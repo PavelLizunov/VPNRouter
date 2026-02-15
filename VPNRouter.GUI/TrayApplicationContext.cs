@@ -24,11 +24,6 @@ public class TrayApplicationContext : ApplicationContext
         _stopItem = new ToolStripMenuItem("⬛ Stop VPN", null, OnStopVpn) { Enabled = false };
         _statusItem = new ToolStripMenuItem("Not running") { Enabled = false };
 
-        var serviceInstalled = ServiceInstaller.IsInstalled();
-        var installServiceItem = new ToolStripMenuItem(
-            serviceInstalled ? "Uninstall Service" : "Install as Service",
-            null, OnToggleService);
-
         var menu = new ContextMenuStrip();
         menu.Items.Add(_statusItem);
         menu.Items.Add(new ToolStripSeparator());
@@ -36,8 +31,6 @@ public class TrayApplicationContext : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_startItem);
         menu.Items.Add(_stopItem);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(installServiceItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit", null, OnExit);
 
@@ -73,7 +66,7 @@ public class TrayApplicationContext : ApplicationContext
     /// Single source of truth: updates tray icon, tooltip, start/stop buttons based on engine state.
     /// Called from engine events AND from manual start/stop actions.
     /// </summary>
-    private void SyncTrayState(string? statusMessage)
+    internal void SyncTrayState(string? statusMessage)
     {
         bool running = _runningAsService || _engine.IsRunning;
 
@@ -82,13 +75,13 @@ public class TrayApplicationContext : ApplicationContext
 
         if (_runningAsService)
         {
-            _statusItem.Text = statusMessage ?? $"Running as Windows Service";
-            SetTrayTooltip("VPNRouter — Service");
+            _statusItem.Text = statusMessage ?? "Running as Windows Service (autostart)";
+            SetTrayTooltip("VPNRouter — Service (autostart)");
         }
         else if (_engine.IsRunning)
         {
             var profile = _engine.ActiveProfileName;
-            _statusItem.Text = statusMessage ?? $"Running (in-process) — {profile}";
+            _statusItem.Text = statusMessage ?? $"Running — {profile}";
             SetTrayTooltip($"VPNRouter — {profile} (PID {_engine.SingBoxPid})");
         }
         else
@@ -99,6 +92,12 @@ public class TrayApplicationContext : ApplicationContext
 
         // Also update MainForm if open
         _mainForm?.RefreshStatus();
+    }
+
+    internal bool RunningAsService
+    {
+        get => _runningAsService;
+        set => _runningAsService = value;
     }
 
     private void SetTrayTooltip(string text)
@@ -126,7 +125,7 @@ public class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        _mainForm = new MainForm(_engine);
+        _mainForm = new MainForm(_engine, this);
         _mainForm.FormClosed += (_, _) => _mainForm = null;
         _mainForm.Show();
     }
@@ -140,7 +139,7 @@ public class TrayApplicationContext : ApplicationContext
             await _engine.StartAsync(settings);
             _runningAsService = false;
             SyncTrayState(null);
-            _trayIcon.ShowBalloonTip(2000, "VPNRouter", "VPN started (in-process)", ToolTipIcon.Info);
+            _trayIcon.ShowBalloonTip(2000, "VPNRouter", "VPN started", ToolTipIcon.Info);
         }
         catch (Exception ex)
         {
@@ -163,49 +162,6 @@ public class TrayApplicationContext : ApplicationContext
         }
 
         SyncTrayState(null);
-    }
-
-    private void OnToggleService(object? sender, EventArgs e)
-    {
-        var item = (ToolStripMenuItem)sender!;
-
-        if (ServiceInstaller.IsInstalled())
-        {
-            var result = ServiceInstaller.Uninstall();
-            MessageBox.Show(result.Message, "VPNRouter",
-                MessageBoxButtons.OK, result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
-            if (result.Success) item.Text = "Install as Service";
-        }
-        else
-        {
-            // Find service exe relative to GUI
-            var serviceExe = Path.Combine(AppContext.BaseDirectory, "service", "VPNRouter.Service.exe");
-            if (!File.Exists(serviceExe))
-                serviceExe = Path.Combine(AppContext.BaseDirectory, "VPNRouter.Service.exe");
-
-            if (!File.Exists(serviceExe))
-            {
-                MessageBox.Show("VPNRouter.Service.exe not found.", "VPNRouter",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            var result = ServiceInstaller.Install(serviceExe);
-            MessageBox.Show(result.Message, "VPNRouter",
-                MessageBoxButtons.OK, result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
-
-            if (result.Success)
-            {
-                item.Text = "Uninstall Service";
-                if (MessageBox.Show("Start service now?", "VPNRouter",
-                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                {
-                    ServiceInstaller.Start();
-                    _runningAsService = true;
-                    SyncTrayState(null);
-                }
-            }
-        }
     }
 
     private void OnExit(object? sender, EventArgs e)

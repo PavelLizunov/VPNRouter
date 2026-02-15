@@ -1,5 +1,6 @@
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Service;
 
 namespace VPNRouter.GUI;
 
@@ -9,6 +10,7 @@ namespace VPNRouter.GUI;
 public class MainForm : Form
 {
     private readonly VpnEngine _engine;
+    private readonly TrayApplicationContext _tray;
 
     // ── Servers tab ──
     private TextBox _uriInput = null!;
@@ -24,15 +26,17 @@ public class MainForm : Form
 
     // ── Bottom panel ──
     private Button _startStopBtn = null!;
+    private CheckBox _autostartCheck = null!;
     private Label _statusLabel = null!;
 
     // ── State ──
     private AppSettings _settings = null!;
     private readonly List<VlessServerEntry> _servers = new();
 
-    public MainForm(VpnEngine engine)
+    public MainForm(VpnEngine engine, TrayApplicationContext tray)
     {
         _engine = engine;
+        _tray = tray;
         InitializeComponent();
         LoadSettings();
 
@@ -50,7 +54,8 @@ public class MainForm : Form
             return;
         }
 
-        UpdateUI(_engine.IsRunning);
+        bool running = _engine.IsRunning || _tray.RunningAsService;
+        UpdateUI(running);
     }
 
     // ─── UI Construction ─────────────────────────────────────────────────────
@@ -58,8 +63,8 @@ public class MainForm : Form
     private void InitializeComponent()
     {
         Text = "VPNRouter Settings";
-        Size = new Size(520, 580);
-        MinimumSize = new Size(460, 500);
+        Size = new Size(520, 600);
+        MinimumSize = new Size(460, 520);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -80,7 +85,7 @@ public class MainForm : Form
         var bottomPanel = new Panel
         {
             Dock = DockStyle.Bottom,
-            Height = 60,
+            Height = 85,
             Padding = new Padding(10, 5, 10, 5)
         };
 
@@ -88,17 +93,27 @@ public class MainForm : Form
         {
             Dock = DockStyle.Top,
             Height = 20,
-            Text = _engine.IsRunning ? $"Running (in-process) — {_engine.ActiveProfileName}" : "Not running",
-            ForeColor = _engine.IsRunning ? Color.Green : Color.Gray,
+            Text = "Not running",
+            ForeColor = Color.Gray,
             TextAlign = ContentAlignment.MiddleCenter
         };
+
+        _autostartCheck = new CheckBox
+        {
+            Dock = DockStyle.Top,
+            Height = 22,
+            Text = "Autostart with Windows (runs as background service, no GUI needed)",
+            Checked = ServiceInstaller.IsInstalled(),
+            Padding = new Padding(0, 2, 0, 0)
+        };
+        _autostartCheck.CheckedChanged += OnAutostartChanged;
 
         _startStopBtn = new Button
         {
             Dock = DockStyle.Bottom,
             Height = 35,
-            Text = _engine.IsRunning ? "⬛ Stop VPN" : "▶ Start VPN",
-            BackColor = _engine.IsRunning ? Color.IndianRed : Color.MediumSeaGreen,
+            Text = "▶ Start VPN",
+            BackColor = Color.MediumSeaGreen,
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Font = new Font(Font.FontFamily, 11, FontStyle.Bold)
@@ -106,10 +121,15 @@ public class MainForm : Form
         _startStopBtn.Click += OnStartStop;
 
         bottomPanel.Controls.Add(_startStopBtn);
+        bottomPanel.Controls.Add(_autostartCheck);
         bottomPanel.Controls.Add(_statusLabel);
 
         Controls.Add(tabs);
         Controls.Add(bottomPanel);
+
+        // Set initial UI state
+        bool running = _engine.IsRunning || _tray.RunningAsService;
+        if (running) UpdateUI(true);
     }
 
     private void BuildServersTab(TabPage page)
@@ -339,7 +359,6 @@ public class MainForm : Form
     {
         if (_serverList.SelectedIndices.Count == 0) return;
 
-        // Remove in reverse order to keep indices valid
         for (int i = _serverList.SelectedIndices.Count - 1; i >= 0; i--)
         {
             var idx = _serverList.SelectedIndices[i];
@@ -356,7 +375,6 @@ public class MainForm : Form
         var idx = _serverList.SelectedIndices[0];
         if (idx <= 0) return;
 
-        // Swap
         (_servers[idx], _servers[idx - 1]) = (_servers[idx - 1], _servers[idx]);
         _serverList.SelectedIndices.Clear();
         RefreshServerList();
@@ -371,7 +389,6 @@ public class MainForm : Form
         var idx = _serverList.SelectedIndices[0];
         if (idx >= _servers.Count - 1) return;
 
-        // Swap
         (_servers[idx], _servers[idx + 1]) = (_servers[idx + 1], _servers[idx]);
         _serverList.SelectedIndices.Clear();
         RefreshServerList();
@@ -380,16 +397,89 @@ public class MainForm : Form
         SaveSettings();
     }
 
+    private void OnAutostartChanged(object? sender, EventArgs e)
+    {
+        SaveSettings(); // save config before installing service
+
+        if (_autostartCheck.Checked)
+        {
+            // Install and start service
+            var serviceExe = Path.Combine(AppContext.BaseDirectory, "service", "VPNRouter.Service.exe");
+            if (!File.Exists(serviceExe))
+                serviceExe = Path.Combine(AppContext.BaseDirectory, "VPNRouter.Service.exe");
+
+            if (!File.Exists(serviceExe))
+            {
+                MessageBox.Show("VPNRouter.Service.exe not found.\nAutostart requires the service binary.",
+                    "VPNRouter", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                _autostartCheck.Checked = false;
+                return;
+            }
+
+            // Stop in-process VPN first if running
+            if (_engine.IsRunning)
+            {
+                _engine.Stop();
+            }
+
+            var result = ServiceInstaller.Install(serviceExe);
+            if (!result.Success)
+            {
+                MessageBox.Show($"Failed to install service:\n{result.Message}",
+                    "VPNRouter", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                _autostartCheck.Checked = false;
+                return;
+            }
+
+            ServiceInstaller.Start();
+            _tray.RunningAsService = true;
+            _tray.SyncTrayState(null);
+
+            _statusLabel.Text = "Running as Windows Service (autostart enabled)";
+            _statusLabel.ForeColor = Color.Green;
+            _startStopBtn.Text = "⬛ Stop VPN";
+            _startStopBtn.BackColor = Color.IndianRed;
+        }
+        else
+        {
+            // Stop and uninstall service
+            if (ServiceInstaller.IsRunning())
+            {
+                ServiceInstaller.Stop();
+            }
+
+            if (ServiceInstaller.IsInstalled())
+            {
+                ServiceInstaller.Uninstall();
+            }
+
+            _tray.RunningAsService = false;
+            _tray.SyncTrayState(null);
+            UpdateUI(false);
+        }
+    }
+
     private async void OnStartStop(object? sender, EventArgs e)
     {
-        if (_engine.IsRunning)
+        // If running as service, stop service
+        if (_tray.RunningAsService)
         {
-            _engine.Stop();
-            UpdateUI(running: false);
+            ServiceInstaller.Stop();
+            _tray.RunningAsService = false;
+            _tray.SyncTrayState(null);
+            UpdateUI(false);
             return;
         }
 
-        // Save settings before starting
+        // If running in-process, stop
+        if (_engine.IsRunning)
+        {
+            _engine.Stop();
+            UpdateUI(false);
+            return;
+        }
+
+        // Start VPN
         SaveSettings();
 
         if (_servers.Count == 0)
@@ -417,11 +507,11 @@ public class MainForm : Form
             var settings = SettingsLoader.Load();
             await _engine.StartAsync(settings);
 
-            UpdateUI(running: true);
+            UpdateUI(true);
         }
         catch (Exception ex)
         {
-            UpdateUI(running: false);
+            UpdateUI(false);
             MessageBox.Show($"Failed to start VPN:\n{ex.Message}", "VPNRouter",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
@@ -432,10 +522,22 @@ public class MainForm : Form
         _startStopBtn.Enabled = true;
         _startStopBtn.Text = running ? "⬛ Stop VPN" : "▶ Start VPN";
         _startStopBtn.BackColor = running ? Color.IndianRed : Color.MediumSeaGreen;
-        _statusLabel.Text = running
-            ? $"Running (in-process) — {_engine.ActiveProfileName} — PID {_engine.SingBoxPid}"
-            : "Not running";
-        _statusLabel.ForeColor = running ? Color.Green : Color.Gray;
+
+        if (_tray.RunningAsService)
+        {
+            _statusLabel.Text = "Running as Windows Service (autostart enabled)";
+            _statusLabel.ForeColor = Color.Green;
+        }
+        else if (running)
+        {
+            _statusLabel.Text = $"Running — {_engine.ActiveProfileName} — PID {_engine.SingBoxPid}";
+            _statusLabel.ForeColor = Color.Green;
+        }
+        else
+        {
+            _statusLabel.Text = "Not running";
+            _statusLabel.ForeColor = Color.Gray;
+        }
     }
 
     private void OnEngineStatus(string msg)
