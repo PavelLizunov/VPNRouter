@@ -3,6 +3,7 @@ bin/
 obj/
 publish/
 cli/
+*.zip
 
 # Visual Studio / Rider
 .vs/
