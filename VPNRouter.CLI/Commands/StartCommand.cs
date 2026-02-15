@@ -40,14 +40,15 @@ public class StartCommand : AsyncCommand<StartSettings>
             return 1;
         }
 
-        // 2. Validate VLESS config (supports both legacy single-server and multi-server)
-        var effectiveServers = appSettings.Vless.GetEffectiveServers();
-        if (effectiveServers.Count == 0 ||
-            effectiveServers.Any(s => string.IsNullOrWhiteSpace(s.Server) || s.Server == "your.server.com"))
+        // 2. Override profile from CLI if specified
+        if (!string.IsNullOrEmpty(settings.Profile))
+            appSettings.ActiveProfile = settings.Profile;
+
+        if (string.IsNullOrEmpty(appSettings.ActiveProfile))
         {
-            AnsiConsole.MarkupLine("[red]✗ VLESS server not configured.[/]");
-            AnsiConsole.MarkupLine("[yellow]  Edit:[/] %ProgramData%\\VPNRouter\\config.yaml");
-            AnsiConsole.MarkupLine("[yellow]  Set:[/] vless.servers or vless.server + vless.uuid");
+            AnsiConsole.MarkupLine("[red]✗ No profile specified.[/]");
+            AnsiConsole.MarkupLine("[yellow]  Use:[/] vpnrouter start --profile Gaming_Full");
+            AnsiConsole.MarkupLine("[yellow]  Or set:[/] active_profile in config.yaml");
             return 1;
         }
 
@@ -59,223 +60,150 @@ public class StartCommand : AsyncCommand<StartSettings>
             return 1;
         }
 
-        // 4. Load profiles
-        var profileName = string.IsNullOrEmpty(settings.Profile)
-            ? appSettings.ActiveProfile
-            : settings.Profile;
-
-        if (string.IsNullOrEmpty(profileName))
-        {
-            AnsiConsole.MarkupLine("[red]✗ No profile specified.[/]");
-            AnsiConsole.MarkupLine("[yellow]  Use:[/] vpnrouter start --profile Gaming_Full");
-            AnsiConsole.MarkupLine("[yellow]  Or set:[/] active_profile in config.yaml");
-            return 1;
-        }
-
-        var sources = ProfileSourceFactory.Create(appSettings);
-        var manager = new ProfileManager(sources);
-        ProfileCollection profiles = null!;
-
-        await AnsiConsole.Status()
-            .Spinner(Spinner.Known.Dots)
-            .StartAsync("Loading profiles...", async ctx =>
-            {
-                profiles = await manager.LoadAsync();
-                ctx.Status = $"Loaded {profiles.Profiles.Count} profiles";
-            });
-
-        // 5. Resolve profile (single or merged)
-        VPNRouter.Core.Models.Profile activeProfile;
-        try
-        {
-            var names = profileName.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            activeProfile = names.Length == 1
-                ? manager.GetProfile(names[0])
-                : manager.MergeProfiles(names);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            AnsiConsole.MarkupLine($"[red]✗ {ex.Message}[/]");
-            return 1;
-        }
-
-        AnsiConsole.MarkupLine($"[green]✓[/] Profile: [cyan]{activeProfile.Name}[/] — {activeProfile.Description}");
-        AnsiConsole.MarkupLine($"  Process rules: [yellow]{activeProfile.Processes.Count}[/]");
-        AnsiConsole.MarkupLine($"  DNS mode: [yellow]{activeProfile.DnsMode}[/]");
-        AnsiConsole.MarkupLine($"  Block on VPN fail: [yellow]{activeProfile.BlockOnVpnFail}[/]");
-
-        // 6. Scan processes
-        var scanner = new ProcessScanner();
-        ScanResult scanResult = null!;
-
-        AnsiConsole.Status()
-            .Spinner(Spinner.Known.Dots)
-            .Start("Scanning processes...", ctx =>
-            {
-                scanResult = scanner.ScanForProfile(activeProfile);
-                ctx.Status($"Found {scanResult.ProcessNames.Count} process names");
-            });
-
-        AnsiConsole.MarkupLine($"[green]✓[/] Resolved [cyan]{scanResult.ProcessNames.Count}[/] process names");
-
-        // 7. Generate sing-box config
-        var sbConfig = ConfigGenerator.Generate(activeProfile, scanResult.ProcessNames, appSettings);
-
-        // 8. Validate (leak protection)
-        var validation = LeakProtection.ValidateConfig(sbConfig);
-
-        if (validation.Warnings.Count > 0)
-        {
-            foreach (var w in validation.Warnings)
-                AnsiConsole.MarkupLine($"[yellow]⚠ {w}[/]");
-        }
-
-        if (!validation.IsValid)
-        {
-            AnsiConsole.MarkupLine("[red]✗ Config validation failed:[/]");
-            foreach (var e in validation.Errors)
-                AnsiConsole.MarkupLine($"  [red]• {e}[/]");
-            return 1;
-        }
-
-        AnsiConsole.MarkupLine("[green]✓[/] Config validated (no leaks detected)");
-
+        // 4. Dry-run: generate config, validate, write to disk, exit
         if (settings.DryRun)
         {
-            // Write config to disk so it can be inspected and validated with sing-box check
-            var dryRunConfigDir = System.Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config");
-            System.IO.Directory.CreateDirectory(dryRunConfigDir);
-            var dryRunConfigPath = System.IO.Path.Combine(dryRunConfigDir, "current.json");
-            System.IO.File.WriteAllText(dryRunConfigPath, ConfigGenerator.Serialize(sbConfig));
-            AnsiConsole.MarkupLine($"[green]✔[/] Config written to: [grey]{dryRunConfigPath}[/]");
-            AnsiConsole.MarkupLine("[cyan]Dry run complete — sing-box not started.[/]");
-            return 0;
+            return await DryRunAsync(appSettings);
         }
 
-        // 9. Check sing-box binary
-        var exePath = Environment.ExpandEnvironmentVariables(appSettings.SingBox.ExecutablePath);
-        if (!File.Exists(exePath))
+        // 5. Start VPN via engine
+        using var engine = new VpnEngine(Serilog.Log.Logger);
+
+        engine.StatusChanged += msg =>
+            AnsiConsole.MarkupLine($"[green]✓[/] {Markup.Escape(msg)}");
+
+        engine.ProcessDetected += (name, pid) =>
+            AnsiConsole.MarkupLine($"[grey]  → new process: {name} (PID {pid})[/]");
+
+        engine.RestartAttempted += (attempt, max) =>
+            AnsiConsole.MarkupLine($"[yellow]⚠ sing-box restarting (attempt {attempt}/{max})[/]");
+
+        engine.Warning += msg =>
+            AnsiConsole.MarkupLine($"[yellow]⚠ {Markup.Escape(msg)}[/]");
+
+        try
         {
-            AnsiConsole.MarkupLine($"[red]✗ sing-box not found at:[/] {exePath}");
-            if (appSettings.SingBox.AutoDownload)
-                AnsiConsole.MarkupLine("[yellow]  Run:[/] vpnrouter singbox download");
+            await engine.StartAsync(appSettings);
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]✗ {Markup.Escape(ex.Message)}[/]");
             return 1;
         }
-
-        // 10. Setup Firewall rules (block_on_vpn_fail)
-        using var firewall = new FirewallManager();
-        if (activeProfile.BlockOnVpnFail)
-        {
-            var blockProcesses = scanResult.ProcessNames;
-            AnsiConsole.Status()
-                .Spinner(Spinner.Known.Dots)
-                .Start("Creating firewall block rules...", _ =>
-                {
-                    firewall.CreateBlockRules(blockProcesses);
-                });
-            AnsiConsole.MarkupLine($"[green]✓[/] Firewall block rules created [grey](disabled until VPN up)[/]");
-        }
-
-        // 11. Start sing-box
-        var singBox = new SingBoxManager(appSettings.SingBox);
-
-        AnsiConsole.Status()
-            .Spinner(Spinner.Known.Dots)
-            .Start("Starting sing-box...", _ =>
-            {
-                singBox.Start(sbConfig);
-                System.Threading.Thread.Sleep(1500); // brief wait for startup
-            });
-
-        if (!singBox.IsRunning())
-        {
-            AnsiConsole.MarkupLine("[red]✗ sing-box failed to start. Check logs:[/]");
-            AnsiConsole.MarkupLine($"  [grey]%ProgramData%\\VPNRouter\\logs\\singbox.log[/]");
-            firewall.DeleteAllRules();
-            return 1;
-        }
-
-        AnsiConsole.MarkupLine($"[green]✓[/] sing-box started [grey](PID: {singBox.Pid})[/]");
-
-        // Enable firewall block rules now that VPN is up
-        if (activeProfile.BlockOnVpnFail)
-        {
-            firewall.EnableBlockRules();
-            AnsiConsole.MarkupLine($"[green]✓[/] Firewall block rules [bold]enabled[/] — leak protection active");
-        }
-
-        // 12. Start ETW process monitor
-        using var etw = new EtwProcessMonitor();
-        var healthMonitor = new HealthMonitor(
-            singBox, scanner, firewall,
-            appSettings.Monitoring);
-
-        etw.ProcessStarted += (_, e) =>
-        {
-            // Check if new process matches any profile pattern
-            var isTargeted = activeProfile.Processes
-                .Any(rule => rule.ScanPatterns
-                    .Any(p => ProcessScanner.MatchesPattern(e.ProcessName + ".exe", p)));
-
-            if (isTargeted)
-            {
-                AnsiConsole.MarkupLine($"[grey]  → new process: {e.ProcessName} (PID {e.ProcessId})[/]");
-                healthMonitor.OnNewProcessDetected(e.ProcessName);
-            }
-        };
-
-        etw.Start();
-        healthMonitor.Start(activeProfile, appSettings, scanResult);
-
-        healthMonitor.RestartAttempted += (_, attempt) =>
-            AnsiConsole.MarkupLine($"[yellow]⚠ sing-box restarting (attempt {attempt}/{appSettings.Monitoring.MaxRestartAttempts})[/]");
-
-        AnsiConsole.MarkupLine($"\n[bold green]VPN Router is running.[/]");
-        AnsiConsole.MarkupLine($"[grey]Profile:[/] [cyan]{activeProfile.Name}[/]  [grey]|[/]  [grey]Processes:[/] [cyan]{scanResult.ProcessNames.Count}[/]  [grey]|[/]  [grey]ETW:[/] [cyan]active[/]");
-        AnsiConsole.MarkupLine($"[grey]Press Ctrl+C to stop.[/]\n");
 
         // Save state for status command
         StateFile.Write(new RunState
         {
-            ActiveProfile = activeProfile.Name,
-            SingBoxPid = singBox.Pid ?? 0,
+            ActiveProfile = engine.ActiveProfileName,
+            SingBoxPid = engine.SingBoxPid ?? 0,
             StartedAt = DateTime.Now,
-            ProcessNames = scanResult.ProcessNames
+            ProcessNames = engine.MonitoredProcesses
         });
 
-        // 13. Block and handle Ctrl+C / crash
+        AnsiConsole.MarkupLine($"\n[bold green]VPN Router is running.[/]");
+        AnsiConsole.MarkupLine($"[grey]Profile:[/] [cyan]{engine.ActiveProfileName}[/]  [grey]|[/]  [grey]Processes:[/] [cyan]{engine.MonitoredProcesses.Count}[/]  [grey]|[/]  [grey]ETW:[/] [cyan]active[/]");
+        AnsiConsole.MarkupLine($"[grey]Press Ctrl+C to stop.[/]\n");
+
+        // 6. Block and handle Ctrl+C
         var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
         {
             e.Cancel = true;
             cts.Cancel();
         };
-        AppDomain.CurrentDomain.UnhandledException += (_, _) =>
-        {
-            firewall.DeleteAllRules();
-            singBox.Stop();
-            StateFile.Clear();
-        };
 
         try { await Task.Delay(Timeout.Infinite, cts.Token); }
         catch (OperationCanceledException) { }
 
-        // 14. Graceful shutdown
+        // 7. Graceful shutdown
         AnsiConsole.MarkupLine("\n[yellow]Stopping...[/]");
-        healthMonitor.Stop();
-        etw.Stop();
-
-        if (activeProfile.BlockOnVpnFail)
-        {
-            firewall.DisableBlockRules();
-            firewall.DeleteAllRules();
-            AnsiConsole.MarkupLine("[green]✓[/] Firewall rules removed");
-        }
-
-        singBox.Stop();
+        engine.Stop();
         StateFile.Clear();
         AnsiConsole.MarkupLine("[green]✓[/] Stopped.");
 
         return 0;
+    }
+
+    private static async Task<int> DryRunAsync(AppSettings settings)
+    {
+        try
+        {
+            // Load profiles & resolve
+            var sources = BuildDryRunSources(settings);
+            var manager = new ProfileManager(sources, Serilog.Log.Logger);
+            var collection = await manager.LoadAsync();
+
+            var profileNames = settings.ActiveProfile
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            var profile = profileNames.Length == 1
+                ? manager.GetProfile(profileNames[0])
+                : manager.MergeProfiles(profileNames);
+
+            AnsiConsole.MarkupLine($"[green]✓[/] Profile: [cyan]{profile.Name}[/] — {profile.Description}");
+            AnsiConsole.MarkupLine($"  Process rules: [yellow]{profile.Processes.Count}[/]");
+            AnsiConsole.MarkupLine($"  DNS mode: [yellow]{profile.DnsMode}[/]");
+
+            // Scan & generate
+            var scanner = new ProcessScanner(Serilog.Log.Logger);
+            var scan = scanner.ScanForProfile(profile);
+            AnsiConsole.MarkupLine($"[green]✓[/] Resolved [cyan]{scan.ProcessNames.Count}[/] process names");
+
+            var sbConfig = ConfigGenerator.Generate(profile, scan.ProcessNames, settings);
+            var validation = LeakProtection.ValidateConfig(sbConfig);
+
+            foreach (var w in validation.Warnings)
+                AnsiConsole.MarkupLine($"[yellow]⚠ {w}[/]");
+
+            if (!validation.IsValid)
+            {
+                AnsiConsole.MarkupLine("[red]✗ Config validation failed:[/]");
+                foreach (var e in validation.Errors)
+                    AnsiConsole.MarkupLine($"  [red]• {e}[/]");
+                return 1;
+            }
+
+            // Write config
+            var configDir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config");
+            Directory.CreateDirectory(configDir);
+            var configPath = Path.Combine(configDir, "current.json");
+            File.WriteAllText(configPath, ConfigGenerator.Serialize(sbConfig));
+
+            AnsiConsole.MarkupLine($"[green]✔[/] Config written to: [grey]{configPath}[/]");
+            AnsiConsole.MarkupLine("[cyan]Dry run complete — sing-box not started.[/]");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]✗ {Markup.Escape(ex.Message)}[/]");
+            return 1;
+        }
+    }
+
+    private static List<Core.Interfaces.IProfileSource> BuildDryRunSources(AppSettings settings)
+    {
+        var sources = new List<Core.Interfaces.IProfileSource>();
+        int priority = 10;
+
+        foreach (var src in settings.ProfileSources)
+        {
+            switch (src.Type?.ToLowerInvariant())
+            {
+                case "github" when !string.IsNullOrEmpty(src.Url):
+                    sources.Add(new GitHubProfileSource(src.Url, priority));
+                    break;
+                case "local" when !string.IsNullOrEmpty(src.Path):
+                    sources.Add(new LocalProfileSource(src.Path, priority + 10));
+                    break;
+            }
+            priority += 10;
+        }
+
+        var appDir = AppContext.BaseDirectory;
+        var defaultJson = Path.Combine(appDir, "profiles", "default.json");
+        if (File.Exists(defaultJson))
+            sources.Add(new LocalProfileSource(defaultJson, 80));
+
+        sources.Add(new BuiltInProfileSource());
+        return sources;
     }
 }
