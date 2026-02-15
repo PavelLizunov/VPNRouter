@@ -2,6 +2,7 @@
 bin/
 obj/
 publish/
+cli/
 
 # Visual Studio / Rider
 .vs/
