@@ -54,12 +54,8 @@ public class TrayApplicationContext : ApplicationContext
         _runningAsService = ServiceInstaller.IsRunning();
         SyncTrayState(null);
 
-        // Auto-open settings on first launch if no config exists
-        var configPath = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config.yaml");
-        if (!File.Exists(configPath))
-        {
-            InvokeOnUI(() => OnOpenSettings(this, EventArgs.Empty));
-        }
+        // Always open settings window on launch
+        OnOpenSettings(this, EventArgs.Empty);
     }
 
     /// <summary>
