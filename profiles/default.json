@@ -74,7 +74,7 @@
           "scan_patterns": ["brave.exe"]
         }
       ],
-      "dns_mode": "smart",
+      "dns_mode": "vpn_only",
       "block_on_vpn_fail": false
     },
     {
