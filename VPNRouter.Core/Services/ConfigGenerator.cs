@@ -123,9 +123,9 @@ public static class ConfigGenerator
                 AutoRoute               = settings.Tun.AutoRoute,
                 StrictRoute             = false, // Always false — avoid dual stack errors
                 EndpointIndependentNat  = false,
-                Stack                   = "system",
-                Sniff                   = true,
-                SniffOverrideDestination = true
+                Stack                   = "system"
+                // sniff + sniff_override_destination removed — deprecated since 1.11
+                // Sniffing now handled by route rule: action="sniff"
             }
         };
     }
@@ -241,6 +241,10 @@ public static class ConfigGenerator
     {
         var rules = new List<RouteRule>
         {
+            // Protocol sniffing: detect HTTP/TLS/QUIC and override destination with sniffed domain.
+            // Replaces deprecated inbound-level sniff + sniff_override_destination (removed in 1.13).
+            new() { Action = "sniff", Timeout = "300ms" },
+
             // DNS traffic: hijack and resolve through DNS module (replaces "dns" outbound)
             new() { Protocol = "dns", Action = "hijack-dns" }
         };

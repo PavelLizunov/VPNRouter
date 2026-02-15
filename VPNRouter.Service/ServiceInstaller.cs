@@ -167,8 +167,8 @@ public static class ServiceInstaller
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            Verb = "runas" // elevate if needed
+            RedirectStandardError = true
+            // Note: caller must already be elevated (AdminHelper.IsAdmin() check in CLI)
         };
 
         using var proc = Process.Start(psi)

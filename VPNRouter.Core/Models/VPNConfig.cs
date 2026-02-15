@@ -136,13 +136,9 @@ public class SingBoxInbound
 
     [JsonProperty("stack")]
     public string Stack { get; set; } = "system";
-
-    [JsonProperty("sniff")]
-    public bool Sniff { get; set; } = true;
-
-    [JsonProperty("sniff_override_destination")]
-    public bool SniffOverrideDestination { get; set; } = true;
 }
+// Note: sniff + sniff_override_destination removed from inbound (deprecated since 1.11, removed in 1.13).
+// Sniffing is now handled by route rule with action: "sniff".
 
 // ─── Outbounds ────────────────────────────────────────────────────────────────
 
@@ -282,6 +278,10 @@ public class SingBoxRoute
 /// <summary>sing-box 1.12+ route rule — uses action-based format</summary>
 public class RouteRule
 {
+    /// <summary>Match by inbound tag (e.g. "tun-in"). Used for sniff rule.</summary>
+    [JsonProperty("inbound", NullValueHandling = NullValueHandling.Ignore)]
+    public string? Inbound { get; set; }
+
     [JsonProperty("protocol", NullValueHandling = NullValueHandling.Ignore)]
     public string? Protocol { get; set; }
 
@@ -292,7 +292,7 @@ public class RouteRule
     public bool? IpIsPrivate { get; set; }
 
     /// <summary>
-    /// New 1.12+ action-based format: "route" | "reject" | "hijack-dns"
+    /// New 1.12+ action-based format: "route" | "reject" | "hijack-dns" | "sniff" | "resolve"
     /// Use Action + Outbound together for route action.
     /// </summary>
     [JsonProperty("action", NullValueHandling = NullValueHandling.Ignore)]
@@ -301,6 +301,10 @@ public class RouteRule
     /// <summary>Outbound tag — used when Action = "route"</summary>
     [JsonProperty("outbound", NullValueHandling = NullValueHandling.Ignore)]
     public string? Outbound { get; set; }
+
+    /// <summary>Sniff timeout — used when Action = "sniff". Default "300ms".</summary>
+    [JsonProperty("timeout", NullValueHandling = NullValueHandling.Ignore)]
+    public string? Timeout { get; set; }
 }
 
 // ─── Experimental ─────────────────────────────────────────────────────────────
