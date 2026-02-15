@@ -1,0 +1,25 @@
+# Build outputs
+bin/
+obj/
+publish/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+
+# NuGet
+packages/
+*.nupkg
+
+# Logs and runtime data
+logs/
+*.log
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Windows reserved device files
+nul

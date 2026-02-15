@@ -1,0 +1,74 @@
+# VPN Process Router — Example Configuration
+# Copy to: %ProgramData%\VPNRouter\config.yaml
+# Required fields: vless.server, vless.uuid, vless.reality.public_key, vless.reality.short_id
+
+app:
+  log_level: info   # debug | info | warning | error
+  log_file: "%ProgramData%\\VPNRouter\\logs\\vpnrouter.log"
+
+# Profile sources — tried in order, first success wins
+profile_sources:
+  - type: github
+    url: "https://raw.githubusercontent.com/username/vpn-profiles/main/profiles.json"
+    update_interval: 3600  # seconds
+
+  - type: local
+    path: "%ProgramData%\\VPNRouter\\profiles\\custom.json"
+
+# Profile to activate on start
+active_profile: Gaming_Full
+
+# VLESS + Reality connection
+# security: reality  — uses XTLS Reality (recommended, harder to detect)
+# security: tls      — uses standard TLS (fill tls section instead)
+vless:
+  server: "194.87.222.111"
+  port: 443
+  uuid: "2d54442d-158f-49e2-b225-67ba1a5b77f4"
+  flow: "xtls-rprx-vision"   # required for Reality + XTLS
+  security: reality           # reality | tls
+
+  # Reality settings (used when security: reality)
+  reality:
+    enabled: true
+    server_name: "yahoo.com"          # SNI to mimic — must be a real TLS 1.3 site
+    fingerprint: "firefox"            # chrome | firefox | safari | ios | android | edge
+    public_key: "DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU"
+    short_id: "78ca7952"
+
+  # Transport: tcp for Reality+XTLS, ws for WebSocket, grpc for gRPC
+  transport:
+    type: tcp
+
+  # Plain TLS fallback (used when security: tls)
+  tls:
+    enabled: false
+    server_name: "your.server.com"
+    insecure: false
+
+# TUN interface settings
+tun:
+  interface_name: VPNRouter-TUN
+  ipv4_address: "172.19.0.1/30"
+  ipv6_enabled: false
+  mtu: 9000
+  auto_route: true
+  strict_route: false  # Keep false — true breaks dual stack
+
+# DNS settings
+dns:
+  strategy: ipv4_only
+  vpn_dns: "https://1.1.1.1/dns-query"
+  local_dns: local
+
+# sing-box binary
+singbox:
+  executable_path: "%ProgramData%\\VPNRouter\\bin\\sing-box.exe"
+  auto_download: true
+
+# Health monitoring
+monitoring:
+  health_check_interval: 30   # seconds
+  restart_on_failure: true
+  max_restart_attempts: 5
+  process_scan_interval: 60   # seconds

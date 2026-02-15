@@ -1,0 +1,257 @@
+using Serilog;
+using VPNRouter.Core.Models;
+
+namespace VPNRouter.Core.Services;
+
+/// <summary>
+/// Monitors sing-box health and manages the full lifecycle:
+/// - Periodic health check every N seconds
+/// - Auto-restart on crash with exponential backoff
+/// - Debounced process rescan (5s window) to minimize sing-box reloads
+/// - Firewall rule management for block_on_vpn_fail
+/// </summary>
+public class HealthMonitor : IDisposable
+{
+    private readonly SingBoxManager _singBox;
+    private readonly ProcessScanner _scanner;
+    private readonly FirewallManager _firewall;
+    private readonly MonitoringSettings _settings;
+    private readonly ILogger _logger;
+
+    private System.Threading.Timer? _healthTimer;
+    private System.Threading.Timer? _debounceTimer;
+
+    private Profile _activeProfile = null!;
+    private AppSettings _appSettings = null!;
+    private ScanResult? _lastScan;
+    private int _restartAttempts;
+    private bool _vpnWasRunning;
+    private bool _disposed;
+    private bool _isStopping;   // set during HealthMonitor.Stop() to block crash handling
+
+    // Cancels any pending AttemptRestart Task.Delay — prevents stale restarts
+    // from firing after a successful reload has already happened.
+    private CancellationTokenSource? _restartCts;
+
+    // Debounce window — wait 5s after last new process before reloading
+    private static readonly TimeSpan DebounceWindow = TimeSpan.FromSeconds(5);
+
+    public event EventHandler? VpnStarted;
+    public event EventHandler? VpnStopped;
+    public event EventHandler<int>? RestartAttempted; // arg = attempt number
+
+    public HealthMonitor(
+        SingBoxManager singBox,
+        ProcessScanner scanner,
+        FirewallManager firewall,
+        MonitoringSettings settings,
+        ILogger? logger = null)
+    {
+        _singBox = singBox;
+        _scanner = scanner;
+        _firewall = firewall;
+        _settings = settings;
+        _logger = logger ?? Log.Logger;
+
+        _singBox.Crashed += OnSingBoxCrashed;
+    }
+
+    // ─── Start / Stop ─────────────────────────────────────────────────────────
+
+    public void Start(Profile profile, AppSettings appSettings, ScanResult? initialScan = null)
+    {
+        _activeProfile = profile;
+        _appSettings = appSettings;
+        _restartAttempts = 0;
+        _isStopping = false;
+        _lastScan = initialScan; // baseline — prevents reload on first debounce if nothing changed
+
+        var intervalMs = _settings.HealthCheckInterval * 1000;
+        _healthTimer = new System.Threading.Timer(
+            OnHealthTick, null, intervalMs, intervalMs);
+
+        _logger.Information("[HealthMonitor] Started — check every {Sec}s, max {Max} restarts",
+            _settings.HealthCheckInterval, _settings.MaxRestartAttempts);
+    }
+
+    public void Stop()
+    {
+        _isStopping = true;
+        _restartCts?.Cancel();
+        _healthTimer?.Dispose();
+        _debounceTimer?.Dispose();
+        _healthTimer = null;
+        _debounceTimer = null;
+        _logger.Information("[HealthMonitor] Stopped");
+    }
+
+    /// <summary>
+    /// Call when a new process is detected by ETW that might need to be added.
+    /// Resets the debounce timer — actual reload happens 5s after the last call.
+    /// </summary>
+    public void OnNewProcessDetected(string processName)
+    {
+        _logger.Debug("[HealthMonitor] New process detected: {Name} — debouncing", processName);
+
+        // Reset the debounce timer
+        _debounceTimer?.Dispose();
+        _debounceTimer = new System.Threading.Timer(
+            OnDebounceElapsed, null,
+            (int)DebounceWindow.TotalMilliseconds,
+            Timeout.Infinite); // fire once
+    }
+
+    // ─── Private: Health check ────────────────────────────────────────────────
+
+    private void OnHealthTick(object? state)
+    {
+        try
+        {
+            var isHealthy = _singBox.IsHealthy();
+
+            if (!isHealthy && _vpnWasRunning)
+            {
+                _logger.Warning("[HealthMonitor] Health check failed — sing-box is not healthy");
+                AttemptRestart();
+            }
+            else if (isHealthy && !_vpnWasRunning)
+            {
+                _vpnWasRunning = true;
+                _logger.Information("[HealthMonitor] VPN is up");
+                VpnStarted?.Invoke(this, EventArgs.Empty);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[HealthMonitor] Exception in health tick");
+        }
+    }
+
+    private void OnSingBoxCrashed(object? sender, EventArgs e)
+    {
+        if (_isStopping)
+            return; // graceful shutdown in progress — ignore
+
+        _vpnWasRunning = false;
+        VpnStopped?.Invoke(this, EventArgs.Empty);
+
+        if (_settings.RestartOnFailure)
+            AttemptRestart();
+    }
+
+    private void AttemptRestart()
+    {
+        if (_restartAttempts >= _settings.MaxRestartAttempts)
+        {
+            _logger.Error("[HealthMonitor] Max restart attempts ({Max}) reached — giving up",
+                _settings.MaxRestartAttempts);
+            return;
+        }
+
+        _restartAttempts++;
+        RestartAttempted?.Invoke(this, _restartAttempts);
+
+        // Cancel any previously scheduled restart — only the latest one matters
+        _restartCts?.Cancel();
+        _restartCts = new CancellationTokenSource();
+        var ct = _restartCts.Token;
+
+        // Exponential backoff: 5s, 10s, 20s, 40s, 80s
+        var delayMs = (int)Math.Pow(2, _restartAttempts - 1) * 5000;
+        _logger.Warning("[HealthMonitor] Restarting sing-box (attempt {N}/{Max}) in {Delay}ms",
+            _restartAttempts, _settings.MaxRestartAttempts, delayMs);
+
+        Task.Delay(delayMs, ct).ContinueWith(_ =>
+        {
+            if (ct.IsCancellationRequested || _isStopping) return;
+
+            // If sing-box is already running (e.g. debounce reload succeeded),
+            // skip — no need to restart what's already up
+            if (_singBox.IsRunning())
+            {
+                _logger.Debug("[HealthMonitor] sing-box already running — skipping scheduled restart");
+                _restartAttempts = 0;
+                return;
+            }
+
+            try
+            {
+                // Re-scan and regenerate config before restart
+                var scan = _scanner.ScanForProfile(_activeProfile);
+                var config = ConfigGenerator.Generate(_activeProfile, scan.ProcessNames, _appSettings);
+                _singBox.ReloadConfig(config);
+                _lastScan = scan;
+
+                _logger.Information("[HealthMonitor] sing-box restarted successfully");
+                _restartAttempts = 0;
+                _vpnWasRunning = true;
+                VpnStarted?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[HealthMonitor] Restart attempt {N} failed", _restartAttempts);
+            }
+        }, CancellationToken.None); // ContinueWith always runs, checks ct inside
+    }
+
+    // ─── Private: Debounced process rescan ───────────────────────────────────
+
+    private void OnDebounceElapsed(object? state)
+    {
+        if (_isStopping) return;
+
+        try
+        {
+            _logger.Information("[HealthMonitor] Debounce elapsed — rescanning processes");
+
+            var newScan = _scanner.ScanForProfile(_activeProfile);
+
+            // Compare only the filtered (non-wildcard) names that actually reach sing-box.
+            // This avoids spurious reloads when only wildcard patterns shift between scans.
+            var newFiltered  = FilterForSingBox(newScan.ProcessNames);
+            var prevFiltered = _lastScan == null ? null : FilterForSingBox(_lastScan.ProcessNames);
+
+            if (prevFiltered != null &&
+                new HashSet<string>(newFiltered, StringComparer.OrdinalIgnoreCase)
+                    .SetEquals(prevFiltered))
+            {
+                _logger.Debug("[HealthMonitor] No effective process changes — skipping reload");
+                _lastScan = newScan; // keep scan timestamp fresh
+                return;
+            }
+
+            _logger.Information("[HealthMonitor] Process list changed — reloading sing-box config");
+
+            // Cancel any pending AttemptRestart — we're doing a fresh reload now
+            _restartCts?.Cancel();
+
+            var config = ConfigGenerator.Generate(_activeProfile, newScan.ProcessNames, _appSettings);
+            _singBox.ReloadConfig(config);
+            _lastScan = newScan;
+            _restartAttempts = 0; // reset counter — this was a planned reload, not a crash
+
+            _logger.Information("[HealthMonitor] Config reloaded with {Count} processes",
+                newFiltered.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[HealthMonitor] Error in debounced rescan");
+        }
+    }
+
+    /// <summary>
+    /// Returns only exact process names (no wildcards) — the same subset
+    /// that ConfigGenerator passes to sing-box process_name rules.
+    /// </summary>
+    private static List<string> FilterForSingBox(IEnumerable<string> names) =>
+        names.Where(p => !p.Contains('*') && !p.Contains('?'))
+             .Distinct(StringComparer.OrdinalIgnoreCase)
+             .ToList();
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        Stop();
+    }
+}
