@@ -16,6 +16,8 @@ public class MainForm : Form
     private ListView _serverList = null!;
     private Button _removeBtn = null!;
     private Button _clearBtn = null!;
+    private Button _upBtn = null!;
+    private Button _downBtn = null!;
 
     // ── Apps tab ──
     private CheckedListBox _profileList = null!;
@@ -56,8 +58,8 @@ public class MainForm : Form
     private void InitializeComponent()
     {
         Text = "VPNRouter Settings";
-        Size = new Size(480, 560);
-        MinimumSize = new Size(420, 480);
+        Size = new Size(520, 580);
+        MinimumSize = new Size(460, 500);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -116,7 +118,7 @@ public class MainForm : Form
 
         var inputLabel = new Label
         {
-            Text = "Paste VLESS URI(s):",
+            Text = "Paste VLESS URI(s) — first server = Primary, others = Fallback:",
             Dock = DockStyle.Top,
             Height = 20
         };
@@ -145,10 +147,11 @@ public class MainForm : Form
             FullRowSelect = true,
             GridLines = true
         };
-        _serverList.Columns.Add("Name", 120);
+        _serverList.Columns.Add("Role", 70);
+        _serverList.Columns.Add("Name", 110);
         _serverList.Columns.Add("Server", 160);
-        _serverList.Columns.Add("Port", 60);
-        _serverList.Columns.Add("Security", 80);
+        _serverList.Columns.Add("Port", 50);
+        _serverList.Columns.Add("Security", 70);
 
         var btnPanel = new FlowLayoutPanel
         {
@@ -157,14 +160,22 @@ public class MainForm : Form
             FlowDirection = FlowDirection.RightToLeft
         };
 
-        _clearBtn = new Button { Text = "Clear All", Width = 80 };
-        _clearBtn.Click += (_, _) => { _servers.Clear(); RefreshServerList(); };
+        _clearBtn = new Button { Text = "Clear All", Width = 70 };
+        _clearBtn.Click += (_, _) => { _servers.Clear(); RefreshServerList(); SaveSettings(); };
 
-        _removeBtn = new Button { Text = "Remove", Width = 80 };
+        _removeBtn = new Button { Text = "Remove", Width = 70 };
         _removeBtn.Click += OnRemoveServer;
+
+        _downBtn = new Button { Text = "▼ Down", Width = 65 };
+        _downBtn.Click += OnMoveDown;
+
+        _upBtn = new Button { Text = "▲ Up", Width = 55 };
+        _upBtn.Click += OnMoveUp;
 
         btnPanel.Controls.Add(_clearBtn);
         btnPanel.Controls.Add(_removeBtn);
+        btnPanel.Controls.Add(_downBtn);
+        btnPanel.Controls.Add(_upBtn);
 
         // Order matters: last added = top of dock
         page.Controls.Add(_serverList);
@@ -239,14 +250,36 @@ public class MainForm : Form
 
     private void RefreshServerList()
     {
+        var selectedIdx = _serverList.SelectedIndices.Count > 0
+            ? _serverList.SelectedIndices[0]
+            : -1;
+
         _serverList.Items.Clear();
-        foreach (var s in _servers)
+        for (int i = 0; i < _servers.Count; i++)
         {
-            var item = new ListViewItem(string.IsNullOrEmpty(s.Name) ? "(no name)" : s.Name);
+            var s = _servers[i];
+            var role = i == 0 ? "★ Primary" : $"Fallback {i}";
+            var item = new ListViewItem(role);
+            item.SubItems.Add(string.IsNullOrEmpty(s.Name) ? "(no name)" : s.Name);
             item.SubItems.Add(s.Server);
             item.SubItems.Add(s.Port.ToString());
             item.SubItems.Add(s.Security);
+
+            // Highlight primary
+            if (i == 0)
+            {
+                item.ForeColor = Color.DarkGreen;
+                item.Font = new Font(_serverList.Font, FontStyle.Bold);
+            }
+
             _serverList.Items.Add(item);
+        }
+
+        // Restore selection
+        if (selectedIdx >= 0 && selectedIdx < _serverList.Items.Count)
+        {
+            _serverList.Items[selectedIdx].Selected = true;
+            _serverList.Items[selectedIdx].Focused = true;
         }
     }
 
@@ -314,6 +347,36 @@ public class MainForm : Form
         }
 
         RefreshServerList();
+        SaveSettings();
+    }
+
+    private void OnMoveUp(object? sender, EventArgs e)
+    {
+        if (_serverList.SelectedIndices.Count == 0) return;
+        var idx = _serverList.SelectedIndices[0];
+        if (idx <= 0) return;
+
+        // Swap
+        (_servers[idx], _servers[idx - 1]) = (_servers[idx - 1], _servers[idx]);
+        _serverList.SelectedIndices.Clear();
+        RefreshServerList();
+        _serverList.Items[idx - 1].Selected = true;
+        _serverList.Items[idx - 1].Focused = true;
+        SaveSettings();
+    }
+
+    private void OnMoveDown(object? sender, EventArgs e)
+    {
+        if (_serverList.SelectedIndices.Count == 0) return;
+        var idx = _serverList.SelectedIndices[0];
+        if (idx >= _servers.Count - 1) return;
+
+        // Swap
+        (_servers[idx], _servers[idx + 1]) = (_servers[idx + 1], _servers[idx]);
+        _serverList.SelectedIndices.Clear();
+        RefreshServerList();
+        _serverList.Items[idx + 1].Selected = true;
+        _serverList.Items[idx + 1].Focused = true;
         SaveSettings();
     }
 
