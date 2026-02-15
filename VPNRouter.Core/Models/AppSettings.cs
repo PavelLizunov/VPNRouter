@@ -27,6 +27,13 @@ public class AppSettings
 
     [YamlMember(Alias = "monitoring")]
     public MonitoringSettings Monitoring { get; set; } = new();
+
+    /// <summary>
+    /// Custom app exe names added by user via GUI (e.g. ["spotify.exe", "slack.exe"]).
+    /// These are added as a "_custom" profile with each exe as a process rule.
+    /// </summary>
+    [YamlMember(Alias = "custom_apps")]
+    public List<string> CustomApps { get; set; } = new();
 }
 
 public class AppConfig

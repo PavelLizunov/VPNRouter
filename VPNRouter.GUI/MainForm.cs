@@ -22,7 +22,11 @@ public class MainForm : Form
     private Button _downBtn = null!;
 
     // ── Apps tab ──
-    private CheckedListBox _profileList = null!;
+    private TreeView _profileTree = null!;
+    private TextBox _customAppInput = null!;
+    private Button _addCustomBtn = null!;
+    private Button _removeCustomBtn = null!;
+    private readonly List<string> _customApps = new();
 
     // ── Bottom panel ──
     private Button _startStopBtn = null!;
@@ -211,27 +215,176 @@ public class MainForm : Form
 
         var label = new Label
         {
-            Text = "Select application groups to route through VPN:",
+            Text = "Check groups to route through VPN (expand to see apps inside):",
             Dock = DockStyle.Top,
             Height = 25
         };
 
-        _profileList = new CheckedListBox
+        _profileTree = new TreeView
         {
             Dock = DockStyle.Fill,
-            CheckOnClick = true,
-            Font = new Font(Font.FontFamily, 10)
+            CheckBoxes = true,
+            Font = new Font(Font.FontFamily, 10),
+            ShowLines = true,
+            ShowPlusMinus = true,
+            ShowRootLines = true
         };
+        _profileTree.AfterCheck += OnProfileTreeCheck;
 
-        // Load built-in profile names
+        // Load built-in profiles with their processes
         var builtIn = BuiltInProfiles.Get();
         foreach (var profile in builtIn.Profiles)
         {
-            _profileList.Items.Add(profile.Name, isChecked: false);
+            var node = new TreeNode($"{profile.Name}  —  {profile.Description}") { Tag = profile.Name };
+            foreach (var proc in profile.Processes)
+            {
+                var childText = proc.IncludeChildren
+                    ? $"{proc.Name} (+ child processes)"
+                    : proc.Name;
+                node.Nodes.Add(new TreeNode(childText) { ForeColor = Color.Gray });
+            }
+            _profileTree.Nodes.Add(node);
         }
 
-        page.Controls.Add(_profileList);
+        // Custom apps section at bottom
+        var customPanel = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 65
+        };
+
+        var customLabel = new Label
+        {
+            Text = "Add custom app (exe name, e.g. spotify.exe):",
+            Dock = DockStyle.Top,
+            Height = 18,
+            ForeColor = Color.DimGray
+        };
+
+        var inputRow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 30,
+            FlowDirection = FlowDirection.LeftToRight
+        };
+
+        _customAppInput = new TextBox
+        {
+            Width = 250,
+            PlaceholderText = "app.exe"
+        };
+        _customAppInput.KeyDown += (_, ke) => { if (ke.KeyCode == Keys.Enter) { OnAddCustomApp(null, EventArgs.Empty); ke.SuppressKeyPress = true; } };
+
+        _addCustomBtn = new Button { Text = "Add", Width = 55 };
+        _addCustomBtn.Click += OnAddCustomApp;
+
+        _removeCustomBtn = new Button { Text = "Remove checked custom", Width = 140 };
+        _removeCustomBtn.Click += OnRemoveCustomApp;
+
+        inputRow.Controls.Add(_customAppInput);
+        inputRow.Controls.Add(_addCustomBtn);
+        inputRow.Controls.Add(_removeCustomBtn);
+
+        customPanel.Controls.Add(inputRow);
+        customPanel.Controls.Add(customLabel);
+
+        page.Controls.Add(_profileTree);
+        page.Controls.Add(customPanel);
         page.Controls.Add(label);
+    }
+
+    private void OnProfileTreeCheck(object? sender, TreeViewEventArgs e)
+    {
+        // Only handle user actions, not programmatic checks
+        if (e.Action == TreeViewAction.Unknown) return;
+
+        var node = e.Node!;
+
+        // If parent node checked/unchecked — propagate to children
+        if (node.Parent == null)
+        {
+            foreach (TreeNode child in node.Nodes)
+                child.Checked = node.Checked;
+        }
+    }
+
+    private void OnAddCustomApp(object? sender, EventArgs e)
+    {
+        var name = _customAppInput.Text.Trim();
+        if (string.IsNullOrEmpty(name)) return;
+
+        // Ensure .exe extension
+        if (!name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            name += ".exe";
+
+        // Avoid duplicates
+        if (_customApps.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            _customAppInput.Clear();
+            return;
+        }
+
+        _customApps.Add(name);
+
+        // Add to tree under "Custom Apps" node
+        var customRoot = GetOrCreateCustomNode();
+        customRoot.Nodes.Add(new TreeNode(name) { Checked = true });
+        customRoot.Checked = true;
+        customRoot.Expand();
+
+        _customAppInput.Clear();
+        SaveSettings();
+    }
+
+    private void OnRemoveCustomApp(object? sender, EventArgs e)
+    {
+        var customRoot = FindCustomNode();
+        if (customRoot == null) return;
+
+        // Collect checked children to remove
+        var toRemove = new List<TreeNode>();
+        foreach (TreeNode child in customRoot.Nodes)
+        {
+            if (child.Checked)
+                toRemove.Add(child);
+        }
+
+        foreach (var node in toRemove)
+        {
+            _customApps.Remove(node.Text);
+            customRoot.Nodes.Remove(node);
+        }
+
+        if (customRoot.Nodes.Count == 0)
+        {
+            _profileTree.Nodes.Remove(customRoot);
+        }
+
+        SaveSettings();
+    }
+
+    private TreeNode GetOrCreateCustomNode()
+    {
+        var existing = FindCustomNode();
+        if (existing != null) return existing;
+
+        var node = new TreeNode("Custom Apps  —  Your custom applications")
+        {
+            Tag = "_custom",
+            ForeColor = Color.DarkBlue,
+            NodeFont = new Font(_profileTree.Font, FontStyle.Bold)
+        };
+        _profileTree.Nodes.Add(node);
+        return node;
+    }
+
+    private TreeNode? FindCustomNode()
+    {
+        foreach (TreeNode node in _profileTree.Nodes)
+        {
+            if (node.Tag?.ToString() == "_custom") return node;
+        }
+        return null;
     }
 
     // ─── Data loading ────────────────────────────────────────────────────────
@@ -252,18 +405,49 @@ public class MainForm : Form
         _servers.AddRange(_settings.Vless.GetEffectiveServers());
         RefreshServerList();
 
-        // Check active profile checkboxes
+        // Check active profile checkboxes in tree
         if (!string.IsNullOrEmpty(_settings.ActiveProfile))
         {
             var activeNames = _settings.ActiveProfile
                 .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            for (int i = 0; i < _profileList.Items.Count; i++)
+            foreach (TreeNode node in _profileTree.Nodes)
             {
-                var name = _profileList.Items[i].ToString()!;
-                if (activeNames.Contains(name))
-                    _profileList.SetItemChecked(i, true);
+                var profileName = node.Tag?.ToString();
+                if (profileName != null && activeNames.Contains(profileName))
+                {
+                    node.Checked = true;
+                    foreach (TreeNode child in node.Nodes)
+                        child.Checked = true;
+                }
+            }
+        }
+
+        // Load custom apps from config (stored as _custom profile processes)
+        if (_settings.ActiveProfile?.Contains("_custom", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            // Custom apps are stored in config.yaml under a special key
+            // For now, they're persisted as custom_apps list in AppSettings
+        }
+
+        // Load custom apps from settings if any
+        if (_settings.CustomApps != null)
+        {
+            foreach (var app in _settings.CustomApps)
+            {
+                _customApps.Add(app);
+            }
+
+            if (_customApps.Count > 0)
+            {
+                var customRoot = GetOrCreateCustomNode();
+                foreach (var app in _customApps)
+                {
+                    customRoot.Nodes.Add(new TreeNode(app) { Checked = true });
+                }
+                customRoot.Checked = true;
+                customRoot.Expand();
             }
         }
     }
@@ -313,14 +497,18 @@ public class MainForm : Form
         if (_servers.Count > 0)
             _settings.Vless.Server = string.Empty;
 
-        // Update active profile
+        // Update active profile from tree
         var checkedNames = new List<string>();
-        for (int i = 0; i < _profileList.Items.Count; i++)
+        foreach (TreeNode node in _profileTree.Nodes)
         {
-            if (_profileList.GetItemChecked(i))
-                checkedNames.Add(_profileList.Items[i].ToString()!);
+            var profileName = node.Tag?.ToString();
+            if (profileName != null && profileName != "_custom" && node.Checked)
+                checkedNames.Add(profileName);
         }
         _settings.ActiveProfile = string.Join(",", checkedNames);
+
+        // Save custom apps
+        _settings.CustomApps = new List<string>(_customApps);
 
         SettingsLoader.Save(_settings);
     }
@@ -489,8 +677,8 @@ public class MainForm : Form
             return;
         }
 
-        var checkedCount = Enumerable.Range(0, _profileList.Items.Count)
-            .Count(i => _profileList.GetItemChecked(i));
+        var checkedCount = _profileTree.Nodes.Cast<TreeNode>()
+            .Count(n => n.Checked);
 
         if (checkedCount == 0)
         {

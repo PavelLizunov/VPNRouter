@@ -78,6 +78,24 @@ public class VpnEngine : IDisposable
             ? manager.GetProfile(names[0])
             : manager.MergeProfiles(names);
 
+        // Inject custom apps from GUI
+        if (settings.CustomApps?.Count > 0)
+        {
+            foreach (var app in settings.CustomApps)
+            {
+                if (!string.IsNullOrEmpty(app) &&
+                    !_activeProfile.Processes.Any(p => p.Name.Equals(app, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _activeProfile.Processes.Add(new ProcessRule
+                    {
+                        Name = app,
+                        IncludeChildren = true,
+                        ScanPatterns = new[] { app }
+                    });
+                }
+            }
+        }
+
         OnStatus($"Profile: {_activeProfile.Name} ({_activeProfile.Processes.Count} rules)");
 
         // 4. Scan processes
