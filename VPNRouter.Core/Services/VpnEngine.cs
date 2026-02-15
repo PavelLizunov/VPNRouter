@@ -1,3 +1,4 @@
+using System.IO;
 using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
@@ -56,6 +57,10 @@ public class VpnEngine : IDisposable
     /// </summary>
     public async Task StartAsync(AppSettings settings, CancellationToken ct = default)
     {
+        // 0. Ensure required directories exist
+        var logsDir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\logs");
+        Directory.CreateDirectory(logsDir);
+
         // 1. Validate VLESS config
         var servers = settings.Vless.GetEffectiveServers();
         if (servers.Count == 0 || servers.Any(s => string.IsNullOrWhiteSpace(s.Server) || s.Server == "your.server.com"))
