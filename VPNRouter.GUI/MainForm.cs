@@ -37,6 +37,20 @@ public class MainForm : Form
         _engine.StatusChanged += OnEngineStatus;
     }
 
+    /// <summary>
+    /// Called by TrayApplicationContext to sync MainForm UI with current engine state.
+    /// </summary>
+    public void RefreshStatus()
+    {
+        if (InvokeRequired)
+        {
+            BeginInvoke(RefreshStatus);
+            return;
+        }
+
+        UpdateUI(_engine.IsRunning);
+    }
+
     // ─── UI Construction ─────────────────────────────────────────────────────
 
     private void InitializeComponent()
@@ -72,7 +86,7 @@ public class MainForm : Form
         {
             Dock = DockStyle.Top,
             Height = 20,
-            Text = _engine.IsRunning ? $"Running — {_engine.ActiveProfileName}" : "Not running",
+            Text = _engine.IsRunning ? $"Running (in-process) — {_engine.ActiveProfileName}" : "Not running",
             ForeColor = _engine.IsRunning ? Color.Green : Color.Gray,
             TextAlign = ContentAlignment.MiddleCenter
         };
@@ -356,7 +370,7 @@ public class MainForm : Form
         _startStopBtn.Text = running ? "⬛ Stop VPN" : "▶ Start VPN";
         _startStopBtn.BackColor = running ? Color.IndianRed : Color.MediumSeaGreen;
         _statusLabel.Text = running
-            ? $"Running — {_engine.ActiveProfileName} — PID {_engine.SingBoxPid}"
+            ? $"Running (in-process) — {_engine.ActiveProfileName} — PID {_engine.SingBoxPid}"
             : "Not running";
         _statusLabel.ForeColor = running ? Color.Green : Color.Gray;
     }

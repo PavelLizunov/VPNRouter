@@ -11,6 +11,7 @@ public class TrayApplicationContext : ApplicationContext
     private readonly NotifyIcon _trayIcon;
     private readonly VpnEngine _engine = new();
     private MainForm? _mainForm;
+    private bool _runningAsService;
 
     private readonly ToolStripMenuItem _startItem;
     private readonly ToolStripMenuItem _stopItem;
@@ -19,8 +20,8 @@ public class TrayApplicationContext : ApplicationContext
     public TrayApplicationContext()
     {
         // Build context menu
-        _startItem = new ToolStripMenuItem("Start VPN", null, OnStartVpn);
-        _stopItem = new ToolStripMenuItem("Stop VPN", null, OnStopVpn) { Enabled = false };
+        _startItem = new ToolStripMenuItem("▶ Start VPN", null, OnStartVpn);
+        _stopItem = new ToolStripMenuItem("⬛ Stop VPN", null, OnStopVpn) { Enabled = false };
         _statusItem = new ToolStripMenuItem("Not running") { Enabled = false };
 
         var serviceInstalled = ServiceInstaller.IsInstalled();
@@ -50,35 +51,64 @@ public class TrayApplicationContext : ApplicationContext
 
         _trayIcon.DoubleClick += OnOpenSettings;
 
-        // Subscribe to engine events
+        // Subscribe to engine events — sync tray state whenever engine starts/stops
         _engine.StatusChanged += msg =>
         {
-            _statusItem.Text = msg;
-            // NotifyIcon.Text max 63 chars
-            var trayText = $"VPNRouter — {msg}";
-            _trayIcon.Text = trayText.Length > 63 ? trayText[..63] : trayText;
+            InvokeOnUI(() => SyncTrayState(msg));
         };
 
         // Check if service is already running
-        if (ServiceInstaller.IsRunning())
-        {
-            _statusItem.Text = "Running as Service";
-            _startItem.Enabled = false;
-            _stopItem.Enabled = true;
-        }
+        _runningAsService = ServiceInstaller.IsRunning();
+        SyncTrayState(null);
 
         // Auto-open settings on first launch if no config exists
         var configPath = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config.yaml");
         if (!File.Exists(configPath))
         {
-            // First run — open settings immediately
-            BeginInvoke(() => OnOpenSettings(this, EventArgs.Empty));
+            InvokeOnUI(() => OnOpenSettings(this, EventArgs.Empty));
         }
     }
 
-    private void BeginInvoke(Action action)
+    /// <summary>
+    /// Single source of truth: updates tray icon, tooltip, start/stop buttons based on engine state.
+    /// Called from engine events AND from manual start/stop actions.
+    /// </summary>
+    private void SyncTrayState(string? statusMessage)
     {
-        if (_mainForm != null && _mainForm.InvokeRequired)
+        bool running = _runningAsService || _engine.IsRunning;
+
+        _startItem.Enabled = !running;
+        _stopItem.Enabled = running;
+
+        if (_runningAsService)
+        {
+            _statusItem.Text = statusMessage ?? $"Running as Windows Service";
+            SetTrayTooltip("VPNRouter — Service");
+        }
+        else if (_engine.IsRunning)
+        {
+            var profile = _engine.ActiveProfileName;
+            _statusItem.Text = statusMessage ?? $"Running (in-process) — {profile}";
+            SetTrayTooltip($"VPNRouter — {profile} (PID {_engine.SingBoxPid})");
+        }
+        else
+        {
+            _statusItem.Text = statusMessage ?? "Not running";
+            SetTrayTooltip("VPNRouter");
+        }
+
+        // Also update MainForm if open
+        _mainForm?.RefreshStatus();
+    }
+
+    private void SetTrayTooltip(string text)
+    {
+        _trayIcon.Text = text.Length > 63 ? text[..63] : text;
+    }
+
+    private void InvokeOnUI(Action action)
+    {
+        if (_mainForm != null && !_mainForm.IsDisposed && _mainForm.InvokeRequired)
             _mainForm.BeginInvoke(action);
         else
             action();
@@ -90,6 +120,8 @@ public class TrayApplicationContext : ApplicationContext
     {
         if (_mainForm != null && !_mainForm.IsDisposed)
         {
+            _mainForm.Show();
+            _mainForm.WindowState = FormWindowState.Normal;
             _mainForm.Activate();
             return;
         }
@@ -106,12 +138,13 @@ public class TrayApplicationContext : ApplicationContext
             _startItem.Enabled = false;
             var settings = SettingsLoader.Load();
             await _engine.StartAsync(settings);
-            _stopItem.Enabled = true;
-            _trayIcon.ShowBalloonTip(2000, "VPNRouter", "VPN started", ToolTipIcon.Info);
+            _runningAsService = false;
+            SyncTrayState(null);
+            _trayIcon.ShowBalloonTip(2000, "VPNRouter", "VPN started (in-process)", ToolTipIcon.Info);
         }
         catch (Exception ex)
         {
-            _startItem.Enabled = true;
+            SyncTrayState(null);
             MessageBox.Show($"Failed to start VPN:\n{ex.Message}", "VPNRouter",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
@@ -119,19 +152,17 @@ public class TrayApplicationContext : ApplicationContext
 
     private void OnStopVpn(object? sender, EventArgs e)
     {
-        if (ServiceInstaller.IsRunning())
+        if (_runningAsService)
         {
             ServiceInstaller.Stop();
+            _runningAsService = false;
         }
         else
         {
             _engine.Stop();
         }
 
-        _startItem.Enabled = true;
-        _stopItem.Enabled = false;
-        _statusItem.Text = "Not running";
-        _trayIcon.Text = "VPNRouter";
+        SyncTrayState(null);
     }
 
     private void OnToggleService(object? sender, EventArgs e)
@@ -170,9 +201,8 @@ public class TrayApplicationContext : ApplicationContext
                     MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                 {
                     ServiceInstaller.Start();
-                    _startItem.Enabled = false;
-                    _stopItem.Enabled = true;
-                    _statusItem.Text = "Running as Service";
+                    _runningAsService = true;
+                    SyncTrayState(null);
                 }
             }
         }
