@@ -54,6 +54,8 @@ public class VpnEngine : IDisposable
 
     /// <summary>
     /// Full VPN startup sequence. Throws on fatal errors.
+    /// Checks CancellationToken after each major step to allow clean abort
+    /// when the service receives a stop signal during startup.
     /// </summary>
     public async Task StartAsync(AppSettings settings, CancellationToken ct = default)
     {
@@ -66,12 +68,16 @@ public class VpnEngine : IDisposable
         if (servers.Count == 0 || servers.Any(s => string.IsNullOrWhiteSpace(s.Server) || s.Server == "your.server.com"))
             throw new InvalidOperationException("VLESS server not configured.");
 
+        ct.ThrowIfCancellationRequested();
+
         // 2. Load profiles
         OnStatus("Loading profiles...");
         var sources = BuildProfileSources(settings);
         var manager = new ProfileManager(sources, _logger);
         var collection = await manager.LoadAsync(ct);
         _logger?.Information("[VpnEngine] Loaded {Count} profiles", collection.Profiles.Count);
+
+        ct.ThrowIfCancellationRequested();
 
         // 3. Resolve active profile
         var profileName = settings.ActiveProfile;
@@ -102,12 +108,15 @@ public class VpnEngine : IDisposable
         }
 
         OnStatus($"Profile: {_activeProfile.Name} ({_activeProfile.Processes.Count} rules)");
+        ct.ThrowIfCancellationRequested();
 
-        // 4. Scan processes
+        // 4. Scan processes (synchronous — can take 1-3s, check token after)
         OnStatus("Scanning processes...");
         var scanner = new ProcessScanner(_logger);
         _scanResult = scanner.ScanForProfile(_activeProfile);
         _logger?.Information("[VpnEngine] Resolved {Count} process names", _scanResult.ProcessNames.Count);
+
+        ct.ThrowIfCancellationRequested();
 
         // 5. Generate + validate config
         var sbConfig = ConfigGenerator.Generate(_activeProfile, _scanResult.ProcessNames, settings);
@@ -124,6 +133,8 @@ public class VpnEngine : IDisposable
             var errors = string.Join("; ", validation.Errors);
             throw new InvalidOperationException($"Config validation failed: {errors}");
         }
+
+        ct.ThrowIfCancellationRequested();
 
         // 6. Ensure sing-box binary exists
         var exePath = Environment.ExpandEnvironmentVariables(settings.SingBox.ExecutablePath);
@@ -143,6 +154,8 @@ public class VpnEngine : IDisposable
             }
         }
 
+        ct.ThrowIfCancellationRequested();
+
         // 7. Firewall block rules
         _firewall = new FirewallManager(_logger);
         if (_activeProfile.BlockOnVpnFail)
@@ -150,6 +163,8 @@ public class VpnEngine : IDisposable
             _firewall.CreateBlockRules(_scanResult.ProcessNames);
             OnStatus("Firewall block rules created (disabled)");
         }
+
+        ct.ThrowIfCancellationRequested();
 
         // 8. Start sing-box
         OnStatus("Starting sing-box...");
@@ -171,6 +186,8 @@ public class VpnEngine : IDisposable
 
         _logger?.Information("[VpnEngine] sing-box started (PID {Pid})", _singBox.Pid);
         OnStatus($"sing-box started (PID {_singBox.Pid})");
+
+        ct.ThrowIfCancellationRequested();
 
         // 9. Enable firewall rules
         if (_activeProfile.BlockOnVpnFail)
