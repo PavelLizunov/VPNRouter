@@ -208,7 +208,7 @@ public class MainForm : Form
 
         var subtitle = new Label
         {
-            Text = $"by {AppBranding.Publisher}",
+            Text = $"by {AppBranding.Publisher}  ·  v{AppBranding.Version}",
             Font = Theme.SubHeaderFont,
             ForeColor = Theme.TextMuted,
             AutoSize = true,

@@ -13,8 +13,9 @@ internal static class AppBranding
     public const string AppName     = "Virtual Penguin Network";
     public const string ShortName   = "VPN";
     public const string Publisher   = "NiniTux";
-    public const string WindowTitle = "Virtual Penguin Network";
-    public const string TrayTooltip = "Virtual Penguin Network";
+    public const string Version     = "1.8";
+    public static string WindowTitle => $"Virtual Penguin Network  v{Version}";
+    public static string TrayTooltip => $"Virtual Penguin Network v{Version}";
 
     // ── Embedded resource ──
     private const string LogoResourceName = "VPNRouter.GUI.Resources.penguin_logo.png";
