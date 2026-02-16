@@ -148,12 +148,23 @@ public static class ConfigGenerator
         else if (servers.Count > 1)
         {
             // Multi-server — individual VLESS outbounds + urltest wrapper
+            // Tags must be unique — deduplicate by appending index on collision
             var childTags = new List<string>();
+            var usedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             for (int i = 0; i < servers.Count; i++)
             {
-                var tag = !string.IsNullOrEmpty(servers[i].Name)
+                var baseTag = !string.IsNullOrEmpty(servers[i].Name)
                     ? $"vless-{servers[i].Name}"
                     : $"vless-{i}";
+
+                var tag = baseTag;
+                var suffix = 2;
+                while (!usedTags.Add(tag))
+                {
+                    tag = $"{baseTag}-{suffix++}";
+                }
+
                 childTags.Add(tag);
                 outbounds.Add(BuildVlessOutbound(servers[i], tag));
             }

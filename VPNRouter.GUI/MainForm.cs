@@ -720,11 +720,36 @@ public class MainForm : Form
                 return;
             }
 
-            _servers.AddRange(entries);
+            // Filter out duplicate servers (same host:port+uuid)
+            var added = 0;
+            var skipped = 0;
+            foreach (var entry in entries)
+            {
+                bool isDuplicate = _servers.Any(s =>
+                    s.Server.Equals(entry.Server, StringComparison.OrdinalIgnoreCase) &&
+                    s.Port == entry.Port &&
+                    s.Uuid.Equals(entry.Uuid, StringComparison.OrdinalIgnoreCase));
+
+                if (isDuplicate)
+                {
+                    skipped++;
+                }
+                else
+                {
+                    _servers.Add(entry);
+                    added++;
+                }
+            }
+
             RefreshServerList();
             _uriInput.Clear();
-
             SaveSettings();
+
+            if (skipped > 0)
+            {
+                MessageBox.Show($"Added {added} server(s), skipped {skipped} duplicate(s).",
+                    AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
         }
         catch (Exception ex)
         {
