@@ -50,8 +50,23 @@ public class FirewallManager : IDisposable
         foreach (var name in exact)
         {
             var ruleName = RulePrefix + name.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
-            CreateBlockRule(ruleName, name, enabled: false);
-            _managedRules.Add(ruleName);
+
+            // Resolve full path — skip this process if path not found
+            var exePath = ResolveProcessPath(name);
+            if (exePath == null)
+            {
+                _logger.Warning("[Firewall] Skipping rule for {Process} — exe path not found (process not running?)", name);
+                continue;
+            }
+
+            if (CreateBlockRule(ruleName, exePath, enabled: false))
+            {
+                _managedRules.Add(ruleName);
+            }
+            else
+            {
+                _logger.Warning("[Firewall] Failed to create rule for {Process} — netsh error", name);
+            }
         }
 
         _logger.Information("[Firewall] Created {Count} block rules (disabled — will enable on VPN crash)", _managedRules.Count);
@@ -100,56 +115,170 @@ public class FirewallManager : IDisposable
 
     // ─── Private ──────────────────────────────────────────────────────────────
 
-    private void CreateBlockRule(string ruleName, string processName, bool enabled)
+    /// <summary>
+    /// Create a single block rule. Returns true if netsh succeeded.
+    /// </summary>
+    private bool CreateBlockRule(string ruleName, string programPath, bool enabled)
     {
         var enabledStr = enabled ? "yes" : "no";
 
         // Outbound block — blocks all direct internet access for this process.
         // When sing-box TUN is up, traffic goes through TUN (not affected by this rule).
         // When sing-box is down, TUN is gone, traffic would go direct — this rule blocks it.
-        RunNetsh($"advfirewall firewall add rule " +
+        var success = RunNetsh($"advfirewall firewall add rule " +
                  $"name=\"{ruleName}\" " +
                  $"dir=out " +
                  $"action=block " +
-                 $"program=\"{ResolveProcessPath(processName)}\" " +
+                 $"program=\"{programPath}\" " +
                  $"enable={enabledStr} " +
                  $"profile=any " +
                  $"description=\"VPNRouter block_on_vpn_fail\"");
 
-        _logger.Debug("[Firewall] Created rule '{Rule}' for {Process} (enabled: {Enabled})",
-            ruleName, processName, enabled);
+        if (success)
+        {
+            _logger.Debug("[Firewall] Created rule '{Rule}' for {Program} (enabled: {Enabled})",
+                ruleName, programPath, enabled);
+        }
+
+        return success;
     }
 
-    private static string ResolveProcessPath(string processName)
+    /// <summary>
+    /// Resolve the full path to an executable.
+    /// 1) Check running processes (most reliable — gives actual filesystem path)
+    /// 2) Fall back to where.exe (finds exe on PATH, e.g. for system processes)
+    /// 3) Return null if not found — caller should skip this rule
+    /// </summary>
+    private string? ResolveProcessPath(string processName)
     {
-        // Try to find the actual .exe path from running processes
-        var name = Path.GetFileNameWithoutExtension(processName);
+        var nameNoExt = Path.GetFileNameWithoutExtension(processName);
+
+        // 1. Try running processes — gives the real path with correct casing
         try
         {
-            var procs = System.Diagnostics.Process.GetProcessesByName(name);
-            if (procs.Length > 0)
+            var procs = Process.GetProcessesByName(nameNoExt);
+            foreach (var proc in procs)
             {
-                var path = procs[0].MainModule?.FileName;
-                if (!string.IsNullOrEmpty(path)) return path;
+                try
+                {
+                    var path = proc.MainModule?.FileName;
+                    if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                        return path;
+                }
+                catch { /* access denied for some processes — try next */ }
+                finally { proc.Dispose(); }
             }
         }
-        catch { /* process may have exited or access denied */ }
+        catch { /* GetProcessesByName itself can fail */ }
 
-        // If not running, use process name as-is (firewall accepts this too)
-        return processName;
+        // 2. Try where.exe — finds executables on PATH
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "where.exe",
+                Arguments = processName,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc != null)
+            {
+                var output = proc.StandardOutput.ReadLine();
+                proc.WaitForExit(3000);
+                if (proc.ExitCode == 0 && !string.IsNullOrEmpty(output) && File.Exists(output))
+                    return output;
+            }
+        }
+        catch { /* where.exe not available or failed */ }
+
+        _logger.Debug("[Firewall] Could not resolve path for {Process}", processName);
+        return null;
     }
 
     /// <summary>
     /// Remove any VPNRouter firewall rules left from a previous crash.
+    /// netsh does NOT support wildcards in rule names, so we enumerate
+    /// all rules and delete those matching our prefix by exact name.
     /// </summary>
     public void CleanupOrphanedRules()
     {
-        // Delete all rules matching our prefix
-        RunNetsh($"advfirewall firewall delete rule name=\"{RulePrefix}*\"");
-        _logger.Debug("[Firewall] Cleaned up any orphaned rules");
+        var orphaned = FindRulesByPrefix(RulePrefix);
+
+        if (orphaned.Count == 0)
+        {
+            _logger.Debug("[Firewall] No orphaned rules found");
+            return;
+        }
+
+        foreach (var ruleName in orphaned)
+        {
+            RunNetsh($"advfirewall firewall delete rule name=\"{ruleName}\"");
+            _logger.Debug("[Firewall] Deleted orphaned rule: {Rule}", ruleName);
+        }
+
+        _logger.Information("[Firewall] Cleaned up {Count} orphaned rules", orphaned.Count);
     }
 
-    private void RunNetsh(string arguments)
+    /// <summary>
+    /// Enumerate firewall rules whose name starts with the given prefix.
+    /// Uses 'netsh advfirewall firewall show rule name=all' and parses output.
+    /// </summary>
+    private List<string> FindRulesByPrefix(string prefix)
+    {
+        var result = new List<string>();
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "netsh.exe",
+                Arguments = "advfirewall firewall show rule name=all dir=out",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc == null) return result;
+
+            // Read all output — can be large, but we only need rule names
+            var output = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit(10_000);
+
+            // netsh output format (English):  "Rule Name:          VPNRouter_Block_Discord"
+            // Localized systems may differ, but the value after ":" is always the rule name.
+            // We match any line where the value after the first ":" starts with our prefix.
+            foreach (var line in output.Split('\n'))
+            {
+                var trimmed = line.Trim();
+                // First field in each rule block is the rule name
+                var colonIdx = trimmed.IndexOf(':');
+                if (colonIdx < 0) continue;
+
+                var value = trimmed[(colonIdx + 1)..].Trim();
+                if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Add(value);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[Firewall] Failed to enumerate firewall rules");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Execute a netsh command. Returns true if exit code is 0.
+    /// </summary>
+    private bool RunNetsh(string arguments)
     {
         try
         {
@@ -164,17 +293,30 @@ public class FirewallManager : IDisposable
             };
 
             using var proc = Process.Start(psi);
-            proc?.WaitForExit(5000);
-
-            var exitCode = proc?.ExitCode ?? -1;
-            if (exitCode != 0)
+            if (proc == null)
             {
-                _logger.Warning("[Firewall] netsh returned {Code} for: {Args}", exitCode, arguments);
+                _logger.Warning("[Firewall] Failed to start netsh.exe");
+                return false;
             }
+
+            // Read streams before WaitForExit to avoid deadlocks on large output
+            var stdout = proc.StandardOutput.ReadToEnd();
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(5000);
+
+            if (proc.ExitCode != 0)
+            {
+                _logger.Warning("[Firewall] netsh returned {Code} for: {Args} | stdout: {Out} | stderr: {Err}",
+                    proc.ExitCode, arguments, stdout.Trim(), stderr.Trim());
+                return false;
+            }
+
+            return true;
         }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[Firewall] netsh failed: {Args}", arguments);
+            return false;
         }
     }
 
