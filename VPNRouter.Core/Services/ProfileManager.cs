@@ -226,13 +226,34 @@ public static class BuiltInProfiles
             new()
             {
                 Name = "Browsers",
-                Description = "Браузеры",
+                Description = "Все браузеры",
                 Processes = new List<ProcessRule>
                 {
-                    new() { Name = "chrome.exe",  IncludeChildren = true, ScanPatterns = new[] { "chrome.exe" } },
-                    new() { Name = "brave.exe",   IncludeChildren = true, ScanPatterns = new[] { "brave.exe"  } }
+                    new() { Name = "chrome.exe",              IncludeChildren = true, ScanPatterns = new[] { "chrome.exe" } },
+                    new() { Name = "msedge.exe",              IncludeChildren = true, ScanPatterns = new[] { "msedge.exe" } },
+                    new() { Name = "firefox.exe",             IncludeChildren = true, ScanPatterns = new[] { "firefox.exe" } },
+                    new() { Name = "brave.exe",               IncludeChildren = true, ScanPatterns = new[] { "brave.exe" } },
+                    new() { Name = "opera.exe",               IncludeChildren = true, ScanPatterns = new[] { "opera.exe", "opera_autoupdate.exe" } },
+                    new() { Name = "vivaldi.exe",             IncludeChildren = true, ScanPatterns = new[] { "vivaldi.exe" } },
+                    new() { Name = "yandex.exe",              IncludeChildren = true, ScanPatterns = new[] { "yandex.exe", "browser.exe" } },
+                    new() { Name = "tor.exe",                 IncludeChildren = true, ScanPatterns = new[] { "tor.exe", "firefox.exe" } },
+                    new() { Name = "waterfox.exe",            IncludeChildren = true, ScanPatterns = new[] { "waterfox.exe" } },
+                    new() { Name = "librewolf.exe",           IncludeChildren = true, ScanPatterns = new[] { "librewolf.exe" } },
+                    new() { Name = "floorp.exe",              IncludeChildren = true, ScanPatterns = new[] { "floorp.exe" } },
+                    new() { Name = "ungoogled-chromium.exe",  IncludeChildren = true, ScanPatterns = new[] { "ungoogled-chromium.exe", "chromium.exe" } },
+                    new() { Name = "arc.exe",                 IncludeChildren = true, ScanPatterns = new[] { "arc.exe" } },
+                    new() { Name = "maxthon.exe",             IncludeChildren = true, ScanPatterns = new[] { "maxthon.exe", "Maxthon.exe" } },
+                    new() { Name = "seamonkey.exe",           IncludeChildren = true, ScanPatterns = new[] { "seamonkey.exe" } },
+                    new() { Name = "palemoon.exe",            IncludeChildren = true, ScanPatterns = new[] { "palemoon.exe" } },
+                    new() { Name = "basilisk.exe",            IncludeChildren = true, ScanPatterns = new[] { "basilisk.exe" } },
+                    new() { Name = "iridium.exe",             IncludeChildren = true, ScanPatterns = new[] { "iridium.exe" } },
+                    new() { Name = "iron.exe",                IncludeChildren = true, ScanPatterns = new[] { "iron.exe" } },
+                    new() { Name = "cent_browser.exe",        IncludeChildren = true, ScanPatterns = new[] { "cent_browser.exe" } },
+                    new() { Name = "thorium.exe",             IncludeChildren = true, ScanPatterns = new[] { "thorium.exe" } },
+                    new() { Name = "whale.exe",               IncludeChildren = true, ScanPatterns = new[] { "whale.exe" } },
+                    new() { Name = "zen.exe",                 IncludeChildren = true, ScanPatterns = new[] { "zen.exe" } }
                 },
-                DnsMode = "smart",
+                DnsMode = "vpn_only",
                 BlockOnVpnFail = false
             }
         }
