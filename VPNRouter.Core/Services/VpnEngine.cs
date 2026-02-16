@@ -189,11 +189,13 @@ public class VpnEngine : IDisposable
 
         ct.ThrowIfCancellationRequested();
 
-        // 9. Enable firewall rules
+        // 9. Firewall rules stay DISABLED while VPN is running.
+        // sing-box TUN handles routing — firewall block is only needed if sing-box crashes.
+        // HealthMonitor.OnSingBoxCrashed() calls EnableBlockRules() when sing-box dies,
+        // and DisableBlockRules() after successful restart.
         if (_activeProfile.BlockOnVpnFail)
         {
-            _firewall.EnableBlockRules();
-            OnStatus("Firewall leak protection active");
+            OnStatus("Firewall leak protection ready (armed for VPN failure)");
         }
 
         // 10. ETW + HealthMonitor

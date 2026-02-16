@@ -5,7 +5,7 @@ using VPNRouter.Service;
 namespace VPNRouter.GUI;
 
 /// <summary>
-/// Main settings window. Header with logo, tabs: Servers | Apps, bottom status + Start/Stop.
+/// Main settings window. Header with logo, tabs: Servers | Apps, bottom status + Start/Stop + Apply.
 /// </summary>
 public class MainForm : Form
 {
@@ -30,6 +30,7 @@ public class MainForm : Form
 
     // ── Bottom panel ──
     private Button _startStopBtn = null!;
+    private Button _applyBtn = null!;
     private CheckBox _autostartCheck = null!;
     private Label _statusLabel = null!;
     private Panel _statusPanel = null!;
@@ -104,7 +105,7 @@ public class MainForm : Form
 
         _statusDot = new Label
         {
-            Text = "●",
+            Text = "\u25cf",
             Font = new Font("Segoe UI", 10f),
             ForeColor = Theme.TextMuted,
             AutoSize = true,
@@ -129,31 +130,19 @@ public class MainForm : Form
         _statusPanel.Controls.Add(_statusDot);
         _statusPanel.Controls.Add(_statusLabel);
 
-        // ── Action panel (Start/Stop + autostart) ──
+        // ── Action panel (Start/Stop + Apply + autostart) ──
         var actionPanel = new Panel
         {
             Dock = DockStyle.Bottom,
-            Height = 60,
+            Height = 80,
             BackColor = Theme.Surface,
             Padding = new Padding(14, 8, 14, 8)
         };
 
-        _autostartCheck = new CheckBox
-        {
-            Text = "Autostart with Windows",
-            Font = Theme.SmallFont,
-            ForeColor = Theme.TextSecondary,
-            Checked = ServiceInstaller.IsInstalled(),
-            AutoSize = true,
-            Location = new Point(14, 40),
-            BackColor = Theme.Surface
-        };
-        _autostartCheck.CheckedChanged += OnAutostartChanged;
-
         _startStopBtn = new Button
         {
-            Text = "▶  Start VPN",
-            Size = new Size(498, 36),
+            Text = "\u25b6  Start VPN",
+            Size = new Size(330, 36),
             Location = new Point(14, 4),
             Font = Theme.StartStopFont,
             Cursor = Cursors.Hand,
@@ -163,7 +152,36 @@ public class MainForm : Form
         _startStopBtn.Click += OnStartStop;
         ApplyStartStyle();
 
+        _applyBtn = new Button
+        {
+            Text = "\u21bb  Apply",
+            Size = new Size(155, 36),
+            Location = new Point(350, 4),
+            Font = Theme.StartStopFont,
+            Cursor = Cursors.Hand,
+            FlatStyle = FlatStyle.Flat,
+            Visible = false
+        };
+        Theme.ApplySecondary(_applyBtn);
+        _applyBtn.FlatAppearance.BorderSize = 0;
+        _applyBtn.BackColor = Color.FromArgb(245, 158, 11); // amber/orange
+        _applyBtn.ForeColor = Color.White;
+        _applyBtn.Click += OnApplyChanges;
+
+        _autostartCheck = new CheckBox
+        {
+            Text = "Autostart with Windows",
+            Font = Theme.SmallFont,
+            ForeColor = Theme.TextSecondary,
+            Checked = ServiceInstaller.IsInstalled(),
+            AutoSize = true,
+            Location = new Point(14, 50),
+            BackColor = Theme.Surface
+        };
+        _autostartCheck.CheckedChanged += OnAutostartChanged;
+
         actionPanel.Controls.Add(_startStopBtn);
+        actionPanel.Controls.Add(_applyBtn);
         actionPanel.Controls.Add(_autostartCheck);
 
         // ── Dock order: last added docks first ──
@@ -208,7 +226,7 @@ public class MainForm : Form
 
         var subtitle = new Label
         {
-            Text = $"by {AppBranding.Publisher}  ·  v{AppBranding.Version}",
+            Text = $"by {AppBranding.Publisher}  \u00b7  v{AppBranding.Version}",
             Font = Theme.SubHeaderFont,
             ForeColor = Theme.TextMuted,
             AutoSize = true,
@@ -234,7 +252,7 @@ public class MainForm : Form
     {
         var inputLabel = new Label
         {
-            Text = "Paste VLESS URI(s) — first server = Primary, others = Fallback:",
+            Text = "Paste VLESS URI(s) \u2014 first server = Primary, others = Fallback:",
             Dock = DockStyle.Top,
             Height = 22,
             ForeColor = Theme.TextSecondary,
@@ -293,11 +311,11 @@ public class MainForm : Form
         Theme.ApplySecondary(_removeBtn);
         _removeBtn.Click += OnRemoveServer;
 
-        _downBtn = new Button { Text = "▼ Down", Width = 68, Height = 28 };
+        _downBtn = new Button { Text = "\u25bc Down", Width = 68, Height = 28 };
         Theme.ApplySecondary(_downBtn);
         _downBtn.Click += OnMoveDown;
 
-        _upBtn = new Button { Text = "▲ Up", Width = 58, Height = 28 };
+        _upBtn = new Button { Text = "\u25b2 Up", Width = 58, Height = 28 };
         Theme.ApplySecondary(_upBtn);
         _upBtn.Click += OnMoveUp;
 
@@ -342,7 +360,7 @@ public class MainForm : Form
         var builtIn = BuiltInProfiles.Get();
         foreach (var profile in builtIn.Profiles)
         {
-            var node = new TreeNode($"{profile.Name}  —  {profile.Description}") { Tag = profile.Name };
+            var node = new TreeNode($"{profile.Name}  \u2014  {profile.Description}") { Tag = profile.Name };
             foreach (var proc in profile.Processes)
             {
                 var childText = proc.IncludeChildren
@@ -417,6 +435,9 @@ public class MainForm : Form
             foreach (TreeNode child in node.Nodes)
                 child.Checked = node.Checked;
         }
+
+        // Show Apply button if VPN is running and profiles changed
+        ShowApplyIfNeeded();
     }
 
     private void OnAddCustomApp(object? sender, EventArgs e)
@@ -442,6 +463,7 @@ public class MainForm : Form
 
         _customAppInput.Clear();
         SaveSettings();
+        ShowApplyIfNeeded();
     }
 
     private void OnRemoveCustomApp(object? sender, EventArgs e)
@@ -468,6 +490,7 @@ public class MainForm : Form
         }
 
         SaveSettings();
+        ShowApplyIfNeeded();
     }
 
     private TreeNode GetOrCreateCustomNode()
@@ -475,7 +498,7 @@ public class MainForm : Form
         var existing = FindCustomNode();
         if (existing != null) return existing;
 
-        var node = new TreeNode("Custom Apps  —  Your custom applications")
+        var node = new TreeNode("Custom Apps  \u2014  Your custom applications")
         {
             Tag = "_custom",
             ForeColor = Theme.Primary,
@@ -492,6 +515,69 @@ public class MainForm : Form
             if (node.Tag?.ToString() == "_custom") return node;
         }
         return null;
+    }
+
+    // ─── Apply button logic ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Show the Apply button when VPN is running and the user changes profiles/apps.
+    /// </summary>
+    private void ShowApplyIfNeeded()
+    {
+        bool vpnRunning = _engine.IsRunning || _tray.RunningAsService;
+        if (!vpnRunning)
+        {
+            _applyBtn.Visible = false;
+            return;
+        }
+
+        _applyBtn.Visible = true;
+    }
+
+    private async void OnApplyChanges(object? sender, EventArgs e)
+    {
+        SaveSettings();
+        _applyBtn.Enabled = false;
+        _applyBtn.Text = "Applying...";
+        _startStopBtn.Enabled = false;
+
+        try
+        {
+            if (_tray.RunningAsService)
+            {
+                // Service mode: stop → start service
+                _statusLabel.Text = "Restarting service...";
+                await Task.Run(() =>
+                {
+                    ServiceInstaller.Stop();
+                    ServiceInstaller.Start();
+                });
+            }
+            else
+            {
+                // In-process mode: stop engine → start engine
+                _statusLabel.Text = "Applying changes...";
+                _engine.Stop();
+
+                var settings = SettingsLoader.Load();
+                await _engine.StartAsync(settings);
+            }
+
+            _applyBtn.Visible = false;
+            UpdateUI(true);
+        }
+        catch (Exception ex)
+        {
+            UpdateUI(false);
+            MessageBox.Show($"Failed to apply changes:\n{ex.Message}", AppBranding.AppName,
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _applyBtn.Enabled = true;
+            _applyBtn.Text = "\u21bb  Apply";
+            _startStopBtn.Enabled = true;
+        }
     }
 
     // ─── Data loading ────────────────────────────────────────────────────────
@@ -567,7 +653,7 @@ public class MainForm : Form
         for (int i = 0; i < _servers.Count; i++)
         {
             var s = _servers[i];
-            var role = i == 0 ? "★ Primary" : $"Fallback {i}";
+            var role = i == 0 ? "\u2605 Primary" : $"Fallback {i}";
             var item = new ListViewItem(role);
             item.SubItems.Add(string.IsNullOrEmpty(s.Name) ? "(no name)" : s.Name);
             item.SubItems.Add(s.Server);
@@ -689,54 +775,78 @@ public class MainForm : Form
         SaveSettings();
     }
 
-    private void OnAutostartChanged(object? sender, EventArgs e)
+    private async void OnAutostartChanged(object? sender, EventArgs e)
     {
         SaveSettings();
+        _autostartCheck.Enabled = false;
+        _startStopBtn.Enabled = false;
 
-        if (_autostartCheck.Checked)
+        try
         {
-            var serviceExe = Path.Combine(AppContext.BaseDirectory, "service", "VPNRouter.Service.exe");
-            if (!File.Exists(serviceExe))
-                serviceExe = Path.Combine(AppContext.BaseDirectory, "VPNRouter.Service.exe");
-
-            if (!File.Exists(serviceExe))
+            if (_autostartCheck.Checked)
             {
-                MessageBox.Show("VPNRouter.Service.exe not found.\nAutostart requires the service binary.",
-                    AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
-                _autostartCheck.Checked = false;
-                return;
-            }
+                var serviceExe = Path.Combine(AppContext.BaseDirectory, "service", "VPNRouter.Service.exe");
+                if (!File.Exists(serviceExe))
+                    serviceExe = Path.Combine(AppContext.BaseDirectory, "VPNRouter.Service.exe");
 
-            if (_engine.IsRunning)
+                if (!File.Exists(serviceExe))
+                {
+                    MessageBox.Show("VPNRouter.Service.exe not found.\nAutostart requires the service binary.",
+                        AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    _autostartCheck.Checked = false;
+                    return;
+                }
+
+                _statusLabel.Text = "Installing service...";
+
+                if (_engine.IsRunning)
+                {
+                    _engine.Stop();
+                }
+
+                // Run blocking service operations on a background thread to avoid UI freeze
+                var result = await Task.Run(() =>
+                {
+                    var installResult = ServiceInstaller.Install(serviceExe);
+                    if (!installResult.Success) return installResult;
+                    return ServiceInstaller.Start();
+                });
+
+                if (!result.Success)
+                {
+                    MessageBox.Show($"Failed to setup service:\n{result.Message}",
+                        AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    _autostartCheck.Checked = false;
+                    UpdateUI(false);
+                    return;
+                }
+
+                _tray.RunningAsService = true;
+                _tray.SyncTrayState(null);
+                UpdateUI(true);
+            }
+            else
             {
-                _engine.Stop();
+                _statusLabel.Text = "Removing service...";
+
+                // Run blocking service operations on a background thread
+                await Task.Run(() =>
+                {
+                    if (ServiceInstaller.IsRunning())
+                        ServiceInstaller.Stop();
+                    if (ServiceInstaller.IsInstalled())
+                        ServiceInstaller.Uninstall();
+                });
+
+                _tray.RunningAsService = false;
+                _tray.SyncTrayState(null);
+                UpdateUI(false);
             }
-
-            var result = ServiceInstaller.Install(serviceExe);
-            if (!result.Success)
-            {
-                MessageBox.Show($"Failed to install service:\n{result.Message}",
-                    AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
-                _autostartCheck.Checked = false;
-                return;
-            }
-
-            ServiceInstaller.Start();
-            _tray.RunningAsService = true;
-            _tray.SyncTrayState(null);
-
-            UpdateUI(true);
         }
-        else
+        finally
         {
-            if (ServiceInstaller.IsRunning())
-                ServiceInstaller.Stop();
-            if (ServiceInstaller.IsInstalled())
-                ServiceInstaller.Uninstall();
-
-            _tray.RunningAsService = false;
-            _tray.SyncTrayState(null);
-            UpdateUI(false);
+            _autostartCheck.Enabled = true;
+            _startStopBtn.Enabled = true;
         }
     }
 
@@ -744,7 +854,9 @@ public class MainForm : Form
     {
         if (_tray.RunningAsService)
         {
-            ServiceInstaller.Stop();
+            _startStopBtn.Enabled = false;
+            _startStopBtn.Text = "Stopping...";
+            await Task.Run(() => ServiceInstaller.Stop());
             _tray.RunningAsService = false;
             _tray.SyncTrayState(null);
             UpdateUI(false);
@@ -800,25 +912,30 @@ public class MainForm : Form
 
         if (running)
         {
-            _startStopBtn.Text = "⬛  Stop VPN";
+            _startStopBtn.Text = "\u2b1b  Stop VPN";
             _startStopBtn.BackColor = Theme.Danger;
             _startStopBtn.ForeColor = Theme.TextOnPrimary;
+            // Resize Start/Stop when Apply is visible
+            _startStopBtn.Size = new Size(330, 36);
         }
         else
         {
             ApplyStartStyle();
+            _applyBtn.Visible = false;
+            // Full width when Apply is hidden
+            _startStopBtn.Size = new Size(498, 36);
         }
 
         if (_tray.RunningAsService)
         {
-            _statusLabel.Text = "Connected — Windows Service (autostart)";
+            _statusLabel.Text = "Connected \u2014 Windows Service (autostart)";
             _statusLabel.ForeColor = Theme.Success;
             _statusDot.ForeColor = Theme.Success;
             _statusPanel.BackColor = Theme.SuccessLight;
         }
         else if (running)
         {
-            _statusLabel.Text = $"Connected — {_engine.ActiveProfileName} — PID {_engine.SingBoxPid}";
+            _statusLabel.Text = $"Connected \u2014 {_engine.ActiveProfileName} \u2014 PID {_engine.SingBoxPid}";
             _statusLabel.ForeColor = Theme.Success;
             _statusDot.ForeColor = Theme.Success;
             _statusPanel.BackColor = Theme.SuccessLight;
@@ -834,7 +951,7 @@ public class MainForm : Form
 
     private void ApplyStartStyle()
     {
-        _startStopBtn.Text = "▶  Start VPN";
+        _startStopBtn.Text = "\u25b6  Start VPN";
         _startStopBtn.BackColor = Theme.Primary;
         _startStopBtn.ForeColor = Theme.TextOnPrimary;
     }

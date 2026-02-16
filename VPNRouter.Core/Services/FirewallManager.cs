@@ -5,9 +5,19 @@ namespace VPNRouter.Core.Services;
 
 /// <summary>
 /// Manages Windows Firewall rules for block_on_vpn_fail.
-/// Rules are created disabled at VPN start, enabled during VPN up,
-/// and permanently deleted on clean shutdown.
-/// On startup, orphaned rules from previous crashes are cleaned up.
+///
+/// Lifecycle:
+/// 1. CreateBlockRules() — creates DISABLED outbound block rules at VPN start
+/// 2. Rules stay DISABLED while VPN is running (sing-box TUN handles routing)
+/// 3. EnableBlockRules() — called by HealthMonitor when sing-box crashes
+///    (prevents traffic from leaking direct while VPN is down)
+/// 4. DisableBlockRules() — called when sing-box successfully restarts
+/// 5. DeleteAllRules() — called on clean shutdown
+///
+/// Key insight: while sing-box is running, TUN captures all targeted traffic
+/// and routes it through proxy. Firewall rules are NOT needed during normal
+/// operation. They are a safety net for the brief window when sing-box dies
+/// and TUN is gone — without them, traffic would go direct.
 /// </summary>
 public class FirewallManager : IDisposable
 {
@@ -25,7 +35,7 @@ public class FirewallManager : IDisposable
 
     /// <summary>
     /// Create DISABLED block rules for all processes with block_on_vpn_fail=true.
-    /// Call this before starting sing-box.
+    /// Rules stay disabled while VPN is running normally.
     /// </summary>
     public void CreateBlockRules(IEnumerable<string> processNames)
     {
@@ -44,12 +54,13 @@ public class FirewallManager : IDisposable
             _managedRules.Add(ruleName);
         }
 
-        _logger.Information("[Firewall] Created {Count} block rules (disabled)", _managedRules.Count);
+        _logger.Information("[Firewall] Created {Count} block rules (disabled — will enable on VPN crash)", _managedRules.Count);
     }
 
     /// <summary>
-    /// Enable block rules — call after VPN is confirmed up.
-    /// Now traffic MUST go through VPN; if VPN drops, rules block direct access.
+    /// Enable block rules — call ONLY when sing-box crashes.
+    /// This blocks all direct outbound traffic for targeted processes,
+    /// preventing data leaks while VPN is down.
     /// </summary>
     public void EnableBlockRules()
     {
@@ -57,11 +68,12 @@ public class FirewallManager : IDisposable
         {
             RunNetsh($"advfirewall firewall set rule name=\"{rule}\" new enable=yes");
         }
-        _logger.Information("[Firewall] Enabled {Count} block rules", _managedRules.Count);
+        _logger.Information("[Firewall] ENABLED {Count} block rules (VPN down — leak protection active)", _managedRules.Count);
     }
 
     /// <summary>
-    /// Disable block rules — call when VPN is stopping gracefully.
+    /// Disable block rules — call when sing-box successfully starts/restarts
+    /// or during clean shutdown.
     /// </summary>
     public void DisableBlockRules()
     {
@@ -69,7 +81,7 @@ public class FirewallManager : IDisposable
         {
             RunNetsh($"advfirewall firewall set rule name=\"{rule}\" new enable=no");
         }
-        _logger.Information("[Firewall] Disabled {Count} block rules", _managedRules.Count);
+        _logger.Information("[Firewall] Disabled {Count} block rules (VPN up — TUN handles routing)", _managedRules.Count);
     }
 
     /// <summary>
@@ -90,10 +102,11 @@ public class FirewallManager : IDisposable
 
     private void CreateBlockRule(string ruleName, string processName, bool enabled)
     {
-        // Block both inbound and outbound for the process
         var enabledStr = enabled ? "yes" : "no";
 
-        // Outbound block
+        // Outbound block — blocks all direct internet access for this process.
+        // When sing-box TUN is up, traffic goes through TUN (not affected by this rule).
+        // When sing-box is down, TUN is gone, traffic would go direct — this rule blocks it.
         RunNetsh($"advfirewall firewall add rule " +
                  $"name=\"{ruleName}\" " +
                  $"dir=out " +

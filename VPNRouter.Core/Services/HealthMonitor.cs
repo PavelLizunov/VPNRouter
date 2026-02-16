@@ -140,6 +140,11 @@ public class HealthMonitor : IDisposable
         _vpnWasRunning = false;
         VpnStopped?.Invoke(this, EventArgs.Empty);
 
+        // Enable firewall block rules — prevent traffic from leaking direct
+        // while sing-box is down and TUN interface is gone
+        try { _firewall.EnableBlockRules(); }
+        catch (Exception ex) { _logger.Error(ex, "[HealthMonitor] Failed to enable firewall block rules on crash"); }
+
         if (_settings.RestartOnFailure)
             AttemptRestart();
     }
@@ -187,6 +192,10 @@ public class HealthMonitor : IDisposable
                 _singBox.ReloadConfig(config);
                 _lastScan = scan;
                 _lastFullRestart = DateTime.UtcNow;
+
+                // Disable firewall block rules — sing-box TUN is back up
+                try { _firewall.DisableBlockRules(); }
+                catch (Exception fwEx) { _logger.Error(fwEx, "[HealthMonitor] Failed to disable firewall block rules after restart"); }
 
                 _logger.Information("[HealthMonitor] sing-box restarted successfully");
                 _restartAttempts = 0;
