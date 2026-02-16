@@ -24,9 +24,9 @@ static class Program
             catch
             {
                 MessageBox.Show(
-                    "VPNRouter requires Administrator rights for TUN interface.\n" +
+                    "Virtual Penguin Network requires Administrator rights for TUN interface.\n" +
                     "Please run as Administrator.",
-                    "VPNRouter",
+                    AppBranding.AppName,
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
             }

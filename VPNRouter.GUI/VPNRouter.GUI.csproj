@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\penguin_logo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\VPNRouter.Core\VPNRouter.Core.csproj" />
     <ProjectReference Include="..\VPNRouter.Service\VPNRouter.Service.csproj" />
   </ItemGroup>

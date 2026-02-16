@@ -5,7 +5,7 @@ using VPNRouter.Service;
 namespace VPNRouter.GUI;
 
 /// <summary>
-/// Main settings window. Tabs: Servers (VLESS URIs) | Apps (profiles) | bottom Start/Stop bar.
+/// Main settings window. Header with logo, tabs: Servers | Apps, bottom status + Start/Stop.
 /// </summary>
 public class MainForm : Form
 {
@@ -32,6 +32,8 @@ public class MainForm : Form
     private Button _startStopBtn = null!;
     private CheckBox _autostartCheck = null!;
     private Label _statusLabel = null!;
+    private Panel _statusPanel = null!;
+    private Label _statusDot = null!;
 
     // ── State ──
     private AppSettings _settings = null!;
@@ -66,85 +68,177 @@ public class MainForm : Form
 
     private void InitializeComponent()
     {
-        Text = "VPNRouter Settings";
-        Size = new Size(520, 600);
-        MinimumSize = new Size(460, 520);
+        Text = AppBranding.WindowTitle;
+        Size = new Size(540, 680);
+        MinimumSize = new Size(480, 560);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
+        BackColor = Theme.Background;
+        Font = Theme.BodyFont;
+        Icon = AppBranding.GetIcon(32);
 
+        // ── Header panel (logo + brand) ──
+        var header = BuildHeaderPanel();
+
+        // ── Tabs ──
         var tabs = new TabControl { Dock = DockStyle.Fill };
+        tabs.Font = Theme.BodyFont;
 
-        // ── Servers tab ──
-        var serversPage = new TabPage("Servers");
+        var serversPage = new TabPage("Servers") { BackColor = Theme.Background, Padding = new Padding(10) };
         BuildServersTab(serversPage);
         tabs.TabPages.Add(serversPage);
 
-        // ── Apps tab ──
-        var appsPage = new TabPage("Applications");
+        var appsPage = new TabPage("Applications") { BackColor = Theme.Background, Padding = new Padding(10) };
         BuildAppsTab(appsPage);
         tabs.TabPages.Add(appsPage);
 
-        // ── Bottom panel ──
-        var bottomPanel = new Panel
+        // ── Status bar ──
+        _statusPanel = new Panel
         {
             Dock = DockStyle.Bottom,
-            Height = 85,
-            Padding = new Padding(10, 5, 10, 5)
+            Height = 32,
+            BackColor = Theme.Background,
+            Padding = new Padding(14, 0, 14, 0)
+        };
+
+        _statusDot = new Label
+        {
+            Text = "●",
+            Font = new Font("Segoe UI", 10f),
+            ForeColor = Theme.TextMuted,
+            AutoSize = true,
+            Location = new Point(14, 6)
         };
 
         _statusLabel = new Label
         {
-            Dock = DockStyle.Top,
-            Height = 20,
-            Text = "Not running",
-            ForeColor = Color.Gray,
-            TextAlign = ContentAlignment.MiddleCenter
+            Text = "Not connected",
+            Font = Theme.BodyFont,
+            ForeColor = Theme.TextMuted,
+            AutoSize = true,
+            Location = new Point(32, 8)
+        };
+
+        _statusPanel.Paint += (s, e) =>
+        {
+            using var pen = new Pen(Theme.SurfaceBorder);
+            e.Graphics.DrawLine(pen, 0, 0, _statusPanel.Width, 0);
+        };
+
+        _statusPanel.Controls.Add(_statusDot);
+        _statusPanel.Controls.Add(_statusLabel);
+
+        // ── Action panel (Start/Stop + autostart) ──
+        var actionPanel = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 60,
+            BackColor = Theme.Surface,
+            Padding = new Padding(14, 8, 14, 8)
         };
 
         _autostartCheck = new CheckBox
         {
-            Dock = DockStyle.Top,
-            Height = 22,
-            Text = "Autostart with Windows (runs as background service, no GUI needed)",
+            Text = "Autostart with Windows",
+            Font = Theme.SmallFont,
+            ForeColor = Theme.TextSecondary,
             Checked = ServiceInstaller.IsInstalled(),
-            Padding = new Padding(0, 2, 0, 0)
+            AutoSize = true,
+            Location = new Point(14, 40),
+            BackColor = Theme.Surface
         };
         _autostartCheck.CheckedChanged += OnAutostartChanged;
 
         _startStopBtn = new Button
         {
-            Dock = DockStyle.Bottom,
-            Height = 35,
-            Text = "▶ Start VPN",
-            BackColor = Color.MediumSeaGreen,
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Font = new Font(Font.FontFamily, 11, FontStyle.Bold)
+            Text = "▶  Start VPN",
+            Size = new Size(498, 36),
+            Location = new Point(14, 4),
+            Font = Theme.StartStopFont,
+            Cursor = Cursors.Hand,
+            FlatStyle = FlatStyle.Flat
         };
+        _startStopBtn.FlatAppearance.BorderSize = 0;
         _startStopBtn.Click += OnStartStop;
+        ApplyStartStyle();
 
-        bottomPanel.Controls.Add(_startStopBtn);
-        bottomPanel.Controls.Add(_autostartCheck);
-        bottomPanel.Controls.Add(_statusLabel);
+        actionPanel.Controls.Add(_startStopBtn);
+        actionPanel.Controls.Add(_autostartCheck);
 
+        // ── Dock order: last added docks first ──
+        // Fill = tabs, Bottom = status then action, Top = header
         Controls.Add(tabs);
-        Controls.Add(bottomPanel);
+        Controls.Add(_statusPanel);
+        Controls.Add(actionPanel);
+        Controls.Add(header);
 
         // Set initial UI state
         bool running = _engine.IsRunning || _tray.RunningAsService;
         if (running) UpdateUI(true);
     }
 
+    private Panel BuildHeaderPanel()
+    {
+        var panel = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 72,
+            BackColor = Theme.Surface
+        };
+
+        var logo = new PictureBox
+        {
+            Image = AppBranding.GetLogo(),
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Size = new Size(50, 50),
+            Location = new Point(16, 11),
+            BackColor = Color.Transparent
+        };
+
+        var title = new Label
+        {
+            Text = AppBranding.AppName,
+            Font = Theme.HeaderFont,
+            ForeColor = Theme.Primary,
+            AutoSize = true,
+            Location = new Point(74, 12),
+            BackColor = Color.Transparent
+        };
+
+        var subtitle = new Label
+        {
+            Text = $"by {AppBranding.Publisher}",
+            Font = Theme.SubHeaderFont,
+            ForeColor = Theme.TextMuted,
+            AutoSize = true,
+            Location = new Point(76, 42),
+            BackColor = Color.Transparent
+        };
+
+        panel.Controls.Add(logo);
+        panel.Controls.Add(title);
+        panel.Controls.Add(subtitle);
+
+        // Bottom border
+        panel.Paint += (s, e) =>
+        {
+            using var pen = new Pen(Theme.SurfaceBorder);
+            e.Graphics.DrawLine(pen, 0, panel.Height - 1, panel.Width, panel.Height - 1);
+        };
+
+        return panel;
+    }
+
     private void BuildServersTab(TabPage page)
     {
-        page.Padding = new Padding(10);
-
         var inputLabel = new Label
         {
             Text = "Paste VLESS URI(s) — first server = Primary, others = Fallback:",
             Dock = DockStyle.Top,
-            Height = 20
+            Height = 22,
+            ForeColor = Theme.TextSecondary,
+            Font = Theme.BodyFont
         };
 
         _uriInput = new TextBox
@@ -153,15 +247,18 @@ public class MainForm : Form
             Height = 60,
             Multiline = true,
             ScrollBars = ScrollBars.Vertical,
-            PlaceholderText = "vless://uuid@server:443?security=reality&sni=...#name"
+            PlaceholderText = "vless://uuid@server:443?security=reality&sni=...#name",
+            BackColor = Theme.InputBackground,
+            Font = Theme.BodyFont
         };
 
         _addBtn = new Button
         {
             Text = "Add Server(s)",
             Dock = DockStyle.Top,
-            Height = 30
+            Height = 32
         };
+        Theme.ApplyPrimary(_addBtn);
         _addBtn.Click += OnAddServer;
 
         _serverList = new ListView
@@ -169,7 +266,10 @@ public class MainForm : Form
             Dock = DockStyle.Fill,
             View = View.Details,
             FullRowSelect = true,
-            GridLines = true
+            GridLines = true,
+            BackColor = Theme.Surface,
+            ForeColor = Theme.TextPrimary,
+            Font = Theme.BodyFont
         };
         _serverList.Columns.Add("Role", 70);
         _serverList.Columns.Add("Name", 110);
@@ -180,20 +280,25 @@ public class MainForm : Form
         var btnPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Bottom,
-            Height = 35,
-            FlowDirection = FlowDirection.RightToLeft
+            Height = 36,
+            FlowDirection = FlowDirection.RightToLeft,
+            BackColor = Theme.Background
         };
 
-        _clearBtn = new Button { Text = "Clear All", Width = 70 };
+        _clearBtn = new Button { Text = "Clear All", Width = 72, Height = 28 };
+        Theme.ApplySecondary(_clearBtn);
         _clearBtn.Click += (_, _) => { _servers.Clear(); RefreshServerList(); SaveSettings(); };
 
-        _removeBtn = new Button { Text = "Remove", Width = 70 };
+        _removeBtn = new Button { Text = "Remove", Width = 72, Height = 28 };
+        Theme.ApplySecondary(_removeBtn);
         _removeBtn.Click += OnRemoveServer;
 
-        _downBtn = new Button { Text = "▼ Down", Width = 65 };
+        _downBtn = new Button { Text = "▼ Down", Width = 68, Height = 28 };
+        Theme.ApplySecondary(_downBtn);
         _downBtn.Click += OnMoveDown;
 
-        _upBtn = new Button { Text = "▲ Up", Width = 55 };
+        _upBtn = new Button { Text = "▲ Up", Width = 58, Height = 28 };
+        Theme.ApplySecondary(_upBtn);
         _upBtn.Click += OnMoveUp;
 
         btnPanel.Controls.Add(_clearBtn);
@@ -201,7 +306,7 @@ public class MainForm : Form
         btnPanel.Controls.Add(_downBtn);
         btnPanel.Controls.Add(_upBtn);
 
-        // Order matters: last added = top of dock
+        // Dock order: last added = top
         page.Controls.Add(_serverList);
         page.Controls.Add(btnPanel);
         page.Controls.Add(_addBtn);
@@ -211,23 +316,25 @@ public class MainForm : Form
 
     private void BuildAppsTab(TabPage page)
     {
-        page.Padding = new Padding(10);
-
         var label = new Label
         {
             Text = "Check groups to route through VPN (expand to see apps inside):",
             Dock = DockStyle.Top,
-            Height = 25
+            Height = 25,
+            ForeColor = Theme.TextSecondary,
+            Font = Theme.BodyFont
         };
 
         _profileTree = new TreeView
         {
             Dock = DockStyle.Fill,
             CheckBoxes = true,
-            Font = new Font(Font.FontFamily, 10),
+            Font = new Font("Segoe UI", 10),
             ShowLines = true,
             ShowPlusMinus = true,
-            ShowRootLines = true
+            ShowRootLines = true,
+            BackColor = Theme.Surface,
+            ForeColor = Theme.TextPrimary
         };
         _profileTree.AfterCheck += OnProfileTreeCheck;
 
@@ -241,7 +348,7 @@ public class MainForm : Form
                 var childText = proc.IncludeChildren
                     ? $"{proc.Name} (+ child processes)"
                     : proc.Name;
-                node.Nodes.Add(new TreeNode(childText) { ForeColor = Color.Gray });
+                node.Nodes.Add(new TreeNode(childText) { ForeColor = Theme.TextMuted });
             }
             _profileTree.Nodes.Add(node);
         }
@@ -250,7 +357,8 @@ public class MainForm : Form
         var customPanel = new Panel
         {
             Dock = DockStyle.Bottom,
-            Height = 65
+            Height = 65,
+            BackColor = Theme.Background
         };
 
         var customLabel = new Label
@@ -258,27 +366,33 @@ public class MainForm : Form
             Text = "Add custom app (exe name, e.g. spotify.exe):",
             Dock = DockStyle.Top,
             Height = 18,
-            ForeColor = Color.DimGray
+            ForeColor = Theme.TextSecondary,
+            Font = Theme.SmallFont
         };
 
         var inputRow = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 30,
-            FlowDirection = FlowDirection.LeftToRight
+            Height = 32,
+            FlowDirection = FlowDirection.LeftToRight,
+            BackColor = Theme.Background
         };
 
         _customAppInput = new TextBox
         {
             Width = 250,
-            PlaceholderText = "app.exe"
+            PlaceholderText = "app.exe",
+            BackColor = Theme.InputBackground,
+            Font = Theme.BodyFont
         };
         _customAppInput.KeyDown += (_, ke) => { if (ke.KeyCode == Keys.Enter) { OnAddCustomApp(null, EventArgs.Empty); ke.SuppressKeyPress = true; } };
 
-        _addCustomBtn = new Button { Text = "Add", Width = 55 };
+        _addCustomBtn = new Button { Text = "Add", Width = 55, Height = 26 };
+        Theme.ApplyPrimary(_addCustomBtn);
         _addCustomBtn.Click += OnAddCustomApp;
 
-        _removeCustomBtn = new Button { Text = "Remove checked custom", Width = 140 };
+        _removeCustomBtn = new Button { Text = "Remove checked", Width = 120, Height = 26 };
+        Theme.ApplySecondary(_removeCustomBtn);
         _removeCustomBtn.Click += OnRemoveCustomApp;
 
         inputRow.Controls.Add(_customAppInput);
@@ -295,12 +409,9 @@ public class MainForm : Form
 
     private void OnProfileTreeCheck(object? sender, TreeViewEventArgs e)
     {
-        // Only handle user actions, not programmatic checks
         if (e.Action == TreeViewAction.Unknown) return;
 
         var node = e.Node!;
-
-        // If parent node checked/unchecked — propagate to children
         if (node.Parent == null)
         {
             foreach (TreeNode child in node.Nodes)
@@ -313,11 +424,9 @@ public class MainForm : Form
         var name = _customAppInput.Text.Trim();
         if (string.IsNullOrEmpty(name)) return;
 
-        // Ensure .exe extension
         if (!name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             name += ".exe";
 
-        // Avoid duplicates
         if (_customApps.Contains(name, StringComparer.OrdinalIgnoreCase))
         {
             _customAppInput.Clear();
@@ -326,7 +435,6 @@ public class MainForm : Form
 
         _customApps.Add(name);
 
-        // Add to tree under "Custom Apps" node
         var customRoot = GetOrCreateCustomNode();
         customRoot.Nodes.Add(new TreeNode(name) { Checked = true });
         customRoot.Checked = true;
@@ -341,7 +449,6 @@ public class MainForm : Form
         var customRoot = FindCustomNode();
         if (customRoot == null) return;
 
-        // Collect checked children to remove
         var toRemove = new List<TreeNode>();
         foreach (TreeNode child in customRoot.Nodes)
         {
@@ -371,7 +478,7 @@ public class MainForm : Form
         var node = new TreeNode("Custom Apps  —  Your custom applications")
         {
             Tag = "_custom",
-            ForeColor = Color.DarkBlue,
+            ForeColor = Theme.Primary,
             NodeFont = new Font(_profileTree.Font, FontStyle.Bold)
         };
         _profileTree.Nodes.Add(node);
@@ -424,14 +531,12 @@ public class MainForm : Form
             }
         }
 
-        // Load custom apps from config (stored as _custom profile processes)
+        // Load custom apps from config
         if (_settings.ActiveProfile?.Contains("_custom", StringComparison.OrdinalIgnoreCase) == true)
         {
-            // Custom apps are stored in config.yaml under a special key
-            // For now, they're persisted as custom_apps list in AppSettings
+            // Custom apps stored in config.yaml under custom_apps key
         }
 
-        // Load custom apps from settings if any
         if (_settings.CustomApps != null)
         {
             foreach (var app in _settings.CustomApps)
@@ -472,7 +577,7 @@ public class MainForm : Form
             // Highlight primary
             if (i == 0)
             {
-                item.ForeColor = Color.DarkGreen;
+                item.ForeColor = Theme.Primary;
                 item.Font = new Font(_serverList.Font, FontStyle.Bold);
             }
 
@@ -493,7 +598,6 @@ public class MainForm : Form
     {
         // Update servers
         _settings.Vless.Servers = new List<VlessServerEntry>(_servers);
-        // Clear legacy fields if using multi-server
         if (_servers.Count > 0)
             _settings.Vless.Server = string.Empty;
 
@@ -525,7 +629,7 @@ public class MainForm : Form
             var entries = VlessUriParser.ParseMultiple(text);
             if (entries.Count == 0)
             {
-                MessageBox.Show("No valid VLESS URIs found.", "VPNRouter",
+                MessageBox.Show("No valid VLESS URIs found.", AppBranding.AppName,
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -538,7 +642,7 @@ public class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to parse VLESS URI:\n{ex.Message}", "VPNRouter",
+            MessageBox.Show($"Failed to parse VLESS URI:\n{ex.Message}", AppBranding.AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
@@ -587,11 +691,10 @@ public class MainForm : Form
 
     private void OnAutostartChanged(object? sender, EventArgs e)
     {
-        SaveSettings(); // save config before installing service
+        SaveSettings();
 
         if (_autostartCheck.Checked)
         {
-            // Install and start service
             var serviceExe = Path.Combine(AppContext.BaseDirectory, "service", "VPNRouter.Service.exe");
             if (!File.Exists(serviceExe))
                 serviceExe = Path.Combine(AppContext.BaseDirectory, "VPNRouter.Service.exe");
@@ -599,12 +702,11 @@ public class MainForm : Form
             if (!File.Exists(serviceExe))
             {
                 MessageBox.Show("VPNRouter.Service.exe not found.\nAutostart requires the service binary.",
-                    "VPNRouter", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
                 _autostartCheck.Checked = false;
                 return;
             }
 
-            // Stop in-process VPN first if running
             if (_engine.IsRunning)
             {
                 _engine.Stop();
@@ -614,7 +716,7 @@ public class MainForm : Form
             if (!result.Success)
             {
                 MessageBox.Show($"Failed to install service:\n{result.Message}",
-                    "VPNRouter", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
                 _autostartCheck.Checked = false;
                 return;
             }
@@ -623,23 +725,14 @@ public class MainForm : Form
             _tray.RunningAsService = true;
             _tray.SyncTrayState(null);
 
-            _statusLabel.Text = "Running as Windows Service (autostart enabled)";
-            _statusLabel.ForeColor = Color.Green;
-            _startStopBtn.Text = "⬛ Stop VPN";
-            _startStopBtn.BackColor = Color.IndianRed;
+            UpdateUI(true);
         }
         else
         {
-            // Stop and uninstall service
             if (ServiceInstaller.IsRunning())
-            {
                 ServiceInstaller.Stop();
-            }
-
             if (ServiceInstaller.IsInstalled())
-            {
                 ServiceInstaller.Uninstall();
-            }
 
             _tray.RunningAsService = false;
             _tray.SyncTrayState(null);
@@ -649,7 +742,6 @@ public class MainForm : Form
 
     private async void OnStartStop(object? sender, EventArgs e)
     {
-        // If running as service, stop service
         if (_tray.RunningAsService)
         {
             ServiceInstaller.Stop();
@@ -659,7 +751,6 @@ public class MainForm : Form
             return;
         }
 
-        // If running in-process, stop
         if (_engine.IsRunning)
         {
             _engine.Stop();
@@ -672,17 +763,15 @@ public class MainForm : Form
 
         if (_servers.Count == 0)
         {
-            MessageBox.Show("Add at least one VLESS server first.", "VPNRouter",
+            MessageBox.Show("Add at least one VLESS server first.", AppBranding.AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        var checkedCount = _profileTree.Nodes.Cast<TreeNode>()
-            .Count(n => n.Checked);
-
+        var checkedCount = _profileTree.Nodes.Cast<TreeNode>().Count(n => n.Checked);
         if (checkedCount == 0)
         {
-            MessageBox.Show("Select at least one application group.", "VPNRouter",
+            MessageBox.Show("Select at least one application group.", AppBranding.AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
@@ -700,7 +789,7 @@ public class MainForm : Form
         catch (Exception ex)
         {
             UpdateUI(false);
-            MessageBox.Show($"Failed to start VPN:\n{ex.Message}", "VPNRouter",
+            MessageBox.Show($"Failed to start VPN:\n{ex.Message}", AppBranding.AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
@@ -708,24 +797,46 @@ public class MainForm : Form
     private void UpdateUI(bool running)
     {
         _startStopBtn.Enabled = true;
-        _startStopBtn.Text = running ? "⬛ Stop VPN" : "▶ Start VPN";
-        _startStopBtn.BackColor = running ? Color.IndianRed : Color.MediumSeaGreen;
 
-        if (_tray.RunningAsService)
+        if (running)
         {
-            _statusLabel.Text = "Running as Windows Service (autostart enabled)";
-            _statusLabel.ForeColor = Color.Green;
-        }
-        else if (running)
-        {
-            _statusLabel.Text = $"Running — {_engine.ActiveProfileName} — PID {_engine.SingBoxPid}";
-            _statusLabel.ForeColor = Color.Green;
+            _startStopBtn.Text = "⬛  Stop VPN";
+            _startStopBtn.BackColor = Theme.Danger;
+            _startStopBtn.ForeColor = Theme.TextOnPrimary;
         }
         else
         {
-            _statusLabel.Text = "Not running";
-            _statusLabel.ForeColor = Color.Gray;
+            ApplyStartStyle();
         }
+
+        if (_tray.RunningAsService)
+        {
+            _statusLabel.Text = "Connected — Windows Service (autostart)";
+            _statusLabel.ForeColor = Theme.Success;
+            _statusDot.ForeColor = Theme.Success;
+            _statusPanel.BackColor = Theme.SuccessLight;
+        }
+        else if (running)
+        {
+            _statusLabel.Text = $"Connected — {_engine.ActiveProfileName} — PID {_engine.SingBoxPid}";
+            _statusLabel.ForeColor = Theme.Success;
+            _statusDot.ForeColor = Theme.Success;
+            _statusPanel.BackColor = Theme.SuccessLight;
+        }
+        else
+        {
+            _statusLabel.Text = "Not connected";
+            _statusLabel.ForeColor = Theme.TextMuted;
+            _statusDot.ForeColor = Theme.TextMuted;
+            _statusPanel.BackColor = Theme.Background;
+        }
+    }
+
+    private void ApplyStartStyle()
+    {
+        _startStopBtn.Text = "▶  Start VPN";
+        _startStopBtn.BackColor = Theme.Primary;
+        _startStopBtn.ForeColor = Theme.TextOnPrimary;
     }
 
     private void OnEngineStatus(string msg)
@@ -741,7 +852,6 @@ public class MainForm : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        // Don't exit app — just hide to tray
         if (e.CloseReason == CloseReason.UserClosing)
         {
             e.Cancel = true;

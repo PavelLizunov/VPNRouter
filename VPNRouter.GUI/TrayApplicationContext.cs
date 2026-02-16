@@ -36,8 +36,8 @@ public class TrayApplicationContext : ApplicationContext
 
         _trayIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Shield,
-            Text = "VPNRouter",
+            Icon = AppBranding.GetIcon(16),
+            Text = AppBranding.TrayTooltip,
             ContextMenuStrip = menu,
             Visible = true
         };
@@ -72,18 +72,18 @@ public class TrayApplicationContext : ApplicationContext
         if (_runningAsService)
         {
             _statusItem.Text = statusMessage ?? "Running as Windows Service (autostart)";
-            SetTrayTooltip("VPNRouter — Service (autostart)");
+            SetTrayTooltip($"{AppBranding.AppName} — Service");
         }
         else if (_engine.IsRunning)
         {
             var profile = _engine.ActiveProfileName;
             _statusItem.Text = statusMessage ?? $"Running — {profile}";
-            SetTrayTooltip($"VPNRouter — {profile} (PID {_engine.SingBoxPid})");
+            SetTrayTooltip($"{AppBranding.ShortName} — {profile} (PID {_engine.SingBoxPid})");
         }
         else
         {
             _statusItem.Text = statusMessage ?? "Not running";
-            SetTrayTooltip("VPNRouter");
+            SetTrayTooltip(AppBranding.TrayTooltip);
         }
 
         // Also update MainForm if open
@@ -135,12 +135,12 @@ public class TrayApplicationContext : ApplicationContext
             await _engine.StartAsync(settings);
             _runningAsService = false;
             SyncTrayState(null);
-            _trayIcon.ShowBalloonTip(2000, "VPNRouter", "VPN started", ToolTipIcon.Info);
+            _trayIcon.ShowBalloonTip(2000, AppBranding.AppName, "VPN started", ToolTipIcon.Info);
         }
         catch (Exception ex)
         {
             SyncTrayState(null);
-            MessageBox.Show($"Failed to start VPN:\n{ex.Message}", "VPNRouter",
+            MessageBox.Show($"Failed to start VPN:\n{ex.Message}", AppBranding.AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
@@ -164,7 +164,7 @@ public class TrayApplicationContext : ApplicationContext
     {
         if (_engine.IsRunning)
         {
-            if (MessageBox.Show("VPN is running. Stop and exit?", "VPNRouter",
+            if (MessageBox.Show("VPN is running. Stop and exit?", AppBranding.AppName,
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.No)
                 return;
 
