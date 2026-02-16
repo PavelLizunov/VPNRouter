@@ -111,6 +111,18 @@ public class SingBoxManager : IDisposable
         Restart();
     }
 
+    /// <summary>
+    /// Attempts hot-reload only (no fallback to full restart).
+    /// Returns true if hot-reload succeeded, false otherwise.
+    /// Use this for debounce-triggered reloads to avoid restart storms.
+    /// </summary>
+    public bool TryReloadConfig(SingBoxConfig config)
+    {
+        _logger.Information("[SingBoxManager] Attempting hot-reload (no restart fallback)");
+        _currentConfigPath = WriteConfigToDisk(config);
+        return TryHotReload();
+    }
+
     public bool IsRunning() => State == SingBoxState.Running && _process?.HasExited == false;
 
     public bool IsHealthy()

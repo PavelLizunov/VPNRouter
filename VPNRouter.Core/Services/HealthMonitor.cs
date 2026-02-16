@@ -36,6 +36,11 @@ public class HealthMonitor : IDisposable
     // Debounce window — wait 5s after last new process before reloading
     private static readonly TimeSpan DebounceWindow = TimeSpan.FromSeconds(5);
 
+    // Minimum time between full restarts to prevent restart storms.
+    // If hot-reload fails and a full restart is needed, enforce at least this gap.
+    private static readonly TimeSpan RestartCooldown = TimeSpan.FromSeconds(60);
+    private DateTime _lastFullRestart = DateTime.MinValue;
+
     public event EventHandler? VpnStarted;
     public event EventHandler? VpnStopped;
     public event EventHandler<int>? RestartAttempted; // arg = attempt number
@@ -181,6 +186,7 @@ public class HealthMonitor : IDisposable
                 var config = ConfigGenerator.Generate(_activeProfile, scan.ProcessNames, _appSettings);
                 _singBox.ReloadConfig(config);
                 _lastScan = scan;
+                _lastFullRestart = DateTime.UtcNow;
 
                 _logger.Information("[HealthMonitor] sing-box restarted successfully");
                 _restartAttempts = 0;
@@ -220,18 +226,42 @@ public class HealthMonitor : IDisposable
                 return;
             }
 
-            _logger.Information("[HealthMonitor] Process list changed — reloading sing-box config");
+            _logger.Information("[HealthMonitor] Process list changed ({Prev} → {New} processes) — reloading sing-box config",
+                prevFiltered?.Count ?? 0, newFiltered.Count);
 
             // Cancel any pending AttemptRestart — we're doing a fresh reload now
             _restartCts?.Cancel();
 
             var config = ConfigGenerator.Generate(_activeProfile, newScan.ProcessNames, _appSettings);
-            _singBox.ReloadConfig(config);
-            _lastScan = newScan;
-            _restartAttempts = 0; // reset counter — this was a planned reload, not a crash
 
-            _logger.Information("[HealthMonitor] Config reloaded with {Count} processes",
-                newFiltered.Count);
+            // Try hot-reload first (no restart fallback) to avoid TUN restart storms.
+            // If hot-reload fails, only do a full restart if cooldown has elapsed.
+            if (_singBox.TryReloadConfig(config))
+            {
+                _lastScan = newScan;
+                _restartAttempts = 0;
+                _logger.Information("[HealthMonitor] Hot-reload succeeded with {Count} processes", newFiltered.Count);
+            }
+            else
+            {
+                var sinceLastRestart = DateTime.UtcNow - _lastFullRestart;
+                if (sinceLastRestart < RestartCooldown)
+                {
+                    _logger.Warning("[HealthMonitor] Hot-reload failed, but cooldown active ({Remaining}s left) — deferring full restart",
+                        (int)(RestartCooldown - sinceLastRestart).TotalSeconds);
+                    // Save scan so next debounce can try again
+                    _lastScan = newScan;
+                }
+                else
+                {
+                    _logger.Warning("[HealthMonitor] Hot-reload failed — performing full restart");
+                    _lastFullRestart = DateTime.UtcNow;
+                    _singBox.Restart();
+                    _lastScan = newScan;
+                    _restartAttempts = 0;
+                    _logger.Information("[HealthMonitor] Full restart completed with {Count} processes", newFiltered.Count);
+                }
+            }
         }
         catch (Exception ex)
         {
