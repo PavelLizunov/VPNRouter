@@ -239,6 +239,8 @@ public class SingBoxManager : IDisposable
     /// <summary>
     /// Only fires for genuine crashes — Stop() disables EnableRaisingEvents
     /// before Kill(), so intentional stops never reach here.
+    /// Exit code 0 = sing-box exited cleanly (e.g. network not ready at boot).
+    /// Non-zero = actual crash. Both trigger restart via Crashed event.
     /// </summary>
     private void OnProcessExited()
     {
@@ -250,8 +252,16 @@ public class SingBoxManager : IDisposable
         }
         catch { /* process disposed or access denied */ }
 
-        _logger.Error("[SingBoxManager] sing-box crashed (exit code: {Code})",
-            exitCode?.ToString() ?? "unknown");
+        if (exitCode == 0)
+        {
+            _logger.Warning("[SingBoxManager] sing-box exited unexpectedly (exit code 0) — will attempt restart");
+        }
+        else
+        {
+            _logger.Error("[SingBoxManager] sing-box crashed (exit code: {Code})",
+                exitCode?.ToString() ?? "unknown");
+        }
+
         State = SingBoxState.Failed;
         Crashed?.Invoke(this, EventArgs.Empty);
     }

@@ -46,8 +46,8 @@ public static class ServiceInstaller
         // Configure failure recovery: restart after 60s, 3 times, reset counter after 24h
         RunSc($"failure {ServiceName} reset= 86400 actions= restart/60000/restart/60000/restart/60000");
 
-        // Set delayed auto-start for better boot performance
-        RunSc($"config {ServiceName} start= delayed-auto");
+        // Use regular auto-start (not delayed) — VPN should be up ASAP after boot.
+        // delayed-auto adds ~2 min delay which leaves traffic unprotected.
 
         return InstallResult.Ok($"Service '{ServiceName}' installed successfully.\nPath: {exePath}");
     }
