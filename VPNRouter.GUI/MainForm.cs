@@ -32,6 +32,7 @@ public class MainForm : Form
     private Button _startStopBtn = null!;
     private Button _applyBtn = null!;
     private CheckBox _autostartCheck = null!;
+    private Button _restartServiceBtn = null!;
     private Label _statusLabel = null!;
     private Panel _statusPanel = null!;
     private Label _statusDot = null!;
@@ -180,9 +181,24 @@ public class MainForm : Form
         };
         _autostartCheck.CheckedChanged += OnAutostartChanged;
 
+        _restartServiceBtn = new Button
+        {
+            Text = "\u21bb  Restart Service",
+            Size = new Size(130, 24),
+            Location = new Point(200, 50),
+            Font = Theme.SmallFont,
+            Cursor = Cursors.Hand,
+            FlatStyle = FlatStyle.Flat,
+            Visible = false
+        };
+        Theme.ApplySecondary(_restartServiceBtn);
+        _restartServiceBtn.FlatAppearance.BorderSize = 0;
+        _restartServiceBtn.Click += OnRestartService;
+
         actionPanel.Controls.Add(_startStopBtn);
         actionPanel.Controls.Add(_applyBtn);
         actionPanel.Controls.Add(_autostartCheck);
+        actionPanel.Controls.Add(_restartServiceBtn);
 
         // ── Dock order: last added docks first ──
         // Fill = tabs, Bottom = status then action, Top = header
@@ -875,6 +891,45 @@ public class MainForm : Form
         }
     }
 
+    private async void OnRestartService(object? sender, EventArgs e)
+    {
+        if (!_tray.RunningAsService) return;
+
+        _restartServiceBtn.Enabled = false;
+        _restartServiceBtn.Text = "Restarting...";
+        _startStopBtn.Enabled = false;
+        _statusLabel.Text = "Restarting service...";
+
+        try
+        {
+            var result = await Task.Run(() =>
+            {
+                var stopResult = ServiceInstaller.Stop();
+                if (!stopResult.Success) return stopResult;
+                return ServiceInstaller.Start();
+            });
+
+            if (!result.Success)
+            {
+                _tray.RunningAsService = false;
+                _tray.SyncTrayState(null);
+                UpdateUI(false);
+                MessageBox.Show($"Failed to restart service:\n{result.Message}",
+                    AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            _tray.SyncTrayState(null);
+            UpdateUI(true);
+        }
+        finally
+        {
+            _restartServiceBtn.Enabled = true;
+            _restartServiceBtn.Text = "\u21bb  Restart Service";
+            _startStopBtn.Enabled = true;
+        }
+    }
+
     private async void OnStartStop(object? sender, EventArgs e)
     {
         if (_tray.RunningAsService)
@@ -950,6 +1005,8 @@ public class MainForm : Form
             // Full width when Apply is hidden
             _startStopBtn.Size = new Size(498, 36);
         }
+
+        _restartServiceBtn.Visible = _tray.RunningAsService;
 
         if (_tray.RunningAsService)
         {
