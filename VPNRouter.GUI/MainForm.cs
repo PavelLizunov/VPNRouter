@@ -33,6 +33,7 @@ public class MainForm : Form
     private Button _applyBtn = null!;
     private CheckBox _autostartCheck = null!;
     private Button _restartServiceBtn = null!;
+    private Button _reinstallServiceBtn = null!;
     private Label _statusLabel = null!;
     private Panel _statusPanel = null!;
     private Label _statusDot = null!;
@@ -75,6 +76,7 @@ public class MainForm : Form
         MinimumSize = new Size(480, 560);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
+        ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Theme.Background;
         Font = Theme.BodyFont;
@@ -195,10 +197,25 @@ public class MainForm : Form
         _restartServiceBtn.FlatAppearance.BorderSize = 0;
         _restartServiceBtn.Click += OnRestartService;
 
+        _reinstallServiceBtn = new Button
+        {
+            Text = "\u21bb  Reinstall Service",
+            Size = new Size(140, 24),
+            Location = new Point(340, 50),
+            Font = Theme.SmallFont,
+            Cursor = Cursors.Hand,
+            FlatStyle = FlatStyle.Flat,
+            Visible = false
+        };
+        Theme.ApplySecondary(_reinstallServiceBtn);
+        _reinstallServiceBtn.FlatAppearance.BorderSize = 0;
+        _reinstallServiceBtn.Click += OnReinstallService;
+
         actionPanel.Controls.Add(_startStopBtn);
         actionPanel.Controls.Add(_applyBtn);
         actionPanel.Controls.Add(_autostartCheck);
         actionPanel.Controls.Add(_restartServiceBtn);
+        actionPanel.Controls.Add(_reinstallServiceBtn);
 
         // ── Dock order: last added docks first ──
         // Fill = tabs, Bottom = status then action, Top = header
@@ -930,6 +947,93 @@ public class MainForm : Form
         }
     }
 
+    private async void OnReinstallService(object? sender, EventArgs e)
+    {
+        var confirm = MessageBox.Show(
+            "This will stop the service, uninstall it, and reinstall from the current binary.\n\n" +
+            "Use this after updating VPNRouter to apply the new service executable.\n\nContinue?",
+            AppBranding.AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+        if (confirm != DialogResult.Yes) return;
+
+        _reinstallServiceBtn.Enabled = false;
+        _reinstallServiceBtn.Text = "Reinstalling...";
+        _restartServiceBtn.Enabled = false;
+        _startStopBtn.Enabled = false;
+        _autostartCheck.Enabled = false;
+        _statusLabel.Text = "Reinstalling service...";
+
+        try
+        {
+            var serviceExe = Path.Combine(AppContext.BaseDirectory, "service", "VPNRouter.Service.exe");
+            if (!File.Exists(serviceExe))
+                serviceExe = Path.Combine(AppContext.BaseDirectory, "VPNRouter.Service.exe");
+
+            if (!File.Exists(serviceExe))
+            {
+                MessageBox.Show("VPNRouter.Service.exe not found.\nCannot reinstall service.",
+                    AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            var result = await Task.Run(() =>
+            {
+                // 1. Stop if running
+                if (ServiceInstaller.IsRunning())
+                {
+                    var stopResult = ServiceInstaller.Stop();
+                    if (!stopResult.Success)
+                        return InstallResult.Fail($"Failed to stop: {stopResult.Message}");
+                }
+
+                // 2. Uninstall
+                if (ServiceInstaller.IsInstalled())
+                {
+                    var uninstResult = ServiceInstaller.Uninstall();
+                    if (!uninstResult.Success)
+                        return InstallResult.Fail($"Failed to uninstall: {uninstResult.Message}");
+
+                    // Brief pause for SCM to fully release the service
+                    Thread.Sleep(1000);
+                }
+
+                // 3. Install with current binary path
+                var installResult = ServiceInstaller.Install(serviceExe);
+                if (!installResult.Success)
+                    return InstallResult.Fail($"Failed to install: {installResult.Message}");
+
+                // 4. Start
+                return ServiceInstaller.Start();
+            });
+
+            if (!result.Success)
+            {
+                _tray.RunningAsService = false;
+                _tray.SyncTrayState(null);
+                UpdateUI(false);
+                _autostartCheck.Checked = ServiceInstaller.IsInstalled();
+                MessageBox.Show($"Service reinstall failed:\n{result.Message}",
+                    AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            _tray.RunningAsService = true;
+            _tray.SyncTrayState(null);
+            UpdateUI(true);
+            _autostartCheck.Checked = true;
+            MessageBox.Show("Service reinstalled and started successfully.",
+                AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        finally
+        {
+            _reinstallServiceBtn.Enabled = true;
+            _reinstallServiceBtn.Text = "\u21bb  Reinstall Service";
+            _restartServiceBtn.Enabled = true;
+            _startStopBtn.Enabled = true;
+            _autostartCheck.Enabled = true;
+        }
+    }
+
     private async void OnStartStop(object? sender, EventArgs e)
     {
         if (_tray.RunningAsService)
@@ -1007,6 +1111,7 @@ public class MainForm : Form
         }
 
         _restartServiceBtn.Visible = _tray.RunningAsService;
+        _reinstallServiceBtn.Visible = _tray.RunningAsService || ServiceInstaller.IsInstalled();
 
         if (_tray.RunningAsService)
         {
