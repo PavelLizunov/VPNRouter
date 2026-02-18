@@ -122,6 +122,9 @@ public static class ConfigGenerator
                 Mtu                     = settings.Tun.Mtu,
                 AutoRoute               = settings.Tun.AutoRoute,
                 StrictRoute             = false, // Always false — avoid dual stack errors
+                RouteExcludeAddress     = settings.Tun.RouteExcludeAddress.Count > 0
+                                            ? settings.Tun.RouteExcludeAddress
+                                            : null,
                 EndpointIndependentNat  = false,
                 Stack                   = "system"
                 // sniff + sniff_override_destination removed — deprecated since 1.11
@@ -260,6 +263,16 @@ public static class ConfigGenerator
             new() { Protocol = "dns", Action = "hijack-dns" }
         };
 
+        // Private IPs always direct — MUST be before process rules so that
+        // traffic to local/VPN subnets (WireGuard, AmneziaWG, LAN) is never
+        // sent through the remote proxy, even from routed processes.
+        rules.Add(new RouteRule
+        {
+            IpIsPrivate = true,
+            Action      = "route",
+            Outbound    = "direct"
+        });
+
         if (processes.Count > 0)
         {
             // Route targeted processes through VPN proxy
@@ -270,14 +283,6 @@ public static class ConfigGenerator
                 Outbound    = "proxy"
             });
         }
-
-        // Private IPs always direct
-        rules.Add(new RouteRule
-        {
-            IpIsPrivate = true,
-            Action      = "route",
-            Outbound    = "direct"
-        });
 
         return new SingBoxRoute
         {

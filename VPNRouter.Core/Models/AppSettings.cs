@@ -233,6 +233,15 @@ public class TunSettings
 
     [YamlMember(Alias = "strict_route")]
     public bool StrictRoute { get; set; } = false;
+
+    /// <summary>
+    /// Exclude specific address ranges from TUN routing.
+    /// Traffic to these addresses bypasses TUN and uses the system routing table.
+    /// Useful for coexistence with other VPNs (e.g. WireGuard/AmneziaWG subnets).
+    /// Example: ["10.9.1.0/24", "192.168.100.0/24"]
+    /// </summary>
+    [YamlMember(Alias = "route_exclude_address")]
+    public List<string> RouteExcludeAddress { get; set; } = new();
 }
 
 public class DnsSettings

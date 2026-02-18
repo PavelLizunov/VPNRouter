@@ -118,6 +118,23 @@ public class VpnEngine : IDisposable
 
         ct.ThrowIfCancellationRequested();
 
+        // 4.5. Auto-detect WireGuard/AmneziaWG subnets and exclude from TUN
+        var detectedSubnets = NetworkInterfaceDetector.DetectWireGuardSubnets(
+            settings.Tun.InterfaceName, _logger);
+
+        if (detectedSubnets.Count > 0)
+        {
+            var merged = new HashSet<string>(settings.Tun.RouteExcludeAddress, StringComparer.OrdinalIgnoreCase);
+            foreach (var subnet in detectedSubnets)
+                merged.Add(subnet);
+            settings.Tun.RouteExcludeAddress = merged.ToList();
+
+            _logger?.Information("[VpnEngine] Auto-excluded WG/AWG subnets: {Subnets}",
+                string.Join(", ", detectedSubnets));
+        }
+
+        ct.ThrowIfCancellationRequested();
+
         // 5. Generate + validate config
         var sbConfig = ConfigGenerator.Generate(_activeProfile, _scanResult.ProcessNames, settings);
         var validation = LeakProtection.ValidateConfig(sbConfig);

@@ -131,6 +131,13 @@ public class SingBoxInbound
     [JsonProperty("strict_route")]
     public bool StrictRoute { get; set; } = false;
 
+    /// <summary>
+    /// Exclude specific address ranges from TUN routing.
+    /// Traffic to these addresses bypasses TUN and uses the system routing table.
+    /// </summary>
+    [JsonProperty("route_exclude_address", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? RouteExcludeAddress { get; set; }
+
     [JsonProperty("endpoint_independent_nat")]
     public bool EndpointIndependentNat { get; set; } = false;
 
