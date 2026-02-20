@@ -13,7 +13,7 @@ internal static class AppBranding
     public const string AppName     = "Virtual Penguin Network";
     public const string ShortName   = "VPN";
     public const string Publisher   = "NiniTux";
-    public const string Version     = "1.11";
+    public const string Version     = "1.11.1";
     public static string WindowTitle => $"Virtual Penguin Network  v{Version}";
     public static string TrayTooltip => $"Virtual Penguin Network v{Version}";
 
