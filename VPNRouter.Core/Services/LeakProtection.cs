@@ -53,6 +53,15 @@ public static class LeakProtection
                 warnings.Add($"Process '{proc}' is routed through proxy but has no VPN DNS rule — DNS may leak");
         }
 
+        // 4b. Full tunnel mode checks
+        var isFullTunnel = config.Route.Final == "proxy";
+        if (isFullTunnel)
+        {
+            // In full tunnel, DNS final should be vpn-dns
+            if (config.Dns.Final != "vpn-dns")
+                warnings.Add("Full tunnel mode: DNS final is not 'vpn-dns' — DNS may bypass VPN");
+        }
+
         // 5. Proxy outbound must exist
         var hasProxy = config.Outbounds.Any(o => o.Tag == "proxy");
         if (!hasProxy)

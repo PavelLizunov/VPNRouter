@@ -43,6 +43,13 @@ public class AppConfig
 
     [YamlMember(Alias = "log_file")]
     public string LogFile { get; set; } = @"%ProgramData%\VPNRouter\logs\vpnrouter.log";
+
+    /// <summary>
+    /// Routing mode: "split" routes only selected apps through VPN,
+    /// "full" routes ALL traffic through VPN (except private IPs).
+    /// </summary>
+    [YamlMember(Alias = "routing_mode")]
+    public string RoutingMode { get; set; } = "split";
 }
 
 public class ProfileSource
@@ -105,7 +112,7 @@ public class VlessConfig
     /// </summary>
     public List<VlessServerEntry> GetEffectiveServers()
     {
-        if (Servers.Count > 0)
+        if (Servers != null && Servers.Count > 0)
             return Servers;
 
         // Backward compat: build from legacy scalar fields
@@ -119,10 +126,10 @@ public class VlessConfig
                     Port = Port,
                     Uuid = Uuid,
                     Flow = Flow,
-                    Security = Security,
-                    Reality = Reality,
-                    Tls = Tls,
-                    Transport = Transport
+                    Security = Security ?? "reality",
+                    Reality = Reality ?? new VlessRealityConfig(),
+                    Tls = Tls ?? new VlessTlsConfig(),
+                    Transport = Transport ?? new VlessTransportConfig()
                 }
             };
         }

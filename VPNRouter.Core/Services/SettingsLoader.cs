@@ -32,7 +32,36 @@ public static class SettingsLoader
             .IgnoreUnmatchedProperties()
             .Build();
 
-        return deserializer.Deserialize<AppSettings>(yaml);
+        var settings = deserializer.Deserialize<AppSettings>(yaml);
+
+        // YamlDotNet returns null for empty/whitespace YAML
+        if (settings == null)
+            return new AppSettings();
+
+        // YamlDotNet may set subsections to null if YAML has empty keys (e.g. "vless:" with no children)
+        settings.App ??= new AppConfig();
+        settings.Vless ??= new VlessConfig();
+        settings.Tun ??= new TunSettings();
+        settings.Dns ??= new DnsSettings();
+        settings.SingBox ??= new SingBoxSettings();
+        settings.Monitoring ??= new MonitoringSettings();
+        settings.ProfileSources ??= new List<ProfileSource>();
+        settings.CustomApps ??= new List<string>();
+
+        // Nested objects inside Vless can also be null
+        settings.Vless.Reality ??= new VlessRealityConfig();
+        settings.Vless.Tls ??= new VlessTlsConfig();
+        settings.Vless.Transport ??= new VlessTransportConfig();
+        settings.Vless.Servers ??= new List<VlessServerEntry>();
+
+        // Nested objects inside Tun
+        settings.Tun.RouteExcludeAddress ??= new List<string>();
+
+        // Ensure routing mode has a valid value
+        if (string.IsNullOrWhiteSpace(settings.App.RoutingMode))
+            settings.App.RoutingMode = "split";
+
+        return settings;
     }
 
     public static void Save(AppSettings settings, string? path = null)

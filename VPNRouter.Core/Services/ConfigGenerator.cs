@@ -41,7 +41,7 @@ public static class ConfigGenerator
             Dns = BuildDns(profile, processes, settings),
             Inbounds = BuildInbounds(settings),
             Outbounds = BuildOutbounds(settings),
-            Route = BuildRoute(profile, processes),
+            Route = BuildRoute(profile, processes, settings.App.RoutingMode),
             Experimental = new SingBoxExperimental()
         };
 
@@ -61,13 +61,15 @@ public static class ConfigGenerator
 
     private static SingBoxDns BuildDns(Profile profile, List<string> processes, AppSettings settings)
     {
+        var routingMode = settings.App.RoutingMode ?? "split";
+        var isFullTunnel = routingMode.Equals("full", StringComparison.OrdinalIgnoreCase);
+
         var dns = new SingBoxDns
         {
             Strategy = "ipv4_only",
-            // Default DNS for processes NOT in the list → local system DNS (direct)
-            // Without this, sing-box uses the first server (vpn-dns via proxy),
-            // so ALL apps lose DNS when the proxy goes down
-            Final = "local-dns",
+            // Full tunnel: all DNS through VPN by default
+            // Split tunnel: only targeted processes use VPN DNS, rest use local
+            Final = isFullTunnel ? "vpn-dns" : "local-dns",
             Servers = new List<DnsServer>
             {
                 // Remote DoH server routed through VPN proxy
@@ -92,16 +94,24 @@ public static class ConfigGenerator
             Rules = new List<DnsRule>()
         };
 
-        // Targeted processes → VPN DNS (leak protection)
-        if (processes.Count > 0 && profile.DnsMode != "direct")
+        if (isFullTunnel)
         {
-            var dnsServer = profile.DnsMode == "smart" ? "local-dns" : "vpn-dns";
-            dns.Rules.Add(new DnsRule
+            // Full tunnel: all DNS goes through vpn-dns (via Final above).
+            // No per-process rules needed.
+        }
+        else
+        {
+            // Split tunnel: targeted processes → VPN DNS (leak protection)
+            if (processes.Count > 0 && profile.DnsMode != "direct")
             {
-                ProcessName = processes.ToList(),
-                Action      = "route",
-                Server      = dnsServer
-            });
+                var dnsServer = profile.DnsMode == "smart" ? "local-dns" : "vpn-dns";
+                dns.Rules.Add(new DnsRule
+                {
+                    ProcessName = processes.ToList(),
+                    Action      = "route",
+                    Server      = dnsServer
+                });
+            }
         }
 
         return dns;
@@ -192,6 +202,10 @@ public static class ConfigGenerator
     /// <summary>Build a single VLESS outbound from a server entry.</summary>
     private static SingBoxOutbound BuildVlessOutbound(VlessServerEntry entry, string tag)
     {
+        // Null-safe: YamlDotNet may leave nested objects null if YAML has empty keys
+        var transport = entry.Transport ?? new VlessTransportConfig();
+        var transportType = transport.Type ?? "tcp";
+
         return new SingBoxOutbound
         {
             Type       = "vless",
@@ -201,13 +215,13 @@ public static class ConfigGenerator
             Uuid       = entry.Uuid,
             Flow       = string.IsNullOrEmpty(entry.Flow) ? null : entry.Flow,
             Tls        = BuildTlsConfig(entry),
-            Transport  = entry.Transport.Type.ToLowerInvariant() == "tcp"
+            Transport  = transportType.Equals("tcp", StringComparison.OrdinalIgnoreCase)
                 ? null
                 : new TransportConfig
                 {
-                    Type    = entry.Transport.Type,
-                    Path    = entry.Transport.Path,
-                    Headers = entry.Transport.Headers.Count > 0 ? entry.Transport.Headers : null
+                    Type    = transportType,
+                    Path    = transport.Path,
+                    Headers = transport.Headers?.Count > 0 ? transport.Headers : null
                 },
             DomainResolver = "local-dns"
         };
@@ -217,42 +231,47 @@ public static class ConfigGenerator
 
     private static TlsConfig BuildTlsConfig(VlessServerEntry entry)
     {
-        var isReality = entry.Security.Equals("reality", StringComparison.OrdinalIgnoreCase);
+        var security = entry.Security ?? "reality";
+        var isReality = security.Equals("reality", StringComparison.OrdinalIgnoreCase);
 
         if (isReality)
         {
+            var reality = entry.Reality ?? new VlessRealityConfig();
             return new TlsConfig
             {
                 Enabled    = true,
-                ServerName = entry.Reality.ServerName,
+                ServerName = reality.ServerName,
                 Insecure   = false,
                 Utls = new UtlsConfig
                 {
                     Enabled     = true,
-                    Fingerprint = entry.Reality.Fingerprint
+                    Fingerprint = reality.Fingerprint
                 },
                 Reality = new RealityConfig
                 {
                     Enabled   = true,
-                    PublicKey = entry.Reality.PublicKey,
-                    ShortId   = entry.Reality.ShortId
+                    PublicKey = reality.PublicKey,
+                    ShortId   = reality.ShortId
                 }
             };
         }
 
         // Plain TLS fallback
+        var tls = entry.Tls ?? new VlessTlsConfig();
         return new TlsConfig
         {
-            Enabled    = entry.Tls.Enabled,
-            ServerName = entry.Tls.ServerName,
-            Insecure   = entry.Tls.Insecure
+            Enabled    = tls.Enabled,
+            ServerName = tls.ServerName,
+            Insecure   = tls.Insecure
         };
     }
 
     // ─── Route (sing-box 1.12+ action-based format) ──────────────────────────
 
-    private static SingBoxRoute BuildRoute(Profile profile, List<string> processes)
+    private static SingBoxRoute BuildRoute(Profile profile, List<string> processes, string routingMode = "split")
     {
+        var isFullTunnel = (routingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase);
+
         var rules = new List<RouteRule>
         {
             // Protocol sniffing: detect HTTP/TLS/QUIC and override destination with sniffed domain.
@@ -263,9 +282,9 @@ public static class ConfigGenerator
             new() { Protocol = "dns", Action = "hijack-dns" }
         };
 
-        // Private IPs always direct — MUST be before process rules so that
+        // Private IPs always direct — MUST be before process/default rules so that
         // traffic to local/VPN subnets (WireGuard, AmneziaWG, LAN) is never
-        // sent through the remote proxy, even from routed processes.
+        // sent through the remote proxy, in both split and full tunnel modes.
         rules.Add(new RouteRule
         {
             IpIsPrivate = true,
@@ -273,9 +292,9 @@ public static class ConfigGenerator
             Outbound    = "direct"
         });
 
-        if (processes.Count > 0)
+        if (!isFullTunnel && processes.Count > 0)
         {
-            // Route targeted processes through VPN proxy
+            // Split tunnel: route only targeted processes through VPN proxy
             rules.Add(new RouteRule
             {
                 ProcessName = processes.ToList(),
@@ -283,11 +302,14 @@ public static class ConfigGenerator
                 Outbound    = "proxy"
             });
         }
+        // Full tunnel: no process-specific rules — Final = "proxy" handles everything
 
         return new SingBoxRoute
         {
             Rules                   = rules,
-            Final                   = "direct",
+            // Full tunnel: all non-private traffic → proxy
+            // Split tunnel: unmatched traffic → direct
+            Final                   = isFullTunnel ? "proxy" : "direct",
             AutoDetectInterface     = true,
             // Required since sing-box 1.12, mandatory in 1.14
             DefaultDomainResolver   = "local-dns"

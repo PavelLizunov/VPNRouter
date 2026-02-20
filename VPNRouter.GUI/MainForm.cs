@@ -26,6 +26,8 @@ public class MainForm : Form
     private TextBox _customAppInput = null!;
     private Button _addCustomBtn = null!;
     private Button _removeCustomBtn = null!;
+    private RadioButton _splitRadio = null!;
+    private RadioButton _fullRadio = null!;
     private readonly List<string> _customApps = new();
 
     // ── Bottom panel ──
@@ -367,6 +369,45 @@ public class MainForm : Form
 
     private void BuildAppsTab(TabPage page)
     {
+        // ── Routing mode selector ──
+        var routingPanel = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 36,
+            BackColor = Theme.Background,
+            Padding = new Padding(0, 4, 0, 4)
+        };
+
+        _splitRadio = new RadioButton
+        {
+            Text = "Split Tunnel (selected apps)",
+            Font = Theme.BodyFont,
+            ForeColor = Theme.TextPrimary,
+            Checked = true,
+            AutoSize = true,
+            Location = new Point(0, 6)
+        };
+
+        _fullRadio = new RadioButton
+        {
+            Text = "Full Tunnel (all traffic)",
+            Font = Theme.BodyFont,
+            ForeColor = Theme.TextPrimary,
+            AutoSize = true,
+            Location = new Point(260, 6)
+        };
+
+        _splitRadio.CheckedChanged += (_, __) =>
+        {
+            _profileTree.Enabled = _splitRadio.Checked;
+            _customAppInput.Enabled = _splitRadio.Checked;
+            _addCustomBtn.Enabled = _splitRadio.Checked;
+            _removeCustomBtn.Enabled = _splitRadio.Checked;
+        };
+
+        routingPanel.Controls.Add(_splitRadio);
+        routingPanel.Controls.Add(_fullRadio);
+
         var label = new Label
         {
             Text = "Check groups to route through VPN (expand to see apps inside):",
@@ -456,6 +497,7 @@ public class MainForm : Form
         page.Controls.Add(_profileTree);
         page.Controls.Add(customPanel);
         page.Controls.Add(label);
+        page.Controls.Add(routingPanel);
     }
 
     private void OnProfileTreeCheck(object? sender, TreeViewEventArgs e)
@@ -626,6 +668,12 @@ public class MainForm : Form
             _settings = new AppSettings();
         }
 
+        // Load routing mode
+        var isFullTunnel = (_settings.App.RoutingMode ?? "split")
+            .Equals("full", StringComparison.OrdinalIgnoreCase);
+        _splitRadio.Checked = !isFullTunnel;
+        _fullRadio.Checked = isFullTunnel;
+
         // Load servers from config
         _servers.Clear();
         _servers.AddRange(_settings.Vless.GetEffectiveServers());
@@ -732,6 +780,9 @@ public class MainForm : Form
 
         // Save custom apps
         _settings.CustomApps = new List<string>(_customApps);
+
+        // Save routing mode
+        _settings.App.RoutingMode = _fullRadio.Checked ? "full" : "split";
 
         SettingsLoader.Save(_settings);
     }
