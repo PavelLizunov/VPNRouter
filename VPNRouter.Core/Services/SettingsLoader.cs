@@ -57,6 +57,9 @@ public static class SettingsLoader
         // Nested objects inside Tun
         settings.Tun.RouteExcludeAddress ??= new List<string>();
 
+        // Update settings
+        settings.Update ??= new UpdateSettings();
+
         // Ensure routing mode has a valid value
         if (string.IsNullOrWhiteSpace(settings.App.RoutingMode))
             settings.App.RoutingMode = "split";

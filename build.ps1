@@ -8,13 +8,19 @@
     Version string for the ZIP filename (default: "1.0")
 .PARAMETER SingBoxPath
     Path to sing-box.exe to bundle (default: %ProgramData%\VPNRouter\bin\sing-box.exe)
+.PARAMETER Upload
+    Upload the ZIP to GitHub Releases using gh CLI
+.PARAMETER GitHubRepo
+    GitHub repo in "owner/repo" format (default: PavelLizunov/VPNRouter)
 .EXAMPLE
-    .\build.ps1
-    .\build.ps1 -Version "1.1" -SingBoxPath "C:\tools\sing-box.exe"
+    .\build.ps1 -Version "1.12"
+    .\build.ps1 -Version "1.12" -Upload -GitHubRepo "PavelLizunov/VPNRouter"
 #>
 param(
     [string]$Version = "1.0",
-    [string]$SingBoxPath = "$env:ProgramData\VPNRouter\bin\sing-box.exe"
+    [string]$SingBoxPath = "$env:ProgramData\VPNRouter\bin\sing-box.exe",
+    [switch]$Upload,
+    [string]$GitHubRepo = "PavelLizunov/VPNRouter"
 )
 
 $ErrorActionPreference = "Stop"
@@ -126,4 +132,29 @@ Write-Host "Contents:" -ForegroundColor Gray
 Get-ChildItem $PublishDir -Recurse | ForEach-Object {
     $rel = $_.FullName.Replace($PublishDir, "").TrimStart("\")
     if ($_.PSIsContainer) { "  $rel\" } else { "  $rel  ($([math]::Round($_.Length/1KB)) KB)" }
+}
+
+# ── Upload to GitHub Releases (optional) ──
+if ($Upload) {
+    Write-Host ""
+    Write-Host "[7/7] Uploading to GitHub Releases..." -ForegroundColor Yellow
+
+    if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+        Write-Host "       ERROR: gh CLI not found. Install: winget install GitHub.cli" -ForegroundColor Red
+        Write-Host "       Skipping upload." -ForegroundColor Red
+    } else {
+        $tag = "v$Version"
+
+        gh release create $tag $ZipPath `
+            --repo $GitHubRepo `
+            --title "VPNRouter v$Version" `
+            --notes "VPNRouter v$Version" `
+            --latest
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "       Uploaded: https://github.com/$GitHubRepo/releases/tag/$tag" -ForegroundColor Green
+        } else {
+            Write-Host "       Upload failed (exit $LASTEXITCODE)" -ForegroundColor Red
+        }
+    }
 }

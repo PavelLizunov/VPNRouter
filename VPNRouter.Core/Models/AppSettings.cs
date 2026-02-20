@@ -34,6 +34,9 @@ public class AppSettings
     /// </summary>
     [YamlMember(Alias = "custom_apps")]
     public List<string> CustomApps { get; set; } = new();
+
+    [YamlMember(Alias = "update")]
+    public UpdateSettings Update { get; set; } = new();
 }
 
 public class AppConfig
@@ -295,4 +298,15 @@ public class MonitoringSettings
 
     [YamlMember(Alias = "process_scan_interval")]
     public int ProcessScanInterval { get; set; } = 60;
+}
+
+public class UpdateSettings
+{
+    /// <summary>GitHub repo in "owner/repo" format for release checks.</summary>
+    [YamlMember(Alias = "github_repo")]
+    public string GitHubRepo { get; set; } = "PavelLizunov/VPNRouter";
+
+    /// <summary>Check for updates on GUI startup.</summary>
+    [YamlMember(Alias = "auto_check")]
+    public bool AutoCheck { get; set; } = true;
 }

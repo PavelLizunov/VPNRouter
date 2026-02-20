@@ -40,6 +40,14 @@ public class MainForm : Form
     private Panel _statusPanel = null!;
     private Label _statusDot = null!;
 
+    // ── Update notification ──
+    private Panel _updatePanel = null!;
+    private Label _updateLabel = null!;
+    private Button _updateBtn = null!;
+    private ProgressBar _updateProgress = null!;
+    private UpdateChecker? _updateChecker;
+    private UpdateInfo? _pendingUpdate;
+
     // ── State ──
     private AppSettings _settings = null!;
     private readonly List<VlessServerEntry> _servers = new();
@@ -52,6 +60,9 @@ public class MainForm : Form
         LoadSettings();
 
         _engine.StatusChanged += OnEngineStatus;
+
+        // Check for updates in background (fire-and-forget, silent fail)
+        _ = CheckForUpdateAsync();
     }
 
     /// <summary>
@@ -219,11 +230,63 @@ public class MainForm : Form
         actionPanel.Controls.Add(_restartServiceBtn);
         actionPanel.Controls.Add(_reinstallServiceBtn);
 
+        // ── Update notification panel ──
+        _updatePanel = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 40,
+            BackColor = Color.FromArgb(254, 243, 199), // amber-100
+            Visible = false,
+            Padding = new Padding(14, 0, 14, 0)
+        };
+
+        _updateLabel = new Label
+        {
+            Text = "",
+            Font = Theme.BodyFont,
+            ForeColor = Color.FromArgb(146, 64, 14), // amber-800
+            AutoSize = true,
+            Location = new Point(14, 11)
+        };
+
+        _updateBtn = new Button
+        {
+            Text = "Update",
+            Size = new Size(80, 28),
+            Location = new Point(430, 6),
+            Font = Theme.ButtonFont,
+            Cursor = Cursors.Hand,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(245, 158, 11), // amber-500
+            ForeColor = Color.White
+        };
+        _updateBtn.FlatAppearance.BorderSize = 0;
+        _updateBtn.Click += OnUpdateClick;
+
+        _updateProgress = new ProgressBar
+        {
+            Size = new Size(80, 28),
+            Location = new Point(430, 6),
+            Style = ProgressBarStyle.Continuous,
+            Visible = false
+        };
+
+        _updatePanel.Controls.Add(_updateLabel);
+        _updatePanel.Controls.Add(_updateBtn);
+        _updatePanel.Controls.Add(_updateProgress);
+
+        _updatePanel.Paint += (s, e) =>
+        {
+            using var pen = new Pen(Color.FromArgb(253, 186, 116)); // amber-300
+            e.Graphics.DrawLine(pen, 0, _updatePanel.Height - 1, _updatePanel.Width, _updatePanel.Height - 1);
+        };
+
         // ── Dock order: last added docks first ──
-        // Fill = tabs, Bottom = status then action, Top = header
+        // Fill = tabs, Bottom = status then action, Top = header then update panel
         Controls.Add(tabs);
         Controls.Add(_statusPanel);
         Controls.Add(actionPanel);
+        Controls.Add(_updatePanel);
         Controls.Add(header);
 
         // Set initial UI state
@@ -721,6 +784,113 @@ public class MainForm : Form
                 customRoot.Checked = true;
                 customRoot.Expand();
             }
+        }
+    }
+
+    // ─── Auto-update ──────────────────────────────────────────────────────────
+
+    private async Task CheckForUpdateAsync()
+    {
+        try
+        {
+            var updateSettings = _settings.Update ?? new UpdateSettings();
+            if (!updateSettings.AutoCheck || string.IsNullOrWhiteSpace(updateSettings.GitHubRepo))
+                return;
+
+            _updateChecker = new UpdateChecker(updateSettings, AppBranding.Version);
+            var info = await _updateChecker.CheckForUpdateAsync();
+
+            if (info is { IsNewer: true })
+            {
+                if (InvokeRequired) { BeginInvoke(() => ShowUpdateNotification(info)); return; }
+                ShowUpdateNotification(info);
+            }
+        }
+        catch
+        {
+            // Silent fail — update check is non-critical
+        }
+    }
+
+    private void ShowUpdateNotification(UpdateInfo info)
+    {
+        _pendingUpdate = info;
+        var sizeMb = info.SizeBytes > 0 ? $"  ({info.SizeBytes / 1024 / 1024} MB)" : "";
+        _updateLabel.Text = $"Update available: v{info.LatestVersion}{sizeMb}";
+        _updatePanel.Visible = true;
+    }
+
+    private async void OnUpdateClick(object? sender, EventArgs e)
+    {
+        if (_pendingUpdate == null || _updateChecker == null) return;
+
+        var msg = $"Update to v{_pendingUpdate.LatestVersion}?\n\n";
+
+        bool vpnRunning = _engine.IsRunning || _tray.RunningAsService;
+        bool serviceInstalled = ServiceInstaller.IsInstalled();
+
+        if (vpnRunning)
+            msg += "VPN will be stopped during the update.\n";
+        if (serviceInstalled)
+            msg += "Windows Service will be stopped during the update.\n";
+        msg += "\nThe application will restart automatically.";
+
+        if (MessageBox.Show(msg, AppBranding.AppName,
+            MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            return;
+
+        _updateBtn.Visible = false;
+        _updateProgress.Visible = true;
+        _updateProgress.Value = 0;
+        _startStopBtn.Enabled = false;
+        _applyBtn.Enabled = false;
+
+        _updateChecker.DownloadProgress += p =>
+        {
+            if (InvokeRequired) { BeginInvoke(() => _updateProgress.Value = p); return; }
+            _updateProgress.Value = p;
+        };
+        _updateChecker.StatusChanged += s =>
+        {
+            if (InvokeRequired) { BeginInvoke(() => _updateLabel.Text = s); return; }
+            _updateLabel.Text = s;
+        };
+
+        try
+        {
+            // Stop VPN if running
+            if (_engine.IsRunning)
+            {
+                _updateLabel.Text = "Stopping VPN...";
+                _engine.Stop();
+            }
+
+            if (_tray.RunningAsService)
+            {
+                _updateLabel.Text = "Stopping service...";
+                await Task.Run(() => ServiceInstaller.Stop());
+            }
+
+            // Download and stage
+            var extractedDir = await _updateChecker.DownloadAndStageAsync(_pendingUpdate);
+
+            // Apply (launches batch script)
+            _updateLabel.Text = "Restarting...";
+            _updateChecker.ApplyUpdate(extractedDir);
+
+            await Task.Delay(500);
+            Application.Exit();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Update failed:\n{ex.Message}", AppBranding.AppName,
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            _updateBtn.Visible = true;
+            _updateBtn.Enabled = true;
+            _updateProgress.Visible = false;
+            _updateLabel.Text = $"Update available: v{_pendingUpdate.LatestVersion}";
+            _startStopBtn.Enabled = true;
+            _applyBtn.Enabled = true;
         }
     }
 
