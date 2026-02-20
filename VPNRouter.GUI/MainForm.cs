@@ -332,9 +332,46 @@ public class MainForm : Form
             BackColor = Color.Transparent
         };
 
+        var checkUpdateLink = new LinkLabel
+        {
+            Text = "Check for updates",
+            Font = Theme.SmallFont,
+            AutoSize = true,
+            Location = new Point(430, 46),
+            LinkColor = Theme.TextMuted,
+            ActiveLinkColor = Theme.Primary,
+            VisitedLinkColor = Theme.TextMuted,
+            BackColor = Color.Transparent
+        };
+        checkUpdateLink.Click += async (_, __) =>
+        {
+            checkUpdateLink.Text = "Checking...";
+            checkUpdateLink.Enabled = false;
+            try
+            {
+                await CheckForUpdateAsync();
+                if (_pendingUpdate == null)
+                    checkUpdateLink.Text = "You're up to date ✓";
+            }
+            catch
+            {
+                checkUpdateLink.Text = "Check failed";
+            }
+            finally
+            {
+                checkUpdateLink.Enabled = true;
+                _ = Task.Delay(3000).ContinueWith(_ =>
+                {
+                    if (IsDisposed) return;
+                    BeginInvoke(() => checkUpdateLink.Text = "Check for updates");
+                });
+            }
+        };
+
         panel.Controls.Add(logo);
         panel.Controls.Add(title);
         panel.Controls.Add(subtitle);
+        panel.Controls.Add(checkUpdateLink);
 
         // Bottom border
         panel.Paint += (s, e) =>
@@ -829,10 +866,8 @@ public class MainForm : Form
         bool vpnRunning = _engine.IsRunning || _tray.RunningAsService;
         bool serviceInstalled = ServiceInstaller.IsInstalled();
 
-        if (vpnRunning)
-            msg += "VPN will be stopped during the update.\n";
-        if (serviceInstalled)
-            msg += "Windows Service will be stopped during the update.\n";
+        if (vpnRunning || serviceInstalled)
+            msg += "VPN will be stopped before applying the update.\n";
         msg += "\nThe application will restart automatically.";
 
         if (MessageBox.Show(msg, AppBranding.AppName,
@@ -858,7 +893,10 @@ public class MainForm : Form
 
         try
         {
-            // Stop VPN if running
+            // Download first (VPN stays on — GitHub may be blocked without it)
+            var extractedDir = await _updateChecker.DownloadAndStageAsync(_pendingUpdate);
+
+            // Stop VPN/Service only before applying (replacing files)
             if (_engine.IsRunning)
             {
                 _updateLabel.Text = "Stopping VPN...";
@@ -870,9 +908,6 @@ public class MainForm : Form
                 _updateLabel.Text = "Stopping service...";
                 await Task.Run(() => ServiceInstaller.Stop());
             }
-
-            // Download and stage
-            var extractedDir = await _updateChecker.DownloadAndStageAsync(_pendingUpdate);
 
             // Apply (launches batch script)
             _updateLabel.Text = "Restarting...";
