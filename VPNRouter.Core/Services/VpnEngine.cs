@@ -80,14 +80,25 @@ public class VpnEngine : IDisposable
         ct.ThrowIfCancellationRequested();
 
         // 3. Resolve active profile
+        var isFullTunnel = (settings.App.RoutingMode ?? "split")
+            .Equals("full", StringComparison.OrdinalIgnoreCase);
         var profileName = settings.ActiveProfile;
-        if (string.IsNullOrEmpty(profileName))
+
+        if (string.IsNullOrEmpty(profileName) && !isFullTunnel)
             throw new InvalidOperationException("No active profile specified in config.");
 
-        var names = profileName.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        _activeProfile = names.Length == 1
-            ? manager.GetProfile(names[0])
-            : manager.MergeProfiles(names);
+        if (!string.IsNullOrEmpty(profileName))
+        {
+            var names = profileName.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            _activeProfile = names.Length == 1
+                ? manager.GetProfile(names[0])
+                : manager.MergeProfiles(names);
+        }
+        else
+        {
+            // Full tunnel with no profiles — empty profile, all traffic goes through VPN
+            _activeProfile = new Profile { Name = "FullTunnel", DnsMode = "vpn_only" };
+        }
 
         // Inject custom apps from GUI
         if (settings.CustomApps?.Count > 0)

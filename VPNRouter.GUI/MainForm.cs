@@ -1320,12 +1320,15 @@ public class MainForm : Form
             return;
         }
 
-        var checkedCount = _profileTree.Nodes.Cast<TreeNode>().Count(n => n.Checked);
-        if (checkedCount == 0)
+        if (_splitRadio.Checked)
         {
-            MessageBox.Show("Select at least one application group.", AppBranding.AppName,
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
+            var checkedCount = _profileTree.Nodes.Cast<TreeNode>().Count(n => n.Checked);
+            if (checkedCount == 0)
+            {
+                MessageBox.Show("Select at least one application group.", AppBranding.AppName,
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
         }
 
         try
