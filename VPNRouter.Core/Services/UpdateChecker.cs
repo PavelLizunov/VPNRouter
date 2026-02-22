@@ -126,6 +126,23 @@ public class UpdateChecker
         return extractDir;
     }
 
+    /// <summary>
+    /// Clean up leftover staging directory from a previous update.
+    /// Call on app startup.
+    /// </summary>
+    public void CleanupStagingDir()
+    {
+        try
+        {
+            if (Directory.Exists(_stagingDir))
+                Directory.Delete(_stagingDir, true);
+        }
+        catch
+        {
+            // Non-critical — will be cleaned on next update
+        }
+    }
+
     public void ApplyUpdate(string extractedDir)
     {
         var appDir = AppContext.BaseDirectory.TrimEnd('\\');
@@ -134,6 +151,10 @@ public class UpdateChecker
         var logPath = Path.Combine(_stagingDir, "update.log");
         var currentPid = Environment.ProcessId;
 
+        // Use start command instead of powershell — batch already runs as admin
+        // (inherited from GUI process), so no need for -Verb RunAs / UAC prompt.
+        // Don't delete staging dir from batch — it deletes the script itself.
+        // Cleanup happens on next app startup via CleanupStagingDir().
         var script = $"""
             @echo off
             echo [VPNRouter Update] Waiting for process {currentPid} to exit... > "{logPath}"
@@ -151,9 +172,8 @@ public class UpdateChecker
                 echo [VPNRouter Update] Files copied successfully >> "{logPath}"
             )
             echo [VPNRouter Update] Launching updated VPNRouter... >> "{logPath}"
-            powershell -Command "Start-Process '{guiExe}' -Verb RunAs"
-            rd /s /q "{_stagingDir}" 2>NUL
-            exit /b 0
+            start "" "{guiExe}"
+            echo [VPNRouter Update] Launch command sent >> "{logPath}"
             """;
 
         File.WriteAllText(batchPath, script);

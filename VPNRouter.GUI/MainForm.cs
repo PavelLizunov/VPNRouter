@@ -835,6 +835,7 @@ public class MainForm : Form
                 return;
 
             _updateChecker = new UpdateChecker(updateSettings, AppBranding.Version);
+            _updateChecker.CleanupStagingDir();
             var info = await _updateChecker.CheckForUpdateAsync();
 
             if (info is { IsNewer: true })
@@ -864,7 +865,7 @@ public class MainForm : Form
         var msg = $"Update to v{_pendingUpdate.LatestVersion}?\n";
 
         if (!string.IsNullOrWhiteSpace(_pendingUpdate.ReleaseNotes))
-            msg += $"\n{_pendingUpdate.ReleaseNotes}\n";
+            msg += $"\n--- Changelog ---\n{_pendingUpdate.ReleaseNotes}\n-----------------\n";
 
         bool vpnRunning = _engine.IsRunning || _tray.RunningAsService;
         bool serviceInstalled = ServiceInstaller.IsInstalled();
