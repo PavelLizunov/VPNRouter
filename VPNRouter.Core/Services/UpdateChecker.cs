@@ -128,26 +128,31 @@ public class UpdateChecker
 
     public void ApplyUpdate(string extractedDir)
     {
-        var appDir = AppContext.BaseDirectory;
+        var appDir = AppContext.BaseDirectory.TrimEnd('\\');
         var batchPath = Path.Combine(_stagingDir, "apply-update.cmd");
         var guiExe = Path.Combine(appDir, "VPNRouter.GUI.exe");
+        var logPath = Path.Combine(_stagingDir, "update.log");
         var currentPid = Environment.ProcessId;
 
         var script = $"""
             @echo off
-            echo [VPNRouter Update] Waiting for process {currentPid} to exit...
+            echo [VPNRouter Update] Waiting for process {currentPid} to exit... > "{logPath}"
             :waitloop
             tasklist /fi "PID eq {currentPid}" 2>NUL | find "{currentPid}" >NUL
             if %ERRORLEVEL%==0 (
                 timeout /t 1 /nobreak >NUL
                 goto waitloop
             )
-            echo [VPNRouter Update] Applying update...
-            xcopy /s /y /q "{extractedDir}\*" "{appDir}"
-            echo [VPNRouter Update] Cleaning up...
+            echo [VPNRouter Update] Process exited. Copying files... >> "{logPath}"
+            xcopy /s /y /q "{extractedDir}\*" "{appDir}\" >> "{logPath}" 2>&1
+            if %ERRORLEVEL% NEQ 0 (
+                echo [VPNRouter Update] xcopy failed with code %ERRORLEVEL% >> "{logPath}"
+            ) else (
+                echo [VPNRouter Update] Files copied successfully >> "{logPath}"
+            )
+            echo [VPNRouter Update] Launching updated VPNRouter... >> "{logPath}"
+            powershell -Command "Start-Process '{guiExe}' -Verb RunAs"
             rd /s /q "{_stagingDir}" 2>NUL
-            echo [VPNRouter Update] Launching updated VPNRouter...
-            start "" "{guiExe}"
             exit /b 0
             """;
 
@@ -157,9 +162,8 @@ public class UpdateChecker
         {
             FileName = "cmd.exe",
             Arguments = $"/c \"{batchPath}\"",
-            UseShellExecute = true,
-            CreateNoWindow = true,
-            WindowStyle = ProcessWindowStyle.Hidden
+            UseShellExecute = false,
+            CreateNoWindow = true
         });
     }
 }

@@ -861,13 +861,16 @@ public class MainForm : Form
     {
         if (_pendingUpdate == null || _updateChecker == null) return;
 
-        var msg = $"Update to v{_pendingUpdate.LatestVersion}?\n\n";
+        var msg = $"Update to v{_pendingUpdate.LatestVersion}?\n";
+
+        if (!string.IsNullOrWhiteSpace(_pendingUpdate.ReleaseNotes))
+            msg += $"\n{_pendingUpdate.ReleaseNotes}\n";
 
         bool vpnRunning = _engine.IsRunning || _tray.RunningAsService;
         bool serviceInstalled = ServiceInstaller.IsInstalled();
 
         if (vpnRunning || serviceInstalled)
-            msg += "VPN will be stopped before applying the update.\n";
+            msg += "\nVPN will be stopped before applying the update.";
         msg += "\nThe application will restart automatically.";
 
         if (MessageBox.Show(msg, AppBranding.AppName,
