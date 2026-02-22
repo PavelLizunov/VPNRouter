@@ -362,13 +362,14 @@ public class MainForm : Form
             BackColor = Color.Transparent
         };
 
+        // Segoe MDL2 Assets: E706=Brightness(sun), E708=QuietHours(moon)
         _themeToggle = new Label
         {
-            Text = Theme.IsDark ? "\u2600" : "\u263d",
-            Font = new Font("Segoe UI", 16f),
+            Text = Theme.IsDark ? "\uE706" : "\uE708",
+            Font = new Font("Segoe MDL2 Assets", 16f),
             Cursor = Cursors.Hand,
             AutoSize = true,
-            Location = new Point(395, 18),
+            Location = new Point(393, 20),
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
             ForeColor = t.TextMuted,
             BackColor = Color.Transparent
@@ -749,7 +750,7 @@ public class MainForm : Form
     private void OnThemeToggle(object? sender, EventArgs e)
     {
         Theme.SetTheme(!Theme.IsDark);
-        _themeToggle.Text = Theme.IsDark ? "\u2600" : "\u263d";
+        _themeToggle.Text = Theme.IsDark ? "\uE706" : "\uE708";
         _settings.App.Theme = Theme.IsDark ? "dark" : "light";
         SaveSettings();
         ApplyTheme();
