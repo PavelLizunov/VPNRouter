@@ -64,6 +64,10 @@ public static class SettingsLoader
         if (string.IsNullOrWhiteSpace(settings.App.RoutingMode))
             settings.App.RoutingMode = "split";
 
+        // Ensure theme has a valid value
+        if (string.IsNullOrWhiteSpace(settings.App.Theme))
+            settings.App.Theme = "light";
+
         return settings;
     }
 

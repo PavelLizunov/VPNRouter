@@ -53,6 +53,10 @@ public class AppConfig
     /// </summary>
     [YamlMember(Alias = "routing_mode")]
     public string RoutingMode { get; set; } = "split";
+
+    /// <summary>UI theme: "light" or "dark".</summary>
+    [YamlMember(Alias = "theme")]
+    public string Theme { get; set; } = "light";
 }
 
 public class ProfileSource

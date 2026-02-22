@@ -48,6 +48,24 @@ public class MainForm : Form
     private UpdateChecker? _updateChecker;
     private UpdateInfo? _pendingUpdate;
 
+    // ── Theme-aware controls (promoted from locals for ApplyTheme) ──
+    private Panel _headerPanel = null!;
+    private Label _titleLabel = null!;
+    private Label _subtitleLabel = null!;
+    private Label _themeToggle = null!;
+    private LinkLabel _checkUpdateLink = null!;
+    private TabControl _tabs = null!;
+    private TabPage _serversPage = null!;
+    private TabPage _appsPage = null!;
+    private Panel _actionPanel = null!;
+    private Panel _routingPanel = null!;
+    private Label _serversInputLabel = null!;
+    private FlowLayoutPanel _serversBtnPanel = null!;
+    private Label _appsLabel = null!;
+    private Panel _customPanel = null!;
+    private Label _customLabel = null!;
+    private FlowLayoutPanel _customInputRow = null!;
+
     // ── State ──
     private AppSettings _settings = null!;
     private readonly List<VlessServerEntry> _servers = new();
@@ -56,8 +74,16 @@ public class MainForm : Form
     {
         _engine = engine;
         _tray = tray;
-        InitializeComponent();
+
+        // Load settings FIRST so theme is set before building UI
         LoadSettings();
+
+        var isDark = (_settings.App.Theme ?? "light")
+            .Equals("dark", StringComparison.OrdinalIgnoreCase);
+        Theme.SetTheme(isDark);
+
+        InitializeComponent();
+        LoadSettingsIntoUI();
 
         _engine.StatusChanged += OnEngineStatus;
 
@@ -84,6 +110,8 @@ public class MainForm : Form
 
     private void InitializeComponent()
     {
+        var t = Theme.Current;
+
         Text = AppBranding.WindowTitle;
         Size = new Size(540, 680);
         MinimumSize = new Size(480, 560);
@@ -91,39 +119,39 @@ public class MainForm : Form
         MaximizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = Theme.Background;
-        Font = Theme.BodyFont;
+        BackColor = t.Background;
+        Font = t.BodyFont;
         Icon = AppBranding.GetIcon(32);
 
         // ── Header panel (logo + brand) ──
-        var header = BuildHeaderPanel();
+        BuildHeaderPanel();
 
         // ── Tabs ──
-        var tabs = new TabControl { Dock = DockStyle.Fill };
-        tabs.Font = Theme.BodyFont;
+        _tabs = new TabControl { Dock = DockStyle.Fill };
+        _tabs.Font = t.BodyFont;
 
-        var serversPage = new TabPage("Servers") { BackColor = Theme.Background, Padding = new Padding(10) };
-        BuildServersTab(serversPage);
-        tabs.TabPages.Add(serversPage);
+        _serversPage = new TabPage("Servers") { BackColor = t.Background, Padding = new Padding(10) };
+        BuildServersTab(_serversPage);
+        _tabs.TabPages.Add(_serversPage);
 
-        var appsPage = new TabPage("Applications") { BackColor = Theme.Background, Padding = new Padding(10) };
-        BuildAppsTab(appsPage);
-        tabs.TabPages.Add(appsPage);
+        _appsPage = new TabPage("Applications") { BackColor = t.Background, Padding = new Padding(10) };
+        BuildAppsTab(_appsPage);
+        _tabs.TabPages.Add(_appsPage);
 
         // ── Status bar ──
         _statusPanel = new Panel
         {
             Dock = DockStyle.Bottom,
             Height = 32,
-            BackColor = Theme.Background,
+            BackColor = t.Background,
             Padding = new Padding(14, 0, 14, 0)
         };
 
         _statusDot = new Label
         {
             Text = "\u25cf",
-            Font = new Font("Segoe UI", 10f),
-            ForeColor = Theme.TextMuted,
+            Font = t.BodyFont,
+            ForeColor = t.TextMuted,
             AutoSize = true,
             Location = new Point(14, 6)
         };
@@ -131,27 +159,27 @@ public class MainForm : Form
         _statusLabel = new Label
         {
             Text = "Not connected",
-            Font = Theme.BodyFont,
-            ForeColor = Theme.TextMuted,
+            Font = t.BodyFont,
+            ForeColor = t.TextMuted,
             AutoSize = true,
             Location = new Point(32, 8)
         };
 
         _statusPanel.Paint += (s, e) =>
         {
-            using var pen = new Pen(Theme.SurfaceBorder);
-            e.Graphics.DrawLine(pen, 0, 0, _statusPanel.Width, 0);
+            var borderColor = Theme.Current.SurfaceBorder;
+            e.Graphics.DrawLine(new Pen(borderColor), 0, 0, _statusPanel.Width, 0);
         };
 
         _statusPanel.Controls.Add(_statusDot);
         _statusPanel.Controls.Add(_statusLabel);
 
         // ── Action panel (Start/Stop + Apply + autostart) ──
-        var actionPanel = new Panel
+        _actionPanel = new Panel
         {
             Dock = DockStyle.Bottom,
             Height = 80,
-            BackColor = Theme.Surface,
+            BackColor = t.Surface,
             Padding = new Padding(14, 8, 14, 8)
         };
 
@@ -160,7 +188,7 @@ public class MainForm : Form
             Text = "\u25b6  Start VPN",
             Size = new Size(330, 36),
             Location = new Point(14, 4),
-            Font = Theme.StartStopFont,
+            Font = t.StartStopFont,
             Cursor = Cursors.Hand,
             FlatStyle = FlatStyle.Flat
         };
@@ -173,26 +201,26 @@ public class MainForm : Form
             Text = "\u21bb  Apply",
             Size = new Size(155, 36),
             Location = new Point(350, 4),
-            Font = Theme.StartStopFont,
+            Font = t.StartStopFont,
             Cursor = Cursors.Hand,
             FlatStyle = FlatStyle.Flat,
             Visible = false
         };
         Theme.ApplySecondary(_applyBtn);
         _applyBtn.FlatAppearance.BorderSize = 0;
-        _applyBtn.BackColor = Color.FromArgb(245, 158, 11); // amber/orange
+        _applyBtn.BackColor = t.AmberButton;
         _applyBtn.ForeColor = Color.White;
         _applyBtn.Click += OnApplyChanges;
 
         _autostartCheck = new CheckBox
         {
             Text = "Autostart with Windows",
-            Font = Theme.SmallFont,
-            ForeColor = Theme.TextSecondary,
+            Font = t.SmallFont,
+            ForeColor = t.TextSecondary,
             Checked = ServiceInstaller.IsInstalled(),
             AutoSize = true,
             Location = new Point(14, 50),
-            BackColor = Theme.Surface
+            BackColor = t.Surface
         };
         _autostartCheck.CheckedChanged += OnAutostartChanged;
 
@@ -201,7 +229,7 @@ public class MainForm : Form
             Text = "\u21bb  Restart Service",
             Size = new Size(130, 24),
             Location = new Point(200, 50),
-            Font = Theme.SmallFont,
+            Font = t.SmallFont,
             Cursor = Cursors.Hand,
             FlatStyle = FlatStyle.Flat,
             Visible = false
@@ -215,7 +243,7 @@ public class MainForm : Form
             Text = "\u21bb  Reinstall Service",
             Size = new Size(140, 24),
             Location = new Point(340, 50),
-            Font = Theme.SmallFont,
+            Font = t.SmallFont,
             Cursor = Cursors.Hand,
             FlatStyle = FlatStyle.Flat,
             Visible = false
@@ -224,18 +252,18 @@ public class MainForm : Form
         _reinstallServiceBtn.FlatAppearance.BorderSize = 0;
         _reinstallServiceBtn.Click += OnReinstallService;
 
-        actionPanel.Controls.Add(_startStopBtn);
-        actionPanel.Controls.Add(_applyBtn);
-        actionPanel.Controls.Add(_autostartCheck);
-        actionPanel.Controls.Add(_restartServiceBtn);
-        actionPanel.Controls.Add(_reinstallServiceBtn);
+        _actionPanel.Controls.Add(_startStopBtn);
+        _actionPanel.Controls.Add(_applyBtn);
+        _actionPanel.Controls.Add(_autostartCheck);
+        _actionPanel.Controls.Add(_restartServiceBtn);
+        _actionPanel.Controls.Add(_reinstallServiceBtn);
 
         // ── Update notification panel ──
         _updatePanel = new Panel
         {
             Dock = DockStyle.Top,
             Height = 40,
-            BackColor = Color.FromArgb(254, 243, 199), // amber-100
+            BackColor = t.UpdatePanelBg,
             Visible = false,
             Padding = new Padding(14, 0, 14, 0)
         };
@@ -243,8 +271,8 @@ public class MainForm : Form
         _updateLabel = new Label
         {
             Text = "",
-            Font = Theme.BodyFont,
-            ForeColor = Color.FromArgb(146, 64, 14), // amber-800
+            Font = t.BodyFont,
+            ForeColor = t.UpdatePanelText,
             AutoSize = true,
             Location = new Point(14, 11)
         };
@@ -254,10 +282,10 @@ public class MainForm : Form
             Text = "Update",
             Size = new Size(80, 28),
             Location = new Point(430, 6),
-            Font = Theme.ButtonFont,
+            Font = t.ButtonFont,
             Cursor = Cursors.Hand,
             FlatStyle = FlatStyle.Flat,
-            BackColor = Color.FromArgb(245, 158, 11), // amber-500
+            BackColor = t.AmberButton,
             ForeColor = Color.White
         };
         _updateBtn.FlatAppearance.BorderSize = 0;
@@ -277,30 +305,32 @@ public class MainForm : Form
 
         _updatePanel.Paint += (s, e) =>
         {
-            using var pen = new Pen(Color.FromArgb(253, 186, 116)); // amber-300
-            e.Graphics.DrawLine(pen, 0, _updatePanel.Height - 1, _updatePanel.Width, _updatePanel.Height - 1);
+            var borderColor = Theme.Current.UpdatePanelBorder;
+            e.Graphics.DrawLine(new Pen(borderColor), 0, _updatePanel.Height - 1, _updatePanel.Width, _updatePanel.Height - 1);
         };
 
         // ── Dock order: last added docks first ──
         // Fill = tabs, Bottom = status then action, Top = header then update panel
-        Controls.Add(tabs);
+        Controls.Add(_tabs);
         Controls.Add(_statusPanel);
-        Controls.Add(actionPanel);
+        Controls.Add(_actionPanel);
         Controls.Add(_updatePanel);
-        Controls.Add(header);
+        Controls.Add(_headerPanel);
 
         // Set initial UI state
         bool running = _engine.IsRunning || _tray.RunningAsService;
         if (running) UpdateUI(true);
     }
 
-    private Panel BuildHeaderPanel()
+    private void BuildHeaderPanel()
     {
-        var panel = new Panel
+        var t = Theme.Current;
+
+        _headerPanel = new Panel
         {
             Dock = DockStyle.Top,
             Height = 72,
-            BackColor = Theme.Surface
+            BackColor = t.Surface
         };
 
         var logo = new PictureBox
@@ -312,90 +342,104 @@ public class MainForm : Form
             BackColor = Color.Transparent
         };
 
-        var title = new Label
+        _titleLabel = new Label
         {
             Text = AppBranding.AppName,
-            Font = Theme.HeaderFont,
-            ForeColor = Theme.Primary,
+            Font = t.HeaderFont,
+            ForeColor = t.Primary,
             AutoSize = true,
             Location = new Point(74, 12),
             BackColor = Color.Transparent
         };
 
-        var subtitle = new Label
+        _subtitleLabel = new Label
         {
             Text = $"by {AppBranding.Publisher}  \u00b7  v{AppBranding.Version}",
-            Font = Theme.SubHeaderFont,
-            ForeColor = Theme.TextMuted,
+            Font = t.SubHeaderFont,
+            ForeColor = t.TextMuted,
             AutoSize = true,
             Location = new Point(76, 42),
             BackColor = Color.Transparent
         };
 
-        var checkUpdateLink = new LinkLabel
+        _themeToggle = new Label
         {
-            Text = "Check for updates",
-            Font = Theme.SmallFont,
+            Text = Theme.IsDark ? "\u2600" : "\u263d",
+            Font = new Font("Segoe UI", 16f),
+            Cursor = Cursors.Hand,
             AutoSize = true,
-            Location = new Point(430, 46),
-            LinkColor = Theme.TextMuted,
-            ActiveLinkColor = Theme.Primary,
-            VisitedLinkColor = Theme.TextMuted,
+            Location = new Point(395, 18),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            ForeColor = t.TextMuted,
             BackColor = Color.Transparent
         };
-        checkUpdateLink.Click += async (_, __) =>
+        _themeToggle.Click += OnThemeToggle;
+
+        _checkUpdateLink = new LinkLabel
         {
-            checkUpdateLink.Text = "Checking...";
-            checkUpdateLink.Enabled = false;
+            Text = "Check for updates",
+            Font = t.SmallFont,
+            AutoSize = true,
+            Location = new Point(430, 46),
+            LinkColor = t.TextMuted,
+            ActiveLinkColor = t.Primary,
+            VisitedLinkColor = t.TextMuted,
+            BackColor = Color.Transparent
+        };
+        _checkUpdateLink.Click += async (_, __) =>
+        {
+            _checkUpdateLink.Text = "Checking...";
+            _checkUpdateLink.Enabled = false;
             try
             {
                 await CheckForUpdateAsync();
                 if (_pendingUpdate == null)
-                    checkUpdateLink.Text = "You're up to date ✓";
+                    _checkUpdateLink.Text = "You're up to date \u2713";
             }
             catch
             {
-                checkUpdateLink.Text = "Check failed";
+                _checkUpdateLink.Text = "Check failed";
             }
             finally
             {
-                checkUpdateLink.Enabled = true;
+                _checkUpdateLink.Enabled = true;
                 _ = Task.Delay(3000).ContinueWith(_ =>
                 {
                     try
                     {
                         if (!IsDisposed && IsHandleCreated)
-                            BeginInvoke(() => checkUpdateLink.Text = "Check for updates");
+                            BeginInvoke(() => _checkUpdateLink.Text = "Check for updates");
                     }
                     catch (ObjectDisposedException) { }
                 });
             }
         };
 
-        panel.Controls.Add(logo);
-        panel.Controls.Add(title);
-        panel.Controls.Add(subtitle);
-        panel.Controls.Add(checkUpdateLink);
+        _headerPanel.Controls.Add(logo);
+        _headerPanel.Controls.Add(_titleLabel);
+        _headerPanel.Controls.Add(_subtitleLabel);
+        _headerPanel.Controls.Add(_themeToggle);
+        _headerPanel.Controls.Add(_checkUpdateLink);
 
         // Bottom border
-        panel.Paint += (s, e) =>
+        _headerPanel.Paint += (s, e) =>
         {
-            using var pen = new Pen(Theme.SurfaceBorder);
-            e.Graphics.DrawLine(pen, 0, panel.Height - 1, panel.Width, panel.Height - 1);
+            var borderColor = Theme.Current.SurfaceBorder;
+            e.Graphics.DrawLine(new Pen(borderColor), 0, _headerPanel.Height - 1, _headerPanel.Width, _headerPanel.Height - 1);
         };
-
-        return panel;
     }
 
     private void BuildServersTab(TabPage page)
     {
-        var inputLabel = new Label
+        var t = Theme.Current;
+
+        _serversInputLabel = new Label
         {
             Text = "Paste VLESS URI(s) \u2014 first server = Primary, others = Fallback:",
             Dock = DockStyle.Top,
             Height = 22,
-            ForeColor = Theme.TextSecondary,
-            Font = Theme.BodyFont
+            ForeColor = t.TextSecondary,
+            Font = t.BodyFont
         };
 
         _uriInput = new TextBox
@@ -405,8 +449,9 @@ public class MainForm : Form
             Multiline = true,
             ScrollBars = ScrollBars.Vertical,
             PlaceholderText = "vless://uuid@server:443?security=reality&sni=...#name",
-            BackColor = Theme.InputBackground,
-            Font = Theme.BodyFont
+            BackColor = t.InputBackground,
+            ForeColor = t.TextPrimary,
+            Font = t.BodyFont
         };
 
         _addBtn = new Button
@@ -424,9 +469,9 @@ public class MainForm : Form
             View = View.Details,
             FullRowSelect = true,
             GridLines = true,
-            BackColor = Theme.Surface,
-            ForeColor = Theme.TextPrimary,
-            Font = Theme.BodyFont
+            BackColor = t.Surface,
+            ForeColor = t.TextPrimary,
+            Font = t.BodyFont
         };
         _serverList.Columns.Add("Role", 70);
         _serverList.Columns.Add("Name", 110);
@@ -434,12 +479,12 @@ public class MainForm : Form
         _serverList.Columns.Add("Port", 50);
         _serverList.Columns.Add("Security", 70);
 
-        var btnPanel = new FlowLayoutPanel
+        _serversBtnPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Bottom,
             Height = 36,
             FlowDirection = FlowDirection.RightToLeft,
-            BackColor = Theme.Background
+            BackColor = t.Background
         };
 
         _clearBtn = new Button { Text = "Clear All", Width = 72, Height = 28 };
@@ -458,35 +503,37 @@ public class MainForm : Form
         Theme.ApplySecondary(_upBtn);
         _upBtn.Click += OnMoveUp;
 
-        btnPanel.Controls.Add(_clearBtn);
-        btnPanel.Controls.Add(_removeBtn);
-        btnPanel.Controls.Add(_downBtn);
-        btnPanel.Controls.Add(_upBtn);
+        _serversBtnPanel.Controls.Add(_clearBtn);
+        _serversBtnPanel.Controls.Add(_removeBtn);
+        _serversBtnPanel.Controls.Add(_downBtn);
+        _serversBtnPanel.Controls.Add(_upBtn);
 
         // Dock order: last added = top
         page.Controls.Add(_serverList);
-        page.Controls.Add(btnPanel);
+        page.Controls.Add(_serversBtnPanel);
         page.Controls.Add(_addBtn);
         page.Controls.Add(_uriInput);
-        page.Controls.Add(inputLabel);
+        page.Controls.Add(_serversInputLabel);
     }
 
     private void BuildAppsTab(TabPage page)
     {
+        var t = Theme.Current;
+
         // ── Routing mode selector ──
-        var routingPanel = new Panel
+        _routingPanel = new Panel
         {
             Dock = DockStyle.Top,
             Height = 36,
-            BackColor = Theme.Background,
+            BackColor = t.Background,
             Padding = new Padding(0, 4, 0, 4)
         };
 
         _splitRadio = new RadioButton
         {
             Text = "Split Tunnel (selected apps)",
-            Font = Theme.BodyFont,
-            ForeColor = Theme.TextPrimary,
+            Font = t.BodyFont,
+            ForeColor = t.TextPrimary,
             Checked = true,
             AutoSize = true,
             Location = new Point(0, 6)
@@ -495,8 +542,8 @@ public class MainForm : Form
         _fullRadio = new RadioButton
         {
             Text = "Full Tunnel (all traffic)",
-            Font = Theme.BodyFont,
-            ForeColor = Theme.TextPrimary,
+            Font = t.BodyFont,
+            ForeColor = t.TextPrimary,
             AutoSize = true,
             Location = new Point(260, 6)
         };
@@ -509,28 +556,28 @@ public class MainForm : Form
             _removeCustomBtn.Enabled = _splitRadio.Checked;
         };
 
-        routingPanel.Controls.Add(_splitRadio);
-        routingPanel.Controls.Add(_fullRadio);
+        _routingPanel.Controls.Add(_splitRadio);
+        _routingPanel.Controls.Add(_fullRadio);
 
-        var label = new Label
+        _appsLabel = new Label
         {
             Text = "Check groups to route through VPN (expand to see apps inside):",
             Dock = DockStyle.Top,
             Height = 25,
-            ForeColor = Theme.TextSecondary,
-            Font = Theme.BodyFont
+            ForeColor = t.TextSecondary,
+            Font = t.BodyFont
         };
 
         _profileTree = new TreeView
         {
             Dock = DockStyle.Fill,
             CheckBoxes = true,
-            Font = new Font("Segoe UI", 10),
+            Font = t.BodyFont,
             ShowLines = true,
             ShowPlusMinus = true,
             ShowRootLines = true,
-            BackColor = Theme.Surface,
-            ForeColor = Theme.TextPrimary
+            BackColor = t.Surface,
+            ForeColor = t.TextPrimary
         };
         _profileTree.AfterCheck += OnProfileTreeCheck;
 
@@ -544,42 +591,43 @@ public class MainForm : Form
                 var childText = proc.IncludeChildren
                     ? $"{proc.Name} (+ child processes)"
                     : proc.Name;
-                node.Nodes.Add(new TreeNode(childText) { ForeColor = Theme.TextMuted });
+                node.Nodes.Add(new TreeNode(childText) { ForeColor = t.TextMuted });
             }
             _profileTree.Nodes.Add(node);
         }
 
         // Custom apps section at bottom
-        var customPanel = new Panel
+        _customPanel = new Panel
         {
             Dock = DockStyle.Bottom,
             Height = 65,
-            BackColor = Theme.Background
+            BackColor = t.Background
         };
 
-        var customLabel = new Label
+        _customLabel = new Label
         {
             Text = "Add custom app (exe name, e.g. spotify.exe):",
             Dock = DockStyle.Top,
             Height = 18,
-            ForeColor = Theme.TextSecondary,
-            Font = Theme.SmallFont
+            ForeColor = t.TextSecondary,
+            Font = t.SmallFont
         };
 
-        var inputRow = new FlowLayoutPanel
+        _customInputRow = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
             Height = 32,
             FlowDirection = FlowDirection.LeftToRight,
-            BackColor = Theme.Background
+            BackColor = t.Background
         };
 
         _customAppInput = new TextBox
         {
             Width = 250,
             PlaceholderText = "app.exe",
-            BackColor = Theme.InputBackground,
-            Font = Theme.BodyFont
+            BackColor = t.InputBackground,
+            ForeColor = t.TextPrimary,
+            Font = t.BodyFont
         };
         _customAppInput.KeyDown += (_, ke) => { if (ke.KeyCode == Keys.Enter) { OnAddCustomApp(null, EventArgs.Empty); ke.SuppressKeyPress = true; } };
 
@@ -591,17 +639,17 @@ public class MainForm : Form
         Theme.ApplySecondary(_removeCustomBtn);
         _removeCustomBtn.Click += OnRemoveCustomApp;
 
-        inputRow.Controls.Add(_customAppInput);
-        inputRow.Controls.Add(_addCustomBtn);
-        inputRow.Controls.Add(_removeCustomBtn);
+        _customInputRow.Controls.Add(_customAppInput);
+        _customInputRow.Controls.Add(_addCustomBtn);
+        _customInputRow.Controls.Add(_removeCustomBtn);
 
-        customPanel.Controls.Add(inputRow);
-        customPanel.Controls.Add(customLabel);
+        _customPanel.Controls.Add(_customInputRow);
+        _customPanel.Controls.Add(_customLabel);
 
         page.Controls.Add(_profileTree);
-        page.Controls.Add(customPanel);
-        page.Controls.Add(label);
-        page.Controls.Add(routingPanel);
+        page.Controls.Add(_customPanel);
+        page.Controls.Add(_appsLabel);
+        page.Controls.Add(_routingPanel);
     }
 
     private void OnProfileTreeCheck(object? sender, TreeViewEventArgs e)
@@ -680,8 +728,8 @@ public class MainForm : Form
         var node = new TreeNode("Custom Apps  \u2014  Your custom applications")
         {
             Tag = "_custom",
-            ForeColor = Theme.Primary,
-            NodeFont = new Font(_profileTree.Font, FontStyle.Bold)
+            ForeColor = Theme.Current.Primary,
+            NodeFont = Theme.Current.BoldBodyFont
         };
         _profileTree.Nodes.Add(node);
         return node;
@@ -694,6 +742,134 @@ public class MainForm : Form
             if (node.Tag?.ToString() == "_custom") return node;
         }
         return null;
+    }
+
+    // ─── Theme toggle ─────────────────────────────────────────────────────────
+
+    private void OnThemeToggle(object? sender, EventArgs e)
+    {
+        Theme.SetTheme(!Theme.IsDark);
+        _themeToggle.Text = Theme.IsDark ? "\u2600" : "\u263d";
+        _settings.App.Theme = Theme.IsDark ? "dark" : "light";
+        SaveSettings();
+        ApplyTheme();
+    }
+
+    /// <summary>
+    /// Re-applies Theme.Current colors/fonts to all controls at runtime.
+    /// </summary>
+    private void ApplyTheme()
+    {
+        var t = Theme.Current;
+
+        SuspendLayout();
+
+        // ── Form ──
+        BackColor = t.Background;
+        Font = t.BodyFont;
+
+        // ── Header ──
+        _headerPanel.BackColor = t.Surface;
+        _titleLabel.Font = t.HeaderFont;
+        _titleLabel.ForeColor = t.Primary;
+        _subtitleLabel.Font = t.SubHeaderFont;
+        _subtitleLabel.ForeColor = t.TextMuted;
+        _themeToggle.ForeColor = t.TextMuted;
+        _checkUpdateLink.LinkColor = t.TextMuted;
+        _checkUpdateLink.ActiveLinkColor = t.Primary;
+        _checkUpdateLink.VisitedLinkColor = t.TextMuted;
+
+        // ── Tabs ──
+        _tabs.Font = t.BodyFont;
+        _serversPage.BackColor = t.Background;
+        _appsPage.BackColor = t.Background;
+
+        // ── Servers tab ──
+        _serversInputLabel.ForeColor = t.TextSecondary;
+        _serversInputLabel.Font = t.BodyFont;
+        _uriInput.BackColor = t.InputBackground;
+        _uriInput.ForeColor = t.TextPrimary;
+        _uriInput.Font = t.BodyFont;
+        Theme.ApplyPrimary(_addBtn);
+        _serverList.BackColor = t.Surface;
+        _serverList.ForeColor = t.TextPrimary;
+        _serverList.Font = t.BodyFont;
+        _serversBtnPanel.BackColor = t.Background;
+        Theme.ApplySecondary(_clearBtn);
+        Theme.ApplySecondary(_removeBtn);
+        Theme.ApplySecondary(_downBtn);
+        Theme.ApplySecondary(_upBtn);
+
+        // ── Apps tab ──
+        _routingPanel.BackColor = t.Background;
+        _splitRadio.Font = t.BodyFont;
+        _splitRadio.ForeColor = t.TextPrimary;
+        _fullRadio.Font = t.BodyFont;
+        _fullRadio.ForeColor = t.TextPrimary;
+        _appsLabel.ForeColor = t.TextSecondary;
+        _appsLabel.Font = t.BodyFont;
+        _profileTree.BackColor = t.Surface;
+        _profileTree.ForeColor = t.TextPrimary;
+        _profileTree.Font = t.BodyFont;
+        // Update child node colors in tree
+        foreach (TreeNode rootNode in _profileTree.Nodes)
+        {
+            if (rootNode.Tag?.ToString() == "_custom")
+            {
+                rootNode.ForeColor = t.Primary;
+                rootNode.NodeFont = t.BoldBodyFont;
+            }
+            foreach (TreeNode child in rootNode.Nodes)
+            {
+                if (rootNode.Tag?.ToString() != "_custom")
+                    child.ForeColor = t.TextMuted;
+            }
+        }
+        _customPanel.BackColor = t.Background;
+        _customLabel.ForeColor = t.TextSecondary;
+        _customLabel.Font = t.SmallFont;
+        _customInputRow.BackColor = t.Background;
+        _customAppInput.BackColor = t.InputBackground;
+        _customAppInput.ForeColor = t.TextPrimary;
+        _customAppInput.Font = t.BodyFont;
+        Theme.ApplyPrimary(_addCustomBtn);
+        Theme.ApplySecondary(_removeCustomBtn);
+
+        // ── Action panel ──
+        _actionPanel.BackColor = t.Surface;
+        _startStopBtn.Font = t.StartStopFont;
+        _applyBtn.Font = t.StartStopFont;
+        _applyBtn.BackColor = t.AmberButton;
+        _applyBtn.ForeColor = Color.White;
+        _autostartCheck.Font = t.SmallFont;
+        _autostartCheck.ForeColor = t.TextSecondary;
+        _autostartCheck.BackColor = t.Surface;
+        Theme.ApplySecondary(_restartServiceBtn);
+        _restartServiceBtn.FlatAppearance.BorderSize = 0;
+        Theme.ApplySecondary(_reinstallServiceBtn);
+        _reinstallServiceBtn.FlatAppearance.BorderSize = 0;
+
+        // ── Status panel ──
+        // UpdateUI will set correct colors based on running state
+        bool running = _engine.IsRunning || _tray.RunningAsService;
+        UpdateUI(running);
+
+        // ── Update panel ──
+        _updatePanel.BackColor = t.UpdatePanelBg;
+        _updateLabel.ForeColor = t.UpdatePanelText;
+        _updateLabel.Font = t.BodyFont;
+        _updateBtn.BackColor = t.AmberButton;
+        _updateBtn.Font = t.ButtonFont;
+
+        // Refresh server list to update primary row styling
+        RefreshServerList();
+
+        ResumeLayout(true);
+
+        // Force repaint of border lines
+        _headerPanel.Invalidate();
+        _statusPanel.Invalidate();
+        _updatePanel.Invalidate();
     }
 
     // ─── Apply button logic ──────────────────────────────────────────────────
@@ -761,6 +937,7 @@ public class MainForm : Form
 
     // ─── Data loading ────────────────────────────────────────────────────────
 
+    /// <summary>Load settings from disk (no UI interaction).</summary>
     private void LoadSettings()
     {
         try
@@ -771,7 +948,11 @@ public class MainForm : Form
         {
             _settings = new AppSettings();
         }
+    }
 
+    /// <summary>Populate UI controls from loaded settings.</summary>
+    private void LoadSettingsIntoUI()
+    {
         // Load routing mode
         var isFullTunnel = (_settings.App.RoutingMode ?? "split")
             .Equals("full", StringComparison.OrdinalIgnoreCase);
@@ -939,6 +1120,7 @@ public class MainForm : Form
 
     private void RefreshServerList()
     {
+        var t = Theme.Current;
         var selectedIdx = _serverList.SelectedIndices.Count > 0
             ? _serverList.SelectedIndices[0]
             : -1;
@@ -957,8 +1139,8 @@ public class MainForm : Form
             // Highlight primary
             if (i == 0)
             {
-                item.ForeColor = Theme.Primary;
-                item.Font = new Font(_serverList.Font, FontStyle.Bold);
+                item.ForeColor = t.Primary;
+                item.Font = t.BoldBodyFont;
             }
 
             _serverList.Items.Add(item);
@@ -1359,13 +1541,14 @@ public class MainForm : Form
 
     private void UpdateUI(bool running)
     {
+        var t = Theme.Current;
         _startStopBtn.Enabled = true;
 
         if (running)
         {
             _startStopBtn.Text = "\u2b1b  Stop VPN";
-            _startStopBtn.BackColor = Theme.Danger;
-            _startStopBtn.ForeColor = Theme.TextOnPrimary;
+            _startStopBtn.BackColor = t.Danger;
+            _startStopBtn.ForeColor = t.TextOnPrimary;
             // Resize Start/Stop when Apply is visible
             _startStopBtn.Size = new Size(330, 36);
         }
@@ -1383,31 +1566,32 @@ public class MainForm : Form
         if (_tray.RunningAsService)
         {
             _statusLabel.Text = "Connected \u2014 Windows Service (autostart)";
-            _statusLabel.ForeColor = Theme.Success;
-            _statusDot.ForeColor = Theme.Success;
-            _statusPanel.BackColor = Theme.SuccessLight;
+            _statusLabel.ForeColor = t.Success;
+            _statusDot.ForeColor = t.Success;
+            _statusPanel.BackColor = t.SuccessLight;
         }
         else if (running)
         {
             _statusLabel.Text = $"Connected \u2014 {_engine.ActiveProfileName} \u2014 PID {_engine.SingBoxPid}";
-            _statusLabel.ForeColor = Theme.Success;
-            _statusDot.ForeColor = Theme.Success;
-            _statusPanel.BackColor = Theme.SuccessLight;
+            _statusLabel.ForeColor = t.Success;
+            _statusDot.ForeColor = t.Success;
+            _statusPanel.BackColor = t.SuccessLight;
         }
         else
         {
             _statusLabel.Text = "Not connected";
-            _statusLabel.ForeColor = Theme.TextMuted;
-            _statusDot.ForeColor = Theme.TextMuted;
-            _statusPanel.BackColor = Theme.Background;
+            _statusLabel.ForeColor = t.TextMuted;
+            _statusDot.ForeColor = t.TextMuted;
+            _statusPanel.BackColor = t.Background;
         }
     }
 
     private void ApplyStartStyle()
     {
+        var t = Theme.Current;
         _startStopBtn.Text = "\u25b6  Start VPN";
-        _startStopBtn.BackColor = Theme.Primary;
-        _startStopBtn.ForeColor = Theme.TextOnPrimary;
+        _startStopBtn.BackColor = t.Primary;
+        _startStopBtn.ForeColor = t.TextOnPrimary;
     }
 
     private void OnEngineStatus(string msg)
