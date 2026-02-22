@@ -38,45 +38,73 @@ public class UpdateChecker
         if (string.IsNullOrWhiteSpace(_settings.GitHubRepo))
             return null;
 
-        var url = $"https://api.github.com/repos/{_settings.GitHubRepo}/releases/latest";
+        if (!Version.TryParse(_currentVersion, out var current))
+            return null;
+
+        // Fetch all releases (up to 30) to collect changelogs for skipped versions
+        var url = $"https://api.github.com/repos/{_settings.GitHubRepo}/releases?per_page=30";
         var json = await _http.GetStringAsync(url, ct);
 
-        var release = JsonConvert.DeserializeAnonymousType(json, new
+        var releases = JsonConvert.DeserializeAnonymousType(json, new[]
         {
-            tag_name = "",
-            body = "",
-            html_url = "",
-            assets = new[] { new { browser_download_url = "", size = 0L, name = "" } }
+            new
+            {
+                tag_name = "",
+                body = "",
+                html_url = "",
+                draft = false,
+                prerelease = false,
+                assets = new[] { new { browser_download_url = "", size = 0L, name = "" } }
+            }
         });
 
-        if (release == null) return null;
+        if (releases == null || releases.Length == 0)
+            return null;
 
-        var latestTag = release.tag_name.TrimStart('v');
+        // Find all non-draft releases newer than current version, sorted newest-first
+        var newerReleases = releases
+            .Where(r => !r.draft && !r.prerelease)
+            .Select(r => new
+            {
+                Release = r,
+                Tag = r.tag_name.TrimStart('v'),
+                Parsed = Version.TryParse(r.tag_name.TrimStart('v'), out var v) ? v : null
+            })
+            .Where(r => r.Parsed != null && r.Parsed > current)
+            .OrderByDescending(r => r.Parsed)
+            .ToList();
 
-        var asset = release.assets?.FirstOrDefault(a =>
+        if (newerReleases.Count == 0)
+            return null;
+
+        var latestRelease = newerReleases[0];
+
+        var asset = latestRelease.Release.assets?.FirstOrDefault(a =>
             a.name.StartsWith("VPNRouter-v", StringComparison.OrdinalIgnoreCase) &&
             a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
 
         if (asset == null) return null;
 
-        var isNewer = Version.TryParse(latestTag, out var latest)
-                   && Version.TryParse(_currentVersion, out var current)
-                   && latest > current;
+        // Collect release notes from ALL skipped versions (newest first)
+        var allNotes = newerReleases
+            .Where(r => !string.IsNullOrWhiteSpace(r.Release.body))
+            .Select(r => r.Release.body!.Trim())
+            .ToList();
+
+        var combinedNotes = string.Join("\n\n", allNotes);
 
         var info = new UpdateInfo
         {
             CurrentVersion = _currentVersion,
-            LatestVersion = latestTag,
+            LatestVersion = latestRelease.Tag,
             DownloadUrl = asset.browser_download_url,
-            ReleaseNotes = release.body ?? string.Empty,
-            HtmlUrl = release.html_url ?? string.Empty,
+            ReleaseNotes = combinedNotes,
+            HtmlUrl = latestRelease.Release.html_url ?? string.Empty,
             SizeBytes = asset.size,
-            IsNewer = isNewer
+            IsNewer = true
         };
 
-        if (isNewer)
-            UpdateAvailable?.Invoke(info);
-
+        UpdateAvailable?.Invoke(info);
         return info;
     }
 
