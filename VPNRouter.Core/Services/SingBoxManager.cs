@@ -31,6 +31,8 @@ public class SingBoxManager : IDisposable
 
     // ─── Public API ───────────────────────────────────────────────────────────
 
+    private const long MaxLogSizeBytes = 10 * 1024 * 1024; // 10 MB
+
     public void Start(SingBoxConfig config)
     {
         if (State == SingBoxState.Running)
@@ -44,6 +46,7 @@ public class SingBoxManager : IDisposable
         if (!File.Exists(exePath))
             throw new FileNotFoundException($"sing-box not found at: {exePath}");
 
+        RotateSingBoxLog();
         _currentConfigPath = WriteConfigToDisk(config);
 
         _logger.Information("[SingBoxManager] Starting sing-box with config: {Config}", _currentConfigPath);
@@ -168,6 +171,38 @@ public class SingBoxManager : IDisposable
     }
 
     // ─── Private ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Rotates singbox.log if it exceeds MaxLogSizeBytes.
+    /// Renames current log to singbox.old.log (overwriting previous backup).
+    /// </summary>
+    private void RotateSingBoxLog()
+    {
+        try
+        {
+            var logPath = Environment.ExpandEnvironmentVariables(
+                @"%ProgramData%\VPNRouter\logs\singbox.log");
+
+            if (!File.Exists(logPath))
+                return;
+
+            var fileInfo = new FileInfo(logPath);
+            if (fileInfo.Length <= MaxLogSizeBytes)
+                return;
+
+            var oldPath = Path.ChangeExtension(logPath, ".old.log");
+            if (File.Exists(oldPath))
+                File.Delete(oldPath);
+
+            File.Move(logPath, oldPath);
+            _logger.Information("[SingBoxManager] Rotated singbox.log ({Size:F1} MB → singbox.old.log)",
+                fileInfo.Length / 1024.0 / 1024.0);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[SingBoxManager] Failed to rotate singbox.log");
+        }
+    }
 
     /// <summary>
     /// Attempts hot-reload via Clash API: PUT http://{clash_api}/configs?force=true
