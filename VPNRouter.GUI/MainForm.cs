@@ -917,11 +917,11 @@ public class MainForm : Form
                 await Task.Run(() => ServiceInstaller.Stop());
             }
 
-            // Apply (launches batch script)
-            _updateLabel.Text = "Restarting...";
+            // Apply in-process: copies files directly, renames locked exes
+            _updateLabel.Text = "Applying update...";
             _updateChecker.ApplyUpdate(extractedDir);
 
-            await Task.Delay(500);
+            // ApplyUpdate already launched the new GUI — just exit
             Application.Exit();
         }
         catch (Exception ex)

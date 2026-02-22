@@ -161,7 +161,9 @@ public class UpdateChecker
     }
 
     /// <summary>
-    /// Clean up leftover staging directory from a previous update.
+    /// Clean up leftover files from a previous update:
+    /// - staging directory (downloaded/extracted ZIP)
+    /// - .bak files (renamed locked executables during in-process update)
     /// Call on app startup.
     /// </summary>
     public void CleanupStagingDir()
@@ -171,53 +173,68 @@ public class UpdateChecker
             if (Directory.Exists(_stagingDir))
                 Directory.Delete(_stagingDir, true);
         }
-        catch
+        catch { /* Non-critical — will be cleaned on next update */ }
+
+        // Clean up .bak files left from in-process update (renamed locked exes)
+        try
         {
-            // Non-critical — will be cleaned on next update
+            var appDir = AppContext.BaseDirectory;
+            foreach (var bak in Directory.GetFiles(appDir, "*.bak", SearchOption.AllDirectories))
+            {
+                try { File.Delete(bak); } catch { }
+            }
         }
+        catch { }
     }
 
+    /// <summary>
+    /// Apply update in-process: copy files directly, rename locked executables.
+    /// No external batch script needed — eliminates the chicken-and-egg problem
+    /// where old versions had buggy batch scripts that couldn't self-update.
+    ///
+    /// On Windows, a running .exe can be renamed (but not deleted/overwritten).
+    /// So we: rename locked file → copy new file → start new exe → exit.
+    /// The .bak files are cleaned up on next startup via CleanupStagingDir().
+    /// </summary>
     public void ApplyUpdate(string extractedDir)
     {
         var appDir = AppContext.BaseDirectory.TrimEnd('\\');
-        var batchPath = Path.Combine(_stagingDir, "apply-update.cmd");
         var guiExe = Path.Combine(appDir, "VPNRouter.GUI.exe");
-        var logPath = Path.Combine(_stagingDir, "update.log");
-        var currentPid = Environment.ProcessId;
+        int copied = 0, renamed = 0;
 
-        // Use start command instead of powershell — batch already runs as admin
-        // (inherited from GUI process), so no need for -Verb RunAs / UAC prompt.
-        // Don't delete staging dir from batch — it deletes the script itself.
-        // Cleanup happens on next app startup via CleanupStagingDir().
-        var script = $"""
-            @echo off
-            echo [VPNRouter Update] Waiting for process {currentPid} to exit... > "{logPath}"
-            :waitloop
-            tasklist /fi "PID eq {currentPid}" 2>NUL | find "{currentPid}" >NUL
-            if %ERRORLEVEL%==0 (
-                timeout /t 1 /nobreak >NUL
-                goto waitloop
-            )
-            echo [VPNRouter Update] Process exited. Copying files... >> "{logPath}"
-            xcopy /s /y /q "{extractedDir}\*" "{appDir}\" >> "{logPath}" 2>&1
-            if %ERRORLEVEL% NEQ 0 (
-                echo [VPNRouter Update] xcopy failed with code %ERRORLEVEL% >> "{logPath}"
-            ) else (
-                echo [VPNRouter Update] Files copied successfully >> "{logPath}"
-            )
-            echo [VPNRouter Update] Launching updated VPNRouter... >> "{logPath}"
-            start "" "{guiExe}"
-            echo [VPNRouter Update] Launch command sent >> "{logPath}"
-            """;
+        foreach (var srcFile in Directory.GetFiles(extractedDir, "*", SearchOption.AllDirectories))
+        {
+            var relativePath = Path.GetRelativePath(extractedDir, srcFile);
+            var destPath = Path.Combine(appDir, relativePath);
 
-        File.WriteAllText(batchPath, script);
+            // Ensure target subdirectory exists (e.g. profiles\, service\)
+            var destDir = Path.GetDirectoryName(destPath);
+            if (destDir != null)
+                Directory.CreateDirectory(destDir);
 
+            try
+            {
+                File.Copy(srcFile, destPath, overwrite: true);
+                copied++;
+            }
+            catch (IOException)
+            {
+                // File is locked (running exe) — rename old file, then copy new
+                var bakPath = destPath + ".bak";
+                try { File.Delete(bakPath); } catch { }
+                File.Move(destPath, bakPath);
+                File.Copy(srcFile, destPath);
+                copied++;
+                renamed++;
+            }
+        }
+
+        // Launch updated GUI (inherits admin token from current process)
         Process.Start(new ProcessStartInfo
         {
-            FileName = "cmd.exe",
-            Arguments = $"/c \"{batchPath}\"",
-            UseShellExecute = false,
-            CreateNoWindow = true
+            FileName = guiExe,
+            WorkingDirectory = appDir,
+            UseShellExecute = false
         });
     }
 }

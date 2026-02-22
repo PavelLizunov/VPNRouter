@@ -89,6 +89,13 @@ if (Test-Path $ProfilesSrc) {
     Write-Host "       Profiles copied" -ForegroundColor Gray
 }
 
+# ── Bundle update helper ──
+$UpdateHelper = Join-Path $Root "update-helper.cmd"
+if (Test-Path $UpdateHelper) {
+    Copy-Item $UpdateHelper $PublishDir
+    Write-Host "       Update helper copied" -ForegroundColor Gray
+}
+
 # ── Create README.txt ──
 $ReadmePath = Join-Path $PublishDir "README.txt"
 @"
