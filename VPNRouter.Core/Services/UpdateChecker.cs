@@ -142,6 +142,12 @@ public class UpdateChecker
 
         fileStream.Close();
 
+        // Validate downloaded file — catch truncated downloads
+        var downloadedSize = new FileInfo(zipPath).Length;
+        if (info.SizeBytes > 0 && downloadedSize < info.SizeBytes * 0.9)
+            throw new InvalidOperationException(
+                $"Downloaded file is too small ({downloadedSize / 1024 / 1024} MB vs expected {info.SizeBytes / 1024 / 1024} MB). Download may be corrupted.");
+
         StatusChanged?.Invoke("Extracting update...");
 
         var extractDir = Path.Combine(_stagingDir, "extracted");

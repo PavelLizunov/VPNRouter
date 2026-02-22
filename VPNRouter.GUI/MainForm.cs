@@ -362,8 +362,12 @@ public class MainForm : Form
                 checkUpdateLink.Enabled = true;
                 _ = Task.Delay(3000).ContinueWith(_ =>
                 {
-                    if (IsDisposed) return;
-                    BeginInvoke(() => checkUpdateLink.Text = "Check for updates");
+                    try
+                    {
+                        if (!IsDisposed && IsHandleCreated)
+                            BeginInvoke(() => checkUpdateLink.Text = "Check for updates");
+                    }
+                    catch (ObjectDisposedException) { }
                 });
             }
         };

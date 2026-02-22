@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Management;
 using System.Text.RegularExpressions;
@@ -13,6 +14,9 @@ namespace VPNRouter.Core.Services;
 public class ProcessScanner
 {
     private readonly ILogger _logger;
+
+    // Cache compiled regexes — avoids re-JITting on every scan
+    private static readonly ConcurrentDictionary<string, Regex> _regexCache = new(StringComparer.OrdinalIgnoreCase);
 
     public ProcessScanner(ILogger? logger = null)
     {
@@ -31,48 +35,59 @@ public class ProcessScanner
         var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var runningNow = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // 1. Get all currently running process names
+        // 1. Get all currently running process names (dispose handles after use)
         var allProcesses = Process.GetProcesses();
-        foreach (var p in allProcesses)
+        try
         {
-            try { runningNow.Add(p.ProcessName + ".exe"); }
-            catch { /* process may have exited */ }
-        }
-
-        foreach (var rule in profile.Processes)
-        {
-            // 2. Add the primary process name directly
-            found.Add(NormalizeName(rule.Name));
-
-            // 3. Expand scan_patterns → add all matching names regardless of running state
-            //    This pre-populates the config so runtime reloads are rare
-            foreach (var pattern in rule.ScanPatterns)
+            foreach (var p in allProcesses)
             {
-                found.Add(NormalizeName(pattern.Contains('*') || pattern.Contains('?')
-                    ? pattern  // keep as pattern for sing-box regex later
-                    : pattern));
-
-                // Also match against currently running processes
-                var regex = BuildPatternRegex(pattern);
-                foreach (var name in runningNow)
-                {
-                    if (regex.IsMatch(name))
-                        found.Add(NormalizeName(name));
-                }
+                try { runningNow.Add(p.ProcessName + ".exe"); }
+                catch { /* process may have exited */ }
             }
 
-            // 4. If include_children, find currently running children via WMI
-            if (rule.IncludeChildren)
+            foreach (var rule in profile.Processes)
             {
-                var mainProcs = allProcesses
-                    .Where(p => string.Equals(p.ProcessName + ".exe", rule.Name, StringComparison.OrdinalIgnoreCase));
+                // 2. Add the primary process name directly
+                found.Add(NormalizeName(rule.Name));
 
-                foreach (var proc in mainProcs)
+                // 3. Expand scan_patterns → add all matching names regardless of running state
+                //    This pre-populates the config so runtime reloads are rare
+                foreach (var pattern in rule.ScanPatterns)
                 {
-                    var children = GetChildProcessNames(proc.Id);
-                    foreach (var child in children)
-                        found.Add(NormalizeName(child));
+                    found.Add(NormalizeName(pattern.Contains('*') || pattern.Contains('?')
+                        ? pattern  // keep as pattern for sing-box regex later
+                        : pattern));
+
+                    // Also match against currently running processes
+                    var regex = BuildPatternRegex(pattern);
+                    foreach (var name in runningNow)
+                    {
+                        if (regex.IsMatch(name))
+                            found.Add(NormalizeName(name));
+                    }
                 }
+
+                // 4. If include_children, find currently running children via WMI
+                if (rule.IncludeChildren)
+                {
+                    var mainProcs = allProcesses
+                        .Where(p => string.Equals(p.ProcessName + ".exe", rule.Name, StringComparison.OrdinalIgnoreCase));
+
+                    foreach (var proc in mainProcs)
+                    {
+                        var children = GetChildProcessNames(proc.Id);
+                        foreach (var child in children)
+                            found.Add(NormalizeName(child));
+                    }
+                }
+            }
+        }
+        finally
+        {
+            // Dispose all Process handles to prevent resource leak
+            foreach (var p in allProcesses)
+            {
+                try { p.Dispose(); } catch { }
             }
         }
 
@@ -132,11 +147,14 @@ public class ProcessScanner
 
     private static Regex BuildPatternRegex(string pattern)
     {
-        var regexPattern = "^" + Regex.Escape(pattern)
-            .Replace(@"\*", ".*")
-            .Replace(@"\?", ".") + "$";
+        return _regexCache.GetOrAdd(pattern, p =>
+        {
+            var regexPattern = "^" + Regex.Escape(p)
+                .Replace(@"\*", ".*")
+                .Replace(@"\?", ".") + "$";
 
-        return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        });
     }
 
     private static string NormalizeName(string name)

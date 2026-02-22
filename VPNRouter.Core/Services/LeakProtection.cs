@@ -39,9 +39,10 @@ public static class LeakProtection
             .Distinct()
             .ToList();
 
-        // DNS rules now use action="route" + server="vpn-dns"
+        // DNS rules use action="route" + server (vpn-dns or local-dns depending on dns_mode)
+        // Smart mode uses local-dns, vpn_only uses vpn-dns — both are valid leak protection
         var processesInDnsRules = config.Dns.Rules
-            .Where(r => r.Server == "vpn-dns" && r.Action == "route")
+            .Where(r => (r.Server == "vpn-dns" || r.Server == "local-dns") && r.Action == "route")
             .Where(r => r.ProcessName != null)
             .SelectMany(r => r.ProcessName!)
             .Distinct()
@@ -50,7 +51,7 @@ public static class LeakProtection
         foreach (var proc in processesInRouteRules)
         {
             if (!processesInDnsRules.Contains(proc))
-                warnings.Add($"Process '{proc}' is routed through proxy but has no VPN DNS rule — DNS may leak");
+                warnings.Add($"Process '{proc}' is routed through proxy but has no DNS rule — DNS may leak");
         }
 
         // 4b. Full tunnel mode checks
