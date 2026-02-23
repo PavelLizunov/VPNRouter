@@ -52,7 +52,7 @@ public class MainForm : Form
     private Panel _headerPanel = null!;
     private Label _titleLabel = null!;
     private Label _subtitleLabel = null!;
-    private Label _themeToggle = null!;
+    private LinkLabel _themeToggle = null!;
     private LinkLabel _checkUpdateLink = null!;
     private TabControl _tabs = null!;
     private TabPage _serversPage = null!;
@@ -362,30 +362,31 @@ public class MainForm : Form
             BackColor = Color.Transparent
         };
 
-        _themeToggle = new Label
-        {
-            Text = Theme.IsDark ? "Light" : "Dark",
-            Font = t.SmallFont,
-            Cursor = Cursors.Hand,
-            AutoSize = true,
-            Location = new Point(390, 28),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            ForeColor = t.Primary,
-            BackColor = Color.Transparent
-        };
-        _themeToggle.Click += OnThemeToggle;
-
         _checkUpdateLink = new LinkLabel
         {
             Text = "Check for updates",
             Font = t.SmallFont,
             AutoSize = true,
-            Location = new Point(430, 46),
+            Location = new Point(340, 46),
             LinkColor = t.TextMuted,
             ActiveLinkColor = t.Primary,
             VisitedLinkColor = t.TextMuted,
             BackColor = Color.Transparent
         };
+
+        _themeToggle = new LinkLabel
+        {
+            Text = Theme.IsDark ? "\u25cb Light" : "\u25cf Dark",
+            Font = t.SmallFont,
+            AutoSize = true,
+            Location = new Point(468, 46),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            LinkColor = t.TextMuted,
+            ActiveLinkColor = t.Primary,
+            VisitedLinkColor = t.TextMuted,
+            BackColor = Color.Transparent
+        };
+        _themeToggle.Click += OnThemeToggle;
         _checkUpdateLink.Click += async (_, __) =>
         {
             _checkUpdateLink.Text = "Checking...";
@@ -749,7 +750,7 @@ public class MainForm : Form
     private void OnThemeToggle(object? sender, EventArgs e)
     {
         Theme.SetTheme(!Theme.IsDark);
-        _themeToggle.Text = Theme.IsDark ? "Light" : "Dark";
+        _themeToggle.Text = Theme.IsDark ? "\u25cb Light" : "\u25cf Dark";
         _settings.App.Theme = Theme.IsDark ? "dark" : "light";
         SaveSettings();
         ApplyTheme();
@@ -774,7 +775,9 @@ public class MainForm : Form
         _titleLabel.ForeColor = t.Primary;
         _subtitleLabel.Font = t.SubHeaderFont;
         _subtitleLabel.ForeColor = t.TextMuted;
-        _themeToggle.ForeColor = t.Primary;
+        _themeToggle.LinkColor = t.TextMuted;
+        _themeToggle.ActiveLinkColor = t.Primary;
+        _themeToggle.VisitedLinkColor = t.TextMuted;
         _checkUpdateLink.LinkColor = t.TextMuted;
         _checkUpdateLink.ActiveLinkColor = t.Primary;
         _checkUpdateLink.VisitedLinkColor = t.TextMuted;
