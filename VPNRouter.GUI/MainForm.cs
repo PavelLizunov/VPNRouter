@@ -127,8 +127,14 @@ public class MainForm : Form
         BuildHeaderPanel();
 
         // ── Tabs ──
-        _tabs = new TabControl { Dock = DockStyle.Fill };
-        _tabs.Font = t.BodyFont;
+        _tabs = new TabControl
+        {
+            Dock = DockStyle.Fill,
+            Font = t.BodyFont,
+            DrawMode = TabDrawMode.OwnerDrawFixed,
+            Padding = new Point(12, 4)
+        };
+        _tabs.DrawItem += OnDrawTab;
 
         _serversPage = new TabPage("Servers") { BackColor = t.Background, Padding = new Padding(10) };
         BuildServersTab(_serversPage);
@@ -167,8 +173,8 @@ public class MainForm : Form
 
         _statusPanel.Paint += (s, e) =>
         {
-            var borderColor = Theme.Current.SurfaceBorder;
-            e.Graphics.DrawLine(new Pen(borderColor), 0, 0, _statusPanel.Width, 0);
+            using var borderPen = new Pen(Theme.Current.SurfaceBorder);
+            e.Graphics.DrawLine(borderPen, 0, 0, _statusPanel.Width, 0);
         };
 
         _statusPanel.Controls.Add(_statusDot);
@@ -305,8 +311,8 @@ public class MainForm : Form
 
         _updatePanel.Paint += (s, e) =>
         {
-            var borderColor = Theme.Current.UpdatePanelBorder;
-            e.Graphics.DrawLine(new Pen(borderColor), 0, _updatePanel.Height - 1, _updatePanel.Width, _updatePanel.Height - 1);
+            using var borderPen = new Pen(Theme.Current.UpdatePanelBorder);
+            e.Graphics.DrawLine(borderPen, 0, _updatePanel.Height - 1, _updatePanel.Width, _updatePanel.Height - 1);
         };
 
         // ── Dock order: last added docks first ──
@@ -424,8 +430,8 @@ public class MainForm : Form
         // Bottom border
         _headerPanel.Paint += (s, e) =>
         {
-            var borderColor = Theme.Current.SurfaceBorder;
-            e.Graphics.DrawLine(new Pen(borderColor), 0, _headerPanel.Height - 1, _headerPanel.Width, _headerPanel.Height - 1);
+            using var borderPen = new Pen(Theme.Current.SurfaceBorder);
+            e.Graphics.DrawLine(borderPen, 0, _headerPanel.Height - 1, _headerPanel.Width, _headerPanel.Height - 1);
         };
     }
 
@@ -471,8 +477,12 @@ public class MainForm : Form
             GridLines = true,
             BackColor = t.Surface,
             ForeColor = t.TextPrimary,
-            Font = t.BodyFont
+            Font = t.BodyFont,
+            OwnerDraw = true
         };
+        _serverList.DrawColumnHeader += OnDrawColumnHeader;
+        _serverList.DrawItem += OnDrawListItem;
+        _serverList.DrawSubItem += OnDrawListSubItem;
         _serverList.Columns.Add("Role", 70);
         _serverList.Columns.Add("Name", 110);
         _serverList.Columns.Add("Server", 160);
@@ -744,6 +754,71 @@ public class MainForm : Form
         return null;
     }
 
+    // ─── Owner-draw handlers ────────────────────────────────────────────────
+
+    private void OnDrawTab(object? sender, DrawItemEventArgs e)
+    {
+        var t = Theme.Current;
+        var page = _tabs.TabPages[e.Index];
+        var bounds = _tabs.GetTabRect(e.Index);
+        bool selected = _tabs.SelectedIndex == e.Index;
+
+        using var bgBrush = new SolidBrush(selected ? t.Background : t.Surface);
+        e.Graphics.FillRectangle(bgBrush, bounds);
+
+        var textColor = selected ? t.TextPrimary : t.TextSecondary;
+        TextRenderer.DrawText(e.Graphics, page.Text, t.BodyFont, bounds, textColor,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+    }
+
+    private void OnDrawColumnHeader(object? sender, DrawListViewColumnHeaderEventArgs e)
+    {
+        var t = Theme.Current;
+        using var bgBrush = new SolidBrush(t.Surface);
+        e.Graphics.FillRectangle(bgBrush, e.Bounds);
+
+        using var borderPen = new Pen(t.SurfaceBorder);
+        e.Graphics.DrawLine(borderPen, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+
+        var textBounds = new Rectangle(e.Bounds.X + 4, e.Bounds.Y, e.Bounds.Width - 8, e.Bounds.Height);
+        TextRenderer.DrawText(e.Graphics, e.Header!.Text, t.BodyFont, textBounds, t.TextSecondary,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+    }
+
+    private void OnDrawListItem(object? sender, DrawListViewItemEventArgs e)
+    {
+        e.DrawDefault = false;
+    }
+
+    private void OnDrawListSubItem(object? sender, DrawListViewSubItemEventArgs e)
+    {
+        var t = Theme.Current;
+        using var bgBrush = new SolidBrush(t.Surface);
+        e.Graphics.FillRectangle(bgBrush, e.Bounds);
+
+        var item = e.Item!;
+        var color = item.ForeColor;
+        var font = item.Font ?? t.BodyFont;
+
+        // For sub-items use their own color if different, otherwise item color
+        if (e.SubItem != null && e.ColumnIndex > 0)
+        {
+            color = t.TextPrimary;
+            font = t.BodyFont;
+        }
+
+        var textBounds = new Rectangle(e.Bounds.X + 4, e.Bounds.Y, e.Bounds.Width - 8, e.Bounds.Height);
+        TextRenderer.DrawText(e.Graphics, e.SubItem?.Text ?? item.Text, font, textBounds, color,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+
+        if (_serverList.GridLines)
+        {
+            using var gridPen = new Pen(t.SurfaceBorder);
+            e.Graphics.DrawLine(gridPen, e.Bounds.Right - 1, e.Bounds.Top, e.Bounds.Right - 1, e.Bounds.Bottom);
+            e.Graphics.DrawLine(gridPen, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+        }
+    }
+
     // ─── Theme toggle ─────────────────────────────────────────────────────────
 
     private void OnThemeToggle(object? sender, EventArgs e)
@@ -868,7 +943,9 @@ public class MainForm : Form
 
         ResumeLayout(true);
 
-        // Force repaint of border lines
+        // Force repaint of owner-drawn controls and border lines
+        _tabs.Invalidate();
+        _serverList.Invalidate();
         _headerPanel.Invalidate();
         _statusPanel.Invalidate();
         _updatePanel.Invalidate();
