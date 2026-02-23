@@ -380,7 +380,6 @@ public class MainForm : Form
             Font = t.SmallFont,
             AutoSize = true,
             Location = new Point(468, 46),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
             LinkColor = t.TextMuted,
             ActiveLinkColor = t.Primary,
             VisitedLinkColor = t.TextMuted,
