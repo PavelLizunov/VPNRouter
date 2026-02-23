@@ -135,6 +135,7 @@ public class MainForm : Form
             Padding = new Point(12, 4)
         };
         _tabs.DrawItem += OnDrawTab;
+        _tabs.Paint += OnTabPaint;
 
         _serversPage = new TabPage("Servers") { BackColor = t.Background, Padding = new Padding(10) };
         BuildServersTab(_serversPage);
@@ -766,9 +767,43 @@ public class MainForm : Form
         using var bgBrush = new SolidBrush(selected ? t.Background : t.Surface);
         e.Graphics.FillRectangle(bgBrush, bounds);
 
+        // Draw bottom border on selected tab to blend with page
+        if (selected)
+        {
+            using var borderPen = new Pen(t.Primary, 2);
+            e.Graphics.DrawLine(borderPen, bounds.Left, bounds.Bottom - 1, bounds.Right, bounds.Bottom - 1);
+        }
+
         var textColor = selected ? t.TextPrimary : t.TextSecondary;
         TextRenderer.DrawText(e.Graphics, page.Text, t.BodyFont, bounds, textColor,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+    }
+
+    private void OnTabPaint(object? sender, PaintEventArgs e)
+    {
+        // Fill the background area around tabs that WinForms draws with system color
+        using var bgBrush = new SolidBrush(Theme.Current.Surface);
+        e.Graphics.FillRectangle(bgBrush, e.ClipRectangle);
+
+        // Redraw each tab on top of the filled background
+        for (int i = 0; i < _tabs.TabCount; i++)
+        {
+            var tabRect = _tabs.GetTabRect(i);
+            bool selected = _tabs.SelectedIndex == i;
+
+            using var tabBrush = new SolidBrush(selected ? Theme.Current.Background : Theme.Current.Surface);
+            e.Graphics.FillRectangle(tabBrush, tabRect);
+
+            if (selected)
+            {
+                using var borderPen = new Pen(Theme.Current.Primary, 2);
+                e.Graphics.DrawLine(borderPen, tabRect.Left, tabRect.Bottom - 1, tabRect.Right, tabRect.Bottom - 1);
+            }
+
+            var textColor = selected ? Theme.Current.TextPrimary : Theme.Current.TextSecondary;
+            TextRenderer.DrawText(e.Graphics, _tabs.TabPages[i].Text, Theme.Current.BodyFont, tabRect, textColor,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        }
     }
 
     private void OnDrawColumnHeader(object? sender, DrawListViewColumnHeaderEventArgs e)
@@ -793,18 +828,26 @@ public class MainForm : Form
     private void OnDrawListSubItem(object? sender, DrawListViewSubItemEventArgs e)
     {
         var t = Theme.Current;
-        using var bgBrush = new SolidBrush(t.Surface);
+        var item = e.Item!;
+        bool selected = item.Selected;
+
+        // Selection highlight
+        Color bgColor = selected ? t.PrimaryLight : t.Surface;
+        using var bgBrush = new SolidBrush(bgColor);
         e.Graphics.FillRectangle(bgBrush, e.Bounds);
 
-        var item = e.Item!;
         var color = item.ForeColor;
         var font = item.Font ?? t.BodyFont;
 
         // For sub-items use their own color if different, otherwise item color
         if (e.SubItem != null && e.ColumnIndex > 0)
         {
-            color = t.TextPrimary;
+            color = selected ? t.TextPrimary : t.TextPrimary;
             font = t.BodyFont;
+        }
+        else if (selected && color == t.Primary)
+        {
+            // Keep primary (blue) color for selected primary row
         }
 
         var textBounds = new Rectangle(e.Bounds.X + 4, e.Bounds.Y, e.Bounds.Width - 8, e.Bounds.Height);
