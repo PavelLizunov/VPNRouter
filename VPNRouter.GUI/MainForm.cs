@@ -362,16 +362,15 @@ public class MainForm : Form
             BackColor = Color.Transparent
         };
 
-        // Segoe MDL2 Assets: E706=Brightness(sun), E708=QuietHours(moon)
         _themeToggle = new Label
         {
-            Text = Theme.IsDark ? "\uE706" : "\uE708",
-            Font = new Font("Segoe MDL2 Assets", 16f),
+            Text = Theme.IsDark ? "Light" : "Dark",
+            Font = t.SmallFont,
             Cursor = Cursors.Hand,
             AutoSize = true,
-            Location = new Point(393, 20),
+            Location = new Point(390, 28),
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
-            ForeColor = t.TextMuted,
+            ForeColor = t.Primary,
             BackColor = Color.Transparent
         };
         _themeToggle.Click += OnThemeToggle;
@@ -750,7 +749,7 @@ public class MainForm : Form
     private void OnThemeToggle(object? sender, EventArgs e)
     {
         Theme.SetTheme(!Theme.IsDark);
-        _themeToggle.Text = Theme.IsDark ? "\uE706" : "\uE708";
+        _themeToggle.Text = Theme.IsDark ? "Light" : "Dark";
         _settings.App.Theme = Theme.IsDark ? "dark" : "light";
         SaveSettings();
         ApplyTheme();
@@ -775,7 +774,7 @@ public class MainForm : Form
         _titleLabel.ForeColor = t.Primary;
         _subtitleLabel.Font = t.SubHeaderFont;
         _subtitleLabel.ForeColor = t.TextMuted;
-        _themeToggle.ForeColor = t.TextMuted;
+        _themeToggle.ForeColor = t.Primary;
         _checkUpdateLink.LinkColor = t.TextMuted;
         _checkUpdateLink.ActiveLinkColor = t.Primary;
         _checkUpdateLink.VisitedLinkColor = t.TextMuted;
