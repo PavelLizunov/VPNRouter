@@ -109,6 +109,11 @@ public static class NetworkInterfaceDetector
     /// <summary>
     /// Calculates the network address from an IP + subnet mask and returns CIDR notation.
     /// Example: 10.9.1.2 + 255.255.255.0 → "10.9.1.0/24"
+    ///
+    /// WireGuard/AmneziaWG often uses point-to-point /32 masks. In that case we widen
+    /// to /24 so the entire VPN subnet (e.g. 10.9.1.0/24) is excluded from TUN routing,
+    /// otherwise only the local peer IP is excluded and traffic to other peers
+    /// (like the gateway at 10.9.1.1) gets captured by TUN.
     /// </summary>
     private static string? CalculateSubnet(IPAddress address, IPAddress mask)
     {
@@ -120,13 +125,22 @@ public static class NetworkInterfaceDetector
             if (addrBytes.Length != 4 || maskBytes.Length != 4)
                 return null;
 
+            int prefixLen = CountBits(maskBytes);
+
+            // WireGuard point-to-point: /32 mask means only this peer's IP.
+            // Widen to /24 to cover the whole VPN subnet (gateway, other peers).
+            if (prefixLen >= 31)
+            {
+                maskBytes = new byte[] { 255, 255, 255, 0 };
+                prefixLen = 24;
+            }
+
             // Calculate network address: addr AND mask
             var networkBytes = new byte[4];
             for (int i = 0; i < 4; i++)
                 networkBytes[i] = (byte)(addrBytes[i] & maskBytes[i]);
 
             var networkAddr = new IPAddress(networkBytes);
-            int prefixLen = CountBits(maskBytes);
 
             return $"{networkAddr}/{prefixLen}";
         }
