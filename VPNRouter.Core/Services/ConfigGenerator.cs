@@ -151,35 +151,25 @@ public static class ConfigGenerator
     // Blocking is done via route rule action: "reject"
 
     /// <summary>
-    /// Build outbound list. When any server has a flow setting (e.g. xtls-rprx-vision),
-    /// also creates a "proxy-udp" outbound without flow for UDP traffic (voice/video).
-    /// xtls-rprx-vision is TCP-only; UDP through it adds latency and may trigger DPI.
+    /// Build outbound list. All traffic (TCP and UDP) goes through the same outbound
+    /// with the server's flow setting. UDP split is NOT possible when the server
+    /// requires xtls-rprx-vision — both sides must use the same flow.
     /// </summary>
     private static List<SingBoxOutbound> BuildOutbounds(AppSettings settings, out bool hasUdpProxy)
     {
         var servers = settings.Vless.GetEffectiveServers();
         var outbounds = new List<SingBoxOutbound>();
-
-        // Detect if any server uses flow — if so, we need a UDP proxy without flow
-        bool anyServerHasFlow = servers.Any(s => !string.IsNullOrEmpty(s.Flow));
-        hasUdpProxy = anyServerHasFlow;
+        hasUdpProxy = false; // UDP split disabled — server flow must match client
 
         if (servers.Count == 1)
         {
             // Single server — direct VLESS outbound with tag="proxy"
             outbounds.Add(BuildVlessOutbound(servers[0], "proxy"));
-
-            // UDP variant: same server but without flow
-            if (anyServerHasFlow)
-            {
-                outbounds.Add(BuildVlessOutbound(servers[0], "proxy-udp", overrideFlowEmpty: true));
-            }
         }
         else if (servers.Count > 1)
         {
             // Multi-server — individual VLESS outbounds + urltest wrapper
             var childTags = new List<string>();
-            var childTagsUdp = new List<string>();
             var usedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             for (int i = 0; i < servers.Count; i++)
@@ -197,14 +187,6 @@ public static class ConfigGenerator
 
                 childTags.Add(tag);
                 outbounds.Add(BuildVlessOutbound(servers[i], tag));
-
-                // UDP variant for each server
-                if (anyServerHasFlow)
-                {
-                    var udpTag = $"{tag}-udp";
-                    childTagsUdp.Add(udpTag);
-                    outbounds.Add(BuildVlessOutbound(servers[i], udpTag, overrideFlowEmpty: true));
-                }
             }
 
             // urltest selector — tag="proxy" so route/DNS rules work unchanged
@@ -218,21 +200,6 @@ public static class ConfigGenerator
                 Tolerance = 150,
                 InterruptExistConnections = false
             });
-
-            // urltest for UDP outbounds
-            if (anyServerHasFlow)
-            {
-                outbounds.Add(new SingBoxOutbound
-                {
-                    Type      = "urltest",
-                    Tag       = "proxy-udp",
-                    Outbounds = childTagsUdp,
-                    Url       = "http://www.gstatic.com/generate_204",
-                    Interval  = "3m",
-                    Tolerance = 150,
-                    InterruptExistConnections = false
-                });
-            }
         }
 
         outbounds.Add(new SingBoxOutbound { Type = "direct", Tag = "direct" });
