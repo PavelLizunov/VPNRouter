@@ -30,6 +30,8 @@ public static class ConfigGenerator
         var logPath = Environment.ExpandEnvironmentVariables(
             @"%ProgramData%\VPNRouter\logs\singbox.log");
 
+        var outbounds = BuildOutbounds(settings, out bool hasUdpProxy);
+
         var config = new SingBoxConfig
         {
             Log = new SingBoxLog
@@ -40,8 +42,8 @@ public static class ConfigGenerator
             },
             Dns = BuildDns(profile, processes, settings),
             Inbounds = BuildInbounds(settings),
-            Outbounds = BuildOutbounds(settings),
-            Route = BuildRoute(profile, processes, settings.App.RoutingMode),
+            Outbounds = outbounds,
+            Route = BuildRoute(profile, processes, settings.App.RoutingMode, hasUdpProxy),
             Experimental = new SingBoxExperimental()
         };
 
@@ -148,21 +150,36 @@ public static class ConfigGenerator
     // DNS hijacking is done via route rule action: "hijack-dns"
     // Blocking is done via route rule action: "reject"
 
-    private static List<SingBoxOutbound> BuildOutbounds(AppSettings settings)
+    /// <summary>
+    /// Build outbound list. When any server has a flow setting (e.g. xtls-rprx-vision),
+    /// also creates a "proxy-udp" outbound without flow for UDP traffic (voice/video).
+    /// xtls-rprx-vision is TCP-only; UDP through it adds latency and may trigger DPI.
+    /// </summary>
+    private static List<SingBoxOutbound> BuildOutbounds(AppSettings settings, out bool hasUdpProxy)
     {
         var servers = settings.Vless.GetEffectiveServers();
         var outbounds = new List<SingBoxOutbound>();
+
+        // Detect if any server uses flow — if so, we need a UDP proxy without flow
+        bool anyServerHasFlow = servers.Any(s => !string.IsNullOrEmpty(s.Flow));
+        hasUdpProxy = anyServerHasFlow;
 
         if (servers.Count == 1)
         {
             // Single server — direct VLESS outbound with tag="proxy"
             outbounds.Add(BuildVlessOutbound(servers[0], "proxy"));
+
+            // UDP variant: same server but without flow
+            if (anyServerHasFlow)
+            {
+                outbounds.Add(BuildVlessOutbound(servers[0], "proxy-udp", overrideFlowEmpty: true));
+            }
         }
         else if (servers.Count > 1)
         {
             // Multi-server — individual VLESS outbounds + urltest wrapper
-            // Tags must be unique — deduplicate by appending index on collision
             var childTags = new List<string>();
+            var childTagsUdp = new List<string>();
             var usedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             for (int i = 0; i < servers.Count; i++)
@@ -180,6 +197,14 @@ public static class ConfigGenerator
 
                 childTags.Add(tag);
                 outbounds.Add(BuildVlessOutbound(servers[i], tag));
+
+                // UDP variant for each server
+                if (anyServerHasFlow)
+                {
+                    var udpTag = $"{tag}-udp";
+                    childTagsUdp.Add(udpTag);
+                    outbounds.Add(BuildVlessOutbound(servers[i], udpTag, overrideFlowEmpty: true));
+                }
             }
 
             // urltest selector — tag="proxy" so route/DNS rules work unchanged
@@ -193,14 +218,32 @@ public static class ConfigGenerator
                 Tolerance = 150,
                 InterruptExistConnections = false
             });
+
+            // urltest for UDP outbounds
+            if (anyServerHasFlow)
+            {
+                outbounds.Add(new SingBoxOutbound
+                {
+                    Type      = "urltest",
+                    Tag       = "proxy-udp",
+                    Outbounds = childTagsUdp,
+                    Url       = "http://www.gstatic.com/generate_204",
+                    Interval  = "3m",
+                    Tolerance = 150,
+                    InterruptExistConnections = false
+                });
+            }
         }
 
         outbounds.Add(new SingBoxOutbound { Type = "direct", Tag = "direct" });
         return outbounds;
     }
 
-    /// <summary>Build a single VLESS outbound from a server entry.</summary>
-    private static SingBoxOutbound BuildVlessOutbound(VlessServerEntry entry, string tag)
+    /// <summary>
+    /// Build a single VLESS outbound from a server entry.
+    /// When overrideFlowEmpty=true, the flow field is omitted (for UDP-optimized outbound).
+    /// </summary>
+    private static SingBoxOutbound BuildVlessOutbound(VlessServerEntry entry, string tag, bool overrideFlowEmpty = false)
     {
         // Null-safe: YamlDotNet may leave nested objects null if YAML has empty keys
         var transport = entry.Transport ?? new VlessTransportConfig();
@@ -213,7 +256,8 @@ public static class ConfigGenerator
             Server     = entry.Server,
             ServerPort = entry.Port,
             Uuid       = entry.Uuid,
-            Flow       = string.IsNullOrEmpty(entry.Flow) ? null : entry.Flow,
+            Flow       = overrideFlowEmpty ? null
+                       : (string.IsNullOrEmpty(entry.Flow) ? null : entry.Flow),
             Tls        = BuildTlsConfig(entry),
             Transport  = transportType.Equals("tcp", StringComparison.OrdinalIgnoreCase)
                 ? null
@@ -268,7 +312,8 @@ public static class ConfigGenerator
 
     // ─── Route (sing-box 1.12+ action-based format) ──────────────────────────
 
-    private static SingBoxRoute BuildRoute(Profile profile, List<string> processes, string routingMode = "split")
+    private static SingBoxRoute BuildRoute(Profile profile, List<string> processes,
+        string routingMode = "split", bool hasUdpProxy = false)
     {
         var isFullTunnel = (routingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase);
 
@@ -294,15 +339,47 @@ public static class ConfigGenerator
 
         if (!isFullTunnel && processes.Count > 0)
         {
-            // Split tunnel: route only targeted processes through VPN proxy
+            if (hasUdpProxy)
+            {
+                // Dual outbound: UDP traffic → proxy-udp (no flow, better for voice/video)
+                // TCP traffic → proxy (with xtls-rprx-vision, optimized for TCP)
+                rules.Add(new RouteRule
+                {
+                    ProcessName = processes.ToList(),
+                    Network     = "udp",
+                    Action      = "route",
+                    Outbound    = "proxy-udp"
+                });
+                rules.Add(new RouteRule
+                {
+                    ProcessName = processes.ToList(),
+                    Network     = "tcp",
+                    Action      = "route",
+                    Outbound    = "proxy"
+                });
+            }
+            else
+            {
+                // Single outbound: all traffic → proxy
+                rules.Add(new RouteRule
+                {
+                    ProcessName = processes.ToList(),
+                    Action      = "route",
+                    Outbound    = "proxy"
+                });
+            }
+        }
+        else if (isFullTunnel && hasUdpProxy)
+        {
+            // Full tunnel with UDP split: UDP → proxy-udp, TCP handled by Final
             rules.Add(new RouteRule
             {
-                ProcessName = processes.ToList(),
-                Action      = "route",
-                Outbound    = "proxy"
+                Network  = "udp",
+                Action   = "route",
+                Outbound = "proxy-udp"
             });
         }
-        // Full tunnel: no process-specific rules — Final = "proxy" handles everything
+        // Full tunnel without UDP split: no process-specific rules — Final = "proxy" handles everything
 
         return new SingBoxRoute
         {

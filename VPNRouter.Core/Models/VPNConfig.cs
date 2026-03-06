@@ -295,6 +295,10 @@ public class RouteRule
     [JsonProperty("process_name", NullValueHandling = NullValueHandling.Ignore)]
     public List<string>? ProcessName { get; set; }
 
+    /// <summary>Match by network type: "tcp" | "udp". Null = match both.</summary>
+    [JsonProperty("network", NullValueHandling = NullValueHandling.Ignore)]
+    public string? Network { get; set; }
+
     [JsonProperty("ip_is_private", NullValueHandling = NullValueHandling.Ignore)]
     public bool? IpIsPrivate { get; set; }
 
