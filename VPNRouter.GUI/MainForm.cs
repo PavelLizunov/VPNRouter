@@ -442,7 +442,7 @@ public class MainForm : Form
 
         _serversInputLabel = new Label
         {
-            Text = "Paste VLESS URI(s) \u2014 first server = Primary, others = Fallback:",
+            Text = "Paste VLESS URI(s) \u2014 with flow = TCP, without flow = UDP, auto-detected:",
             Dock = DockStyle.Top,
             Height = 22,
             ForeColor = t.TextSecondary,
@@ -1248,18 +1248,29 @@ public class MainForm : Form
             : -1;
 
         _serverList.Items.Clear();
+
+        // Detect UDP split: mix of flow and no-flow servers
+        bool hasFlow = _servers.Any(s => !string.IsNullOrEmpty(s.Flow));
+        bool hasNoFlow = _servers.Any(s => string.IsNullOrEmpty(s.Flow));
+        bool udpSplit = hasFlow && hasNoFlow;
+
         for (int i = 0; i < _servers.Count; i++)
         {
             var s = _servers[i];
-            var role = i == 0 ? "\u2605 Primary" : $"Fallback {i}";
+            string role;
+            if (udpSplit)
+                role = !string.IsNullOrEmpty(s.Flow) ? "\u2605 TCP" : "\u2605 UDP";
+            else
+                role = i == 0 ? "\u2605 Primary" : $"Fallback {i}";
+
             var item = new ListViewItem(role);
             item.SubItems.Add(string.IsNullOrEmpty(s.Name) ? "(no name)" : s.Name);
             item.SubItems.Add(s.Server);
             item.SubItems.Add(s.Port.ToString());
             item.SubItems.Add(s.Security);
 
-            // Highlight primary
-            if (i == 0)
+            // Highlight: all servers in split mode, or just primary in fallback mode
+            if (udpSplit || i == 0)
             {
                 item.ForeColor = t.Primary;
                 item.Font = t.BoldBodyFont;
