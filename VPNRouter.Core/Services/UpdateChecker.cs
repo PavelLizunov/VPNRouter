@@ -62,8 +62,9 @@ public class UpdateChecker
             return null;
 
         // Find all non-draft releases newer than current version, sorted newest-first
+        // Stable channel: skip pre-releases. Experimental: include all.
         var newerReleases = releases
-            .Where(r => !r.draft && !r.prerelease)
+            .Where(r => !r.draft && (_settings.IsExperimental || !r.prerelease))
             .Select(r => new
             {
                 Release = r,

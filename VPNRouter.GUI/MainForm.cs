@@ -53,6 +53,7 @@ public class MainForm : Form
     private Label _titleLabel = null!;
     private Label _subtitleLabel = null!;
     private LinkLabel _themeToggle = null!;
+    private LinkLabel _channelToggle = null!;
     private LinkLabel _checkUpdateLink = null!;
     private TabControl _tabs = null!;
     private TabPage _serversPage = null!;
@@ -393,6 +394,20 @@ public class MainForm : Form
             BackColor = Color.Transparent
         };
         _themeToggle.Click += OnThemeToggle;
+
+        var isExp = _settings.Update.IsExperimental;
+        _channelToggle = new LinkLabel
+        {
+            Text = isExp ? "\u26a0 Experimental" : "\u2714 Stable",
+            Font = t.SmallFont,
+            AutoSize = true,
+            Location = new Point(340, 30),
+            LinkColor = isExp ? t.AmberButton : t.TextMuted,
+            ActiveLinkColor = t.Primary,
+            VisitedLinkColor = isExp ? t.AmberButton : t.TextMuted,
+            BackColor = Color.Transparent
+        };
+        _channelToggle.Click += OnChannelToggle;
         _checkUpdateLink.Click += async (_, __) =>
         {
             _checkUpdateLink.Text = "Checking...";
@@ -426,6 +441,7 @@ public class MainForm : Form
         _headerPanel.Controls.Add(_titleLabel);
         _headerPanel.Controls.Add(_subtitleLabel);
         _headerPanel.Controls.Add(_themeToggle);
+        _headerPanel.Controls.Add(_channelToggle);
         _headerPanel.Controls.Add(_checkUpdateLink);
 
         // Bottom border
@@ -873,6 +889,18 @@ public class MainForm : Form
         ApplyTheme();
     }
 
+    private void OnChannelToggle(object? sender, EventArgs e)
+    {
+        var t = Theme.Current;
+        bool wasExp = _settings.Update.IsExperimental;
+        _settings.Update.Channel = wasExp ? "stable" : "experimental";
+        bool isExp = _settings.Update.IsExperimental;
+        _channelToggle.Text = isExp ? "\u26a0 Experimental" : "\u2714 Stable";
+        _channelToggle.LinkColor = isExp ? t.AmberButton : t.TextMuted;
+        _channelToggle.VisitedLinkColor = isExp ? t.AmberButton : t.TextMuted;
+        SaveSettings();
+    }
+
     /// <summary>
     /// Re-applies Theme.Current colors/fonts to all controls at runtime.
     /// </summary>
@@ -895,6 +923,10 @@ public class MainForm : Form
         _themeToggle.LinkColor = t.TextMuted;
         _themeToggle.ActiveLinkColor = t.Primary;
         _themeToggle.VisitedLinkColor = t.TextMuted;
+        var chExp = _settings.Update.IsExperimental;
+        _channelToggle.LinkColor = chExp ? t.AmberButton : t.TextMuted;
+        _channelToggle.ActiveLinkColor = t.Primary;
+        _channelToggle.VisitedLinkColor = chExp ? t.AmberButton : t.TextMuted;
         _checkUpdateLink.LinkColor = t.TextMuted;
         _checkUpdateLink.ActiveLinkColor = t.Primary;
         _checkUpdateLink.VisitedLinkColor = t.TextMuted;

@@ -313,4 +313,12 @@ public class UpdateSettings
     /// <summary>Check for updates on GUI startup.</summary>
     [YamlMember(Alias = "auto_check")]
     public bool AutoCheck { get; set; } = true;
+
+    /// <summary>Update channel: "stable" or "experimental".
+    /// Stable skips pre-releases, experimental includes all.</summary>
+    [YamlMember(Alias = "channel")]
+    public string Channel { get; set; } = "stable";
+
+    public bool IsExperimental =>
+        Channel.Equals("experimental", StringComparison.OrdinalIgnoreCase);
 }
