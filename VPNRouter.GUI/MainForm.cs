@@ -20,6 +20,7 @@ public class MainForm : Form
     private Button _clearBtn = null!;
     private Button _upBtn = null!;
     private Button _downBtn = null!;
+    private Label _serverHintLabel = null!;
 
     // ── Apps tab ──
     private TreeView _profileTree = null!;
@@ -458,7 +459,7 @@ public class MainForm : Form
 
         _serversInputLabel = new Label
         {
-            Text = "Paste VLESS URI(s) \u2014 with flow = TCP, without flow = UDP, auto-detected:",
+            Text = "Paste VLESS URI(s):",
             Dock = DockStyle.Top,
             Height = 22,
             ForeColor = t.TextSecondary,
@@ -535,8 +536,20 @@ public class MainForm : Form
         _serversBtnPanel.Controls.Add(_downBtn);
         _serversBtnPanel.Controls.Add(_upBtn);
 
+        _serverHintLabel = new Label
+        {
+            Dock = DockStyle.Bottom,
+            Height = 20,
+            ForeColor = t.TextMuted,
+            Font = t.SmallFont,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(4, 0, 0, 0),
+            Visible = false
+        };
+
         // Dock order: last added = top
         page.Controls.Add(_serverList);
+        page.Controls.Add(_serverHintLabel);
         page.Controls.Add(_serversBtnPanel);
         page.Controls.Add(_addBtn);
         page.Controls.Add(_uriInput);
@@ -946,6 +959,7 @@ public class MainForm : Form
         _serverList.BackColor = t.Surface;
         _serverList.ForeColor = t.TextPrimary;
         _serverList.Font = t.BodyFont;
+        _serverHintLabel.Font = t.SmallFont;
         _serversBtnPanel.BackColor = t.Background;
         Theme.ApplySecondary(_clearBtn);
         Theme.ApplySecondary(_removeBtn);
@@ -1289,6 +1303,24 @@ public class MainForm : Form
         // Up/Down reorder makes no sense in split mode — roles are by flow, not position
         _upBtn.Visible = !udpSplit;
         _downBtn.Visible = !udpSplit;
+
+        // Context-sensitive hint
+        if (udpSplit)
+        {
+            _serverHintLabel.Text = "\u2139 TCP/UDP split active \u2014 TCP servers handle browsing/chat, UDP servers handle voice/video";
+            _serverHintLabel.ForeColor = t.Primary;
+            _serverHintLabel.Visible = true;
+        }
+        else if (_servers.Count > 0 && !hasFlow)
+        {
+            _serverHintLabel.Text = "\u26a0 All servers without flow \u2014 add a server with xtls-rprx-vision for TCP optimization";
+            _serverHintLabel.ForeColor = t.AmberButton;
+            _serverHintLabel.Visible = true;
+        }
+        else
+        {
+            _serverHintLabel.Visible = false;
+        }
 
         for (int i = 0; i < _servers.Count; i++)
         {
