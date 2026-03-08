@@ -902,7 +902,7 @@ public class MainForm : Form
         ApplyTheme();
     }
 
-    private void OnChannelToggle(object? sender, EventArgs e)
+    private async void OnChannelToggle(object? sender, EventArgs e)
     {
         var t = Theme.Current;
         bool wasExp = _settings.Update.IsExperimental;
@@ -912,6 +912,11 @@ public class MainForm : Form
         _channelToggle.LinkColor = isExp ? t.AmberButton : t.TextMuted;
         _channelToggle.VisitedLinkColor = isExp ? t.AmberButton : t.TextMuted;
         SaveSettings();
+
+        // Re-check for updates with new channel setting
+        _pendingUpdate = null;
+        _updatePanel.Visible = false;
+        try { await CheckForUpdateAsync(); } catch { }
     }
 
     /// <summary>

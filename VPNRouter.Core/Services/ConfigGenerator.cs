@@ -229,9 +229,9 @@ public static class ConfigGenerator
 
     /// <summary>
     /// Build a single VLESS outbound from a server entry.
-    /// When overrideFlowEmpty=true, the flow field is omitted (for UDP-optimized outbound).
+    /// Flow is included only when entry.Flow is non-empty (auto-detect: no-flow servers → no flow in output).
     /// </summary>
-    private static SingBoxOutbound BuildVlessOutbound(VlessServerEntry entry, string tag, bool overrideFlowEmpty = false)
+    private static SingBoxOutbound BuildVlessOutbound(VlessServerEntry entry, string tag)
     {
         // Null-safe: YamlDotNet may leave nested objects null if YAML has empty keys
         var transport = entry.Transport ?? new VlessTransportConfig();
@@ -244,8 +244,7 @@ public static class ConfigGenerator
             Server     = entry.Server,
             ServerPort = entry.Port,
             Uuid       = entry.Uuid,
-            Flow       = overrideFlowEmpty ? null
-                       : (string.IsNullOrEmpty(entry.Flow) ? null : entry.Flow),
+            Flow       = string.IsNullOrEmpty(entry.Flow) ? null : entry.Flow,
             Tls        = BuildTlsConfig(entry),
             Transport  = transportType.Equals("tcp", StringComparison.OrdinalIgnoreCase)
                 ? null

@@ -319,6 +319,7 @@ public class UpdateSettings
     [YamlMember(Alias = "channel")]
     public string Channel { get; set; } = "stable";
 
+    [YamlIgnore]
     public bool IsExperimental =>
         Channel.Equals("experimental", StringComparison.OrdinalIgnoreCase);
 }
