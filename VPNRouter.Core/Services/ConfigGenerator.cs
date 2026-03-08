@@ -151,49 +151,73 @@ public static class ConfigGenerator
     // Blocking is done via route rule action: "reject"
 
     /// <summary>
-    /// Build outbound list. All traffic (TCP and UDP) goes through the same outbound
-    /// with the server's flow setting. UDP split is NOT possible when the server
-    /// requires xtls-rprx-vision — both sides must use the same flow.
+    /// Build outbound list. Auto-detects UDP split:
+    /// - If servers have BOTH flow and no-flow entries → dual outbound (TCP/UDP split)
+    /// - Servers WITH flow → "proxy" (TCP, xtls-rprx-vision optimized)
+    /// - Servers WITHOUT flow → "proxy-udp" (UDP, better for voice/video)
+    /// - If all servers have same flow config → single "proxy" outbound
     /// </summary>
     private static List<SingBoxOutbound> BuildOutbounds(AppSettings settings, out bool hasUdpProxy)
     {
         var servers = settings.Vless.GetEffectiveServers();
         var outbounds = new List<SingBoxOutbound>();
-        hasUdpProxy = false; // UDP split disabled — server flow must match client
 
+        // Auto-detect: split servers by flow presence
+        var flowServers = servers.Where(s => !string.IsNullOrEmpty(s.Flow)).ToList();
+        var noFlowServers = servers.Where(s => string.IsNullOrEmpty(s.Flow)).ToList();
+        hasUdpProxy = flowServers.Count > 0 && noFlowServers.Count > 0;
+
+        if (hasUdpProxy)
+        {
+            // Dual outbound: TCP → proxy (with flow), UDP → proxy-udp (no flow)
+            AddOutboundGroup(outbounds, flowServers, "proxy", "vless");
+            AddOutboundGroup(outbounds, noFlowServers, "proxy-udp", "vless-udp");
+        }
+        else
+        {
+            // Single outbound: all traffic → proxy
+            AddOutboundGroup(outbounds, servers, "proxy", "vless");
+        }
+
+        outbounds.Add(new SingBoxOutbound { Type = "direct", Tag = "direct" });
+        return outbounds;
+    }
+
+    /// <summary>
+    /// Add a group of VLESS outbounds. Single server → direct outbound.
+    /// Multiple servers → individual outbounds + urltest wrapper.
+    /// </summary>
+    private static void AddOutboundGroup(List<SingBoxOutbound> outbounds,
+        List<VlessServerEntry> servers, string groupTag, string childPrefix)
+    {
         if (servers.Count == 1)
         {
-            // Single server — direct VLESS outbound with tag="proxy"
-            outbounds.Add(BuildVlessOutbound(servers[0], "proxy"));
+            outbounds.Add(BuildVlessOutbound(servers[0], groupTag));
         }
         else if (servers.Count > 1)
         {
-            // Multi-server — individual VLESS outbounds + urltest wrapper
             var childTags = new List<string>();
             var usedTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             for (int i = 0; i < servers.Count; i++)
             {
                 var baseTag = !string.IsNullOrEmpty(servers[i].Name)
-                    ? $"vless-{servers[i].Name}"
-                    : $"vless-{i}";
+                    ? $"{childPrefix}-{servers[i].Name}"
+                    : $"{childPrefix}-{i}";
 
                 var tag = baseTag;
                 var suffix = 2;
                 while (!usedTags.Add(tag))
-                {
                     tag = $"{baseTag}-{suffix++}";
-                }
 
                 childTags.Add(tag);
                 outbounds.Add(BuildVlessOutbound(servers[i], tag));
             }
 
-            // urltest selector — tag="proxy" so route/DNS rules work unchanged
             outbounds.Add(new SingBoxOutbound
             {
                 Type      = "urltest",
-                Tag       = "proxy",
+                Tag       = groupTag,
                 Outbounds = childTags,
                 Url       = "http://www.gstatic.com/generate_204",
                 Interval  = "3m",
@@ -201,9 +225,6 @@ public static class ConfigGenerator
                 InterruptExistConnections = false
             });
         }
-
-        outbounds.Add(new SingBoxOutbound { Type = "direct", Tag = "direct" });
-        return outbounds;
     }
 
     /// <summary>

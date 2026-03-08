@@ -78,27 +78,27 @@ public static class LeakProtection
         if (!hasDnsHijack)
             warnings.Add("No 'hijack-dns' route rule — DNS traffic may not be handled correctly");
 
-        // 7. Validate proxy outbound — single VLESS or urltest wrapper
-        var proxyOutbound = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy");
-        if (proxyOutbound != null)
+        // 7. Validate proxy outbounds — both "proxy" and optional "proxy-udp"
+        foreach (var proxyTag in new[] { "proxy", "proxy-udp" })
         {
+            var proxyOutbound = config.Outbounds.FirstOrDefault(o => o.Tag == proxyTag);
+            if (proxyOutbound == null) continue;
+
             if (proxyOutbound.Type == "vless")
             {
-                // Single server mode
                 ValidateVlessOutbound(proxyOutbound, errors);
             }
             else if (proxyOutbound.Type == "urltest")
             {
-                // Multi-server mode — validate urltest + each child VLESS
                 if (proxyOutbound.Outbounds == null || proxyOutbound.Outbounds.Count < 2)
-                    errors.Add("urltest outbound: must have at least 2 child outbounds");
+                    errors.Add($"urltest outbound '{proxyTag}': must have at least 2 child outbounds");
 
                 var outboundTags = config.Outbounds.Select(o => o.Tag).ToHashSet();
                 foreach (var childTag in proxyOutbound.Outbounds ?? new())
                 {
                     if (!outboundTags.Contains(childTag))
                     {
-                        errors.Add($"urltest references non-existent outbound '{childTag}'");
+                        errors.Add($"urltest '{proxyTag}' references non-existent outbound '{childTag}'");
                         continue;
                     }
                     var child = config.Outbounds.First(o => o.Tag == childTag);
