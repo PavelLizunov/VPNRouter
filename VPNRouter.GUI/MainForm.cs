@@ -1286,6 +1286,10 @@ public class MainForm : Form
         bool hasNoFlow = _servers.Any(s => string.IsNullOrEmpty(s.Flow));
         bool udpSplit = hasFlow && hasNoFlow;
 
+        // Up/Down reorder makes no sense in split mode — roles are by flow, not position
+        _upBtn.Visible = !udpSplit;
+        _downBtn.Visible = !udpSplit;
+
         for (int i = 0; i < _servers.Count; i++)
         {
             var s = _servers[i];
