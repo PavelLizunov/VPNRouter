@@ -218,6 +218,26 @@ public class UpdateChecker
             }
         }
         catch { }
+
+        // If running from app/ subfolder, clean orphaned .bak files from parent dir
+        // (left after flat → app/ migration)
+        try
+        {
+            var appDir2 = AppContext.BaseDirectory.TrimEnd('\\');
+            var dirName = Path.GetFileName(appDir2);
+            if (dirName.Equals("app", StringComparison.OrdinalIgnoreCase))
+            {
+                var parentDir = Path.GetDirectoryName(appDir2);
+                if (parentDir != null)
+                {
+                    foreach (var bak in Directory.GetFiles(parentDir, "*.bak"))
+                    {
+                        try { File.Delete(bak); } catch { }
+                    }
+                }
+            }
+        }
+        catch { }
     }
 
     /// <summary>
@@ -232,16 +252,23 @@ public class UpdateChecker
     public void ApplyUpdate(string extractedDir)
     {
         var appDir = AppContext.BaseDirectory.TrimEnd('\\');
+        var currentDirName = Path.GetFileName(appDir);
+        var isAlreadyAppLayout = currentDirName.Equals("app", StringComparison.OrdinalIgnoreCase);
 
-        // Detect new folder structure: if extracted dir has app/ subfolder with our exe,
-        // use that as the source (strips the wrapper layout for full ZIPs)
+        // Detect if extracted package has app/ subfolder structure
         var appSubDir = Path.Combine(extractedDir, "app");
-        if (Directory.Exists(appSubDir) &&
+        bool extractedHasApp = Directory.Exists(appSubDir) &&
             (File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.exe")) ||
-             File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.dll"))))
+             File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.dll")));
+
+        if (extractedHasApp && isAlreadyAppLayout)
         {
+            // Already in app/ layout → strip wrapper, copy app/ contents to current dir
             extractedDir = appSubDir;
         }
+        // else if extractedHasApp && !isAlreadyAppLayout:
+        //   Flat layout → copy WHOLE structure (creates app/ subfolder = migration)
+        // else: flat update ZIP → copy as-is
 
         var guiExe = Path.Combine(appDir, "VPNRouter.GUI.exe");
         int copied = 0, renamed = 0;
@@ -273,11 +300,29 @@ public class UpdateChecker
             }
         }
 
+        // If we migrated flat → app/ layout, rename old flat exes so user doesn't click them
+        if (extractedHasApp && !isAlreadyAppLayout)
+        {
+            foreach (var oldExe in new[] { "VPNRouter.GUI.exe", "VPNRouter.CLI.exe", "VPNRouter.Service.exe" })
+            {
+                var oldPath = Path.Combine(appDir, oldExe);
+                if (File.Exists(oldPath))
+                {
+                    var bakPath = oldPath + ".bak";
+                    try { File.Delete(bakPath); } catch { }
+                    try { File.Move(oldPath, bakPath); } catch { }
+                }
+            }
+
+            // Launch from the new app/ subfolder
+            guiExe = Path.Combine(appDir, "app", "VPNRouter.GUI.exe");
+        }
+
         // Launch updated GUI (inherits admin token from current process)
         Process.Start(new ProcessStartInfo
         {
             FileName = guiExe,
-            WorkingDirectory = appDir,
+            WorkingDirectory = Path.GetDirectoryName(guiExe)!,
             UseShellExecute = false
         });
     }
