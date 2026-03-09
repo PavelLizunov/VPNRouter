@@ -90,36 +90,16 @@ foreach ($locale in $localeDirs) {
     if (Test-Path $localeDir) { Remove-Item -Recurse -Force $localeDir }
 }
 
-# Remove WPF/XPS assemblies (not used by WinForms-only app)
-$wpfFiles = @(
-    "PresentationCore.dll", "PresentationFramework.dll", "PresentationFramework.*.dll",
-    "PresentationNative_cor3.dll", "PresentationUI.dll",
-    "ReachFramework.dll", "System.Printing.dll", "System.Xaml.dll",
-    "System.Windows.Controls.Ribbon.dll", "System.Windows.Presentation.dll",
-    "System.Windows.Input.Manipulations.dll", "WindowsFormsIntegration.dll",
-    "UIAutomation*.dll", "PenImc_cor3.dll", "D3DCompiler_47_cor3.dll", "wpfgfx_cor3.dll",
-    "DirectWriteForwarder.dll", "System.IO.Packaging.dll",
-    "vcruntime140_cor3.dll"
-)
-foreach ($pattern in $wpfFiles) {
-    Get-ChildItem $DistDir -Filter $pattern | Remove-Item -Force -ErrorAction SilentlyContinue
-}
-
-# Remove other unused assemblies
+# Remove debug/diagnostic tools only (conservative — don't remove runtime DLLs)
 $unusedFiles = @(
     "createdump.exe",
-    "mscordaccore.dll", "mscordaccore_amd64_amd64_*.dll", "mscordbi.dll",
-    "Microsoft.VisualBasic.Core.dll", "Microsoft.VisualBasic.dll", "Microsoft.VisualBasic.Forms.dll",
-    "System.Private.DataContractSerialization.dll",
-    "System.Data.Common.dll", "System.Data.DataSetExtensions.dll", "System.Data.dll",
-    "System.Net.Quic.dll", "msquic.dll",
-    "System.Transactions.Local.dll", "System.Transactions.dll"
+    "mscordaccore.dll", "mscordaccore_amd64_amd64_*.dll", "mscordbi.dll"
 )
 foreach ($pattern in $unusedFiles) {
     Get-ChildItem $DistDir -Filter $pattern | Remove-Item -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host "       Cleaned PDB, locale, WPF and unused files" -ForegroundColor Gray
+Write-Host "       Cleaned PDB, locale, and debug files" -ForegroundColor Gray
 
 # ── Bundle sing-box.exe ──
 Write-Host "[6/9] Bundling sing-box.exe..." -ForegroundColor Yellow
