@@ -32,43 +32,46 @@ $FdDir = Join-Path $Root "publish\fd"
 $UpdateDir = Join-Path $Root "publish\update"
 $PackageDir = Join-Path $Root "publish\package"
 $FullZipName = "VPNRouter-v$Version.zip"
+$InstallZipName = "VPNRouter-install-v$Version.zip"
 $UpdateZipName = "VPNRouter-update-v$Version.zip"
 $FullZipPath = Join-Path $Root $FullZipName
+$InstallZipPath = Join-Path $Root $InstallZipName
 $UpdateZipPath = Join-Path $Root $UpdateZipName
 
 Write-Host "=== VPNRouter Build Script ===" -ForegroundColor Cyan
 Write-Host "Version: $Version"
 Write-Host "Full:    $FullZipPath"
+Write-Host "Install: $InstallZipPath"
 Write-Host "Update:  $UpdateZipPath"
 Write-Host ""
 
 # ── Clean ──
-Write-Host "[1/10] Cleaning previous build..." -ForegroundColor Yellow
+Write-Host "[1/11] Cleaning previous build..." -ForegroundColor Yellow
 foreach ($dir in @($DistDir, $FdDir, $UpdateDir, $PackageDir)) {
     if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
 }
 
 # ── Publish all three self-contained to SAME dir (shared runtime) ──
-Write-Host "[2/10] Publishing VPNRouter.GUI (self-contained, shared runtime)..." -ForegroundColor Yellow
+Write-Host "[2/11] Publishing VPNRouter.GUI (self-contained, shared runtime)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.GUI\VPNRouter.GUI.csproj" `
     -c Release -r win-x64 --self-contained `
     -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "GUI publish failed" }
 
-Write-Host "[3/10] Publishing VPNRouter.CLI (self-contained, shared runtime)..." -ForegroundColor Yellow
+Write-Host "[3/11] Publishing VPNRouter.CLI (self-contained, shared runtime)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.CLI\VPNRouter.CLI.csproj" `
     -c Release -r win-x64 --self-contained `
     -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "CLI publish failed" }
 
-Write-Host "[4/10] Publishing VPNRouter.Service (self-contained, shared runtime)..." -ForegroundColor Yellow
+Write-Host "[4/11] Publishing VPNRouter.Service (self-contained, shared runtime)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.Service\VPNRouter.Service.csproj" `
     -c Release -r win-x64 --self-contained `
     -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Service publish failed" }
 
 # ── Publish framework-dependent to temp dir (to identify app-only files) ──
-Write-Host "[5/10] Building app file list (framework-dependent)..." -ForegroundColor Yellow
+Write-Host "[5/11] Building app file list (framework-dependent)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.GUI\VPNRouter.GUI.csproj" `
     -c Release -r win-x64 --self-contained false --no-build `
     -o $FdDir 2>&1 | Out-Null
@@ -103,7 +106,7 @@ foreach ($pattern in $unusedFiles) {
 Write-Host "       Cleaned PDB, locale, and debug files" -ForegroundColor Gray
 
 # ── Bundle sing-box.exe ──
-Write-Host "[6/10] Bundling sing-box.exe..." -ForegroundColor Yellow
+Write-Host "[6/11] Bundling sing-box.exe..." -ForegroundColor Yellow
 if (Test-Path $SingBoxPath) {
     Copy-Item $SingBoxPath $DistDir
     Write-Host "       Copied from: $SingBoxPath" -ForegroundColor Gray
@@ -154,7 +157,7 @@ Service Installation (run as admin):
 "@ | Set-Content -Path $ReadmePath -Encoding UTF8
 
 # ── Create clean package layout (app/ subfolder + launcher) ──
-Write-Host "[7/10] Creating package layout..." -ForegroundColor Yellow
+Write-Host "[7/11] Creating package layout..." -ForegroundColor Yellow
 $AppDir = Join-Path $PackageDir "app"
 New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 
@@ -169,13 +172,18 @@ Move-Item (Join-Path $AppDir "README.txt") (Join-Path $PackageDir "README.txt") 
 
 Write-Host "       Package layout: Start VPN.cmd + README.txt + app/" -ForegroundColor Gray
 
-# ── Create FULL ZIP ──
-Write-Host "[8/10] Creating full ZIP..." -ForegroundColor Yellow
+# ── Create FULL ZIP (flat — backward compatible with all versions for auto-update) ──
+Write-Host "[8/11] Creating full ZIP (flat)..." -ForegroundColor Yellow
 if (Test-Path $FullZipPath) { Remove-Item $FullZipPath }
-Compress-Archive -Path "$PackageDir\*" -DestinationPath $FullZipPath -CompressionLevel Optimal
+Compress-Archive -Path "$DistDir\*" -DestinationPath $FullZipPath -CompressionLevel Optimal
+
+# ── Create INSTALL ZIP (app/ structure — for new users downloading manually) ──
+Write-Host "[9/11] Creating install ZIP (app/ layout)..." -ForegroundColor Yellow
+if (Test-Path $InstallZipPath) { Remove-Item $InstallZipPath }
+Compress-Archive -Path "$PackageDir\*" -DestinationPath $InstallZipPath -CompressionLevel Optimal
 
 # ── Create UPDATE ZIP (app files only, no runtime, no sing-box) ──
-Write-Host "[9/10] Creating update ZIP..." -ForegroundColor Yellow
+Write-Host "[10/11] Creating update ZIP..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path $UpdateDir | Out-Null
 
 # Copy app-only files from dist (using fd file list as reference)
@@ -208,15 +216,17 @@ Remove-Item -Recurse -Force $PackageDir
 
 # ── Summary ──
 $fullSize = (Get-Item $FullZipPath).Length / 1MB
+$installSize = (Get-Item $InstallZipPath).Length / 1MB
 $updateSize = (Get-Item $UpdateZipPath).Length / 1MB
 
 Write-Host ""
 Write-Host "=== Build complete ===" -ForegroundColor Green
-Write-Host "Full ZIP:   $FullZipPath ($([math]::Round($fullSize, 1)) MB)" -ForegroundColor White
-Write-Host "Update ZIP: $UpdateZipPath ($([math]::Round($updateSize, 1)) MB)" -ForegroundColor White
+Write-Host "Full ZIP:    $FullZipPath ($([math]::Round($fullSize, 1)) MB) - auto-update" -ForegroundColor White
+Write-Host "Install ZIP: $InstallZipPath ($([math]::Round($installSize, 1)) MB) - new users" -ForegroundColor White
+Write-Host "Update ZIP:  $UpdateZipPath ($([math]::Round($updateSize, 1)) MB) - lite update" -ForegroundColor White
 Write-Host ""
 
-Write-Host "[10/10] Full package contents:" -ForegroundColor Gray
+Write-Host "[11/11] Full package contents:" -ForegroundColor Gray
 Get-ChildItem $DistDir -Recurse | ForEach-Object {
     $rel = $_.FullName.Replace($DistDir, "").TrimStart("\")
     if ($_.PSIsContainer) { "  $rel\" } else { "  $rel  ($([math]::Round($_.Length/1KB)) KB)" }
@@ -232,7 +242,7 @@ if ($Upload) {
     } else {
         $tag = "v$Version"
 
-        gh release create $tag $FullZipPath $UpdateZipPath `
+        gh release create $tag $FullZipPath $InstallZipPath $UpdateZipPath `
             --repo $GitHubRepo `
             --title "VPNRouter v$Version" `
             --notes "VPNRouter v$Version" `
