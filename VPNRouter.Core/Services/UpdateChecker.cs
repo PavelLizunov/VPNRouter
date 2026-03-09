@@ -175,8 +175,18 @@ public class UpdateChecker
         ZipFile.ExtractToDirectory(zipPath, extractDir);
 
         // Validate: must contain at least one of our app files
-        if (!File.Exists(Path.Combine(extractDir, "VPNRouter.GUI.exe")) &&
-            !File.Exists(Path.Combine(extractDir, "VPNRouter.GUI.dll")))
+        // Support both flat layout and app/ subfolder layout
+        var checkDir = extractDir;
+        var appSubDir = Path.Combine(extractDir, "app");
+        if (Directory.Exists(appSubDir) &&
+            (File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.exe")) ||
+             File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.dll"))))
+        {
+            checkDir = appSubDir;
+        }
+
+        if (!File.Exists(Path.Combine(checkDir, "VPNRouter.GUI.exe")) &&
+            !File.Exists(Path.Combine(checkDir, "VPNRouter.GUI.dll")))
             throw new InvalidOperationException("Invalid update package: VPNRouter.GUI.exe/dll not found.");
 
         StatusChanged?.Invoke("Update ready to apply.");
@@ -222,6 +232,17 @@ public class UpdateChecker
     public void ApplyUpdate(string extractedDir)
     {
         var appDir = AppContext.BaseDirectory.TrimEnd('\\');
+
+        // Detect new folder structure: if extracted dir has app/ subfolder with our exe,
+        // use that as the source (strips the wrapper layout for full ZIPs)
+        var appSubDir = Path.Combine(extractedDir, "app");
+        if (Directory.Exists(appSubDir) &&
+            (File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.exe")) ||
+             File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.dll"))))
+        {
+            extractedDir = appSubDir;
+        }
+
         var guiExe = Path.Combine(appDir, "VPNRouter.GUI.exe");
         int copied = 0, renamed = 0;
 

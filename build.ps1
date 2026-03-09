@@ -30,6 +30,7 @@ $Root = $PSScriptRoot
 $DistDir = Join-Path $Root "publish\dist"
 $FdDir = Join-Path $Root "publish\fd"
 $UpdateDir = Join-Path $Root "publish\update"
+$PackageDir = Join-Path $Root "publish\package"
 $FullZipName = "VPNRouter-v$Version.zip"
 $UpdateZipName = "VPNRouter-update-v$Version.zip"
 $FullZipPath = Join-Path $Root $FullZipName
@@ -42,32 +43,32 @@ Write-Host "Update:  $UpdateZipPath"
 Write-Host ""
 
 # ── Clean ──
-Write-Host "[1/9] Cleaning previous build..." -ForegroundColor Yellow
-foreach ($dir in @($DistDir, $FdDir, $UpdateDir)) {
+Write-Host "[1/10] Cleaning previous build..." -ForegroundColor Yellow
+foreach ($dir in @($DistDir, $FdDir, $UpdateDir, $PackageDir)) {
     if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
 }
 
 # ── Publish all three self-contained to SAME dir (shared runtime) ──
-Write-Host "[2/9] Publishing VPNRouter.GUI (self-contained, shared runtime)..." -ForegroundColor Yellow
+Write-Host "[2/10] Publishing VPNRouter.GUI (self-contained, shared runtime)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.GUI\VPNRouter.GUI.csproj" `
     -c Release -r win-x64 --self-contained `
     -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "GUI publish failed" }
 
-Write-Host "[3/9] Publishing VPNRouter.CLI (self-contained, shared runtime)..." -ForegroundColor Yellow
+Write-Host "[3/10] Publishing VPNRouter.CLI (self-contained, shared runtime)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.CLI\VPNRouter.CLI.csproj" `
     -c Release -r win-x64 --self-contained `
     -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "CLI publish failed" }
 
-Write-Host "[4/9] Publishing VPNRouter.Service (self-contained, shared runtime)..." -ForegroundColor Yellow
+Write-Host "[4/10] Publishing VPNRouter.Service (self-contained, shared runtime)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.Service\VPNRouter.Service.csproj" `
     -c Release -r win-x64 --self-contained `
     -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Service publish failed" }
 
 # ── Publish framework-dependent to temp dir (to identify app-only files) ──
-Write-Host "[5/9] Building app file list (framework-dependent)..." -ForegroundColor Yellow
+Write-Host "[5/10] Building app file list (framework-dependent)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.GUI\VPNRouter.GUI.csproj" `
     -c Release -r win-x64 --self-contained false --no-build `
     -o $FdDir 2>&1 | Out-Null
@@ -102,7 +103,7 @@ foreach ($pattern in $unusedFiles) {
 Write-Host "       Cleaned PDB, locale, and debug files" -ForegroundColor Gray
 
 # ── Bundle sing-box.exe ──
-Write-Host "[6/9] Bundling sing-box.exe..." -ForegroundColor Yellow
+Write-Host "[6/10] Bundling sing-box.exe..." -ForegroundColor Yellow
 if (Test-Path $SingBoxPath) {
     Copy-Item $SingBoxPath $DistDir
     Write-Host "       Copied from: $SingBoxPath" -ForegroundColor Gray
@@ -126,19 +127,23 @@ VPNRouter v$Version
 ====================
 
 Quick Start:
-1. Run VPNRouter.GUI.exe (accept UAC prompt)
-2. Paste your VLESS URI(s) in the Servers tab
-3. Select application groups in the Applications tab
-4. Click Start VPN
+1. Double-click "Start VPN.cmd" (or run app\VPNRouter.GUI.exe directly)
+2. Accept the UAC prompt
+3. Paste your VLESS URI(s) in the Servers tab
+4. Select application groups in the Applications tab
+5. Click Start VPN
 
-Files:
-- VPNRouter.GUI.exe        Main app (tray icon + settings window)
-- VPNRouter.CLI.exe        Command-line interface (advanced)
-- VPNRouter.Service.exe    Windows Service (optional, for auto-start)
-- sing-box.exe             VPN engine (auto-copied on first run)
-- profiles\                Application profiles
+Folder Structure:
+- Start VPN.cmd            Launcher (double-click to start)
+- README.txt               This file
+- app\                     Application files
+  - VPNRouter.GUI.exe      Main app (tray icon + settings window)
+  - VPNRouter.CLI.exe      Command-line interface (advanced)
+  - VPNRouter.Service.exe  Windows Service (optional, for auto-start)
+  - sing-box.exe           VPN engine (auto-copied on first run)
+  - profiles\              Application profiles
 
-CLI Usage:
+CLI Usage (run from app\ folder):
   VPNRouter.CLI.exe start --profile Discord_Privacy
   VPNRouter.CLI.exe status
   VPNRouter.CLI.exe stop
@@ -148,13 +153,29 @@ Service Installation (run as admin):
   VPNRouter.CLI.exe service start
 "@ | Set-Content -Path $ReadmePath -Encoding UTF8
 
+# ── Create clean package layout (app/ subfolder + launcher) ──
+Write-Host "[7/10] Creating package layout..." -ForegroundColor Yellow
+$AppDir = Join-Path $PackageDir "app"
+New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
+
+# Copy all dist files into app/
+Copy-Item "$DistDir\*" $AppDir -Recurse
+
+# Create Start VPN.cmd launcher in package root
+'@start "" "%~dp0app\VPNRouter.GUI.exe"' | Set-Content (Join-Path $PackageDir "Start VPN.cmd") -Encoding ASCII
+
+# Move README to package root (user-facing, not buried in app/)
+Move-Item (Join-Path $AppDir "README.txt") (Join-Path $PackageDir "README.txt") -Force
+
+Write-Host "       Package layout: Start VPN.cmd + README.txt + app/" -ForegroundColor Gray
+
 # ── Create FULL ZIP ──
-Write-Host "[7/9] Creating full ZIP..." -ForegroundColor Yellow
+Write-Host "[8/10] Creating full ZIP..." -ForegroundColor Yellow
 if (Test-Path $FullZipPath) { Remove-Item $FullZipPath }
-Compress-Archive -Path "$DistDir\*" -DestinationPath $FullZipPath -CompressionLevel Optimal
+Compress-Archive -Path "$PackageDir\*" -DestinationPath $FullZipPath -CompressionLevel Optimal
 
 # ── Create UPDATE ZIP (app files only, no runtime, no sing-box) ──
-Write-Host "[8/9] Creating update ZIP..." -ForegroundColor Yellow
+Write-Host "[9/10] Creating update ZIP..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path $UpdateDir | Out-Null
 
 # Copy app-only files from dist (using fd file list as reference)
@@ -183,6 +204,7 @@ Compress-Archive -Path "$UpdateDir\*" -DestinationPath $UpdateZipPath -Compressi
 # ── Clean temp dirs ──
 Remove-Item -Recurse -Force $FdDir
 Remove-Item -Recurse -Force $UpdateDir
+Remove-Item -Recurse -Force $PackageDir
 
 # ── Summary ──
 $fullSize = (Get-Item $FullZipPath).Length / 1MB
@@ -194,7 +216,7 @@ Write-Host "Full ZIP:   $FullZipPath ($([math]::Round($fullSize, 1)) MB)" -Foreg
 Write-Host "Update ZIP: $UpdateZipPath ($([math]::Round($updateSize, 1)) MB)" -ForegroundColor White
 Write-Host ""
 
-Write-Host "[9/9] Full package contents:" -ForegroundColor Gray
+Write-Host "[10/10] Full package contents:" -ForegroundColor Gray
 Get-ChildItem $DistDir -Recurse | ForEach-Object {
     $rel = $_.FullName.Replace($DistDir, "").TrimStart("\")
     if ($_.PSIsContainer) { "  $rel\" } else { "  $rel  ($([math]::Round($_.Length/1KB)) KB)" }
