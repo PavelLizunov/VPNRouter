@@ -25,3 +25,9 @@ Desktop.ini
 
 # Windows reserved device files
 nul
+
+# sing-box source & Go build cache (built via build-singbox.ps1)
+tools/
+
+# Misc
+*.jpg

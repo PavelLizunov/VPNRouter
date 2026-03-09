@@ -103,7 +103,66 @@ foreach ($pattern in $unusedFiles) {
     Get-ChildItem $DistDir -Filter $pattern | Remove-Item -Force -ErrorAction SilentlyContinue
 }
 
-Write-Host "       Cleaned PDB, locale, and debug files" -ForegroundColor Gray
+# ── Remove WPF DLLs (~41 MB) — app uses WinForms only, no WPF ──
+$wpfPatterns = @(
+    "PresentationFramework*.dll", "PresentationCore.dll", "PresentationUI.dll",
+    "PresentationNative_cor3.dll", "wpfgfx_cor3.dll", "D3DCompiler_47_cor3.dll",
+    "System.Xaml.dll", "System.Windows.Controls.Ribbon.dll",
+    "ReachFramework.dll", "System.Printing.dll",
+    "System.Windows.Input.Manipulations.dll", "System.Windows.Presentation.dll",
+    "System.IO.Packaging.dll", "DirectWriteForwarder.dll",
+    "PenImc_cor3.dll", "vcruntime140_cor3.dll",
+    "WindowsBase.dll", "WindowsFormsIntegration.dll"
+)
+$wpfRemoved = 0
+foreach ($pattern in $wpfPatterns) {
+    Get-ChildItem $DistDir -Filter $pattern -ErrorAction SilentlyContinue | ForEach-Object {
+        $wpfRemoved += $_.Length
+        Remove-Item $_.FullName -Force
+    }
+}
+
+# ── Remove TraceEvent non-essential natives (~9 MB) ──
+# App is win-x64: arm64/ and x86/ folders not needed
+# msdia140.dll = symbol resolution (not used for ETW monitoring)
+# Microsoft.DiaSymReader.Native = symbol reading (not needed)
+# Keep only amd64/KernelTraceControl.dll (required for ETW)
+$nativeRemoved = 0
+foreach ($dir in @("arm64", "x86")) {
+    $dirPath = Join-Path $DistDir $dir
+    if (Test-Path $dirPath) {
+        $nativeRemoved += (Get-ChildItem $dirPath -File -Recurse | Measure-Object Length -Sum).Sum
+        Remove-Item $dirPath -Recurse -Force
+    }
+}
+$msdia = Join-Path $DistDir "amd64\msdia140.dll"
+if (Test-Path $msdia) {
+    $nativeRemoved += (Get-Item $msdia).Length
+    Remove-Item $msdia -Force
+}
+$diasym = Join-Path $DistDir "Microsoft.DiaSymReader.Native.amd64.dll"
+if (Test-Path $diasym) {
+    $nativeRemoved += (Get-Item $diasym).Length
+    Remove-Item $diasym -Force
+}
+
+# ── Remove design-time / unused assemblies (~7 MB) ──
+$unusedAssemblies = @(
+    "System.Windows.Forms.Design.dll", "System.Windows.Forms.Design.Editors.dll",
+    "Microsoft.VisualBasic.Core.dll", "System.CodeDom.dll",
+    "System.DirectoryServices.dll"
+)
+$designRemoved = 0
+foreach ($pattern in $unusedAssemblies) {
+    Get-ChildItem $DistDir -Filter $pattern -ErrorAction SilentlyContinue | ForEach-Object {
+        $designRemoved += $_.Length
+        Remove-Item $_.FullName -Force
+    }
+}
+
+$totalSaved = ($wpfRemoved + $nativeRemoved + $designRemoved) / 1MB
+Write-Host "       Cleaned PDB, locale, debug, WPF, and unused files" -ForegroundColor Gray
+Write-Host "       Removed: WPF $([math]::Round($wpfRemoved/1MB,1)) MB + natives $([math]::Round($nativeRemoved/1MB,1)) MB + design $([math]::Round($designRemoved/1MB,1)) MB = $([math]::Round($totalSaved,1)) MB saved" -ForegroundColor Gray
 
 # ── Bundle sing-box.exe ──
 Write-Host "[6/11] Bundling sing-box.exe..." -ForegroundColor Yellow
