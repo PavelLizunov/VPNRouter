@@ -1,20 +1,22 @@
 <#
 .SYNOPSIS
-    Builds VPNRouter distribution ZIP for testers.
+    Builds VPNRouter distribution ZIPs.
 .DESCRIPTION
-    Publishes GUI, CLI, Service as self-contained win-x64 binaries.
-    Bundles sing-box.exe and profiles into a ready-to-use ZIP archive.
+    Publishes GUI, CLI, Service as self-contained win-x64 binaries with SHARED runtime.
+    Generates TWO archives:
+      - Full ZIP (~50 MB): runtime + apps + sing-box + profiles (for new installs)
+      - Update ZIP (~5-10 MB): app binaries only (for existing installs)
 .PARAMETER Version
     Version string for the ZIP filename (default: "1.0")
 .PARAMETER SingBoxPath
     Path to sing-box.exe to bundle (default: %ProgramData%\VPNRouter\bin\sing-box.exe)
 .PARAMETER Upload
-    Upload the ZIP to GitHub Releases using gh CLI
+    Upload the ZIPs to GitHub Releases using gh CLI
 .PARAMETER GitHubRepo
     GitHub repo in "owner/repo" format (default: PavelLizunov/VPNRouter)
 .EXAMPLE
-    .\build.ps1 -Version "1.12"
-    .\build.ps1 -Version "1.12" -Upload -GitHubRepo "PavelLizunov/VPNRouter"
+    .\build.ps1 -Version "1.17.0"
+    .\build.ps1 -Version "1.17.0" -Upload
 #>
 param(
     [string]$Version = "1.0",
@@ -25,79 +27,120 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
-$PublishDir = Join-Path $Root "publish\dist"
-$ZipName = "VPNRouter-v$Version.zip"
-$ZipPath = Join-Path $Root $ZipName
+$DistDir = Join-Path $Root "publish\dist"
+$FdDir = Join-Path $Root "publish\fd"
+$UpdateDir = Join-Path $Root "publish\update"
+$FullZipName = "VPNRouter-v$Version.zip"
+$UpdateZipName = "VPNRouter-v$Version-update.zip"
+$FullZipPath = Join-Path $Root $FullZipName
+$UpdateZipPath = Join-Path $Root $UpdateZipName
 
 Write-Host "=== VPNRouter Build Script ===" -ForegroundColor Cyan
 Write-Host "Version: $Version"
-Write-Host "Output:  $ZipPath"
+Write-Host "Full:    $FullZipPath"
+Write-Host "Update:  $UpdateZipPath"
 Write-Host ""
 
 # ── Clean ──
-if (Test-Path $PublishDir) {
-    Write-Host "[1/6] Cleaning previous build..." -ForegroundColor Yellow
-    Remove-Item -Recurse -Force $PublishDir
+Write-Host "[1/9] Cleaning previous build..." -ForegroundColor Yellow
+foreach ($dir in @($DistDir, $FdDir, $UpdateDir)) {
+    if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
 }
 
-# ── Publish GUI (main entry point for testers) ──
-Write-Host "[2/6] Publishing VPNRouter.GUI (self-contained)..." -ForegroundColor Yellow
+# ── Publish all three self-contained to SAME dir (shared runtime) ──
+Write-Host "[2/9] Publishing VPNRouter.GUI (self-contained, shared runtime)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.GUI\VPNRouter.GUI.csproj" `
     -c Release -r win-x64 --self-contained `
-    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-    -o $PublishDir 2>&1 | Out-Null
+    -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "GUI publish failed" }
 
-# ── Publish CLI ──
-Write-Host "[3/6] Publishing VPNRouter.CLI (self-contained)..." -ForegroundColor Yellow
+Write-Host "[3/9] Publishing VPNRouter.CLI (self-contained, shared runtime)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.CLI\VPNRouter.CLI.csproj" `
     -c Release -r win-x64 --self-contained `
-    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-    -o $PublishDir 2>&1 | Out-Null
+    -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "CLI publish failed" }
 
-# ── Publish Service ──
-Write-Host "[4/6] Publishing VPNRouter.Service (self-contained)..." -ForegroundColor Yellow
-$ServiceDir = Join-Path $PublishDir "service"
-New-Item -ItemType Directory -Force -Path $ServiceDir | Out-Null
+Write-Host "[4/9] Publishing VPNRouter.Service (self-contained, shared runtime)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.Service\VPNRouter.Service.csproj" `
     -c Release -r win-x64 --self-contained `
-    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-    -o $ServiceDir 2>&1 | Out-Null
+    -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Service publish failed" }
 
-# ── Clean up unnecessary files ──
-Get-ChildItem $PublishDir -Recurse -Include "*.pdb", "appsettings.*.json", "*.runtimeconfig.json" | Remove-Item -Force
-Write-Host "       Cleaned PDB/config files" -ForegroundColor Gray
+# ── Publish framework-dependent to temp dir (to identify app-only files) ──
+Write-Host "[5/9] Building app file list (framework-dependent)..." -ForegroundColor Yellow
+dotnet publish "$Root\VPNRouter.GUI\VPNRouter.GUI.csproj" `
+    -c Release -r win-x64 --self-contained false --no-build `
+    -o $FdDir 2>&1 | Out-Null
+dotnet publish "$Root\VPNRouter.CLI\VPNRouter.CLI.csproj" `
+    -c Release -r win-x64 --self-contained false --no-build `
+    -o $FdDir 2>&1 | Out-Null
+dotnet publish "$Root\VPNRouter.Service\VPNRouter.Service.csproj" `
+    -c Release -r win-x64 --self-contained false --no-build `
+    -o $FdDir 2>&1 | Out-Null
+Write-Host "       App files identified: $((Get-ChildItem $FdDir -File).Count) files" -ForegroundColor Gray
+
+# ── Clean unnecessary files from dist ──
+Get-ChildItem $DistDir -Recurse -Include "*.pdb", "appsettings.*.json" | Remove-Item -Force
+
+# Remove unused localization satellite assemblies (WPF/WinForms resources for languages we don't use)
+# Keeps only 'en' (default, embedded in main DLLs). Saves ~15 MB.
+$localeDirs = @("cs", "de", "es", "fr", "it", "ja", "ko", "pl", "pt-BR", "ru", "sv", "tr", "zh-Hans", "zh-Hant")
+foreach ($locale in $localeDirs) {
+    $localeDir = Join-Path $DistDir $locale
+    if (Test-Path $localeDir) { Remove-Item -Recurse -Force $localeDir }
+}
+
+# Remove WPF/XPS assemblies (not used by WinForms-only app)
+$wpfFiles = @(
+    "PresentationCore.dll", "PresentationFramework.dll", "PresentationFramework.*.dll",
+    "PresentationNative_cor3.dll", "PresentationUI.dll",
+    "ReachFramework.dll", "System.Printing.dll", "System.Xaml.dll",
+    "System.Windows.Controls.Ribbon.dll", "System.Windows.Presentation.dll",
+    "System.Windows.Input.Manipulations.dll", "WindowsFormsIntegration.dll",
+    "UIAutomation*.dll", "PenImc_cor3.dll", "D3DCompiler_47_cor3.dll", "wpfgfx_cor3.dll",
+    "DirectWriteForwarder.dll", "System.IO.Packaging.dll",
+    "vcruntime140_cor3.dll"
+)
+foreach ($pattern in $wpfFiles) {
+    Get-ChildItem $DistDir -Filter $pattern | Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
+# Remove other unused assemblies
+$unusedFiles = @(
+    "createdump.exe",
+    "mscordaccore.dll", "mscordaccore_amd64_amd64_*.dll", "mscordbi.dll",
+    "Microsoft.VisualBasic.Core.dll", "Microsoft.VisualBasic.dll", "Microsoft.VisualBasic.Forms.dll",
+    "System.Private.DataContractSerialization.dll",
+    "System.Data.Common.dll", "System.Data.DataSetExtensions.dll", "System.Data.dll",
+    "System.Net.Quic.dll", "msquic.dll",
+    "System.Transactions.Local.dll", "System.Transactions.dll"
+)
+foreach ($pattern in $unusedFiles) {
+    Get-ChildItem $DistDir -Filter $pattern | Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
+Write-Host "       Cleaned PDB, locale, WPF and unused files" -ForegroundColor Gray
 
 # ── Bundle sing-box.exe ──
-Write-Host "[5/6] Bundling sing-box.exe..." -ForegroundColor Yellow
+Write-Host "[6/9] Bundling sing-box.exe..." -ForegroundColor Yellow
 if (Test-Path $SingBoxPath) {
-    Copy-Item $SingBoxPath $PublishDir
+    Copy-Item $SingBoxPath $DistDir
     Write-Host "       Copied from: $SingBoxPath" -ForegroundColor Gray
 } else {
     Write-Host "       WARNING: sing-box.exe not found at $SingBoxPath" -ForegroundColor Red
-    Write-Host "       You can add it manually to $PublishDir before zipping" -ForegroundColor Red
 }
 
 # ── Bundle profiles ──
 $ProfilesSrc = Join-Path $Root "profiles"
-$ProfilesDst = Join-Path $PublishDir "profiles"
+$ProfilesDst = Join-Path $DistDir "profiles"
 if (Test-Path $ProfilesSrc) {
     New-Item -ItemType Directory -Force -Path $ProfilesDst | Out-Null
     Copy-Item "$ProfilesSrc\*" $ProfilesDst -Recurse
     Write-Host "       Profiles copied" -ForegroundColor Gray
 }
 
-# ── Bundle update helper ──
-$UpdateHelper = Join-Path $Root "update-helper.cmd"
-if (Test-Path $UpdateHelper) {
-    Copy-Item $UpdateHelper $PublishDir
-    Write-Host "       Update helper copied" -ForegroundColor Gray
-}
-
 # ── Create README.txt ──
-$ReadmePath = Join-Path $PublishDir "README.txt"
+$ReadmePath = Join-Path $DistDir "README.txt"
 @"
 VPNRouter v$Version
 ====================
@@ -109,11 +152,11 @@ Quick Start:
 4. Click Start VPN
 
 Files:
-- VPNRouter.GUI.exe    Main app (tray icon + settings window)
-- VPNRouter.CLI.exe    Command-line interface (advanced)
-- service\             Windows Service (optional, for auto-start)
-- sing-box.exe         VPN engine (auto-copied on first run)
-- profiles\            Application profiles
+- VPNRouter.GUI.exe        Main app (tray icon + settings window)
+- VPNRouter.CLI.exe        Command-line interface (advanced)
+- VPNRouter.Service.exe    Windows Service (optional, for auto-start)
+- sing-box.exe             VPN engine (auto-copied on first run)
+- profiles\                Application profiles
 
 CLI Usage:
   VPNRouter.CLI.exe start --profile Discord_Privacy
@@ -125,34 +168,69 @@ Service Installation (run as admin):
   VPNRouter.CLI.exe service start
 "@ | Set-Content -Path $ReadmePath -Encoding UTF8
 
-# ── Create ZIP ──
-Write-Host "[6/6] Creating ZIP archive..." -ForegroundColor Yellow
-if (Test-Path $ZipPath) { Remove-Item $ZipPath }
-Compress-Archive -Path "$PublishDir\*" -DestinationPath $ZipPath -CompressionLevel Optimal
+# ── Create FULL ZIP ──
+Write-Host "[7/9] Creating full ZIP..." -ForegroundColor Yellow
+if (Test-Path $FullZipPath) { Remove-Item $FullZipPath }
+Compress-Archive -Path "$DistDir\*" -DestinationPath $FullZipPath -CompressionLevel Optimal
 
-$zipSize = (Get-Item $ZipPath).Length / 1MB
+# ── Create UPDATE ZIP (app files only, no runtime, no sing-box) ──
+Write-Host "[8/9] Creating update ZIP..." -ForegroundColor Yellow
+New-Item -ItemType Directory -Force -Path $UpdateDir | Out-Null
+
+# Copy app-only files from dist (using fd file list as reference)
+$fdFileNames = (Get-ChildItem $FdDir -File).Name | Sort-Object -Unique
+$updateFileCount = 0
+foreach ($name in $fdFileNames) {
+    $src = Join-Path $DistDir $name
+    if (Test-Path $src) {
+        Copy-Item $src $UpdateDir
+        $updateFileCount++
+    }
+}
+# Also include profiles and README
+$UpdateProfilesDst = Join-Path $UpdateDir "profiles"
+if (Test-Path $ProfilesSrc) {
+    New-Item -ItemType Directory -Force -Path $UpdateProfilesDst | Out-Null
+    Copy-Item "$ProfilesSrc\*" $UpdateProfilesDst -Recurse
+}
+Copy-Item $ReadmePath $UpdateDir
+
+Write-Host "       Update package: $updateFileCount app files" -ForegroundColor Gray
+
+if (Test-Path $UpdateZipPath) { Remove-Item $UpdateZipPath }
+Compress-Archive -Path "$UpdateDir\*" -DestinationPath $UpdateZipPath -CompressionLevel Optimal
+
+# ── Clean temp dirs ──
+Remove-Item -Recurse -Force $FdDir
+Remove-Item -Recurse -Force $UpdateDir
+
+# ── Summary ──
+$fullSize = (Get-Item $FullZipPath).Length / 1MB
+$updateSize = (Get-Item $UpdateZipPath).Length / 1MB
+
 Write-Host ""
 Write-Host "=== Build complete ===" -ForegroundColor Green
-Write-Host "Archive: $ZipPath ($([math]::Round($zipSize, 1)) MB)"
+Write-Host "Full ZIP:   $FullZipPath ($([math]::Round($fullSize, 1)) MB)" -ForegroundColor White
+Write-Host "Update ZIP: $UpdateZipPath ($([math]::Round($updateSize, 1)) MB)" -ForegroundColor White
 Write-Host ""
-Write-Host "Contents:" -ForegroundColor Gray
-Get-ChildItem $PublishDir -Recurse | ForEach-Object {
-    $rel = $_.FullName.Replace($PublishDir, "").TrimStart("\")
+
+Write-Host "[9/9] Full package contents:" -ForegroundColor Gray
+Get-ChildItem $DistDir -Recurse | ForEach-Object {
+    $rel = $_.FullName.Replace($DistDir, "").TrimStart("\")
     if ($_.PSIsContainer) { "  $rel\" } else { "  $rel  ($([math]::Round($_.Length/1KB)) KB)" }
 }
 
 # ── Upload to GitHub Releases (optional) ──
 if ($Upload) {
     Write-Host ""
-    Write-Host "[7/7] Uploading to GitHub Releases..." -ForegroundColor Yellow
+    Write-Host "Uploading to GitHub Releases..." -ForegroundColor Yellow
 
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
         Write-Host "       ERROR: gh CLI not found. Install: winget install GitHub.cli" -ForegroundColor Red
-        Write-Host "       Skipping upload." -ForegroundColor Red
     } else {
         $tag = "v$Version"
 
-        gh release create $tag $ZipPath `
+        gh release create $tag $FullZipPath $UpdateZipPath `
             --repo $GitHubRepo `
             --title "VPNRouter v$Version" `
             --notes "VPNRouter v$Version" `

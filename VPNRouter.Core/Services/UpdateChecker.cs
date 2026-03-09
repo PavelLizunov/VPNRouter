@@ -80,11 +80,22 @@ public class UpdateChecker
 
         var latestRelease = newerReleases[0];
 
-        var asset = latestRelease.Release.assets?.FirstOrDefault(a =>
+        // Find full ZIP asset (VPNRouter-v*.zip, NOT *-update.zip)
+        var fullAsset = latestRelease.Release.assets?.FirstOrDefault(a =>
             a.name.StartsWith("VPNRouter-v", StringComparison.OrdinalIgnoreCase) &&
+            !a.name.Contains("-update", StringComparison.OrdinalIgnoreCase) &&
             a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
 
-        if (asset == null) return null;
+        if (fullAsset == null) return null;
+
+        // Find lite update asset (VPNRouter-v*-update.zip)
+        var updateAsset = latestRelease.Release.assets?.FirstOrDefault(a =>
+            a.name.Contains("-update", StringComparison.OrdinalIgnoreCase) &&
+            a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+
+        // Lite update is available if: update asset exists AND current install
+        // uses shared runtime (hostfxr.dll next to exe = non-single-file deployment)
+        bool canUseLite = updateAsset != null && IsSharedRuntimeInstall();
 
         // Collect release notes from ALL skipped versions (newest first)
         var allNotes = newerReleases
@@ -98,11 +109,14 @@ public class UpdateChecker
         {
             CurrentVersion = _currentVersion,
             LatestVersion = latestRelease.Tag,
-            DownloadUrl = asset.browser_download_url,
+            DownloadUrl = fullAsset.browser_download_url,
             ReleaseNotes = combinedNotes,
             HtmlUrl = latestRelease.Release.html_url ?? string.Empty,
-            SizeBytes = asset.size,
-            IsNewer = true
+            SizeBytes = fullAsset.size,
+            IsNewer = true,
+            LiteDownloadUrl = updateAsset?.browser_download_url,
+            LiteSizeBytes = updateAsset?.size ?? 0,
+            HasLiteUpdate = canUseLite
         };
 
         UpdateAvailable?.Invoke(info);
@@ -111,7 +125,13 @@ public class UpdateChecker
 
     public async Task<string> DownloadAndStageAsync(UpdateInfo info, CancellationToken ct = default)
     {
-        StatusChanged?.Invoke("Downloading update...");
+        // Choose lite or full download
+        var useLite = info.HasLiteUpdate && !string.IsNullOrEmpty(info.LiteDownloadUrl);
+        var downloadUrl = useLite ? info.LiteDownloadUrl! : info.DownloadUrl;
+        var expectedSize = useLite ? info.LiteSizeBytes : info.SizeBytes;
+        var label = useLite ? "lite update" : "full update";
+
+        StatusChanged?.Invoke($"Downloading {label}...");
 
         if (Directory.Exists(_stagingDir))
             Directory.Delete(_stagingDir, true);
@@ -119,11 +139,11 @@ public class UpdateChecker
 
         var zipPath = Path.Combine(_stagingDir, $"VPNRouter-v{info.LatestVersion}.zip");
 
-        using var response = await _http.GetAsync(info.DownloadUrl,
+        using var response = await _http.GetAsync(downloadUrl,
             HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
 
-        var totalBytes = response.Content.Headers.ContentLength ?? info.SizeBytes;
+        var totalBytes = response.Content.Headers.ContentLength ?? expectedSize;
 
         using var contentStream = await response.Content.ReadAsStreamAsync(ct);
         using var fileStream = new FileStream(zipPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920);
@@ -145,17 +165,19 @@ public class UpdateChecker
 
         // Validate downloaded file — catch truncated downloads
         var downloadedSize = new FileInfo(zipPath).Length;
-        if (info.SizeBytes > 0 && downloadedSize < info.SizeBytes * 0.9)
+        if (expectedSize > 0 && downloadedSize < expectedSize * 0.9)
             throw new InvalidOperationException(
-                $"Downloaded file is too small ({downloadedSize / 1024 / 1024} MB vs expected {info.SizeBytes / 1024 / 1024} MB). Download may be corrupted.");
+                $"Downloaded file is too small ({downloadedSize / 1024 / 1024} MB vs expected {expectedSize / 1024 / 1024} MB). Download may be corrupted.");
 
         StatusChanged?.Invoke("Extracting update...");
 
         var extractDir = Path.Combine(_stagingDir, "extracted");
         ZipFile.ExtractToDirectory(zipPath, extractDir);
 
-        if (!File.Exists(Path.Combine(extractDir, "VPNRouter.GUI.exe")))
-            throw new InvalidOperationException("Invalid update package: VPNRouter.GUI.exe not found.");
+        // Validate: must contain at least one of our app files
+        if (!File.Exists(Path.Combine(extractDir, "VPNRouter.GUI.exe")) &&
+            !File.Exists(Path.Combine(extractDir, "VPNRouter.GUI.dll")))
+            throw new InvalidOperationException("Invalid update package: VPNRouter.GUI.exe/dll not found.");
 
         StatusChanged?.Invoke("Update ready to apply.");
         return extractDir;
@@ -208,7 +230,7 @@ public class UpdateChecker
             var relativePath = Path.GetRelativePath(extractedDir, srcFile);
             var destPath = Path.Combine(appDir, relativePath);
 
-            // Ensure target subdirectory exists (e.g. profiles\, service\)
+            // Ensure target subdirectory exists (e.g. profiles\)
             var destDir = Path.GetDirectoryName(destPath);
             if (destDir != null)
                 Directory.CreateDirectory(destDir);
@@ -237,5 +259,16 @@ public class UpdateChecker
             WorkingDirectory = appDir,
             UseShellExecute = false
         });
+    }
+
+    /// <summary>
+    /// Detects if the current installation uses shared runtime (non-single-file deployment).
+    /// Single-file self-contained exe's don't have hostfxr.dll next to them.
+    /// Shared-runtime installs (v1.17+) have hostfxr.dll in the app directory.
+    /// </summary>
+    private static bool IsSharedRuntimeInstall()
+    {
+        var appDir = AppContext.BaseDirectory;
+        return File.Exists(Path.Combine(appDir, "hostfxr.dll"));
     }
 }

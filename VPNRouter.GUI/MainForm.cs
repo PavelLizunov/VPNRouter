@@ -1211,8 +1211,10 @@ public class MainForm : Form
     private void ShowUpdateNotification(UpdateInfo info)
     {
         _pendingUpdate = info;
-        var sizeMb = info.SizeBytes > 0 ? $"  ({info.SizeBytes / 1024 / 1024} MB)" : "";
-        _updateLabel.Text = $"Update available: v{info.LatestVersion}{sizeMb}";
+        var downloadBytes = info.HasLiteUpdate ? info.LiteSizeBytes : info.SizeBytes;
+        var sizeMb = downloadBytes > 0 ? $"  ({downloadBytes / 1024 / 1024} MB)" : "";
+        var updateType = info.HasLiteUpdate ? "Lite update" : "Update";
+        _updateLabel.Text = $"{updateType} available: v{info.LatestVersion}{sizeMb}";
         _updatePanel.Visible = true;
     }
 
@@ -1230,6 +1232,8 @@ public class MainForm : Form
 
         if (vpnRunning || serviceInstalled)
             msg += "\nVPN will be stopped before applying the update.";
+        if (serviceInstalled)
+            msg += "\nAutostart service will be removed and can be re-enabled after update.";
         msg += "\nThe application will restart automatically.";
 
         if (MessageBox.Show(msg, AppBranding.AppName,
@@ -1271,6 +1275,16 @@ public class MainForm : Form
                 await Task.Run(() => ServiceInstaller.Stop());
             }
 
+            // Uninstall service before applying — binary path may change
+            // (e.g. migration from service\ subfolder to root, or single-file to shared-runtime).
+            // User can re-enable autostart after update via the checkbox.
+            if (ServiceInstaller.IsInstalled())
+            {
+                _updateLabel.Text = "Removing old service...";
+                await Task.Run(() => ServiceInstaller.Uninstall());
+                await Task.Delay(500);
+            }
+
             // Apply in-process: copies files directly, renames locked exes
             _updateLabel.Text = "Applying update...";
             _updateChecker.ApplyUpdate(extractedDir);
@@ -1285,7 +1299,9 @@ public class MainForm : Form
             _updateBtn.Visible = true;
             _updateBtn.Enabled = true;
             _updateProgress.Visible = false;
-            _updateLabel.Text = $"Update available: v{_pendingUpdate.LatestVersion}";
+            var dlBytes = _pendingUpdate.HasLiteUpdate ? _pendingUpdate.LiteSizeBytes : _pendingUpdate.SizeBytes;
+            var dlMb = dlBytes > 0 ? $"  ({dlBytes / 1024 / 1024} MB)" : "";
+            _updateLabel.Text = $"Update available: v{_pendingUpdate.LatestVersion}{dlMb}";
             _startStopBtn.Enabled = true;
             _applyBtn.Enabled = true;
         }
