@@ -80,22 +80,22 @@ public class UpdateChecker
 
         var latestRelease = newerReleases[0];
 
-        // Find full ZIP asset (VPNRouter-v*.zip, NOT *-update.zip)
+        // Find install ZIP asset (VPNRouter-install-v*.zip — app/ layout)
         var fullAsset = latestRelease.Release.assets?.FirstOrDefault(a =>
-            a.name.StartsWith("VPNRouter-v", StringComparison.OrdinalIgnoreCase) &&
-            !a.name.Contains("-update", StringComparison.OrdinalIgnoreCase) &&
+            a.name.StartsWith("VPNRouter-install-v", StringComparison.OrdinalIgnoreCase) &&
             a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
 
-        if (fullAsset == null) return null;
-
-        // Find lite update asset (VPNRouter-v*-update.zip)
+        // Find lite update asset (VPNRouter-update-v*.zip — app binaries only)
         var updateAsset = latestRelease.Release.assets?.FirstOrDefault(a =>
-            a.name.Contains("-update", StringComparison.OrdinalIgnoreCase) &&
+            a.name.StartsWith("VPNRouter-update-v", StringComparison.OrdinalIgnoreCase) &&
             a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
 
-        // Lite update is available if: update asset exists AND current install
-        // uses shared runtime (hostfxr.dll next to exe = non-single-file deployment)
+        // Lite update: update asset exists AND current install uses shared runtime
         bool canUseLite = updateAsset != null && IsSharedRuntimeInstall();
+
+        // Need at least one downloadable asset
+        if (fullAsset == null && !canUseLite)
+            return null;
 
         // Collect release notes from ALL skipped versions (newest first)
         var allNotes = newerReleases
@@ -109,10 +109,11 @@ public class UpdateChecker
         {
             CurrentVersion = _currentVersion,
             LatestVersion = latestRelease.Tag,
-            DownloadUrl = fullAsset.browser_download_url,
+            DownloadUrl = fullAsset?.browser_download_url
+                          ?? updateAsset?.browser_download_url ?? string.Empty,
             ReleaseNotes = combinedNotes,
             HtmlUrl = latestRelease.Release.html_url ?? string.Empty,
-            SizeBytes = fullAsset.size,
+            SizeBytes = fullAsset?.size ?? updateAsset?.size ?? 0,
             IsNewer = true,
             LiteDownloadUrl = updateAsset?.browser_download_url,
             LiteSizeBytes = updateAsset?.size ?? 0,
@@ -218,26 +219,6 @@ public class UpdateChecker
             }
         }
         catch { }
-
-        // If running from app/ subfolder, clean orphaned .bak files from parent dir
-        // (left after flat → app/ migration)
-        try
-        {
-            var appDir2 = AppContext.BaseDirectory.TrimEnd('\\');
-            var dirName = Path.GetFileName(appDir2);
-            if (dirName.Equals("app", StringComparison.OrdinalIgnoreCase))
-            {
-                var parentDir = Path.GetDirectoryName(appDir2);
-                if (parentDir != null)
-                {
-                    foreach (var bak in Directory.GetFiles(parentDir, "*.bak"))
-                    {
-                        try { File.Delete(bak); } catch { }
-                    }
-                }
-            }
-        }
-        catch { }
     }
 
     /// <summary>
@@ -248,27 +229,23 @@ public class UpdateChecker
     /// On Windows, a running .exe can be renamed (but not deleted/overwritten).
     /// So we: rename locked file → copy new file → start new exe → exit.
     /// The .bak files are cleaned up on next startup via CleanupStagingDir().
+    ///
+    /// Supports install ZIP (app/ layout) and lite update ZIP (flat).
+    /// When install ZIP has app/ subfolder, strips the wrapper and copies app/ contents.
     /// </summary>
     public void ApplyUpdate(string extractedDir)
     {
         var appDir = AppContext.BaseDirectory.TrimEnd('\\');
-        var currentDirName = Path.GetFileName(appDir);
-        var isAlreadyAppLayout = currentDirName.Equals("app", StringComparison.OrdinalIgnoreCase);
 
-        // Detect if extracted package has app/ subfolder structure
+        // If extracted package has app/ subfolder, strip the wrapper
+        // (install ZIP layout: Start VPN.cmd + README.txt + app/)
         var appSubDir = Path.Combine(extractedDir, "app");
-        bool extractedHasApp = Directory.Exists(appSubDir) &&
+        if (Directory.Exists(appSubDir) &&
             (File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.exe")) ||
-             File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.dll")));
-
-        if (extractedHasApp && isAlreadyAppLayout)
+             File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.dll"))))
         {
-            // Already in app/ layout → strip wrapper, copy app/ contents to current dir
             extractedDir = appSubDir;
         }
-        // else if extractedHasApp && !isAlreadyAppLayout:
-        //   Flat layout → copy WHOLE structure (creates app/ subfolder = migration)
-        // else: flat update ZIP → copy as-is
 
         var guiExe = Path.Combine(appDir, "VPNRouter.GUI.exe");
         int copied = 0, renamed = 0;
@@ -298,24 +275,6 @@ public class UpdateChecker
                 copied++;
                 renamed++;
             }
-        }
-
-        // If we migrated flat → app/ layout, rename old flat exes so user doesn't click them
-        if (extractedHasApp && !isAlreadyAppLayout)
-        {
-            foreach (var oldExe in new[] { "VPNRouter.GUI.exe", "VPNRouter.CLI.exe", "VPNRouter.Service.exe" })
-            {
-                var oldPath = Path.Combine(appDir, oldExe);
-                if (File.Exists(oldPath))
-                {
-                    var bakPath = oldPath + ".bak";
-                    try { File.Delete(bakPath); } catch { }
-                    try { File.Move(oldPath, bakPath); } catch { }
-                }
-            }
-
-            // Launch from the new app/ subfolder
-            guiExe = Path.Combine(appDir, "app", "VPNRouter.GUI.exe");
         }
 
         // Launch updated GUI (inherits admin token from current process)
