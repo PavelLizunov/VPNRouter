@@ -14,13 +14,12 @@ public class MainForm : Form
     private readonly TrayApplicationContext _tray;
 
     // ── Servers tab ──
-    private TextBox _uriInput = null!;
-    private Button _addBtn = null!;
+    private Panel _vlessPanel = null!;
+    private FlowLayoutPanel _vlessBtnPanel = null!;
+    private Button _addServerBtn = null!;
     private ListView _serverList = null!;
     private Button _removeBtn = null!;
     private Button _clearBtn = null!;
-    private Button _upBtn = null!;
-    private Button _downBtn = null!;
     private Label _serverHintLabel = null!;
 
     // ── Custom config mode ──
@@ -73,8 +72,7 @@ public class MainForm : Form
     private TabPage _appsPage = null!;
     private Panel _actionPanel = null!;
     private FlowLayoutPanel _routingPanel = null!;
-    private Label _serversInputLabel = null!;
-    private FlowLayoutPanel _serversBtnPanel = null!;
+    // (removed: _serversInputLabel, _serversBtnPanel — unified with _vlessBtnPanel)
     private Label _appsLabel = null!;
     private Panel _customPanel = null!;
     private Label _customLabel = null!;
@@ -636,36 +634,36 @@ public class MainForm : Form
         _customConfigPanel.Controls.Add(customHintLabel);
         _customConfigPanel.Controls.Add(_customConfigBtnPanel);
 
-        // ── VLESS controls (existing) ──
-        _serversInputLabel = new Label
+        // ── VLESS panel (mirrors Custom Config layout: buttons top, list fill, hint bottom) ──
+        _vlessPanel = new Panel
         {
-            Text = Strings.PasteVlessUri,
-            Dock = DockStyle.Top,
-            Height = 22,
-            ForeColor = t.TextSecondary,
-            Font = t.BodyFont
+            Dock = DockStyle.Fill,
+            Visible = true
         };
 
-        _uriInput = new TextBox
+        _vlessBtnPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 60,
-            Multiline = true,
-            ScrollBars = ScrollBars.Vertical,
-            PlaceholderText = "vless://uuid@server:443?security=reality&sni=...#name",
-            BackColor = t.InputBackground,
-            ForeColor = t.TextPrimary,
-            Font = t.BodyFont
+            Height = 36,
+            FlowDirection = FlowDirection.LeftToRight,
+            BackColor = t.Background
         };
 
-        _addBtn = new Button
-        {
-            Text = Strings.AddServers,
-            Dock = DockStyle.Top,
-            Height = 32
-        };
-        Theme.ApplyPrimary(_addBtn);
-        _addBtn.Click += OnAddServer;
+        _addServerBtn = new Button { Text = Strings.AddServers, Width = 140, Height = 28 };
+        Theme.ApplyPrimary(_addServerBtn);
+        _addServerBtn.Click += OnAddServer;
+
+        _removeBtn = new Button { Text = Strings.Remove, Width = 72, Height = 28 };
+        Theme.ApplySecondary(_removeBtn);
+        _removeBtn.Click += OnRemoveServer;
+
+        _clearBtn = new Button { Text = Strings.ClearAll, Width = 100, Height = 28 };
+        Theme.ApplySecondary(_clearBtn);
+        _clearBtn.Click += (_, _) => { _servers.Clear(); RefreshServerList(); SaveSettings(); };
+
+        _vlessBtnPanel.Controls.Add(_addServerBtn);
+        _vlessBtnPanel.Controls.Add(_removeBtn);
+        _vlessBtnPanel.Controls.Add(_clearBtn);
 
         _serverList = new ListView
         {
@@ -688,35 +686,6 @@ public class MainForm : Form
         _serverList.Columns.Add(Strings.ColSecurity, 70);
         _serverList.Resize += (_, _) => LayoutHelper.AutoSizeColumns(_serverList, new[] { 2, 3, 4, 1, 2 });
 
-        _serversBtnPanel = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Bottom,
-            Height = 36,
-            FlowDirection = FlowDirection.RightToLeft,
-            BackColor = t.Background
-        };
-
-        _clearBtn = new Button { Text = Strings.ClearAll, Width = 72, Height = 28 };
-        Theme.ApplySecondary(_clearBtn);
-        _clearBtn.Click += (_, _) => { _servers.Clear(); RefreshServerList(); SaveSettings(); };
-
-        _removeBtn = new Button { Text = Strings.Remove, Width = 72, Height = 28 };
-        Theme.ApplySecondary(_removeBtn);
-        _removeBtn.Click += OnRemoveServer;
-
-        _downBtn = new Button { Text = Strings.BtnDown, Width = 68, Height = 28 };
-        Theme.ApplySecondary(_downBtn);
-        _downBtn.Click += OnMoveDown;
-
-        _upBtn = new Button { Text = Strings.BtnUp, Width = 58, Height = 28 };
-        Theme.ApplySecondary(_upBtn);
-        _upBtn.Click += OnMoveUp;
-
-        _serversBtnPanel.Controls.Add(_clearBtn);
-        _serversBtnPanel.Controls.Add(_removeBtn);
-        _serversBtnPanel.Controls.Add(_downBtn);
-        _serversBtnPanel.Controls.Add(_upBtn);
-
         _serverHintLabel = new Label
         {
             Dock = DockStyle.Bottom,
@@ -728,14 +697,13 @@ public class MainForm : Form
             Visible = false
         };
 
+        _vlessPanel.Controls.Add(_serverList);       // Fill
+        _vlessPanel.Controls.Add(_serverHintLabel);   // Bottom
+        _vlessPanel.Controls.Add(_vlessBtnPanel);     // Top
+
         // Dock order: last added = top
         page.Controls.Add(_customConfigPanel);  // Fill (hidden by default)
-        page.Controls.Add(_serverList);          // Fill (visible by default)
-        page.Controls.Add(_serverHintLabel);
-        page.Controls.Add(_serversBtnPanel);
-        page.Controls.Add(_addBtn);
-        page.Controls.Add(_uriInput);
-        page.Controls.Add(_serversInputLabel);
+        page.Controls.Add(_vlessPanel);          // Fill (visible by default)
         page.Controls.Add(_configModePanel);     // Top — mode selector
     }
 
@@ -1120,8 +1088,7 @@ public class MainForm : Form
         // Config mode
         _vlessRadio.Text = Strings.VlessServers;
         _customConfigRadio.Text = Strings.CustomConfigJson;
-        _serversInputLabel.Text = Strings.PasteVlessUri;
-        _addBtn.Text = Strings.AddServers;
+        _addServerBtn.Text = Strings.AddServers;
         _addCustomConfigBtn.Text = Strings.AddConfig;
         _removeCustomConfigBtn.Text = Strings.Remove;
 
@@ -1140,8 +1107,6 @@ public class MainForm : Form
         // Server buttons
         _clearBtn.Text = Strings.ClearAll;
         _removeBtn.Text = Strings.Remove;
-        _downBtn.Text = Strings.BtnDown;
-        _upBtn.Text = Strings.BtnUp;
 
         // Apps tab
         _splitRadio.Text = Strings.SplitTunnel;
@@ -1229,21 +1194,14 @@ public class MainForm : Form
         _appsPage.BackColor = t.Background;
 
         // ── Servers tab ──
-        _serversInputLabel.ForeColor = t.TextSecondary;
-        _serversInputLabel.Font = t.BodyFont;
-        _uriInput.BackColor = t.InputBackground;
-        _uriInput.ForeColor = t.TextPrimary;
-        _uriInput.Font = t.BodyFont;
-        Theme.ApplyPrimary(_addBtn);
+        Theme.ApplyPrimary(_addServerBtn);
         _serverList.BackColor = t.Surface;
         _serverList.ForeColor = t.TextPrimary;
         _serverList.Font = t.BodyFont;
         _serverHintLabel.Font = t.SmallFont;
-        _serversBtnPanel.BackColor = t.Background;
+        _vlessBtnPanel.BackColor = t.Background;
         Theme.ApplySecondary(_clearBtn);
         Theme.ApplySecondary(_removeBtn);
-        Theme.ApplySecondary(_downBtn);
-        Theme.ApplySecondary(_upBtn);
 
         // ── Apps tab ──
         _routingPanel.BackColor = t.Background;
@@ -1427,11 +1385,7 @@ public class MainForm : Form
         RefreshCustomConfigList();
 
         // Toggle visibility based on config mode
-        _serversInputLabel.Visible = !isCustomConfig;
-        _uriInput.Visible = !isCustomConfig;
-        _addBtn.Visible = !isCustomConfig;
-        _serverList.Visible = !isCustomConfig;
-        _serversBtnPanel.Visible = !isCustomConfig;
+        _vlessPanel.Visible = !isCustomConfig;
         _customConfigPanel.Visible = isCustomConfig;
 
         // Load routing mode
@@ -1635,9 +1589,7 @@ public class MainForm : Form
         bool hasNoFlow = _servers.Any(s => string.IsNullOrEmpty(s.Flow));
         bool udpSplit = hasFlow && hasNoFlow;
 
-        // Up/Down reorder makes no sense in split mode — roles are by flow, not position
-        _upBtn.Visible = !udpSplit;
-        _downBtn.Visible = !udpSplit;
+        // (Up/Down buttons removed — roles are automatic by flow type)
 
         // Context-sensitive hint
         if (udpSplit)
@@ -1760,18 +1712,10 @@ public class MainForm : Form
         if (_isLoadingUI) return;
 
         // Use _vlessRadio state directly — it's already updated when its CheckedChanged fires.
-        // _customConfigRadio.Checked may NOT yet be updated at this point (WinForms timing).
         var isCustom = !_vlessRadio.Checked;
 
-        // Toggle VLESS controls
-        _serversInputLabel.Visible = !isCustom;
-        _uriInput.Visible = !isCustom;
-        _addBtn.Visible = !isCustom;
-        _serverList.Visible = !isCustom;
-        _serversBtnPanel.Visible = !isCustom;
-        _serverHintLabel.Visible = false;
-
-        // Toggle custom config panel
+        // Toggle panels (identical structure, just swap visibility)
+        _vlessPanel.Visible = !isCustom;
         _customConfigPanel.Visible = isCustom;
 
         // Save mode
@@ -1884,7 +1828,50 @@ public class MainForm : Form
 
     private void OnAddServer(object? sender, EventArgs e)
     {
-        var text = _uriInput.Text.Trim();
+        // Show input dialog (matches Add Config... pattern)
+        using var dlg = new Form
+        {
+            Text = Strings.AddServers,
+            Size = new Size(500, 200),
+            MinimumSize = new Size(400, 180),
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            StartPosition = FormStartPosition.CenterParent,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            BackColor = Theme.Current.Background
+        };
+
+        var label = new Label
+        {
+            Text = Strings.PasteVlessUri,
+            Dock = DockStyle.Top,
+            Height = 20,
+            ForeColor = Theme.Current.TextSecondary,
+            Font = Theme.Current.BodyFont
+        };
+
+        var input = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            ScrollBars = ScrollBars.Vertical,
+            PlaceholderText = Strings.PlaceholderVless,
+            BackColor = Theme.Current.InputBackground,
+            ForeColor = Theme.Current.TextPrimary,
+            Font = Theme.Current.BodyFont
+        };
+
+        var okBtn = new Button { Text = "OK", DialogResult = DialogResult.OK, Dock = DockStyle.Bottom, Height = 32 };
+        Theme.ApplyPrimary(okBtn);
+        dlg.AcceptButton = okBtn;
+
+        dlg.Controls.Add(input);
+        dlg.Controls.Add(okBtn);
+        dlg.Controls.Add(label);
+
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+        var text = input.Text.Trim();
         if (string.IsNullOrEmpty(text)) return;
 
         try
@@ -1897,7 +1884,6 @@ public class MainForm : Form
                 return;
             }
 
-            // Filter out duplicate servers (same host:port+uuid)
             var added = 0;
             var skipped = 0;
             foreach (var entry in entries)
@@ -1907,26 +1893,16 @@ public class MainForm : Form
                     s.Port == entry.Port &&
                     s.Uuid.Equals(entry.Uuid, StringComparison.OrdinalIgnoreCase));
 
-                if (isDuplicate)
-                {
-                    skipped++;
-                }
-                else
-                {
-                    _servers.Add(entry);
-                    added++;
-                }
+                if (isDuplicate) skipped++;
+                else { _servers.Add(entry); added++; }
             }
 
             RefreshServerList();
-            _uriInput.Clear();
             SaveSettings();
 
             if (skipped > 0)
-            {
                 MessageBox.Show(Strings.AddedSkipped(added, skipped),
                     AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
         }
         catch (Exception ex)
         {
@@ -1946,34 +1922,6 @@ public class MainForm : Form
         }
 
         RefreshServerList();
-        SaveSettings();
-    }
-
-    private void OnMoveUp(object? sender, EventArgs e)
-    {
-        if (_serverList.SelectedIndices.Count == 0) return;
-        var idx = _serverList.SelectedIndices[0];
-        if (idx <= 0) return;
-
-        (_servers[idx], _servers[idx - 1]) = (_servers[idx - 1], _servers[idx]);
-        _serverList.SelectedIndices.Clear();
-        RefreshServerList();
-        _serverList.Items[idx - 1].Selected = true;
-        _serverList.Items[idx - 1].Focused = true;
-        SaveSettings();
-    }
-
-    private void OnMoveDown(object? sender, EventArgs e)
-    {
-        if (_serverList.SelectedIndices.Count == 0) return;
-        var idx = _serverList.SelectedIndices[0];
-        if (idx >= _servers.Count - 1) return;
-
-        (_servers[idx], _servers[idx + 1]) = (_servers[idx + 1], _servers[idx]);
-        _serverList.SelectedIndices.Clear();
-        RefreshServerList();
-        _serverList.Items[idx + 1].Selected = true;
-        _serverList.Items[idx + 1].Focused = true;
         SaveSettings();
     }
 
