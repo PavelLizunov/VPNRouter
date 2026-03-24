@@ -45,6 +45,18 @@ public static class CustomConfigInjector
         // Migrate legacy features to sing-box 1.13+ format
         StripUnsupportedFeatures(config);
 
+        // Align route.final with routing_mode setting
+        var isSplitTunnel = !(settings.App.RoutingMode ?? "split")
+            .Equals("full", StringComparison.OrdinalIgnoreCase);
+        if (isSplitTunnel)
+        {
+            // Split tunnel: only matched processes go through VPN, everything else direct.
+            // User config may have "final":"proxy" (full tunnel) — override to "direct".
+            var route = config["route"] as JObject;
+            if (route != null)
+                route["final"] = "direct";
+        }
+
         EnsureDefaultDomainResolver(config);
         EnsureClashApi(config, settings.SingBox.ClashApi);
 
@@ -502,12 +514,24 @@ public static class CustomConfigInjector
                 else if (address.Contains("://"))
                 {
                     var uri = new Uri(address);
-                    obj["type"] = uri.Scheme; // tls, https, udp, tcp, quic, h3
+                    var scheme = uri.Scheme;
+
+                    // Upgrade DoT (tls, port 853) → DoH (https, port 443) for better performance.
+                    // DoT is often slower/blocked; DoH uses HTTP/2 multiplexing and port 443.
+                    if (scheme == "tls")
+                    {
+                        scheme = "https";
+                        obj["path"] = "/dns-query";
+                    }
+
+                    obj["type"] = scheme;
                     obj["server"] = uri.Host;
                     if (uri.Port > 0 && uri.Port != 443 && uri.Port != 53)
                         obj["server_port"] = uri.Port;
-                    if (!string.IsNullOrEmpty(uri.AbsolutePath) && uri.AbsolutePath != "/")
-                        obj["path"] = uri.AbsolutePath;
+                    if (scheme == "https" && obj["path"] == null)
+                        obj["path"] = !string.IsNullOrEmpty(uri.AbsolutePath) && uri.AbsolutePath != "/"
+                            ? uri.AbsolutePath
+                            : "/dns-query";
                 }
                 else
                 {
