@@ -505,7 +505,7 @@ public static class CustomConfigInjector
             }
         }
 
-        // 5. Remove deprecated inbound sniff fields (moved to route actions in 1.12+)
+        // 5. Normalize inbounds: remove deprecated fields, fix TUN settings
         var inbounds = config["inbounds"] as JArray;
         if (inbounds != null)
         {
@@ -514,12 +514,35 @@ public static class CustomConfigInjector
                 var obj = inbound as JObject;
                 if (obj == null) continue;
 
+                // Remove deprecated sniff fields (moved to route actions in 1.12+)
                 obj.Remove("sniff");
                 obj.Remove("sniff_override_destination");
                 obj.Remove("sniff_timeout");
                 obj.Remove("domain_strategy");
+
+                // TUN-specific fixes
+                if (obj["type"]?.ToString() == "tun")
+                {
+                    // Force strict_route=false — true causes dual-stack errors on Windows
+                    obj["strict_route"] = false;
+                    // Set stack to "system" (default for Windows, avoids gVisor dependency)
+                    if (obj["stack"] == null)
+                        obj["stack"] = "system";
+                }
             }
         }
+
+        // 6. Ensure log output goes to our log file (so we can debug startup failures)
+        var log = config["log"] as JObject;
+        if (log == null)
+        {
+            log = new JObject();
+            config["log"] = log;
+        }
+        var logPath = Environment.ExpandEnvironmentVariables(
+            @"%ProgramData%\VPNRouter\logs\singbox.log");
+        log["output"] = logPath;
+        log["timestamp"] = true;
     }
 
     // ─── Private: Cleanup helpers ────────────────────────────────────────────

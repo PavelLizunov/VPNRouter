@@ -1508,8 +1508,12 @@ public class MainForm : Form
 
     private void SaveSettings()
     {
-        // Update config mode
-        _settings.App.ConfigMode = _customConfigRadio.Checked ? "custom" : "generated";
+        // Block ALL saves during UI loading — event handlers fire during
+        // LoadSettingsIntoUI and would overwrite settings with partial state.
+        if (_isLoadingUI) return;
+
+        // Safe to read radio state here — _isLoadingUI blocks during loading
+        _settings.App.ConfigMode = !_vlessRadio.Checked ? "custom" : "generated";
         _settings.App.CustomConfig = _customConfigPath.Text.Trim();
 
         // Update servers
