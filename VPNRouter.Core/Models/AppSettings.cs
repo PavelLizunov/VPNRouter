@@ -72,6 +72,29 @@ public class AppConfig
     /// </summary>
     [YamlMember(Alias = "custom_config")]
     public string CustomConfig { get; set; } = string.Empty;
+
+    /// <summary>
+    /// List of saved custom sing-box configs. Each entry has a name and path
+    /// to a ProgramData copy. Configs are copied on import so originals can be deleted.
+    /// </summary>
+    [YamlMember(Alias = "custom_configs")]
+    public List<CustomConfigEntry> CustomConfigs { get; set; } = new();
+
+    /// <summary>Name of the currently active custom config (from CustomConfigs list).</summary>
+    [YamlMember(Alias = "active_custom_config")]
+    public string ActiveCustomConfig { get; set; } = string.Empty;
+}
+
+/// <summary>A saved custom sing-box config entry.</summary>
+public class CustomConfigEntry
+{
+    /// <summary>Display name (derived from filename on import, e.g. "brat-pc").</summary>
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Path to the ProgramData copy (e.g. %ProgramData%\VPNRouter\config\custom-brat-pc.json).</summary>
+    [YamlMember(Alias = "path")]
+    public string Path { get; set; } = string.Empty;
 }
 
 public class ProfileSource

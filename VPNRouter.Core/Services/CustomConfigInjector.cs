@@ -105,18 +105,66 @@ public static class CustomConfigInjector
     }
 
     /// <summary>
-    /// Copies a custom config file to %ProgramData%\VPNRouter\config\custom.json.
-    /// Returns the destination path. Subsequent reads use the copy, so the original
-    /// can be deleted without breaking the VPN.
+    /// Copies a custom config to ProgramData with a named filename.
+    /// Returns the destination path. Subsequent reads use the copy.
     /// </summary>
-    public static string CopyToProgramData(string sourcePath)
+    public static string CopyToProgramData(string sourcePath, string configName = "custom")
     {
         var dir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config");
         Directory.CreateDirectory(dir);
 
-        var destPath = Path.Combine(dir, "custom.json");
+        // Sanitize name for filesystem
+        var safeName = string.Join("_", configName.Split(Path.GetInvalidFileNameChars()));
+        var destPath = Path.Combine(dir, $"custom-{safeName}.json");
         File.Copy(sourcePath, destPath, overwrite: true);
         return destPath;
+    }
+
+    /// <summary>Returns the ProgramData path for a named custom config.</summary>
+    public static string GetProgramDataPath(string configName)
+    {
+        var dir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config");
+        var safeName = string.Join("_", configName.Split(Path.GetInvalidFileNameChars()));
+        return Path.Combine(dir, $"custom-{safeName}.json");
+    }
+
+    /// <summary>
+    /// Parses a sing-box JSON config and returns display info for the ListView.
+    /// Returns (protocols, serverAddress).
+    /// </summary>
+    public static (string protocols, string server) ParseConfigInfo(string rawJson)
+    {
+        try
+        {
+            var config = JObject.Parse(rawJson);
+            var outbounds = config["outbounds"] as JArray;
+            if (outbounds == null) return ("?", "?");
+
+            var protocols = new HashSet<string>();
+            string? server = null;
+
+            foreach (var ob in outbounds)
+            {
+                var type = ob["type"]?.ToString();
+                if (type == "direct" || type == "block" || type == "dns" || type == "selector" || type == "urltest")
+                    continue;
+
+                if (type != null)
+                    protocols.Add(type.ToUpperInvariant());
+
+                if (server == null)
+                    server = ob["server"]?.ToString();
+            }
+
+            return (
+                protocols.Count > 0 ? string.Join("+", protocols) : "?",
+                server ?? "?"
+            );
+        }
+        catch
+        {
+            return ("?", "?");
+        }
     }
 
     // ─── Private: Find proxy outbound ────────────────────────────────────────

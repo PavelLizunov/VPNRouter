@@ -69,10 +69,11 @@ public class VpnEngine : IDisposable
         // 1. Validate config source
         if (isCustomConfig)
         {
-            var customPath = Environment.ExpandEnvironmentVariables(settings.App.CustomConfig ?? "");
+            // Resolve custom config path: try multi-config list first, fallback to single path
+            var customPath = ResolveCustomConfigPath(settings);
             if (string.IsNullOrEmpty(customPath) || !File.Exists(customPath))
                 throw new InvalidOperationException(
-                    $"Custom config not found: {customPath}. Set app.custom_config in config.yaml.");
+                    $"Custom config not found: {customPath}. Add a config in the Servers tab.");
 
             var rawJson = File.ReadAllText(customPath);
             var (isValid, errors) = CustomConfigInjector.Validate(rawJson);
@@ -174,14 +175,23 @@ public class VpnEngine : IDisposable
         string configJson;
         if (isCustomConfig)
         {
-            var customPath = Environment.ExpandEnvironmentVariables(settings.App.CustomConfig!);
-            // Copy to ProgramData so the original can be safely deleted
-            var localCopy = CustomConfigInjector.CopyToProgramData(customPath);
-            _logger?.Information("[VpnEngine] Custom config copied to {Path}", localCopy);
+            var customPath = ResolveCustomConfigPath(settings);
+            // Resolve ProgramData copy path (may already exist from import)
+            var activeEntry = settings.App.CustomConfigs
+                .FirstOrDefault(c => c.Name == settings.App.ActiveCustomConfig);
+            var configName = activeEntry?.Name ?? "custom";
+            var localCopy = CustomConfigInjector.GetProgramDataPath(configName);
+
+            // If ProgramData copy doesn't exist, copy from source
+            if (!File.Exists(localCopy) && File.Exists(customPath))
+            {
+                localCopy = CustomConfigInjector.CopyToProgramData(customPath, configName);
+                _logger?.Information("[VpnEngine] Custom config copied to {Path}", localCopy);
+            }
 
             var rawJson = File.ReadAllText(localCopy);
             configJson = CustomConfigInjector.Inject(rawJson, _scanResult.ProcessNames, settings);
-            OnStatus("Custom config injected with process routing");
+            OnStatus($"Custom config '{configName}' injected with process routing");
         }
         else
         {
@@ -332,6 +342,37 @@ public class VpnEngine : IDisposable
 
         OnStatus("Stopped");
         _logger?.Information("[VpnEngine] Stopped");
+    }
+
+    // ─── Config resolution ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Resolves the custom config file path. Priority:
+    /// 1. ActiveCustomConfig name → look up in CustomConfigs list → ProgramData path
+    /// 2. Fallback to single CustomConfig path (backward compat)
+    /// </summary>
+    private static string ResolveCustomConfigPath(AppSettings settings)
+    {
+        // Try multi-config list first
+        if (settings.App.CustomConfigs?.Count > 0 && !string.IsNullOrEmpty(settings.App.ActiveCustomConfig))
+        {
+            var entry = settings.App.CustomConfigs
+                .FirstOrDefault(c => c.Name == settings.App.ActiveCustomConfig);
+            if (entry != null)
+            {
+                var path = Environment.ExpandEnvironmentVariables(entry.Path);
+                if (File.Exists(path))
+                    return path;
+
+                // Try ProgramData path
+                var pdPath = CustomConfigInjector.GetProgramDataPath(entry.Name);
+                if (File.Exists(pdPath))
+                    return pdPath;
+            }
+        }
+
+        // Fallback: single custom_config path (backward compat)
+        return Environment.ExpandEnvironmentVariables(settings.App.CustomConfig ?? "");
     }
 
     // ─── Dispose ─────────────────────────────────────────────────────────────

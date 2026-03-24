@@ -27,8 +27,10 @@ public class MainForm : Form
     private RadioButton _vlessRadio = null!;
     private RadioButton _customConfigRadio = null!;
     private Panel _customConfigPanel = null!;
-    private TextBox _customConfigPath = null!;
-    private Button _browseConfigBtn = null!;
+    private ListView _customConfigList = null!;
+    private Button _addCustomConfigBtn = null!;
+    private Button _removeCustomConfigBtn = null!;
+    private FlowLayoutPanel _customConfigBtnPanel = null!;
 
     // ── Apps tab ──
     private TreeView _profileTree = null!;
@@ -501,61 +503,62 @@ public class MainForm : Form
         _customConfigPanel = new Panel
         {
             Dock = DockStyle.Fill,
-            Visible = false,
-            Padding = new Padding(0, 8, 0, 0)
+            Visible = false
         };
 
-        var customLabel = new Label
-        {
-            Text = "sing-box JSON config file:",
-            Dock = DockStyle.Top,
-            Height = 22,
-            ForeColor = t.TextSecondary,
-            Font = t.BodyFont
-        };
-
-        var browseRow = new Panel
+        _customConfigBtnPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 34
+            Height = 36,
+            FlowDirection = FlowDirection.LeftToRight,
+            BackColor = t.Background
         };
 
-        _customConfigPath = new TextBox
+        _addCustomConfigBtn = new Button { Text = "Add Config...", Width = 100, Height = 28 };
+        Theme.ApplyPrimary(_addCustomConfigBtn);
+        _addCustomConfigBtn.Click += OnAddCustomConfig;
+
+        _removeCustomConfigBtn = new Button { Text = "Remove", Width = 72, Height = 28 };
+        Theme.ApplySecondary(_removeCustomConfigBtn);
+        _removeCustomConfigBtn.Click += OnRemoveCustomConfig;
+
+        _customConfigBtnPanel.Controls.Add(_addCustomConfigBtn);
+        _customConfigBtnPanel.Controls.Add(_removeCustomConfigBtn);
+
+        _customConfigList = new ListView
         {
             Dock = DockStyle.Fill,
-            PlaceholderText = @"C:\path\to\sing-box-config.json",
-            BackColor = t.InputBackground,
+            View = View.Details,
+            FullRowSelect = true,
+            GridLines = true,
+            MultiSelect = false,
+            BackColor = t.Surface,
             ForeColor = t.TextPrimary,
-            Font = t.BodyFont
+            Font = t.BodyFont,
+            OwnerDraw = true
         };
-
-        _browseConfigBtn = new Button
-        {
-            Text = "Browse...",
-            Dock = DockStyle.Right,
-            Width = 80,
-            Height = 28
-        };
-        Theme.ApplySecondary(_browseConfigBtn);
-        _browseConfigBtn.Click += OnBrowseConfig;
-
-        browseRow.Controls.Add(_customConfigPath);
-        browseRow.Controls.Add(_browseConfigBtn);
+        _customConfigList.DrawColumnHeader += OnDrawColumnHeader;
+        _customConfigList.DrawItem += OnDrawListItem;
+        _customConfigList.DrawSubItem += OnDrawListSubItem;
+        _customConfigList.Columns.Add("", 24);         // ★ marker
+        _customConfigList.Columns.Add("Name", 110);
+        _customConfigList.Columns.Add("Protocols", 80);
+        _customConfigList.Columns.Add("Server", 140);
+        _customConfigList.DoubleClick += OnCustomConfigDoubleClick;
 
         var customHintLabel = new Label
         {
-            Text = "Provide a complete sing-box JSON config. Process routing rules will be injected automatically.\n"
-                 + "Supports any protocol: VLESS, Hysteria2, TUIC, Shadowsocks, etc.",
-            Dock = DockStyle.Top,
-            Height = 44,
+            Dock = DockStyle.Bottom,
+            Height = 20,
+            Text = "Double-click to set active config. Any protocol supported.",
             ForeColor = t.TextMuted,
             Font = t.SmallFont,
-            Padding = new Padding(0, 6, 0, 0)
+            Padding = new Padding(4, 0, 0, 0)
         };
 
+        _customConfigPanel.Controls.Add(_customConfigList);
         _customConfigPanel.Controls.Add(customHintLabel);
-        _customConfigPanel.Controls.Add(browseRow);
-        _customConfigPanel.Controls.Add(customLabel);
+        _customConfigPanel.Controls.Add(_customConfigBtnPanel);
 
         // ── VLESS controls (existing) ──
         _serversInputLabel = new Label
@@ -1237,9 +1240,23 @@ public class MainForm : Form
         // Load config mode
         var isCustomConfig = (_settings.App.ConfigMode ?? "generated")
             .Equals("custom", StringComparison.OrdinalIgnoreCase);
-        _customConfigPath.Text = _settings.App.CustomConfig ?? "";
+
+        // Migrate single custom_config to multi-config list (backward compat)
+        if (isCustomConfig && _settings.App.CustomConfigs.Count == 0
+            && !string.IsNullOrEmpty(_settings.App.CustomConfig))
+        {
+            var name = Path.GetFileNameWithoutExtension(_settings.App.CustomConfig);
+            if (string.IsNullOrEmpty(name)) name = "custom";
+            var localPath = CustomConfigInjector.GetProgramDataPath(name);
+            if (!File.Exists(localPath) && File.Exists(_settings.App.CustomConfig))
+                localPath = CustomConfigInjector.CopyToProgramData(_settings.App.CustomConfig, name);
+            _settings.App.CustomConfigs.Add(new CustomConfigEntry { Name = name, Path = localPath });
+            _settings.App.ActiveCustomConfig = name;
+        }
+
         _vlessRadio.Checked = !isCustomConfig;
         _customConfigRadio.Checked = isCustomConfig;
+        RefreshCustomConfigList();
 
         // Toggle visibility based on config mode
         _serversInputLabel.Visible = !isCustomConfig;
@@ -1514,7 +1531,11 @@ public class MainForm : Form
 
         // Safe to read radio state here — _isLoadingUI blocks during loading
         _settings.App.ConfigMode = !_vlessRadio.Checked ? "custom" : "generated";
-        _settings.App.CustomConfig = _customConfigPath.Text.Trim();
+
+        // Set CustomConfig for backward compat (single path from active entry)
+        var activeEntry = _settings.App.CustomConfigs
+            .FirstOrDefault(c => c.Name == _settings.App.ActiveCustomConfig);
+        _settings.App.CustomConfig = activeEntry?.Path ?? "";
 
         // Update servers
         _settings.Vless.Servers = new List<VlessServerEntry>(_servers);
@@ -1566,7 +1587,7 @@ public class MainForm : Form
         SaveSettings();
     }
 
-    private void OnBrowseConfig(object? sender, EventArgs e)
+    private void OnAddCustomConfig(object? sender, EventArgs e)
     {
         using var dialog = new OpenFileDialog
         {
@@ -1575,14 +1596,95 @@ public class MainForm : Form
             FilterIndex = 1
         };
 
-        if (!string.IsNullOrEmpty(_customConfigPath.Text) && File.Exists(_customConfigPath.Text))
-            dialog.InitialDirectory = Path.GetDirectoryName(_customConfigPath.Text);
+        if (dialog.ShowDialog() != DialogResult.OK) return;
 
-        if (dialog.ShowDialog() == DialogResult.OK)
+        var filePath = dialog.FileName;
+        var name = Path.GetFileNameWithoutExtension(filePath);
+
+        // Check for duplicate name
+        if (_settings.App.CustomConfigs.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
         {
-            _customConfigPath.Text = dialog.FileName;
-            _settings.App.CustomConfig = dialog.FileName;
-            SaveSettings();
+            MessageBox.Show($"Config '{name}' already exists.", AppBranding.AppName,
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        // Validate JSON
+        var rawJson = File.ReadAllText(filePath);
+        var (isValid, errors) = CustomConfigInjector.Validate(rawJson);
+        if (!isValid)
+        {
+            MessageBox.Show($"Invalid config:\n{string.Join("\n", errors)}", AppBranding.AppName,
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+
+        // Copy to ProgramData
+        var localPath = CustomConfigInjector.CopyToProgramData(filePath, name);
+
+        // Add to list
+        _settings.App.CustomConfigs.Add(new CustomConfigEntry { Name = name, Path = localPath });
+
+        // Set as active if first config
+        if (_settings.App.CustomConfigs.Count == 1)
+            _settings.App.ActiveCustomConfig = name;
+
+        RefreshCustomConfigList();
+        SaveSettings();
+    }
+
+    private void OnRemoveCustomConfig(object? sender, EventArgs e)
+    {
+        if (_customConfigList.SelectedItems.Count == 0) return;
+
+        var selectedName = _customConfigList.SelectedItems[0].SubItems[1].Text;
+        _settings.App.CustomConfigs.RemoveAll(c => c.Name == selectedName);
+
+        // If removed active, select first remaining
+        if (_settings.App.ActiveCustomConfig == selectedName)
+            _settings.App.ActiveCustomConfig = _settings.App.CustomConfigs.FirstOrDefault()?.Name ?? "";
+
+        RefreshCustomConfigList();
+        SaveSettings();
+    }
+
+    private void OnCustomConfigDoubleClick(object? sender, EventArgs e)
+    {
+        if (_customConfigList.SelectedItems.Count == 0) return;
+
+        var selectedName = _customConfigList.SelectedItems[0].SubItems[1].Text;
+        _settings.App.ActiveCustomConfig = selectedName;
+
+        RefreshCustomConfigList();
+        SaveSettings();
+    }
+
+    private void RefreshCustomConfigList()
+    {
+        _customConfigList.Items.Clear();
+
+        foreach (var config in _settings.App.CustomConfigs)
+        {
+            var isActive = config.Name == _settings.App.ActiveCustomConfig;
+
+            // Parse protocol/server info from the ProgramData copy
+            var (protocols, server) = ("?", "?");
+            var pdPath = CustomConfigInjector.GetProgramDataPath(config.Name);
+            if (File.Exists(pdPath))
+            {
+                try
+                {
+                    var json = File.ReadAllText(pdPath);
+                    (protocols, server) = CustomConfigInjector.ParseConfigInfo(json);
+                }
+                catch { }
+            }
+
+            var item = new ListViewItem(isActive ? "\u2605" : "");  // ★ marker
+            item.SubItems.Add(config.Name);
+            item.SubItems.Add(protocols);
+            item.SubItems.Add(server);
+            _customConfigList.Items.Add(item);
         }
     }
 

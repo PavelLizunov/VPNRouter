@@ -287,21 +287,35 @@ public class HealthMonitor : IDisposable
         var isCustom = (_appSettings.App.ConfigMode ?? "generated")
             .Equals("custom", StringComparison.OrdinalIgnoreCase);
 
-        if (isCustom && !string.IsNullOrEmpty(_appSettings.App.CustomConfig))
+        if (isCustom)
         {
-            // Read from ProgramData copy (created at startup by VpnEngine)
-            var localCopy = Environment.ExpandEnvironmentVariables(
-                @"%ProgramData%\VPNRouter\config\custom.json");
-            if (File.Exists(localCopy))
+            // Try named ProgramData copy first (multi-config)
+            var configName = _appSettings.App.ActiveCustomConfig;
+            if (!string.IsNullOrEmpty(configName))
             {
-                var rawJson = File.ReadAllText(localCopy);
+                var namedPath = CustomConfigInjector.GetProgramDataPath(configName);
+                if (File.Exists(namedPath))
+                {
+                    var rawJson = File.ReadAllText(namedPath);
+                    return CustomConfigInjector.Inject(rawJson, processNames, _appSettings);
+                }
+            }
+
+            // Fallback: old single custom.json or custom_config path
+            var legacyPath = Environment.ExpandEnvironmentVariables(
+                @"%ProgramData%\VPNRouter\config\custom.json");
+            if (File.Exists(legacyPath))
+            {
+                var rawJson = File.ReadAllText(legacyPath);
                 return CustomConfigInjector.Inject(rawJson, processNames, _appSettings);
             }
 
-            // Fallback to original path
-            var customPath = Environment.ExpandEnvironmentVariables(_appSettings.App.CustomConfig);
-            var fallbackJson = File.ReadAllText(customPath);
-            return CustomConfigInjector.Inject(fallbackJson, processNames, _appSettings);
+            if (!string.IsNullOrEmpty(_appSettings.App.CustomConfig))
+            {
+                var customPath = Environment.ExpandEnvironmentVariables(_appSettings.App.CustomConfig);
+                var fallbackJson = File.ReadAllText(customPath);
+                return CustomConfigInjector.Inject(fallbackJson, processNames, _appSettings);
+            }
         }
 
         var config = ConfigGenerator.Generate(_activeProfile, processNames, _appSettings);

@@ -9,7 +9,13 @@ app:
   # Config mode: "generated" builds config from vless section below,
   # "custom" uses a user-provided sing-box JSON (any protocol: VLESS, Hysteria2, TUIC, etc.)
   config_mode: generated   # generated | custom
-  # custom_config: "C:\\path\\to\\sing-box-config.json"
+  # custom_config: "C:\\path\\to\\sing-box-config.json"  # legacy single config
+  # active_custom_config: brat-pc   # name of active config from list below
+  # custom_configs:
+  #   - name: brat-pc
+  #     path: "%ProgramData%\\VPNRouter\\config\\custom-brat-pc.json"
+  #   - name: work-server
+  #     path: "%ProgramData%\\VPNRouter\\config\\custom-work-server.json"
 
 # Profile sources — tried in order, first success wins
 profile_sources:
