@@ -289,9 +289,19 @@ public class HealthMonitor : IDisposable
 
         if (isCustom && !string.IsNullOrEmpty(_appSettings.App.CustomConfig))
         {
+            // Read from ProgramData copy (created at startup by VpnEngine)
+            var localCopy = Environment.ExpandEnvironmentVariables(
+                @"%ProgramData%\VPNRouter\config\custom.json");
+            if (File.Exists(localCopy))
+            {
+                var rawJson = File.ReadAllText(localCopy);
+                return CustomConfigInjector.Inject(rawJson, processNames, _appSettings);
+            }
+
+            // Fallback to original path
             var customPath = Environment.ExpandEnvironmentVariables(_appSettings.App.CustomConfig);
-            var rawJson = File.ReadAllText(customPath);
-            return CustomConfigInjector.Inject(rawJson, processNames, _appSettings);
+            var fallbackJson = File.ReadAllText(customPath);
+            return CustomConfigInjector.Inject(fallbackJson, processNames, _appSettings);
         }
 
         var config = ConfigGenerator.Generate(_activeProfile, processNames, _appSettings);

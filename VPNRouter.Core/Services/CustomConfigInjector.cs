@@ -38,6 +38,9 @@ public static class CustomConfigInjector
             InjectDnsRules(config, processes, isActionBased);
         }
 
+        // Clean up features that require external databases or are deprecated
+        StripUnsupportedFeatures(config);
+
         EnsureClashApi(config, settings.SingBox.ClashApi);
 
         return config.ToString(Formatting.Indented);
@@ -82,6 +85,21 @@ public static class CustomConfigInjector
         // Route section is optional — InjectRouteRules creates one if missing
 
         return (errors.Count == 0, errors);
+    }
+
+    /// <summary>
+    /// Copies a custom config file to %ProgramData%\VPNRouter\config\custom.json.
+    /// Returns the destination path. Subsequent reads use the copy, so the original
+    /// can be deleted without breaking the VPN.
+    /// </summary>
+    public static string CopyToProgramData(string sourcePath)
+    {
+        var dir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config");
+        Directory.CreateDirectory(dir);
+
+        var destPath = Path.Combine(dir, "custom.json");
+        File.Copy(sourcePath, destPath, overwrite: true);
+        return destPath;
     }
 
     // ─── Private: Find proxy outbound ────────────────────────────────────────
@@ -332,6 +350,62 @@ public static class CustomConfigInjector
         // Don't override if user already set it
         if (clashApi["external_controller"] == null)
             clashApi["external_controller"] = clashApiAddr;
+    }
+
+    // ─── Private: Strip unsupported features ───────────────────────────────
+
+    /// <summary>
+    /// Removes config features that require external databases or are deprecated:
+    /// - geosite/geoip route rules (require .db files not bundled with VPNRouter)
+    /// - geosite/geoip DNS rules (same reason)
+    /// - Legacy inbound sniff fields (removed in sing-box 1.13, moved to route actions)
+    /// - Legacy block/dns outbound types (removed in sing-box 1.13)
+    /// </summary>
+    private static void StripUnsupportedFeatures(JObject config)
+    {
+        // 1. Remove route rules that use geosite/geoip (require external databases)
+        var routeRules = config.SelectToken("route.rules") as JArray;
+        if (routeRules != null)
+        {
+            for (int i = routeRules.Count - 1; i >= 0; i--)
+            {
+                var rule = routeRules[i] as JObject;
+                if (rule == null) continue;
+
+                if (rule["geosite"] != null || rule["geoip"] != null)
+                    routeRules.RemoveAt(i);
+            }
+        }
+
+        // 2. Remove DNS rules that use geosite/geoip
+        var dnsRules = config.SelectToken("dns.rules") as JArray;
+        if (dnsRules != null)
+        {
+            for (int i = dnsRules.Count - 1; i >= 0; i--)
+            {
+                var rule = dnsRules[i] as JObject;
+                if (rule == null) continue;
+
+                if (rule["geosite"] != null || rule["geoip"] != null)
+                    dnsRules.RemoveAt(i);
+            }
+        }
+
+        // 3. Remove deprecated inbound sniff fields (moved to route actions in 1.12+)
+        var inbounds = config["inbounds"] as JArray;
+        if (inbounds != null)
+        {
+            foreach (var inbound in inbounds)
+            {
+                var obj = inbound as JObject;
+                if (obj == null) continue;
+
+                obj.Remove("sniff");
+                obj.Remove("sniff_override_destination");
+                obj.Remove("sniff_timeout");
+                obj.Remove("domain_strategy");
+            }
+        }
     }
 
     // ─── Private: Cleanup helpers ────────────────────────────────────────────

@@ -175,7 +175,11 @@ public class VpnEngine : IDisposable
         if (isCustomConfig)
         {
             var customPath = Environment.ExpandEnvironmentVariables(settings.App.CustomConfig!);
-            var rawJson = File.ReadAllText(customPath);
+            // Copy to ProgramData so the original can be safely deleted
+            var localCopy = CustomConfigInjector.CopyToProgramData(customPath);
+            _logger?.Information("[VpnEngine] Custom config copied to {Path}", localCopy);
+
+            var rawJson = File.ReadAllText(localCopy);
             configJson = CustomConfigInjector.Inject(rawJson, _scanResult.ProcessNames, settings);
             OnStatus("Custom config injected with process routing");
         }
@@ -201,22 +205,32 @@ public class VpnEngine : IDisposable
 
         ct.ThrowIfCancellationRequested();
 
-        // 6. Ensure sing-box binary exists
+        // 6. Ensure sing-box binary exists and is up-to-date
         var exePath = Environment.ExpandEnvironmentVariables(settings.SingBox.ExecutablePath);
-        if (!File.Exists(exePath))
+        var bundledPath = Path.Combine(AppContext.BaseDirectory, "sing-box.exe");
+
+        if (File.Exists(bundledPath))
         {
-            // Try to copy from app directory (bundled in ZIP)
-            var bundledPath = Path.Combine(AppContext.BaseDirectory, "sing-box.exe");
-            if (File.Exists(bundledPath))
+            bool needDeploy = !File.Exists(exePath);
+
+            if (!needDeploy)
+            {
+                // Deploy if bundled version differs (size change = different build/version)
+                var installedSize = new FileInfo(exePath).Length;
+                var bundledSize = new FileInfo(bundledPath).Length;
+                needDeploy = installedSize != bundledSize;
+            }
+
+            if (needDeploy)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(exePath)!);
-                File.Copy(bundledPath, exePath, overwrite: false);
-                _logger?.Information("[VpnEngine] Copied sing-box from bundle to {Path}", exePath);
+                File.Copy(bundledPath, exePath, overwrite: true);
+                _logger?.Information("[VpnEngine] Deployed sing-box from bundle to {Path}", exePath);
             }
-            else
-            {
-                throw new FileNotFoundException($"sing-box not found at: {exePath}");
-            }
+        }
+        else if (!File.Exists(exePath))
+        {
+            throw new FileNotFoundException($"sing-box not found at: {exePath}");
         }
 
         ct.ThrowIfCancellationRequested();
