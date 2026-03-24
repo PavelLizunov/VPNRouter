@@ -2265,9 +2265,16 @@ public class MainForm : Form
         {
             var configMode = _engine.ActiveConfigMode == "custom" ? Strings.ModeCustom : Strings.ModeVless;
             var routingMode = _engine.ActiveRoutingMode == "full" ? Strings.ModeFull : Strings.ModeSplit;
-            var serverInfo = string.IsNullOrEmpty(_engine.ActiveServerAddress) ? "" : $" \u2192 {_engine.ActiveServerAddress}";
-            var text = $"{Strings.Connected(_engine.ActiveProfileName, _engine.SingBoxPid ?? 0)}  [{configMode} | {routingMode}]{serverInfo}";
-            SetStatus(text, t.Success, t.SuccessLight);
+            var server = _engine.ActiveServerAddress;
+            // Short status: mode + server (fits in one line)
+            var shortText = string.IsNullOrEmpty(server)
+                ? $"{configMode} | {routingMode}"
+                : $"{configMode} | {routingMode} \u2192 {server}";
+            // Full tooltip with all details
+            var tooltip = Strings.Connected(_engine.ActiveProfileName, _engine.SingBoxPid ?? 0)
+                + $"  [{configMode} | {routingMode}]"
+                + (string.IsNullOrEmpty(server) ? "" : $" \u2192 {server}");
+            SetStatus(shortText, t.Success, t.SuccessLight, tooltip);
         }
         else
         {
@@ -2283,14 +2290,14 @@ public class MainForm : Form
         _startStopBtn.ForeColor = t.TextOnPrimary;
     }
 
-    private void SetStatus(string text, Color foreColor, Color bgColor)
+    private void SetStatus(string text, Color foreColor, Color bgColor, string? tooltip = null)
     {
         _statusLabel.Text = text;
         _statusLabel.ForeColor = foreColor;
         _statusDot.ForeColor = foreColor;
         _statusPanel.BackColor = bgColor;
-        _statusTooltip.SetToolTip(_statusLabel, text);
-        _statusTooltip.SetToolTip(_statusDot, text);
+        _statusTooltip.SetToolTip(_statusLabel, tooltip ?? text);
+        _statusTooltip.SetToolTip(_statusDot, tooltip ?? text);
     }
 
     /// <summary>
