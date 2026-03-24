@@ -104,6 +104,9 @@ public static class Strings
     public static string NoFlowHint => Ru
         ? "\u26a0 Все серверы без flow \u2014 добавьте сервер с xtls-rprx-vision для оптимизации TCP"
         : "\u26a0 All servers without flow \u2014 add a server with xtls-rprx-vision for TCP optimization";
+    public static string VlessHint => Ru
+        ? "Двойной клик \u2014 сделать основным сервером."
+        : "Double-click to set as primary server.";
     public static string CustomConfigHint => Ru
         ? "Двойной клик для выбора активного конфига. Любой протокол."
         : "Double-click to set active config. Any protocol supported.";

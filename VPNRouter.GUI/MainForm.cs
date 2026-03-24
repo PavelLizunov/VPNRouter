@@ -685,6 +685,7 @@ public class MainForm : Form
         _serverList.Columns.Add(Strings.ColPort, 50);
         _serverList.Columns.Add(Strings.ColSecurity, 70);
         _serverList.Resize += (_, _) => LayoutHelper.AutoSizeColumns(_serverList, new[] { 2, 3, 4, 1, 2 });
+        _serverList.DoubleClick += OnServerDoubleClick;
 
         _serverHintLabel = new Label
         {
@@ -697,9 +698,20 @@ public class MainForm : Form
             Visible = false
         };
 
-        _vlessPanel.Controls.Add(_serverList);       // Fill
-        _vlessPanel.Controls.Add(_serverHintLabel);   // Bottom
-        _vlessPanel.Controls.Add(_vlessBtnPanel);     // Top
+        var vlessHintLabel = new Label
+        {
+            Dock = DockStyle.Bottom,
+            Height = 20,
+            Text = Strings.VlessHint,
+            ForeColor = t.TextMuted,
+            Font = t.SmallFont,
+            Padding = new Padding(4, 0, 0, 0)
+        };
+
+        _vlessPanel.Controls.Add(_serverList);        // Fill
+        _vlessPanel.Controls.Add(vlessHintLabel);      // Bottom (permanent: "Double-click to set primary")
+        _vlessPanel.Controls.Add(_serverHintLabel);    // Bottom (dynamic: TCP/UDP or no-flow hint)
+        _vlessPanel.Controls.Add(_vlessBtnPanel);      // Top
 
         // Dock order: last added = top
         page.Controls.Add(_customConfigPanel);  // Fill (hidden by default)
@@ -1641,7 +1653,7 @@ public class MainForm : Form
             else
                 role = i == 0 ? Strings.RolePrimary : Strings.RoleFallback(i);
 
-            var item = new ListViewItem(role);
+            var item = new ListViewItem(role) { Tag = i }; // store server index
             item.SubItems.Add(string.IsNullOrEmpty(s.Name) ? Strings.NoName : s.Name);
             item.SubItems.Add(s.Server);
             item.SubItems.Add(s.Port.ToString());
@@ -1913,16 +1925,36 @@ public class MainForm : Form
 
     private void OnRemoveServer(object? sender, EventArgs e)
     {
-        if (_serverList.SelectedIndices.Count == 0) return;
+        if (_serverList.SelectedItems.Count == 0) return;
 
-        for (int i = _serverList.SelectedIndices.Count - 1; i >= 0; i--)
-        {
-            var idx = _serverList.SelectedIndices[i];
+        // Collect server indices from Tag (skip separator rows)
+        var indicesToRemove = _serverList.SelectedItems.Cast<ListViewItem>()
+            .Where(item => item.Tag is int)
+            .Select(item => (int)item.Tag!)
+            .OrderByDescending(idx => idx)
+            .ToList();
+
+        foreach (var idx in indicesToRemove)
             _servers.RemoveAt(idx);
-        }
 
         RefreshServerList();
         SaveSettings();
+    }
+
+    private void OnServerDoubleClick(object? sender, EventArgs e)
+    {
+        if (_serverList.SelectedItems.Count == 0) return;
+        var selected = _serverList.SelectedItems[0];
+        if (selected.Tag is not int idx || idx <= 0) return; // already primary or separator
+
+        // Move selected server to position 0 (make primary)
+        var server = _servers[idx];
+        _servers.RemoveAt(idx);
+        _servers.Insert(0, server);
+
+        RefreshServerList();
+        SaveSettings();
+        ShowApplyIfNeeded();
     }
 
     private async void OnAutostartChanged(object? sender, EventArgs e)
