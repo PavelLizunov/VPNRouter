@@ -236,7 +236,7 @@ Write-Host "[8/9] Creating install ZIP (app/ layout)..." -ForegroundColor Yellow
 if (Test-Path $InstallZipPath) { Remove-Item $InstallZipPath }
 Compress-Archive -Path "$PackageDir\*" -DestinationPath $InstallZipPath -CompressionLevel Optimal
 
-# ── Create UPDATE ZIP (app files only, no runtime, no sing-box) ──
+# ── Create UPDATE ZIP (app files + sing-box + profiles) ──
 Write-Host "[9/9] Creating update ZIP..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path $UpdateDir | Out-Null
 
@@ -250,6 +250,13 @@ foreach ($name in $fdFileNames) {
         $updateFileCount++
     }
 }
+# Include sing-box.exe (version may change between releases)
+$singBoxInDist = Join-Path $DistDir "sing-box.exe"
+if (Test-Path $singBoxInDist) {
+    Copy-Item $singBoxInDist $UpdateDir
+    $updateFileCount++
+    Write-Host "       sing-box.exe included in update" -ForegroundColor Gray
+}
 # Also include profiles and README
 $UpdateProfilesDst = Join-Path $UpdateDir "profiles"
 if (Test-Path $ProfilesSrc) {
@@ -258,7 +265,7 @@ if (Test-Path $ProfilesSrc) {
 }
 Copy-Item $ReadmePath $UpdateDir
 
-Write-Host "       Update package: $updateFileCount app files" -ForegroundColor Gray
+Write-Host "       Update package: $updateFileCount files" -ForegroundColor Gray
 
 if (Test-Path $UpdateZipPath) { Remove-Item $UpdateZipPath }
 Compress-Archive -Path "$UpdateDir\*" -DestinationPath $UpdateZipPath -CompressionLevel Optimal
