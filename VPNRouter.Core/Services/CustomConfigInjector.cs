@@ -38,9 +38,10 @@ public static class CustomConfigInjector
             InjectDnsRules(config, processes, isActionBased);
         }
 
-        // Clean up features that require external databases or are deprecated
+        // Migrate legacy features to sing-box 1.13+ format
         StripUnsupportedFeatures(config);
 
+        EnsureDefaultDomainResolver(config);
         EnsureClashApi(config, settings.SingBox.ClashApi);
 
         return config.ToString(Formatting.Indented);
@@ -329,6 +330,42 @@ public static class CustomConfigInjector
         rules.Insert(0, dnsRule);
     }
 
+    // ─── Private: Ensure required fields ────────────────────────────────────
+
+    /// <summary>
+    /// Ensures route.default_domain_resolver is set (required in sing-box 1.13+).
+    /// Uses the first DNS server with a "direct" detour, or the first server.
+    /// </summary>
+    private static void EnsureDefaultDomainResolver(JObject config)
+    {
+        var route = config["route"] as JObject;
+        if (route == null) return;
+        if (route["default_domain_resolver"] != null) return; // already set
+
+        // Find a local DNS server tag
+        var servers = config.SelectToken("dns.servers") as JArray;
+        if (servers == null || servers.Count == 0) return;
+
+        string? localTag = null;
+        foreach (var server in servers)
+        {
+            var detour = server["detour"]?.ToString();
+            var type = server["type"]?.ToString();
+            if (detour == "direct" || type == "local" || type == "udp" || type == "dhcp")
+            {
+                localTag = server["tag"]?.ToString();
+                break;
+            }
+        }
+
+        // Fallback: first server
+        if (string.IsNullOrEmpty(localTag))
+            localTag = servers[0]["tag"]?.ToString();
+
+        if (!string.IsNullOrEmpty(localTag))
+            route["default_domain_resolver"] = localTag;
+    }
+
     // ─── Private: Ensure Clash API ───────────────────────────────────────────
 
     private static void EnsureClashApi(JObject config, string clashApiAddr)
@@ -352,32 +389,63 @@ public static class CustomConfigInjector
             clashApi["external_controller"] = clashApiAddr;
     }
 
-    // ─── Private: Strip unsupported features ───────────────────────────────
+    // ─── Private: Migrate legacy config to 1.13+ ──────────────────────────
 
     /// <summary>
-    /// Removes config features that require external databases or are deprecated:
-    /// - geosite/geoip route rules (require .db files not bundled with VPNRouter)
-    /// - geosite/geoip DNS rules (same reason)
-    /// - Legacy inbound sniff fields (removed in sing-box 1.13, moved to route actions)
-    /// - Legacy block/dns outbound types (removed in sing-box 1.13)
+    /// Migrates legacy config features to sing-box 1.13+ format:
+    /// 1. Legacy DNS servers ("address": "tls://...") → type-based format (FATAL in 1.13.3)
+    /// 2. Legacy DNS rules with "outbound" field → removed (FATAL in 1.13.3)
+    /// 3. geosite/geoip rules → removed (require .db files not bundled)
+    /// 4. "block"/"dns" outbound types → removed + route rules converted to actions
+    /// 5. Legacy inbound sniff fields → removed (moved to route actions)
     /// </summary>
     private static void StripUnsupportedFeatures(JObject config)
     {
-        // 1. Remove route rules that use geosite/geoip (require external databases)
-        var routeRules = config.SelectToken("route.rules") as JArray;
-        if (routeRules != null)
+        // 1. Convert legacy DNS server format to type-based
+        var dnsServers = config.SelectToken("dns.servers") as JArray;
+        if (dnsServers != null)
         {
-            for (int i = routeRules.Count - 1; i >= 0; i--)
+            foreach (var server in dnsServers)
             {
-                var rule = routeRules[i] as JObject;
-                if (rule == null) continue;
+                var obj = server as JObject;
+                if (obj == null) continue;
 
-                if (rule["geosite"] != null || rule["geoip"] != null)
-                    routeRules.RemoveAt(i);
+                var address = obj["address"]?.ToString();
+                if (address == null || obj["type"] != null) continue; // already new format
+
+                obj.Remove("address");
+
+                // Convert "address_resolver" → "domain_resolver"
+                var addrResolver = obj["address_resolver"]?.ToString();
+                if (addrResolver != null)
+                {
+                    obj.Remove("address_resolver");
+                    obj["domain_resolver"] = addrResolver;
+                }
+
+                if (address == "local" || address == "dhcp://auto")
+                {
+                    obj["type"] = address == "local" ? "local" : "dhcp";
+                }
+                else if (address.Contains("://"))
+                {
+                    var uri = new Uri(address);
+                    obj["type"] = uri.Scheme; // tls, https, udp, tcp, quic, h3
+                    obj["server"] = uri.Host;
+                    if (uri.Port > 0 && uri.Port != 443 && uri.Port != 53)
+                        obj["server_port"] = uri.Port;
+                    if (!string.IsNullOrEmpty(uri.AbsolutePath) && uri.AbsolutePath != "/")
+                        obj["path"] = uri.AbsolutePath;
+                }
+                else
+                {
+                    obj["type"] = "udp";
+                    obj["server"] = address;
+                }
             }
         }
 
-        // 2. Remove DNS rules that use geosite/geoip
+        // 2. Remove deprecated DNS rules ("outbound" field is FATAL in 1.13.3, geosite/geoip need .db)
         var dnsRules = config.SelectToken("dns.rules") as JArray;
         if (dnsRules != null)
         {
@@ -386,12 +454,58 @@ public static class CustomConfigInjector
                 var rule = dnsRules[i] as JObject;
                 if (rule == null) continue;
 
-                if (rule["geosite"] != null || rule["geoip"] != null)
+                if (rule["geosite"] != null || rule["geoip"] != null ||
+                    rule["outbound"] != null)
                     dnsRules.RemoveAt(i);
             }
         }
 
-        // 3. Remove deprecated inbound sniff fields (moved to route actions in 1.12+)
+        // 3. Remove "block" and "dns" outbound types (removed in sing-box 1.13)
+        var outbounds = config["outbounds"] as JArray;
+        var removedTags = new HashSet<string>();
+        if (outbounds != null)
+        {
+            for (int i = outbounds.Count - 1; i >= 0; i--)
+            {
+                var type = outbounds[i]["type"]?.ToString();
+                if (type == "block" || type == "dns")
+                {
+                    removedTags.Add(outbounds[i]["tag"]?.ToString() ?? "");
+                    outbounds.RemoveAt(i);
+                }
+            }
+        }
+
+        // 4. Convert route rules that reference removed outbounds + remove geosite/geoip
+        var routeRules = config.SelectToken("route.rules") as JArray;
+        if (routeRules != null)
+        {
+            for (int i = routeRules.Count - 1; i >= 0; i--)
+            {
+                var rule = routeRules[i] as JObject;
+                if (rule == null) continue;
+
+                // Remove geosite/geoip rules (no databases)
+                if (rule["geosite"] != null || rule["geoip"] != null)
+                {
+                    routeRules.RemoveAt(i);
+                    continue;
+                }
+
+                // Convert rules pointing to removed outbounds
+                var outbound = rule["outbound"]?.ToString();
+                if (outbound != null && removedTags.Contains(outbound))
+                {
+                    rule.Remove("outbound");
+                    // "dns-out" → hijack-dns, "block" → reject
+                    rule["action"] = rule["protocol"]?.ToString() == "dns"
+                        ? "hijack-dns"
+                        : "reject";
+                }
+            }
+        }
+
+        // 5. Remove deprecated inbound sniff fields (moved to route actions in 1.12+)
         var inbounds = config["inbounds"] as JArray;
         if (inbounds != null)
         {
