@@ -43,7 +43,7 @@ public static class CustomConfigInjector
         }
 
         // Migrate legacy features to sing-box 1.13+ format
-        StripUnsupportedFeatures(config);
+        StripUnsupportedFeatures(config, settings.Tun.RouteExcludeAddress);
 
         // Align route.final with routing_mode setting
         var isSplitTunnel = !(settings.App.RoutingMode ?? "split")
@@ -478,7 +478,7 @@ public static class CustomConfigInjector
     /// 4. "block"/"dns" outbound types → removed + route rules converted to actions
     /// 5. Legacy inbound sniff fields → removed (moved to route actions)
     /// </summary>
-    private static void StripUnsupportedFeatures(JObject config)
+    private static void StripUnsupportedFeatures(JObject config, List<string>? excludeAddresses = null)
     {
         // 1. Convert legacy DNS server format to type-based
         var dnsServers = config.SelectToken("dns.servers") as JArray;
@@ -659,6 +659,20 @@ public static class CustomConfigInjector
                     // Set stack to "system" (default for Windows, avoids gVisor dependency)
                     if (obj["stack"] == null)
                         obj["stack"] = "system";
+
+                    // Inject route_exclude_address from settings (WireGuard/AmneziaWG subnets)
+                    // VpnEngine auto-detects these but they only get into settings.Tun,
+                    // not into the custom config's TUN inbound.
+                    if (excludeAddresses != null && excludeAddresses.Count > 0)
+                    {
+                        var existing = obj["route_exclude_address"] as JArray ?? new JArray();
+                        var merged = new HashSet<string>(
+                            existing.Select(t => t.ToString()),
+                            StringComparer.OrdinalIgnoreCase);
+                        foreach (var addr in excludeAddresses)
+                            merged.Add(addr);
+                        obj["route_exclude_address"] = new JArray(merged.ToArray());
+                    }
                 }
             }
         }
