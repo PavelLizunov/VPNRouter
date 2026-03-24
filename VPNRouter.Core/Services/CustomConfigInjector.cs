@@ -517,6 +517,41 @@ public static class CustomConfigInjector
             }
         }
 
+        // 1b. Optimize DNS strategy — prevent IPv6 delays
+        var dns = config["dns"] as JObject;
+        if (dns != null)
+        {
+            // Force ipv4_only — "prefer_ipv4" tries AAAA first, times out, then A (adds seconds)
+            var strategy = dns["strategy"]?.ToString();
+            if (strategy == "prefer_ipv4" || strategy == "prefer_ipv6")
+                dns["strategy"] = "ipv4_only";
+
+            // Change DNS final to local server tag (not remote) —
+            // routing ALL DNS through proxy adds 100-400ms per query.
+            // Only targeted process DNS should go through VPN (handled by injected DNS rules).
+            var finalTag = dns["final"]?.ToString();
+            if (!string.IsNullOrEmpty(finalTag))
+            {
+                // Find local DNS server tag (no detour, or type=udp/local)
+                string? localTag = null;
+                if (dnsServers != null)
+                {
+                    foreach (var s in dnsServers)
+                    {
+                        var t = s["type"]?.ToString();
+                        var d = s["detour"]?.ToString();
+                        if (string.IsNullOrEmpty(d) && (t == "udp" || t == "local" || t == "dhcp"))
+                        {
+                            localTag = s["tag"]?.ToString();
+                            break;
+                        }
+                    }
+                }
+                if (localTag != null && finalTag != localTag)
+                    dns["final"] = localTag;
+            }
+        }
+
         // 2. Remove deprecated DNS rules ("outbound" field is FATAL in 1.13.3, geosite/geoip need .db)
         var dnsRules = config.SelectToken("dns.rules") as JArray;
         if (dnsRules != null)
