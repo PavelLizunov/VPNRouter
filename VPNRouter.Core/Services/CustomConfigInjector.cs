@@ -34,7 +34,11 @@ public static class CustomConfigInjector
             var proxyTag = FindProxyOutboundTag(config);
             var isActionBased = DetectActionFormat(config);
 
-            InjectRouteRules(config, processes, proxyTag, isActionBased);
+            // Auto-detect TCP/UDP split: if selector has both VLESS and QUIC-based
+            // (TUIC/Hysteria2) outbounds, route TCP→VLESS, UDP→QUIC for optimal performance
+            var (tcpTag, udpTag) = DetectTcpUdpSplit(config, proxyTag);
+
+            InjectRouteRules(config, processes, tcpTag, udpTag, isActionBased);
             InjectDnsRules(config, processes, isActionBased);
         }
 
@@ -161,10 +165,58 @@ public static class CustomConfigInjector
         return false; // legacy format
     }
 
+    // ─── Private: TCP/UDP split detection ────────────────────────────────────
+
+    /// <summary>
+    /// Detects if TCP/UDP split is possible. If a selector/urltest outbound contains
+    /// both VLESS and QUIC-based (TUIC/Hysteria2) children, returns separate tags.
+    /// VLESS (with flow/xtls) is optimal for TCP, QUIC protocols for UDP.
+    /// Returns (tcpTag, udpTag) — both equal proxyTag if no split detected.
+    /// </summary>
+    private static (string tcpTag, string udpTag) DetectTcpUdpSplit(JObject config, string proxyTag)
+    {
+        var outbounds = config["outbounds"] as JArray;
+        if (outbounds == null) return (proxyTag, proxyTag);
+
+        // Find the proxy outbound (selector/urltest)
+        var proxyOutbound = outbounds.FirstOrDefault(o => o["tag"]?.ToString() == proxyTag);
+        if (proxyOutbound == null) return (proxyTag, proxyTag);
+
+        var proxyType = proxyOutbound["type"]?.ToString();
+        if (proxyType != "selector" && proxyType != "urltest") return (proxyTag, proxyTag);
+
+        var childTags = proxyOutbound["outbounds"] as JArray;
+        if (childTags == null || childTags.Count < 2) return (proxyTag, proxyTag);
+
+        // Categorize children by protocol
+        string? vlessTag = null;
+        string? quicTag = null; // tuic, hysteria, hysteria2
+
+        foreach (var childTagToken in childTags)
+        {
+            var childTag = childTagToken.ToString();
+            var child = outbounds.FirstOrDefault(o => o["tag"]?.ToString() == childTag);
+            if (child == null) continue;
+
+            var childType = child["type"]?.ToString();
+            if (childType == "vless" && vlessTag == null)
+                vlessTag = childTag;
+            else if ((childType == "tuic" || childType == "hysteria2" || childType == "hysteria")
+                     && quicTag == null)
+                quicTag = childTag;
+        }
+
+        // Both found → split TCP/UDP
+        if (vlessTag != null && quicTag != null)
+            return (vlessTag, quicTag);
+
+        return (proxyTag, proxyTag);
+    }
+
     // ─── Private: Inject route rules ─────────────────────────────────────────
 
     private static void InjectRouteRules(JObject config, List<string> processes,
-        string proxyTag, bool isActionBased)
+        string tcpTag, string? udpTag, bool isActionBased)
     {
         var route = config["route"] as JObject;
         if (route == null)
@@ -183,32 +235,47 @@ public static class CustomConfigInjector
         // Remove any previously injected process_name rules (idempotent re-injection)
         RemoveInjectedProcessRules(rules);
 
-        // Build the process route rule
         var processArray = new JArray(processes.Cast<object>().ToArray());
+        var insertIndex = FindRouteInsertIndex(rules, isActionBased);
+        bool hasSplit = udpTag != null && udpTag != tcpTag;
 
-        JObject processRule;
-        if (isActionBased)
+        if (hasSplit)
         {
-            processRule = new JObject
+            // TCP/UDP split: UDP → QUIC protocol (tuic/hysteria2), TCP → VLESS
+            var udpRule = new JObject
             {
-                ["process_name"] = processArray,
-                ["action"] = "route",
-                ["outbound"] = proxyTag
+                ["process_name"] = processArray.DeepClone(),
+                ["network"] = "udp",
+                ["outbound"] = udpTag
             };
+            var tcpRule = new JObject
+            {
+                ["process_name"] = processArray.DeepClone(),
+                ["network"] = "tcp",
+                ["outbound"] = tcpTag
+            };
+            if (isActionBased)
+            {
+                udpRule["action"] = "route";
+                tcpRule["action"] = "route";
+            }
+            // UDP first (higher priority for voice/video), then TCP
+            rules.Insert(insertIndex, tcpRule);
+            rules.Insert(insertIndex, udpRule);
         }
         else
         {
-            processRule = new JObject
+            // Single outbound — all traffic through proxy
+            var processRule = new JObject
             {
                 ["process_name"] = processArray,
-                ["outbound"] = proxyTag
+                ["outbound"] = tcpTag
             };
-        }
+            if (isActionBased)
+                processRule["action"] = "route";
 
-        // Insert after system rules (sniff, hijack-dns, ip_is_private) but before
-        // geo rules and catch-all. This ensures process rules have correct priority.
-        var insertIndex = FindRouteInsertIndex(rules, isActionBased);
-        rules.Insert(insertIndex, processRule);
+            rules.Insert(insertIndex, processRule);
+        }
     }
 
     /// <summary>
