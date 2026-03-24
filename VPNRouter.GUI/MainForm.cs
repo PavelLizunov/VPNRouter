@@ -2222,7 +2222,9 @@ public class MainForm : Form
         }
         else if (running)
         {
-            _statusLabel.Text = Strings.Connected(_engine.ActiveProfileName, _engine.SingBoxPid ?? 0);
+            var configMode = _engine.ActiveConfigMode == "custom" ? Strings.ModeCustom : Strings.ModeVless;
+            var routingMode = _engine.ActiveRoutingMode == "full" ? Strings.ModeFull : Strings.ModeSplit;
+            _statusLabel.Text = $"{Strings.Connected(_engine.ActiveProfileName, _engine.SingBoxPid ?? 0)}  [{configMode} | {routingMode}]";
             _statusLabel.ForeColor = t.Success;
             _statusDot.ForeColor = t.Success;
             _statusPanel.BackColor = t.SuccessLight;

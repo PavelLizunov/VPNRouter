@@ -31,6 +31,12 @@ public class VpnEngine : IDisposable
     public int? SingBoxPid => _singBox?.Pid;
     public List<string> MonitoredProcesses => _scanResult?.ProcessNames ?? new();
 
+    /// <summary>"custom" or "generated" — set during StartAsync.</summary>
+    public string ActiveConfigMode { get; private set; } = "generated";
+
+    /// <summary>"split" or "full" — set during StartAsync.</summary>
+    public string ActiveRoutingMode { get; private set; } = "split";
+
     // ─── Events for UI ───────────────────────────────────────────────────────
 
     /// <summary>Fired when engine status changes (e.g. "Loading profiles...", "sing-box started")</summary>
@@ -65,6 +71,9 @@ public class VpnEngine : IDisposable
 
         var isCustomConfig = (settings.App.ConfigMode ?? "generated")
             .Equals("custom", StringComparison.OrdinalIgnoreCase);
+        ActiveConfigMode = isCustomConfig ? "custom" : "generated";
+        ActiveRoutingMode = (settings.App.RoutingMode ?? "split")
+            .Equals("full", StringComparison.OrdinalIgnoreCase) ? "full" : "split";
 
         // 1. Validate config source
         if (isCustomConfig)

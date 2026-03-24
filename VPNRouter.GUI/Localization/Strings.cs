@@ -169,6 +169,12 @@ public static class Strings
     public static string RemovingOldService => Ru ? "Удаление старой службы..." : "Removing old service...";
     public static string ApplyingUpdate => Ru ? "Применение обновления..." : "Applying update...";
 
+    // ── Mode labels ──────────────────────────────────────────────────────────
+    public static string ModeCustom => "Custom";
+    public static string ModeVless => "VLESS";
+    public static string ModeSplit => "Split";
+    public static string ModeFull => "Full";
+
     // ── Tray ────────────────────────────────────────────────────────────────
     public static string TrayStart => Ru ? "\u25b6 Запустить VPN" : "\u25b6 Start VPN";
     public static string TrayStop => Ru ? "\u2b1b Остановить VPN" : "\u2b1b Stop VPN";
