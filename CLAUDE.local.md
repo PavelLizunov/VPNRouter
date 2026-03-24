@@ -19,7 +19,10 @@ git push origin main && git push github main
 3. Остановить VPNRouter (DLL заблокированы)
 4. `powershell -ExecutionPolicy Bypass -File build.ps1 -Version "X.Y.Z"`
 5. Коммит + push в оба remote
-6. GitHub Release: `gh release create vX.Y.Z VPNRouter-install-vX.Y.Z.zip VPNRouter-update-vX.Y.Z.zip --title "vX.Y.Z — Description" --notes "..."`
+6. GitHub Release: **ВСЕГДА с `--prerelease`** пока пользователь явно не скажет "стабильный релиз":
+   ```bash
+   gh release create vX.Y.Z VPNRouter-install-vX.Y.Z.zip VPNRouter-update-vX.Y.Z.zip --prerelease --title "vX.Y.Z — Description" --notes "..."
+   ```
 
 ## Forgejo Access
 
