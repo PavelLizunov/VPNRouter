@@ -410,6 +410,11 @@ public static class CustomConfigInjector
                 var obj = server as JObject;
                 if (obj == null) continue;
 
+                // Remove "detour":"direct" — sing-box 1.13 FATAL: "detour to empty direct makes no sense"
+                // Local DNS servers go direct by default, explicit detour is redundant and breaks 1.13.
+                if (obj["detour"]?.ToString() == "direct")
+                    obj.Remove("detour");
+
                 var address = obj["address"]?.ToString();
                 if (address == null || obj["type"] != null) continue; // already new format
 
