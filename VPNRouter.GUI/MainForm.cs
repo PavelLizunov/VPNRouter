@@ -24,7 +24,7 @@ public class MainForm : Form
     private Label _serverHintLabel = null!;
 
     // ── Custom config mode ──
-    private Panel _configModePanel = null!;
+    private FlowLayoutPanel _configModePanel = null!;
     private RadioButton _vlessRadio = null!;
     private RadioButton _customConfigRadio = null!;
     private Panel _customConfigPanel = null!;
@@ -72,13 +72,16 @@ public class MainForm : Form
     private TabPage _serversPage = null!;
     private TabPage _appsPage = null!;
     private Panel _actionPanel = null!;
-    private Panel _routingPanel = null!;
+    private FlowLayoutPanel _routingPanel = null!;
     private Label _serversInputLabel = null!;
     private FlowLayoutPanel _serversBtnPanel = null!;
     private Label _appsLabel = null!;
     private Panel _customPanel = null!;
     private Label _customLabel = null!;
     private FlowLayoutPanel _customInputRow = null!;
+
+    // ── Tooltips ──
+    private readonly ToolTip _statusTooltip = new();
 
     // ── State ──
     private AppSettings _settings = null!;
@@ -127,11 +130,12 @@ public class MainForm : Form
     {
         var t = Theme.Current;
 
+        AutoScaleMode = AutoScaleMode.Dpi;
         Text = AppBranding.WindowTitle;
         Size = new Size(540, 680);
         MinimumSize = new Size(480, 560);
-        FormBorderStyle = FormBorderStyle.FixedSingle;
-        MaximizeBox = false;
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MaximizeBox = true;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = t.Background;
@@ -183,8 +187,10 @@ public class MainForm : Form
             Text = Strings.NotConnected,
             Font = t.BodyFont,
             ForeColor = t.TextMuted,
-            AutoSize = true,
-            Location = new Point(32, 8)
+            AutoSize = false,
+            AutoEllipsis = true,
+            Location = new Point(32, 8),
+            Height = 16
         };
 
         _statusPanel.Paint += (s, e) =>
@@ -195,6 +201,12 @@ public class MainForm : Form
 
         _statusPanel.Controls.Add(_statusDot);
         _statusPanel.Controls.Add(_statusLabel);
+        // Anchor status label to fill available width
+        _statusLabel.Width = Math.Max(100, _statusPanel.ClientSize.Width - 32 - 14);
+        _statusPanel.Resize += (_, _) =>
+        {
+            _statusLabel.Width = Math.Max(100, _statusPanel.ClientSize.Width - 32 - 14);
+        };
 
         // ── Action panel (Start/Stop + Apply + autostart) ──
         _actionPanel = new Panel
@@ -279,6 +291,7 @@ public class MainForm : Form
         _actionPanel.Controls.Add(_autostartCheck);
         _actionPanel.Controls.Add(_restartServiceBtn);
         _actionPanel.Controls.Add(_reinstallServiceBtn);
+        _actionPanel.Resize += (_, _) => LayoutActionButtons();
 
         // ── Update notification panel ──
         _updatePanel = new Panel
@@ -295,15 +308,17 @@ public class MainForm : Form
             Text = "",
             Font = t.BodyFont,
             ForeColor = t.UpdatePanelText,
-            AutoSize = true,
-            Location = new Point(14, 11)
+            AutoSize = false,
+            AutoEllipsis = true,
+            Location = new Point(14, 11),
+            Height = 18
         };
 
         _updateBtn = new Button
         {
             Text = Strings.Update,
             Size = new Size(80, 28),
-            Location = new Point(430, 6),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
             Font = t.ButtonFont,
             Cursor = Cursors.Hand,
             FlatStyle = FlatStyle.Flat,
@@ -316,7 +331,7 @@ public class MainForm : Form
         _updateProgress = new ProgressBar
         {
             Size = new Size(80, 28),
-            Location = new Point(430, 6),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
             Style = ProgressBarStyle.Continuous,
             Visible = false
         };
@@ -324,6 +339,17 @@ public class MainForm : Form
         _updatePanel.Controls.Add(_updateLabel);
         _updatePanel.Controls.Add(_updateBtn);
         _updatePanel.Controls.Add(_updateProgress);
+
+        // Layout update panel controls dynamically
+        void LayoutUpdatePanel()
+        {
+            int btnX = _updatePanel.ClientSize.Width - 80 - 14;
+            _updateBtn.Location = new Point(btnX, 6);
+            _updateProgress.Location = new Point(btnX, 6);
+            _updateLabel.Width = Math.Max(50, btnX - 28);
+        }
+        LayoutUpdatePanel();
+        _updatePanel.Resize += (_, _) => LayoutUpdatePanel();
 
         _updatePanel.Paint += (s, e) =>
         {
@@ -473,6 +499,7 @@ public class MainForm : Form
         _headerPanel.Controls.Add(_checkUpdateLink);
 
         RepositionHeaderLinks();
+        _headerPanel.Resize += (_, _) => RepositionHeaderLinks();
 
         // Bottom border
         _headerPanel.Paint += (s, e) =>
@@ -483,33 +510,43 @@ public class MainForm : Form
     }
 
     /// <summary>
-    /// Positions header links right-to-left from the right edge so they don't overlap
-    /// regardless of language (Russian strings are longer than English).
+    /// Positions header links right-to-left from the right edge using measured text widths.
+    /// Called on init, resize, language change, and theme change.
     /// </summary>
     private void RepositionHeaderLinks()
     {
         const int rightMargin = 14;
         const int gap = 10;
-        int rightEdge = _headerPanel.Width - rightMargin;
+        int rightEdge = _headerPanel.Width > 0 ? _headerPanel.Width - rightMargin : ClientSize.Width - rightMargin;
+
+        // Measure actual text widths (not PreferredWidth which may not be ready)
+        int langW = TextRenderer.MeasureText(_langToggle.Text, _langToggle.Font).Width + 4;
+        int themeW = TextRenderer.MeasureText(_themeToggle.Text, _themeToggle.Font).Width + 4;
+        int checkW = TextRenderer.MeasureText(_checkUpdateLink.Text, _checkUpdateLink.Font).Width + 4;
+        int channelW = TextRenderer.MeasureText(_channelToggle.Text, _channelToggle.Font).Width + 4;
 
         // Row 3 (y=46): langToggle | themeToggle | checkUpdateLink — right to left
-        _langToggle.Location = new Point(rightEdge - _langToggle.PreferredWidth, 46);
-        _themeToggle.Location = new Point(_langToggle.Left - gap - _themeToggle.PreferredWidth, 46);
-        _checkUpdateLink.Location = new Point(_themeToggle.Left - gap - _checkUpdateLink.PreferredWidth, 46);
+        var row3 = LayoutHelper.CalculateRightToLeftPositions(rightEdge, gap, new[] { langW, themeW, checkW });
+        _langToggle.Location = new Point(row3[0], 46);
+        _themeToggle.Location = new Point(row3[1], 46);
+        _checkUpdateLink.Location = new Point(row3[2], 46);
 
         // Row 2 (y=30): channelToggle — right-aligned
-        _channelToggle.Location = new Point(rightEdge - _channelToggle.PreferredWidth, 30);
+        var row2 = LayoutHelper.CalculateRightToLeftPositions(rightEdge, gap, new[] { channelW });
+        _channelToggle.Location = new Point(row2[0], 30);
     }
 
     private void BuildServersTab(TabPage page)
     {
         var t = Theme.Current;
 
-        // ── Config mode selector ──
-        _configModePanel = new Panel
+        // ── Config mode selector (FlowLayout — auto-positions for any language) ──
+        _configModePanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
             Height = 36,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
             BackColor = t.Background,
             Padding = new Padding(0, 4, 0, 4)
         };
@@ -521,7 +558,7 @@ public class MainForm : Form
             ForeColor = t.TextPrimary,
             Checked = true,
             AutoSize = true,
-            Location = new Point(0, 6)
+            Margin = new Padding(0, 2, 10, 0)
         };
         _vlessRadio.CheckedChanged += OnConfigModeChanged;
 
@@ -531,7 +568,7 @@ public class MainForm : Form
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
             AutoSize = true,
-            Location = new Point(150, 6)
+            Margin = new Padding(0, 2, 0, 0)
         };
 
         _configModePanel.Controls.Add(_vlessRadio);
@@ -583,6 +620,7 @@ public class MainForm : Form
         _customConfigList.Columns.Add(Strings.ColProtocols, 80);
         _customConfigList.Columns.Add(Strings.ColServer, 140);
         _customConfigList.DoubleClick += OnCustomConfigDoubleClick;
+        _customConfigList.Resize += (_, _) => LayoutHelper.AutoSizeColumns(_customConfigList, new[] { 1, 4, 3, 5 });
 
         var customHintLabel = new Label
         {
@@ -648,6 +686,7 @@ public class MainForm : Form
         _serverList.Columns.Add(Strings.ColServer, 160);
         _serverList.Columns.Add(Strings.ColPort, 50);
         _serverList.Columns.Add(Strings.ColSecurity, 70);
+        _serverList.Resize += (_, _) => LayoutHelper.AutoSizeColumns(_serverList, new[] { 2, 3, 4, 1, 2 });
 
         _serversBtnPanel = new FlowLayoutPanel
         {
@@ -704,11 +743,13 @@ public class MainForm : Form
     {
         var t = Theme.Current;
 
-        // ── Routing mode selector ──
-        _routingPanel = new Panel
+        // ── Routing mode selector (FlowLayout — auto-positions for any language) ──
+        _routingPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
             Height = 36,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
             BackColor = t.Background,
             Padding = new Padding(0, 4, 0, 4)
         };
@@ -720,7 +761,7 @@ public class MainForm : Form
             ForeColor = t.TextPrimary,
             Checked = true,
             AutoSize = true,
-            Location = new Point(0, 6)
+            Margin = new Padding(0, 2, 10, 0)
         };
 
         _fullRadio = new RadioButton
@@ -729,7 +770,7 @@ public class MainForm : Form
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
             AutoSize = true,
-            Location = new Point(260, 6)
+            Margin = new Padding(0, 2, 0, 0)
         };
 
         _splitRadio.CheckedChanged += (_, __) =>
@@ -826,6 +867,11 @@ public class MainForm : Form
         _customInputRow.Controls.Add(_customAppInput);
         _customInputRow.Controls.Add(_addCustomBtn);
         _customInputRow.Controls.Add(_removeCustomBtn);
+        _customInputRow.Resize += (_, _) =>
+        {
+            int btnsWidth = _addCustomBtn.Width + _removeCustomBtn.Width + 20;
+            _customAppInput.Width = Math.Max(80, _customInputRow.ClientSize.Width - btnsWidth);
+        };
 
         _customPanel.Controls.Add(_customInputRow);
         _customPanel.Controls.Add(_customLabel);
@@ -2199,43 +2245,33 @@ public class MainForm : Form
             _startStopBtn.Text = Strings.StopVPN;
             _startStopBtn.BackColor = t.Danger;
             _startStopBtn.ForeColor = t.TextOnPrimary;
-            // Resize Start/Stop when Apply is visible
-            _startStopBtn.Size = new Size(330, 36);
         }
         else
         {
             ApplyStartStyle();
             _applyBtn.Visible = false;
-            // Full width when Apply is hidden
-            _startStopBtn.Size = new Size(498, 36);
         }
+
+        LayoutActionButtons();
 
         _restartServiceBtn.Visible = _tray.RunningAsService;
         _reinstallServiceBtn.Visible = _tray.RunningAsService || ServiceInstaller.IsInstalled();
 
         if (_tray.RunningAsService)
         {
-            _statusLabel.Text = Strings.ConnectedService;
-            _statusLabel.ForeColor = t.Success;
-            _statusDot.ForeColor = t.Success;
-            _statusPanel.BackColor = t.SuccessLight;
+            SetStatus(Strings.ConnectedService, t.Success, t.SuccessLight);
         }
         else if (running)
         {
             var configMode = _engine.ActiveConfigMode == "custom" ? Strings.ModeCustom : Strings.ModeVless;
             var routingMode = _engine.ActiveRoutingMode == "full" ? Strings.ModeFull : Strings.ModeSplit;
             var serverInfo = string.IsNullOrEmpty(_engine.ActiveServerAddress) ? "" : $" \u2192 {_engine.ActiveServerAddress}";
-            _statusLabel.Text = $"{Strings.Connected(_engine.ActiveProfileName, _engine.SingBoxPid ?? 0)}  [{configMode} | {routingMode}]{serverInfo}";
-            _statusLabel.ForeColor = t.Success;
-            _statusDot.ForeColor = t.Success;
-            _statusPanel.BackColor = t.SuccessLight;
+            var text = $"{Strings.Connected(_engine.ActiveProfileName, _engine.SingBoxPid ?? 0)}  [{configMode} | {routingMode}]{serverInfo}";
+            SetStatus(text, t.Success, t.SuccessLight);
         }
         else
         {
-            _statusLabel.Text = Strings.NotConnected;
-            _statusLabel.ForeColor = t.TextMuted;
-            _statusDot.ForeColor = t.TextMuted;
-            _statusPanel.BackColor = t.Background;
+            SetStatus(Strings.NotConnected, t.TextMuted, t.Background);
         }
     }
 
@@ -2245,6 +2281,59 @@ public class MainForm : Form
         _startStopBtn.Text = Strings.StartVPN;
         _startStopBtn.BackColor = t.Primary;
         _startStopBtn.ForeColor = t.TextOnPrimary;
+    }
+
+    private void SetStatus(string text, Color foreColor, Color bgColor)
+    {
+        _statusLabel.Text = text;
+        _statusLabel.ForeColor = foreColor;
+        _statusDot.ForeColor = foreColor;
+        _statusPanel.BackColor = bgColor;
+        _statusTooltip.SetToolTip(_statusLabel, text);
+        _statusTooltip.SetToolTip(_statusDot, text);
+    }
+
+    /// <summary>
+    /// Dynamically position action panel buttons based on panel width and text sizes.
+    /// </summary>
+    private void LayoutActionButtons()
+    {
+        const int margin = 14;
+        const int gap = 6;
+
+        int applyTextW = _applyBtn.Visible
+            ? TextRenderer.MeasureText(_applyBtn.Text, _applyBtn.Font).Width
+            : 0;
+
+        var (startW, applyX, applyW) = LayoutHelper.CalculateActionLayout(
+            _actionPanel.ClientSize.Width, margin, gap, 120, applyTextW, _applyBtn.Visible);
+
+        _startStopBtn.Size = new Size(startW, 36);
+        _startStopBtn.Location = new Point(margin, 4);
+
+        if (_applyBtn.Visible)
+        {
+            _applyBtn.Size = new Size(applyW, 36);
+            _applyBtn.Location = new Point(applyX, 4);
+        }
+
+        // Row 2: service buttons flow after autostart checkbox
+        _autostartCheck.Location = new Point(margin, 50);
+        int x = _autostartCheck.Right + 10;
+
+        if (_restartServiceBtn.Visible)
+        {
+            int w = TextRenderer.MeasureText(_restartServiceBtn.Text, _restartServiceBtn.Font).Width + 20;
+            _restartServiceBtn.Size = new Size(Math.Max(100, w), 24);
+            _restartServiceBtn.Location = new Point(x, 50);
+            x = _restartServiceBtn.Right + 6;
+        }
+        if (_reinstallServiceBtn.Visible)
+        {
+            int w = TextRenderer.MeasureText(_reinstallServiceBtn.Text, _reinstallServiceBtn.Font).Width + 20;
+            _reinstallServiceBtn.Size = new Size(Math.Max(100, w), 24);
+            _reinstallServiceBtn.Location = new Point(x, 50);
+        }
     }
 
     private void OnEngineStatus(string msg)

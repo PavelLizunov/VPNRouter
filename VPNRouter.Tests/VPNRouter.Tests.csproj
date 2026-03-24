@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
@@ -22,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VPNRouter.Core\VPNRouter.Core.csproj" />
+    <ProjectReference Include="..\VPNRouter.GUI\VPNRouter.GUI.csproj" />
   </ItemGroup>
 
 </Project>
