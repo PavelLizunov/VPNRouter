@@ -37,6 +37,9 @@ public class VpnEngine : IDisposable
     /// <summary>"split" or "full" — set during StartAsync.</summary>
     public string ActiveRoutingMode { get; private set; } = "split";
 
+    /// <summary>IP/host of the active server (for status display).</summary>
+    public string ActiveServerAddress { get; private set; } = string.Empty;
+
     // ─── Events for UI ───────────────────────────────────────────────────────
 
     /// <summary>Fired when engine status changes (e.g. "Loading profiles...", "sing-box started")</summary>
@@ -89,12 +92,18 @@ public class VpnEngine : IDisposable
             if (!isValid)
                 throw new InvalidOperationException(
                     $"Custom config validation failed: {string.Join("; ", errors)}");
+
+            // Extract server address for status display
+            try { var (_, srv) = CustomConfigInjector.ParseConfigInfo(rawJson); ActiveServerAddress = srv; }
+            catch { ActiveServerAddress = ""; }
         }
         else
         {
             var servers = settings.Vless.GetEffectiveServers();
             if (servers.Count == 0 || servers.Any(s => string.IsNullOrWhiteSpace(s.Server) || s.Server == "your.server.com"))
                 throw new InvalidOperationException("VLESS server not configured.");
+
+            ActiveServerAddress = servers[0].Server;
         }
 
         ct.ThrowIfCancellationRequested();

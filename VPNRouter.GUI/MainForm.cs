@@ -2224,7 +2224,8 @@ public class MainForm : Form
         {
             var configMode = _engine.ActiveConfigMode == "custom" ? Strings.ModeCustom : Strings.ModeVless;
             var routingMode = _engine.ActiveRoutingMode == "full" ? Strings.ModeFull : Strings.ModeSplit;
-            _statusLabel.Text = $"{Strings.Connected(_engine.ActiveProfileName, _engine.SingBoxPid ?? 0)}  [{configMode} | {routingMode}]";
+            var serverInfo = string.IsNullOrEmpty(_engine.ActiveServerAddress) ? "" : $" \u2192 {_engine.ActiveServerAddress}";
+            _statusLabel.Text = $"{Strings.Connected(_engine.ActiveProfileName, _engine.SingBoxPid ?? 0)}  [{configMode} | {routingMode}]{serverInfo}";
             _statusLabel.ForeColor = t.Success;
             _statusDot.ForeColor = t.Success;
             _statusPanel.BackColor = t.SuccessLight;
