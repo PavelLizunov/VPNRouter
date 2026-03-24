@@ -1541,9 +1541,10 @@ public class MainForm : Form
     private void OnConfigModeChanged(object? sender, EventArgs e)
     {
         if (_isLoadingUI) return;
-        if (!_vlessRadio.Checked && !_customConfigRadio.Checked) return;
 
-        var isCustom = _customConfigRadio.Checked;
+        // Use _vlessRadio state directly — it's already updated when its CheckedChanged fires.
+        // _customConfigRadio.Checked may NOT yet be updated at this point (WinForms timing).
+        var isCustom = !_vlessRadio.Checked;
 
         // Toggle VLESS controls
         _serversInputLabel.Visible = !isCustom;
