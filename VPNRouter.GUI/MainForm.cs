@@ -1,5 +1,6 @@
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.GUI.Localization;
 using VPNRouter.Service;
 
 namespace VPNRouter.GUI;
@@ -64,6 +65,7 @@ public class MainForm : Form
     private Label _titleLabel = null!;
     private Label _subtitleLabel = null!;
     private LinkLabel _themeToggle = null!;
+    private LinkLabel _langToggle = null!;
     private LinkLabel _channelToggle = null!;
     private LinkLabel _checkUpdateLink = null!;
     private TabControl _tabs = null!;
@@ -93,6 +95,7 @@ public class MainForm : Form
         var isDark = (_settings.App.Theme ?? "light")
             .Equals("dark", StringComparison.OrdinalIgnoreCase);
         Theme.SetTheme(isDark);
+        Strings.Lang = _settings.App.Language ?? "en";
 
         InitializeComponent();
         LoadSettingsIntoUI();
@@ -149,11 +152,11 @@ public class MainForm : Form
         _tabs.DrawItem += OnDrawTab;
         _tabs.Paint += OnTabPaint;
 
-        _serversPage = new TabPage("Servers") { BackColor = t.Background, Padding = new Padding(10) };
+        _serversPage = new TabPage(Strings.TabServers) { BackColor = t.Background, Padding = new Padding(10) };
         BuildServersTab(_serversPage);
         _tabs.TabPages.Add(_serversPage);
 
-        _appsPage = new TabPage("Applications") { BackColor = t.Background, Padding = new Padding(10) };
+        _appsPage = new TabPage(Strings.TabApps) { BackColor = t.Background, Padding = new Padding(10) };
         BuildAppsTab(_appsPage);
         _tabs.TabPages.Add(_appsPage);
 
@@ -177,7 +180,7 @@ public class MainForm : Form
 
         _statusLabel = new Label
         {
-            Text = "Not connected",
+            Text = Strings.NotConnected,
             Font = t.BodyFont,
             ForeColor = t.TextMuted,
             AutoSize = true,
@@ -204,7 +207,7 @@ public class MainForm : Form
 
         _startStopBtn = new Button
         {
-            Text = "\u25b6  Start VPN",
+            Text = Strings.StartVPN,
             Size = new Size(330, 36),
             Location = new Point(14, 4),
             Font = t.StartStopFont,
@@ -217,7 +220,7 @@ public class MainForm : Form
 
         _applyBtn = new Button
         {
-            Text = "\u21bb  Apply",
+            Text = Strings.Apply,
             Size = new Size(155, 36),
             Location = new Point(350, 4),
             Font = t.StartStopFont,
@@ -233,7 +236,7 @@ public class MainForm : Form
 
         _autostartCheck = new CheckBox
         {
-            Text = "Autostart with Windows",
+            Text = Strings.AutostartWindows,
             Font = t.SmallFont,
             ForeColor = t.TextSecondary,
             Checked = ServiceInstaller.IsInstalled(),
@@ -245,7 +248,7 @@ public class MainForm : Form
 
         _restartServiceBtn = new Button
         {
-            Text = "\u21bb  Restart Service",
+            Text = Strings.RestartService,
             Size = new Size(130, 24),
             Location = new Point(200, 50),
             Font = t.SmallFont,
@@ -259,7 +262,7 @@ public class MainForm : Form
 
         _reinstallServiceBtn = new Button
         {
-            Text = "\u21bb  Reinstall Service",
+            Text = Strings.ReinstallService,
             Size = new Size(140, 24),
             Location = new Point(340, 50),
             Font = t.SmallFont,
@@ -298,7 +301,7 @@ public class MainForm : Form
 
         _updateBtn = new Button
         {
-            Text = "Update",
+            Text = Strings.Update,
             Size = new Size(80, 28),
             Location = new Point(430, 6),
             Font = t.ButtonFont,
@@ -383,10 +386,10 @@ public class MainForm : Form
 
         _checkUpdateLink = new LinkLabel
         {
-            Text = "Check for updates",
+            Text = Strings.CheckForUpdates,
             Font = t.SmallFont,
             AutoSize = true,
-            Location = new Point(340, 46),
+            Location = new Point(300, 46),
             LinkColor = t.TextMuted,
             ActiveLinkColor = t.Primary,
             VisitedLinkColor = t.TextMuted,
@@ -395,10 +398,10 @@ public class MainForm : Form
 
         _themeToggle = new LinkLabel
         {
-            Text = Theme.IsDark ? "\u25cb Light" : "\u25cf Dark",
+            Text = Theme.IsDark ? Strings.ThemeLight : Strings.ThemeDark,
             Font = t.SmallFont,
             AutoSize = true,
-            Location = new Point(468, 46),
+            Location = new Point(428, 46),
             LinkColor = t.TextMuted,
             ActiveLinkColor = t.Primary,
             VisitedLinkColor = t.TextMuted,
@@ -406,13 +409,26 @@ public class MainForm : Form
         };
         _themeToggle.Click += OnThemeToggle;
 
+        _langToggle = new LinkLabel
+        {
+            Text = Strings.Lang.Equals("ru", StringComparison.OrdinalIgnoreCase) ? "ENG" : "RUS",
+            Font = t.SmallFont,
+            AutoSize = true,
+            Location = new Point(488, 46),
+            LinkColor = t.TextMuted,
+            ActiveLinkColor = t.Primary,
+            VisitedLinkColor = t.TextMuted,
+            BackColor = Color.Transparent
+        };
+        _langToggle.Click += OnLangToggle;
+
         var isExp = _settings.Update.IsExperimental;
         _channelToggle = new LinkLabel
         {
-            Text = isExp ? "\u26a0 Experimental" : "\u2714 Stable",
+            Text = isExp ? Strings.ChannelExp : Strings.ChannelStable,
             Font = t.SmallFont,
             AutoSize = true,
-            Location = new Point(340, 30),
+            Location = new Point(300, 30),
             LinkColor = isExp ? t.AmberButton : t.TextMuted,
             ActiveLinkColor = t.Primary,
             VisitedLinkColor = isExp ? t.AmberButton : t.TextMuted,
@@ -421,17 +437,17 @@ public class MainForm : Form
         _channelToggle.Click += OnChannelToggle;
         _checkUpdateLink.Click += async (_, __) =>
         {
-            _checkUpdateLink.Text = "Checking...";
+            _checkUpdateLink.Text = Strings.Checking;
             _checkUpdateLink.Enabled = false;
             try
             {
                 await CheckForUpdateAsync();
                 if (_pendingUpdate == null)
-                    _checkUpdateLink.Text = "You're up to date \u2713";
+                    _checkUpdateLink.Text = Strings.UpToDate;
             }
             catch
             {
-                _checkUpdateLink.Text = "Check failed";
+                _checkUpdateLink.Text = Strings.CheckFailed;
             }
             finally
             {
@@ -441,7 +457,7 @@ public class MainForm : Form
                     try
                     {
                         if (!IsDisposed && IsHandleCreated)
-                            BeginInvoke(() => _checkUpdateLink.Text = "Check for updates");
+                            BeginInvoke(() => _checkUpdateLink.Text = Strings.CheckForUpdates);
                     }
                     catch (ObjectDisposedException) { }
                 });
@@ -452,6 +468,7 @@ public class MainForm : Form
         _headerPanel.Controls.Add(_titleLabel);
         _headerPanel.Controls.Add(_subtitleLabel);
         _headerPanel.Controls.Add(_themeToggle);
+        _headerPanel.Controls.Add(_langToggle);
         _headerPanel.Controls.Add(_channelToggle);
         _headerPanel.Controls.Add(_checkUpdateLink);
 
@@ -478,7 +495,7 @@ public class MainForm : Form
 
         _vlessRadio = new RadioButton
         {
-            Text = "VLESS Servers",
+            Text = Strings.VlessServers,
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
             Checked = true,
@@ -489,7 +506,7 @@ public class MainForm : Form
 
         _customConfigRadio = new RadioButton
         {
-            Text = "Custom Config (JSON)",
+            Text = Strings.CustomConfigJson,
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
             AutoSize = true,
@@ -514,11 +531,11 @@ public class MainForm : Form
             BackColor = t.Background
         };
 
-        _addCustomConfigBtn = new Button { Text = "Add Config...", Width = 100, Height = 28 };
+        _addCustomConfigBtn = new Button { Text = Strings.AddConfig, Width = 100, Height = 28 };
         Theme.ApplyPrimary(_addCustomConfigBtn);
         _addCustomConfigBtn.Click += OnAddCustomConfig;
 
-        _removeCustomConfigBtn = new Button { Text = "Remove", Width = 72, Height = 28 };
+        _removeCustomConfigBtn = new Button { Text = Strings.Remove, Width = 72, Height = 28 };
         Theme.ApplySecondary(_removeCustomConfigBtn);
         _removeCustomConfigBtn.Click += OnRemoveCustomConfig;
 
@@ -541,16 +558,16 @@ public class MainForm : Form
         _customConfigList.DrawItem += OnDrawListItem;
         _customConfigList.DrawSubItem += OnDrawListSubItem;
         _customConfigList.Columns.Add("", 24);         // ★ marker
-        _customConfigList.Columns.Add("Name", 110);
-        _customConfigList.Columns.Add("Protocols", 80);
-        _customConfigList.Columns.Add("Server", 140);
+        _customConfigList.Columns.Add(Strings.ColName, 110);
+        _customConfigList.Columns.Add(Strings.ColProtocols, 80);
+        _customConfigList.Columns.Add(Strings.ColServer, 140);
         _customConfigList.DoubleClick += OnCustomConfigDoubleClick;
 
         var customHintLabel = new Label
         {
             Dock = DockStyle.Bottom,
             Height = 20,
-            Text = "Double-click to set active config. Any protocol supported.",
+            Text = Strings.CustomConfigHint,
             ForeColor = t.TextMuted,
             Font = t.SmallFont,
             Padding = new Padding(4, 0, 0, 0)
@@ -563,7 +580,7 @@ public class MainForm : Form
         // ── VLESS controls (existing) ──
         _serversInputLabel = new Label
         {
-            Text = "Paste VLESS URI(s):",
+            Text = Strings.PasteVlessUri,
             Dock = DockStyle.Top,
             Height = 22,
             ForeColor = t.TextSecondary,
@@ -584,7 +601,7 @@ public class MainForm : Form
 
         _addBtn = new Button
         {
-            Text = "Add Server(s)",
+            Text = Strings.AddServers,
             Dock = DockStyle.Top,
             Height = 32
         };
@@ -605,11 +622,11 @@ public class MainForm : Form
         _serverList.DrawColumnHeader += OnDrawColumnHeader;
         _serverList.DrawItem += OnDrawListItem;
         _serverList.DrawSubItem += OnDrawListSubItem;
-        _serverList.Columns.Add("Role", 70);
-        _serverList.Columns.Add("Name", 110);
-        _serverList.Columns.Add("Server", 160);
-        _serverList.Columns.Add("Port", 50);
-        _serverList.Columns.Add("Security", 70);
+        _serverList.Columns.Add(Strings.ColRole, 70);
+        _serverList.Columns.Add(Strings.ColName, 110);
+        _serverList.Columns.Add(Strings.ColServer, 160);
+        _serverList.Columns.Add(Strings.ColPort, 50);
+        _serverList.Columns.Add(Strings.ColSecurity, 70);
 
         _serversBtnPanel = new FlowLayoutPanel
         {
@@ -619,19 +636,19 @@ public class MainForm : Form
             BackColor = t.Background
         };
 
-        _clearBtn = new Button { Text = "Clear All", Width = 72, Height = 28 };
+        _clearBtn = new Button { Text = Strings.ClearAll, Width = 72, Height = 28 };
         Theme.ApplySecondary(_clearBtn);
         _clearBtn.Click += (_, _) => { _servers.Clear(); RefreshServerList(); SaveSettings(); };
 
-        _removeBtn = new Button { Text = "Remove", Width = 72, Height = 28 };
+        _removeBtn = new Button { Text = Strings.Remove, Width = 72, Height = 28 };
         Theme.ApplySecondary(_removeBtn);
         _removeBtn.Click += OnRemoveServer;
 
-        _downBtn = new Button { Text = "\u25bc Down", Width = 68, Height = 28 };
+        _downBtn = new Button { Text = Strings.BtnDown, Width = 68, Height = 28 };
         Theme.ApplySecondary(_downBtn);
         _downBtn.Click += OnMoveDown;
 
-        _upBtn = new Button { Text = "\u25b2 Up", Width = 58, Height = 28 };
+        _upBtn = new Button { Text = Strings.BtnUp, Width = 58, Height = 28 };
         Theme.ApplySecondary(_upBtn);
         _upBtn.Click += OnMoveUp;
 
@@ -677,7 +694,7 @@ public class MainForm : Form
 
         _splitRadio = new RadioButton
         {
-            Text = "Split Tunnel (selected apps)",
+            Text = Strings.SplitTunnel,
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
             Checked = true,
@@ -687,7 +704,7 @@ public class MainForm : Form
 
         _fullRadio = new RadioButton
         {
-            Text = "Full Tunnel (all traffic)",
+            Text = Strings.FullTunnel,
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
             AutoSize = true,
@@ -707,7 +724,7 @@ public class MainForm : Form
 
         _appsLabel = new Label
         {
-            Text = "Check groups to route through VPN (expand to see apps inside):",
+            Text = Strings.AppsHint,
             Dock = DockStyle.Top,
             Height = 25,
             ForeColor = t.TextSecondary,
@@ -735,7 +752,7 @@ public class MainForm : Form
             foreach (var proc in profile.Processes)
             {
                 var childText = proc.IncludeChildren
-                    ? $"{proc.Name} (+ child processes)"
+                    ? $"{proc.Name} {Strings.ChildProcesses}"
                     : proc.Name;
                 node.Nodes.Add(new TreeNode(childText) { ForeColor = t.TextMuted });
             }
@@ -752,7 +769,7 @@ public class MainForm : Form
 
         _customLabel = new Label
         {
-            Text = "Add custom app (exe name, e.g. spotify.exe):",
+            Text = Strings.CustomAppLabel,
             Dock = DockStyle.Top,
             Height = 18,
             ForeColor = t.TextSecondary,
@@ -777,11 +794,11 @@ public class MainForm : Form
         };
         _customAppInput.KeyDown += (_, ke) => { if (ke.KeyCode == Keys.Enter) { OnAddCustomApp(null, EventArgs.Empty); ke.SuppressKeyPress = true; } };
 
-        _addCustomBtn = new Button { Text = "Add", Width = 55, Height = 26 };
+        _addCustomBtn = new Button { Text = Strings.BtnAdd, Width = 55, Height = 26 };
         Theme.ApplyPrimary(_addCustomBtn);
         _addCustomBtn.Click += OnAddCustomApp;
 
-        _removeCustomBtn = new Button { Text = "Remove checked", Width = 120, Height = 26 };
+        _removeCustomBtn = new Button { Text = Strings.RemoveChecked, Width = 120, Height = 26 };
         Theme.ApplySecondary(_removeCustomBtn);
         _removeCustomBtn.Click += OnRemoveCustomApp;
 
@@ -871,7 +888,7 @@ public class MainForm : Form
         var existing = FindCustomNode();
         if (existing != null) return existing;
 
-        var node = new TreeNode("Custom Apps  \u2014  Your custom applications")
+        var node = new TreeNode(Strings.CustomAppsNode)
         {
             Tag = "_custom",
             ForeColor = Theme.Current.Primary,
@@ -1002,10 +1019,81 @@ public class MainForm : Form
     private void OnThemeToggle(object? sender, EventArgs e)
     {
         Theme.SetTheme(!Theme.IsDark);
-        _themeToggle.Text = Theme.IsDark ? "\u25cb Light" : "\u25cf Dark";
+        _themeToggle.Text = Theme.IsDark ? Strings.ThemeLight : Strings.ThemeDark;
         _settings.App.Theme = Theme.IsDark ? "dark" : "light";
         SaveSettings();
         ApplyTheme();
+    }
+
+    private void OnLangToggle(object? sender, EventArgs e)
+    {
+        Strings.Lang = Strings.Lang.Equals("ru", StringComparison.OrdinalIgnoreCase) ? "en" : "ru";
+        _settings.App.Language = Strings.Lang;
+        SaveSettings();
+        ApplyLanguage();
+    }
+
+    private void ApplyLanguage()
+    {
+        var t = Theme.Current;
+        SuspendLayout();
+
+        // Header
+        _langToggle.Text = Strings.Lang.Equals("ru", StringComparison.OrdinalIgnoreCase) ? "ENG" : "RUS";
+        _checkUpdateLink.Text = Strings.CheckForUpdates;
+        _themeToggle.Text = Theme.IsDark ? Strings.ThemeLight : Strings.ThemeDark;
+        var isExp = _settings.Update.IsExperimental;
+        _channelToggle.Text = isExp ? Strings.ChannelExp : Strings.ChannelStable;
+
+        // Tabs
+        _serversPage.Text = Strings.TabServers;
+        _appsPage.Text = Strings.TabApps;
+
+        // Config mode
+        _vlessRadio.Text = Strings.VlessServers;
+        _customConfigRadio.Text = Strings.CustomConfigJson;
+        _serversInputLabel.Text = Strings.PasteVlessUri;
+        _addBtn.Text = Strings.AddServers;
+        _addCustomConfigBtn.Text = Strings.AddConfig;
+        _removeCustomConfigBtn.Text = Strings.Remove;
+
+        // Server buttons
+        _clearBtn.Text = Strings.ClearAll;
+        _removeBtn.Text = Strings.Remove;
+        _downBtn.Text = Strings.BtnDown;
+        _upBtn.Text = Strings.BtnUp;
+
+        // Apps tab
+        _splitRadio.Text = Strings.SplitTunnel;
+        _fullRadio.Text = Strings.FullTunnel;
+        _appsLabel.Text = Strings.AppsHint;
+        _customLabel.Text = Strings.CustomAppLabel;
+        _addCustomBtn.Text = Strings.BtnAdd;
+        _removeCustomBtn.Text = Strings.RemoveChecked;
+
+        // Action panel
+        _autostartCheck.Text = Strings.AutostartWindows;
+        _restartServiceBtn.Text = Strings.RestartService;
+        _reinstallServiceBtn.Text = Strings.ReinstallService;
+        _updateBtn.Text = Strings.Update;
+
+        // Refresh lists to update role/hint text
+        RefreshServerList();
+
+        // Update status
+        bool running = _engine.IsRunning || _tray.RunningAsService;
+        UpdateUI(running);
+
+        // Update custom apps tree node text
+        var customNode = FindCustomNode();
+        if (customNode != null)
+            customNode.Text = Strings.CustomAppsNode;
+
+        // Refresh tray menu text
+        _tray.ApplyLanguage();
+
+        ResumeLayout(true);
+        _tabs.Invalidate();
     }
 
     private async void OnChannelToggle(object? sender, EventArgs e)
@@ -1014,7 +1102,7 @@ public class MainForm : Form
         bool wasExp = _settings.Update.IsExperimental;
         _settings.Update.Channel = wasExp ? "stable" : "experimental";
         bool isExp = _settings.Update.IsExperimental;
-        _channelToggle.Text = isExp ? "\u26a0 Experimental" : "\u2714 Stable";
+        _channelToggle.Text = isExp ? Strings.ChannelExp : Strings.ChannelStable;
         _channelToggle.LinkColor = isExp ? t.AmberButton : t.TextMuted;
         _channelToggle.VisitedLinkColor = isExp ? t.AmberButton : t.TextMuted;
         SaveSettings();
@@ -1172,7 +1260,7 @@ public class MainForm : Form
     {
         SaveSettings();
         _applyBtn.Enabled = false;
-        _applyBtn.Text = "Applying...";
+        _applyBtn.Text = Strings.Applying;
         _startStopBtn.Enabled = false;
 
         try
@@ -1180,7 +1268,7 @@ public class MainForm : Form
             if (_tray.RunningAsService)
             {
                 // Service mode: stop → start service
-                _statusLabel.Text = "Restarting service...";
+                _statusLabel.Text = Strings.RestartingService;
                 await Task.Run(() =>
                 {
                     ServiceInstaller.Stop();
@@ -1190,7 +1278,7 @@ public class MainForm : Form
             else
             {
                 // In-process mode: stop engine → start engine
-                _statusLabel.Text = "Applying changes...";
+                _statusLabel.Text = Strings.ApplyingChanges;
                 _engine.Stop();
 
                 var settings = SettingsLoader.Load();
@@ -1203,13 +1291,13 @@ public class MainForm : Form
         catch (Exception ex)
         {
             UpdateUI(false);
-            MessageBox.Show($"Failed to apply changes:\n{ex.Message}", AppBranding.AppName,
+            MessageBox.Show($"{Strings.FailedApply}\n{ex.Message}", AppBranding.AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {
             _applyBtn.Enabled = true;
-            _applyBtn.Text = "\u21bb  Apply";
+            _applyBtn.Text = Strings.Apply;
             _startStopBtn.Enabled = true;
         }
     }
@@ -1358,8 +1446,8 @@ public class MainForm : Form
         _pendingUpdate = info;
         var downloadBytes = info.HasLiteUpdate ? info.LiteSizeBytes : info.SizeBytes;
         var sizeMb = downloadBytes > 0 ? $"  ({downloadBytes / 1024 / 1024} MB)" : "";
-        var updateType = info.HasLiteUpdate ? "Lite update" : "Update";
-        _updateLabel.Text = $"{updateType} available: v{info.LatestVersion}{sizeMb}";
+        var updateType = info.HasLiteUpdate ? Strings.UpdateTypeLite : Strings.UpdateTypeFull;
+        _updateLabel.Text = Strings.UpdateAvailable(updateType, info.LatestVersion, sizeMb);
         _updatePanel.Visible = true;
     }
 
@@ -1367,7 +1455,7 @@ public class MainForm : Form
     {
         if (_pendingUpdate == null || _updateChecker == null) return;
 
-        var msg = $"Update to v{_pendingUpdate.LatestVersion}?\n";
+        var msg = Strings.UpdateConfirm(_pendingUpdate.LatestVersion) + "\n";
 
         if (!string.IsNullOrWhiteSpace(_pendingUpdate.ReleaseNotes))
             msg += $"\n--- Changelog ---\n{_pendingUpdate.ReleaseNotes}\n-----------------\n";
@@ -1376,10 +1464,10 @@ public class MainForm : Form
         bool serviceInstalled = ServiceInstaller.IsInstalled();
 
         if (vpnRunning || serviceInstalled)
-            msg += "\nVPN will be stopped before applying the update.";
+            msg += Strings.UpdateVpnWillStop;
         if (serviceInstalled)
-            msg += "\nAutostart service will be removed and can be re-enabled after update.";
-        msg += "\nThe application will restart automatically.";
+            msg += Strings.UpdateServiceWillRemove;
+        msg += Strings.UpdateWillRestart;
 
         if (MessageBox.Show(msg, AppBranding.AppName,
             MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
@@ -1410,13 +1498,13 @@ public class MainForm : Form
             // Stop VPN/Service only before applying (replacing files)
             if (_engine.IsRunning)
             {
-                _updateLabel.Text = "Stopping VPN...";
+                _updateLabel.Text = Strings.StoppingVpn;
                 _engine.Stop();
             }
 
             if (_tray.RunningAsService)
             {
-                _updateLabel.Text = "Stopping service...";
+                _updateLabel.Text = Strings.StoppingService;
                 await Task.Run(() => ServiceInstaller.Stop());
             }
 
@@ -1425,13 +1513,13 @@ public class MainForm : Form
             // User can re-enable autostart after update via the checkbox.
             if (ServiceInstaller.IsInstalled())
             {
-                _updateLabel.Text = "Removing old service...";
+                _updateLabel.Text = Strings.RemovingOldService;
                 await Task.Run(() => ServiceInstaller.Uninstall());
                 await Task.Delay(500);
             }
 
             // Apply in-process: copies files directly, renames locked exes
-            _updateLabel.Text = "Applying update...";
+            _updateLabel.Text = Strings.ApplyingUpdate;
             _updateChecker.ApplyUpdate(extractedDir);
 
             // ApplyUpdate already launched the new GUI — just exit
@@ -1439,14 +1527,15 @@ public class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Update failed:\n{ex.Message}", AppBranding.AppName,
+            MessageBox.Show($"{Strings.UpdateFailed}\n{ex.Message}", AppBranding.AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
             _updateBtn.Visible = true;
             _updateBtn.Enabled = true;
             _updateProgress.Visible = false;
             var dlBytes = _pendingUpdate.HasLiteUpdate ? _pendingUpdate.LiteSizeBytes : _pendingUpdate.SizeBytes;
             var dlMb = dlBytes > 0 ? $"  ({dlBytes / 1024 / 1024} MB)" : "";
-            _updateLabel.Text = $"Update available: v{_pendingUpdate.LatestVersion}{dlMb}";
+            var updType = _pendingUpdate.HasLiteUpdate ? Strings.UpdateTypeLite : Strings.UpdateTypeFull;
+            _updateLabel.Text = Strings.UpdateAvailable(updType, _pendingUpdate.LatestVersion, dlMb);
             _startStopBtn.Enabled = true;
             _applyBtn.Enabled = true;
         }
@@ -1473,13 +1562,13 @@ public class MainForm : Form
         // Context-sensitive hint
         if (udpSplit)
         {
-            _serverHintLabel.Text = "\u2139 TCP/UDP split active \u2014 TCP servers handle browsing/chat, UDP servers handle voice/video";
+            _serverHintLabel.Text = Strings.TcpUdpHint;
             _serverHintLabel.ForeColor = t.Primary;
             _serverHintLabel.Visible = true;
         }
         else if (_servers.Count > 0 && !hasFlow)
         {
-            _serverHintLabel.Text = "\u26a0 All servers without flow \u2014 add a server with xtls-rprx-vision for TCP optimization";
+            _serverHintLabel.Text = Strings.NoFlowHint;
             _serverHintLabel.ForeColor = t.AmberButton;
             _serverHintLabel.Visible = true;
         }
@@ -1516,12 +1605,12 @@ public class MainForm : Form
 
             string role;
             if (udpSplit)
-                role = !string.IsNullOrEmpty(s.Flow) ? "\u2605 TCP" : "\u2605 UDP";
+                role = !string.IsNullOrEmpty(s.Flow) ? Strings.RoleTcp : Strings.RoleUdp;
             else
-                role = i == 0 ? "\u2605 Primary" : $"Fallback {i}";
+                role = i == 0 ? Strings.RolePrimary : Strings.RoleFallback(i);
 
             var item = new ListViewItem(role);
-            item.SubItems.Add(string.IsNullOrEmpty(s.Name) ? "(no name)" : s.Name);
+            item.SubItems.Add(string.IsNullOrEmpty(s.Name) ? Strings.NoName : s.Name);
             item.SubItems.Add(s.Server);
             item.SubItems.Add(s.Port.ToString());
             item.SubItems.Add(s.Security);
@@ -1614,7 +1703,7 @@ public class MainForm : Form
     {
         using var dialog = new OpenFileDialog
         {
-            Title = "Select sing-box JSON config",
+            Title = Strings.SelectSingBoxConfig,
             Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
             FilterIndex = 1
         };
@@ -1627,7 +1716,7 @@ public class MainForm : Form
         // Check for duplicate name
         if (_settings.App.CustomConfigs.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
         {
-            MessageBox.Show($"Config '{name}' already exists.", AppBranding.AppName,
+            MessageBox.Show(Strings.ConfigExists(name), AppBranding.AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
@@ -1637,7 +1726,7 @@ public class MainForm : Form
         var (isValid, errors) = CustomConfigInjector.Validate(rawJson);
         if (!isValid)
         {
-            MessageBox.Show($"Invalid config:\n{string.Join("\n", errors)}", AppBranding.AppName,
+            MessageBox.Show($"{Strings.InvalidConfig}\n{string.Join("\n", errors)}", AppBranding.AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
@@ -1723,7 +1812,7 @@ public class MainForm : Form
             var entries = VlessUriParser.ParseMultiple(text);
             if (entries.Count == 0)
             {
-                MessageBox.Show("No valid VLESS URIs found.", AppBranding.AppName,
+                MessageBox.Show(Strings.NoValidVless, AppBranding.AppName,
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -1755,13 +1844,13 @@ public class MainForm : Form
 
             if (skipped > 0)
             {
-                MessageBox.Show($"Added {added} server(s), skipped {skipped} duplicate(s).",
+                MessageBox.Show(Strings.AddedSkipped(added, skipped),
                     AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Failed to parse VLESS URI:\n{ex.Message}", AppBranding.AppName,
+            MessageBox.Show($"{Strings.FailedParseVless}\n{ex.Message}", AppBranding.AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
@@ -1824,13 +1913,13 @@ public class MainForm : Form
 
                 if (!File.Exists(serviceExe))
                 {
-                    MessageBox.Show("VPNRouter.Service.exe not found.\nAutostart requires the service binary.",
+                    MessageBox.Show(Strings.ServiceExeNotFound,
                         AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
                     _autostartCheck.Checked = false;
                     return;
                 }
 
-                _statusLabel.Text = "Installing service...";
+                _statusLabel.Text = Strings.InstallingService;
 
                 if (_engine.IsRunning)
                 {
@@ -1847,7 +1936,7 @@ public class MainForm : Form
 
                 if (!result.Success)
                 {
-                    MessageBox.Show($"Failed to setup service:\n{result.Message}",
+                    MessageBox.Show($"{Strings.FailedSetupService}\n{result.Message}",
                         AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
                     _autostartCheck.Checked = false;
                     UpdateUI(false);
@@ -1860,7 +1949,7 @@ public class MainForm : Form
             }
             else
             {
-                _statusLabel.Text = "Removing service...";
+                _statusLabel.Text = Strings.RemovingService;
 
                 // Run blocking service operations on a background thread
                 await Task.Run(() =>
@@ -1888,9 +1977,9 @@ public class MainForm : Form
         if (!_tray.RunningAsService) return;
 
         _restartServiceBtn.Enabled = false;
-        _restartServiceBtn.Text = "Restarting...";
+        _restartServiceBtn.Text = Strings.Restarting;
         _startStopBtn.Enabled = false;
-        _statusLabel.Text = "Restarting service...";
+        _statusLabel.Text = Strings.RestartingService;
 
         try
         {
@@ -1906,7 +1995,7 @@ public class MainForm : Form
                 _tray.RunningAsService = false;
                 _tray.SyncTrayState(null);
                 UpdateUI(false);
-                MessageBox.Show($"Failed to restart service:\n{result.Message}",
+                MessageBox.Show($"{Strings.FailedRestartService}\n{result.Message}",
                     AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
@@ -1917,26 +2006,24 @@ public class MainForm : Form
         finally
         {
             _restartServiceBtn.Enabled = true;
-            _restartServiceBtn.Text = "\u21bb  Restart Service";
+            _restartServiceBtn.Text = Strings.RestartService;
             _startStopBtn.Enabled = true;
         }
     }
 
     private async void OnReinstallService(object? sender, EventArgs e)
     {
-        var confirm = MessageBox.Show(
-            "This will stop the service, uninstall it, and reinstall from the current binary.\n\n" +
-            "Use this after updating VPNRouter to apply the new service executable.\n\nContinue?",
+        var confirm = MessageBox.Show(Strings.ReinstallConfirm,
             AppBranding.AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
 
         if (confirm != DialogResult.Yes) return;
 
         _reinstallServiceBtn.Enabled = false;
-        _reinstallServiceBtn.Text = "Reinstalling...";
+        _reinstallServiceBtn.Text = Strings.Reinstalling;
         _restartServiceBtn.Enabled = false;
         _startStopBtn.Enabled = false;
         _autostartCheck.Enabled = false;
-        _statusLabel.Text = "Reinstalling service...";
+        _statusLabel.Text = Strings.ReinstallingService;
 
         try
         {
@@ -1946,7 +2033,7 @@ public class MainForm : Form
 
             if (!File.Exists(serviceExe))
             {
-                MessageBox.Show("VPNRouter.Service.exe not found.\nCannot reinstall service.",
+                MessageBox.Show(Strings.ServiceExeNotFoundReinstall,
                     AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
@@ -1987,7 +2074,7 @@ public class MainForm : Form
                 _tray.SyncTrayState(null);
                 UpdateUI(false);
                 _autostartCheck.Checked = ServiceInstaller.IsInstalled();
-                MessageBox.Show($"Service reinstall failed:\n{result.Message}",
+                MessageBox.Show($"{Strings.ServiceReinstallFailed}\n{result.Message}",
                     AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
@@ -1996,13 +2083,13 @@ public class MainForm : Form
             _tray.SyncTrayState(null);
             UpdateUI(true);
             _autostartCheck.Checked = true;
-            MessageBox.Show("Service reinstalled and started successfully.",
+            MessageBox.Show(Strings.ServiceReinstalled,
                 AppBranding.AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         finally
         {
             _reinstallServiceBtn.Enabled = true;
-            _reinstallServiceBtn.Text = "\u21bb  Reinstall Service";
+            _reinstallServiceBtn.Text = Strings.ReinstallService;
             _restartServiceBtn.Enabled = true;
             _startStopBtn.Enabled = true;
             _autostartCheck.Enabled = true;
@@ -2014,7 +2101,7 @@ public class MainForm : Form
         if (_tray.RunningAsService)
         {
             _startStopBtn.Enabled = false;
-            _startStopBtn.Text = "Stopping...";
+            _startStopBtn.Text = Strings.Stopping;
             await Task.Run(() => ServiceInstaller.Stop());
             _tray.RunningAsService = false;
             _tray.SyncTrayState(null);
@@ -2034,7 +2121,7 @@ public class MainForm : Form
 
         if (_servers.Count == 0)
         {
-            MessageBox.Show("Add at least one VLESS server first.", AppBranding.AppName,
+            MessageBox.Show(Strings.AddServerFirst, AppBranding.AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
@@ -2044,7 +2131,7 @@ public class MainForm : Form
             var checkedCount = _profileTree.Nodes.Cast<TreeNode>().Count(n => n.Checked);
             if (checkedCount == 0)
             {
-                MessageBox.Show("Select at least one application group.", AppBranding.AppName,
+                MessageBox.Show(Strings.SelectAppGroup, AppBranding.AppName,
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -2053,7 +2140,7 @@ public class MainForm : Form
         try
         {
             _startStopBtn.Enabled = false;
-            _startStopBtn.Text = "Starting...";
+            _startStopBtn.Text = Strings.Starting;
 
             var settings = SettingsLoader.Load();
             await _engine.StartAsync(settings);
@@ -2063,7 +2150,7 @@ public class MainForm : Form
         catch (Exception ex)
         {
             UpdateUI(false);
-            MessageBox.Show($"Failed to start VPN:\n{ex.Message}", AppBranding.AppName,
+            MessageBox.Show($"{Strings.FailedStartVpn}\n{ex.Message}", AppBranding.AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
@@ -2075,7 +2162,7 @@ public class MainForm : Form
 
         if (running)
         {
-            _startStopBtn.Text = "\u2b1b  Stop VPN";
+            _startStopBtn.Text = Strings.StopVPN;
             _startStopBtn.BackColor = t.Danger;
             _startStopBtn.ForeColor = t.TextOnPrimary;
             // Resize Start/Stop when Apply is visible
@@ -2094,21 +2181,21 @@ public class MainForm : Form
 
         if (_tray.RunningAsService)
         {
-            _statusLabel.Text = "Connected \u2014 Windows Service (autostart)";
+            _statusLabel.Text = Strings.ConnectedService;
             _statusLabel.ForeColor = t.Success;
             _statusDot.ForeColor = t.Success;
             _statusPanel.BackColor = t.SuccessLight;
         }
         else if (running)
         {
-            _statusLabel.Text = $"Connected \u2014 {_engine.ActiveProfileName} \u2014 PID {_engine.SingBoxPid}";
+            _statusLabel.Text = Strings.Connected(_engine.ActiveProfileName, _engine.SingBoxPid ?? 0);
             _statusLabel.ForeColor = t.Success;
             _statusDot.ForeColor = t.Success;
             _statusPanel.BackColor = t.SuccessLight;
         }
         else
         {
-            _statusLabel.Text = "Not connected";
+            _statusLabel.Text = Strings.NotConnected;
             _statusLabel.ForeColor = t.TextMuted;
             _statusDot.ForeColor = t.TextMuted;
             _statusPanel.BackColor = t.Background;
@@ -2118,7 +2205,7 @@ public class MainForm : Form
     private void ApplyStartStyle()
     {
         var t = Theme.Current;
-        _startStopBtn.Text = "\u25b6  Start VPN";
+        _startStopBtn.Text = Strings.StartVPN;
         _startStopBtn.BackColor = t.Primary;
         _startStopBtn.ForeColor = t.TextOnPrimary;
     }

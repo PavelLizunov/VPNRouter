@@ -1,4 +1,5 @@
 using VPNRouter.Core.Services;
+using VPNRouter.GUI.Localization;
 using VPNRouter.Service;
 
 namespace VPNRouter.GUI;
@@ -20,19 +21,19 @@ public class TrayApplicationContext : ApplicationContext
     public TrayApplicationContext()
     {
         // Build context menu
-        _startItem = new ToolStripMenuItem("▶ Start VPN", null, OnStartVpn);
-        _stopItem = new ToolStripMenuItem("⬛ Stop VPN", null, OnStopVpn) { Enabled = false };
-        _statusItem = new ToolStripMenuItem("Not running") { Enabled = false };
+        _startItem = new ToolStripMenuItem(Strings.TrayStart, null, OnStartVpn);
+        _stopItem = new ToolStripMenuItem(Strings.TrayStop, null, OnStopVpn) { Enabled = false };
+        _statusItem = new ToolStripMenuItem(Strings.TrayNotRunning) { Enabled = false };
 
         var menu = new ContextMenuStrip();
         menu.Items.Add(_statusItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Settings...", null, OnOpenSettings);
+        menu.Items.Add(Strings.TraySettings, null, OnOpenSettings);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_startItem);
         menu.Items.Add(_stopItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Exit", null, OnExit);
+        menu.Items.Add(Strings.TrayExit, null, OnExit);
 
         _trayIcon = new NotifyIcon
         {
@@ -71,18 +72,18 @@ public class TrayApplicationContext : ApplicationContext
 
         if (_runningAsService)
         {
-            _statusItem.Text = statusMessage ?? "Running as Windows Service (autostart)";
+            _statusItem.Text = statusMessage ?? Strings.TrayRunningService;
             SetTrayTooltip($"{AppBranding.AppName} — Service");
         }
         else if (_engine.IsRunning)
         {
             var profile = _engine.ActiveProfileName;
-            _statusItem.Text = statusMessage ?? $"Running — {profile}";
+            _statusItem.Text = statusMessage ?? Strings.TrayRunning(profile);
             SetTrayTooltip($"{AppBranding.ShortName} — {profile} (PID {_engine.SingBoxPid})");
         }
         else
         {
-            _statusItem.Text = statusMessage ?? "Not running";
+            _statusItem.Text = statusMessage ?? Strings.TrayNotRunning;
             SetTrayTooltip(AppBranding.TrayTooltip);
         }
 
@@ -94,6 +95,22 @@ public class TrayApplicationContext : ApplicationContext
     {
         get => _runningAsService;
         set => _runningAsService = value;
+    }
+
+    internal void ApplyLanguage()
+    {
+        _startItem.Text = Strings.TrayStart;
+        _stopItem.Text = Strings.TrayStop;
+
+        // Update Settings/Exit items (indices 2 and 6 in menu)
+        var menu = _trayIcon.ContextMenuStrip!;
+        if (menu.Items.Count >= 8)
+        {
+            menu.Items[2].Text = Strings.TraySettings;
+            menu.Items[7].Text = Strings.TrayExit;
+        }
+
+        SyncTrayState(null);
     }
 
     private void SetTrayTooltip(string text)
@@ -135,12 +152,12 @@ public class TrayApplicationContext : ApplicationContext
             await _engine.StartAsync(settings);
             _runningAsService = false;
             SyncTrayState(null);
-            _trayIcon.ShowBalloonTip(2000, AppBranding.AppName, "VPN started", ToolTipIcon.Info);
+            _trayIcon.ShowBalloonTip(2000, AppBranding.AppName, Strings.TrayVpnStarted, ToolTipIcon.Info);
         }
         catch (Exception ex)
         {
             SyncTrayState(null);
-            MessageBox.Show($"Failed to start VPN:\n{ex.Message}", AppBranding.AppName,
+            MessageBox.Show($"{Strings.FailedStartVpn}\n{ex.Message}", AppBranding.AppName,
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
@@ -164,7 +181,7 @@ public class TrayApplicationContext : ApplicationContext
     {
         if (_engine.IsRunning)
         {
-            if (MessageBox.Show("VPN is running. Stop and exit?", AppBranding.AppName,
+            if (MessageBox.Show(Strings.TrayStopAndExit, AppBranding.AppName,
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.No)
                 return;
 

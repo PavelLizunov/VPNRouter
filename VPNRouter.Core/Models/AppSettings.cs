@@ -58,6 +58,10 @@ public class AppConfig
     [YamlMember(Alias = "theme")]
     public string Theme { get; set; } = "light";
 
+    /// <summary>UI language: "en" or "ru".</summary>
+    [YamlMember(Alias = "language")]
+    public string Language { get; set; } = "en";
+
     /// <summary>
     /// Config generation mode:
     /// "generated" — build sing-box config from VLESS settings + profiles (default).
