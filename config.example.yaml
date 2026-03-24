@@ -6,6 +6,11 @@ app:
   log_level: info   # debug | info | warning | error
   log_file: "%ProgramData%\\VPNRouter\\logs\\vpnrouter.log"
 
+  # Config mode: "generated" builds config from vless section below,
+  # "custom" uses a user-provided sing-box JSON (any protocol: VLESS, Hysteria2, TUIC, etc.)
+  config_mode: generated   # generated | custom
+  # custom_config: "C:\\path\\to\\sing-box-config.json"
+
 # Profile sources — tried in order, first success wins
 profile_sources:
   - type: github

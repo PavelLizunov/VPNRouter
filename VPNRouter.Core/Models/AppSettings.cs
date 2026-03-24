@@ -57,6 +57,21 @@ public class AppConfig
     /// <summary>UI theme: "light" or "dark".</summary>
     [YamlMember(Alias = "theme")]
     public string Theme { get; set; } = "light";
+
+    /// <summary>
+    /// Config generation mode:
+    /// "generated" — build sing-box config from VLESS settings + profiles (default).
+    /// "custom" — use a user-provided sing-box JSON config, inject process routing only.
+    /// </summary>
+    [YamlMember(Alias = "config_mode")]
+    public string ConfigMode { get; set; } = "generated";
+
+    /// <summary>
+    /// Path to custom sing-box JSON config (used when config_mode = "custom").
+    /// Supports environment variables (e.g. %ProgramData%\VPNRouter\custom.json).
+    /// </summary>
+    [YamlMember(Alias = "custom_config")]
+    public string CustomConfig { get; set; } = string.Empty;
 }
 
 public class ProfileSource

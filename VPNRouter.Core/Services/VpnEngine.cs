@@ -63,10 +63,29 @@ public class VpnEngine : IDisposable
         var logsDir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\logs");
         Directory.CreateDirectory(logsDir);
 
-        // 1. Validate VLESS config
-        var servers = settings.Vless.GetEffectiveServers();
-        if (servers.Count == 0 || servers.Any(s => string.IsNullOrWhiteSpace(s.Server) || s.Server == "your.server.com"))
-            throw new InvalidOperationException("VLESS server not configured.");
+        var isCustomConfig = (settings.App.ConfigMode ?? "generated")
+            .Equals("custom", StringComparison.OrdinalIgnoreCase);
+
+        // 1. Validate config source
+        if (isCustomConfig)
+        {
+            var customPath = Environment.ExpandEnvironmentVariables(settings.App.CustomConfig ?? "");
+            if (string.IsNullOrEmpty(customPath) || !File.Exists(customPath))
+                throw new InvalidOperationException(
+                    $"Custom config not found: {customPath}. Set app.custom_config in config.yaml.");
+
+            var rawJson = File.ReadAllText(customPath);
+            var (isValid, errors) = CustomConfigInjector.Validate(rawJson);
+            if (!isValid)
+                throw new InvalidOperationException(
+                    $"Custom config validation failed: {string.Join("; ", errors)}");
+        }
+        else
+        {
+            var servers = settings.Vless.GetEffectiveServers();
+            if (servers.Count == 0 || servers.Any(s => string.IsNullOrWhiteSpace(s.Server) || s.Server == "your.server.com"))
+                throw new InvalidOperationException("VLESS server not configured.");
+        }
 
         ct.ThrowIfCancellationRequested();
 
@@ -84,7 +103,7 @@ public class VpnEngine : IDisposable
             .Equals("full", StringComparison.OrdinalIgnoreCase);
         var profileName = settings.ActiveProfile;
 
-        if (string.IsNullOrEmpty(profileName) && !isFullTunnel)
+        if (string.IsNullOrEmpty(profileName) && !isFullTunnel && !isCustomConfig)
             throw new InvalidOperationException("No active profile specified in config.");
 
         if (!string.IsNullOrEmpty(profileName))
@@ -93,6 +112,11 @@ public class VpnEngine : IDisposable
             _activeProfile = names.Length == 1
                 ? manager.GetProfile(names[0])
                 : manager.MergeProfiles(names);
+        }
+        else if (isCustomConfig)
+        {
+            // Custom config with no profile — process routing handled by user's config
+            _activeProfile = new Profile { Name = "CustomConfig", DnsMode = "vpn_only" };
         }
         else
         {
@@ -147,19 +171,32 @@ public class VpnEngine : IDisposable
         ct.ThrowIfCancellationRequested();
 
         // 5. Generate + validate config
-        var sbConfig = ConfigGenerator.Generate(_activeProfile, _scanResult.ProcessNames, settings);
-        var validation = LeakProtection.ValidateConfig(sbConfig);
-
-        foreach (var warn in validation.Warnings)
+        string configJson;
+        if (isCustomConfig)
         {
-            _logger?.Warning("[VpnEngine] {Warn}", warn);
-            Warning?.Invoke(warn);
+            var customPath = Environment.ExpandEnvironmentVariables(settings.App.CustomConfig!);
+            var rawJson = File.ReadAllText(customPath);
+            configJson = CustomConfigInjector.Inject(rawJson, _scanResult.ProcessNames, settings);
+            OnStatus("Custom config injected with process routing");
         }
-
-        if (!validation.IsValid)
+        else
         {
-            var errors = string.Join("; ", validation.Errors);
-            throw new InvalidOperationException($"Config validation failed: {errors}");
+            var sbConfig = ConfigGenerator.Generate(_activeProfile, _scanResult.ProcessNames, settings);
+            var validation = LeakProtection.ValidateConfig(sbConfig);
+
+            foreach (var warn in validation.Warnings)
+            {
+                _logger?.Warning("[VpnEngine] {Warn}", warn);
+                Warning?.Invoke(warn);
+            }
+
+            if (!validation.IsValid)
+            {
+                var errors = string.Join("; ", validation.Errors);
+                throw new InvalidOperationException($"Config validation failed: {errors}");
+            }
+
+            configJson = ConfigGenerator.Serialize(sbConfig);
         }
 
         ct.ThrowIfCancellationRequested();
@@ -197,7 +234,7 @@ public class VpnEngine : IDisposable
         // 8. Start sing-box
         OnStatus("Starting sing-box...");
         _singBox = new SingBoxManager(settings.SingBox, _logger);
-        _singBox.Start(sbConfig);
+        _singBox.StartWithJson(configJson);
 
         // Wait up to 5s for startup
         for (int i = 0; i < 10; i++)

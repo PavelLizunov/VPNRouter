@@ -188,8 +188,8 @@ public class HealthMonitor : IDisposable
             {
                 // Re-scan and regenerate config before restart
                 var scan = _scanner.ScanForProfile(_activeProfile);
-                var config = ConfigGenerator.Generate(_activeProfile, scan.ProcessNames, _appSettings);
-                _singBox.ReloadConfig(config);
+                var configJson = GenerateConfigJson(scan.ProcessNames);
+                _singBox.ReloadConfigJson(configJson);
                 _lastScan = scan;
                 _lastFullRestart = DateTime.UtcNow;
 
@@ -241,11 +241,11 @@ public class HealthMonitor : IDisposable
             // Cancel any pending AttemptRestart — we're doing a fresh reload now
             _restartCts?.Cancel();
 
-            var config = ConfigGenerator.Generate(_activeProfile, newScan.ProcessNames, _appSettings);
+            var configJson = GenerateConfigJson(newScan.ProcessNames);
 
             // Try hot-reload first (no restart fallback) to avoid TUN restart storms.
             // If hot-reload fails, only do a full restart if cooldown has elapsed.
-            if (_singBox.TryReloadConfig(config))
+            if (_singBox.TryReloadConfigJson(configJson))
             {
                 _lastScan = newScan;
                 _restartAttempts = 0;
@@ -276,6 +276,26 @@ public class HealthMonitor : IDisposable
         {
             _logger.Error(ex, "[HealthMonitor] Error in debounced rescan");
         }
+    }
+
+    /// <summary>
+    /// Generates sing-box config JSON. Uses CustomConfigInjector for custom mode,
+    /// ConfigGenerator for generated mode. Handles both transparently.
+    /// </summary>
+    private string GenerateConfigJson(List<string> processNames)
+    {
+        var isCustom = (_appSettings.App.ConfigMode ?? "generated")
+            .Equals("custom", StringComparison.OrdinalIgnoreCase);
+
+        if (isCustom && !string.IsNullOrEmpty(_appSettings.App.CustomConfig))
+        {
+            var customPath = Environment.ExpandEnvironmentVariables(_appSettings.App.CustomConfig);
+            var rawJson = File.ReadAllText(customPath);
+            return CustomConfigInjector.Inject(rawJson, processNames, _appSettings);
+        }
+
+        var config = ConfigGenerator.Generate(_activeProfile, processNames, _appSettings);
+        return ConfigGenerator.Serialize(config);
     }
 
     /// <summary>

@@ -33,7 +33,10 @@ public class SingBoxManager : IDisposable
 
     private const long MaxLogSizeBytes = 10 * 1024 * 1024; // 10 MB
 
-    public void Start(SingBoxConfig config)
+    public void Start(SingBoxConfig config) =>
+        StartWithJson(ConfigGenerator.Serialize(config));
+
+    public void StartWithJson(string configJson)
     {
         if (State == SingBoxState.Running)
         {
@@ -47,7 +50,7 @@ public class SingBoxManager : IDisposable
             throw new FileNotFoundException($"sing-box not found at: {exePath}");
 
         RotateSingBoxLog();
-        _currentConfigPath = WriteConfigToDisk(config);
+        _currentConfigPath = WriteJsonToDisk(configJson);
 
         _logger.Information("[SingBoxManager] Starting sing-box with config: {Config}", _currentConfigPath);
 
@@ -102,10 +105,13 @@ public class SingBoxManager : IDisposable
     /// No process restart — TUN interface stays up, connections are not dropped.
     /// Falls back to kill+restart if hot-reload fails.
     /// </summary>
-    public void ReloadConfig(SingBoxConfig config)
+    public void ReloadConfig(SingBoxConfig config) =>
+        ReloadConfigJson(ConfigGenerator.Serialize(config));
+
+    public void ReloadConfigJson(string configJson)
     {
         _logger.Information("[SingBoxManager] Reloading config");
-        _currentConfigPath = WriteConfigToDisk(config);
+        _currentConfigPath = WriteJsonToDisk(configJson);
 
         if (TryHotReload())
             return;
@@ -119,10 +125,13 @@ public class SingBoxManager : IDisposable
     /// Returns true if hot-reload succeeded, false otherwise.
     /// Use this for debounce-triggered reloads to avoid restart storms.
     /// </summary>
-    public bool TryReloadConfig(SingBoxConfig config)
+    public bool TryReloadConfig(SingBoxConfig config) =>
+        TryReloadConfigJson(ConfigGenerator.Serialize(config));
+
+    public bool TryReloadConfigJson(string configJson)
     {
         _logger.Information("[SingBoxManager] Attempting hot-reload (no restart fallback)");
-        _currentConfigPath = WriteConfigToDisk(config);
+        _currentConfigPath = WriteJsonToDisk(configJson);
         return TryHotReload();
     }
 
@@ -301,13 +310,13 @@ public class SingBoxManager : IDisposable
         Crashed?.Invoke(this, EventArgs.Empty);
     }
 
-    private static string WriteConfigToDisk(SingBoxConfig config)
+    private static string WriteJsonToDisk(string json)
     {
         var dir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config");
         Directory.CreateDirectory(dir);
 
         var path = Path.Combine(dir, "current.json");
-        File.WriteAllText(path, ConfigGenerator.Serialize(config));
+        File.WriteAllText(path, json);
         return path;
     }
 

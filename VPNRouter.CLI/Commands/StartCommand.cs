@@ -133,13 +133,30 @@ public class StartCommand : AsyncCommand<StartSettings>
             var manager = new ProfileManager(sources, Serilog.Log.Logger);
             var collection = await manager.LoadAsync();
 
-            var profileNames = settings.ActiveProfile
-                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            var profile = profileNames.Length == 1
-                ? manager.GetProfile(profileNames[0])
-                : manager.MergeProfiles(profileNames);
+            var isCustomMode = (settings.App.ConfigMode ?? "generated")
+                .Equals("custom", StringComparison.OrdinalIgnoreCase);
 
-            AnsiConsole.MarkupLine($"[green]✓[/] Profile: [cyan]{profile.Name}[/] — {profile.Description}");
+            Core.Models.Profile profile;
+            var profileNames = (settings.ActiveProfile ?? "")
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+            if (profileNames.Length > 0)
+            {
+                profile = profileNames.Length == 1
+                    ? manager.GetProfile(profileNames[0])
+                    : manager.MergeProfiles(profileNames);
+            }
+            else if (isCustomMode)
+            {
+                profile = new Core.Models.Profile { Name = "CustomConfig", DnsMode = "vpn_only" };
+            }
+            else
+            {
+                AnsiConsole.MarkupLine("[red]✗ No profile specified.[/]");
+                return 1;
+            }
+
+            AnsiConsole.MarkupLine($"[green]✓[/] Profile: [cyan]{Markup.Escape(profile.Name)}[/] — {Markup.Escape(profile.Description)}");
             AnsiConsole.MarkupLine($"  Process rules: [yellow]{profile.Processes.Count}[/]");
             AnsiConsole.MarkupLine($"  DNS mode: [yellow]{profile.DnsMode}[/]");
 
@@ -148,25 +165,53 @@ public class StartCommand : AsyncCommand<StartSettings>
             var scan = scanner.ScanForProfile(profile);
             AnsiConsole.MarkupLine($"[green]✓[/] Resolved [cyan]{scan.ProcessNames.Count}[/] process names");
 
-            var sbConfig = ConfigGenerator.Generate(profile, scan.ProcessNames, settings);
-            var validation = LeakProtection.ValidateConfig(sbConfig);
-
-            foreach (var w in validation.Warnings)
-                AnsiConsole.MarkupLine($"[yellow]⚠ {w}[/]");
-
-            if (!validation.IsValid)
+            string configJson;
+            if (isCustomMode)
             {
-                AnsiConsole.MarkupLine("[red]✗ Config validation failed:[/]");
-                foreach (var e in validation.Errors)
-                    AnsiConsole.MarkupLine($"  [red]• {e}[/]");
-                return 1;
+                var customPath = Environment.ExpandEnvironmentVariables(settings.App.CustomConfig ?? "");
+                if (string.IsNullOrEmpty(customPath) || !File.Exists(customPath))
+                {
+                    AnsiConsole.MarkupLine($"[red]✗ Custom config not found: {customPath}[/]");
+                    return 1;
+                }
+
+                var rawJson = File.ReadAllText(customPath);
+                var (isValid, customErrors) = CustomConfigInjector.Validate(rawJson);
+                if (!isValid)
+                {
+                    AnsiConsole.MarkupLine("[red]✗ Custom config validation failed:[/]");
+                    foreach (var e in customErrors)
+                        AnsiConsole.MarkupLine($"  [red]• {e}[/]");
+                    return 1;
+                }
+
+                configJson = CustomConfigInjector.Inject(rawJson, scan.ProcessNames, settings);
+                AnsiConsole.MarkupLine("[green]✓[/] Custom config injected with process routing");
+            }
+            else
+            {
+                var sbConfig = ConfigGenerator.Generate(profile, scan.ProcessNames, settings);
+                var validation = LeakProtection.ValidateConfig(sbConfig);
+
+                foreach (var w in validation.Warnings)
+                    AnsiConsole.MarkupLine($"[yellow]⚠ {w}[/]");
+
+                if (!validation.IsValid)
+                {
+                    AnsiConsole.MarkupLine("[red]✗ Config validation failed:[/]");
+                    foreach (var e in validation.Errors)
+                        AnsiConsole.MarkupLine($"  [red]• {e}[/]");
+                    return 1;
+                }
+
+                configJson = ConfigGenerator.Serialize(sbConfig);
             }
 
             // Write config
             var configDir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config");
             Directory.CreateDirectory(configDir);
             var configPath = Path.Combine(configDir, "current.json");
-            File.WriteAllText(configPath, ConfigGenerator.Serialize(sbConfig));
+            File.WriteAllText(configPath, configJson);
 
             AnsiConsole.MarkupLine($"[green]✔[/] Config written to: [grey]{configPath}[/]");
             AnsiConsole.MarkupLine("[cyan]Dry run complete — sing-box not started.[/]");

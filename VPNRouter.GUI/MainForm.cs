@@ -22,6 +22,14 @@ public class MainForm : Form
     private Button _downBtn = null!;
     private Label _serverHintLabel = null!;
 
+    // ── Custom config mode ──
+    private Panel _configModePanel = null!;
+    private RadioButton _vlessRadio = null!;
+    private RadioButton _customConfigRadio = null!;
+    private Panel _customConfigPanel = null!;
+    private TextBox _customConfigPath = null!;
+    private Button _browseConfigBtn = null!;
+
     // ── Apps tab ──
     private TreeView _profileTree = null!;
     private TextBox _customAppInput = null!;
@@ -457,6 +465,99 @@ public class MainForm : Form
     {
         var t = Theme.Current;
 
+        // ── Config mode selector ──
+        _configModePanel = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 36,
+            BackColor = t.Background,
+            Padding = new Padding(0, 4, 0, 4)
+        };
+
+        _vlessRadio = new RadioButton
+        {
+            Text = "VLESS Servers",
+            Font = t.BodyFont,
+            ForeColor = t.TextPrimary,
+            Checked = true,
+            AutoSize = true,
+            Location = new Point(0, 6)
+        };
+        _vlessRadio.CheckedChanged += OnConfigModeChanged;
+
+        _customConfigRadio = new RadioButton
+        {
+            Text = "Custom Config (JSON)",
+            Font = t.BodyFont,
+            ForeColor = t.TextPrimary,
+            AutoSize = true,
+            Location = new Point(150, 6)
+        };
+
+        _configModePanel.Controls.Add(_vlessRadio);
+        _configModePanel.Controls.Add(_customConfigRadio);
+
+        // ── Custom config panel (hidden by default) ──
+        _customConfigPanel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Visible = false,
+            Padding = new Padding(0, 8, 0, 0)
+        };
+
+        var customLabel = new Label
+        {
+            Text = "sing-box JSON config file:",
+            Dock = DockStyle.Top,
+            Height = 22,
+            ForeColor = t.TextSecondary,
+            Font = t.BodyFont
+        };
+
+        var browseRow = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 34
+        };
+
+        _customConfigPath = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            PlaceholderText = @"C:\path\to\sing-box-config.json",
+            BackColor = t.InputBackground,
+            ForeColor = t.TextPrimary,
+            Font = t.BodyFont
+        };
+
+        _browseConfigBtn = new Button
+        {
+            Text = "Browse...",
+            Dock = DockStyle.Right,
+            Width = 80,
+            Height = 28
+        };
+        Theme.ApplySecondary(_browseConfigBtn);
+        _browseConfigBtn.Click += OnBrowseConfig;
+
+        browseRow.Controls.Add(_customConfigPath);
+        browseRow.Controls.Add(_browseConfigBtn);
+
+        var customHintLabel = new Label
+        {
+            Text = "Provide a complete sing-box JSON config. Process routing rules will be injected automatically.\n"
+                 + "Supports any protocol: VLESS, Hysteria2, TUIC, Shadowsocks, etc.",
+            Dock = DockStyle.Top,
+            Height = 44,
+            ForeColor = t.TextMuted,
+            Font = t.SmallFont,
+            Padding = new Padding(0, 6, 0, 0)
+        };
+
+        _customConfigPanel.Controls.Add(customHintLabel);
+        _customConfigPanel.Controls.Add(browseRow);
+        _customConfigPanel.Controls.Add(customLabel);
+
+        // ── VLESS controls (existing) ──
         _serversInputLabel = new Label
         {
             Text = "Paste VLESS URI(s):",
@@ -548,12 +649,14 @@ public class MainForm : Form
         };
 
         // Dock order: last added = top
-        page.Controls.Add(_serverList);
+        page.Controls.Add(_customConfigPanel);  // Fill (hidden by default)
+        page.Controls.Add(_serverList);          // Fill (visible by default)
         page.Controls.Add(_serverHintLabel);
         page.Controls.Add(_serversBtnPanel);
         page.Controls.Add(_addBtn);
         page.Controls.Add(_uriInput);
         page.Controls.Add(_serversInputLabel);
+        page.Controls.Add(_configModePanel);     // Top — mode selector
     }
 
     private void BuildAppsTab(TabPage page)
@@ -1126,6 +1229,21 @@ public class MainForm : Form
     /// <summary>Populate UI controls from loaded settings.</summary>
     private void LoadSettingsIntoUI()
     {
+        // Load config mode
+        var isCustomConfig = (_settings.App.ConfigMode ?? "generated")
+            .Equals("custom", StringComparison.OrdinalIgnoreCase);
+        _vlessRadio.Checked = !isCustomConfig;
+        _customConfigRadio.Checked = isCustomConfig;
+        _customConfigPath.Text = _settings.App.CustomConfig ?? "";
+
+        // Toggle visibility based on config mode
+        _serversInputLabel.Visible = !isCustomConfig;
+        _uriInput.Visible = !isCustomConfig;
+        _addBtn.Visible = !isCustomConfig;
+        _serverList.Visible = !isCustomConfig;
+        _serversBtnPanel.Visible = !isCustomConfig;
+        _customConfigPanel.Visible = isCustomConfig;
+
         // Load routing mode
         var isFullTunnel = (_settings.App.RoutingMode ?? "split")
             .Equals("full", StringComparison.OrdinalIgnoreCase);
@@ -1380,6 +1498,10 @@ public class MainForm : Form
 
     private void SaveSettings()
     {
+        // Update config mode
+        _settings.App.ConfigMode = _customConfigRadio.Checked ? "custom" : "generated";
+        _settings.App.CustomConfig = _customConfigPath.Text.Trim();
+
         // Update servers
         _settings.Vless.Servers = new List<VlessServerEntry>(_servers);
         if (_servers.Count > 0)
@@ -1402,6 +1524,50 @@ public class MainForm : Form
         _settings.App.RoutingMode = _fullRadio.Checked ? "full" : "split";
 
         SettingsLoader.Save(_settings);
+    }
+
+    // ─── Config mode switching ─────────────────────────────────────────────
+
+    private void OnConfigModeChanged(object? sender, EventArgs e)
+    {
+        if (!_vlessRadio.Checked && !_customConfigRadio.Checked) return;
+
+        var isCustom = _customConfigRadio.Checked;
+
+        // Toggle VLESS controls
+        _serversInputLabel.Visible = !isCustom;
+        _uriInput.Visible = !isCustom;
+        _addBtn.Visible = !isCustom;
+        _serverList.Visible = !isCustom;
+        _serversBtnPanel.Visible = !isCustom;
+        _serverHintLabel.Visible = false;
+
+        // Toggle custom config panel
+        _customConfigPanel.Visible = isCustom;
+
+        // Save mode
+        _settings.App.ConfigMode = isCustom ? "custom" : "generated";
+        SaveSettings();
+    }
+
+    private void OnBrowseConfig(object? sender, EventArgs e)
+    {
+        using var dialog = new OpenFileDialog
+        {
+            Title = "Select sing-box JSON config",
+            Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
+            FilterIndex = 1
+        };
+
+        if (!string.IsNullOrEmpty(_customConfigPath.Text) && File.Exists(_customConfigPath.Text))
+            dialog.InitialDirectory = Path.GetDirectoryName(_customConfigPath.Text);
+
+        if (dialog.ShowDialog() == DialogResult.OK)
+        {
+            _customConfigPath.Text = dialog.FileName;
+            _settings.App.CustomConfig = dialog.FileName;
+            SaveSettings();
+        }
     }
 
     // ─── Event handlers ──────────────────────────────────────────────────────

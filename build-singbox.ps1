@@ -6,14 +6,15 @@
     and builds with minimal Go build tags (with_utls + with_clash_api only).
 
     Full official build: ~35 MB (8 tags: gvisor, quic, wireguard, tailscale, etc.)
-    Minimal VPNRouter build: ~20 MB (2 tags: utls + clash_api)
+    VPNRouter build: ~23 MB (3 tags: utls + clash_api + quic)
 
-    VPNRouter only needs:
+    VPNRouter needs:
     - with_utls       : uTLS fingerprinting for Reality/TLS
     - with_clash_api  : Clash REST API for hot-reload config
+    - with_quic       : QUIC transport (Hysteria2, TUIC, HTTP/3 — required for custom configs)
 
-    NOT needed (stack="system", not gVisor; no WireGuard/QUIC/Tailscale protocols):
-    - with_gvisor, with_quic, with_wireguard, with_tailscale, with_dhcp, with_acme
+    NOT needed (stack="system", not gVisor; no WireGuard/Tailscale protocols):
+    - with_gvisor, with_wireguard, with_tailscale, with_dhcp, with_acme
 .PARAMETER Version
     sing-box version tag to build (e.g. "1.12.21"). Required.
 .PARAMETER Install
@@ -31,7 +32,7 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 $SrcDir = Join-Path $Root "tools\sing-box-src"
-$Tags = "with_utls,with_clash_api"
+$Tags = "with_utls,with_clash_api,with_quic"
 $OutputExe = Join-Path $SrcDir "sing-box.exe"
 $InstallPath = "$env:ProgramData\VPNRouter\bin\sing-box.exe"
 
