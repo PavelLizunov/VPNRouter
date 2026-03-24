@@ -1488,9 +1488,32 @@ public class MainForm : Form
             _serverHintLabel.Visible = false;
         }
 
+        // Group servers by IP for visual clarity
+        var serverGroups = _servers
+            .Select((s, i) => (server: s, index: i))
+            .GroupBy(x => x.server.Server)
+            .ToList();
+
+        string? lastServer = null;
         for (int i = 0; i < _servers.Count; i++)
         {
             var s = _servers[i];
+
+            // Add separator row when server IP changes (if multiple server IPs exist)
+            if (serverGroups.Count > 1 && s.Server != lastServer)
+            {
+                lastServer = s.Server;
+                var separator = new ListViewItem("");
+                separator.SubItems.Add($"\u2500\u2500 {s.Server} \u2500\u2500");
+                separator.SubItems.Add("");
+                separator.SubItems.Add("");
+                separator.SubItems.Add("");
+                separator.ForeColor = t.TextMuted;
+                separator.Font = t.SmallFont;
+                separator.Tag = "separator"; // mark as non-selectable
+                _serverList.Items.Add(separator);
+            }
+
             string role;
             if (udpSplit)
                 role = !string.IsNullOrEmpty(s.Flow) ? "\u2605 TCP" : "\u2605 UDP";
