@@ -472,12 +472,33 @@ public class MainForm : Form
         _headerPanel.Controls.Add(_channelToggle);
         _headerPanel.Controls.Add(_checkUpdateLink);
 
+        RepositionHeaderLinks();
+
         // Bottom border
         _headerPanel.Paint += (s, e) =>
         {
             using var borderPen = new Pen(Theme.Current.SurfaceBorder);
             e.Graphics.DrawLine(borderPen, 0, _headerPanel.Height - 1, _headerPanel.Width, _headerPanel.Height - 1);
         };
+    }
+
+    /// <summary>
+    /// Positions header links right-to-left from the right edge so they don't overlap
+    /// regardless of language (Russian strings are longer than English).
+    /// </summary>
+    private void RepositionHeaderLinks()
+    {
+        const int rightMargin = 14;
+        const int gap = 10;
+        int rightEdge = _headerPanel.Width - rightMargin;
+
+        // Row 3 (y=46): langToggle | themeToggle | checkUpdateLink — right to left
+        _langToggle.Location = new Point(rightEdge - _langToggle.PreferredWidth, 46);
+        _themeToggle.Location = new Point(_langToggle.Left - gap - _themeToggle.PreferredWidth, 46);
+        _checkUpdateLink.Location = new Point(_themeToggle.Left - gap - _checkUpdateLink.PreferredWidth, 46);
+
+        // Row 2 (y=30): channelToggle — right-aligned
+        _channelToggle.Location = new Point(rightEdge - _channelToggle.PreferredWidth, 30);
     }
 
     private void BuildServersTab(TabPage page)
@@ -531,7 +552,7 @@ public class MainForm : Form
             BackColor = t.Background
         };
 
-        _addCustomConfigBtn = new Button { Text = Strings.AddConfig, Width = 100, Height = 28 };
+        _addCustomConfigBtn = new Button { Text = Strings.AddConfig, Width = 140, Height = 28 };
         Theme.ApplyPrimary(_addCustomConfigBtn);
         _addCustomConfigBtn.Click += OnAddCustomConfig;
 
@@ -798,7 +819,7 @@ public class MainForm : Form
         Theme.ApplyPrimary(_addCustomBtn);
         _addCustomBtn.Click += OnAddCustomApp;
 
-        _removeCustomBtn = new Button { Text = Strings.RemoveChecked, Width = 120, Height = 26 };
+        _removeCustomBtn = new Button { Text = Strings.RemoveChecked, Width = 140, Height = 26 };
         Theme.ApplySecondary(_removeCustomBtn);
         _removeCustomBtn.Click += OnRemoveCustomApp;
 
@@ -1044,6 +1065,7 @@ public class MainForm : Form
         _themeToggle.Text = Theme.IsDark ? Strings.ThemeLight : Strings.ThemeDark;
         var isExp = _settings.Update.IsExperimental;
         _channelToggle.Text = isExp ? Strings.ChannelExp : Strings.ChannelStable;
+        RepositionHeaderLinks();
 
         // Tabs
         _serversPage.Text = Strings.TabServers;
@@ -1056,6 +1078,18 @@ public class MainForm : Form
         _addBtn.Text = Strings.AddServers;
         _addCustomConfigBtn.Text = Strings.AddConfig;
         _removeCustomConfigBtn.Text = Strings.Remove;
+
+        // Server list column headers
+        _serverList.Columns[0].Text = Strings.ColRole;
+        _serverList.Columns[1].Text = Strings.ColName;
+        _serverList.Columns[2].Text = Strings.ColServer;
+        _serverList.Columns[3].Text = Strings.ColPort;
+        _serverList.Columns[4].Text = Strings.ColSecurity;
+
+        // Custom config list column headers
+        _customConfigList.Columns[1].Text = Strings.ColName;
+        _customConfigList.Columns[2].Text = Strings.ColProtocols;
+        _customConfigList.Columns[3].Text = Strings.ColServer;
 
         // Server buttons
         _clearBtn.Text = Strings.ClearAll;
