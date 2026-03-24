@@ -781,3 +781,290 @@ another line
         Assert.Equal("cdn.example.com", entry.Transport.Headers["Host"]);
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CustomConfigInjector
+// ═══════════════════════════════════════════════════════════════════════════════
+
+public class CustomConfigInjectorTests
+{
+    private static AppSettings CreateSettings() => new()
+    {
+        SingBox = new SingBoxSettings { ClashApi = "127.0.0.1:9090" }
+    };
+
+    // ── User's example: selector + vless + tuic (legacy format) ──
+    private const string LegacyConfig = """
+    {
+      "dns": {
+        "servers": [
+          {"tag": "remote", "address": "tls://1.1.1.1", "detour": "proxy"},
+          {"tag": "local",  "address": "223.5.5.5",     "detour": "direct"}
+        ],
+        "rules": [
+          {"outbound": "any", "server": "local"}
+        ],
+        "final": "remote"
+      },
+      "outbounds": [
+        {"type": "selector", "tag": "proxy", "outbounds": ["vless-reality","tuic-v5"]},
+        {"type": "vless",    "tag": "vless-reality", "server": "1.2.3.4", "server_port": 443, "uuid": "test"},
+        {"type": "tuic",     "tag": "tuic-v5",       "server": "1.2.3.4", "server_port": 8443, "uuid": "test"},
+        {"type": "direct",   "tag": "direct"},
+        {"type": "block",    "tag": "block"},
+        {"type": "dns",      "tag": "dns-out"}
+      ],
+      "route": {
+        "rules": [
+          {"protocol": "dns", "outbound": "dns-out"},
+          {"ip_is_private": true, "outbound": "direct"},
+          {"clash_mode": "direct", "outbound": "direct"},
+          {"clash_mode": "global", "outbound": "proxy"}
+        ],
+        "final": "proxy"
+      }
+    }
+    """;
+
+    // ── Action-based 1.12+ format ──
+    private const string ActionConfig = """
+    {
+      "dns": {
+        "servers": [
+          {"tag": "vpn-dns", "type": "https", "server": "1.1.1.1", "detour": "proxy"},
+          {"tag": "local-dns", "type": "local"}
+        ],
+        "rules": []
+      },
+      "outbounds": [
+        {"type": "vless", "tag": "proxy", "server": "1.2.3.4", "server_port": 443, "uuid": "test"},
+        {"type": "direct", "tag": "direct"}
+      ],
+      "route": {
+        "rules": [
+          {"action": "sniff", "timeout": "300ms"},
+          {"protocol": "dns", "action": "hijack-dns"},
+          {"ip_is_private": true, "action": "route", "outbound": "direct"}
+        ],
+        "final": "direct"
+      }
+    }
+    """;
+
+    // ── Validate ──
+
+    [Fact]
+    public void Validate_ValidConfig_Passes()
+    {
+        var (isValid, errors) = CustomConfigInjector.Validate(LegacyConfig);
+        Assert.True(isValid, string.Join("; ", errors));
+    }
+
+    [Fact]
+    public void Validate_InvalidJson_Fails()
+    {
+        var (isValid, errors) = CustomConfigInjector.Validate("{bad json");
+        Assert.False(isValid);
+        Assert.Contains(errors, e => e.Contains("Invalid JSON"));
+    }
+
+    [Fact]
+    public void Validate_NoOutbounds_Fails()
+    {
+        var (isValid, errors) = CustomConfigInjector.Validate("""{"route": {}}""");
+        Assert.False(isValid);
+        Assert.Contains(errors, e => e.Contains("outbounds"));
+    }
+
+    [Fact]
+    public void Validate_OnlyDirectOutbound_Fails()
+    {
+        var json = """{"outbounds": [{"type": "direct", "tag": "direct"}]}""";
+        var (isValid, errors) = CustomConfigInjector.Validate(json);
+        Assert.False(isValid);
+        Assert.Contains(errors, e => e.Contains("No proxy outbound"));
+    }
+
+    [Fact]
+    public void Validate_NoRouteSection_StillPasses()
+    {
+        var json = """{"outbounds": [{"type": "vless", "tag": "proxy"}, {"type": "direct", "tag": "direct"}]}""";
+        var (isValid, _) = CustomConfigInjector.Validate(json);
+        Assert.True(isValid);
+    }
+
+    // ── Inject: proxy tag detection ──
+
+    [Fact]
+    public void Inject_LegacyConfig_FindsSelectorTag()
+    {
+        var result = CustomConfigInjector.Inject(LegacyConfig, new[] { "Discord.exe" }, CreateSettings());
+        // selector tag is "proxy", so process rule should use outbound: "proxy"
+        Assert.Contains("\"outbound\": \"proxy\"", result);
+        Assert.Contains("\"Discord.exe\"", result);
+    }
+
+    [Fact]
+    public void Inject_ActionConfig_FindsProxyTag()
+    {
+        var result = CustomConfigInjector.Inject(ActionConfig, new[] { "Telegram.exe" }, CreateSettings());
+        Assert.Contains("\"Telegram.exe\"", result);
+        Assert.Contains("\"outbound\": \"proxy\"", result);
+    }
+
+    // ── Inject: format detection ──
+
+    [Fact]
+    public void Inject_LegacyConfig_NoActionField()
+    {
+        var result = CustomConfigInjector.Inject(LegacyConfig, new[] { "test.exe" }, CreateSettings());
+        // Legacy format — process rule should NOT have "action" field
+        // The rule should be: {"process_name": [...], "outbound": "proxy"} without action
+        // (action only in action-based format)
+        Assert.Contains("\"process_name\"", result);
+    }
+
+    [Fact]
+    public void Inject_ActionConfig_HasActionField()
+    {
+        var result = CustomConfigInjector.Inject(ActionConfig, new[] { "test.exe" }, CreateSettings());
+        Assert.Contains("\"action\": \"route\"", result);
+    }
+
+    // ── Inject: route rule position ──
+
+    [Fact]
+    public void Inject_LegacyConfig_ProcessRuleAfterSystemRules()
+    {
+        var result = CustomConfigInjector.Inject(LegacyConfig, new[] { "Discord.exe" }, CreateSettings());
+        var json = Newtonsoft.Json.Linq.JObject.Parse(result);
+        var rules = json.SelectToken("route.rules") as Newtonsoft.Json.Linq.JArray;
+
+        Assert.NotNull(rules);
+        // Process rule should be after dns/ip_is_private/clash_mode rules
+        // Original: [dns-out, ip_is_private, clash_mode:direct, clash_mode:global]
+        // After inject: [dns-out, ip_is_private, clash_mode:direct, clash_mode:global, process_name]
+        var processRuleIndex = -1;
+        for (int i = 0; i < rules!.Count; i++)
+        {
+            if (rules[i]["process_name"] != null)
+            {
+                processRuleIndex = i;
+                break;
+            }
+        }
+        Assert.True(processRuleIndex >= 4, $"Process rule at index {processRuleIndex}, expected >= 4");
+    }
+
+    // ── Inject: DNS rules ──
+
+    [Fact]
+    public void Inject_InjectsDnsRuleForRemoteServer()
+    {
+        var result = CustomConfigInjector.Inject(LegacyConfig, new[] { "Discord.exe" }, CreateSettings());
+        var json = Newtonsoft.Json.Linq.JObject.Parse(result);
+        var dnsRules = json.SelectToken("dns.rules") as Newtonsoft.Json.Linq.JArray;
+
+        Assert.NotNull(dnsRules);
+        // First DNS rule should be our injected process rule
+        var firstRule = dnsRules![0] as Newtonsoft.Json.Linq.JObject;
+        Assert.NotNull(firstRule!["process_name"]);
+        Assert.Equal("remote", firstRule["server"]?.ToString());
+    }
+
+    // ── Inject: Clash API ──
+
+    [Fact]
+    public void Inject_AddsClashApi()
+    {
+        var result = CustomConfigInjector.Inject(LegacyConfig, new[] { "test.exe" }, CreateSettings());
+        Assert.Contains("\"external_controller\": \"127.0.0.1:9090\"", result);
+    }
+
+    [Fact]
+    public void Inject_DoesNotOverrideExistingClashApi()
+    {
+        var configWithClash = """
+        {
+          "outbounds": [{"type": "vless", "tag": "proxy"}, {"type": "direct", "tag": "direct"}],
+          "route": {"rules": [], "final": "direct"},
+          "experimental": {"clash_api": {"external_controller": "0.0.0.0:8080"}}
+        }
+        """;
+        var result = CustomConfigInjector.Inject(configWithClash, new[] { "test.exe" }, CreateSettings());
+        Assert.Contains("0.0.0.0:8080", result);
+        Assert.DoesNotContain("127.0.0.1:9090", result);
+    }
+
+    // ── Inject: empty processes ──
+
+    [Fact]
+    public void Inject_EmptyProcesses_NoProcessRulesAdded()
+    {
+        var result = CustomConfigInjector.Inject(LegacyConfig, Array.Empty<string>(), CreateSettings());
+        var json = Newtonsoft.Json.Linq.JObject.Parse(result);
+        var rules = json.SelectToken("route.rules") as Newtonsoft.Json.Linq.JArray;
+
+        foreach (var rule in rules!)
+        {
+            Assert.Null(rule["process_name"]);
+        }
+    }
+
+    // ── Inject: wildcard filtering ──
+
+    [Fact]
+    public void Inject_FiltersWildcardProcesses()
+    {
+        var result = CustomConfigInjector.Inject(ActionConfig,
+            new[] { "Discord.exe", "chrome*", "fire?.exe" }, CreateSettings());
+        Assert.Contains("Discord.exe", result);
+        Assert.DoesNotContain("chrome*", result);
+        Assert.DoesNotContain("fire?", result);
+    }
+
+    // ── Inject: idempotent ──
+
+    [Fact]
+    public void Inject_IdempotentReinjection()
+    {
+        var settings = CreateSettings();
+        var first = CustomConfigInjector.Inject(ActionConfig, new[] { "Discord.exe" }, settings);
+        var second = CustomConfigInjector.Inject(first, new[] { "Discord.exe", "Telegram.exe" }, settings);
+
+        var json = Newtonsoft.Json.Linq.JObject.Parse(second);
+        var rules = json.SelectToken("route.rules") as Newtonsoft.Json.Linq.JArray;
+
+        // Should have exactly one process_name route rule (not two)
+        var processRules = rules!.Where(r => r["process_name"] != null).ToList();
+        Assert.Single(processRules);
+
+        // Should contain both processes
+        var names = processRules[0]["process_name"]!.Select(t => t.ToString()).ToList();
+        Assert.Contains("Discord.exe", names);
+        Assert.Contains("Telegram.exe", names);
+    }
+
+    // ── Inject: no route section ──
+
+    [Fact]
+    public void Inject_ConfigWithoutRoute_CreatesRouteSection()
+    {
+        var json = """{"outbounds": [{"type": "vless", "tag": "proxy"}, {"type": "direct", "tag": "direct"}]}""";
+        var result = CustomConfigInjector.Inject(json, new[] { "test.exe" }, CreateSettings());
+        var parsed = Newtonsoft.Json.Linq.JObject.Parse(result);
+
+        Assert.NotNull(parsed["route"]);
+        Assert.NotNull(parsed.SelectToken("route.rules"));
+    }
+
+    // ── Case preservation ──
+
+    [Fact]
+    public void Inject_PreservesProcessNameCase()
+    {
+        var result = CustomConfigInjector.Inject(ActionConfig, new[] { "Discord.exe", "Telegram.exe" }, CreateSettings());
+        Assert.Contains("Discord.exe", result);
+        Assert.Contains("Telegram.exe", result);
+    }
+}

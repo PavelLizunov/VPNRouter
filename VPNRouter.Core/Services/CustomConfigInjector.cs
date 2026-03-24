@@ -79,9 +79,7 @@ public static class CustomConfigInjector
         if (!hasProxy)
             errors.Add("No proxy outbound found (all outbounds are direct/block/dns)");
 
-        // Should have route section (or we'll create one)
-        if (config["route"] == null)
-            errors.Add("No 'route' section — one will be created during injection");
+        // Route section is optional — InjectRouteRules creates one if missing
 
         return (errors.Count == 0, errors);
     }

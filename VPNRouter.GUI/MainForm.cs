@@ -1227,14 +1227,19 @@ public class MainForm : Form
     }
 
     /// <summary>Populate UI controls from loaded settings.</summary>
+    private bool _isLoadingUI;
+
     private void LoadSettingsIntoUI()
     {
+        _isLoadingUI = true;
+        try
+        {
         // Load config mode
         var isCustomConfig = (_settings.App.ConfigMode ?? "generated")
             .Equals("custom", StringComparison.OrdinalIgnoreCase);
+        _customConfigPath.Text = _settings.App.CustomConfig ?? "";
         _vlessRadio.Checked = !isCustomConfig;
         _customConfigRadio.Checked = isCustomConfig;
-        _customConfigPath.Text = _settings.App.CustomConfig ?? "";
 
         // Toggle visibility based on config mode
         _serversInputLabel.Visible = !isCustomConfig;
@@ -1297,6 +1302,11 @@ public class MainForm : Form
                 customRoot.Checked = true;
                 customRoot.Expand();
             }
+        }
+        }
+        finally
+        {
+            _isLoadingUI = false;
         }
     }
 
@@ -1530,6 +1540,7 @@ public class MainForm : Form
 
     private void OnConfigModeChanged(object? sender, EventArgs e)
     {
+        if (_isLoadingUI) return;
         if (!_vlessRadio.Checked && !_customConfigRadio.Checked) return;
 
         var isCustom = _customConfigRadio.Checked;

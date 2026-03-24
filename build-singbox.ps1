@@ -58,12 +58,12 @@ if (-not (Test-Path (Join-Path $SrcDir ".git"))) {
 } else {
     Write-Host "       Fetching latest tags..." -ForegroundColor Gray
     Push-Location $SrcDir
-    git fetch --tags 2>&1 | Out-Null
+    $fetchOutput = git fetch --tags 2>&1
     Pop-Location
 }
 
 Push-Location $SrcDir
-git checkout "v$Version" 2>&1 | Out-Null
+$checkoutOutput = git checkout "v$Version" 2>&1
 if ($LASTEXITCODE -ne 0) {
     Pop-Location
     throw "Tag v$Version not found. Check: https://github.com/SagerNet/sing-box/tags"
