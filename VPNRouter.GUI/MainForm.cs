@@ -1705,6 +1705,7 @@ public class MainForm : Form
         // Save mode
         _settings.App.ConfigMode = isCustom ? "custom" : "generated";
         SaveSettings();
+        ShowApplyIfNeeded();
     }
 
     private void OnAddCustomConfig(object? sender, EventArgs e)
@@ -1777,6 +1778,7 @@ public class MainForm : Form
 
         RefreshCustomConfigList();
         SaveSettings();
+        ShowApplyIfNeeded();
     }
 
     private void RefreshCustomConfigList()
