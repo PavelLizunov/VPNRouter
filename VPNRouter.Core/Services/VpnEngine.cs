@@ -294,18 +294,32 @@ public class VpnEngine : IDisposable
         _logger?.Information("[VpnEngine] sing-box started (PID {Pid})", _singBox.Pid);
         OnStatus($"sing-box started (PID {_singBox.Pid})");
 
-        // Warm up proxy connection — first DNS query through proxy is slow (TLS handshake ~300ms).
-        // Fire-and-forget: resolve a domain through the VPN DNS to establish the connection.
+        // Warm up TUN + proxy connection. After TUN creation, Windows needs time to rebuild
+        // routing tables. First packets may get lost. Retry until connectivity works.
+        OnStatus("Warming up network...");
         _ = Task.Run(async () =>
         {
-            try
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            for (int attempt = 1; attempt <= 15; attempt++)
             {
-                await Task.Delay(500, ct); // let TUN stabilize
-                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-                await http.GetStringAsync("https://1.1.1.1/dns-query?name=connectivity-check.ubuntu.com&type=A", ct);
-                _logger?.Information("[VpnEngine] Proxy connection warmed up");
+                try
+                {
+                    await Task.Delay(1000, ct);
+                    await http.GetStringAsync("https://www.gstatic.com/generate_204", ct);
+                    _logger?.Information("[VpnEngine] TUN ready after {Ms}ms (attempt {Attempt})",
+                        sw.ElapsedMilliseconds, attempt);
+                    OnStatus($"Connected (PID {_singBox.Pid})");
+                    return;
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    _logger?.Debug("[VpnEngine] Warm-up attempt {Attempt}: {Error}",
+                        attempt, ex.GetType().Name);
+                }
             }
-            catch { /* silent — warm-up is best-effort */ }
+            _logger?.Warning("[VpnEngine] TUN warm-up failed after {Ms}ms", sw.ElapsedMilliseconds);
+            OnStatus($"Connected (PID {_singBox.Pid})");
         }, ct);
 
         ct.ThrowIfCancellationRequested();
