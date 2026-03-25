@@ -590,7 +590,28 @@ public static class CustomConfigInjector
             }
         }
 
-        // 1b. Optimize DNS — prevent IPv6 delays, ensure local DNS final
+        // 1b. Convert non-proxy DNS servers to "local" (system DNS).
+        // UDP/plain DNS servers (e.g. 223.5.5.5) go through TUN → first packet can timeout (~10s).
+        // "local" type uses OS resolver, bypasses TUN, no cold start.
+        if (dnsServers != null)
+        {
+            foreach (var server in dnsServers)
+            {
+                var obj = server as JObject;
+                if (obj == null) continue;
+                var detour = obj["detour"]?.ToString();
+                var type = obj["type"]?.ToString();
+                // Only convert servers without proxy detour (i.e. local/direct DNS)
+                if (string.IsNullOrEmpty(detour) && (type == "udp" || type == "dhcp"))
+                {
+                    obj["type"] = "local";
+                    obj.Remove("server");
+                    obj.Remove("server_port");
+                }
+            }
+        }
+
+        // 1c. Optimize DNS — prevent IPv6 delays, ensure local DNS final
         var dns = config["dns"] as JObject;
         if (dns != null)
         {
