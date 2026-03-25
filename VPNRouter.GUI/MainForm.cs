@@ -19,7 +19,7 @@ public class MainForm : Form
     private Button _addServerBtn = null!;
     private ListView _serverList = null!;
     private Button _removeBtn = null!;
-    private Button _clearBtn = null!;
+    // (removed: _clearBtn — Remove is sufficient)
     private Label _serverHintLabel = null!;
 
     // ── Custom config mode ──
@@ -657,13 +657,8 @@ public class MainForm : Form
         Theme.ApplySecondary(_removeBtn);
         _removeBtn.Click += OnRemoveServer;
 
-        _clearBtn = new Button { Text = Strings.ClearAll, Width = 100, Height = 28 };
-        Theme.ApplySecondary(_clearBtn);
-        _clearBtn.Click += (_, _) => { _servers.Clear(); RefreshServerList(); SaveSettings(); };
-
         _vlessBtnPanel.Controls.Add(_addServerBtn);
         _vlessBtnPanel.Controls.Add(_removeBtn);
-        _vlessBtnPanel.Controls.Add(_clearBtn);
 
         _serverList = new ListView
         {
@@ -691,26 +686,15 @@ public class MainForm : Form
         {
             Dock = DockStyle.Bottom,
             Height = 20,
-            ForeColor = t.TextMuted,
-            Font = t.SmallFont,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(4, 0, 0, 0),
-            Visible = false
-        };
-
-        var vlessHintLabel = new Label
-        {
-            Dock = DockStyle.Bottom,
-            Height = 20,
             Text = Strings.VlessHint,
             ForeColor = t.TextMuted,
             Font = t.SmallFont,
+            TextAlign = ContentAlignment.MiddleLeft,
             Padding = new Padding(4, 0, 0, 0)
         };
 
         _vlessPanel.Controls.Add(_serverList);        // Fill
-        _vlessPanel.Controls.Add(vlessHintLabel);      // Bottom (permanent: "Double-click to set primary")
-        _vlessPanel.Controls.Add(_serverHintLabel);    // Bottom (dynamic: TCP/UDP or no-flow hint)
+        _vlessPanel.Controls.Add(_serverHintLabel);    // Bottom (single hint, updated dynamically)
         _vlessPanel.Controls.Add(_vlessBtnPanel);      // Top
 
         // Dock order: last added = top
@@ -1117,7 +1101,6 @@ public class MainForm : Form
         _customConfigList.Columns[3].Text = Strings.ColServer;
 
         // Server buttons
-        _clearBtn.Text = Strings.ClearAll;
         _removeBtn.Text = Strings.Remove;
 
         // Apps tab
@@ -1212,7 +1195,6 @@ public class MainForm : Form
         _serverList.Font = t.BodyFont;
         _serverHintLabel.Font = t.SmallFont;
         _vlessBtnPanel.BackColor = t.Background;
-        Theme.ApplySecondary(_clearBtn);
         Theme.ApplySecondary(_removeBtn);
 
         // ── Apps tab ──
@@ -1604,48 +1586,26 @@ public class MainForm : Form
         // (Up/Down buttons removed — roles are automatic by flow type)
 
         // Context-sensitive hint
+        // Single hint line: TCP/UDP info or default double-click hint
         if (udpSplit)
         {
             _serverHintLabel.Text = Strings.TcpUdpHint;
             _serverHintLabel.ForeColor = t.Primary;
-            _serverHintLabel.Visible = true;
         }
         else if (_servers.Count > 0 && !hasFlow)
         {
             _serverHintLabel.Text = Strings.NoFlowHint;
             _serverHintLabel.ForeColor = t.AmberButton;
-            _serverHintLabel.Visible = true;
         }
         else
         {
-            _serverHintLabel.Visible = false;
+            _serverHintLabel.Text = Strings.VlessHint;
+            _serverHintLabel.ForeColor = t.TextMuted;
         }
 
-        // Group servers by IP for visual clarity
-        var serverGroups = _servers
-            .Select((s, i) => (server: s, index: i))
-            .GroupBy(x => x.server.Server)
-            .ToList();
-
-        string? lastServer = null;
         for (int i = 0; i < _servers.Count; i++)
         {
             var s = _servers[i];
-
-            // Add separator row when server IP changes (if multiple server IPs exist)
-            if (serverGroups.Count > 1 && s.Server != lastServer)
-            {
-                lastServer = s.Server;
-                var separator = new ListViewItem("");
-                separator.SubItems.Add($"\u2500\u2500 {s.Server} \u2500\u2500");
-                separator.SubItems.Add("");
-                separator.SubItems.Add("");
-                separator.SubItems.Add("");
-                separator.ForeColor = t.TextMuted;
-                separator.Font = t.SmallFont;
-                separator.Tag = "separator"; // mark as non-selectable
-                _serverList.Items.Add(separator);
-            }
 
             string role;
             if (udpSplit)
