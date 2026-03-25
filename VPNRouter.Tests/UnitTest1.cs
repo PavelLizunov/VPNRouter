@@ -1067,4 +1067,93 @@ public class CustomConfigInjectorTests
         Assert.Contains("Discord.exe", result);
         Assert.Contains("Telegram.exe", result);
     }
+
+    // ── DNS optimization (real-world custom config) ──
+
+    private const string RealWorldConfig = """
+    {
+      "dns": {
+        "servers": [
+          {"tag": "remote", "address": "tls://1.1.1.1", "detour": "proxy"},
+          {"tag": "local", "address": "223.5.5.5", "detour": "direct"}
+        ],
+        "rules": [
+          {"outbound": "any", "server": "local"},
+          {"clash_mode": "direct", "server": "local"}
+        ],
+        "final": "remote",
+        "strategy": "prefer_ipv4"
+      },
+      "inbounds": [{
+        "type": "tun", "auto_route": true, "strict_route": true,
+        "sniff": true, "sniff_override_destination": true,
+        "inet4_address": "172.19.0.1/30"
+      }],
+      "outbounds": [
+        {"tag": "proxy", "type": "selector", "outbounds": ["vless-reality", "tuic-v5"]},
+        {"tag": "vless-reality", "type": "vless", "server": "1.2.3.4", "server_port": 443,
+         "uuid": "test", "flow": "xtls-rprx-vision",
+         "tls": {"enabled": true, "server_name": "yahoo.com", "utls": {"enabled": true, "fingerprint": "chrome"},
+                 "reality": {"enabled": true, "public_key": "test", "short_id": "test"}}},
+        {"tag": "tuic-v5", "type": "tuic", "server": "1.2.3.4", "server_port": 443, "uuid": "test"},
+        {"tag": "direct", "type": "direct"},
+        {"tag": "block", "type": "block"},
+        {"tag": "dns-out", "type": "dns"}
+      ],
+      "route": {
+        "rules": [
+          {"protocol": "dns", "outbound": "dns-out"},
+          {"ip_is_private": true, "outbound": "direct"}
+        ],
+        "final": "proxy",
+        "auto_detect_interface": true
+      }
+    }
+    """;
+
+    [Fact]
+    public void Inject_RealWorldConfig_DnsOptimized()
+    {
+        var result = CustomConfigInjector.Inject(RealWorldConfig, new[] { "chrome.exe" }, CreateSettings());
+        var json = Newtonsoft.Json.Linq.JObject.Parse(result);
+
+        // dns.strategy must be ipv4_only (was prefer_ipv4)
+        Assert.Equal("ipv4_only", json.SelectToken("dns.strategy")?.ToString());
+
+        // dns.final must point to local DNS (was "remote")
+        var dnsFinal = json.SelectToken("dns.final")?.ToString();
+        Assert.NotEqual("remote", dnsFinal);
+
+        // route.final must be "direct" (split tunnel)
+        Assert.Equal("direct", json.SelectToken("route.final")?.ToString());
+
+        // route.default_domain_resolver must be set to local DNS
+        var resolver = json.SelectToken("route.default_domain_resolver")?.ToString();
+        Assert.NotNull(resolver);
+        Assert.NotEqual("remote", resolver);
+
+        // tun.strict_route must be false
+        var tun = json.SelectTokens("inbounds[*]").FirstOrDefault(t => t["type"]?.ToString() == "tun");
+        Assert.NotNull(tun);
+        Assert.Equal(false, (bool?)tun["strict_route"]);
+        Assert.Equal("system", tun["stack"]?.ToString());
+
+        // "block" and "dns" outbound types must be removed
+        var outbounds = json["outbounds"] as Newtonsoft.Json.Linq.JArray;
+        Assert.DoesNotContain(outbounds!, o => o["type"]?.ToString() == "block");
+        Assert.DoesNotContain(outbounds!, o => o["type"]?.ToString() == "dns");
+
+        // No "detour":"direct" on any DNS server (FATAL in 1.13)
+        var dnsServers = json.SelectToken("dns.servers") as Newtonsoft.Json.Linq.JArray;
+        foreach (var s in dnsServers!)
+            Assert.NotEqual("direct", s["detour"]?.ToString());
+
+        // DNS servers must be converted to new format (type field present)
+        foreach (var s in dnsServers!)
+            Assert.NotNull(s["type"]);
+
+        // Remote DNS must be DoH (not DoT)
+        var remoteDns = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "remote");
+        Assert.Equal("https", remoteDns?["type"]?.ToString());
+    }
 }
