@@ -529,8 +529,8 @@ public static class CustomConfigInjector
         {
             var detour = server["detour"]?.ToString();
             var type = server["type"]?.ToString();
-            if (detour == "direct" || string.IsNullOrEmpty(detour) &&
-                (type == "local" || type == "udp" || type == "dhcp"))
+            if (detour == "direct" || detour == "dns-direct" ||
+                string.IsNullOrEmpty(detour) && (type == "local" || type == "udp" || type == "dhcp"))
             {
                 localTag = server["tag"]?.ToString();
                 break;
@@ -659,19 +659,40 @@ public static class CustomConfigInjector
             }
         }
 
-        // 1c. Ensure non-proxy DNS servers have detour:"direct".
+        // 1c. Ensure non-proxy DNS servers bypass hijack-dns routing loop.
         // Without detour, DNS queries go through routing → protocol:dns → hijack-dns →
         // DNS module → same server → LOOP → 12s timeout on first request.
-        // detour:"direct" bypasses routing entirely → direct outbound → real NIC.
+        // Can't use detour:"direct" — sing-box 1.13 FATAL: "detour to empty direct makes no sense".
+        // Solution: create a dedicated "dns-direct" outbound with udp_fragment:true (makes it non-empty),
+        // then point DNS servers to it. This bypasses routing entirely → real NIC → no loop.
         if (dnsServers != null)
         {
+            bool needsDnsDirect = false;
             foreach (var server in dnsServers)
             {
                 var obj = server as JObject;
                 if (obj == null) continue;
                 var detour = obj["detour"]?.ToString();
-                if (string.IsNullOrEmpty(detour))
-                    obj["detour"] = "direct";
+                if (string.IsNullOrEmpty(detour) || detour == "direct")
+                {
+                    obj["detour"] = "dns-direct";
+                    needsDnsDirect = true;
+                }
+            }
+
+            // Add the dns-direct outbound if any DNS server needs it
+            if (needsDnsDirect)
+            {
+                var dnsOutbounds = config["outbounds"] as JArray;
+                if (dnsOutbounds != null && !dnsOutbounds.Any(o => o["tag"]?.ToString() == "dns-direct"))
+                {
+                    dnsOutbounds.Add(new JObject
+                    {
+                        ["type"] = "direct",
+                        ["tag"] = "dns-direct",
+                        ["udp_fragment"] = true
+                    });
+                }
             }
         }
 
@@ -684,14 +705,14 @@ public static class CustomConfigInjector
             if (strategy != "ipv4_only")
                 dns["strategy"] = "ipv4_only";
 
-            // Find local DNS server tag (detour:"direct" = local, no proxy)
+            // Find local DNS server tag (detour:"dns-direct" or "direct" = local, no proxy)
             string? localTag = null;
             if (dnsServers != null)
             {
                 foreach (var s in dnsServers)
                 {
                     var d = s["detour"]?.ToString();
-                    if (d == "direct")
+                    if (d == "dns-direct" || d == "direct")
                     {
                         localTag = s["tag"]?.ToString();
                         break;

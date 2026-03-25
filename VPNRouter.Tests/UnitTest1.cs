@@ -1143,13 +1143,18 @@ public class CustomConfigInjectorTests
         Assert.DoesNotContain(outbounds!, o => o["type"]?.ToString() == "block");
         Assert.DoesNotContain(outbounds!, o => o["type"]?.ToString() == "dns");
 
-        // Non-proxy DNS servers must have detour:"direct" to bypass hijack-dns routing loop
+        // Non-proxy DNS servers must have detour:"dns-direct" to bypass hijack-dns routing loop
         var dnsServers = json.SelectToken("dns.servers") as Newtonsoft.Json.Linq.JArray;
         var localDnsServer = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "local");
-        Assert.Equal("direct", localDnsServer?["detour"]?.ToString());
+        Assert.Equal("dns-direct", localDnsServer?["detour"]?.ToString());
         // Proxy DNS server must keep its proxy detour
         var remoteDnsServer = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "remote");
         Assert.Equal("proxy", remoteDnsServer?["detour"]?.ToString());
+        // dns-direct outbound must exist
+        var allOutbounds = json["outbounds"] as Newtonsoft.Json.Linq.JArray;
+        var dnsDirect = allOutbounds!.FirstOrDefault(o => o["tag"]?.ToString() == "dns-direct");
+        Assert.NotNull(dnsDirect);
+        Assert.Equal("direct", dnsDirect!["type"]?.ToString());
 
         // DNS servers must be converted to new format (type field present)
         foreach (var s in dnsServers!)
@@ -1175,7 +1180,12 @@ public class CustomConfigInjectorTests
             return;
 
         var rawJson = File.ReadAllText(configPath);
-        var result = CustomConfigInjector.Inject(rawJson, new[] { "chrome.exe", "Discord.exe" }, CreateSettings());
+        var settings = CreateSettings();
+        settings.Tun.RouteExcludeAddress = new List<string> { "10.9.1.0/24" };
+        var result = CustomConfigInjector.Inject(rawJson, new[] { "chrome.exe", "Discord.exe" }, settings);
+
+        // Write to known location for manual inspection
+        File.WriteAllText(@"C:\ProgramData\VPNRouter\config\test-debug-inject.json", result);
 
         var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-test-actual-{Guid.NewGuid()}.json");
         try
