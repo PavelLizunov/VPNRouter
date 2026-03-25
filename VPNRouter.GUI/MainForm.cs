@@ -1279,11 +1279,19 @@ public class MainForm : Form
         bool vpnRunning = _engine.IsRunning || _tray.RunningAsService;
         if (!vpnRunning)
         {
-            _applyBtn.Visible = false;
+            if (_applyBtn.Visible)
+            {
+                _applyBtn.Visible = false;
+                LayoutActionButtons();
+            }
             return;
         }
 
-        _applyBtn.Visible = true;
+        if (!_applyBtn.Visible)
+        {
+            _applyBtn.Visible = true;
+            LayoutActionButtons();
+        }
     }
 
     private async void OnApplyChanges(object? sender, EventArgs e)
