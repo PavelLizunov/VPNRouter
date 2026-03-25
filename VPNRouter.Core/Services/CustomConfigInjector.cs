@@ -467,9 +467,8 @@ public static class CustomConfigInjector
     {
         var route = config["route"] as JObject;
         if (route == null) return;
-        if (route["default_domain_resolver"] != null) return; // already set
 
-        // Find a local DNS server tag
+        // Find a local DNS server tag (no proxy detour)
         var servers = config.SelectToken("dns.servers") as JArray;
         if (servers == null || servers.Count == 0) return;
 
@@ -478,7 +477,8 @@ public static class CustomConfigInjector
         {
             var detour = server["detour"]?.ToString();
             var type = server["type"]?.ToString();
-            if (detour == "direct" || type == "local" || type == "udp" || type == "dhcp")
+            if (detour == "direct" || string.IsNullOrEmpty(detour) &&
+                (type == "local" || type == "udp" || type == "dhcp"))
             {
                 localTag = server["tag"]?.ToString();
                 break;
@@ -489,6 +489,7 @@ public static class CustomConfigInjector
         if (string.IsNullOrEmpty(localTag))
             localTag = servers[0]["tag"]?.ToString();
 
+        // Always set to local tag — using proxy DNS as domain resolver adds latency
         if (!string.IsNullOrEmpty(localTag))
             route["default_domain_resolver"] = localTag;
     }
@@ -589,37 +590,37 @@ public static class CustomConfigInjector
             }
         }
 
-        // 1b. Optimize DNS strategy — prevent IPv6 delays
+        // 1b. Optimize DNS — prevent IPv6 delays, ensure local DNS final
         var dns = config["dns"] as JObject;
         if (dns != null)
         {
-            // Force ipv4_only — "prefer_ipv4" tries AAAA first, times out, then A (adds seconds)
+            // Force ipv4_only — anything else causes IPv6 AAAA timeout (+100-300ms per query)
             var strategy = dns["strategy"]?.ToString();
-            if (strategy == "prefer_ipv4" || strategy == "prefer_ipv6")
+            if (strategy != "ipv4_only")
                 dns["strategy"] = "ipv4_only";
 
-            // Change DNS final to local server tag (not remote) —
-            // routing ALL DNS through proxy adds 100-400ms per query.
-            // Only targeted process DNS should go through VPN (handled by injected DNS rules).
-            var finalTag = dns["final"]?.ToString();
-            if (!string.IsNullOrEmpty(finalTag))
+            // Find local DNS server tag (no detour, or type=udp/local/dhcp)
+            string? localTag = null;
+            if (dnsServers != null)
             {
-                // Find local DNS server tag (no detour, or type=udp/local)
-                string? localTag = null;
-                if (dnsServers != null)
+                foreach (var s in dnsServers)
                 {
-                    foreach (var s in dnsServers)
+                    var t = s["type"]?.ToString();
+                    var d = s["detour"]?.ToString();
+                    if (string.IsNullOrEmpty(d) && (t == "udp" || t == "local" || t == "dhcp"))
                     {
-                        var t = s["type"]?.ToString();
-                        var d = s["detour"]?.ToString();
-                        if (string.IsNullOrEmpty(d) && (t == "udp" || t == "local" || t == "dhcp"))
-                        {
-                            localTag = s["tag"]?.ToString();
-                            break;
-                        }
+                        localTag = s["tag"]?.ToString();
+                        break;
                     }
                 }
-                if (localTag != null && finalTag != localTag)
+            }
+
+            // Force DNS final to local — routing ALL DNS through VPN adds 100-400ms per query.
+            // Only targeted process DNS should go through VPN (handled by injected DNS rules).
+            if (localTag != null)
+            {
+                var finalTag = dns["final"]?.ToString();
+                if (finalTag != localTag)
                     dns["final"] = localTag;
             }
         }
