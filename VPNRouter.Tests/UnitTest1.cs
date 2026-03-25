@@ -1087,7 +1087,7 @@ public class CustomConfigInjectorTests
       "inbounds": [{
         "type": "tun", "auto_route": true, "strict_route": true,
         "sniff": true, "sniff_override_destination": true,
-        "inet4_address": "172.19.0.1/30"
+        "address": ["172.19.0.1/30"]
       }],
       "outbounds": [
         {"tag": "proxy", "type": "selector", "outbounds": ["vless-reality", "tuic-v5"]},
@@ -1164,5 +1164,48 @@ public class CustomConfigInjectorTests
         Assert.NotNull(localDns);
         Assert.NotEqual("local", localDns!["type"]?.ToString());
         Assert.Equal("udp", localDns["type"]?.ToString());
+    }
+
+    [Fact]
+    public void Inject_ActualCustomConfig_SingBoxCheck()
+    {
+        // Test with the actual user config file if it exists
+        var configPath = @"C:\ProgramData\VPNRouter\config\custom-brat-pc.json";
+        if (!File.Exists(configPath))
+            return;
+
+        var rawJson = File.ReadAllText(configPath);
+        var result = CustomConfigInjector.Inject(rawJson, new[] { "chrome.exe", "Discord.exe" }, CreateSettings());
+
+        var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-test-actual-{Guid.NewGuid()}.json");
+        try
+        {
+            File.WriteAllText(tempPath, result);
+
+            var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
+            if (!File.Exists(singBoxPath))
+                return;
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = singBoxPath,
+                Arguments = $"check -c \"{tempPath}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var proc = System.Diagnostics.Process.Start(psi)!;
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(10000);
+
+            Assert.True(proc.ExitCode == 0, $"sing-box check failed (exit {proc.ExitCode}):\n{stderr}\n\nConfig:\n{result}");
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
     }
 }

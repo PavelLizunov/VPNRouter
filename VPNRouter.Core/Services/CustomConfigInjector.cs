@@ -790,6 +790,24 @@ public static class CustomConfigInjector
                 // TUN-specific fixes
                 if (obj["type"]?.ToString() == "tun")
                 {
+                    // Convert legacy inet4_address/inet6_address → address array (removed in 1.12)
+                    if (obj["address"] == null)
+                    {
+                        var addrs = new JArray();
+                        if (obj["inet4_address"] != null)
+                        {
+                            addrs.Add(obj["inet4_address"]!.ToString());
+                            obj.Remove("inet4_address");
+                        }
+                        if (obj["inet6_address"] != null)
+                        {
+                            addrs.Add(obj["inet6_address"]!.ToString());
+                            obj.Remove("inet6_address");
+                        }
+                        if (addrs.Count > 0)
+                            obj["address"] = addrs;
+                    }
+
                     // Force strict_route=false — true causes dual-stack errors on Windows
                     obj["strict_route"] = false;
                     // Set stack to "system" (default for Windows, avoids gVisor dependency)
