@@ -59,8 +59,60 @@ public static class CustomConfigInjector
 
         EnsureDefaultDomainResolver(config);
         EnsureClashApi(config, settings.SingBox.ClashApi);
+        EnsureUrltest(config);
 
         return config.ToString(Formatting.Indented);
+    }
+
+    /// <summary>
+    /// If the proxy outbound is a selector, wrap children in a urltest for auto health check.
+    /// Without urltest, selector doesn't pre-establish connections → 12s cold start on first request.
+    /// Adds a urltest only if one doesn't already exist.
+    /// </summary>
+    private static void EnsureUrltest(JObject config)
+    {
+        var outbounds = config["outbounds"] as JArray;
+        if (outbounds == null) return;
+
+        // Find the selector
+        JObject? selector = null;
+        foreach (var ob in outbounds)
+        {
+            if (ob["type"]?.ToString() == "selector")
+            {
+                selector = ob as JObject;
+                break;
+            }
+        }
+        if (selector == null) return;
+
+        var children = selector["outbounds"] as JArray;
+        if (children == null || children.Count == 0) return;
+
+        // Check if any child is already a urltest
+        foreach (var ob in outbounds)
+        {
+            if (ob["type"]?.ToString() == "urltest")
+                return; // already has urltest, don't add another
+        }
+
+        // Create urltest from selector's children
+        var childTags = children.Select(c => c.ToString()).ToList();
+        var urltest = new JObject
+        {
+            ["type"] = "urltest",
+            ["tag"] = "auto",
+            ["outbounds"] = new JArray(childTags.ToArray()),
+            ["url"] = "https://www.gstatic.com/generate_204",
+            ["interval"] = "5m"
+        };
+
+        // Insert urltest before selector
+        var selectorIdx = outbounds.IndexOf(selector);
+        outbounds.Insert(selectorIdx, urltest);
+
+        // Add "auto" to selector's children (first = default)
+        children.Insert(0, "auto");
     }
 
     /// <summary>
