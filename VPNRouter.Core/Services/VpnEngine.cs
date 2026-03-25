@@ -294,6 +294,20 @@ public class VpnEngine : IDisposable
         _logger?.Information("[VpnEngine] sing-box started (PID {Pid})", _singBox.Pid);
         OnStatus($"sing-box started (PID {_singBox.Pid})");
 
+        // Warm up proxy connection — first DNS query through proxy is slow (TLS handshake ~300ms).
+        // Fire-and-forget: resolve a domain through the VPN DNS to establish the connection.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(500, ct); // let TUN stabilize
+                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+                await http.GetStringAsync("https://1.1.1.1/dns-query?name=connectivity-check.ubuntu.com&type=A", ct);
+                _logger?.Information("[VpnEngine] Proxy connection warmed up");
+            }
+            catch { /* silent — warm-up is best-effort */ }
+        }, ct);
+
         ct.ThrowIfCancellationRequested();
 
         // 9. Firewall rules stay DISABLED while VPN is running.
