@@ -1759,6 +1759,10 @@ public class MainForm : Form
         if (_customConfigList.SelectedItems.Count == 0) return;
 
         var selectedName = _customConfigList.SelectedItems[0].SubItems[1].Text;
+
+        if (MessageBox.Show(Strings.ConfirmRemove(selectedName), AppBranding.AppName,
+            MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+
         _settings.App.CustomConfigs.RemoveAll(c => c.Name == selectedName);
 
         // If removed active, select first remaining
@@ -1900,6 +1904,10 @@ public class MainForm : Form
     private void OnRemoveServer(object? sender, EventArgs e)
     {
         if (_serverList.SelectedItems.Count == 0) return;
+
+        var selectedName = _serverList.SelectedItems[0].SubItems[1].Text;
+        if (MessageBox.Show(Strings.ConfirmRemove(selectedName), AppBranding.AppName,
+            MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
 
         // Collect all server indices from grouped Tag (List<int>)
         var indicesToRemove = _serverList.SelectedItems.Cast<ListViewItem>()

@@ -112,6 +112,9 @@ public static class Strings
         : "Double-click to set active config. Any protocol supported.";
 
     // ── Dialogs ─────────────────────────────────────────────────────────────
+    public static string ConfirmRemove(string name) => Ru
+        ? $"Удалить \"{name}\"?"
+        : $"Remove \"{name}\"?";
     public static string FailedStartVpn => Ru ? "Не удалось запустить VPN:" : "Failed to start VPN:";
     public static string FailedApply => Ru ? "Не удалось применить изменения:" : "Failed to apply changes:";
     public static string FailedParseVless => Ru ? "Ошибка разбора VLESS URI:" : "Failed to parse VLESS URI:";
