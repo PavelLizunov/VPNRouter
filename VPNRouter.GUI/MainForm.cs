@@ -742,6 +742,13 @@ public class MainForm : Form
             _customAppInput.Enabled = _splitRadio.Checked;
             _addCustomBtn.Enabled = _splitRadio.Checked;
             _removeCustomBtn.Enabled = _splitRadio.Checked;
+
+            if (!_isLoadingUI)
+            {
+                _settings.App.RoutingMode = _fullRadio.Checked ? "full" : "split";
+                SaveSettings();
+                ShowApplyIfNeeded();
+            }
         };
 
         _routingPanel.Controls.Add(_splitRadio);
@@ -2322,6 +2329,14 @@ public class MainForm : Form
         if (InvokeRequired)
         {
             BeginInvoke(() => OnEngineStatus(msg));
+            return;
+        }
+
+        // When engine reports final "Connected" status after warm-up,
+        // refresh with full detail (mode, server) instead of plain PID text.
+        if (msg.StartsWith("Connected") && _engine.IsRunning)
+        {
+            UpdateUI(true);
             return;
         }
 
