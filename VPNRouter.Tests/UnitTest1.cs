@@ -1143,10 +1143,13 @@ public class CustomConfigInjectorTests
         Assert.DoesNotContain(outbounds!, o => o["type"]?.ToString() == "block");
         Assert.DoesNotContain(outbounds!, o => o["type"]?.ToString() == "dns");
 
-        // No "detour":"direct" on any DNS server (FATAL in 1.13)
+        // Non-proxy DNS servers must have detour:"direct" to bypass hijack-dns routing loop
         var dnsServers = json.SelectToken("dns.servers") as Newtonsoft.Json.Linq.JArray;
-        foreach (var s in dnsServers!)
-            Assert.NotEqual("direct", s["detour"]?.ToString());
+        var localDnsServer = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "local");
+        Assert.Equal("direct", localDnsServer?["detour"]?.ToString());
+        // Proxy DNS server must keep its proxy detour
+        var remoteDnsServer = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "remote");
+        Assert.Equal("proxy", remoteDnsServer?["detour"]?.ToString());
 
         // DNS servers must be converted to new format (type field present)
         foreach (var s in dnsServers!)

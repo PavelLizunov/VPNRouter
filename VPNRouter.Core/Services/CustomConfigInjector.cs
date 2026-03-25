@@ -590,11 +590,6 @@ public static class CustomConfigInjector
                 var obj = server as JObject;
                 if (obj == null) continue;
 
-                // Remove "detour":"direct" — sing-box 1.13 FATAL: "detour to empty direct makes no sense"
-                // Local DNS servers go direct by default, explicit detour is redundant and breaks 1.13.
-                if (obj["detour"]?.ToString() == "direct")
-                    obj.Remove("detour");
-
                 var address = obj["address"]?.ToString();
                 if (address == null || obj["type"] != null) continue; // already new format
 
@@ -642,11 +637,32 @@ public static class CustomConfigInjector
             }
         }
 
-        // 1b. Normalize non-proxy DNS servers.
-        // DON'T use type:"local" — causes DNS loop with TUN auto_route on Windows:
-        //   app → TUN → hijack-dns → type:local → getaddrinfo() → DNS Client → TUN → loop → 12s timeout
-        // Instead use type:"udp" server:"1.0.0.1" — goes through sing-box routing → direct outbound
-        //   → auto_detect_interface → real NIC (bypasses TUN).
+        // 1b. Convert type:local/dhcp → type:udp.
+        // type:local uses getaddrinfo() which loops through TUN on Windows.
+        // type:udp with detour:direct goes through direct outbound → real NIC.
+        if (dnsServers != null)
+        {
+            foreach (var server in dnsServers)
+            {
+                var obj = server as JObject;
+                if (obj == null) continue;
+                var type = obj["type"]?.ToString();
+                if (type == "local" || type == "dhcp")
+                {
+                    obj["type"] = "udp";
+                    if (obj["server"] == null)
+                        obj["server"] = "1.0.0.1"; // Cloudflare secondary fallback
+                    // Remove detour:direct for local→udp (was meaningless for getaddrinfo),
+                    // will be re-added in step 1c below.
+                    obj.Remove("detour");
+                }
+            }
+        }
+
+        // 1c. Ensure non-proxy DNS servers have detour:"direct".
+        // Without detour, DNS queries go through routing → protocol:dns → hijack-dns →
+        // DNS module → same server → LOOP → 12s timeout on first request.
+        // detour:"direct" bypasses routing entirely → direct outbound → real NIC.
         if (dnsServers != null)
         {
             foreach (var server in dnsServers)
@@ -654,17 +670,12 @@ public static class CustomConfigInjector
                 var obj = server as JObject;
                 if (obj == null) continue;
                 var detour = obj["detour"]?.ToString();
-                var type = obj["type"]?.ToString();
-                // Convert local/dhcp to UDP with reliable DNS (avoids TUN loop)
-                if (string.IsNullOrEmpty(detour) && (type == "local" || type == "dhcp"))
-                {
-                    obj["type"] = "udp";
-                    obj["server"] = "1.0.0.1"; // Cloudflare secondary, fast & reliable
-                }
+                if (string.IsNullOrEmpty(detour))
+                    obj["detour"] = "direct";
             }
         }
 
-        // 1c. Optimize DNS — prevent IPv6 delays, ensure local DNS final
+        // 1d. Optimize DNS — prevent IPv6 delays, ensure local DNS final
         var dns = config["dns"] as JObject;
         if (dns != null)
         {
@@ -673,15 +684,14 @@ public static class CustomConfigInjector
             if (strategy != "ipv4_only")
                 dns["strategy"] = "ipv4_only";
 
-            // Find local DNS server tag (no detour, or type=udp/local/dhcp)
+            // Find local DNS server tag (detour:"direct" = local, no proxy)
             string? localTag = null;
             if (dnsServers != null)
             {
                 foreach (var s in dnsServers)
                 {
-                    var t = s["type"]?.ToString();
                     var d = s["detour"]?.ToString();
-                    if (string.IsNullOrEmpty(d) && (t == "udp" || t == "local" || t == "dhcp"))
+                    if (d == "direct")
                     {
                         localTag = s["tag"]?.ToString();
                         break;
@@ -760,6 +770,7 @@ public static class CustomConfigInjector
         }
 
         // 5. Normalize inbounds: remove deprecated fields, fix TUN settings
+        bool hadInboundSniff = false;
         var inbounds = config["inbounds"] as JArray;
         if (inbounds != null)
         {
@@ -769,6 +780,8 @@ public static class CustomConfigInjector
                 if (obj == null) continue;
 
                 // Remove deprecated sniff fields (moved to route actions in 1.12+)
+                if (obj["sniff"] != null)
+                    hadInboundSniff = true;
                 obj.Remove("sniff");
                 obj.Remove("sniff_override_destination");
                 obj.Remove("sniff_timeout");
@@ -800,7 +813,26 @@ public static class CustomConfigInjector
             }
         }
 
-        // 6. Ensure log output goes to our log file (so we can debug startup failures)
+        // 6. If we stripped inbound-level sniff, add route-level sniff rule (1.12+ replacement).
+        // Without sniffing, sing-box can't detect TLS SNI for domain-based routing.
+        if (hadInboundSniff)
+        {
+            var sniffRules = config.SelectToken("route.rules") as JArray;
+            if (sniffRules != null)
+            {
+                bool hasSniffRule = sniffRules.Any(r => r["action"]?.ToString() == "sniff");
+                if (!hasSniffRule)
+                {
+                    sniffRules.Insert(0, new JObject
+                    {
+                        ["action"] = "sniff",
+                        ["timeout"] = "300ms"
+                    });
+                }
+            }
+        }
+
+        // 7. Ensure log output goes to our log file (so we can debug startup failures)
         var log = config["log"] as JObject;
         if (log == null)
         {
