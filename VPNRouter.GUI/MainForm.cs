@@ -674,12 +674,11 @@ public class MainForm : Form
         _serverList.DrawColumnHeader += OnDrawColumnHeader;
         _serverList.DrawItem += OnDrawListItem;
         _serverList.DrawSubItem += OnDrawListSubItem;
-        _serverList.Columns.Add(Strings.ColRole, 70);
+        _serverList.Columns.Add("", 24);                     // ★ marker
         _serverList.Columns.Add(Strings.ColName, 110);
-        _serverList.Columns.Add(Strings.ColServer, 160);
-        _serverList.Columns.Add(Strings.ColPort, 50);
-        _serverList.Columns.Add(Strings.ColSecurity, 70);
-        _serverList.Resize += (_, _) => LayoutHelper.AutoSizeColumns(_serverList, new[] { 2, 3, 4, 1, 2 });
+        _serverList.Columns.Add(Strings.ColRole, 80);
+        _serverList.Columns.Add(Strings.ColServer, 140);
+        _serverList.Resize += (_, _) => LayoutHelper.AutoSizeColumns(_serverList, new[] { 1, 4, 3, 5 });
         _serverList.DoubleClick += OnServerDoubleClick;
 
         _serverHintLabel = new Label
@@ -1088,12 +1087,11 @@ public class MainForm : Form
         _addCustomConfigBtn.Text = Strings.AddConfig;
         _removeCustomConfigBtn.Text = Strings.Remove;
 
-        // Server list column headers
-        _serverList.Columns[0].Text = Strings.ColRole;
+        // Server list column headers (★, Name, Role, Server — matches Custom Config)
+        // Column 0 is ★ marker (no text)
         _serverList.Columns[1].Text = Strings.ColName;
-        _serverList.Columns[2].Text = Strings.ColServer;
-        _serverList.Columns[3].Text = Strings.ColPort;
-        _serverList.Columns[4].Text = Strings.ColSecurity;
+        _serverList.Columns[2].Text = Strings.ColRole;
+        _serverList.Columns[3].Text = Strings.ColServer;
 
         // Custom config list column headers
         _customConfigList.Columns[1].Text = Strings.ColName;
@@ -1578,24 +1576,21 @@ public class MainForm : Form
 
         _serverList.Items.Clear();
 
-        // Detect UDP split: mix of flow and no-flow servers
+        // Group servers by IP — each row represents one server address
+        var groups = _servers
+            .Select((s, i) => (server: s, index: i))
+            .GroupBy(x => x.server.Server, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // Context-sensitive hint
         bool hasFlow = _servers.Any(s => !string.IsNullOrEmpty(s.Flow));
         bool hasNoFlow = _servers.Any(s => string.IsNullOrEmpty(s.Flow));
         bool udpSplit = hasFlow && hasNoFlow;
 
-        // (Up/Down buttons removed — roles are automatic by flow type)
-
-        // Context-sensitive hint
-        // Single hint line: TCP/UDP info or default double-click hint
         if (udpSplit)
         {
             _serverHintLabel.Text = Strings.TcpUdpHint;
             _serverHintLabel.ForeColor = t.Primary;
-        }
-        else if (_servers.Count > 0 && !hasFlow)
-        {
-            _serverHintLabel.Text = Strings.NoFlowHint;
-            _serverHintLabel.ForeColor = t.AmberButton;
         }
         else
         {
@@ -1603,30 +1598,47 @@ public class MainForm : Form
             _serverHintLabel.ForeColor = t.TextMuted;
         }
 
-        for (int i = 0; i < _servers.Count; i++)
+        bool isFirst = true;
+        foreach (var group in groups)
         {
-            var s = _servers[i];
+            var entries = group.ToList();
+            var indices = entries.Select(e => e.index).ToList();
 
+            // Build role: TCP, UDP, or TCP+UDP
+            bool groupHasFlow = entries.Any(e => !string.IsNullOrEmpty(e.server.Flow));
+            bool groupHasNoFlow = entries.Any(e => string.IsNullOrEmpty(e.server.Flow));
             string role;
-            if (udpSplit)
-                role = !string.IsNullOrEmpty(s.Flow) ? Strings.RoleTcp : Strings.RoleUdp;
+            if (groupHasFlow && groupHasNoFlow)
+                role = "TCP+UDP";
+            else if (groupHasFlow)
+                role = "TCP";
+            else if (udpSplit)
+                role = "UDP";
             else
-                role = i == 0 ? Strings.RolePrimary : Strings.RoleFallback(i);
+                role = isFirst ? Strings.RolePrimary : Strings.RoleFallback(groups.IndexOf(group));
 
-            var item = new ListViewItem(role) { Tag = i }; // store server index
-            item.SubItems.Add(string.IsNullOrEmpty(s.Name) ? Strings.NoName : s.Name);
-            item.SubItems.Add(s.Server);
-            item.SubItems.Add(s.Port.ToString());
-            item.SubItems.Add(s.Security);
+            // Build name: combine names from all entries
+            var names = entries
+                .Select(e => string.IsNullOrEmpty(e.server.Name) ? null : e.server.Name)
+                .Where(n => n != null)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var displayName = names.Count > 0 ? string.Join(" / ", names) : Strings.NoName;
 
-            // Highlight: all servers in split mode, or just primary in fallback mode
-            if (udpSplit || i == 0)
+            // ★ marker for first group (primary)
+            var item = new ListViewItem(isFirst ? "\u2605" : "") { Tag = indices };
+            item.SubItems.Add(displayName);
+            item.SubItems.Add(role);
+            item.SubItems.Add(group.Key); // server IP
+
+            if (isFirst)
             {
                 item.ForeColor = t.Primary;
                 item.Font = t.BoldBodyFont;
             }
 
             _serverList.Items.Add(item);
+            isFirst = false;
         }
 
         // Restore selection
@@ -1887,10 +1899,10 @@ public class MainForm : Form
     {
         if (_serverList.SelectedItems.Count == 0) return;
 
-        // Collect server indices from Tag (skip separator rows)
+        // Collect all server indices from grouped Tag (List<int>)
         var indicesToRemove = _serverList.SelectedItems.Cast<ListViewItem>()
-            .Where(item => item.Tag is int)
-            .Select(item => (int)item.Tag!)
+            .Where(item => item.Tag is List<int>)
+            .SelectMany(item => (List<int>)item.Tag!)
             .OrderByDescending(idx => idx)
             .ToList();
 
@@ -1905,12 +1917,16 @@ public class MainForm : Form
     {
         if (_serverList.SelectedItems.Count == 0) return;
         var selected = _serverList.SelectedItems[0];
-        if (selected.Tag is not int idx || idx <= 0) return; // already primary or separator
+        if (selected.Tag is not List<int> indices) return;
 
-        // Move selected server to position 0 (make primary)
-        var server = _servers[idx];
-        _servers.RemoveAt(idx);
-        _servers.Insert(0, server);
+        // Already first group — nothing to do
+        if (indices.Count > 0 && indices.Min() == 0) return;
+
+        // Move all servers of this IP group to the top of the list
+        var movedServers = indices.OrderBy(i => i).Select(i => _servers[i]).ToList();
+        foreach (var idx in indices.OrderByDescending(i => i))
+            _servers.RemoveAt(idx);
+        _servers.InsertRange(0, movedServers);
 
         RefreshServerList();
         SaveSettings();
