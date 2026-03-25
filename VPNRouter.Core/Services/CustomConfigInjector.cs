@@ -590,9 +590,11 @@ public static class CustomConfigInjector
             }
         }
 
-        // 1b. Convert non-proxy DNS servers to "local" (system DNS).
-        // UDP/plain DNS servers (e.g. 223.5.5.5) go through TUN → first packet can timeout (~10s).
-        // "local" type uses OS resolver, bypasses TUN, no cold start.
+        // 1b. Normalize non-proxy DNS servers.
+        // DON'T use type:"local" — causes DNS loop with TUN auto_route on Windows:
+        //   app → TUN → hijack-dns → type:local → getaddrinfo() → DNS Client → TUN → loop → 12s timeout
+        // Instead use type:"udp" server:"1.0.0.1" — goes through sing-box routing → direct outbound
+        //   → auto_detect_interface → real NIC (bypasses TUN).
         if (dnsServers != null)
         {
             foreach (var server in dnsServers)
@@ -601,12 +603,11 @@ public static class CustomConfigInjector
                 if (obj == null) continue;
                 var detour = obj["detour"]?.ToString();
                 var type = obj["type"]?.ToString();
-                // Only convert servers without proxy detour (i.e. local/direct DNS)
-                if (string.IsNullOrEmpty(detour) && (type == "udp" || type == "dhcp"))
+                // Convert local/dhcp to UDP with reliable DNS (avoids TUN loop)
+                if (string.IsNullOrEmpty(detour) && (type == "local" || type == "dhcp"))
                 {
-                    obj["type"] = "local";
-                    obj.Remove("server");
-                    obj.Remove("server_port");
+                    obj["type"] = "udp";
+                    obj["server"] = "1.0.0.1"; // Cloudflare secondary, fast & reliable
                 }
             }
         }

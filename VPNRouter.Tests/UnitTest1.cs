@@ -1155,5 +1155,11 @@ public class CustomConfigInjectorTests
         // Remote DNS must be DoH (not DoT)
         var remoteDns = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "remote");
         Assert.Equal("https", remoteDns?["type"]?.ToString());
+
+        // Local DNS must NOT be type:"local" (causes DNS loop with TUN auto_route)
+        var localDns = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "local");
+        Assert.NotNull(localDns);
+        Assert.NotEqual("local", localDns!["type"]?.ToString());
+        Assert.Equal("udp", localDns["type"]?.ToString());
     }
 }
