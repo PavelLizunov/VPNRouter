@@ -7,7 +7,7 @@
         mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="680"
         x:Class="VPNRouter.Mac.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="VPNRouter"
+        Title="Virtual Penguin Network"
         Width="540" Height="680"
         MinWidth="480" MinHeight="560"
         WindowStartupLocation="CenterScreen">
@@ -23,49 +23,59 @@
     </Design.DataContext>
 
     <DockPanel>
-        <!-- ═══ Header ═══ -->
-        <Border DockPanel.Dock="Top" Padding="20,16" BorderThickness="0,0,0,1"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
-            <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Grid.Column="0" Spacing="2">
-                    <TextBlock Text="VPNRouter" FontSize="20" FontWeight="Bold"/>
-                    <TextBlock Text="Process-based split-tunnel VPN"
-                               FontSize="12" Opacity="0.6"/>
+        <!-- ═══ Header: Logo + Brand + Controls ═══ -->
+        <Border DockPanel.Dock="Top" Padding="16,12" BorderThickness="0,0,0,1"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                Background="{DynamicResource SystemAltHighColor}">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <!-- Logo -->
+                <Image Grid.Column="0" Source="/Assets/penguin_logo.png"
+                       Width="48" Height="48" Margin="0,0,12,0"/>
+                <!-- Title + Subtitle -->
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                    <TextBlock Text="Virtual Penguin Network" FontSize="18" FontWeight="Bold"
+                               Foreground="#2563EB"/>
+                    <TextBlock Text="by NiniTux  ·  v1.0.0-mac" FontSize="11" Opacity="0.5"/>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                <!-- Theme / Lang -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
                             VerticalAlignment="Center">
                     <Button Content="{Binding ThemeToggleText}"
                             Command="{Binding ToggleThemeCommand}"
-                            Padding="8,4" FontSize="12"/>
+                            Padding="8,4" FontSize="11"
+                            Background="Transparent" BorderThickness="0"/>
                     <Button Content="{Binding IsRussian, Converter={StaticResource LangConverter}}"
                             Command="{Binding ToggleLanguageCommand}"
-                            Padding="8,4" FontSize="12"/>
+                            Padding="8,4" FontSize="11"
+                            Background="Transparent" BorderThickness="0"/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- ═══ Bottom: Status + Connect ═══ -->
-        <Border DockPanel.Dock="Bottom" Padding="20,12" BorderThickness="0,1,0,0"
+        <!-- ═══ Bottom: Action Panel (Connect + Status) ═══ -->
+        <Border DockPanel.Dock="Bottom" Padding="16,10" BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
-            <DockPanel>
-                <Button DockPanel.Dock="Right"
-                        Content="{Binding ConnectButtonText}"
+            <StackPanel Spacing="8">
+                <!-- Connect Button — full width, primary color -->
+                <Button Content="{Binding ConnectButtonText}"
                         Command="{Binding ToggleConnectionCommand}"
                         IsEnabled="{Binding !IsConnecting}"
                         FontSize="14" FontWeight="Bold"
-                        Padding="24,10"
+                        Padding="0,12"
+                        HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
-                        MinWidth="180"
-                        Classes="accent"/>
-                <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Ellipse Width="10" Height="10"
-                                 Fill="{Binding IsConnected, Converter={StaticResource StatusColorConverter}}"/>
-                        <TextBlock Text="{Binding StatusText}" TextTrimming="CharacterEllipsis"
-                                   MaxWidth="250"/>
-                    </StackPanel>
+                        Background="#2563EB" Foreground="White"
+                        CornerRadius="6"/>
+                <!-- Status row -->
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Ellipse Width="10" Height="10"
+                             Fill="{Binding IsConnected, Converter={StaticResource StatusColorConverter}}"
+                             VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding StatusText}" FontSize="12"
+                               Opacity="0.7" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"/>
                 </StackPanel>
-            </DockPanel>
+            </StackPanel>
         </Border>
 
         <!-- ═══ Tabs ═══ -->
@@ -80,47 +90,47 @@
                         <StackPanel Orientation="Horizontal" Spacing="16">
                             <RadioButton Content="VLESS Servers"
                                          IsChecked="{Binding IsVlessMode}"
-                                         GroupName="ConfigMode"/>
+                                         GroupName="ConfigMode" FontWeight="SemiBold"/>
                             <RadioButton Content="Custom Config (JSON)"
-                                         GroupName="ConfigMode"/>
+                                         GroupName="ConfigMode" FontWeight="SemiBold"/>
                         </StackPanel>
 
-                        <!-- VLESS Panel -->
+                        <!-- ── VLESS Panel ── -->
                         <StackPanel Spacing="8" IsVisible="{Binding IsVlessMode}">
-                            <TextBlock Text="Paste VLESS URI(s):" FontSize="12" Opacity="0.7"/>
-                            <TextBox Text="{Binding VlessUri}"
-                                     Watermark="vless://uuid@server:443?security=reality&amp;sni=...#name"
-                                     AcceptsReturn="True"
-                                     MinHeight="60"/>
+                            <!-- Buttons -->
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Button Content="Add Server(s)"
-                                        Command="{Binding AddServerCommand}"/>
+                                        Command="{Binding AddServerCommand}"
+                                        Background="#2563EB" Foreground="White"
+                                        Padding="16,6" CornerRadius="4" FontWeight="SemiBold"/>
                                 <Button Content="Remove"
-                                        Command="{Binding RemoveServerCommand}"/>
+                                        Command="{Binding RemoveServerCommand}"
+                                        Padding="16,6" CornerRadius="4"/>
                             </StackPanel>
+
+                            <!-- VLESS URI input -->
+                            <TextBox Text="{Binding VlessUri}"
+                                     Watermark="vless://uuid@server:443?security=reality&amp;sni=...#name"
+                                     AcceptsReturn="True" MinHeight="50"/>
 
                             <!-- Server List -->
                             <ListBox ItemsSource="{Binding Servers}"
                                      SelectedItem="{Binding SelectedServer}"
-                                     MinHeight="120" MaxHeight="250">
+                                     MinHeight="100" MaxHeight="200">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate x:DataType="vm:ServerViewModel">
-                                        <Grid ColumnDefinitions="*,Auto,Auto" Margin="4,2">
-                                            <TextBlock Grid.Column="0"
-                                                       Text="{Binding DisplayName}"
-                                                       VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding Server}"
-                                                       Opacity="0.6" Margin="8,0"
-                                                       VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="2"
-                                                       Text="{Binding Security}"
-                                                       Opacity="0.4"
-                                                       VerticalAlignment="Center"/>
+                                        <Grid ColumnDefinitions="*,*,50,70" Margin="4,2">
+                                            <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Server}" Opacity="0.7"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding Port}" Opacity="0.5" TextAlignment="Center"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding Security}" Opacity="0.4" TextAlignment="Right"/>
                                         </Grid>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
+
+                            <TextBlock Text="Double-click to edit server. Paste VLESS URI(s) above."
+                                       FontSize="11" Opacity="0.5"/>
 
                             <!-- Selected Server Details -->
                             <Border IsVisible="{Binding SelectedServer, Converter={x:Static ObjectConverters.IsNotNull}}"
@@ -131,32 +141,30 @@
                                       x:DataType="vm:ServerViewModel">
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Name:" VerticalAlignment="Center" Margin="0,0,0,4"/>
                                     <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Name}" Margin="0,0,0,4"/>
-
                                     <TextBlock Grid.Row="1" Grid.Column="0" Text="Server:" VerticalAlignment="Center" Margin="0,0,0,4"/>
                                     <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Server}" Margin="0,0,0,4"/>
-
                                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Port:" VerticalAlignment="Center" Margin="0,0,0,4"/>
                                     <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Port}" Margin="0,0,0,4"/>
-
                                     <TextBlock Grid.Row="3" Grid.Column="0" Text="UUID:" VerticalAlignment="Center" Margin="0,0,0,4"/>
                                     <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding Uuid}" Margin="0,0,0,4"/>
-
                                     <TextBlock Grid.Row="4" Grid.Column="0" Text="Public Key:" VerticalAlignment="Center" Margin="0,0,0,4"/>
                                     <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding PublicKey}" Margin="0,0,0,4"/>
-
                                     <TextBlock Grid.Row="5" Grid.Column="0" Text="Short ID:" VerticalAlignment="Center"/>
                                     <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding ShortId}"/>
                                 </Grid>
                             </Border>
                         </StackPanel>
 
-                        <!-- Custom Config Panel -->
+                        <!-- ── Custom Config Panel ── -->
                         <StackPanel Spacing="8" IsVisible="{Binding !IsVlessMode}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Button Content="Add Config..."
-                                        Command="{Binding AddCustomConfigCommand}"/>
+                                        Command="{Binding AddCustomConfigCommand}"
+                                        Background="#2563EB" Foreground="White"
+                                        Padding="16,6" CornerRadius="4" FontWeight="SemiBold"/>
                                 <Button Content="Remove"
-                                        Command="{Binding RemoveCustomConfigCommand}"/>
+                                        Command="{Binding RemoveCustomConfigCommand}"
+                                        Padding="16,6" CornerRadius="4"/>
                             </StackPanel>
 
                             <ListBox ItemsSource="{Binding CustomConfigs}"
@@ -166,26 +174,20 @@
                                 <ListBox.ItemTemplate>
                                     <DataTemplate x:DataType="vm:CustomConfigViewModel">
                                         <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="4,2">
-                                            <TextBlock Grid.Column="0"
-                                                       Text="{Binding Name}"
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}"
                                                        FontWeight="{Binding IsActive, Converter={StaticResource ActiveFontConverter}}"
                                                        VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="2"
-                                                       Text="{Binding Protocols}"
-                                                       Opacity="0.6" Margin="8,0"
-                                                       VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="3"
-                                                       Text="{Binding Server}"
-                                                       Opacity="0.4"
-                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding Protocols}"
+                                                       Opacity="0.6" Margin="8,0" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding Server}"
+                                                       Opacity="0.4" VerticalAlignment="Center"/>
                                         </Grid>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
-                            <TextBlock Text="Double-click to set active config."
+                            <TextBlock Text="Double-click to set active config. Any protocol supported."
                                        FontSize="11" Opacity="0.5"/>
                         </StackPanel>
-
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -194,21 +196,20 @@
             <TabItem Header="Applications">
                 <ScrollViewer Padding="12">
                     <StackPanel Spacing="12">
-
                         <!-- Routing Mode -->
                         <StackPanel Orientation="Horizontal" Spacing="16">
                             <RadioButton Content="Split Tunnel (selected apps)"
                                          IsChecked="{Binding IsSplitTunnel}"
-                                         GroupName="RoutingMode"/>
+                                         GroupName="RoutingMode" FontWeight="SemiBold"/>
                             <RadioButton Content="Full Tunnel (all traffic)"
-                                         GroupName="RoutingMode"/>
+                                         GroupName="RoutingMode" FontWeight="SemiBold"/>
                         </StackPanel>
 
                         <TextBlock Text="Check profile groups to route through VPN:"
                                    FontSize="12" Opacity="0.7"
                                    IsVisible="{Binding IsSplitTunnel}"/>
 
-                        <!-- App Groups (TreeView-like) -->
+                        <!-- App Groups -->
                         <ItemsControl ItemsSource="{Binding AppGroups}"
                                       IsVisible="{Binding IsSplitTunnel}">
                             <ItemsControl.ItemTemplate>
@@ -229,8 +230,7 @@
                                             <ItemsControl ItemsSource="{Binding Apps}" Margin="24,4,0,0">
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate x:DataType="vm:AppItemViewModel">
-                                                        <CheckBox IsChecked="{Binding IsChecked}"
-                                                                  Margin="0,1">
+                                                        <CheckBox IsChecked="{Binding IsChecked}" Margin="0,1">
                                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                                 <TextBlock Text="{Binding ProcessName}"/>
                                                                 <TextBlock Text="(custom)" Opacity="0.4"
@@ -253,16 +253,16 @@
                             <DockPanel>
                                 <Button DockPanel.Dock="Right" Content="Remove"
                                         Command="{Binding RemoveCustomAppsCommand}"
-                                        Margin="8,0,0,0"/>
+                                        Margin="8,0,0,0" Padding="12,6" CornerRadius="4"/>
                                 <Button DockPanel.Dock="Right" Content="Add"
                                         Command="{Binding AddCustomAppCommand}"
                                         CommandParameter="{Binding #customAppInput.Text}"
-                                        Margin="8,0,0,0"/>
+                                        Margin="8,0,0,0" Padding="12,6" CornerRadius="4"
+                                        Background="#2563EB" Foreground="White"/>
                                 <TextBox x:Name="customAppInput"
                                          Watermark="e.g. Discord, Chrome, Telegram"/>
                             </DockPanel>
                         </StackPanel>
-
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
