@@ -553,22 +553,39 @@ public partial class MainWindowViewModel : ViewModelBase
     // ── Helpers ──
 
     /// <summary>
-    /// Copies bundled profiles/default.json to AppPaths.ProfilesDir if not present.
+    /// First-run setup: deploy bundled profiles and sing-box binary.
     /// </summary>
     private void DeployBundledProfiles()
     {
-        string[] files = OperatingSystem.IsMacOS()
+        // Deploy profiles
+        string[] profileFiles = OperatingSystem.IsMacOS()
             ? new[] { "default-macos.json", "default.json" }
             : new[] { "default.json" };
 
-        foreach (var file in files)
+        foreach (var file in profileFiles)
         {
             var destPath = Path.Combine(AppPaths.ProfilesDir, file);
             var bundledPath = Path.Combine(AppContext.BaseDirectory, "profiles", file);
             if (!File.Exists(destPath) && File.Exists(bundledPath))
             {
                 File.Copy(bundledPath, destPath);
-                _logger.Information("Deployed bundled profiles {File} to {Path}", file, destPath);
+                _logger.Information("Deployed {File}", file);
+            }
+        }
+
+        // Deploy sing-box binary (bundled in .app)
+        if (OperatingSystem.IsMacOS())
+        {
+            var destSingBox = AppPaths.SingBoxExePath;
+            var bundledSingBox = Path.Combine(AppContext.BaseDirectory, "sing-box");
+            if (File.Exists(bundledSingBox) && !File.Exists(destSingBox))
+            {
+                File.Copy(bundledSingBox, destSingBox);
+                File.SetUnixFileMode(destSingBox,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                    UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                    UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+                _logger.Information("Deployed sing-box to {Path}", destSingBox);
             }
         }
     }
