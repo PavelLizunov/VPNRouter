@@ -10,12 +10,11 @@ using VPNRouter.Core.Services;
 namespace VPNRouter.Core.Platform.macOS;
 
 /// <summary>
-/// macOS process scanner. Uses Process.GetProcesses() for enumeration,
-/// ps(1) for child process detection.
+/// macOS process scanner. Uses a single `ps -eo pid,ppid,comm` call for all data.
+/// No Process.GetProcesses() — it's too slow on macOS (sysctl per-process).
 ///
 /// Key difference from Windows: process names on macOS have no .exe suffix.
-/// sing-box process_name matching on macOS expects bare names (e.g. "Discord", not "Discord.exe").
-/// This scanner strips .exe from all names before returning.
+/// This scanner strips .exe from all profile names before matching.
 /// </summary>
 public class MacProcessScanner : IProcessScanner
 {
@@ -32,62 +31,45 @@ public class MacProcessScanner : IProcessScanner
     public ScanResult ScanForProfile(Profile profile)
     {
         var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var runningNow = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Build process tree ONCE (single ps call)
-        var processTree = BuildProcessTree();
+        // Single ps call — gets PID, PPID, and command name for all processes
+        var tree = BuildProcessTree();
 
-        var allProcesses = Process.GetProcesses();
-        try
+        var runningNames = new HashSet<string>(
+            tree.Names.Values, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var rule in profile.Processes)
         {
-            foreach (var p in allProcesses)
+            // 1. Primary process name — strip .exe for macOS
+            found.Add(StripExe(rule.Name));
+
+            // 2. Scan patterns — match against running process names
+            foreach (var pattern in rule.ScanPatterns)
             {
-                try { runningNow.Add(StripExe(p.ProcessName)); }
-                catch { /* process may have exited */ }
-            }
+                var strippedPattern = StripExe(pattern);
+                found.Add(strippedPattern);
 
-            foreach (var rule in profile.Processes)
-            {
-                // 1. Primary process name — strip .exe for macOS
-                found.Add(StripExe(rule.Name));
-
-                // 2. Scan patterns
-                foreach (var pattern in rule.ScanPatterns)
+                var regex = BuildPatternRegex(strippedPattern);
+                foreach (var name in runningNames)
                 {
-                    var strippedPattern = StripExe(pattern);
-                    found.Add(strippedPattern);
-
-                    var regex = BuildPatternRegex(strippedPattern);
-                    foreach (var name in runningNow)
-                    {
-                        if (regex.IsMatch(name))
-                            found.Add(name);
-                    }
-                }
-
-                // 3. Include children via pre-built tree (no extra ps calls)
-                if (rule.IncludeChildren)
-                {
-                    var mainProcs = allProcesses
-                        .Where(p => string.Equals(
-                            StripExe(p.ProcessName),
-                            StripExe(rule.Name),
-                            StringComparison.OrdinalIgnoreCase));
-
-                    foreach (var proc in mainProcs)
-                    {
-                        var children = GetDescendantNames(proc.Id, processTree);
-                        foreach (var child in children)
-                            found.Add(StripExe(child));
-                    }
+                    if (regex.IsMatch(name))
+                        found.Add(name);
                 }
             }
-        }
-        finally
-        {
-            foreach (var p in allProcesses)
+
+            // 3. Include children — walk pre-built tree
+            if (rule.IncludeChildren)
             {
-                try { p.Dispose(); } catch { }
+                var strippedName = StripExe(rule.Name);
+                var parentPids = tree.Names
+                    .Where(kv => string.Equals(kv.Value, strippedName, StringComparison.OrdinalIgnoreCase))
+                    .Select(kv => kv.Key);
+
+                foreach (var pid in parentPids)
+                {
+                    foreach (var child in GetDescendantNames(pid, tree))
+                        found.Add(StripExe(child));
+                }
             }
         }
 
@@ -100,16 +82,13 @@ public class MacProcessScanner : IProcessScanner
         _logger.Information("[MacProcessScanner] Resolved {Count} process names for profile '{Profile}'",
             result.ProcessNames.Count, profile.Name);
 
-        foreach (var name in result.ProcessNames)
-            _logger.Debug("[MacProcessScanner]   → {Name}", name);
-
         return result;
     }
 
     // ─── Private ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Run `ps -eo pid,ppid,comm` ONCE and build a parent→children lookup.
+    /// Run `ps -eo pid,ppid,comm` ONCE and build pid→name + parent→children maps.
     /// </summary>
     private ProcessTree BuildProcessTree()
     {
@@ -159,9 +138,6 @@ public class MacProcessScanner : IProcessScanner
         return tree;
     }
 
-    /// <summary>
-    /// Walk the pre-built tree to collect all descendant process names.
-    /// </summary>
     private static List<string> GetDescendantNames(int parentId, ProcessTree tree)
     {
         var names = new List<string>();
@@ -178,12 +154,6 @@ public class MacProcessScanner : IProcessScanner
         return names;
     }
 
-    private class ProcessTree
-    {
-        public Dictionary<int, List<int>> Children { get; } = new();
-        public Dictionary<int, string> Names { get; } = new();
-    }
-
     private static Regex BuildPatternRegex(string pattern)
     {
         return _regexCache.GetOrAdd(pattern, p =>
@@ -196,16 +166,18 @@ public class MacProcessScanner : IProcessScanner
         });
     }
 
-    /// <summary>
-    /// Strip .exe suffix — macOS process names don't use it.
-    /// Wildcards are passed through unchanged.
-    /// </summary>
     private static string StripExe(string name)
     {
         name = name.Trim();
         if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             name = name[..^4];
         return name;
+    }
+
+    private class ProcessTree
+    {
+        public Dictionary<int, List<int>> Children { get; } = new();
+        public Dictionary<int, string> Names { get; } = new();
     }
 }
 #endif
