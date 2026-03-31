@@ -1,17 +1,20 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+#if PLATFORM_WINDOWS
 using System.Management;
+#endif
 using System.Text.RegularExpressions;
 using Serilog;
+using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
 /// <summary>
-/// Phase 1: Scans running processes by name and wildcard patterns.
-/// Phase 3 will add ETW real-time monitoring and child process detection.
+/// Scans running processes by name and wildcard patterns.
+/// Child process detection uses WMI on Windows, skipped on other platforms.
 /// </summary>
-public class ProcessScanner
+public class ProcessScanner : IProcessScanner
 {
     private readonly ILogger _logger;
 
@@ -118,6 +121,17 @@ public class ProcessScanner
 
     private List<string> GetChildProcessNames(int parentId)
     {
+#if PLATFORM_WINDOWS
+        return GetChildProcessNamesWmi(parentId);
+#else
+        // Non-Windows: child process detection not implemented yet (TODO: macOS ps/sysctl)
+        return new List<string>();
+#endif
+    }
+
+#if PLATFORM_WINDOWS
+    private List<string> GetChildProcessNamesWmi(int parentId)
+    {
         var names = new List<string>();
         try
         {
@@ -132,8 +146,7 @@ public class ProcessScanner
                 if (!string.IsNullOrEmpty(childName))
                 {
                     names.Add(childName);
-                    // Recursively find grandchildren
-                    names.AddRange(GetChildProcessNames(childId));
+                    names.AddRange(GetChildProcessNamesWmi(childId));
                 }
             }
         }
@@ -144,6 +157,7 @@ public class ProcessScanner
 
         return names;
     }
+#endif
 
     private static Regex BuildPatternRegex(string pattern)
     {

@@ -1,4 +1,5 @@
 using Serilog;
+using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -13,8 +14,8 @@ namespace VPNRouter.Core.Services;
 public class HealthMonitor : IDisposable
 {
     private readonly SingBoxManager _singBox;
-    private readonly ProcessScanner _scanner;
-    private readonly FirewallManager _firewall;
+    private readonly IProcessScanner _scanner;
+    private readonly IFirewallManager _firewall;
     private readonly MonitoringSettings _settings;
     private readonly ILogger _logger;
 
@@ -47,8 +48,8 @@ public class HealthMonitor : IDisposable
 
     public HealthMonitor(
         SingBoxManager singBox,
-        ProcessScanner scanner,
-        FirewallManager firewall,
+        IProcessScanner scanner,
+        IFirewallManager firewall,
         MonitoringSettings settings,
         ILogger? logger = null)
     {

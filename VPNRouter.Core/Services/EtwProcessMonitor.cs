@@ -1,3 +1,4 @@
+#if PLATFORM_WINDOWS
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Session;
@@ -34,7 +35,6 @@ public class EtwProcessMonitor : IProcessMonitor
 
         _logger.Information("[ETW] Starting process monitor session");
 
-        // ETW session must run on a dedicated thread — it blocks on Process()
         _sessionThread = new Thread(RunSession)
         {
             Name = "VPNRouter-ETW",
@@ -56,7 +56,6 @@ public class EtwProcessMonitor : IProcessMonitor
     {
         try
         {
-            // Reuse existing session if crash left it open
             if (TraceEventSession.GetActiveSessionNames().Contains(SessionName))
             {
                 _logger.Warning("[ETW] Found orphaned session '{Name}', disposing", SessionName);
@@ -67,12 +66,10 @@ public class EtwProcessMonitor : IProcessMonitor
             using var session = new TraceEventSession(SessionName);
             _session = session;
 
-            // Enable kernel process events (start/stop)
             session.EnableKernelProvider(
                 KernelTraceEventParser.Keywords.Process,
                 KernelTraceEventParser.Keywords.None);
 
-            // Process start
             session.Source.Kernel.ProcessStart += data =>
             {
                 try
@@ -90,7 +87,6 @@ public class EtwProcessMonitor : IProcessMonitor
                 }
             };
 
-            // Process stop
             session.Source.Kernel.ProcessStop += data =>
             {
                 try
@@ -109,7 +105,7 @@ public class EtwProcessMonitor : IProcessMonitor
             };
 
             _logger.Information("[ETW] Session active, listening for process events");
-            session.Source.Process(); // Blocks until session is stopped
+            session.Source.Process();
         }
         catch (Exception ex)
         {
@@ -124,3 +120,4 @@ public class EtwProcessMonitor : IProcessMonitor
         Stop();
     }
 }
+#endif

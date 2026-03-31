@@ -47,7 +47,11 @@ public class VPNRouterService : BackgroundService
             _logger.LogInformation("[VPNRouterService] Loaded config, active profile: {Profile}",
                 settings.ActiveProfile);
 
-            _engine = new VpnEngine(Serilog.Log.Logger);
+            _engine = new VpnEngine(
+                new ProcessScanner(Serilog.Log.Logger),
+                () => new FirewallManager(Serilog.Log.Logger),
+                () => new EtwProcessMonitor(Serilog.Log.Logger),
+                Serilog.Log.Logger);
 
             _engine.StatusChanged += msg =>
                 _logger.LogInformation("[VPNRouterService] {Status}", msg);

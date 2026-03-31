@@ -10,7 +10,10 @@ namespace VPNRouter.GUI;
 public class TrayApplicationContext : ApplicationContext
 {
     private readonly NotifyIcon _trayIcon;
-    private readonly VpnEngine _engine = new();
+    private readonly VpnEngine _engine = new(
+        new ProcessScanner(),
+        () => new FirewallManager(),
+        () => new EtwProcessMonitor());
     private MainForm? _mainForm;
     private bool _runningAsService;
 

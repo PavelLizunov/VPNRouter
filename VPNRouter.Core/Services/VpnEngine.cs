@@ -16,10 +16,13 @@ public class VpnEngine : IDisposable
 {
     private SingBoxManager? _singBox;
     private HealthMonitor? _healthMonitor;
-    private EtwProcessMonitor? _etw;
-    private FirewallManager? _firewall;
+    private IProcessMonitor? _etw;
+    private IFirewallManager? _firewall;
     private Profile? _activeProfile;
     private ScanResult? _scanResult;
+    private readonly IProcessScanner _scanner;
+    private readonly Func<IFirewallManager> _firewallFactory;
+    private readonly Func<IProcessMonitor> _monitorFactory;
     private readonly ILogger? _logger;
 
     private bool _disposed;
@@ -54,8 +57,15 @@ public class VpnEngine : IDisposable
     /// <summary>Fired on validation warnings</summary>
     public event Action<string>? Warning;
 
-    public VpnEngine(ILogger? logger = null)
+    public VpnEngine(
+        IProcessScanner scanner,
+        Func<IFirewallManager> firewallFactory,
+        Func<IProcessMonitor> monitorFactory,
+        ILogger? logger = null)
     {
+        _scanner = scanner;
+        _firewallFactory = firewallFactory;
+        _monitorFactory = monitorFactory;
         _logger = logger;
     }
 
@@ -166,8 +176,7 @@ public class VpnEngine : IDisposable
 
         // 4. Scan processes (synchronous — can take 1-3s, check token after)
         OnStatus("Scanning processes...");
-        var scanner = new ProcessScanner(_logger);
-        _scanResult = scanner.ScanForProfile(_activeProfile);
+        _scanResult = _scanner.ScanForProfile(_activeProfile);
         _logger?.Information("[VpnEngine] Resolved {Count} process names", _scanResult.ProcessNames.Count);
 
         ct.ThrowIfCancellationRequested();
@@ -264,7 +273,7 @@ public class VpnEngine : IDisposable
         ct.ThrowIfCancellationRequested();
 
         // 7. Firewall block rules
-        _firewall = new FirewallManager(_logger);
+        _firewall = _firewallFactory();
         if (_activeProfile.BlockOnVpnFail)
         {
             _firewall.CreateBlockRules(_scanResult.ProcessNames);
@@ -333,10 +342,10 @@ public class VpnEngine : IDisposable
             OnStatus("Firewall leak protection ready (armed for VPN failure)");
         }
 
-        // 10. ETW + HealthMonitor
-        _etw = new EtwProcessMonitor(_logger);
+        // 10. Process monitor + HealthMonitor
+        _etw = _monitorFactory();
         _healthMonitor = new HealthMonitor(
-            _singBox, scanner, _firewall,
+            _singBox, _scanner, _firewall,
             settings.Monitoring, _logger);
 
         _etw.ProcessStarted += (_, e) =>

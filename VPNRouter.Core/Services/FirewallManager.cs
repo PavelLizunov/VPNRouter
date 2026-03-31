@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Serilog;
+using VPNRouter.Core.Interfaces;
 
 namespace VPNRouter.Core.Services;
 
@@ -19,7 +20,7 @@ namespace VPNRouter.Core.Services;
 /// operation. They are a safety net for the brief window when sing-box dies
 /// and TUN is gone — without them, traffic would go direct.
 /// </summary>
-public class FirewallManager : IDisposable
+public class FirewallManager : IFirewallManager
 {
     private const string RulePrefix = "VPNRouter_Block_";
     private readonly ILogger _logger;

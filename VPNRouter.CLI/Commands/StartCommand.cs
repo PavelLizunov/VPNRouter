@@ -67,7 +67,11 @@ public class StartCommand : AsyncCommand<StartSettings>
         }
 
         // 5. Start VPN via engine
-        using var engine = new VpnEngine(Serilog.Log.Logger);
+        using var engine = new VpnEngine(
+            new ProcessScanner(Serilog.Log.Logger),
+            () => new FirewallManager(Serilog.Log.Logger),
+            () => new EtwProcessMonitor(Serilog.Log.Logger),
+            Serilog.Log.Logger);
 
         engine.StatusChanged += msg =>
             AnsiConsole.MarkupLine($"[green]✓[/] {Markup.Escape(msg)}");
