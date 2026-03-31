@@ -128,7 +128,7 @@ public static class ConfigGenerator
             {
                 Type                    = "tun",
                 Tag                     = "tun-in",
-                InterfaceName           = settings.Tun.InterfaceName,
+                InterfaceName           = OperatingSystem.IsMacOS() ? "utun99" : settings.Tun.InterfaceName,
                 Address                 = new List<string> { settings.Tun.Ipv4Address },
                 Mtu                     = settings.Tun.Mtu,
                 AutoRoute               = settings.Tun.AutoRoute,
