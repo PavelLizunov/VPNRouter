@@ -157,6 +157,104 @@
       ],
       "dns_mode": "vpn_only",
       "block_on_vpn_fail": false
+    },
+    {
+      "name": "System",
+      "description": "Terminal, shells, system tools",
+      "processes": [
+        {
+          "name": "Terminal",
+          "include_children": true,
+          "scan_patterns": ["Terminal"]
+        },
+        {
+          "name": "iTerm2",
+          "include_children": true,
+          "scan_patterns": ["iTerm2*"]
+        },
+        {
+          "name": "Warp",
+          "include_children": true,
+          "scan_patterns": ["Warp*"]
+        },
+        {
+          "name": "Alacritty",
+          "include_children": true,
+          "scan_patterns": ["Alacritty*"]
+        },
+        {
+          "name": "kitty",
+          "include_children": true,
+          "scan_patterns": ["kitty*"]
+        },
+        {
+          "name": "zsh",
+          "include_children": true,
+          "scan_patterns": ["zsh", "-zsh"]
+        },
+        {
+          "name": "bash",
+          "include_children": true,
+          "scan_patterns": ["bash", "-bash"]
+        },
+        {
+          "name": "ssh",
+          "include_children": true,
+          "scan_patterns": ["ssh", "ssh-*"]
+        },
+        {
+          "name": "git",
+          "include_children": true,
+          "scan_patterns": ["git", "git-*"]
+        },
+        {
+          "name": "curl",
+          "include_children": false,
+          "scan_patterns": ["curl"]
+        },
+        {
+          "name": "wget",
+          "include_children": false,
+          "scan_patterns": ["wget"]
+        },
+        {
+          "name": "node",
+          "include_children": true,
+          "scan_patterns": ["node"]
+        },
+        {
+          "name": "Python",
+          "include_children": true,
+          "scan_patterns": ["Python", "python*"]
+        },
+        {
+          "name": "ruby",
+          "include_children": true,
+          "scan_patterns": ["ruby"]
+        },
+        {
+          "name": "Mail",
+          "include_children": true,
+          "scan_patterns": ["Mail"]
+        },
+        {
+          "name": "App Store",
+          "include_children": true,
+          "scan_patterns": ["App Store*", "storeuid"]
+        },
+        {
+          "name": "softwareupdated",
+          "include_children": false,
+          "scan_patterns": ["softwareupdated"]
+        },
+        {
+          "name": "Finder",
+          "include_children": true,
+          "scan_patterns": ["Finder"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
     }
   ]
 }
