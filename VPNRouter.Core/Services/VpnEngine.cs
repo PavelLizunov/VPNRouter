@@ -79,8 +79,7 @@ public class VpnEngine : IDisposable
     public async Task StartAsync(AppSettings settings, CancellationToken ct = default)
     {
         // 0. Ensure required directories exist
-        var logsDir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\logs");
-        Directory.CreateDirectory(logsDir);
+        AppPaths.EnsureDirectories();
 
         var isCustomConfig = (settings.App.ConfigMode ?? "generated")
             .Equals("custom", StringComparison.OrdinalIgnoreCase);
@@ -243,8 +242,11 @@ public class VpnEngine : IDisposable
         ct.ThrowIfCancellationRequested();
 
         // 6. Ensure sing-box binary exists and is up-to-date
-        var exePath = Environment.ExpandEnvironmentVariables(settings.SingBox.ExecutablePath);
-        var bundledPath = Path.Combine(AppContext.BaseDirectory, "sing-box.exe");
+        var exePath = OperatingSystem.IsWindows()
+            ? Environment.ExpandEnvironmentVariables(settings.SingBox.ExecutablePath)
+            : AppPaths.SingBoxExePath;
+        var bundledPath = Path.Combine(AppContext.BaseDirectory,
+            OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
 
         if (File.Exists(bundledPath))
         {
@@ -474,11 +476,10 @@ public class VpnEngine : IDisposable
         if (File.Exists(defaultJson))
             sources.Add(new LocalProfileSource(defaultJson, 80));
 
-        // %ProgramData% profiles
-        var programDataProfiles = Environment.ExpandEnvironmentVariables(
-            @"%ProgramData%\VPNRouter\profiles\default.json");
-        if (File.Exists(programDataProfiles))
-            sources.Add(new LocalProfileSource(programDataProfiles, 85));
+        // Platform-specific profiles directory
+        var platformProfiles = Path.Combine(AppPaths.ProfilesDir, "default.json");
+        if (File.Exists(platformProfiles))
+            sources.Add(new LocalProfileSource(platformProfiles, 85));
 
         // Built-in fallback
         sources.Add(new BuiltInProfileSource());

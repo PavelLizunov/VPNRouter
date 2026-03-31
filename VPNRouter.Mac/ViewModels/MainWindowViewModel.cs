@@ -57,6 +57,7 @@ public partial class MainWindowViewModel : ViewModelBase
             .CreateLogger();
 
         AppPaths.EnsureDirectories();
+        DeployBundledProfiles();
 
         _engine = PlatformServices.CreateVpnEngine(_logger);
         _engine.StatusChanged += OnEngineStatus;
@@ -443,6 +444,22 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     // ── Helpers ──
+
+    /// <summary>
+    /// Copies bundled profiles/default.json to AppPaths.ProfilesDir if not present.
+    /// </summary>
+    private void DeployBundledProfiles()
+    {
+        var destPath = Path.Combine(AppPaths.ProfilesDir, "default.json");
+        if (File.Exists(destPath)) return;
+
+        var bundledPath = Path.Combine(AppContext.BaseDirectory, "profiles", "default.json");
+        if (File.Exists(bundledPath))
+        {
+            File.Copy(bundledPath, destPath);
+            _logger.Information("Deployed bundled profiles to {Path}", destPath);
+        }
+    }
 
     private static Window? GetMainWindow()
     {

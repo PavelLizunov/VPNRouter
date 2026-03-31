@@ -6,8 +6,7 @@ namespace VPNRouter.Core.Services;
 
 public static class SettingsLoader
 {
-    private static readonly string DefaultConfigPath =
-        Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config.yaml");
+    private static readonly string DefaultConfigPath = AppPaths.ConfigYamlPath;
 
     public static AppSettings Load(string? path = null)
     {
@@ -90,20 +89,14 @@ public static class SettingsLoader
         App = new AppConfig
         {
             LogLevel = "info",
-            LogFile = @"%ProgramData%\VPNRouter\logs\vpnrouter.log"
+            LogFile = Path.Combine(AppPaths.LogsDir, "vpnrouter.log")
         },
         ProfileSources = new List<ProfileSource>
         {
             new()
             {
-                Type = "github",
-                Url = "https://raw.githubusercontent.com/username/vpn-profiles/main/profiles.json",
-                UpdateInterval = 3600
-            },
-            new()
-            {
                 Type = "local",
-                Path = @"%ProgramData%\VPNRouter\profiles\custom.json"
+                Path = Path.Combine(AppPaths.ProfilesDir, "default.json")
             }
         },
         ActiveProfile = "Gaming_Full",
@@ -145,7 +138,7 @@ public static class SettingsLoader
         },
         SingBox = new SingBoxSettings
         {
-            ExecutablePath = @"%ProgramData%\VPNRouter\bin\sing-box.exe",
+            ExecutablePath = AppPaths.SingBoxExePath,
             AutoDownload = true
         },
         Monitoring = new MonitoringSettings

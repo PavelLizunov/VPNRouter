@@ -44,7 +44,9 @@ public class SingBoxManager : IDisposable
             Stop();
         }
 
-        var exePath = Environment.ExpandEnvironmentVariables(_settings.ExecutablePath);
+        var exePath = OperatingSystem.IsWindows()
+            ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
+            : AppPaths.SingBoxExePath;
 
         if (!File.Exists(exePath))
             throw new FileNotFoundException($"sing-box not found at: {exePath}");
@@ -74,6 +76,28 @@ public class SingBoxManager : IDisposable
 
         try
         {
+            if (OperatingSystem.IsMacOS())
+            {
+                // On macOS, sing-box runs as root — use sudo kill via osascript
+                var pidFile = Path.Combine(AppPaths.DataDir, "singbox.pid");
+                if (File.Exists(pidFile))
+                {
+                    var pid = File.ReadAllText(pidFile).Trim();
+                    if (!string.IsNullOrEmpty(pid))
+                    {
+                        var killProc = Process.Start(new ProcessStartInfo
+                        {
+                            FileName = "/usr/bin/osascript",
+                            Arguments = $"-e 'do shell script \"kill {pid}\" with administrator privileges'",
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        });
+                        killProc?.WaitForExit(5000);
+                    }
+                    File.Delete(pidFile);
+                }
+            }
+
             _process.Kill(entireProcessTree: true);
             _process.WaitForExit(5000);
         }
@@ -189,8 +213,7 @@ public class SingBoxManager : IDisposable
     {
         try
         {
-            var logPath = Environment.ExpandEnvironmentVariables(
-                @"%ProgramData%\VPNRouter\logs\singbox.log");
+            var logPath = AppPaths.SingBoxLogPath;
 
             if (!File.Exists(logPath))
                 return;
@@ -248,15 +271,37 @@ public class SingBoxManager : IDisposable
 
     private void LaunchProcess(string exePath)
     {
-        var psi = new ProcessStartInfo
+        ProcessStartInfo psi;
+
+        if (OperatingSystem.IsMacOS())
         {
-            FileName = exePath,
-            Arguments = $"run -c \"{_currentConfigPath}\"",
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
+            // macOS: sing-box requires root for TUN — launch via osascript admin prompt.
+            // osascript runs the command as root and returns immediately.
+            // We launch a wrapper script that writes the PID so we can track it.
+            var pidFile = Path.Combine(AppPaths.DataDir, "singbox.pid");
+            var script = $"{exePath} run -c \\\"{_currentConfigPath}\\\" & echo $! > \\\"{pidFile}\\\"";
+            psi = new ProcessStartInfo
+            {
+                FileName = "/usr/bin/osascript",
+                Arguments = $"-e 'do shell script \"{script}\" with administrator privileges'",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+        }
+        else
+        {
+            psi = new ProcessStartInfo
+            {
+                FileName = exePath,
+                Arguments = $"run -c \"{_currentConfigPath}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+        }
 
         _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
         _process.OutputDataReceived += (_, e) =>
@@ -312,10 +357,9 @@ public class SingBoxManager : IDisposable
 
     private static string WriteJsonToDisk(string json)
     {
-        var dir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config");
-        Directory.CreateDirectory(dir);
+        Directory.CreateDirectory(AppPaths.ConfigDir);
 
-        var path = Path.Combine(dir, "current.json");
+        var path = AppPaths.CurrentConfigPath;
         File.WriteAllText(path, json);
         return path;
     }

@@ -162,7 +162,7 @@ public static class CustomConfigInjector
     /// </summary>
     public static string CopyToProgramData(string sourcePath, string configName = "custom")
     {
-        var dir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config");
+        var dir = AppPaths.ConfigDir;
         Directory.CreateDirectory(dir);
 
         // Sanitize name for filesystem
@@ -175,7 +175,7 @@ public static class CustomConfigInjector
     /// <summary>Returns the ProgramData path for a named custom config.</summary>
     public static string GetProgramDataPath(string configName)
     {
-        var dir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\config");
+        var dir = AppPaths.ConfigDir;
         var safeName = string.Join("_", configName.Split(Path.GetInvalidFileNameChars()));
         return Path.Combine(dir, $"custom-{safeName}.json");
     }
@@ -878,8 +878,7 @@ public static class CustomConfigInjector
             log = new JObject();
             config["log"] = log;
         }
-        var logPath = Environment.ExpandEnvironmentVariables(
-            @"%ProgramData%\VPNRouter\logs\singbox.log");
+        var logPath = AppPaths.SingBoxLogPath;
         log["output"] = logPath;
         log["timestamp"] = true;
     }

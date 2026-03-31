@@ -154,7 +154,7 @@ public class GitHubProfileSource : IProfileSource
     {
         _url = url;
         Priority = priority;
-        _cacheDir = Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\cache");
+        _cacheDir = AppPaths.CacheDir;
     }
 
     public bool IsAvailable()

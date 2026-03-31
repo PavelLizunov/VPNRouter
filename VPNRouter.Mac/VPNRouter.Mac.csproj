@@ -26,4 +26,10 @@
   <ItemGroup>
     <ProjectReference Include="..\VPNRouter.Core\VPNRouter.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\profiles\default.json" Link="profiles\default.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>
