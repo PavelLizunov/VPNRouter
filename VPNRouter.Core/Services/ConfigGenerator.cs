@@ -27,8 +27,7 @@ public static class ConfigGenerator
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var logPath = Environment.ExpandEnvironmentVariables(
-            @"%ProgramData%\VPNRouter\logs\singbox.log");
+        var logPath = AppPaths.SingBoxLogPath;
 
         var outbounds = BuildOutbounds(settings, out bool hasUdpProxy);
 

@@ -14,13 +14,14 @@ public class SingBoxManager : IDisposable
     private readonly ILogger _logger;
 
     private Process? _process;
+    private int? _macSingBoxPid; // macOS: actual sing-box PID (osascript exits immediately)
     private string _currentConfigPath = string.Empty;
     private bool _disposed;
 
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(3) };
 
     public SingBoxState State { get; private set; } = SingBoxState.Stopped;
-    public int? Pid => _process?.HasExited == false ? _process.Id : null;
+    public int? Pid => OperatingSystem.IsMacOS() ? _macSingBoxPid : (_process?.HasExited == false ? _process.Id : null);
     public event EventHandler? Crashed;
 
     public SingBoxManager(SingBoxSettings settings, ILogger? logger = null)
@@ -76,30 +77,30 @@ public class SingBoxManager : IDisposable
 
         try
         {
-            if (OperatingSystem.IsMacOS())
+            if (OperatingSystem.IsMacOS() && _macSingBoxPid.HasValue)
             {
-                // On macOS, sing-box runs as root — use sudo kill via osascript
-                var pidFile = Path.Combine(AppPaths.DataDir, "singbox.pid");
-                if (File.Exists(pidFile))
+                // sing-box runs as root — kill via osascript
+                var psi = new ProcessStartInfo("/usr/bin/osascript")
                 {
-                    var pid = File.ReadAllText(pidFile).Trim();
-                    if (!string.IsNullOrEmpty(pid))
-                    {
-                        var killProc = Process.Start(new ProcessStartInfo
-                        {
-                            FileName = "/usr/bin/osascript",
-                            Arguments = $"-e 'do shell script \"kill {pid}\" with administrator privileges'",
-                            UseShellExecute = false,
-                            CreateNoWindow = true
-                        });
-                        killProc?.WaitForExit(5000);
-                    }
-                    File.Delete(pidFile);
-                }
-            }
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+                psi.ArgumentList.Add("-e");
+                psi.ArgumentList.Add($"do shell script \"kill {_macSingBoxPid.Value}\" with administrator privileges");
+                var killProc = Process.Start(psi);
+                killProc?.WaitForExit(10000);
 
-            _process.Kill(entireProcessTree: true);
-            _process.WaitForExit(5000);
+                var pidFile = Path.Combine(AppPaths.DataDir, "singbox.pid");
+                if (File.Exists(pidFile)) File.Delete(pidFile);
+                _macSingBoxPid = null;
+            }
+            else
+            {
+                _process.Kill(entireProcessTree: true);
+                _process.WaitForExit(5000);
+            }
         }
         catch (Exception ex)
         {
@@ -107,8 +108,9 @@ public class SingBoxManager : IDisposable
         }
         finally
         {
-            _process.Dispose();
+            _process?.Dispose();
             _process = null;
+            _macSingBoxPid = null;
             State = SingBoxState.Stopped;
             _logger.Information("[SingBoxManager] sing-box stopped");
         }
@@ -159,10 +161,19 @@ public class SingBoxManager : IDisposable
         return TryHotReload();
     }
 
-    public bool IsRunning() => State == SingBoxState.Running && _process?.HasExited == false;
+    public bool IsRunning()
+    {
+        if (State != SingBoxState.Running) return false;
+        if (OperatingSystem.IsMacOS())
+            return _macSingBoxPid.HasValue && IsPidAlive(_macSingBoxPid.Value);
+        return _process?.HasExited == false;
+    }
 
     public bool IsHealthy()
     {
+        if (OperatingSystem.IsMacOS())
+            return _macSingBoxPid.HasValue && IsPidAlive(_macSingBoxPid.Value);
+
         if (_process == null || _process.HasExited)
             return false;
 
@@ -275,20 +286,29 @@ public class SingBoxManager : IDisposable
 
         if (OperatingSystem.IsMacOS())
         {
-            // macOS: sing-box requires root for TUN — launch via osascript admin prompt.
-            // osascript runs the command as root and returns immediately.
-            // We launch a wrapper script that writes the PID so we can track it.
+            // macOS: sing-box requires root for TUN.
+            // Write a helper script, then run it via osascript with admin privileges.
+            var helperScript = Path.Combine(AppPaths.DataDir, "run-singbox.sh");
             var pidFile = Path.Combine(AppPaths.DataDir, "singbox.pid");
-            var script = $"{exePath} run -c \\\"{_currentConfigPath}\\\" & echo $! > \\\"{pidFile}\\\"";
+            File.WriteAllText(helperScript,
+                $"#!/bin/bash\nnohup \"{exePath}\" run -c \"{_currentConfigPath}\" > \"{AppPaths.SingBoxLogPath}\" 2>&1 &\necho $! > \"{pidFile}\"\ndisown\n");
+            File.SetUnixFileMode(helperScript,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+
+            // osascript: escape backslashes and quotes for AppleScript string
+            var escapedPath = helperScript.Replace("\\", "\\\\").Replace("\"", "\\\"");
             psi = new ProcessStartInfo
             {
                 FileName = "/usr/bin/osascript",
-                Arguments = $"-e 'do shell script \"{script}\" with administrator privileges'",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            psi.ArgumentList.Add("-e");
+            psi.ArgumentList.Add($"do shell script quoted form of \"{escapedPath}\" with administrator privileges");
         }
         else
         {
@@ -315,14 +335,49 @@ public class SingBoxManager : IDisposable
                 _logger.Warning("[sing-box] {Line}", e.Data);
         };
 
-        _process.Exited += (_, _) => OnProcessExited();
+        if (!OperatingSystem.IsMacOS())
+            _process.Exited += (_, _) => OnProcessExited();
 
         _process.Start();
         _process.BeginOutputReadLine();
         _process.BeginErrorReadLine();
 
-        State = SingBoxState.Running;
-        _logger.Information("[SingBoxManager] sing-box started (PID {Pid})", _process.Id);
+        if (OperatingSystem.IsMacOS())
+        {
+            // osascript exits after launching sing-box — wait for it, then read PID
+            _process.WaitForExit(15000); // includes admin password dialog
+            var pidFile = Path.Combine(AppPaths.DataDir, "singbox.pid");
+            _macSingBoxPid = null;
+            for (int i = 0; i < 10; i++)
+            {
+                if (File.Exists(pidFile))
+                {
+                    var pidStr = File.ReadAllText(pidFile).Trim();
+                    if (int.TryParse(pidStr, out var pid))
+                    {
+                        _macSingBoxPid = pid;
+                        break;
+                    }
+                }
+                Thread.Sleep(200);
+            }
+
+            if (_macSingBoxPid.HasValue)
+            {
+                State = SingBoxState.Running;
+                _logger.Information("[SingBoxManager] sing-box started as root (PID {Pid})", _macSingBoxPid.Value);
+            }
+            else
+            {
+                State = SingBoxState.Failed;
+                _logger.Error("[SingBoxManager] Failed to read sing-box PID from {File}", pidFile);
+            }
+        }
+        else
+        {
+            State = SingBoxState.Running;
+            _logger.Information("[SingBoxManager] sing-box started (PID {Pid})", _process.Id);
+        }
     }
 
     /// <summary>
@@ -353,6 +408,24 @@ public class SingBoxManager : IDisposable
 
         State = SingBoxState.Failed;
         Crashed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Check if a PID is still alive (macOS/Linux). Uses kill -0 which works for root processes.</summary>
+    private static bool IsPidAlive(int pid)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("/bin/kill", $"-0 {pid}")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true
+            };
+            using var proc = Process.Start(psi);
+            proc?.WaitForExit(1000);
+            return proc?.ExitCode == 0;
+        }
+        catch { return false; }
     }
 
     private static string WriteJsonToDisk(string json)
