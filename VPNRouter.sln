@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VPNRouter.Tests", "VPNRoute
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VPNRouter.GUI", "VPNRouter.GUI\VPNRouter.GUI.csproj", "{67C33E67-B399-40ED-88FF-6A1F42752785}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VPNRouter.Mac", "VPNRouter.Mac\VPNRouter.Mac.csproj", "{094E6034-0E64-4015-8705-80C6EFEA31D9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -42,5 +44,9 @@ Global
 		{67C33E67-B399-40ED-88FF-6A1F42752785}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{67C33E67-B399-40ED-88FF-6A1F42752785}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{67C33E67-B399-40ED-88FF-6A1F42752785}.Release|Any CPU.Build.0 = Release|Any CPU
+		{094E6034-0E64-4015-8705-80C6EFEA31D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{094E6034-0E64-4015-8705-80C6EFEA31D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{094E6034-0E64-4015-8705-80C6EFEA31D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{094E6034-0E64-4015-8705-80C6EFEA31D9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
