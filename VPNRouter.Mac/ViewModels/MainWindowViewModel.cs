@@ -237,7 +237,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
             try
             {
-                await _engine.StartAsync(_settings);
+                await Task.Run(() => _engine.StartAsync(_settings));
             }
             catch (Exception ex)
             {
