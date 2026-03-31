@@ -62,38 +62,49 @@ public class SingBoxManager : IDisposable
 
     public void Stop()
     {
+        _logger.Information("[SingBoxManager] Stopping sing-box (PID {Pid})", Pid);
+
+        if (OperatingSystem.IsMacOS())
+        {
+            // sing-box runs as root via sudo — kill with sudo (NOPASSWD from sudoers)
+            try
+            {
+                if (_process != null) _process.EnableRaisingEvents = false;
+
+                var psi = new ProcessStartInfo("/usr/bin/sudo", "pkill -f sing-box")
+                {
+                    UseShellExecute = false, CreateNoWindow = true,
+                    RedirectStandardOutput = true, RedirectStandardError = true
+                };
+                using var killProc = Process.Start(psi);
+                killProc?.WaitForExit(5000);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[SingBoxManager] Error stopping sing-box");
+            }
+            finally
+            {
+                _process?.Dispose();
+                _process = null;
+                State = SingBoxState.Stopped;
+                _logger.Information("[SingBoxManager] sing-box stopped");
+            }
+            return;
+        }
+
         if (_process == null || _process.HasExited)
         {
             State = SingBoxState.Stopped;
             return;
         }
 
-        _logger.Information("[SingBoxManager] Stopping sing-box (PID {Pid})", Pid);
-
-        // Disable events BEFORE Kill — this prevents the Exited callback from
-        // firing and falsely reporting a crash. Simple and race-free.
         _process.EnableRaisingEvents = false;
 
         try
         {
-            if (OperatingSystem.IsMacOS())
-            {
-                // sing-box runs as detached root — kill via osascript
-                var psi = new ProcessStartInfo("/usr/bin/osascript")
-                {
-                    UseShellExecute = false, CreateNoWindow = true,
-                    RedirectStandardOutput = true, RedirectStandardError = true
-                };
-                psi.ArgumentList.Add("-e");
-                psi.ArgumentList.Add("do shell script \"pkill -f sing-box\" with administrator privileges");
-                var killProc = Process.Start(psi);
-                killProc?.WaitForExit(15000);
-            }
-            else
-            {
-                _process.Kill(entireProcessTree: true);
-                _process.WaitForExit(5000);
-            }
+            _process.Kill(entireProcessTree: true);
+            _process.WaitForExit(5000);
         }
         catch (Exception ex)
         {
@@ -101,7 +112,7 @@ public class SingBoxManager : IDisposable
         }
         finally
         {
-            _process?.Dispose();
+            _process.Dispose();
             _process = null;
             State = SingBoxState.Stopped;
             _logger.Information("[SingBoxManager] sing-box stopped");
@@ -114,15 +125,12 @@ public class SingBoxManager : IDisposable
         State = SingBoxState.Restarting;
         Stop();
 
-        var exePath = Environment.ExpandEnvironmentVariables(_settings.ExecutablePath);
+        var exePath = OperatingSystem.IsWindows()
+            ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
+            : AppPaths.SingBoxExePath;
         LaunchProcess(exePath);
     }
 
-    /// <summary>
-    /// Hot-reload: sends new config to sing-box via Clash API PUT /configs.
-    /// No process restart — TUN interface stays up, connections are not dropped.
-    /// Falls back to kill+restart if hot-reload fails.
-    /// </summary>
     public void ReloadConfig(SingBoxConfig config) =>
         ReloadConfigJson(ConfigGenerator.Serialize(config));
 
@@ -138,11 +146,6 @@ public class SingBoxManager : IDisposable
         Restart();
     }
 
-    /// <summary>
-    /// Attempts hot-reload only (no fallback to full restart).
-    /// Returns true if hot-reload succeeded, false otherwise.
-    /// Use this for debounce-triggered reloads to avoid restart storms.
-    /// </summary>
     public bool TryReloadConfig(SingBoxConfig config) =>
         TryReloadConfigJson(ConfigGenerator.Serialize(config));
 
@@ -208,10 +211,6 @@ public class SingBoxManager : IDisposable
 
     // ─── Private ──────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Rotates singbox.log if it exceeds MaxLogSizeBytes.
-    /// Renames current log to singbox.old.log (overwriting previous backup).
-    /// </summary>
     private void RotateSingBoxLog()
     {
         try
@@ -239,10 +238,6 @@ public class SingBoxManager : IDisposable
         }
     }
 
-    /// <summary>
-    /// Attempts hot-reload via Clash API: PUT http://{clash_api}/configs?force=true
-    /// Returns true on HTTP 2xx, false on any error.
-    /// </summary>
     private bool TryHotReload()
     {
         try
@@ -278,20 +273,16 @@ public class SingBoxManager : IDisposable
 
         if (OperatingSystem.IsMacOS())
         {
-            // macOS: sing-box requires root for TUN.
-            // Run sing-box as foreground in osascript — osascript stays alive as long as sing-box runs.
-            // This way we can track the osascript process directly.
-            var cmd = $"\\\"{exePath}\\\" run -c \\\"{_currentConfigPath}\\\"";
+            // sudo with NOPASSWD — sudoers configured by UI on first Connect
             psi = new ProcessStartInfo
             {
-                FileName = "/usr/bin/osascript",
+                FileName = "/usr/bin/sudo",
+                Arguments = $"\"{exePath}\" run -c \"{_currentConfigPath}\"",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
-            psi.ArgumentList.Add("-e");
-            psi.ArgumentList.Add($"do shell script \"{cmd}\" with administrator privileges");
         }
         else
         {
@@ -318,59 +309,17 @@ public class SingBoxManager : IDisposable
                 _logger.Warning("[sing-box] {Line}", e.Data);
         };
 
-        if (!OperatingSystem.IsMacOS())
-            _process.Exited += (_, _) => OnProcessExited();
+        _process.Exited += (_, _) => OnProcessExited();
 
         _process.Start();
         _process.BeginOutputReadLine();
         _process.BeginErrorReadLine();
 
-        if (OperatingSystem.IsMacOS())
-        {
-            // osascript exits after auth + launching detached root shell.
-            // Wait for it to complete, then verify sing-box is alive via Clash API.
-            _process.WaitForExit(30000);
-            State = SingBoxState.Running;
-            _logger.Information("[SingBoxManager] sing-box launched via osascript");
-        }
-        else
-        {
-            State = SingBoxState.Running;
-            _logger.Information("[SingBoxManager] sing-box started (PID {Pid})", _process.Id);
-        }
+        State = SingBoxState.Running;
+        _logger.Information("[SingBoxManager] sing-box started (PID {Pid})", _process.Id);
     }
 
-    /// <summary>
-    /// Only fires for genuine crashes — Stop() disables EnableRaisingEvents
-    /// before Kill(), so intentional stops never reach here.
-    /// Exit code 0 = sing-box exited cleanly (e.g. network not ready at boot).
-    /// Non-zero = actual crash. Both trigger restart via Crashed event.
-    /// </summary>
-    private void OnProcessExited()
-    {
-        int? exitCode = null;
-        try
-        {
-            if (_process is { HasExited: true } p)
-                exitCode = p.ExitCode;
-        }
-        catch { /* process disposed or access denied */ }
-
-        if (exitCode == 0)
-        {
-            _logger.Warning("[SingBoxManager] sing-box exited unexpectedly (exit code 0) — will attempt restart");
-        }
-        else
-        {
-            _logger.Error("[SingBoxManager] sing-box crashed (exit code: {Code})",
-                exitCode?.ToString() ?? "unknown");
-        }
-
-        State = SingBoxState.Failed;
-        Crashed?.Invoke(this, EventArgs.Empty);
-    }
-
-    /// <summary>Check if sing-box Clash API responds (macOS: sing-box runs detached as root).</summary>
+    /// <summary>Check if sing-box Clash API responds (macOS: sing-box runs as root child of sudo).</summary>
     private bool IsClashApiAlive()
     {
         try
@@ -379,6 +328,26 @@ public class SingBoxManager : IDisposable
             return response.IsSuccessStatusCode;
         }
         catch { return false; }
+    }
+
+    private void OnProcessExited()
+    {
+        int? exitCode = null;
+        try
+        {
+            if (_process is { HasExited: true } p)
+                exitCode = p.ExitCode;
+        }
+        catch { }
+
+        if (exitCode == 0)
+            _logger.Warning("[SingBoxManager] sing-box exited unexpectedly (exit code 0) — will attempt restart");
+        else
+            _logger.Error("[SingBoxManager] sing-box crashed (exit code: {Code})",
+                exitCode?.ToString() ?? "unknown");
+
+        State = SingBoxState.Failed;
+        Crashed?.Invoke(this, EventArgs.Empty);
     }
 
     private static string WriteJsonToDisk(string json)

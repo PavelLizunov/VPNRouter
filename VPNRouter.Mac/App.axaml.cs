@@ -41,6 +41,12 @@ public partial class App : Application
                 mainWindow.Hide();
             };
 
+            // Cleanup sing-box on any kind of app exit
+            desktop.ShutdownRequested += (_, _) =>
+            {
+                _viewModel?.QuitCommand.Execute(null);
+            };
+
             // Setup tray icon
             SetupTrayIcon(desktop);
         }

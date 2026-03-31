@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -166,6 +167,68 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// One-time: create /etc/sudoers.d/vpnrouter via osascript on UI thread
+    /// so the admin password dialog appears properly.
+    /// </summary>
+    private void EnsureMacSudoAccess()
+    {
+        const string sudoersPath = "/etc/sudoers.d/vpnrouter";
+        if (File.Exists(sudoersPath)) return;
+
+        StatusText = IsRussian ? "Настройка sudo (один раз)..." : "Setting up sudo (one-time)...";
+
+        // Write sudoers content to temp file (avoids all quoting problems)
+        var user = Environment.UserName;
+        var singbox = AppPaths.SingBoxExePath;
+        var tmpFile = Path.Combine(Path.GetTempPath(), "vpnrouter-sudoers");
+        File.WriteAllText(tmpFile,
+            $"{user} ALL=(root) NOPASSWD: {singbox}\n" +
+            $"{user} ALL=(root) NOPASSWD: /usr/bin/pkill -f sing-box\n");
+
+        // Write a helper script
+        var helperScript = Path.Combine(Path.GetTempPath(), "vpnrouter-setup.sh");
+        File.WriteAllText(helperScript,
+            $"#!/bin/bash\ncp \"{tmpFile}\" {sudoersPath}\nchmod 0440 {sudoersPath}\nchown root:wheel {sudoersPath}\nrm -f \"{tmpFile}\" \"{helperScript}\"\n");
+        File.SetUnixFileMode(helperScript,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+            UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+
+        // Exact same osascript format that works for sing-box launch
+        var cmd = $"\\\"{helperScript}\\\"";
+        var psi = new ProcessStartInfo("/usr/bin/osascript")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        psi.ArgumentList.Add("-e");
+        psi.ArgumentList.Add($"do shell script \"{cmd}\" with administrator privileges");
+
+        _logger.Information("Running osascript for sudo setup...");
+        var proc = System.Diagnostics.Process.Start(psi);
+        if (proc == null)
+        {
+            _logger.Error("Failed to start osascript");
+            return;
+        }
+
+        var stderr = proc.StandardError.ReadToEnd();
+        var stdout = proc.StandardOutput.ReadToEnd();
+        proc.WaitForExit(60000);
+
+        _logger.Information("osascript exit={Exit} stdout={Out} stderr={Err}",
+            proc.ExitCode, stdout, stderr);
+        proc.Dispose();
+
+        if (File.Exists(sudoersPath))
+            _logger.Information("Passwordless sudo configured");
+        else
+            _logger.Warning("Failed to configure sudoers");
+    }
+
     private static string StripExe(string name)
     {
         name = name.Trim();
@@ -266,6 +329,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
             SaveSettings();
             _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+
+            // macOS: ensure sudo access (one-time password prompt)
+            if (OperatingSystem.IsMacOS())
+                await Task.Run(EnsureMacSudoAccess);
 
             try
             {
