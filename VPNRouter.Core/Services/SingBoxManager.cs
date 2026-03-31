@@ -76,8 +76,24 @@ public class SingBoxManager : IDisposable
 
         try
         {
-            _process.Kill(entireProcessTree: true);
-            _process.WaitForExit(5000);
+            if (OperatingSystem.IsMacOS())
+            {
+                // sing-box runs as detached root — kill via osascript
+                var psi = new ProcessStartInfo("/usr/bin/osascript")
+                {
+                    UseShellExecute = false, CreateNoWindow = true,
+                    RedirectStandardOutput = true, RedirectStandardError = true
+                };
+                psi.ArgumentList.Add("-e");
+                psi.ArgumentList.Add("do shell script \"pkill -f sing-box\" with administrator privileges");
+                var killProc = Process.Start(psi);
+                killProc?.WaitForExit(15000);
+            }
+            else
+            {
+                _process.Kill(entireProcessTree: true);
+                _process.WaitForExit(5000);
+            }
         }
         catch (Exception ex)
         {
@@ -85,7 +101,7 @@ public class SingBoxManager : IDisposable
         }
         finally
         {
-            _process.Dispose();
+            _process?.Dispose();
             _process = null;
             State = SingBoxState.Stopped;
             _logger.Information("[SingBoxManager] sing-box stopped");
@@ -137,10 +153,19 @@ public class SingBoxManager : IDisposable
         return TryHotReload();
     }
 
-    public bool IsRunning() => State == SingBoxState.Running && _process?.HasExited == false;
+    public bool IsRunning()
+    {
+        if (State != SingBoxState.Running) return false;
+        if (OperatingSystem.IsMacOS())
+            return IsClashApiAlive();
+        return _process?.HasExited == false;
+    }
 
     public bool IsHealthy()
     {
+        if (OperatingSystem.IsMacOS())
+            return State == SingBoxState.Running && IsClashApiAlive();
+
         if (_process == null || _process.HasExited)
             return false;
 
@@ -256,7 +281,7 @@ public class SingBoxManager : IDisposable
             // macOS: sing-box requires root for TUN.
             // Run sing-box as foreground in osascript — osascript stays alive as long as sing-box runs.
             // This way we can track the osascript process directly.
-            var cmd = $"\\\"{exePath}\\\" run -c \\\"{_currentConfigPath}\\\" > \\\"{AppPaths.SingBoxLogPath}\\\" 2>&1";
+            var cmd = $"\\\"{exePath}\\\" run -c \\\"{_currentConfigPath}\\\"";
             psi = new ProcessStartInfo
             {
                 FileName = "/usr/bin/osascript",
@@ -293,14 +318,26 @@ public class SingBoxManager : IDisposable
                 _logger.Warning("[sing-box] {Line}", e.Data);
         };
 
-        _process.Exited += (_, _) => OnProcessExited();
+        if (!OperatingSystem.IsMacOS())
+            _process.Exited += (_, _) => OnProcessExited();
 
         _process.Start();
         _process.BeginOutputReadLine();
         _process.BeginErrorReadLine();
 
-        State = SingBoxState.Running;
-        _logger.Information("[SingBoxManager] sing-box started (PID {Pid})", _process.Id);
+        if (OperatingSystem.IsMacOS())
+        {
+            // osascript exits after auth + launching detached root shell.
+            // Wait for it to complete, then verify sing-box is alive via Clash API.
+            _process.WaitForExit(30000);
+            State = SingBoxState.Running;
+            _logger.Information("[SingBoxManager] sing-box launched via osascript");
+        }
+        else
+        {
+            State = SingBoxState.Running;
+            _logger.Information("[SingBoxManager] sing-box started (PID {Pid})", _process.Id);
+        }
     }
 
     /// <summary>
@@ -333,20 +370,13 @@ public class SingBoxManager : IDisposable
         Crashed?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Check if a PID is still alive (macOS/Linux). Uses kill -0 which works for root processes.</summary>
-    private static bool IsPidAlive(int pid)
+    /// <summary>Check if sing-box Clash API responds (macOS: sing-box runs detached as root).</summary>
+    private bool IsClashApiAlive()
     {
         try
         {
-            var psi = new ProcessStartInfo("/bin/kill", $"-0 {pid}")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true
-            };
-            using var proc = Process.Start(psi);
-            proc?.WaitForExit(1000);
-            return proc?.ExitCode == 0;
+            using var response = _http.GetAsync($"http://{_settings.ClashApi}/configs").GetAwaiter().GetResult();
+            return response.IsSuccessStatusCode;
         }
         catch { return false; }
     }
