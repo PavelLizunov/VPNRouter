@@ -34,6 +34,9 @@ public class MacProcessScanner : IProcessScanner
         var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var runningNow = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Build process tree ONCE (single ps call)
+        var processTree = BuildProcessTree();
+
         var allProcesses = Process.GetProcesses();
         try
         {
@@ -62,7 +65,7 @@ public class MacProcessScanner : IProcessScanner
                     }
                 }
 
-                // 3. Include children via ps(1)
+                // 3. Include children via pre-built tree (no extra ps calls)
                 if (rule.IncludeChildren)
                 {
                     var mainProcs = allProcesses
@@ -73,7 +76,7 @@ public class MacProcessScanner : IProcessScanner
 
                     foreach (var proc in mainProcs)
                     {
-                        var children = GetChildProcessNames(proc.Id);
+                        var children = GetDescendantNames(proc.Id, processTree);
                         foreach (var child in children)
                             found.Add(StripExe(child));
                     }
@@ -106,12 +109,11 @@ public class MacProcessScanner : IProcessScanner
     // ─── Private ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Enumerate child processes using `ps -eo pid,ppid,comm`.
-    /// This is a portable macOS approach (no P/Invoke or WMI needed).
+    /// Run `ps -eo pid,ppid,comm` ONCE and build a parent→children lookup.
     /// </summary>
-    private List<string> GetChildProcessNames(int parentId)
+    private ProcessTree BuildProcessTree()
     {
-        var names = new List<string>();
+        var tree = new ProcessTree();
         try
         {
             var psi = new ProcessStartInfo
@@ -125,13 +127,12 @@ public class MacProcessScanner : IProcessScanner
             };
 
             using var proc = Process.Start(psi);
-            if (proc == null) return names;
+            if (proc == null) return tree;
 
             var output = proc.StandardOutput.ReadToEnd();
             proc.WaitForExit(5000);
 
-            // Parse: "  PID  PPID COMM"
-            foreach (var line in output.Split('\n').Skip(1)) // skip header
+            foreach (var line in output.Split('\n').Skip(1))
             {
                 var parts = line.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length < 3) continue;
@@ -139,21 +140,48 @@ public class MacProcessScanner : IProcessScanner
                 if (!int.TryParse(parts[0], out var pid)) continue;
                 if (!int.TryParse(parts[1], out var ppid)) continue;
 
-                if (ppid == parentId)
+                var comm = Path.GetFileName(parts[2]);
+                tree.Names[pid] = comm;
+
+                if (!tree.Children.TryGetValue(ppid, out var list))
                 {
-                    var comm = parts[2]; // just the exe name, no full path
-                    names.Add(comm);
-                    // Recurse
-                    names.AddRange(GetChildProcessNames(pid));
+                    list = new List<int>();
+                    tree.Children[ppid] = list;
                 }
+                list.Add(pid);
             }
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "[MacProcessScanner] ps query failed for parent PID {Id}", parentId);
+            _logger.Warning(ex, "[MacProcessScanner] Failed to build process tree");
+        }
+
+        return tree;
+    }
+
+    /// <summary>
+    /// Walk the pre-built tree to collect all descendant process names.
+    /// </summary>
+    private static List<string> GetDescendantNames(int parentId, ProcessTree tree)
+    {
+        var names = new List<string>();
+        if (!tree.Children.TryGetValue(parentId, out var children))
+            return names;
+
+        foreach (var childPid in children)
+        {
+            if (tree.Names.TryGetValue(childPid, out var name))
+                names.Add(name);
+            names.AddRange(GetDescendantNames(childPid, tree));
         }
 
         return names;
+    }
+
+    private class ProcessTree
+    {
+        public Dictionary<int, List<int>> Children { get; } = new();
+        public Dictionary<int, string> Names { get; } = new();
     }
 
     private static Regex BuildPatternRegex(string pattern)
