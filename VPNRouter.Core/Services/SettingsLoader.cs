@@ -96,7 +96,8 @@ public static class SettingsLoader
             new()
             {
                 Type = "local",
-                Path = Path.Combine(AppPaths.ProfilesDir, "default.json")
+                Path = Path.Combine(AppPaths.ProfilesDir,
+                    OperatingSystem.IsMacOS() ? "default-macos.json" : "default.json")
             }
         },
         ActiveProfile = "Gaming_Full",

@@ -40,7 +40,7 @@ public partial class MainWindowViewModel : ViewModelBase
     // ── Collections ──
     public ObservableCollection<ServerViewModel> Servers { get; } = new();
     public ObservableCollection<CustomConfigViewModel> CustomConfigs { get; } = new();
-    public ObservableCollection<AppItemViewModel> Apps { get; } = new();
+    public ObservableCollection<AppGroupViewModel> AppGroups { get; } = new();
 
     // ── Selected items ──
     [ObservableProperty] private ServerViewModel? _selectedServer;
@@ -107,10 +107,17 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void LoadApps()
     {
-        Apps.Clear();
+        AppGroups.Clear();
 
-        // Load from built-in profile
-        var profilePath = Path.Combine(AppContext.BaseDirectory, "profiles", "default.json");
+        var activeProfiles = (_settings.ActiveProfile ?? "")
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        // Load from profiles (macOS uses default-macos.json)
+        var profileFile = OperatingSystem.IsMacOS() ? "default-macos.json" : "default.json";
+        var profilePath = Path.Combine(AppContext.BaseDirectory, "profiles", profileFile);
+        if (!File.Exists(profilePath))
+            profilePath = Path.Combine(AppPaths.ProfilesDir, profileFile);
+        // Fallback to default.json if macOS variant doesn't exist
         if (!File.Exists(profilePath))
             profilePath = Path.Combine(AppPaths.ProfilesDir, "default.json");
 
@@ -124,14 +131,18 @@ public partial class MainWindowViewModel : ViewModelBase
                 {
                     foreach (var profile in collection.Profiles)
                     {
+                        var isActive = activeProfiles.Any(p =>
+                            p.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
+
+                        var group = new AppGroupViewModel(profile.Name, profile.Description, isActive);
+
                         foreach (var proc in profile.Processes)
                         {
-                            if (!Apps.Any(a => a.ProcessName.Equals(proc.Name, StringComparison.OrdinalIgnoreCase)))
-                            {
-                                var isActive = _settings.ActiveProfile?.Contains(profile.Name, StringComparison.OrdinalIgnoreCase) == true;
-                                Apps.Add(new AppItemViewModel(proc.Name, isActive));
-                            }
+                            var name = StripExe(proc.Name);
+                            group.Apps.Add(new AppItemViewModel(name, isActive));
                         }
+
+                        AppGroups.Add(group);
                     }
                 }
             }
@@ -141,12 +152,26 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         }
 
-        // Add custom apps
-        foreach (var app in _settings.CustomApps ?? new())
+        // Custom apps group
+        var customApps = _settings.CustomApps ?? new();
+        if (customApps.Count > 0)
         {
-            if (!string.IsNullOrEmpty(app) && !Apps.Any(a => a.ProcessName.Equals(app, StringComparison.OrdinalIgnoreCase)))
-                Apps.Add(new AppItemViewModel(app, true, isCustom: true));
+            var customGroup = new AppGroupViewModel("Custom Apps", "Your custom applications", true);
+            foreach (var app in customApps)
+            {
+                if (!string.IsNullOrEmpty(app))
+                    customGroup.Apps.Add(new AppItemViewModel(StripExe(app), true, isCustom: true));
+            }
+            AppGroups.Add(customGroup);
         }
+    }
+
+    private static string StripExe(string name)
+    {
+        name = name.Trim();
+        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            name = name[..^4];
+        return name;
     }
 
     private void SaveSettings()
@@ -179,11 +204,18 @@ public partial class MainWindowViewModel : ViewModelBase
         var active = CustomConfigs.FirstOrDefault(c => c.IsActive);
         _settings.App.ActiveCustomConfig = active?.Name ?? "";
 
+        // Active profiles (checked groups)
+        var activeProfileNames = AppGroups
+            .Where(g => g.IsChecked && g.Name != "Custom Apps")
+            .Select(g => g.Name);
+        _settings.ActiveProfile = string.Join(",", activeProfileNames);
+
         // Custom apps
-        _settings.CustomApps = Apps
-            .Where(a => a.IsCustom && a.IsChecked)
+        var customGroup = AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
+        _settings.CustomApps = customGroup?.Apps
+            .Where(a => a.IsChecked)
             .Select(a => a.ProcessName)
-            .ToList();
+            .ToList() ?? new();
 
         SettingsLoader.Save(_settings, AppPaths.ConfigYamlPath);
     }
@@ -352,23 +384,31 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(processName)) return;
 
-        var name = processName.Trim();
-        // On macOS, strip .exe if user pasted it
-        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            name = name[..^4];
+        var name = StripExe(processName.Trim());
 
-        if (Apps.Any(a => a.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        // Find or create Custom Apps group
+        var customGroup = AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
+        if (customGroup == null)
+        {
+            customGroup = new AppGroupViewModel("Custom Apps", "Your custom applications", true);
+            AppGroups.Add(customGroup);
+        }
+
+        if (customGroup.Apps.Any(a => a.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase)))
             return;
 
-        Apps.Add(new AppItemViewModel(name, true, isCustom: true));
+        customGroup.Apps.Add(new AppItemViewModel(name, true, isCustom: true));
     }
 
     [RelayCommand]
     private void RemoveCustomApps()
     {
-        var toRemove = Apps.Where(a => a.IsCustom && a.IsChecked).ToList();
+        var customGroup = AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
+        if (customGroup == null) return;
+
+        var toRemove = customGroup.Apps.Where(a => a.IsChecked).ToList();
         foreach (var app in toRemove)
-            Apps.Remove(app);
+            customGroup.Apps.Remove(app);
     }
 
     [RelayCommand]
@@ -450,14 +490,19 @@ public partial class MainWindowViewModel : ViewModelBase
     /// </summary>
     private void DeployBundledProfiles()
     {
-        var destPath = Path.Combine(AppPaths.ProfilesDir, "default.json");
-        if (File.Exists(destPath)) return;
+        string[] files = OperatingSystem.IsMacOS()
+            ? new[] { "default-macos.json", "default.json" }
+            : new[] { "default.json" };
 
-        var bundledPath = Path.Combine(AppContext.BaseDirectory, "profiles", "default.json");
-        if (File.Exists(bundledPath))
+        foreach (var file in files)
         {
-            File.Copy(bundledPath, destPath);
-            _logger.Information("Deployed bundled profiles to {Path}", destPath);
+            var destPath = Path.Combine(AppPaths.ProfilesDir, file);
+            var bundledPath = Path.Combine(AppContext.BaseDirectory, "profiles", file);
+            if (!File.Exists(destPath) && File.Exists(bundledPath))
+            {
+                File.Copy(bundledPath, destPath);
+                _logger.Information("Deployed bundled profiles {File} to {Path}", file, destPath);
+            }
         }
     }
 

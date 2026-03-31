@@ -31,5 +31,8 @@
     <None Include="..\profiles\default.json" Link="profiles\default.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\profiles\default-macos.json" Link="profiles\default-macos.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>

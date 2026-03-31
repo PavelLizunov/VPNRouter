@@ -204,34 +204,54 @@
                                          GroupName="RoutingMode"/>
                         </StackPanel>
 
-                        <TextBlock Text="Check apps to route through VPN:"
+                        <TextBlock Text="Check profile groups to route through VPN:"
                                    FontSize="12" Opacity="0.7"
                                    IsVisible="{Binding IsSplitTunnel}"/>
 
-                        <!-- App List -->
-                        <ListBox ItemsSource="{Binding Apps}"
-                                 MinHeight="200"
-                                 IsVisible="{Binding IsSplitTunnel}">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:AppItemViewModel">
-                                    <CheckBox IsChecked="{Binding IsChecked}"
-                                              Margin="4,1">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <TextBlock Text="{Binding ProcessName}"/>
-                                            <TextBlock Text="(custom)" Opacity="0.4"
-                                                       IsVisible="{Binding IsCustom}"/>
-                                        </StackPanel>
-                                    </CheckBox>
+                        <!-- App Groups (TreeView-like) -->
+                        <ItemsControl ItemsSource="{Binding AppGroups}"
+                                      IsVisible="{Binding IsSplitTunnel}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:AppGroupViewModel">
+                                    <Border Margin="0,2" Padding="8,6"
+                                            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                                            BorderThickness="1" CornerRadius="4">
+                                        <Expander>
+                                            <Expander.Header>
+                                                <CheckBox IsChecked="{Binding IsChecked}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                                        <TextBlock Text="{Binding Description}" Opacity="0.5"
+                                                                   FontSize="12" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </CheckBox>
+                                            </Expander.Header>
+                                            <ItemsControl ItemsSource="{Binding Apps}" Margin="24,4,0,0">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:AppItemViewModel">
+                                                        <CheckBox IsChecked="{Binding IsChecked}"
+                                                                  Margin="0,1">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Text="{Binding ProcessName}"/>
+                                                                <TextBlock Text="(custom)" Opacity="0.4"
+                                                                           IsVisible="{Binding IsCustom}"/>
+                                                            </StackPanel>
+                                                        </CheckBox>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Expander>
+                                    </Border>
                                 </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
                         <!-- Add Custom App -->
                         <StackPanel Spacing="4" IsVisible="{Binding IsSplitTunnel}">
-                            <TextBlock Text="Add custom app (process name):"
+                            <TextBlock Text="Add custom app (process name, e.g. Discord, Chrome):"
                                        FontSize="12" Opacity="0.7"/>
                             <DockPanel>
-                                <Button DockPanel.Dock="Right" Content="Remove checked"
+                                <Button DockPanel.Dock="Right" Content="Remove"
                                         Command="{Binding RemoveCustomAppsCommand}"
                                         Margin="8,0,0,0"/>
                                 <Button DockPanel.Dock="Right" Content="Add"
