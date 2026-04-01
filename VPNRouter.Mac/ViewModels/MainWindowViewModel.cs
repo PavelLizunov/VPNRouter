@@ -113,7 +113,10 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         AppGroups.Clear();
 
-        var activeProfiles = (_settings.ActiveProfile ?? "")
+        var activeProfileStr = _settings.ActiveProfile ?? "";
+        var isFirstLaunch = string.IsNullOrWhiteSpace(activeProfileStr);
+
+        var activeProfiles = activeProfileStr
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
         // Load from profiles (macOS uses default-macos.json)
@@ -135,7 +138,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 {
                     foreach (var profile in collection.Profiles)
                     {
-                        var isActive = activeProfiles.Any(p =>
+                        // First launch: select all profiles by default
+                        var isActive = isFirstLaunch || activeProfiles.Any(p =>
                             p.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
 
                         var group = new AppGroupViewModel(profile.Name, profile.Description, isActive);
