@@ -34,8 +34,8 @@ $DistDir = Join-Path $Root "publish\dist"
 $FdDir = Join-Path $Root "publish\fd"
 $UpdateDir = Join-Path $Root "publish\update"
 $PackageDir = Join-Path $Root "publish\package"
-$InstallZipName = "VPNRouter-install-v$Version.zip"
-$UpdateZipName = "VPNRouter-update-v$Version.zip"
+$InstallZipName = "VPNRouter-v$Version-win.zip"
+$UpdateZipName = "VPNRouter-update-v$Version-win.zip"
 $InstallZipPath = Join-Path $Root $InstallZipName
 $UpdateZipPath = Join-Path $Root $UpdateZipName
 

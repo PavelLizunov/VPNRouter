@@ -35,6 +35,9 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _isVlessMode = true;
     [ObservableProperty] private bool _isSplitTunnel = true;
 
+    // ── Version ──
+    public string VersionText => $"by NiniTux  \u00b7  v{AppVersion.Version}";
+
     // ── VLESS fields (for single-server quick edit) ──
     [ObservableProperty] private string _vlessUri = string.Empty;
 

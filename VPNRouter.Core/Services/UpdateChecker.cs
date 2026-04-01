@@ -20,6 +20,12 @@ public class UpdateChecker
     public event Action<int>? DownloadProgress;        // 0-100
     public event Action<string>? StatusChanged;
 
+    // ── Platform-specific asset naming ──
+    // v2.0+: VPNRouter-v2.0.0-win.zip / VPNRouter-v2.0.0-mac.zip
+    // Legacy: VPNRouter-install-v1.24.6.zip (old Windows naming, still supported)
+    private static readonly string PlatformSuffix =
+        OperatingSystem.IsMacOS() ? "-mac" : "-win";
+
     static UpdateChecker()
     {
         _http.DefaultRequestHeaders.Add("User-Agent", "VPNRouter");
@@ -29,8 +35,7 @@ public class UpdateChecker
     {
         _settings = settings;
         _currentVersion = currentVersion;
-        _stagingDir = Environment.ExpandEnvironmentVariables(
-            @"%ProgramData%\VPNRouter\update-staging");
+        _stagingDir = Path.Combine(AppPaths.DataDir, "update-staging");
     }
 
     public async Task<UpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default)
@@ -41,7 +46,6 @@ public class UpdateChecker
         if (!Version.TryParse(_currentVersion, out var current))
             return null;
 
-        // Fetch all releases (up to 30) to collect changelogs for skipped versions
         var url = $"https://api.github.com/repos/{_settings.GitHubRepo}/releases?per_page=30";
         var json = await _http.GetStringAsync(url, ct);
 
@@ -61,8 +65,7 @@ public class UpdateChecker
         if (releases == null || releases.Length == 0)
             return null;
 
-        // Find all non-draft releases newer than current version, sorted newest-first
-        // Stable channel: skip pre-releases. Experimental: include all.
+        // Skip platform-specific tags (e.g. v1.0.0-mac) — they don't parse as Version
         var newerReleases = releases
             .Where(r => !r.draft && (_settings.IsExperimental || !r.prerelease))
             .Select(r => new
@@ -80,43 +83,32 @@ public class UpdateChecker
 
         var latestRelease = newerReleases[0];
 
-        // Find install ZIP asset (VPNRouter-install-v*.zip — app/ layout)
-        var fullAsset = latestRelease.Release.assets?.FirstOrDefault(a =>
-            a.name.StartsWith("VPNRouter-install-v", StringComparison.OrdinalIgnoreCase) &&
-            a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+        // ── Find platform-specific assets ──
+        var fullAsset = FindFullAsset(latestRelease.Release.assets);
+        var liteAsset = FindLiteAsset(latestRelease.Release.assets);
 
-        // Find lite update asset (VPNRouter-update-v*.zip — app binaries only)
-        var updateAsset = latestRelease.Release.assets?.FirstOrDefault(a =>
-            a.name.StartsWith("VPNRouter-update-v", StringComparison.OrdinalIgnoreCase) &&
-            a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+        bool canUseLite = liteAsset != null && IsSharedRuntimeInstall();
 
-        // Lite update: update asset exists AND current install uses shared runtime
-        bool canUseLite = updateAsset != null && IsSharedRuntimeInstall();
-
-        // Need at least one downloadable asset
         if (fullAsset == null && !canUseLite)
             return null;
 
-        // Collect release notes from ALL skipped versions (newest first)
         var allNotes = newerReleases
             .Where(r => !string.IsNullOrWhiteSpace(r.Release.body))
             .Select(r => r.Release.body!.Trim())
             .ToList();
-
-        var combinedNotes = string.Join("\n\n", allNotes);
 
         var info = new UpdateInfo
         {
             CurrentVersion = _currentVersion,
             LatestVersion = latestRelease.Tag,
             DownloadUrl = fullAsset?.browser_download_url
-                          ?? updateAsset?.browser_download_url ?? string.Empty,
-            ReleaseNotes = combinedNotes,
+                          ?? liteAsset?.browser_download_url ?? string.Empty,
+            ReleaseNotes = string.Join("\n\n", allNotes),
             HtmlUrl = latestRelease.Release.html_url ?? string.Empty,
-            SizeBytes = fullAsset?.size ?? updateAsset?.size ?? 0,
+            SizeBytes = fullAsset?.size ?? liteAsset?.size ?? 0,
             IsNewer = true,
-            LiteDownloadUrl = updateAsset?.browser_download_url,
-            LiteSizeBytes = updateAsset?.size ?? 0,
+            LiteDownloadUrl = liteAsset?.browser_download_url,
+            LiteSizeBytes = liteAsset?.size ?? 0,
             HasLiteUpdate = canUseLite
         };
 
@@ -126,7 +118,6 @@ public class UpdateChecker
 
     public async Task<string> DownloadAndStageAsync(UpdateInfo info, CancellationToken ct = default)
     {
-        // Choose lite or full download
         var useLite = info.HasLiteUpdate && !string.IsNullOrEmpty(info.LiteDownloadUrl);
         var downloadUrl = useLite ? info.LiteDownloadUrl! : info.DownloadUrl;
         var expectedSize = useLite ? info.LiteSizeBytes : info.SizeBytes;
@@ -164,7 +155,6 @@ public class UpdateChecker
 
         fileStream.Close();
 
-        // Validate downloaded file — catch truncated downloads
         var downloadedSize = new FileInfo(zipPath).Length;
         if (expectedSize > 0 && downloadedSize < expectedSize * 0.9)
             throw new InvalidOperationException(
@@ -175,31 +165,12 @@ public class UpdateChecker
         var extractDir = Path.Combine(_stagingDir, "extracted");
         ZipFile.ExtractToDirectory(zipPath, extractDir);
 
-        // Validate: must contain at least one of our app files
-        // Support both flat layout and app/ subfolder layout
-        var checkDir = extractDir;
-        var appSubDir = Path.Combine(extractDir, "app");
-        if (Directory.Exists(appSubDir) &&
-            (File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.exe")) ||
-             File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.dll"))))
-        {
-            checkDir = appSubDir;
-        }
-
-        if (!File.Exists(Path.Combine(checkDir, "VPNRouter.GUI.exe")) &&
-            !File.Exists(Path.Combine(checkDir, "VPNRouter.GUI.dll")))
-            throw new InvalidOperationException("Invalid update package: VPNRouter.GUI.exe/dll not found.");
+        ValidateExtractedContent(extractDir);
 
         StatusChanged?.Invoke("Update ready to apply.");
         return extractDir;
     }
 
-    /// <summary>
-    /// Clean up leftover files from a previous update:
-    /// - staging directory (downloaded/extracted ZIP)
-    /// - .bak files (renamed locked executables during in-process update)
-    /// Call on app startup.
-    /// </summary>
     public void CleanupStagingDir()
     {
         try
@@ -207,9 +178,8 @@ public class UpdateChecker
             if (Directory.Exists(_stagingDir))
                 Directory.Delete(_stagingDir, true);
         }
-        catch { /* Non-critical — will be cleaned on next update */ }
+        catch { }
 
-        // Clean up .bak files left from in-process update (renamed locked exes)
         try
         {
             var appDir = AppContext.BaseDirectory;
@@ -222,23 +192,25 @@ public class UpdateChecker
     }
 
     /// <summary>
-    /// Apply update in-process: copy files directly, rename locked executables.
-    /// No external batch script needed — eliminates the chicken-and-egg problem
-    /// where old versions had buggy batch scripts that couldn't self-update.
-    ///
-    /// On Windows, a running .exe can be renamed (but not deleted/overwritten).
-    /// So we: rename locked file → copy new file → start new exe → exit.
-    /// The .bak files are cleaned up on next startup via CleanupStagingDir().
-    ///
-    /// Supports install ZIP (app/ layout) and lite update ZIP (flat).
-    /// When install ZIP has app/ subfolder, strips the wrapper and copies app/ contents.
+    /// Apply update. Platform-specific:
+    /// - Windows: copy files, rename locked executables (.bak), relaunch .exe
+    /// - macOS: replace .app bundle contents, relaunch via open(1)
     /// </summary>
     public void ApplyUpdate(string extractedDir)
     {
+        if (OperatingSystem.IsMacOS())
+            ApplyUpdateMac(extractedDir);
+        else
+            ApplyUpdateWindows(extractedDir);
+    }
+
+    // ─── Windows ─────────────────────────────────────────────────────────────
+
+    private static void ApplyUpdateWindows(string extractedDir)
+    {
         var appDir = AppContext.BaseDirectory.TrimEnd('\\');
 
-        // If extracted package has app/ subfolder, strip the wrapper
-        // (install ZIP layout: Start VPN.cmd + README.txt + app/)
+        // Strip app/ wrapper from install ZIP layout
         var appSubDir = Path.Combine(extractedDir, "app");
         if (Directory.Exists(appSubDir) &&
             (File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.exe")) ||
@@ -248,14 +220,12 @@ public class UpdateChecker
         }
 
         var guiExe = Path.Combine(appDir, "VPNRouter.GUI.exe");
-        int copied = 0, renamed = 0;
 
         foreach (var srcFile in Directory.GetFiles(extractedDir, "*", SearchOption.AllDirectories))
         {
             var relativePath = Path.GetRelativePath(extractedDir, srcFile);
             var destPath = Path.Combine(appDir, relativePath);
 
-            // Ensure target subdirectory exists (e.g. profiles\)
             var destDir = Path.GetDirectoryName(destPath);
             if (destDir != null)
                 Directory.CreateDirectory(destDir);
@@ -263,21 +233,16 @@ public class UpdateChecker
             try
             {
                 File.Copy(srcFile, destPath, overwrite: true);
-                copied++;
             }
             catch (IOException)
             {
-                // File is locked (running exe) — rename old file, then copy new
                 var bakPath = destPath + ".bak";
                 try { File.Delete(bakPath); } catch { }
                 File.Move(destPath, bakPath);
                 File.Copy(srcFile, destPath);
-                copied++;
-                renamed++;
             }
         }
 
-        // Launch updated GUI (inherits admin token from current process)
         Process.Start(new ProcessStartInfo
         {
             FileName = guiExe,
@@ -286,13 +251,187 @@ public class UpdateChecker
         });
     }
 
+    // ─── macOS ───────────────────────────────────────────────────────────────
+
+    private static void ApplyUpdateMac(string extractedDir)
+    {
+        // Find .app bundle in extracted content
+        var appBundles = Directory.GetDirectories(extractedDir, "*.app", SearchOption.TopDirectoryOnly);
+
+        string sourceDir;
+        if (appBundles.Length > 0)
+        {
+            // ZIP contains .app bundle — use its Contents/
+            sourceDir = Path.Combine(appBundles[0], "Contents");
+        }
+        else if (Directory.Exists(Path.Combine(extractedDir, "Contents")))
+        {
+            // ZIP contains Contents/ directly
+            sourceDir = Path.Combine(extractedDir, "Contents");
+        }
+        else
+        {
+            // Flat layout — just DLLs, copy to Contents/MacOS/
+            var currentAppBundle = FindCurrentAppBundle()
+                ?? throw new InvalidOperationException("Cannot locate current .app bundle.");
+            var targetMacOS = Path.Combine(currentAppBundle, "Contents", "MacOS");
+            CopyDirectoryRecursive(extractedDir, targetMacOS);
+
+            Process.Start(new ProcessStartInfo("/usr/bin/open", $"-n \"{currentAppBundle}\"")
+                { UseShellExecute = false });
+            return;
+        }
+
+        // Full bundle update — replace entire Contents/
+        var appBundle = FindCurrentAppBundle()
+            ?? throw new InvalidOperationException("Cannot locate current .app bundle.");
+        var targetContents = Path.Combine(appBundle, "Contents");
+
+        CopyDirectoryRecursive(sourceDir, targetContents);
+
+        // Make binaries executable
+        var macosDir = Path.Combine(targetContents, "MacOS");
+        if (Directory.Exists(macosDir))
+        {
+            foreach (var file in Directory.GetFiles(macosDir))
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo("/bin/chmod", $"+x \"{file}\"")
+                        { UseShellExecute = false })?.WaitForExit(3000);
+                }
+                catch { }
+            }
+        }
+
+        Process.Start(new ProcessStartInfo("/usr/bin/open", $"-n \"{appBundle}\"")
+            { UseShellExecute = false });
+    }
+
     /// <summary>
-    /// Detects if the current installation uses shared runtime (non-single-file deployment).
-    /// Single-file self-contained exe's don't have hostfxr.dll next to them.
-    /// Shared-runtime installs (v1.17+) have hostfxr.dll in the app directory.
+    /// Walk up from AppContext.BaseDirectory to find the .app bundle.
+    /// e.g. /Applications/VPNRouter.app/Contents/MacOS/ → /Applications/VPNRouter.app
+    /// </summary>
+    private static string? FindCurrentAppBundle()
+    {
+        var dir = AppContext.BaseDirectory.TrimEnd('/');
+        while (!string.IsNullOrEmpty(dir))
+        {
+            if (dir.EndsWith(".app", StringComparison.OrdinalIgnoreCase))
+                return dir;
+            dir = Path.GetDirectoryName(dir);
+        }
+        return null;
+    }
+
+    private static void CopyDirectoryRecursive(string source, string target)
+    {
+        Directory.CreateDirectory(target);
+        foreach (var file in Directory.GetFiles(source))
+            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), overwrite: true);
+        foreach (var subdir in Directory.GetDirectories(source))
+            CopyDirectoryRecursive(subdir, Path.Combine(target, Path.GetFileName(subdir)));
+    }
+
+    // ─── Asset matching ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Find the full install asset for the current platform.
+    /// v2.0+: VPNRouter-v2.0.0-win.zip / VPNRouter-v2.0.0-mac.zip
+    /// Legacy: VPNRouter-install-v*.zip (Windows only, no platform suffix)
+    /// </summary>
+    private static dynamic? FindFullAsset(dynamic[]? assets)
+    {
+        if (assets == null) return null;
+
+        // New naming: VPNRouter-v*-{platform}.zip (not containing "update")
+        var newFormat = ((IEnumerable<dynamic>)assets).FirstOrDefault(a =>
+        {
+            string name = a.name;
+            return name.StartsWith("VPNRouter-v", StringComparison.OrdinalIgnoreCase) &&
+                   name.EndsWith($"{PlatformSuffix}.zip", StringComparison.OrdinalIgnoreCase) &&
+                   !name.Contains("update", StringComparison.OrdinalIgnoreCase);
+        });
+        if (newFormat != null) return newFormat;
+
+        // Legacy (Windows only): VPNRouter-install-v*.zip
+        if (OperatingSystem.IsWindows())
+        {
+            return ((IEnumerable<dynamic>)assets).FirstOrDefault(a =>
+            {
+                string name = a.name;
+                return name.StartsWith("VPNRouter-install-v", StringComparison.OrdinalIgnoreCase) &&
+                       name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+            });
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Find the lite update asset (Windows only).
+    /// v2.0+: VPNRouter-update-v2.0.0-win.zip
+    /// Legacy: VPNRouter-update-v*.zip
+    /// </summary>
+    private static dynamic? FindLiteAsset(dynamic[]? assets)
+    {
+        if (assets == null || !OperatingSystem.IsWindows()) return null;
+
+        var newFormat = ((IEnumerable<dynamic>)assets).FirstOrDefault(a =>
+        {
+            string name = a.name;
+            return name.StartsWith("VPNRouter-update-v", StringComparison.OrdinalIgnoreCase) &&
+                   name.EndsWith($"{PlatformSuffix}.zip", StringComparison.OrdinalIgnoreCase);
+        });
+        if (newFormat != null) return newFormat;
+
+        return ((IEnumerable<dynamic>)assets).FirstOrDefault(a =>
+        {
+            string name = a.name;
+            return name.StartsWith("VPNRouter-update-v", StringComparison.OrdinalIgnoreCase) &&
+                   name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    /// <summary>
+    /// Validate extracted content based on platform.
+    /// </summary>
+    private static void ValidateExtractedContent(string extractDir)
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            if (Directory.GetDirectories(extractDir, "*.app", SearchOption.TopDirectoryOnly).Length > 0)
+                return;
+            if (Directory.Exists(Path.Combine(extractDir, "Contents")))
+                return;
+            if (File.Exists(Path.Combine(extractDir, "VPNRouter.Mac.dll")))
+                return;
+            throw new InvalidOperationException(
+                "Invalid update package: no .app bundle or VPNRouter.Mac.dll found.");
+        }
+
+        // Windows: support flat and app/ layout
+        var checkDir = extractDir;
+        var appSubDir = Path.Combine(extractDir, "app");
+        if (Directory.Exists(appSubDir) &&
+            (File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.exe")) ||
+             File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.dll"))))
+        {
+            checkDir = appSubDir;
+        }
+
+        if (!File.Exists(Path.Combine(checkDir, "VPNRouter.GUI.exe")) &&
+            !File.Exists(Path.Combine(checkDir, "VPNRouter.GUI.dll")))
+            throw new InvalidOperationException(
+                "Invalid update package: VPNRouter.GUI.exe/dll not found.");
+    }
+
+    /// <summary>
+    /// Shared runtime detection. Only meaningful on Windows — macOS has no lite update.
     /// </summary>
     private static bool IsSharedRuntimeInstall()
     {
+        if (OperatingSystem.IsMacOS()) return false;
         var appDir = AppContext.BaseDirectory;
         return File.Exists(Path.Combine(appDir, "hostfxr.dll"));
     }
