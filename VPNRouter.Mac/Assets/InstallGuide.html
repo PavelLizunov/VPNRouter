@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>VPNRouter — Install Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #e2e8f0; min-height: 100vh; padding: 40px 20px; }
+  .container { max-width: 640px; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 36px; }
+  .header h1 { font-size: 28px; font-weight: 700; color: #60a5fa; margin-bottom: 4px; }
+  .header p { font-size: 14px; color: #94a3b8; }
+  .lang-tabs { display: flex; gap: 8px; justify-content: center; margin-bottom: 28px; }
+  .lang-tab { padding: 6px 20px; border-radius: 20px; border: 1px solid #334155; background: transparent; color: #94a3b8; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+  .lang-tab.active { background: #2563eb; border-color: #2563eb; color: white; }
+  .steps { display: flex; flex-direction: column; gap: 16px; }
+  .step { display: flex; gap: 16px; align-items: flex-start; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 16px; border: 1px solid rgba(255,255,255,0.08); }
+  .step-num { width: 32px; height: 32px; border-radius: 50%; background: #2563eb; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; }
+  .step-text { flex: 1; }
+  .step-text h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .step-text p { font-size: 13px; color: #94a3b8; line-height: 1.5; }
+  .cmd-block { margin-top: 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 14px; position: relative; }
+  .cmd-block code { font-family: "SF Mono", Menlo, monospace; font-size: 11.5px; color: #a5f3fc; word-break: break-all; line-height: 1.6; display: block; user-select: all; }
+  .copy-btn { position: absolute; top: 8px; right: 8px; padding: 4px 12px; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: #94a3b8; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+  .copy-btn:hover { background: #334155; color: white; }
+  .note { margin-top: 24px; padding: 12px 16px; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2); border-radius: 8px; font-size: 13px; color: #86efac; text-align: center; }
+  .section { display: none; }
+  .section.active { display: block; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header"><h1>Virtual Penguin Network</h1><p>v2.0.0 — Installation Guide</p></div>
+  <div class="lang-tabs">
+    <button class="lang-tab active" onclick="switchLang('ru')">Русский</button>
+    <button class="lang-tab" onclick="switchLang('en')">English</button>
+  </div>
+  <div id="ru" class="section active">
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-text"><h3>Перетащи приложение</h3><p>Перетащи <b>VPNRouter.app</b> в папку <b>Applications</b></p></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text"><h3>Открой Terminal</h3><p>Нажми на иконку <b>Terminal</b> в этом окне</p></div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text"><h3>Вставь команду</h3><p>Скопируй команду ниже (кнопка Копировать) и вставь в Terminal (Cmd+V), нажми Enter</p></div></div>
+    </div>
+    <div class="cmd-block">
+      <button class="copy-btn" onclick="copyCmd()">Копировать</button>
+      <code id="cmd">xattr -cr /Applications/VPNRouter.app && USER=$(whoami) && sudo bash -c "echo \"$USER ALL=(root) NOPASSWD: /Users/$USER/Library/Application\\ Support/VPNRouter/bin/sing-box *\" > /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/pkill\" >> /etc/sudoers.d/vpnrouter && chmod 0440 /etc/sudoers.d/vpnrouter" && open /Applications/VPNRouter.app</code>
+    </div>
+    <div class="step" style="margin-top:16px"><div class="step-num">4</div><div class="step-text"><h3>Введи пароль Mac</h3><p>Terminal попросит пароль — введи пароль от Mac. Это нужно <b>один раз</b>, больше не попросит.</p></div></div>
+    <div class="note">✅ Готово! Приложение запустится. В следующий раз просто открывай из Applications.</div>
+  </div>
+  <div id="en" class="section">
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-text"><h3>Drag the app</h3><p>Drag <b>VPNRouter.app</b> to <b>Applications</b></p></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text"><h3>Open Terminal</h3><p>Click the <b>Terminal</b> icon in this window</p></div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text"><h3>Paste the command</h3><p>Copy the command below and paste in Terminal (Cmd+V), press Enter</p></div></div>
+    </div>
+    <div class="cmd-block">
+      <button class="copy-btn" onclick="copyCmd()">Copy</button>
+      <code>xattr -cr /Applications/VPNRouter.app && USER=$(whoami) && sudo bash -c "echo \"$USER ALL=(root) NOPASSWD: /Users/$USER/Library/Application\\ Support/VPNRouter/bin/sing-box *\" > /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/pkill\" >> /etc/sudoers.d/vpnrouter && chmod 0440 /etc/sudoers.d/vpnrouter" && open /Applications/VPNRouter.app</code>
+    </div>
+    <div class="step" style="margin-top:16px"><div class="step-num">4</div><div class="step-text"><h3>Enter Mac password</h3><p>Terminal will ask for your password — type your Mac password. Needed <b>only once</b>.</p></div></div>
+    <div class="note">✅ Done! The app will launch. Next time just open from Applications.</div>
+  </div>
+</div>
+<script>
+function switchLang(l){document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));document.querySelectorAll(".lang-tab").forEach(t=>t.classList.remove("active"));document.getElementById(l).classList.add("active");event.target.classList.add("active")}
+function copyCmd(){var c=document.getElementById("cmd").textContent;navigator.clipboard.writeText(c).then(()=>{event.target.textContent="✓";setTimeout(()=>event.target.textContent=document.getElementById("ru").classList.contains("active")?"Копировать":"Copy",1500)})}
+</script>
+</body></html>
