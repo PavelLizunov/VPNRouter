@@ -398,6 +398,14 @@ public class VpnEngine : IDisposable
         _etw.Start();
         _healthMonitor.Start(_activeProfile, settings, _scanResult);
 
+        // Apply Windows DNS hardening: disable SMHNR, set TUN metric.
+        // Closes the leak vector where Windows sends DNS to ALL adapters in
+        // parallel — leaks via secondary VPN tunnels (e.g. AmneziaWG) bypass
+        // sing-box entirely. No-op on macOS.
+#if PLATFORM_WINDOWS
+        WindowsDnsHardening.Apply(_logger);
+#endif
+
         OnStatus("VPN Router is running");
     }
 
@@ -406,6 +414,12 @@ public class VpnEngine : IDisposable
     public void Stop()
     {
         OnStatus("Stopping...");
+
+        // Restore Windows DNS settings before tearing down TUN —
+        // SMHNR back to default, parallel A/AAAA back to default.
+#if PLATFORM_WINDOWS
+        try { WindowsDnsHardening.Restore(_logger); } catch { }
+#endif
 
         try { _healthMonitor?.Stop(); } catch { }
         try { _etw?.Stop(); } catch { }
