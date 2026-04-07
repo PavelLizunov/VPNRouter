@@ -70,15 +70,18 @@ dotnet publish "$Root\VPNRouter.Service\VPNRouter.Service.csproj" `
     -o $DistDir 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Service publish failed" }
 
-# ── Publish backwards-compat launcher stub (VPNRouter.GUI.exe) ──
+# ── Build backwards-compat launcher stub (VPNRouter.GUI.exe) ──
 # Old auto-updater (v2.3.x) and old shortcuts expect VPNRouter.GUI.exe.
-# This is a tiny single-file launcher that forwards to VPNRouter.App.exe.
-Write-Host "[4b/9] Publishing VPNRouter.GUI launcher stub..." -ForegroundColor Yellow
-dotnet publish "$Root\VPNRouter.GUI\VPNRouter.GUI.csproj" `
-    -c Release -r win-x64 --self-contained false `
-    -p:PublishSingleFile=true `
-    -o $DistDir 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "GUI stub publish failed" }
+# Native Go exe — ~2MB, zero runtime dependency, runs on machines without .NET 8.
+Write-Host "[4b/9] Building VPNRouter.GUI launcher stub (Go native)..." -ForegroundColor Yellow
+$stubExe = Join-Path $DistDir "VPNRouter.GUI.exe"
+$env:GOOS = "windows"
+$env:GOARCH = "amd64"
+Push-Location "$Root\VPNRouter.GUI"
+go build -ldflags="-s -w -H windowsgui" -o $stubExe .\main.go 2>&1 | Out-Null
+$stubExitCode = $LASTEXITCODE
+Pop-Location
+if ($stubExitCode -ne 0) { throw "GUI stub build failed (is Go installed?)" }
 
 # ── Publish framework-dependent to temp dir (to identify app-only files) ──
 Write-Host "[5/9] Building app file list (framework-dependent)..." -ForegroundColor Yellow
@@ -91,10 +94,8 @@ dotnet publish "$Root\VPNRouter.CLI\VPNRouter.CLI.csproj" `
 dotnet publish "$Root\VPNRouter.Service\VPNRouter.Service.csproj" `
     -c Release -r win-x64 --self-contained false --no-build `
     -o $FdDir 2>&1 | Out-Null
-dotnet publish "$Root\VPNRouter.GUI\VPNRouter.GUI.csproj" `
-    -c Release -r win-x64 --self-contained false `
-    -p:PublishSingleFile=true `
-    -o $FdDir 2>&1 | Out-Null
+# Also copy stub to FdDir so update zip includes it
+Copy-Item $stubExe $FdDir -Force
 Write-Host "       App files identified: $((Get-ChildItem $FdDir -File).Count) files" -ForegroundColor Gray
 
 # ── Clean unnecessary files from dist ──
