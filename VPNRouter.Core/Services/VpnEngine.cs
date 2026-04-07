@@ -108,10 +108,14 @@ public class VpnEngine : IDisposable
         }
         else
         {
-            var servers = settings.Vless.GetEffectiveServers();
-            if (servers.Count == 0 || servers.Any(s => string.IsNullOrWhiteSpace(s.Server) || s.Server == "your.server.com"))
+            var servers = settings.Vless.GetEffectiveServers()
+                .Where(s => !string.IsNullOrWhiteSpace(s.Server) && s.Server != "your.server.com")
+                .ToList();
+            if (servers.Count == 0)
                 throw new InvalidOperationException("VLESS server not configured.");
 
+            // Filter out placeholders so config generation doesn't include them
+            settings.Vless.Servers = servers;
             ActiveServerAddress = servers[0].Server;
         }
 
