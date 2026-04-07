@@ -84,13 +84,14 @@ public static class ConfigGenerator
             Path = geoSitePath
         });
 
-        // 2. Add Russian DNS server (Yandex 77.88.8.8) via local network
-        // Use type=udp with no detour — sing-box defaults to direct routing for it
+        // 2. Add Russian DNS server (Yandex 77.88.8.8) routed via dns-direct
+        // outbound (real NIC, no proxy, no routing loop)
         config.Dns.Servers.Add(new DnsServer
         {
             Tag = DirectDnsRuTag,
             Type = "udp",
-            Server = "77.88.8.8"
+            Server = "77.88.8.8",
+            Detour = "dns-direct"
         });
 
         // 3. Add DNS rule: RU domains use Russian DNS resolver
@@ -161,12 +162,17 @@ public static class ConfigGenerator
                     Path       = ParseDohPath(settings.Dns.VpnDns),
                     Detour     = "proxy"
                 },
-                // Local system DNS — direct
+                // Local DNS — Cloudflare DoH via dns-direct outbound (real NIC).
+                // type:local would call getaddrinfo() → system resolver → ISP DNS,
+                // which leaks queries to ISP for any process not in the routed list
+                // (e.g. Windows DnsCache svchost.exe). DoH via Cloudflare hides queries.
                 new()
                 {
-                    Tag  = "local-dns",
-                    Type = "local"
-                    // No address needed for type=local
+                    Tag        = "local-dns",
+                    Type       = "https",
+                    Server     = "1.1.1.1",
+                    Path       = "/dns-query",
+                    Detour     = "dns-direct"
                 }
             },
             Rules = new List<DnsRule>()
@@ -256,6 +262,11 @@ public static class ConfigGenerator
         }
 
         outbounds.Add(new SingBoxOutbound { Type = "direct", Tag = "direct" });
+        // dns-direct: separate non-empty direct outbound for DNS servers.
+        // sing-box 1.13 FATAL: "detour to empty direct outbound makes no sense"
+        // when using detour:"direct" on a bare direct outbound. udp_fragment:true
+        // makes it non-empty so we can route DNS through it.
+        outbounds.Add(new SingBoxOutbound { Type = "direct", Tag = "dns-direct", UdpFragment = true });
         return outbounds;
     }
 

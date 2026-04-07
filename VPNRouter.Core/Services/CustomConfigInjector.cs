@@ -892,8 +892,9 @@ public static class CustomConfigInjector
         }
 
         // 1b. Convert type:local/dhcp → type:udp.
-        // type:local uses getaddrinfo() which loops through TUN on Windows.
-        // type:udp with detour:direct goes through direct outbound → real NIC.
+        // type:local uses getaddrinfo() → system resolver → ISP DNS (LEAK).
+        // type:udp 1.0.0.1 sends plain text DNS to ISP visibility (still leaky).
+        // type:https 1.1.1.1 (DoH) hides queries from ISP.
         if (dnsServers != null)
         {
             foreach (var server in dnsServers)
@@ -903,12 +904,12 @@ public static class CustomConfigInjector
                 var type = obj["type"]?.ToString();
                 if (type == "local" || type == "dhcp")
                 {
-                    obj["type"] = "udp";
+                    obj["type"] = "https";
                     if (obj["server"] == null)
-                        obj["server"] = "1.0.0.1"; // Cloudflare secondary fallback
-                    // Remove detour:direct for local→udp (was meaningless for getaddrinfo),
-                    // will be re-added in step 1c below.
-                    obj.Remove("detour");
+                        obj["server"] = "1.1.1.1";
+                    if (obj["path"] == null)
+                        obj["path"] = "/dns-query";
+                    obj.Remove("detour"); // re-added in step 1c below as dns-direct
                 }
             }
         }

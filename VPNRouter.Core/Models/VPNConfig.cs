@@ -208,6 +208,14 @@ public class SingBoxOutbound
     /// <summary>Whether to interrupt existing connections on server switch</summary>
     [JsonProperty("interrupt_exist_connections", NullValueHandling = NullValueHandling.Ignore)]
     public bool? InterruptExistConnections { get; set; }
+
+    /// <summary>
+    /// For type=direct: enables UDP fragmentation. Setting this to true makes the
+    /// outbound "non-empty" so sing-box 1.13 accepts detour:"direct" pointing to it
+    /// (otherwise FATAL: "detour to empty direct outbound makes no sense").
+    /// </summary>
+    [JsonProperty("udp_fragment", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? UdpFragment { get; set; }
 }
 
 public class TlsConfig
