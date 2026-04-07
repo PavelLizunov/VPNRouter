@@ -87,6 +87,28 @@ public class AppConfig
     /// <summary>Name of the currently active custom config (from CustomConfigs list).</summary>
     [YamlMember(Alias = "active_custom_config")]
     public string ActiveCustomConfig { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When true, traffic to Russian sites/IPs is routed directly (real IP),
+    /// not through VPN. Protects VPN server from being blacklisted by RU services
+    /// and unblocks RU sites that geo-restrict non-RU IPs.
+    /// </summary>
+    [YamlMember(Alias = "bypass_russian_traffic")]
+    public bool BypassRussianTraffic { get; set; } = true;
+
+    /// <summary>
+    /// When true, force IPv4-only DNS resolution to prevent IPv6 leaks
+    /// when VPN tunnels only IPv4. Recommended unless you specifically need IPv6.
+    /// </summary>
+    [YamlMember(Alias = "force_ipv4_only")]
+    public bool ForceIpv4Only { get; set; } = true;
+
+    /// <summary>
+    /// When true, flush system DNS cache when VPN starts to prevent
+    /// resolved-pre-connect entries from leaking through direct route.
+    /// </summary>
+    [YamlMember(Alias = "flush_dns_on_start")]
+    public bool FlushDnsOnStart { get; set; } = true;
 }
 
 /// <summary>A saved custom sing-box config entry.</summary>

@@ -1218,4 +1218,62 @@ public class CustomConfigInjectorTests
                 File.Delete(tempPath);
         }
     }
+
+    [Fact]
+    public void Inject_WithBypassRussianTraffic_PassesSingBoxCheck()
+    {
+        // Verify geo bypass injection produces a valid sing-box config
+        var configPath = @"C:\ProgramData\VPNRouter\config\custom-brat-pc.json";
+        if (!File.Exists(configPath))
+            return;
+
+        // Geo files must be present (downloaded by GeoDataDownloader normally)
+        if (!GeoDataDownloader.AreGeoFilesAvailable())
+            return;
+
+        var rawJson = File.ReadAllText(configPath);
+        var settings = CreateSettings();
+        settings.App.BypassRussianTraffic = true;
+        settings.Tun.RouteExcludeAddress = new List<string> { "10.9.1.0/24" };
+        var result = CustomConfigInjector.Inject(rawJson, new[] { "chrome.exe", "Discord.exe" }, settings);
+
+        // Verify our injected pieces are present
+        Assert.Contains("vpnrouter-geoip-ru", result);
+        Assert.Contains("vpnrouter-geosite-ru", result);
+        Assert.Contains("vpnrouter-dns-ru", result);
+        Assert.Contains("77.88.8.8", result);
+
+        File.WriteAllText(@"C:\ProgramData\VPNRouter\config\test-debug-bypass.json", result);
+
+        var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-test-bypass-{Guid.NewGuid()}.json");
+        try
+        {
+            File.WriteAllText(tempPath, result);
+
+            var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
+            if (!File.Exists(singBoxPath))
+                return;
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = singBoxPath,
+                Arguments = $"check -c \"{tempPath}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var proc = System.Diagnostics.Process.Start(psi)!;
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(10000);
+
+            Assert.True(proc.ExitCode == 0, $"sing-box check failed with bypass (exit {proc.ExitCode}):\n{stderr}\n\nConfig:\n{result}");
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
+    }
 }

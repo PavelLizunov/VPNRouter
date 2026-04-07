@@ -46,7 +46,81 @@ public static class ConfigGenerator
             Experimental = new SingBoxExperimental()
         };
 
+        // Russian geo bypass — inject rule sets + DNS/route rules so RU traffic
+        // goes direct (real IP), protecting VPN server from blacklists.
+        if (settings.App.BypassRussianTraffic && GeoDataDownloader.AreGeoFilesAvailable())
+        {
+            ApplyGeoBypass(config);
+        }
+
         return config;
+    }
+
+    // ─── Russian geo bypass ───────────────────────────────────────────────────
+
+    private const string GeoIpRuleSetTag = "vpnrouter-geoip-ru";
+    private const string GeoSiteRuleSetTag = "vpnrouter-geosite-ru";
+    private const string DirectDnsRuTag = "vpnrouter-dns-ru";
+
+    private static void ApplyGeoBypass(SingBoxConfig config)
+    {
+        // 1. Add rule_set entries pointing to local .srs files
+        config.Route.RuleSet ??= new List<RuleSetEntry>();
+        var geoIpPath = AppPaths.GeoIpRuPath.Replace('\\', '/');
+        var geoSitePath = AppPaths.GeoSiteRuPath.Replace('\\', '/');
+
+        config.Route.RuleSet.Add(new RuleSetEntry
+        {
+            Type = "local",
+            Tag = GeoIpRuleSetTag,
+            Format = "binary",
+            Path = geoIpPath
+        });
+        config.Route.RuleSet.Add(new RuleSetEntry
+        {
+            Type = "local",
+            Tag = GeoSiteRuleSetTag,
+            Format = "binary",
+            Path = geoSitePath
+        });
+
+        // 2. Add Russian DNS server (Yandex 77.88.8.8) via local network
+        // Use type=udp with no detour — sing-box defaults to direct routing for it
+        config.Dns.Servers.Add(new DnsServer
+        {
+            Tag = DirectDnsRuTag,
+            Type = "udp",
+            Server = "77.88.8.8"
+        });
+
+        // 3. Add DNS rule: RU domains use Russian DNS resolver
+        config.Dns.Rules.Insert(0, new DnsRule
+        {
+            RuleSet = new List<string> { GeoSiteRuleSetTag },
+            Action = "route",
+            Server = DirectDnsRuTag
+        });
+
+        // 4. Add route rule: RU sites/IPs go direct (BEFORE process_name rules)
+        // Find insertion point: after sniff/hijack-dns/private-ip rules
+        int insertAt = 0;
+        for (int i = 0; i < config.Route.Rules.Count; i++)
+        {
+            var r = config.Route.Rules[i];
+            if (r.Action == "sniff" || r.Action == "hijack-dns" || r.IpIsPrivate == true)
+            {
+                insertAt = i + 1;
+                continue;
+            }
+            break;
+        }
+
+        config.Route.Rules.Insert(insertAt, new RouteRule
+        {
+            RuleSet = new List<string> { GeoSiteRuleSetTag, GeoIpRuleSetTag },
+            Action = "route",
+            Outbound = "direct"
+        });
     }
 
     public static string Serialize(SingBoxConfig config)

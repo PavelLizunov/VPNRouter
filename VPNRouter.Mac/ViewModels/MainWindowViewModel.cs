@@ -34,9 +34,19 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _isRussian;
     [ObservableProperty] private bool _isVlessMode = true;
     [ObservableProperty] private bool _isSplitTunnel = true;
+    [ObservableProperty] private bool _bypassRussianTraffic = true;
 
     // ── Version ──
     public string VersionText => $"by NiniTux  \u00b7  v{AppVersion.Version}";
+
+    // ── Localized labels ──
+    public string BypassRuLabel => Strings.Lang == "ru"
+        ? "Российский трафик через реальный IP"
+        : "Russian traffic via real IP";
+
+    public string BypassRuHint => Strings.Lang == "ru"
+        ? "Сайты и приложения с российскими доменами/IP идут напрямую, минуя VPN. Защищает VPN-сервер от блокировок российскими сервисами."
+        : "Russian domains and IPs go directly, bypassing VPN. Protects the VPN server from being blocked by Russian services.";
 
     // ── VLESS fields (for single-server quick edit) ──
     [ObservableProperty] private string _vlessUri = string.Empty;
@@ -89,6 +99,9 @@ public partial class MainWindowViewModel : ViewModelBase
         // Routing mode
         IsSplitTunnel = !(_settings.App.RoutingMode ?? "split")
             .Equals("full", StringComparison.OrdinalIgnoreCase);
+
+        // Russian geo bypass
+        BypassRussianTraffic = _settings.App.BypassRussianTraffic;
 
         // Load servers
         Servers.Clear();
@@ -251,6 +264,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Routing mode
         _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
+
+        // Russian geo bypass
+        _settings.App.BypassRussianTraffic = BypassRussianTraffic;
 
         // Theme & language
         _settings.App.Theme = IsDarkTheme ? "dark" : "light";
@@ -555,6 +571,8 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(ConnectButtonText));
         OnPropertyChanged(nameof(ThemeToggleText));
         OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(BypassRuLabel));
+        OnPropertyChanged(nameof(BypassRuHint));
     }
 
     // ── Helpers ──

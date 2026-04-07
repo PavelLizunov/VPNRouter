@@ -81,6 +81,29 @@ public class VpnEngine : IDisposable
         // 0. Ensure required directories exist
         AppPaths.EnsureDirectories();
 
+        // 0a. Flush DNS cache to prevent leakage of pre-VPN resolved entries
+        if (settings.App.FlushDnsOnStart)
+        {
+            DnsFlusher.Flush(_logger);
+        }
+
+        // 0b. Download geo rule sets if RU bypass is enabled and files missing
+        if (settings.App.BypassRussianTraffic && !GeoDataDownloader.AreGeoFilesAvailable())
+        {
+            OnStatus("Downloading geo data...");
+            try
+            {
+                var downloader = new GeoDataDownloader(_logger);
+                var ok = await downloader.EnsureGeoFilesAsync(ct);
+                if (!ok)
+                    _logger?.Warning("[VpnEngine] Geo data download failed — RU bypass will be disabled for this session");
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning(ex, "[VpnEngine] Geo data download error — RU bypass will be disabled");
+            }
+        }
+
         var isCustomConfig = (settings.App.ConfigMode ?? "generated")
             .Equals("custom", StringComparison.OrdinalIgnoreCase);
         ActiveConfigMode = isCustomConfig ? "custom" : "generated";

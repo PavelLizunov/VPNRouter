@@ -18,6 +18,10 @@ public static class AppPaths
     public static string CacheDir => Path.Combine(DataDir, "cache");
     public static string BinDir => Path.Combine(DataDir, "bin");
     public static string ProfilesDir => Path.Combine(DataDir, "profiles");
+    public static string GeoDir => Path.Combine(DataDir, "geo");
+
+    public static string GeoIpRuPath => Path.Combine(GeoDir, "geoip-ru.srs");
+    public static string GeoSiteRuPath => Path.Combine(GeoDir, "geosite-ru.srs");
 
     public static string CurrentConfigPath => Path.Combine(ConfigDir, "current.json");
     public static string SingBoxLogPath => Path.Combine(LogsDir, "singbox.log");
@@ -34,6 +38,7 @@ public static class AppPaths
         Directory.CreateDirectory(CacheDir);
         Directory.CreateDirectory(BinDir);
         Directory.CreateDirectory(ProfilesDir);
+        Directory.CreateDirectory(GeoDir);
     }
 
     private static string ResolveDataDir()

@@ -205,6 +205,20 @@
                                          GroupName="RoutingMode" FontWeight="SemiBold"/>
                         </StackPanel>
 
+                        <!-- Russian Geo Bypass -->
+                        <Border Padding="12,10" CornerRadius="6"
+                                Background="{DynamicResource SystemControlBackgroundListLowBrush}"
+                                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                                BorderThickness="1">
+                            <StackPanel Spacing="4">
+                                <CheckBox IsChecked="{Binding BypassRussianTraffic}"
+                                          Content="{Binding BypassRuLabel}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding BypassRuHint}"
+                                           FontSize="11" Opacity="0.6" Margin="22,0,0,0"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
                         <TextBlock Text="Check profile groups to route through VPN:"
                                    FontSize="12" Opacity="0.7"
                                    IsVisible="{Binding IsSplitTunnel}"/>

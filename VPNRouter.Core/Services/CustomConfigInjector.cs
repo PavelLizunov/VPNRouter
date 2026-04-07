@@ -29,10 +29,11 @@ public static class CustomConfigInjector
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        bool isActionBased = DetectActionFormat(config);
+
         if (processes.Count > 0)
         {
             var proxyTag = FindProxyOutboundTag(config);
-            var isActionBased = DetectActionFormat(config);
 
             // Auto-detect TCP/UDP split: if selector has both VLESS and QUIC-based
             // (TUIC/Hysteria2) outbounds, route TCP→VLESS, UDP→QUIC for optimal performance
@@ -40,6 +41,14 @@ public static class CustomConfigInjector
 
             InjectRouteRules(config, processes, tcpTag, udpTag, isActionBased);
             InjectDnsRules(config, processes, isActionBased);
+        }
+
+        // Inject Russian geo bypass — RU sites/IPs go direct (real IP),
+        // protects VPN server from being blacklisted by RU services.
+        // Only injected if both .srs files are present locally.
+        if (settings.App.BypassRussianTraffic && GeoDataDownloader.AreGeoFilesAvailable())
+        {
+            InjectGeoBypassRules(config, isActionBased);
         }
 
         // Migrate legacy features to sing-box 1.13+ format
@@ -507,6 +516,251 @@ public static class CustomConfigInjector
         }
 
         rules.Insert(0, dnsRule);
+    }
+
+    // ─── Private: Inject Russian geo bypass ───────────────────────────────
+
+    private const string GeoIpRuleSetTag = "vpnrouter-geoip-ru";
+    private const string GeoSiteRuleSetTag = "vpnrouter-geosite-ru";
+    private const string DirectDnsRuTag = "vpnrouter-dns-ru";
+
+    /// <summary>
+    /// Injects sing-box rule_set definitions and route/dns rules so that
+    /// Russian sites and IPs go through "direct" outbound (real IP).
+    /// This protects the VPN server from being detected and blacklisted
+    /// by Russian services.
+    ///
+    /// Architecture:
+    ///   1. rule_set blocks pointing to local .srs files (downloaded at runtime)
+    ///   2. DNS server "vpnrouter-dns-ru" → Yandex 77.88.8.8 via dns-direct
+    ///   3. DNS rule: geosite-ru → vpnrouter-dns-ru (RU domains use RU DNS)
+    ///   4. Route rule: geosite-ru OR geoip-ru → outbound:direct
+    ///
+    /// Idempotent: removes previously injected rules before adding new ones.
+    /// </summary>
+    private static void InjectGeoBypassRules(JObject config, bool isActionBased)
+    {
+        InjectGeoRuleSets(config);
+        InjectGeoDnsServer(config);
+        InjectGeoDnsRule(config, isActionBased);
+        InjectGeoRouteRules(config, isActionBased);
+    }
+
+    private static void InjectGeoRuleSets(JObject config)
+    {
+        var route = config["route"] as JObject;
+        if (route == null)
+        {
+            route = new JObject { ["rules"] = new JArray(), ["final"] = "direct" };
+            config["route"] = route;
+        }
+
+        var ruleSet = route["rule_set"] as JArray;
+        if (ruleSet == null)
+        {
+            ruleSet = new JArray();
+            route["rule_set"] = ruleSet;
+        }
+
+        // Remove any previously injected rule sets (idempotent)
+        for (int i = ruleSet.Count - 1; i >= 0; i--)
+        {
+            var tag = ruleSet[i]?["tag"]?.ToString();
+            if (tag == GeoIpRuleSetTag || tag == GeoSiteRuleSetTag)
+                ruleSet.RemoveAt(i);
+        }
+
+        // Forward slashes work on both Windows and macOS in sing-box config
+        var geoIpPath = AppPaths.GeoIpRuPath.Replace('\\', '/');
+        var geoSitePath = AppPaths.GeoSiteRuPath.Replace('\\', '/');
+
+        ruleSet.Add(new JObject
+        {
+            ["type"] = "local",
+            ["tag"] = GeoIpRuleSetTag,
+            ["format"] = "binary",
+            ["path"] = geoIpPath
+        });
+
+        ruleSet.Add(new JObject
+        {
+            ["type"] = "local",
+            ["tag"] = GeoSiteRuleSetTag,
+            ["format"] = "binary",
+            ["path"] = geoSitePath
+        });
+    }
+
+    private static void InjectGeoDnsServer(JObject config)
+    {
+        var dns = config["dns"] as JObject;
+        if (dns == null) return;
+
+        var servers = dns["servers"] as JArray;
+        if (servers == null)
+        {
+            servers = new JArray();
+            dns["servers"] = servers;
+        }
+
+        // Remove previously injected RU DNS server (idempotent)
+        for (int i = servers.Count - 1; i >= 0; i--)
+        {
+            if (servers[i]?["tag"]?.ToString() == DirectDnsRuTag)
+                servers.RemoveAt(i);
+        }
+
+        // Yandex DNS via dns-direct outbound (real NIC, no proxy, no loop)
+        servers.Add(new JObject
+        {
+            ["type"] = "udp",
+            ["tag"] = DirectDnsRuTag,
+            ["server"] = "77.88.8.8",
+            ["detour"] = "dns-direct"
+        });
+    }
+
+    private static void InjectGeoDnsRule(JObject config, bool isActionBased)
+    {
+        var dns = config["dns"] as JObject;
+        if (dns == null) return;
+
+        var rules = dns["rules"] as JArray;
+        if (rules == null)
+        {
+            rules = new JArray();
+            dns["rules"] = rules;
+        }
+
+        // Remove previously injected geo DNS rule (idempotent)
+        for (int i = rules.Count - 1; i >= 0; i--)
+        {
+            var rule = rules[i] as JObject;
+            if (rule == null) continue;
+            var server = rule["server"]?.ToString();
+            if (server == DirectDnsRuTag)
+                rules.RemoveAt(i);
+        }
+
+        // RU domains → Russian DNS resolver (direct, not via VPN)
+        // Insert after process_name rules but before any catch-all
+        var dnsRule = new JObject
+        {
+            ["rule_set"] = new JArray(GeoSiteRuleSetTag),
+            ["server"] = DirectDnsRuTag
+        };
+        if (isActionBased)
+            dnsRule["action"] = "route";
+
+        // Find insertion point: after process_name rules
+        int insertAt = 0;
+        for (int i = 0; i < rules.Count; i++)
+        {
+            if (rules[i]?["process_name"] != null)
+                insertAt = i + 1;
+            else
+                break;
+        }
+        rules.Insert(insertAt, dnsRule);
+    }
+
+    private static void InjectGeoRouteRules(JObject config, bool isActionBased)
+    {
+        var route = config["route"] as JObject;
+        if (route == null) return;
+
+        var rules = route["rules"] as JArray;
+        if (rules == null)
+        {
+            rules = new JArray();
+            route["rules"] = rules;
+        }
+
+        // Remove previously injected geo route rules (idempotent)
+        for (int i = rules.Count - 1; i >= 0; i--)
+        {
+            var rule = rules[i] as JObject;
+            if (rule == null) continue;
+
+            var ruleSet = rule["rule_set"] as JArray;
+            if (ruleSet == null) continue;
+
+            bool isOurs = ruleSet.Any(rs =>
+            {
+                var s = rs?.ToString();
+                return s == GeoIpRuleSetTag || s == GeoSiteRuleSetTag;
+            });
+
+            if (isOurs)
+                rules.RemoveAt(i);
+        }
+
+        // Insert geo bypass rules — geo wins over process_name routing
+        // (RU services NEVER see VPN IP, even from VPN-routed processes).
+        // Place before process_name rules but after sniff/dns/private-ip.
+        int insertAt = FindGeoInsertIndex(rules, isActionBased);
+
+        // Single rule with both rule_sets — sing-box matches if ANY in the array matches
+        var geoRule = new JObject
+        {
+            ["rule_set"] = new JArray(GeoSiteRuleSetTag, GeoIpRuleSetTag),
+            ["outbound"] = "direct"
+        };
+        if (isActionBased)
+            geoRule["action"] = "route";
+
+        rules.Insert(insertAt, geoRule);
+    }
+
+    /// <summary>
+    /// Finds the position to insert geo rules: after sniff/dns/private-ip,
+    /// BEFORE process_name rules (geo wins over process routing).
+    /// </summary>
+    private static int FindGeoInsertIndex(JArray rules, bool isActionBased)
+    {
+        int index = 0;
+        for (int i = 0; i < rules.Count; i++)
+        {
+            var rule = rules[i] as JObject;
+            if (rule == null) continue;
+
+            // Skip sniff/hijack-dns/dns-out rules
+            if (isActionBased)
+            {
+                var action = rule["action"]?.ToString();
+                if (action == "sniff" || action == "hijack-dns")
+                {
+                    index = i + 1;
+                    continue;
+                }
+            }
+            else
+            {
+                if (rule["protocol"]?.ToString() == "dns")
+                {
+                    index = i + 1;
+                    continue;
+                }
+            }
+
+            // Skip ip_is_private
+            if (rule["ip_is_private"]?.Value<bool>() == true)
+            {
+                index = i + 1;
+                continue;
+            }
+
+            // Skip clash_mode
+            if (rule["clash_mode"] != null)
+            {
+                index = i + 1;
+                continue;
+            }
+
+            break;
+        }
+
+        return index;
     }
 
     // ─── Private: Ensure required fields ────────────────────────────────────

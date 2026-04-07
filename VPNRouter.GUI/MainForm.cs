@@ -39,6 +39,7 @@ public class MainForm : Form
     private Button _removeCustomBtn = null!;
     private RadioButton _splitRadio = null!;
     private RadioButton _fullRadio = null!;
+    private CheckBox _bypassRuCheck = null!;
     private readonly List<string> _customApps = new();
 
     // ── Bottom panel ──
@@ -754,6 +755,24 @@ public class MainForm : Form
         _routingPanel.Controls.Add(_splitRadio);
         _routingPanel.Controls.Add(_fullRadio);
 
+        _bypassRuCheck = new CheckBox
+        {
+            Text = Strings.BypassRussianTraffic,
+            Font = t.BodyFont,
+            ForeColor = t.TextPrimary,
+            AutoSize = true,
+            Checked = true,
+            Margin = new Padding(20, 4, 0, 0)
+        };
+        _bypassRuCheck.CheckedChanged += (_, __) =>
+        {
+            if (_isLoadingUI) return;
+            _settings.App.BypassRussianTraffic = _bypassRuCheck.Checked;
+            SaveSettings();
+            ShowApplyIfNeeded();
+        };
+        _routingPanel.Controls.Add(_bypassRuCheck);
+
         _appsLabel = new Label
         {
             Text = Strings.AppsHint,
@@ -1111,6 +1130,7 @@ public class MainForm : Form
         // Apps tab
         _splitRadio.Text = Strings.SplitTunnel;
         _fullRadio.Text = Strings.FullTunnel;
+        _bypassRuCheck.Text = Strings.BypassRussianTraffic;
         _appsLabel.Text = Strings.AppsHint;
         _customLabel.Text = Strings.CustomAppLabel;
         _addCustomBtn.Text = Strings.BtnAdd;
@@ -1400,6 +1420,9 @@ public class MainForm : Form
             .Equals("full", StringComparison.OrdinalIgnoreCase);
         _splitRadio.Checked = !isFullTunnel;
         _fullRadio.Checked = isFullTunnel;
+
+        // Russian geo bypass
+        _bypassRuCheck.Checked = _settings.App.BypassRussianTraffic;
 
         // Load servers from config
         _servers.Clear();
@@ -1700,6 +1723,9 @@ public class MainForm : Form
 
         // Save routing mode
         _settings.App.RoutingMode = _fullRadio.Checked ? "full" : "split";
+
+        // Russian geo bypass
+        _settings.App.BypassRussianTraffic = _bypassRuCheck.Checked;
 
         SettingsLoader.Save(_settings);
     }

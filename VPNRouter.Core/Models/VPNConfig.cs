@@ -103,6 +103,10 @@ public class DnsRule
     /// <summary>Tag of DNS server to use (for action=route)</summary>
     [JsonProperty("server", NullValueHandling = NullValueHandling.Ignore)]
     public string? Server { get; set; }
+
+    /// <summary>Match by rule set tags (geosite-ru, etc).</summary>
+    [JsonProperty("rule_set", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? RuleSet { get; set; }
 }
 
 // ─── Inbounds ─────────────────────────────────────────────────────────────────
@@ -280,6 +284,31 @@ public class SingBoxRoute
     /// </summary>
     [JsonProperty("default_domain_resolver", NullValueHandling = NullValueHandling.Ignore)]
     public string? DefaultDomainResolver { get; set; }
+
+    /// <summary>
+    /// Rule sets — references to local .srs files (sing-box binary rule sets).
+    /// Used for geo-based routing (geoip-ru, geosite-ru).
+    /// </summary>
+    [JsonProperty("rule_set", NullValueHandling = NullValueHandling.Ignore)]
+    public List<RuleSetEntry>? RuleSet { get; set; }
+}
+
+/// <summary>
+/// Local rule set definition (sing-box format: type=local, path to .srs file).
+/// </summary>
+public class RuleSetEntry
+{
+    [JsonProperty("type")]
+    public string Type { get; set; } = "local";
+
+    [JsonProperty("tag")]
+    public string Tag { get; set; } = string.Empty;
+
+    [JsonProperty("format")]
+    public string Format { get; set; } = "binary";
+
+    [JsonProperty("path")]
+    public string Path { get; set; } = string.Empty;
 }
 
 /// <summary>sing-box 1.12+ route rule — uses action-based format</summary>
@@ -316,6 +345,10 @@ public class RouteRule
     /// <summary>Sniff timeout — used when Action = "sniff". Default "300ms".</summary>
     [JsonProperty("timeout", NullValueHandling = NullValueHandling.Ignore)]
     public string? Timeout { get; set; }
+
+    /// <summary>Match by rule set tags (geoip-ru, geosite-ru, etc).</summary>
+    [JsonProperty("rule_set", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? RuleSet { get; set; }
 }
 
 // ─── Experimental ─────────────────────────────────────────────────────────────
