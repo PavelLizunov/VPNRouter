@@ -1,5 +1,6 @@
 using Avalonia;
 using System;
+using VPNRouter.Core.Services;
 #if PLATFORM_WINDOWS
 using System.Diagnostics;
 using System.Security.Principal;
@@ -35,6 +36,10 @@ sealed class Program
             }
             return;
         }
+
+        // Defensive cleanup: kill orphan sing-box / older VPNRouter instances
+        // left behind by failed updates or v2.3.x→v2.4.x migration.
+        try { OrphanCleanup.KillOrphans(); } catch { }
 #endif
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

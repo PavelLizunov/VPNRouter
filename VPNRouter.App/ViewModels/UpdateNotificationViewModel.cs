@@ -126,6 +126,11 @@ public partial class UpdateNotificationViewModel : ObservableObject
 
             Message = Strings.UpdateApplying;
 
+            // Defensive: kill any orphan sing-box / VPNRouter.GUI processes BEFORE
+            // file copy. This ensures the new instance starts clean.
+            // (Killing self-process VPNRouter.App.exe is excluded by KillOrphans logic.)
+            try { OrphanCleanup.KillOrphans(); } catch { }
+
             // Apply (replaces files, may rename locked exe to .bak)
             _updateChecker.ApplyUpdate(extractedDir);
 
