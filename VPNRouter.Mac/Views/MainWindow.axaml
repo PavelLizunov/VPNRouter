@@ -37,9 +37,14 @@
                                Foreground="#2563EB"/>
                     <TextBlock Text="{Binding VersionText}" FontSize="11" Opacity="0.5"/>
                 </StackPanel>
-                <!-- Theme / Lang / Leak Test -->
+                <!-- Theme / Lang / Tools -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
                             VerticalAlignment="Center">
+                    <Button Content="{Binding ShowLogsLabel}"
+                            Command="{Binding OpenLogsCommand}"
+                            Padding="8,4" FontSize="11"
+                            Background="Transparent" BorderThickness="0"
+                            ToolTip.Tip="Open logs folder"/>
                     <Button Content="{Binding CheckLeaksLabel}"
                             Command="{Binding OpenLeakTestCommand}"
                             Padding="8,4" FontSize="11"
@@ -224,17 +229,21 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Strict Mode -->
+                        <!-- Strict Mode + Advanced -->
                         <Border Padding="12,10" CornerRadius="6"
                                 Background="{DynamicResource SystemControlBackgroundListLowBrush}"
                                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                                 BorderThickness="1">
-                            <StackPanel Spacing="4">
+                            <StackPanel Spacing="6">
                                 <CheckBox IsChecked="{Binding StrictMode}"
                                           Content="{Binding StrictModeLabel}" FontWeight="SemiBold"/>
                                 <TextBlock Text="{Binding StrictModeHint}"
-                                           FontSize="11" Opacity="0.6" Margin="22,0,0,0"
+                                           FontSize="11" Opacity="0.6" Margin="22,0,0,4"
                                            TextWrapping="Wrap"/>
+                                <CheckBox IsChecked="{Binding ForceIpv4Only}"
+                                          Content="{Binding ForceIpv4Label}" FontSize="12"/>
+                                <CheckBox IsChecked="{Binding FlushDnsOnStart}"
+                                          Content="{Binding FlushDnsLabel}" FontSize="12"/>
                             </StackPanel>
                         </Border>
 

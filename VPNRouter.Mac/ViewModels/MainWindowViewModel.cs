@@ -36,6 +36,8 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _isSplitTunnel = true;
     [ObservableProperty] private bool _bypassRussianTraffic = true;
     [ObservableProperty] private bool _strictMode = false;
+    [ObservableProperty] private bool _forceIpv4Only = true;
+    [ObservableProperty] private bool _flushDnsOnStart = true;
 
     // ── Version ──
     public string VersionText => $"by NiniTux  \u00b7  v{AppVersion.Version}";
@@ -64,8 +66,11 @@ public partial class MainWindowViewModel : ViewModelBase
     public string BypassRuLabel => Strings.BypassRussianTrafficLabel;
     public string BypassRuHint => Strings.BypassRussianTrafficHint;
     public string CheckLeaksLabel => Strings.CheckLeaks;
+    public string ShowLogsLabel => Strings.ShowLogs;
     public string StrictModeLabel => Strings.StrictModeLabel;
     public string StrictModeHint => Strings.StrictModeHint;
+    public string ForceIpv4Label => Strings.ForceIpv4Label;
+    public string FlushDnsLabel => Strings.FlushDnsLabel;
 
     [RelayCommand]
     private void OpenLeakTest()
@@ -76,6 +81,23 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 FileName = "https://ipleak.net/",
                 UseShellExecute = true
+            });
+        }
+        catch { /* best-effort */ }
+    }
+
+    [RelayCommand]
+    private void OpenLogs()
+    {
+        try
+        {
+            var logsDir = AppPaths.LogsDir;
+            Directory.CreateDirectory(logsDir);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "/usr/bin/open",
+                Arguments = $"\"{logsDir}\"",
+                UseShellExecute = false
             });
         }
         catch { /* best-effort */ }
@@ -138,6 +160,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Strict mode
         StrictMode = _settings.App.StrictMode;
+
+        // IPv4 + DNS flush
+        ForceIpv4Only = _settings.App.ForceIpv4Only;
+        FlushDnsOnStart = _settings.App.FlushDnsOnStart;
 
         // Load servers
         Servers.Clear();
@@ -306,6 +332,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Strict mode
         _settings.App.StrictMode = StrictMode;
+
+        // IPv4 + DNS flush
+        _settings.App.ForceIpv4Only = ForceIpv4Only;
+        _settings.App.FlushDnsOnStart = FlushDnsOnStart;
 
         // Theme & language
         _settings.App.Theme = IsDarkTheme ? "dark" : "light";

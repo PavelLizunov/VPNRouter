@@ -101,6 +101,7 @@ public static class Strings
         ? "Сайты и приложения с российскими доменами/IP идут напрямую, минуя VPN. Защищает VPN-сервер от блокировок российскими сервисами."
         : "Russian domains and IPs go directly, bypassing VPN. Protects the VPN server from being blocked by Russian services.";
     public static string CheckLeaks => Ru ? "Проверить утечки" : "Check leaks";
+    public static string ShowLogs => Ru ? "Логи" : "Logs";
 
     public static string StrictModeLabel => Ru
         ? "Строгий режим (быстрая реакция на сбои)"
@@ -108,4 +109,10 @@ public static class Strings
     public static string StrictModeHint => Ru
         ? "Health check каждые 5 секунд вместо 30. Уменьшает окно потенциальной утечки трафика при крахе sing-box."
         : "Health check every 5 seconds instead of 30. Reduces the leak window if sing-box silently hangs.";
+    public static string ForceIpv4Label => Ru
+        ? "Только IPv4 (защита от IPv6 leak)"
+        : "Force IPv4 only (IPv6 leak protection)";
+    public static string FlushDnsLabel => Ru
+        ? "Очищать DNS кэш при подключении"
+        : "Flush DNS cache on connect";
 }

@@ -98,11 +98,26 @@ public class HealthMonitor : IDisposable
     }
 
     /// <summary>
-    /// Call when a new process is detected by ETW that might need to be added.
+    /// Call when a new process is detected by ETW/polling that might need to be added.
     /// Resets the debounce timer — actual reload happens 5s after the last call.
+    ///
+    /// IMPORTANT: skips debounce entirely if the process name is already in
+    /// _lastScan.ProcessNames. Browser tabs spawn many child processes with names
+    /// already monitored (chrome.exe, msedge.exe), and rescanning + hot-reloading
+    /// for each one creates a "process rescan storm" that visibly stalls the VPN
+    /// for 1-3 seconds when many tabs are opened in quick succession.
     /// </summary>
     public void OnNewProcessDetected(string processName)
     {
+        // Skip if the name is already monitored — config wouldn't change anyway.
+        // Saves a full process rescan + sing-box hot-reload per browser tab spawn.
+        if (_lastScan?.ProcessNames != null &&
+            _lastScan.ProcessNames.Contains(processName, StringComparer.OrdinalIgnoreCase))
+        {
+            _logger.Verbose("[HealthMonitor] Process {Name} already monitored — skipping debounce", processName);
+            return;
+        }
+
         _logger.Debug("[HealthMonitor] New process detected: {Name} — debouncing", processName);
 
         // Reset the debounce timer

@@ -41,6 +41,8 @@ public class MainForm : Form
     private RadioButton _fullRadio = null!;
     private CheckBox _bypassRuCheck = null!;
     private CheckBox _strictModeCheck = null!;
+    private CheckBox _forceIpv4Check = null!;
+    private CheckBox _flushDnsCheck = null!;
     private readonly List<string> _customApps = new();
 
     // ── Bottom panel ──
@@ -70,6 +72,7 @@ public class MainForm : Form
     private LinkLabel _channelToggle = null!;
     private LinkLabel _checkUpdateLink = null!;
     private LinkLabel _leakTestLink = null!;
+    private LinkLabel _showLogsLink = null!;
     private TabControl _tabs = null!;
     private TabPage _serversPage = null!;
     private TabPage _appsPage = null!;
@@ -223,16 +226,33 @@ public class MainForm : Form
             catch { }
         };
 
+        _showLogsLink = new LinkLabel
+        {
+            Text = Strings.ShowLogs,
+            Font = t.SmallFont,
+            AutoSize = true,
+            LinkColor = t.TextMuted,
+            ActiveLinkColor = t.Primary,
+            VisitedLinkColor = t.TextMuted,
+            BackColor = Color.Transparent
+        };
+        _showLogsLink.Click += (_, __) => OpenLogsFolder();
+
         _statusPanel.Controls.Add(_statusDot);
         _statusPanel.Controls.Add(_statusLabel);
         _statusPanel.Controls.Add(_leakTestLink);
+        _statusPanel.Controls.Add(_showLogsLink);
 
         void RepositionStatusBar()
         {
+            const int gap = 12;
             int leakW = TextRenderer.MeasureText(_leakTestLink.Text, _leakTestLink.Font).Width + 4;
-            _leakTestLink.Location = new Point(
-                Math.Max(0, _statusPanel.ClientSize.Width - leakW - 14), 8);
-            _statusLabel.Width = Math.Max(50, _leakTestLink.Location.X - 32 - 8);
+            int logsW = TextRenderer.MeasureText(_showLogsLink.Text, _showLogsLink.Font).Width + 4;
+
+            int rightEdge = _statusPanel.ClientSize.Width - 14;
+            _leakTestLink.Location = new Point(Math.Max(0, rightEdge - leakW), 8);
+            _showLogsLink.Location = new Point(Math.Max(0, rightEdge - leakW - gap - logsW), 8);
+            _statusLabel.Width = Math.Max(50, _showLogsLink.Location.X - 32 - 8);
         }
         RepositionStatusBar();
         _statusPanel.Resize += (_, _) => RepositionStatusBar();
@@ -741,7 +761,7 @@ public class MainForm : Form
         _routingPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 92,
+            Height = 120,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = true,
             BackColor = t.Background,
@@ -822,6 +842,43 @@ public class MainForm : Form
             ShowApplyIfNeeded();
         };
         _routingPanel.Controls.Add(_strictModeCheck);
+        _routingPanel.SetFlowBreak(_strictModeCheck, true);
+
+        _forceIpv4Check = new CheckBox
+        {
+            Text = Strings.ForceIpv4Only,
+            Font = t.BodyFont,
+            ForeColor = t.TextPrimary,
+            AutoSize = true,
+            Checked = true,
+            Margin = new Padding(0, 4, 12, 0)
+        };
+        _forceIpv4Check.CheckedChanged += (_, __) =>
+        {
+            if (_isLoadingUI) return;
+            _settings.App.ForceIpv4Only = _forceIpv4Check.Checked;
+            SaveSettings();
+            ShowApplyIfNeeded();
+        };
+        _routingPanel.Controls.Add(_forceIpv4Check);
+
+        _flushDnsCheck = new CheckBox
+        {
+            Text = Strings.FlushDnsOnStart,
+            Font = t.BodyFont,
+            ForeColor = t.TextPrimary,
+            AutoSize = true,
+            Checked = true,
+            Margin = new Padding(0, 4, 0, 0)
+        };
+        _flushDnsCheck.CheckedChanged += (_, __) =>
+        {
+            if (_isLoadingUI) return;
+            _settings.App.FlushDnsOnStart = _flushDnsCheck.Checked;
+            SaveSettings();
+            ShowApplyIfNeeded();
+        };
+        _routingPanel.Controls.Add(_flushDnsCheck);
 
         _appsLabel = new Label
         {
@@ -1182,7 +1239,10 @@ public class MainForm : Form
         _fullRadio.Text = Strings.FullTunnel;
         _bypassRuCheck.Text = Strings.BypassRussianTraffic;
         _strictModeCheck.Text = Strings.StrictMode;
+        _forceIpv4Check.Text = Strings.ForceIpv4Only;
+        _flushDnsCheck.Text = Strings.FlushDnsOnStart;
         _leakTestLink.Text = Strings.CheckLeaks;
+        _showLogsLink.Text = Strings.ShowLogs;
         _appsLabel.Text = Strings.AppsHint;
         _customLabel.Text = Strings.CustomAppLabel;
         _addCustomBtn.Text = Strings.BtnAdd;
@@ -1479,6 +1539,10 @@ public class MainForm : Form
         // Strict mode
         _strictModeCheck.Checked = _settings.App.StrictMode;
 
+        // IPv4 + DNS flush
+        _forceIpv4Check.Checked = _settings.App.ForceIpv4Only;
+        _flushDnsCheck.Checked = _settings.App.FlushDnsOnStart;
+
         // Load servers from config
         _servers.Clear();
         _servers.AddRange(_settings.Vless.GetEffectiveServers());
@@ -1568,6 +1632,22 @@ public class MainForm : Form
         var updateType = info.HasLiteUpdate ? Strings.UpdateTypeLite : Strings.UpdateTypeFull;
         _updateLabel.Text = Strings.UpdateAvailable(updateType, info.LatestVersion, sizeMb);
         _updatePanel.Visible = true;
+    }
+
+    private void OpenLogsFolder()
+    {
+        try
+        {
+            var logsDir = Core.AppPaths.LogsDir;
+            Directory.CreateDirectory(logsDir);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{logsDir}\"",
+                UseShellExecute = true
+            });
+        }
+        catch { /* best-effort */ }
     }
 
     private async void OnUpdateClick(object? sender, EventArgs e)
@@ -1784,6 +1864,10 @@ public class MainForm : Form
 
         // Strict mode
         _settings.App.StrictMode = _strictModeCheck.Checked;
+
+        // IPv4 + DNS flush
+        _settings.App.ForceIpv4Only = _forceIpv4Check.Checked;
+        _settings.App.FlushDnsOnStart = _flushDnsCheck.Checked;
 
         SettingsLoader.Save(_settings);
     }
