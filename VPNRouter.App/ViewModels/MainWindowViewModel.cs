@@ -506,17 +506,23 @@ public partial class MainWindowViewModel : ViewModelBase
                 IsConnected = true;
                 IsConnecting = false;
                 ConnectButtonText = Strings.StopVPN;
-                var activeServer = SelectedServer?.DisplayName
-                    ?? Servers.FirstOrDefault()?.DisplayName
-                    ?? (IsVlessMode ? null : SelectedCustomConfig?.Name);
-                var modeLabel = IsSplitTunnel
-                    ? (IsRussian ? "split" : "split")
-                    : (IsRussian ? "full" : "full");
-                StatusText = Strings.Connected(
-                    _engine.ActiveProfileName,
-                    _engine.SingBoxPid,
-                    activeServer,
-                    modeLabel);
+                string? serverName, serverIp;
+                if (IsVlessMode)
+                {
+                    var s = SelectedServer ?? Servers.FirstOrDefault();
+                    serverName = s?.DisplayName;
+                    serverIp = s?.Server;
+                }
+                else
+                {
+                    var c = SelectedCustomConfig
+                        ?? CustomConfigs.FirstOrDefault(x => x.IsActive)
+                        ?? CustomConfigs.FirstOrDefault();
+                    serverName = c?.Name;
+                    serverIp = c?.Server;
+                }
+                var modeLabel = IsSplitTunnel ? "split" : "full";
+                StatusText = Strings.Connected(modeLabel, serverName, serverIp);
             }
             else if (status == "Stopped")
             {
