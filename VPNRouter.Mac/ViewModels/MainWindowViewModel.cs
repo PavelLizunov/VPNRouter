@@ -38,6 +38,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _strictMode = false;
     [ObservableProperty] private bool _forceIpv4Only = true;
     [ObservableProperty] private bool _flushDnsOnStart = true;
+    [ObservableProperty] private bool _strictDns = false;
 
     // ── Version ──
     public string VersionText => $"by NiniTux  \u00b7  v{AppVersion.Version}";
@@ -71,6 +72,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public string StrictModeHint => Strings.StrictModeHint;
     public string ForceIpv4Label => Strings.ForceIpv4Label;
     public string FlushDnsLabel => Strings.FlushDnsLabel;
+    public string StrictDnsLabel => Strings.StrictDnsLabel;
 
     [RelayCommand]
     private void OpenLeakTest()
@@ -161,9 +163,10 @@ public partial class MainWindowViewModel : ViewModelBase
         // Strict mode
         StrictMode = _settings.App.StrictMode;
 
-        // IPv4 + DNS flush
+        // IPv4 + DNS flush + Strict DNS
         ForceIpv4Only = _settings.App.ForceIpv4Only;
         FlushDnsOnStart = _settings.App.FlushDnsOnStart;
+        StrictDns = _settings.App.StrictDns;
 
         // Load servers
         Servers.Clear();
@@ -333,9 +336,10 @@ public partial class MainWindowViewModel : ViewModelBase
         // Strict mode
         _settings.App.StrictMode = StrictMode;
 
-        // IPv4 + DNS flush
+        // IPv4 + DNS flush + Strict DNS
         _settings.App.ForceIpv4Only = ForceIpv4Only;
         _settings.App.FlushDnsOnStart = FlushDnsOnStart;
+        _settings.App.StrictDns = StrictDns;
 
         // Theme & language
         _settings.App.Theme = IsDarkTheme ? "dark" : "light";

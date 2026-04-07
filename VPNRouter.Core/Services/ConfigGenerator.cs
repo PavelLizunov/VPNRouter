@@ -146,9 +146,10 @@ public static class ConfigGenerator
             // skips slow AAAA queries (+100-300ms each). Disable only if user
             // explicitly wants IPv6 via dns.strategy in config.yaml.
             Strategy = settings.App.ForceIpv4Only ? "ipv4_only" : null,
-            // Full tunnel: all DNS through VPN by default
-            // Split tunnel: only targeted processes use VPN DNS, rest use local
-            Final = isFullTunnel ? "vpn-dns" : "local-dns",
+            // Strict DNS: all queries via VPN (no leaks possible).
+            // Full tunnel: all DNS through VPN by default.
+            // Split tunnel (default): only targeted processes use VPN DNS, rest use local.
+            Final = (isFullTunnel || settings.App.StrictDns) ? "vpn-dns" : "local-dns",
             Servers = new List<DnsServer>
             {
                 // Remote DoH server routed through VPN proxy

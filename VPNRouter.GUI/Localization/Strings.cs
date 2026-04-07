@@ -43,6 +43,7 @@ public static class Strings
     public static string StrictMode => Ru ? "Строгий режим (быстрая реакция на сбои)" : "Strict mode (faster crash detection)";
     public static string ForceIpv4Only => Ru ? "Только IPv4 (защита от IPv6 leak)" : "Force IPv4 only (IPv6 leak protection)";
     public static string FlushDnsOnStart => Ru ? "Очищать DNS кэш при подключении" : "Flush DNS cache on connect";
+    public static string StrictDns => Ru ? "Строгий DNS (весь DNS через VPN, без утечек)" : "Strict DNS (all DNS via VPN, no leaks)";
     public static string AppsHint => Ru
         ? "Выберите группы для маршрутизации через VPN (раскройте для просмотра):"
         : "Check groups to route through VPN (expand to see apps inside):";

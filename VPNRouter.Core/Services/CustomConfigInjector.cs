@@ -52,7 +52,7 @@ public static class CustomConfigInjector
         }
 
         // Migrate legacy features to sing-box 1.13+ format
-        StripUnsupportedFeatures(config, settings.Tun.RouteExcludeAddress, settings.App.ForceIpv4Only);
+        StripUnsupportedFeatures(config, settings.Tun.RouteExcludeAddress, settings.App.ForceIpv4Only, settings.App.StrictDns);
 
         // Align route.final with routing_mode setting
         var isSplitTunnel = !(settings.App.RoutingMode ?? "split")
@@ -833,7 +833,7 @@ public static class CustomConfigInjector
     /// 4. "block"/"dns" outbound types → removed + route rules converted to actions
     /// 5. Legacy inbound sniff fields → removed (moved to route actions)
     /// </summary>
-    private static void StripUnsupportedFeatures(JObject config, List<string>? excludeAddresses = null, bool forceIpv4Only = true)
+    private static void StripUnsupportedFeatures(JObject config, List<string>? excludeAddresses = null, bool forceIpv4Only = true, bool strictDns = false)
     {
         // 1. Convert legacy DNS server format to type-based
         var dnsServers = config.SelectToken("dns.servers") as JArray;
@@ -967,22 +967,33 @@ public static class CustomConfigInjector
 
             // Find local DNS server tag (detour:"dns-direct" or "direct" = local, no proxy)
             string? localTag = null;
+            // Find proxy DNS server tag (detour pointing to a non-direct outbound)
+            string? proxyTag = null;
             if (dnsServers != null)
             {
                 foreach (var s in dnsServers)
                 {
                     var d = s["detour"]?.ToString();
-                    if (d == "dns-direct" || d == "direct")
+                    if ((d == "dns-direct" || d == "direct") && localTag == null)
                     {
                         localTag = s["tag"]?.ToString();
-                        break;
+                    }
+                    else if (!string.IsNullOrEmpty(d) && d != "dns-direct" && d != "direct" && proxyTag == null)
+                    {
+                        proxyTag = s["tag"]?.ToString();
                     }
                 }
             }
 
-            // Force DNS final to local — routing ALL DNS through VPN adds 100-400ms per query.
-            // Only targeted process DNS should go through VPN (handled by injected DNS rules).
-            if (localTag != null)
+            // Strict DNS: force final → proxy DNS server (all queries via VPN, leak-proof)
+            // Default: force final → local DNS server (faster, but only routed processes use VPN DNS)
+            if (strictDns && proxyTag != null)
+            {
+                var finalTag = dns["final"]?.ToString();
+                if (finalTag != proxyTag)
+                    dns["final"] = proxyTag;
+            }
+            else if (localTag != null)
             {
                 var finalTag = dns["final"]?.ToString();
                 if (finalTag != localTag)

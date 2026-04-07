@@ -115,4 +115,7 @@ public static class Strings
     public static string FlushDnsLabel => Ru
         ? "Очищать DNS кэш при подключении"
         : "Flush DNS cache on connect";
+    public static string StrictDnsLabel => Ru
+        ? "Строгий DNS (весь DNS через VPN, без утечек)"
+        : "Strict DNS (all DNS via VPN, no leaks)";
 }

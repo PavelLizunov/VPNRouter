@@ -43,6 +43,7 @@ public class MainForm : Form
     private CheckBox _strictModeCheck = null!;
     private CheckBox _forceIpv4Check = null!;
     private CheckBox _flushDnsCheck = null!;
+    private CheckBox _strictDnsCheck = null!;
     private readonly List<string> _customApps = new();
 
     // ── Bottom panel ──
@@ -761,7 +762,7 @@ public class MainForm : Form
         _routingPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 120,
+            Height = 148,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = true,
             BackColor = t.Background,
@@ -879,6 +880,25 @@ public class MainForm : Form
             ShowApplyIfNeeded();
         };
         _routingPanel.Controls.Add(_flushDnsCheck);
+        _routingPanel.SetFlowBreak(_flushDnsCheck, true);
+
+        _strictDnsCheck = new CheckBox
+        {
+            Text = Strings.StrictDns,
+            Font = t.BodyFont,
+            ForeColor = t.TextPrimary,
+            AutoSize = true,
+            Checked = false,
+            Margin = new Padding(0, 4, 0, 0)
+        };
+        _strictDnsCheck.CheckedChanged += (_, __) =>
+        {
+            if (_isLoadingUI) return;
+            _settings.App.StrictDns = _strictDnsCheck.Checked;
+            SaveSettings();
+            ShowApplyIfNeeded();
+        };
+        _routingPanel.Controls.Add(_strictDnsCheck);
 
         _appsLabel = new Label
         {
@@ -1241,6 +1261,7 @@ public class MainForm : Form
         _strictModeCheck.Text = Strings.StrictMode;
         _forceIpv4Check.Text = Strings.ForceIpv4Only;
         _flushDnsCheck.Text = Strings.FlushDnsOnStart;
+        _strictDnsCheck.Text = Strings.StrictDns;
         _leakTestLink.Text = Strings.CheckLeaks;
         _showLogsLink.Text = Strings.ShowLogs;
         _appsLabel.Text = Strings.AppsHint;
@@ -1539,9 +1560,10 @@ public class MainForm : Form
         // Strict mode
         _strictModeCheck.Checked = _settings.App.StrictMode;
 
-        // IPv4 + DNS flush
+        // IPv4 + DNS flush + Strict DNS
         _forceIpv4Check.Checked = _settings.App.ForceIpv4Only;
         _flushDnsCheck.Checked = _settings.App.FlushDnsOnStart;
+        _strictDnsCheck.Checked = _settings.App.StrictDns;
 
         // Load servers from config
         _servers.Clear();
@@ -1865,9 +1887,10 @@ public class MainForm : Form
         // Strict mode
         _settings.App.StrictMode = _strictModeCheck.Checked;
 
-        // IPv4 + DNS flush
+        // IPv4 + DNS flush + Strict DNS
         _settings.App.ForceIpv4Only = _forceIpv4Check.Checked;
         _settings.App.FlushDnsOnStart = _flushDnsCheck.Checked;
+        _settings.App.StrictDns = _strictDnsCheck.Checked;
 
         SettingsLoader.Save(_settings);
     }

@@ -115,6 +115,22 @@ public class AppConfig
     public bool StrictMode { get; set; } = false;
 
     /// <summary>
+    /// "Strict DNS" — when true, ALL DNS queries are routed through the VPN
+    /// (vpn-dns), not just queries from routed processes. Eliminates DNS leaks
+    /// from system services (svchost DnsCache), background apps, and any process
+    /// not in the routed list.
+    ///
+    /// Tradeoffs:
+    /// - +50-100ms latency per DNS query (round-trip via VPN)
+    /// - Local network resolution (printer.local, nas.lan) may break
+    /// - DNS stops working if VPN disconnects (de facto DNS kill switch)
+    ///
+    /// Recommended if leak tests show ISP DNS appearing despite VPN being on.
+    /// </summary>
+    [YamlMember(Alias = "strict_dns")]
+    public bool StrictDns { get; set; } = false;
+
+    /// <summary>
     /// When true, flush system DNS cache when VPN starts to prevent
     /// resolved-pre-connect entries from leaking through direct route.
     /// </summary>

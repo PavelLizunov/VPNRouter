@@ -244,6 +244,8 @@
                                           Content="{Binding ForceIpv4Label}" FontSize="12"/>
                                 <CheckBox IsChecked="{Binding FlushDnsOnStart}"
                                           Content="{Binding FlushDnsLabel}" FontSize="12"/>
+                                <CheckBox IsChecked="{Binding StrictDns}"
+                                          Content="{Binding StrictDnsLabel}" FontSize="12"/>
                             </StackPanel>
                         </Border>
 
