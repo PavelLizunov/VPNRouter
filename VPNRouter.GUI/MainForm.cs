@@ -711,9 +711,9 @@ public class MainForm : Form
         _routingPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 36,
+            Height = 64,
             FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
+            WrapContents = true,
             BackColor = t.Background,
             Padding = new Padding(0, 4, 0, 4)
         };
@@ -754,6 +754,7 @@ public class MainForm : Form
 
         _routingPanel.Controls.Add(_splitRadio);
         _routingPanel.Controls.Add(_fullRadio);
+        _routingPanel.SetFlowBreak(_fullRadio, true);
 
         _bypassRuCheck = new CheckBox
         {
@@ -762,7 +763,7 @@ public class MainForm : Form
             ForeColor = t.TextPrimary,
             AutoSize = true,
             Checked = true,
-            Margin = new Padding(20, 4, 0, 0)
+            Margin = new Padding(0, 6, 0, 0)
         };
         _bypassRuCheck.CheckedChanged += (_, __) =>
         {
