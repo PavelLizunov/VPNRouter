@@ -16,6 +16,7 @@ public class SingBoxManager : IDisposable
     private Process? _process;
     private string _currentConfigPath = string.Empty;
     private bool _disposed;
+    private readonly TunOwnershipLock _tunLock;
 
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(3) };
 
@@ -27,6 +28,10 @@ public class SingBoxManager : IDisposable
     {
         _settings = settings;
         _logger = logger ?? Log.Logger;
+        _tunLock = new TunOwnershipLock(_logger);
+
+        // Release lock on ungraceful process exit (Environment.Exit, Ctrl+C, crash).
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => _tunLock.Dispose();
     }
 
     // ─── Public API ───────────────────────────────────────────────────────────
@@ -44,12 +49,25 @@ public class SingBoxManager : IDisposable
             Stop();
         }
 
+        // Take exclusive ownership of the TUN adapter. If another VPNRouter
+        // instance (desktop UI / Windows Service / CLI) already owns it,
+        // bail out instead of fighting over the same TUN device.
+        if (!_tunLock.TryAcquire())
+        {
+            throw new TunOwnershipException(
+                "Another VPNRouter instance already owns the TUN adapter. " +
+                "Stop the other instance (e.g. disable Windows Service autostart) and try again.");
+        }
+
         var exePath = OperatingSystem.IsWindows()
             ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
             : AppPaths.SingBoxExePath;
 
         if (!File.Exists(exePath))
+        {
+            _tunLock.Release();
             throw new FileNotFoundException($"sing-box not found at: {exePath}");
+        }
 
         RotateSingBoxLog();
         _currentConfigPath = WriteJsonToDisk(configJson);
@@ -57,10 +75,20 @@ public class SingBoxManager : IDisposable
         _logger.Information("[SingBoxManager] Starting sing-box with config: {Config}", _currentConfigPath);
 
         State = SingBoxState.Starting;
-        LaunchProcess(exePath);
+        try
+        {
+            LaunchProcess(exePath);
+        }
+        catch
+        {
+            _tunLock.Release();
+            throw;
+        }
     }
 
-    public void Stop()
+    public void Stop() => StopInternal(releaseLock: true);
+
+    private void StopInternal(bool releaseLock)
     {
         _logger.Information("[SingBoxManager] Stopping sing-box (PID {Pid})", Pid);
 
@@ -88,6 +116,7 @@ public class SingBoxManager : IDisposable
                 _process?.Dispose();
                 _process = null;
                 State = SingBoxState.Stopped;
+                if (releaseLock) _tunLock.Release();
                 _logger.Information("[SingBoxManager] sing-box stopped");
             }
             return;
@@ -96,6 +125,7 @@ public class SingBoxManager : IDisposable
         if (_process == null || _process.HasExited)
         {
             State = SingBoxState.Stopped;
+            if (releaseLock) _tunLock.Release();
             return;
         }
 
@@ -115,6 +145,7 @@ public class SingBoxManager : IDisposable
             _process.Dispose();
             _process = null;
             State = SingBoxState.Stopped;
+            _tunLock.Release();
             _logger.Information("[SingBoxManager] sing-box stopped");
         }
     }
@@ -123,7 +154,9 @@ public class SingBoxManager : IDisposable
     {
         _logger.Information("[SingBoxManager] Restarting sing-box");
         State = SingBoxState.Restarting;
-        Stop();
+        // Keep the TUN lock across restart so another instance can't slip in
+        // during the brief window between Stop and LaunchProcess.
+        StopInternal(releaseLock: false);
 
         var exePath = OperatingSystem.IsWindows()
             ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)

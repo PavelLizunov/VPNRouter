@@ -62,7 +62,28 @@ public class VPNRouterService : BackgroundService
             _engine.Warning += msg =>
                 _logger.LogWarning("[VPNRouterService] {Warn}", msg);
 
-            await _engine.StartAsync(settings, stoppingToken);
+            // Wait for the TUN adapter to become free. If a desktop UI
+            // (VPNRouter.App.exe) is currently running and owns sing-box,
+            // we idle here instead of crashing with FATAL. When the UI
+            // exits, the named mutex is released and our next attempt
+            // succeeds.
+            while (true)
+            {
+                try
+                {
+                    await _engine.StartAsync(settings, stoppingToken);
+                    break;
+                }
+                catch (TunOwnershipException)
+                {
+                    _logger.LogInformation(
+                        "[VPNRouterService] TUN adapter owned by another VPNRouter instance — idling, will retry in 30s");
+                    // Signal startup completion to unblock StopAsync waiters,
+                    // even though we haven't actually started yet.
+                    _startupComplete.TrySetResult();
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                }
+            }
 
             // Signal that startup completed successfully
             _startupComplete.TrySetResult();

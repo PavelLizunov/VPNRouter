@@ -577,6 +577,15 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 await Task.Run(() => _engine.StartAsync(_settings));
             }
+            catch (TunOwnershipException)
+            {
+                _logger.Warning("[VM] TUN adapter owned by another VPNRouter instance");
+                IsConnecting = false;
+                StatusText = IsRussian
+                    ? "VPN адаптер занят другим экземпляром VPNRouter. Отключите Windows Service в Network → Service Controls."
+                    : "TUN adapter is owned by another VPNRouter instance. Disable Windows Service in Network → Service Controls.";
+                ConnectButtonText = Strings.StartVPN;
+            }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Failed to start VPN");
