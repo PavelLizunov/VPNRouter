@@ -17,7 +17,7 @@ public class MainForm : Form
     private Panel _vlessPanel = null!;
     private FlowLayoutPanel _vlessBtnPanel = null!;
     private Button _addServerBtn = null!;
-    private ListView _serverList = null!;
+    private ThemedListView _serverList = null!;
     private Button _removeBtn = null!;
     // (removed: _clearBtn — Remove is sufficient)
     private Label _serverHintLabel = null!;
@@ -28,7 +28,7 @@ public class MainForm : Form
     private RadioButton _vlessRadio = null!;
     private RadioButton _customConfigRadio = null!;
     private Panel _customConfigPanel = null!;
-    private ListView _customConfigList = null!;
+    private ThemedListView _customConfigList = null!;
     private Button _addCustomConfigBtn = null!;
     private Button _removeCustomConfigBtn = null!;
     private FlowLayoutPanel _customConfigBtnPanel = null!;
@@ -688,17 +688,18 @@ public class MainForm : Form
         _customConfigBtnPanel.Controls.Add(_addCustomConfigBtn);
         _customConfigBtnPanel.Controls.Add(_removeCustomConfigBtn);
 
-        _customConfigList = new ListView
+        _customConfigList = new ThemedListView
         {
             Dock = DockStyle.Fill,
             View = View.Details,
             FullRowSelect = true,
-            GridLines = true,
+            GridLines = false,
             MultiSelect = false,
             BackColor = t.Surface,
             ForeColor = t.TextPrimary,
             Font = t.BodyFont,
-            OwnerDraw = true
+            OwnerDraw = true,
+            BorderStyle = BorderStyle.None
         };
         _customConfigList.DrawColumnHeader += OnDrawColumnHeader;
         _customConfigList.DrawItem += OnDrawListItem;
@@ -752,16 +753,17 @@ public class MainForm : Form
         _vlessBtnPanel.Controls.Add(_addServerBtn);
         _vlessBtnPanel.Controls.Add(_removeBtn);
 
-        _serverList = new ListView
+        _serverList = new ThemedListView
         {
             Dock = DockStyle.Fill,
             View = View.Details,
             FullRowSelect = true,
-            GridLines = true,
+            GridLines = false,
             BackColor = t.Surface,
             ForeColor = t.TextPrimary,
             Font = t.BodyFont,
-            OwnerDraw = true
+            OwnerDraw = true,
+            BorderStyle = BorderStyle.None
         };
         _serverList.DrawColumnHeader += OnDrawColumnHeader;
         _serverList.DrawItem += OnDrawListItem;
