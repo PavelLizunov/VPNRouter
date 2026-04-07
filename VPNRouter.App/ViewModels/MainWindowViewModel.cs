@@ -49,6 +49,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _forceIpv4Only = true;
     [ObservableProperty] private bool _flushDnsOnStart = true;
     [ObservableProperty] private bool _strictDns = false;
+    [ObservableProperty] private bool _receivePrereleases = false;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServersTabSelected))]
@@ -113,6 +114,8 @@ public partial class MainWindowViewModel : ViewModelBase
     public string ForceIpv4Label => Strings.ForceIpv4Label;
     public string FlushDnsLabel => Strings.FlushDnsLabel;
     public string StrictDnsLabel => Strings.StrictDnsLabel;
+    public string ReceivePrereleasesLabel => IsRussian ? "Получать prerelease обновления (experimental канал)" : "Receive prereleases (experimental channel)";
+    public string UpdateChannelHeader => IsRussian ? "Канал обновлений" : "Update channel";
 
     [RelayCommand]
     private void OpenLeakTest()
@@ -237,6 +240,9 @@ public partial class MainWindowViewModel : ViewModelBase
         ForceIpv4Only = _settings.App.ForceIpv4Only;
         FlushDnsOnStart = _settings.App.FlushDnsOnStart;
         StrictDns = _settings.App.StrictDns;
+
+        // Update channel
+        ReceivePrereleases = _settings.Update.IsExperimental;
 
         // Load servers
         Servers.Clear();
@@ -435,6 +441,9 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.App.FlushDnsOnStart = FlushDnsOnStart;
         _settings.App.StrictDns = StrictDns;
 
+        // Update channel
+        _settings.Update.Channel = ReceivePrereleases ? "experimental" : "stable";
+
         // Theme & language
         _settings.App.Theme = IsDarkTheme ? "dark" : "light";
         _settings.App.Language = IsRussian ? "ru" : "en";
@@ -474,6 +483,13 @@ public partial class MainWindowViewModel : ViewModelBase
                 .ToList() ?? new();
         }
 
+        SettingsLoader.Save(_settings, AppPaths.ConfigYamlPath);
+    }
+
+    partial void OnReceivePrereleasesChanged(bool value)
+    {
+        if (_isLoadingUI) return;
+        _settings.Update.Channel = value ? "experimental" : "stable";
         SettingsLoader.Save(_settings, AppPaths.ConfigYamlPath);
     }
 
