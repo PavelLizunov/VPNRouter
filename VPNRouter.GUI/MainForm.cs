@@ -979,8 +979,6 @@ public class MainForm : Form
             Dock = DockStyle.Fill,
             CheckBoxes = true,
             Font = t.BodyFont,
-            // ShowLines = true draws system-color indentation lines that look
-            // bright on dark themes. Hide them — collapse/expand glyph still works.
             ShowLines = false,
             ShowPlusMinus = true,
             ShowRootLines = true,
@@ -991,6 +989,8 @@ public class MainForm : Form
             HideSelection = false
         };
         _profileTree.AfterCheck += OnProfileTreeCheck;
+        _profileTree.HandleCreated += (_, _) =>
+            NativeThemeHelper.DisableVisualStyles(_profileTree.Handle);
 
         // Load built-in profiles with their processes
         var builtIn = BuiltInProfiles.Get();

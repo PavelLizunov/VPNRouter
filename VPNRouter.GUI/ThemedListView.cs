@@ -30,6 +30,14 @@ internal sealed class ThemedListView : ListView
         DoubleBuffered = true;
     }
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        // Strip visual styles so the column header strip respects BackColor
+        // and doesn't render in light gray system theme on dark themes.
+        NativeThemeHelper.DisableVisualStyles(Handle);
+    }
+
     private const int WM_ERASEBKGND = 0x0014;
 
     protected override void WndProc(ref Message m)
