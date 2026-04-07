@@ -200,14 +200,42 @@ public class MainForm : Form
             e.Graphics.DrawLine(borderPen, 0, 0, _statusPanel.Width, 0);
         };
 
+        _leakTestLink = new LinkLabel
+        {
+            Text = Strings.CheckLeaks,
+            Font = t.SmallFont,
+            AutoSize = true,
+            LinkColor = t.TextMuted,
+            ActiveLinkColor = t.Primary,
+            VisitedLinkColor = t.TextMuted,
+            BackColor = Color.Transparent
+        };
+        _leakTestLink.Click += (_, __) =>
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "https://ipleak.net/",
+                    UseShellExecute = true
+                });
+            }
+            catch { }
+        };
+
         _statusPanel.Controls.Add(_statusDot);
         _statusPanel.Controls.Add(_statusLabel);
-        // Anchor status label to fill available width
-        _statusLabel.Width = Math.Max(100, _statusPanel.ClientSize.Width - 32 - 14);
-        _statusPanel.Resize += (_, _) =>
+        _statusPanel.Controls.Add(_leakTestLink);
+
+        void RepositionStatusBar()
         {
-            _statusLabel.Width = Math.Max(100, _statusPanel.ClientSize.Width - 32 - 14);
-        };
+            int leakW = TextRenderer.MeasureText(_leakTestLink.Text, _leakTestLink.Font).Width + 4;
+            _leakTestLink.Location = new Point(
+                Math.Max(0, _statusPanel.ClientSize.Width - leakW - 14), 8);
+            _statusLabel.Width = Math.Max(50, _leakTestLink.Location.X - 32 - 8);
+        }
+        RepositionStatusBar();
+        _statusPanel.Resize += (_, _) => RepositionStatusBar();
 
         // ── Action panel (Start/Stop + Apply + autostart) ──
         _actionPanel = new Panel
@@ -491,30 +519,6 @@ public class MainForm : Form
             }
         };
 
-        _leakTestLink = new LinkLabel
-        {
-            Text = Strings.CheckLeaks,
-            Font = t.SmallFont,
-            AutoSize = true,
-            Location = new Point(160, 30),
-            LinkColor = t.TextMuted,
-            ActiveLinkColor = t.Primary,
-            VisitedLinkColor = t.TextMuted,
-            BackColor = Color.Transparent
-        };
-        _leakTestLink.Click += (_, __) =>
-        {
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "https://ipleak.net/",
-                    UseShellExecute = true
-                });
-            }
-            catch { /* opening URL is best-effort */ }
-        };
-
         _headerPanel.Controls.Add(logo);
         _headerPanel.Controls.Add(_titleLabel);
         _headerPanel.Controls.Add(_subtitleLabel);
@@ -522,7 +526,6 @@ public class MainForm : Form
         _headerPanel.Controls.Add(_langToggle);
         _headerPanel.Controls.Add(_channelToggle);
         _headerPanel.Controls.Add(_checkUpdateLink);
-        _headerPanel.Controls.Add(_leakTestLink);
 
         RepositionHeaderLinks();
         _headerPanel.Resize += (_, _) => RepositionHeaderLinks();
@@ -550,7 +553,6 @@ public class MainForm : Form
         int themeW = TextRenderer.MeasureText(_themeToggle.Text, _themeToggle.Font).Width + 4;
         int checkW = TextRenderer.MeasureText(_checkUpdateLink.Text, _checkUpdateLink.Font).Width + 4;
         int channelW = TextRenderer.MeasureText(_channelToggle.Text, _channelToggle.Font).Width + 4;
-        int leakW = TextRenderer.MeasureText(_leakTestLink.Text, _leakTestLink.Font).Width + 4;
 
         // Row 3 (y=46): langToggle | themeToggle | checkUpdateLink — right to left
         var row3 = LayoutHelper.CalculateRightToLeftPositions(rightEdge, gap, new[] { langW, themeW, checkW });
@@ -558,10 +560,9 @@ public class MainForm : Form
         _themeToggle.Location = new Point(row3[1], 46);
         _checkUpdateLink.Location = new Point(row3[2], 46);
 
-        // Row 2 (y=30): channelToggle | leakTestLink — right to left
-        var row2 = LayoutHelper.CalculateRightToLeftPositions(rightEdge, gap, new[] { channelW, leakW });
+        // Row 2 (y=30): channelToggle — right-aligned
+        var row2 = LayoutHelper.CalculateRightToLeftPositions(rightEdge, gap, new[] { channelW });
         _channelToggle.Location = new Point(row2[0], 30);
-        _leakTestLink.Location = new Point(row2[1], 30);
     }
 
     private void BuildServersTab(TabPage page)
