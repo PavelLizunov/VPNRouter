@@ -104,6 +104,17 @@ public class AppConfig
     public bool ForceIpv4Only { get; set; } = true;
 
     /// <summary>
+    /// "Strict mode" — when true, HealthMonitor polls sing-box every 5 seconds
+    /// instead of 30, so a crash is detected faster and the firewall kill switch
+    /// activates sooner. Reduces the leak window from ~30s to ~5s.
+    /// Note: process exit events fire immediately regardless of this setting,
+    /// so detection of clean exits is unaffected. This option only helps with
+    /// silent hangs (sing-box alive but Clash API not responding).
+    /// </summary>
+    [YamlMember(Alias = "strict_mode")]
+    public bool StrictMode { get; set; } = false;
+
+    /// <summary>
     /// When true, flush system DNS cache when VPN starts to prevent
     /// resolved-pre-connect entries from leaking through direct route.
     /// </summary>

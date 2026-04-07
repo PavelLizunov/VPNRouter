@@ -37,9 +37,14 @@
                                Foreground="#2563EB"/>
                     <TextBlock Text="{Binding VersionText}" FontSize="11" Opacity="0.5"/>
                 </StackPanel>
-                <!-- Theme / Lang -->
+                <!-- Theme / Lang / Leak Test -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
                             VerticalAlignment="Center">
+                    <Button Content="{Binding CheckLeaksLabel}"
+                            Command="{Binding OpenLeakTestCommand}"
+                            Padding="8,4" FontSize="11"
+                            Background="Transparent" BorderThickness="0"
+                            ToolTip.Tip="ipleak.net"/>
                     <Button Content="{Binding ThemeToggleText}"
                             Command="{Binding ToggleThemeCommand}"
                             Padding="8,4" FontSize="11"
@@ -82,16 +87,16 @@
         <TabControl Margin="0" Padding="8">
 
             <!-- ─── Servers Tab ─── -->
-            <TabItem Header="Servers">
+            <TabItem Header="{Binding LblTabServers}">
                 <ScrollViewer Padding="12">
                     <StackPanel Spacing="12">
 
                         <!-- Config Mode Toggle -->
                         <StackPanel Orientation="Horizontal" Spacing="16">
-                            <RadioButton Content="VLESS Servers"
+                            <RadioButton Content="{Binding LblVlessServers}"
                                          IsChecked="{Binding IsVlessMode}"
                                          GroupName="ConfigMode" FontWeight="SemiBold"/>
-                            <RadioButton Content="Custom Config (JSON)"
+                            <RadioButton Content="{Binding LblCustomConfigJson}"
                                          GroupName="ConfigMode" FontWeight="SemiBold"/>
                         </StackPanel>
 
@@ -99,11 +104,11 @@
                         <StackPanel Spacing="8" IsVisible="{Binding IsVlessMode}">
                             <!-- Buttons -->
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Content="Add Server(s)"
+                                <Button Content="{Binding LblAddServers}"
                                         Command="{Binding AddServerCommand}"
                                         Background="#2563EB" Foreground="White"
                                         Padding="16,6" CornerRadius="4" FontWeight="SemiBold"/>
-                                <Button Content="Remove"
+                                <Button Content="{Binding LblRemove}"
                                         Command="{Binding RemoveServerCommand}"
                                         Padding="16,6" CornerRadius="4"/>
                             </StackPanel>
@@ -129,7 +134,7 @@
                                 </ListBox.ItemTemplate>
                             </ListBox>
 
-                            <TextBlock Text="Double-click to edit server. Paste VLESS URI(s) above."
+                            <TextBlock Text="{Binding LblDoubleClickEditServer}"
                                        FontSize="11" Opacity="0.5"/>
 
                             <!-- Selected Server Details -->
@@ -158,11 +163,11 @@
                         <!-- ── Custom Config Panel ── -->
                         <StackPanel Spacing="8" IsVisible="{Binding !IsVlessMode}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Content="Add Config..."
+                                <Button Content="{Binding LblAddConfig}"
                                         Command="{Binding AddCustomConfigCommand}"
                                         Background="#2563EB" Foreground="White"
                                         Padding="16,6" CornerRadius="4" FontWeight="SemiBold"/>
-                                <Button Content="Remove"
+                                <Button Content="{Binding LblRemove}"
                                         Command="{Binding RemoveCustomConfigCommand}"
                                         Padding="16,6" CornerRadius="4"/>
                             </StackPanel>
@@ -185,7 +190,7 @@
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
                             </ListBox>
-                            <TextBlock Text="Double-click to set active config. Any protocol supported."
+                            <TextBlock Text="{Binding LblDoubleClickActiveConfig}"
                                        FontSize="11" Opacity="0.5"/>
                         </StackPanel>
                     </StackPanel>
@@ -193,15 +198,15 @@
             </TabItem>
 
             <!-- ─── Apps Tab ─── -->
-            <TabItem Header="Applications">
+            <TabItem Header="{Binding LblTabApps}">
                 <ScrollViewer Padding="12">
                     <StackPanel Spacing="12">
                         <!-- Routing Mode -->
                         <StackPanel Orientation="Horizontal" Spacing="16">
-                            <RadioButton Content="Split Tunnel (selected apps)"
+                            <RadioButton Content="{Binding LblSplitTunnel}"
                                          IsChecked="{Binding IsSplitTunnel}"
                                          GroupName="RoutingMode" FontWeight="SemiBold"/>
-                            <RadioButton Content="Full Tunnel (all traffic)"
+                            <RadioButton Content="{Binding LblFullTunnel}"
                                          GroupName="RoutingMode" FontWeight="SemiBold"/>
                         </StackPanel>
 
@@ -219,7 +224,21 @@
                             </StackPanel>
                         </Border>
 
-                        <TextBlock Text="Check profile groups to route through VPN:"
+                        <!-- Strict Mode -->
+                        <Border Padding="12,10" CornerRadius="6"
+                                Background="{DynamicResource SystemControlBackgroundListLowBrush}"
+                                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                                BorderThickness="1">
+                            <StackPanel Spacing="4">
+                                <CheckBox IsChecked="{Binding StrictMode}"
+                                          Content="{Binding StrictModeLabel}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding StrictModeHint}"
+                                           FontSize="11" Opacity="0.6" Margin="22,0,0,0"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="{Binding LblAppsHint}"
                                    FontSize="12" Opacity="0.7"
                                    IsVisible="{Binding IsSplitTunnel}"/>
 
@@ -262,13 +281,13 @@
 
                         <!-- Add Custom App -->
                         <StackPanel Spacing="4" IsVisible="{Binding IsSplitTunnel}">
-                            <TextBlock Text="Add custom app (process name, e.g. Discord, Chrome):"
+                            <TextBlock Text="{Binding LblAddCustomAppHint}"
                                        FontSize="12" Opacity="0.7"/>
                             <DockPanel>
-                                <Button DockPanel.Dock="Right" Content="Remove"
+                                <Button DockPanel.Dock="Right" Content="{Binding LblRemove}"
                                         Command="{Binding RemoveCustomAppsCommand}"
                                         Margin="8,0,0,0" Padding="12,6" CornerRadius="4"/>
-                                <Button DockPanel.Dock="Right" Content="Add"
+                                <Button DockPanel.Dock="Right" Content="{Binding LblBtnAdd}"
                                         Command="{Binding AddCustomAppCommand}"
                                         CommandParameter="{Binding #customAppInput.Text}"
                                         Margin="8,0,0,0" Padding="12,6" CornerRadius="4"

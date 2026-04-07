@@ -57,8 +57,8 @@ public class SingBoxDns
     [JsonProperty("final", NullValueHandling = NullValueHandling.Ignore)]
     public string? Final { get; set; }
 
-    [JsonProperty("strategy")]
-    public string Strategy { get; set; } = "ipv4_only";
+    [JsonProperty("strategy", NullValueHandling = NullValueHandling.Ignore)]
+    public string? Strategy { get; set; } = "ipv4_only";
 }
 
 /// <summary>sing-box 1.12+ new DNS server format</summary>

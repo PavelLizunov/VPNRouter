@@ -40,6 +40,7 @@ public class MainForm : Form
     private RadioButton _splitRadio = null!;
     private RadioButton _fullRadio = null!;
     private CheckBox _bypassRuCheck = null!;
+    private CheckBox _strictModeCheck = null!;
     private readonly List<string> _customApps = new();
 
     // ── Bottom panel ──
@@ -68,6 +69,7 @@ public class MainForm : Form
     private LinkLabel _langToggle = null!;
     private LinkLabel _channelToggle = null!;
     private LinkLabel _checkUpdateLink = null!;
+    private LinkLabel _leakTestLink = null!;
     private TabControl _tabs = null!;
     private TabPage _serversPage = null!;
     private TabPage _appsPage = null!;
@@ -489,6 +491,30 @@ public class MainForm : Form
             }
         };
 
+        _leakTestLink = new LinkLabel
+        {
+            Text = Strings.CheckLeaks,
+            Font = t.SmallFont,
+            AutoSize = true,
+            Location = new Point(160, 30),
+            LinkColor = t.TextMuted,
+            ActiveLinkColor = t.Primary,
+            VisitedLinkColor = t.TextMuted,
+            BackColor = Color.Transparent
+        };
+        _leakTestLink.Click += (_, __) =>
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "https://ipleak.net/",
+                    UseShellExecute = true
+                });
+            }
+            catch { /* opening URL is best-effort */ }
+        };
+
         _headerPanel.Controls.Add(logo);
         _headerPanel.Controls.Add(_titleLabel);
         _headerPanel.Controls.Add(_subtitleLabel);
@@ -496,6 +522,7 @@ public class MainForm : Form
         _headerPanel.Controls.Add(_langToggle);
         _headerPanel.Controls.Add(_channelToggle);
         _headerPanel.Controls.Add(_checkUpdateLink);
+        _headerPanel.Controls.Add(_leakTestLink);
 
         RepositionHeaderLinks();
         _headerPanel.Resize += (_, _) => RepositionHeaderLinks();
@@ -523,6 +550,7 @@ public class MainForm : Form
         int themeW = TextRenderer.MeasureText(_themeToggle.Text, _themeToggle.Font).Width + 4;
         int checkW = TextRenderer.MeasureText(_checkUpdateLink.Text, _checkUpdateLink.Font).Width + 4;
         int channelW = TextRenderer.MeasureText(_channelToggle.Text, _channelToggle.Font).Width + 4;
+        int leakW = TextRenderer.MeasureText(_leakTestLink.Text, _leakTestLink.Font).Width + 4;
 
         // Row 3 (y=46): langToggle | themeToggle | checkUpdateLink — right to left
         var row3 = LayoutHelper.CalculateRightToLeftPositions(rightEdge, gap, new[] { langW, themeW, checkW });
@@ -530,9 +558,10 @@ public class MainForm : Form
         _themeToggle.Location = new Point(row3[1], 46);
         _checkUpdateLink.Location = new Point(row3[2], 46);
 
-        // Row 2 (y=30): channelToggle — right-aligned
-        var row2 = LayoutHelper.CalculateRightToLeftPositions(rightEdge, gap, new[] { channelW });
+        // Row 2 (y=30): channelToggle | leakTestLink — right to left
+        var row2 = LayoutHelper.CalculateRightToLeftPositions(rightEdge, gap, new[] { channelW, leakW });
         _channelToggle.Location = new Point(row2[0], 30);
+        _leakTestLink.Location = new Point(row2[1], 30);
     }
 
     private void BuildServersTab(TabPage page)
@@ -711,7 +740,7 @@ public class MainForm : Form
         _routingPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 64,
+            Height = 92,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = true,
             BackColor = t.Background,
@@ -773,6 +802,25 @@ public class MainForm : Form
             ShowApplyIfNeeded();
         };
         _routingPanel.Controls.Add(_bypassRuCheck);
+        _routingPanel.SetFlowBreak(_bypassRuCheck, true);
+
+        _strictModeCheck = new CheckBox
+        {
+            Text = Strings.StrictMode,
+            Font = t.BodyFont,
+            ForeColor = t.TextPrimary,
+            AutoSize = true,
+            Checked = false,
+            Margin = new Padding(0, 4, 0, 0)
+        };
+        _strictModeCheck.CheckedChanged += (_, __) =>
+        {
+            if (_isLoadingUI) return;
+            _settings.App.StrictMode = _strictModeCheck.Checked;
+            SaveSettings();
+            ShowApplyIfNeeded();
+        };
+        _routingPanel.Controls.Add(_strictModeCheck);
 
         _appsLabel = new Label
         {
@@ -1132,6 +1180,8 @@ public class MainForm : Form
         _splitRadio.Text = Strings.SplitTunnel;
         _fullRadio.Text = Strings.FullTunnel;
         _bypassRuCheck.Text = Strings.BypassRussianTraffic;
+        _strictModeCheck.Text = Strings.StrictMode;
+        _leakTestLink.Text = Strings.CheckLeaks;
         _appsLabel.Text = Strings.AppsHint;
         _customLabel.Text = Strings.CustomAppLabel;
         _addCustomBtn.Text = Strings.BtnAdd;
@@ -1424,6 +1474,9 @@ public class MainForm : Form
 
         // Russian geo bypass
         _bypassRuCheck.Checked = _settings.App.BypassRussianTraffic;
+
+        // Strict mode
+        _strictModeCheck.Checked = _settings.App.StrictMode;
 
         // Load servers from config
         _servers.Clear();
@@ -1727,6 +1780,9 @@ public class MainForm : Form
 
         // Russian geo bypass
         _settings.App.BypassRussianTraffic = _bypassRuCheck.Checked;
+
+        // Strict mode
+        _settings.App.StrictMode = _strictModeCheck.Checked;
 
         SettingsLoader.Save(_settings);
     }

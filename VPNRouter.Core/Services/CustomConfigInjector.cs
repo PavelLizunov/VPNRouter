@@ -52,7 +52,7 @@ public static class CustomConfigInjector
         }
 
         // Migrate legacy features to sing-box 1.13+ format
-        StripUnsupportedFeatures(config, settings.Tun.RouteExcludeAddress);
+        StripUnsupportedFeatures(config, settings.Tun.RouteExcludeAddress, settings.App.ForceIpv4Only);
 
         // Align route.final with routing_mode setting
         var isSplitTunnel = !(settings.App.RoutingMode ?? "split")
@@ -833,7 +833,7 @@ public static class CustomConfigInjector
     /// 4. "block"/"dns" outbound types → removed + route rules converted to actions
     /// 5. Legacy inbound sniff fields → removed (moved to route actions)
     /// </summary>
-    private static void StripUnsupportedFeatures(JObject config, List<string>? excludeAddresses = null)
+    private static void StripUnsupportedFeatures(JObject config, List<string>? excludeAddresses = null, bool forceIpv4Only = true)
     {
         // 1. Convert legacy DNS server format to type-based
         var dnsServers = config.SelectToken("dns.servers") as JArray;
@@ -954,10 +954,15 @@ public static class CustomConfigInjector
         var dns = config["dns"] as JObject;
         if (dns != null)
         {
-            // Force ipv4_only — anything else causes IPv6 AAAA timeout (+100-300ms per query)
-            var strategy = dns["strategy"]?.ToString();
-            if (strategy != "ipv4_only")
-                dns["strategy"] = "ipv4_only";
+            // Force ipv4_only when ForceIpv4Only is enabled (default).
+            // Without ipv4_only: AAAA queries timeout +100-300ms per request AND
+            // IPv6 traffic can leak past TUN if the OS has v6 connectivity.
+            if (forceIpv4Only)
+            {
+                var strategy = dns["strategy"]?.ToString();
+                if (strategy != "ipv4_only")
+                    dns["strategy"] = "ipv4_only";
+            }
 
             // Find local DNS server tag (detour:"dns-direct" or "direct" = local, no proxy)
             string? localTag = null;

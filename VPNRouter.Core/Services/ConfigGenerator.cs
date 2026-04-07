@@ -141,7 +141,10 @@ public static class ConfigGenerator
 
         var dns = new SingBoxDns
         {
-            Strategy = "ipv4_only",
+            // ipv4_only protects from IPv6 leaks (when VPN tunnels only IPv4) AND
+            // skips slow AAAA queries (+100-300ms each). Disable only if user
+            // explicitly wants IPv6 via dns.strategy in config.yaml.
+            Strategy = settings.App.ForceIpv4Only ? "ipv4_only" : null,
             // Full tunnel: all DNS through VPN by default
             // Split tunnel: only targeted processes use VPN DNS, rest use local
             Final = isFullTunnel ? "vpn-dns" : "local-dns",

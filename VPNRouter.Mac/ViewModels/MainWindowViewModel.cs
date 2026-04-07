@@ -35,18 +35,51 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _isVlessMode = true;
     [ObservableProperty] private bool _isSplitTunnel = true;
     [ObservableProperty] private bool _bypassRussianTraffic = true;
+    [ObservableProperty] private bool _strictMode = false;
 
     // ── Version ──
     public string VersionText => $"by NiniTux  \u00b7  v{AppVersion.Version}";
 
-    // ── Localized labels ──
-    public string BypassRuLabel => Strings.Lang == "ru"
-        ? "Российский трафик через реальный IP"
-        : "Russian traffic via real IP";
+    // ── Localized labels (proxies to Strings.cs, refreshed on language toggle) ──
+    public string LblTabServers => Strings.TabServers;
+    public string LblTabApps => Strings.TabApps;
+    public string LblVlessServers => Strings.VlessServers;
+    public string LblCustomConfigJson => Strings.CustomConfigJson;
+    public string LblAddServers => Strings.AddServers;
+    public string LblRemove => Strings.Remove;
+    public string LblAddConfig => Strings.AddConfig;
+    public string LblBtnAdd => Strings.BtnAdd;
+    public string LblSplitTunnel => Strings.SplitTunnel;
+    public string LblFullTunnel => Strings.FullTunnel;
+    public string LblAppsHint => Strings.AppsHint;
+    public string LblFieldName => Strings.FieldName;
+    public string LblFieldServer => Strings.FieldServer;
+    public string LblFieldPort => Strings.FieldPort;
+    public string LblFieldUuid => Strings.FieldUuid;
+    public string LblFieldPublicKey => Strings.FieldPublicKey;
+    public string LblFieldShortId => Strings.FieldShortId;
+    public string LblDoubleClickEditServer => Strings.DoubleClickEditServer;
+    public string LblDoubleClickActiveConfig => Strings.DoubleClickActiveConfig;
+    public string LblAddCustomAppHint => Strings.AddCustomAppHint;
+    public string BypassRuLabel => Strings.BypassRussianTrafficLabel;
+    public string BypassRuHint => Strings.BypassRussianTrafficHint;
+    public string CheckLeaksLabel => Strings.CheckLeaks;
+    public string StrictModeLabel => Strings.StrictModeLabel;
+    public string StrictModeHint => Strings.StrictModeHint;
 
-    public string BypassRuHint => Strings.Lang == "ru"
-        ? "Сайты и приложения с российскими доменами/IP идут напрямую, минуя VPN. Защищает VPN-сервер от блокировок российскими сервисами."
-        : "Russian domains and IPs go directly, bypassing VPN. Protects the VPN server from being blocked by Russian services.";
+    [RelayCommand]
+    private void OpenLeakTest()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "https://ipleak.net/",
+                UseShellExecute = true
+            });
+        }
+        catch { /* best-effort */ }
+    }
 
     // ── VLESS fields (for single-server quick edit) ──
     [ObservableProperty] private string _vlessUri = string.Empty;
@@ -102,6 +135,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Russian geo bypass
         BypassRussianTraffic = _settings.App.BypassRussianTraffic;
+
+        // Strict mode
+        StrictMode = _settings.App.StrictMode;
 
         // Load servers
         Servers.Clear();
@@ -267,6 +303,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Russian geo bypass
         _settings.App.BypassRussianTraffic = BypassRussianTraffic;
+
+        // Strict mode
+        _settings.App.StrictMode = StrictMode;
 
         // Theme & language
         _settings.App.Theme = IsDarkTheme ? "dark" : "light";
@@ -568,11 +607,8 @@ public partial class MainWindowViewModel : ViewModelBase
         if (!IsConnected && !IsConnecting)
             StatusText = Strings.NotConnected;
 
-        OnPropertyChanged(nameof(ConnectButtonText));
-        OnPropertyChanged(nameof(ThemeToggleText));
-        OnPropertyChanged(nameof(StatusText));
-        OnPropertyChanged(nameof(BypassRuLabel));
-        OnPropertyChanged(nameof(BypassRuHint));
+        // Notify all properties — refreshes every Lbl* and other localized binding
+        OnPropertyChanged(string.Empty);
     }
 
     // ── Helpers ──

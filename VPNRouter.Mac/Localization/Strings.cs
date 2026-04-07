@@ -73,4 +73,39 @@ public static class Strings
     public static string TrayStop => Ru ? "\u2b1b Остановить VPN" : "\u2b1b Stop VPN";
     public static string TraySettings => Ru ? "Настройки..." : "Settings...";
     public static string TrayExit => Ru ? "Выход" : "Exit";
+
+    // ── Server detail editor ──
+    public static string FieldName => Ru ? "Имя:" : "Name:";
+    public static string FieldServer => Ru ? "Сервер:" : "Server:";
+    public static string FieldPort => Ru ? "Порт:" : "Port:";
+    public static string FieldUuid => "UUID:";
+    public static string FieldPublicKey => Ru ? "Public Key:" : "Public Key:";
+    public static string FieldShortId => Ru ? "Short ID:" : "Short ID:";
+
+    // ── Hints ──
+    public static string DoubleClickEditServer => Ru
+        ? "Двойной клик — редактировать сервер. Вставьте VLESS URI выше."
+        : "Double-click to edit server. Paste VLESS URI(s) above.";
+    public static string DoubleClickActiveConfig => Ru
+        ? "Двойной клик — сделать активным. Поддерживается любой протокол."
+        : "Double-click to set active config. Any protocol supported.";
+    public static string AddCustomAppHint => Ru
+        ? "Добавить приложение (имя процесса, например Discord, Chrome):"
+        : "Add custom app (process name, e.g. Discord, Chrome):";
+
+    // ── Bypass / Strict ──
+    public static string BypassRussianTrafficLabel => Ru
+        ? "Российский трафик через реальный IP"
+        : "Russian traffic via real IP";
+    public static string BypassRussianTrafficHint => Ru
+        ? "Сайты и приложения с российскими доменами/IP идут напрямую, минуя VPN. Защищает VPN-сервер от блокировок российскими сервисами."
+        : "Russian domains and IPs go directly, bypassing VPN. Protects the VPN server from being blocked by Russian services.";
+    public static string CheckLeaks => Ru ? "Проверить утечки" : "Check leaks";
+
+    public static string StrictModeLabel => Ru
+        ? "Строгий режим (быстрая реакция на сбои)"
+        : "Strict mode (faster crash detection)";
+    public static string StrictModeHint => Ru
+        ? "Health check каждые 5 секунд вместо 30. Уменьшает окно потенциальной утечки трафика при крахе sing-box."
+        : "Health check every 5 seconds instead of 30. Reduces the leak window if sing-box silently hangs.";
 }

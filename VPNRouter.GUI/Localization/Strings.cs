@@ -38,6 +38,8 @@ public static class Strings
     public static string SplitTunnel => Ru ? "Split Tunnel (выбранные приложения)" : "Split Tunnel (selected apps)";
     public static string FullTunnel => Ru ? "Full Tunnel (весь трафик)" : "Full Tunnel (all traffic)";
     public static string BypassRussianTraffic => Ru ? "Российский трафик через реальный IP" : "Russian traffic via real IP";
+    public static string CheckLeaks => Ru ? "Проверить утечки" : "Check leaks";
+    public static string StrictMode => Ru ? "Строгий режим (быстрая реакция на сбои)" : "Strict mode (faster crash detection)";
     public static string AppsHint => Ru
         ? "Выберите группы для маршрутизации через VPN (раскройте для просмотра):"
         : "Check groups to route through VPN (expand to see apps inside):";

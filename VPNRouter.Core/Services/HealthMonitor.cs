@@ -72,12 +72,18 @@ public class HealthMonitor : IDisposable
         _isStopping = false;
         _lastScan = initialScan; // baseline — prevents reload on first debounce if nothing changed
 
-        var intervalMs = _settings.HealthCheckInterval * 1000;
+        // Strict mode: poll every 5 seconds instead of the configured interval
+        // (default 30s). Catches silent hangs faster — process exit events
+        // already fire immediately, so this only matters for "alive but stuck"
+        // sing-box where Clash API stops responding.
+        var intervalSeconds = appSettings.App.StrictMode ? 5 : _settings.HealthCheckInterval;
+        var intervalMs = intervalSeconds * 1000;
+
         _healthTimer = new System.Threading.Timer(
             OnHealthTick, null, intervalMs, intervalMs);
 
-        _logger.Information("[HealthMonitor] Started — check every {Sec}s, max {Max} restarts",
-            _settings.HealthCheckInterval, _settings.MaxRestartAttempts);
+        _logger.Information("[HealthMonitor] Started — check every {Sec}s, max {Max} restarts (strict mode: {Strict})",
+            intervalSeconds, _settings.MaxRestartAttempts, appSettings.App.StrictMode);
     }
 
     public void Stop()
