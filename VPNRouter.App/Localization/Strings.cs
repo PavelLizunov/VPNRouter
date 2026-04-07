@@ -44,9 +44,13 @@ public static class Strings
 
     // ── Status ──
     public static string NotConnected => Ru ? "Не подключено" : "Not connected";
-    public static string Connected(string profile, int? pid) => Ru
-        ? $"Подключено — {profile}" + (pid.HasValue ? $" — PID {pid}" : "")
-        : $"Connected — {profile}" + (pid.HasValue ? $" — PID {pid}" : "");
+    public static string Connected(string profile, int? pid, string? server, string mode) => Ru
+        ? $"Подключено [{mode}] — {profile}"
+            + (string.IsNullOrEmpty(server) ? "" : $" → {server}")
+            + (pid.HasValue ? $" — PID {pid}" : "")
+        : $"Connected [{mode}] — {profile}"
+            + (string.IsNullOrEmpty(server) ? "" : $" → {server}")
+            + (pid.HasValue ? $" — PID {pid}" : "");
 
     // ── Action states ──
     public static string Starting => Ru ? "Запуск..." : "Starting...";
