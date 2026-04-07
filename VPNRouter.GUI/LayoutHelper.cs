@@ -61,44 +61,15 @@ internal static class LayoutHelper
     }
 
     /// <summary>
-    /// Apply proportional column widths to a ListView. The LAST column absorbs
-    /// any rounding remainder so columns always fill the full client width
-    /// (no white strip on the right when scrollbar isn't visible).
+    /// Apply proportional column widths to a ListView.
     /// Call from ListView.Resize handler.
     /// </summary>
     public static void AutoSizeColumns(System.Windows.Forms.ListView lv, int[] proportions)
     {
         if (lv.Columns.Count == 0 || proportions.Length == 0) return;
-
-        // Reserve scrollbar width only if items actually need scrolling
-        int scrollBarWidth = NeedsScrollbar(lv) ? SystemInformation.VerticalScrollBarWidth : 0;
-
-        var widths = CalculateProportionalWidths(lv.ClientSize.Width, scrollBarWidth, proportions);
-
-        int n = Math.Min(lv.Columns.Count, widths.Length);
-
-        // Sum all but the last; the last column gets the remainder
-        int usedWidth = 0;
-        for (int i = 0; i < n - 1; i++)
-        {
+        var widths = CalculateProportionalWidths(
+            lv.ClientSize.Width, SystemInformation.VerticalScrollBarWidth, proportions);
+        for (int i = 0; i < lv.Columns.Count && i < widths.Length; i++)
             lv.Columns[i].Width = widths[i];
-            usedWidth += widths[i];
-        }
-
-        if (n > 0)
-        {
-            int remaining = lv.ClientSize.Width - usedWidth - scrollBarWidth;
-            lv.Columns[n - 1].Width = Math.Max(20, remaining);
-        }
-    }
-
-    private static bool NeedsScrollbar(System.Windows.Forms.ListView lv)
-    {
-        if (lv.Items.Count == 0) return false;
-        int rowHeight = lv.Items[0].Bounds.Height;
-        if (rowHeight <= 0) rowHeight = lv.Font.Height + 4;
-        int headerHeight = lv.View == System.Windows.Forms.View.Details ? lv.Font.Height + 6 : 0;
-        int contentHeight = lv.Items.Count * rowHeight + headerHeight;
-        return contentHeight > lv.ClientSize.Height;
     }
 }

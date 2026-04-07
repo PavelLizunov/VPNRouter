@@ -17,7 +17,7 @@ public class MainForm : Form
     private Panel _vlessPanel = null!;
     private FlowLayoutPanel _vlessBtnPanel = null!;
     private Button _addServerBtn = null!;
-    private ThemedListView _serverList = null!;
+    private ListView _serverList = null!;
     private Button _removeBtn = null!;
     // (removed: _clearBtn — Remove is sufficient)
     private Label _serverHintLabel = null!;
@@ -28,7 +28,7 @@ public class MainForm : Form
     private RadioButton _vlessRadio = null!;
     private RadioButton _customConfigRadio = null!;
     private Panel _customConfigPanel = null!;
-    private ThemedListView _customConfigList = null!;
+    private ListView _customConfigList = null!;
     private Button _addCustomConfigBtn = null!;
     private Button _removeCustomConfigBtn = null!;
     private FlowLayoutPanel _customConfigBtnPanel = null!;
@@ -75,7 +75,7 @@ public class MainForm : Form
     private LinkLabel _checkUpdateLink = null!;
     private LinkLabel _leakTestLink = null!;
     private LinkLabel _showLogsLink = null!;
-    private ThemedTabControl _tabs = null!;
+    private TabControl _tabs = null!;
     private TabPage _serversPage = null!;
     private TabPage _appsPage = null!;
     private Panel _actionPanel = null!;
@@ -182,13 +182,12 @@ public class MainForm : Form
         BuildHeaderPanel();
 
         // ── Tabs ──
-        _tabs = new ThemedTabControl
+        _tabs = new TabControl
         {
             Dock = DockStyle.Fill,
             Font = t.BodyFont,
             DrawMode = TabDrawMode.OwnerDrawFixed,
-            Padding = new Point(12, 4),
-            BackColor = t.Background
+            Padding = new Point(12, 4)
         };
         _tabs.DrawItem += OnDrawTab;
         _tabs.Paint += OnTabPaint;
@@ -689,18 +688,17 @@ public class MainForm : Form
         _customConfigBtnPanel.Controls.Add(_addCustomConfigBtn);
         _customConfigBtnPanel.Controls.Add(_removeCustomConfigBtn);
 
-        _customConfigList = new ThemedListView
+        _customConfigList = new ListView
         {
             Dock = DockStyle.Fill,
             View = View.Details,
             FullRowSelect = true,
-            GridLines = false,
+            GridLines = true,
             MultiSelect = false,
             BackColor = t.Surface,
             ForeColor = t.TextPrimary,
             Font = t.BodyFont,
-            OwnerDraw = true,
-            BorderStyle = BorderStyle.None
+            OwnerDraw = true
         };
         _customConfigList.DrawColumnHeader += OnDrawColumnHeader;
         _customConfigList.DrawItem += OnDrawListItem;
@@ -754,17 +752,16 @@ public class MainForm : Form
         _vlessBtnPanel.Controls.Add(_addServerBtn);
         _vlessBtnPanel.Controls.Add(_removeBtn);
 
-        _serverList = new ThemedListView
+        _serverList = new ListView
         {
             Dock = DockStyle.Fill,
             View = View.Details,
             FullRowSelect = true,
-            GridLines = false,
+            GridLines = true,
             BackColor = t.Surface,
             ForeColor = t.TextPrimary,
             Font = t.BodyFont,
-            OwnerDraw = true,
-            BorderStyle = BorderStyle.None
+            OwnerDraw = true
         };
         _serverList.DrawColumnHeader += OnDrawColumnHeader;
         _serverList.DrawItem += OnDrawListItem;
@@ -979,18 +976,13 @@ public class MainForm : Form
             Dock = DockStyle.Fill,
             CheckBoxes = true,
             Font = t.BodyFont,
-            ShowLines = false,
+            ShowLines = true,
             ShowPlusMinus = true,
             ShowRootLines = true,
             BackColor = t.Surface,
-            ForeColor = t.TextPrimary,
-            BorderStyle = BorderStyle.None,
-            FullRowSelect = true,
-            HideSelection = false
+            ForeColor = t.TextPrimary
         };
         _profileTree.AfterCheck += OnProfileTreeCheck;
-        _profileTree.HandleCreated += (_, _) =>
-            NativeThemeHelper.DisableVisualStyles(_profileTree.Handle);
 
         // Load built-in profiles with their processes
         var builtIn = BuiltInProfiles.Get();
@@ -1187,13 +1179,9 @@ public class MainForm : Form
 
     private void OnTabPaint(object? sender, PaintEventArgs e)
     {
-        var t = Theme.Current;
-
-        // Fill the ENTIRE control client area with theme background.
-        // ClipRectangle alone misses the gray strip around tabs that the system
-        // paints with SystemColors.Control. ClientRectangle covers everything.
-        using var bgBrush = new SolidBrush(t.Background);
-        e.Graphics.FillRectangle(bgBrush, _tabs.ClientRectangle);
+        // Fill the background area around tabs that WinForms draws with system color
+        using var bgBrush = new SolidBrush(Theme.Current.Surface);
+        e.Graphics.FillRectangle(bgBrush, e.ClipRectangle);
 
         // Redraw each tab on top of the filled background
         for (int i = 0; i < _tabs.TabCount; i++)
@@ -1201,17 +1189,17 @@ public class MainForm : Form
             var tabRect = _tabs.GetTabRect(i);
             bool selected = _tabs.SelectedIndex == i;
 
-            using var tabBrush = new SolidBrush(selected ? t.Background : t.Surface);
+            using var tabBrush = new SolidBrush(selected ? Theme.Current.Background : Theme.Current.Surface);
             e.Graphics.FillRectangle(tabBrush, tabRect);
 
             if (selected)
             {
-                using var borderPen = new Pen(t.Primary, 2);
+                using var borderPen = new Pen(Theme.Current.Primary, 2);
                 e.Graphics.DrawLine(borderPen, tabRect.Left, tabRect.Bottom - 1, tabRect.Right, tabRect.Bottom - 1);
             }
 
-            var textColor = selected ? t.TextPrimary : t.TextSecondary;
-            TextRenderer.DrawText(e.Graphics, _tabs.TabPages[i].Text, t.BodyFont, tabRect, textColor,
+            var textColor = selected ? Theme.Current.TextPrimary : Theme.Current.TextSecondary;
+            TextRenderer.DrawText(e.Graphics, _tabs.TabPages[i].Text, Theme.Current.BodyFont, tabRect, textColor,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
     }
@@ -1428,10 +1416,8 @@ public class MainForm : Form
 
         // ── Tabs ──
         _tabs.Font = t.BodyFont;
-        _tabs.BackColor = t.Background;
         _serversPage.BackColor = t.Background;
         _appsPage.BackColor = t.Background;
-        _tabs.Invalidate();
 
         // ── Servers tab ──
         _configModePanel.BackColor = t.Background;
