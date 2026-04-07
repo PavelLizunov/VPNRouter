@@ -774,6 +774,9 @@ public class MainForm : Form
             Text = Strings.SplitTunnel,
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
+            BackColor = t.Background,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false,
             Checked = true,
             AutoSize = true,
             Margin = new Padding(0, 2, 10, 0)
@@ -784,6 +787,9 @@ public class MainForm : Form
             Text = Strings.FullTunnel,
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
+            BackColor = t.Background,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false,
             AutoSize = true,
             Margin = new Padding(0, 2, 0, 0)
         };
@@ -812,6 +818,9 @@ public class MainForm : Form
             Text = Strings.BypassRussianTraffic,
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
+            BackColor = t.Background,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false,
             AutoSize = true,
             Checked = true,
             Margin = new Padding(0, 6, 0, 0)
@@ -831,6 +840,9 @@ public class MainForm : Form
             Text = Strings.StrictMode,
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
+            BackColor = t.Background,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false,
             AutoSize = true,
             Checked = false,
             Margin = new Padding(0, 4, 0, 0)
@@ -850,6 +862,9 @@ public class MainForm : Form
             Text = Strings.ForceIpv4Only,
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
+            BackColor = t.Background,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false,
             AutoSize = true,
             Checked = true,
             Margin = new Padding(0, 4, 12, 0)
@@ -868,6 +883,9 @@ public class MainForm : Form
             Text = Strings.FlushDnsOnStart,
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
+            BackColor = t.Background,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false,
             AutoSize = true,
             Checked = true,
             Margin = new Padding(0, 4, 0, 0)
@@ -887,6 +905,9 @@ public class MainForm : Form
             Text = Strings.StrictDns,
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
+            BackColor = t.Background,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false,
             AutoSize = true,
             Checked = false,
             Margin = new Padding(0, 4, 0, 0)
@@ -1314,6 +1335,15 @@ public class MainForm : Form
     /// <summary>
     /// Re-applies Theme.Current colors/fonts to all controls at runtime.
     /// </summary>
+    private static void ApplyCheckBoxTheme(CheckBox cb, ThemeData t)
+    {
+        cb.FlatStyle = FlatStyle.Flat;
+        cb.Font = t.BodyFont;
+        cb.ForeColor = t.TextPrimary;
+        cb.BackColor = t.Background;
+        cb.UseVisualStyleBackColor = false;
+    }
+
     private void ApplyTheme()
     {
         var t = Theme.Current;
@@ -1359,8 +1389,17 @@ public class MainForm : Form
         _routingPanel.BackColor = t.Background;
         _splitRadio.Font = t.BodyFont;
         _splitRadio.ForeColor = t.TextPrimary;
+        _splitRadio.BackColor = t.Background;
         _fullRadio.Font = t.BodyFont;
         _fullRadio.ForeColor = t.TextPrimary;
+        _fullRadio.BackColor = t.Background;
+
+        // Leak protection checkboxes — must reapply colors on theme switch
+        ApplyCheckBoxTheme(_bypassRuCheck, t);
+        ApplyCheckBoxTheme(_strictModeCheck, t);
+        ApplyCheckBoxTheme(_forceIpv4Check, t);
+        ApplyCheckBoxTheme(_flushDnsCheck, t);
+        ApplyCheckBoxTheme(_strictDnsCheck, t);
         _appsLabel.ForeColor = t.TextSecondary;
         _appsLabel.Font = t.BodyFont;
         _profileTree.BackColor = t.Surface;
