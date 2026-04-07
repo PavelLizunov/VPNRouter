@@ -6,87 +6,88 @@ namespace VPNRouter.GUI;
 /// ListView subclass that fully respects BackColor on dark themes.
 ///
 /// Stock WinForms ListView in Details + OwnerDraw mode only paints item rows
-/// via DrawSubItem. The empty area below items, the area to the right of the
-/// last column header, and the column header strip beyond the last column are
-/// painted by Windows native theme using SystemColors.Window — bright white,
-/// regardless of BackColor. This produces visible white rectangles on dark
-/// themes.
+/// via DrawSubItem. Three areas remain painted by Windows native theme using
+/// SystemColors.Window (bright white) regardless of BackColor:
+/// 1. Empty area below the last item
+/// 2. Strip to the right of the last column header
+/// 3. Strip in the body to the right of the last column
 ///
 /// Fix:
-/// 1. Enable double buffering to eliminate flicker
-/// 2. Override OnPaint to fill the empty body area below items with BackColor
-/// 3. Override WndProc to suppress NM_CUSTOMDRAW WM_ERASEBKGND with our color
+/// - Double buffering eliminates flicker
+/// - Suppress WM_ERASEBKGND so the system can't flash white
+/// - Override OnPaint to fill all three problem areas with BackColor after
+///   base painting completes
+/// - The list's Resize handler should call AutoSizeColumns to size the last
+///   column to fill remaining width (handled in LayoutHelper)
 /// </summary>
 internal sealed class ThemedListView : ListView
 {
     public ThemedListView()
     {
-        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+        SetStyle(ControlStyles.OptimizedDoubleBuffer
+            | ControlStyles.AllPaintingInWmPaint
+            | ControlStyles.ResizeRedraw, true);
         DoubleBuffered = true;
+    }
+
+    private const int WM_ERASEBKGND = 0x0014;
+
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WM_ERASEBKGND)
+        {
+            m.Result = (IntPtr)1;
+            return;
+        }
+        base.WndProc(ref m);
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
+        PaintEmptyAreas(e.Graphics);
+    }
 
-        // Fill the area below the last item with our BackColor.
-        // OwnerDraw subitems handle the row areas, but anything below the last
-        // row remains the system white. Paint over it.
-        int top = 0;
+    private void PaintEmptyAreas(Graphics g)
+    {
+        if (View != View.Details) return;
+
+        using var brush = new SolidBrush(BackColor);
+
+        // 1. Compute header height
+        int headerHeight = Columns.Count > 0 ? Font.Height + 6 : 0;
+
+        // 2. Compute total column width
+        int totalColWidth = 0;
+        for (int i = 0; i < Columns.Count; i++) totalColWidth += Columns[i].Width;
+
+        // 3. Compute bottom of last item
+        int itemsBottom = headerHeight;
         if (Items.Count > 0)
         {
             var last = Items[Items.Count - 1];
-            top = last.Bounds.Bottom;
-        }
-        else if (View == View.Details && Columns.Count > 0)
-        {
-            // Header height
-            top = Font.Height + 6;
+            itemsBottom = Math.Max(itemsBottom, last.Bounds.Bottom);
         }
 
-        if (top < ClientSize.Height)
+        // 4. Fill area below last item (across full width)
+        if (itemsBottom < ClientSize.Height)
         {
-            using var brush = new SolidBrush(BackColor);
-            e.Graphics.FillRectangle(brush, 0, top, ClientSize.Width, ClientSize.Height - top);
+            g.FillRectangle(brush, 0, itemsBottom,
+                ClientSize.Width, ClientSize.Height - itemsBottom);
         }
 
-        // Fill the strip to the right of the last column in the body
-        if (View == View.Details && Items.Count > 0 && Columns.Count > 0)
+        // 5. Fill strip to right of last column header
+        if (totalColWidth < ClientSize.Width && headerHeight > 0)
         {
-            int totalColWidth = 0;
-            for (int i = 0; i < Columns.Count; i++) totalColWidth += Columns[i].Width;
-            if (totalColWidth < ClientSize.Width)
-            {
-                using var brush = new SolidBrush(BackColor);
-                int headerHeight = Font.Height + 6;
-                e.Graphics.FillRectangle(brush, totalColWidth, headerHeight,
-                    ClientSize.Width - totalColWidth, top - headerHeight);
-            }
+            g.FillRectangle(brush, totalColWidth, 0,
+                ClientSize.Width - totalColWidth, headerHeight);
         }
-    }
 
-    // ── WndProc: paint header right-of-last-column strip ─────────────────────
-
-    private const int WM_PAINT = 0x000F;
-
-    protected override void WndProc(ref Message m)
-    {
-        base.WndProc(ref m);
-
-        if (m.Msg == WM_PAINT && View == View.Details && Columns.Count > 0)
+        // 6. Fill strip to right of last column in the body (between header and items bottom)
+        if (totalColWidth < ClientSize.Width && itemsBottom > headerHeight)
         {
-            // After base painted the column headers, paint over the white strip
-            // to the right of the last column header
-            using var g = CreateGraphics();
-            int totalColWidth = 0;
-            for (int i = 0; i < Columns.Count; i++) totalColWidth += Columns[i].Width;
-            if (totalColWidth < ClientSize.Width)
-            {
-                int headerHeight = Font.Height + 6;
-                using var brush = new SolidBrush(BackColor);
-                g.FillRectangle(brush, totalColWidth, 0,
-                    ClientSize.Width - totalColWidth, headerHeight);
-            }
+            g.FillRectangle(brush, totalColWidth, headerHeight,
+                ClientSize.Width - totalColWidth, itemsBottom - headerHeight);
         }
     }
 }
