@@ -21,6 +21,7 @@ public class MainForm : Form
     private Button _removeBtn = null!;
     // (removed: _clearBtn — Remove is sufficient)
     private Label _serverHintLabel = null!;
+    private Label _customConfigHintLabel = null!;
 
     // ── Custom config mode ──
     private FlowLayoutPanel _configModePanel = null!;
@@ -131,6 +132,34 @@ public class MainForm : Form
 
     // ─── UI Construction ─────────────────────────────────────────────────────
 
+    // ─── Native title bar dark mode (Windows 10 1809+) ────────────────────────
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE_OLD = 19; // Windows 10 1809..1909
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;     // Windows 10 2004+
+    private const uint SWP_NOMOVE = 0x0002, SWP_NOSIZE = 0x0001, SWP_NOZORDER = 0x0004, SWP_FRAMECHANGED = 0x0020;
+
+    private void ApplyNativeTitleBarTheme()
+    {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10)) return;
+        try
+        {
+            int useDark = Theme.IsDark ? 1 : 0;
+            // Try modern attribute first, fall back to legacy
+            if (DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int)) != 0)
+                DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE_OLD, ref useDark, sizeof(int));
+
+            // Force the non-client area to repaint with the new theme
+            SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+        }
+        catch { /* not supported on older Windows builds */ }
+    }
+
     private void InitializeComponent()
     {
         var t = Theme.Current;
@@ -146,6 +175,8 @@ public class MainForm : Form
         BackColor = t.Background;
         Font = t.BodyFont;
         Icon = AppBranding.GetIcon(32);
+
+        HandleCreated += (_, _) => ApplyNativeTitleBarTheme();
 
         // ── Header panel (logo + brand) ──
         BuildHeaderPanel();
@@ -606,6 +637,9 @@ public class MainForm : Form
             Text = Strings.VlessServers,
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
+            BackColor = t.Background,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false,
             Checked = true,
             AutoSize = true,
             Margin = new Padding(0, 2, 10, 0)
@@ -617,6 +651,9 @@ public class MainForm : Form
             Text = Strings.CustomConfigJson,
             Font = t.BodyFont,
             ForeColor = t.TextPrimary,
+            BackColor = t.Background,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false,
             AutoSize = true,
             Margin = new Padding(0, 2, 0, 0)
         };
@@ -628,7 +665,8 @@ public class MainForm : Form
         _customConfigPanel = new Panel
         {
             Dock = DockStyle.Fill,
-            Visible = false
+            Visible = false,
+            BackColor = t.Background
         };
 
         _customConfigBtnPanel = new FlowLayoutPanel
@@ -672,25 +710,27 @@ public class MainForm : Form
         _customConfigList.DoubleClick += OnCustomConfigDoubleClick;
         _customConfigList.Resize += (_, _) => LayoutHelper.AutoSizeColumns(_customConfigList, new[] { 1, 4, 3, 5 });
 
-        var customHintLabel = new Label
+        _customConfigHintLabel = new Label
         {
             Dock = DockStyle.Bottom,
             Height = 20,
             Text = Strings.CustomConfigHint,
             ForeColor = t.TextMuted,
+            BackColor = t.Background,
             Font = t.SmallFont,
             Padding = new Padding(4, 0, 0, 0)
         };
 
         _customConfigPanel.Controls.Add(_customConfigList);
-        _customConfigPanel.Controls.Add(customHintLabel);
+        _customConfigPanel.Controls.Add(_customConfigHintLabel);
         _customConfigPanel.Controls.Add(_customConfigBtnPanel);
 
         // ── VLESS panel (mirrors Custom Config layout: buttons top, list fill, hint bottom) ──
         _vlessPanel = new Panel
         {
             Dock = DockStyle.Fill,
-            Visible = true
+            Visible = true,
+            BackColor = t.Background
         };
 
         _vlessBtnPanel = new FlowLayoutPanel
@@ -927,6 +967,7 @@ public class MainForm : Form
             Dock = DockStyle.Top,
             Height = 25,
             ForeColor = t.TextSecondary,
+            BackColor = t.Background,
             Font = t.BodyFont
         };
 
@@ -935,11 +976,16 @@ public class MainForm : Form
             Dock = DockStyle.Fill,
             CheckBoxes = true,
             Font = t.BodyFont,
-            ShowLines = true,
+            // ShowLines = true draws system-color indentation lines that look
+            // bright on dark themes. Hide them — collapse/expand glyph still works.
+            ShowLines = false,
             ShowPlusMinus = true,
             ShowRootLines = true,
             BackColor = t.Surface,
-            ForeColor = t.TextPrimary
+            ForeColor = t.TextPrimary,
+            BorderStyle = BorderStyle.None,
+            FullRowSelect = true,
+            HideSelection = false
         };
         _profileTree.AfterCheck += OnProfileTreeCheck;
 
@@ -972,6 +1018,7 @@ public class MainForm : Form
             Dock = DockStyle.Top,
             Height = 18,
             ForeColor = t.TextSecondary,
+            BackColor = t.Background,
             Font = t.SmallFont
         };
 
@@ -1227,6 +1274,7 @@ public class MainForm : Form
         _settings.App.Theme = Theme.IsDark ? "dark" : "light";
         SaveSettings();
         ApplyTheme();
+        ApplyNativeTitleBarTheme();
     }
 
     private void OnLangToggle(object? sender, EventArgs e)
@@ -1377,11 +1425,33 @@ public class MainForm : Form
         _appsPage.BackColor = t.Background;
 
         // ── Servers tab ──
+        _configModePanel.BackColor = t.Background;
+        _vlessRadio.BackColor = t.Background;
+        _vlessRadio.ForeColor = t.TextPrimary;
+        _vlessRadio.FlatStyle = FlatStyle.Flat;
+        _vlessRadio.UseVisualStyleBackColor = false;
+        _customConfigRadio.BackColor = t.Background;
+        _customConfigRadio.ForeColor = t.TextPrimary;
+        _customConfigRadio.FlatStyle = FlatStyle.Flat;
+        _customConfigRadio.UseVisualStyleBackColor = false;
+        _vlessPanel.BackColor = t.Background;
+        _customConfigPanel.BackColor = t.Background;
+        _customConfigList.BackColor = t.Surface;
+        _customConfigList.ForeColor = t.TextPrimary;
+        _customConfigList.Font = t.BodyFont;
+        _customConfigBtnPanel.BackColor = t.Background;
+        Theme.ApplyPrimary(_addCustomConfigBtn);
+        Theme.ApplySecondary(_removeCustomConfigBtn);
         Theme.ApplyPrimary(_addServerBtn);
         _serverList.BackColor = t.Surface;
         _serverList.ForeColor = t.TextPrimary;
         _serverList.Font = t.BodyFont;
         _serverHintLabel.Font = t.SmallFont;
+        _serverHintLabel.ForeColor = t.TextMuted;
+        _serverHintLabel.BackColor = t.Background;
+        _customConfigHintLabel.Font = t.SmallFont;
+        _customConfigHintLabel.ForeColor = t.TextMuted;
+        _customConfigHintLabel.BackColor = t.Background;
         _vlessBtnPanel.BackColor = t.Background;
         Theme.ApplySecondary(_removeBtn);
 
@@ -1401,20 +1471,28 @@ public class MainForm : Form
         ApplyCheckBoxTheme(_flushDnsCheck, t);
         ApplyCheckBoxTheme(_strictDnsCheck, t);
         _appsLabel.ForeColor = t.TextSecondary;
+        _appsLabel.BackColor = t.Background;
         _appsLabel.Font = t.BodyFont;
         _profileTree.BackColor = t.Surface;
         _profileTree.ForeColor = t.TextPrimary;
         _profileTree.Font = t.BodyFont;
-        // Update child node colors in tree
+        // Sync all node BackColors with surface so per-node fills don't show
+        // SystemColors.Window leaks on dark theme.
         foreach (TreeNode rootNode in _profileTree.Nodes)
         {
+            rootNode.BackColor = t.Surface;
             if (rootNode.Tag?.ToString() == "_custom")
             {
                 rootNode.ForeColor = t.Primary;
                 rootNode.NodeFont = t.BoldBodyFont;
             }
+            else
+            {
+                rootNode.ForeColor = t.TextPrimary;
+            }
             foreach (TreeNode child in rootNode.Nodes)
             {
+                child.BackColor = t.Surface;
                 if (rootNode.Tag?.ToString() != "_custom")
                     child.ForeColor = t.TextMuted;
             }
