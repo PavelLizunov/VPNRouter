@@ -11,6 +11,7 @@ public static class Strings
     // ── Tabs ──
     public static string TabServers => Ru ? "Серверы" : "Servers";
     public static string TabApps => Ru ? "Приложения" : "Applications";
+    public static string TabNetwork => Ru ? "Сеть" : "Network";
 
     // ── Config mode ──
     public static string VlessServers => Ru ? "VLESS Серверы" : "VLESS Servers";
@@ -92,6 +93,9 @@ public static class Strings
     public static string AddCustomAppHint => Ru
         ? "Добавить приложение (имя процесса, например Discord, Chrome):"
         : "Add custom app (process name, e.g. Discord, Chrome):";
+    public static string TcpUdpHint => Ru
+        ? "VLESS+Reality маршрутизирует TCP. Для UDP (игры, QUIC) используйте Custom Config с TUIC или Hysteria2 outbound."
+        : "VLESS+Reality routes TCP only. For UDP (games, QUIC) use Custom Config with a TUIC or Hysteria2 outbound.";
 
     // ── Bypass / Strict ──
     public static string BypassRussianTrafficLabel => Ru
