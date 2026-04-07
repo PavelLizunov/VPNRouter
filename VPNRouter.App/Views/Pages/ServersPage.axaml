@@ -1,0 +1,154 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:VPNRouter.App.ViewModels"
+             xmlns:conv="using:VPNRouter.App"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
+             x:Class="VPNRouter.App.Views.Pages.ServersPage"
+             x:DataType="vm:MainWindowViewModel">
+    <UserControl.Resources>
+        <conv:BoolToFontWeightConverter x:Key="ActiveFontConverter"/>
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="*,Auto">
+
+        <!-- ═══ VLESS Panel ═══ -->
+        <Grid Grid.Row="0"
+              IsVisible="{Binding IsVlessMode}"
+              RowDefinitions="Auto,*,Auto,Auto"
+              Margin="10,8,10,4">
+
+            <!-- URI input -->
+            <TextBox Grid.Row="0"
+                     Text="{Binding VlessUri}"
+                     Watermark="vless://uuid@server:443?security=reality&amp;sni=...#name"
+                     AcceptsReturn="True" MinHeight="50" MaxHeight="60"
+                     Margin="0,0,0,6"/>
+
+            <!-- Server list — fills * row, has its own scroll
+                 Left click = select active. Right click = open detail editor. -->
+            <ListBox Grid.Row="1"
+                     x:Name="ServerList"
+                     ItemsSource="{Binding Servers}"
+                     SelectedItem="{Binding SelectedServer}"
+                     ContextRequested="ServerList_ContextRequested"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ServerViewModel">
+                        <Grid ColumnDefinitions="*,*,50,70">
+                            <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Server}" Opacity="0.7"/>
+                            <TextBlock Grid.Column="2" Text="{Binding Port}" Opacity="0.5" TextAlignment="Center"/>
+                            <TextBlock Grid.Column="3" Text="{Binding Security}" Opacity="0.4" TextAlignment="Right"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- Hints -->
+            <StackPanel Grid.Row="2" Spacing="2" Margin="0,4,0,0">
+                <TextBlock Text="Left click = select active. Right click = edit details."
+                           FontSize="10" Opacity="0.5"/>
+                <TextBlock Text="{Binding LblTcpUdpHint}"
+                           FontSize="10" Opacity="0.6" TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <!-- Server detail editor (opened via right-click; close via ✕) -->
+            <Border Grid.Row="3"
+                    IsVisible="{Binding DetailServer, Converter={x:Static ObjectConverters.IsNotNull}}"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                    BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,6,0,0">
+                <DockPanel>
+                    <Button DockPanel.Dock="Top" HorizontalAlignment="Right" Content="✕"
+                            Command="{Binding CloseServerDetailCommand}"
+                            Background="Transparent" BorderThickness="0"
+                            Padding="6,0" MinHeight="0" FontSize="11" Opacity="0.6"
+                            ToolTip.Tip="Close"/>
+                <Grid ColumnDefinitions="80,*"
+                      RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
+                      DataContext="{Binding DetailServer}"
+                      x:DataType="vm:ServerViewModel">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Name:"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+                    <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Server:"    VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+                    <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Server}"    FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Port:"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+                    <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Port}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="UUID:"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+                    <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding Uuid}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Pub Key:"   VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+                    <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding PublicKey}" FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Short ID:"  VerticalAlignment="Center" FontSize="10"/>
+                    <TextBox   Grid.Row="5" Grid.Column="1" Text="{Binding ShortId}"   FontSize="10" Padding="4,2"/>
+                </Grid>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- ═══ Custom Config Panel ═══ -->
+        <Grid Grid.Row="0"
+              IsVisible="{Binding !IsVlessMode}"
+              RowDefinitions="*,Auto"
+              Margin="10,8,10,4">
+            <ListBox Grid.Row="0"
+                     ItemsSource="{Binding CustomConfigs}"
+                     SelectedItem="{Binding SelectedCustomConfig}"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     DoubleTapped="CustomConfigList_DoubleTapped">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:CustomConfigViewModel">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                            <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                       FontWeight="{Binding IsActive, Converter={StaticResource ActiveFontConverter}}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="2" Text="{Binding Protocols}"
+                                       Opacity="0.6" Margin="8,0" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="3" Text="{Binding Server}"
+                                       Opacity="0.4" VerticalAlignment="Center"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Grid.Row="1" Text="{Binding LblDoubleClickActiveConfig}"
+                       FontSize="10" Opacity="0.5" Margin="0,4,0,0"/>
+        </Grid>
+
+        <!-- ═══ Bottom action bar: mode + add/remove ═══ -->
+        <Border Grid.Row="1" Padding="10,6"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+            <StackPanel Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <RadioButton Content="{Binding LblVlessServers}"
+                                 IsChecked="{Binding IsVlessMode}"
+                                 GroupName="ConfigMode" FontWeight="SemiBold"/>
+                    <RadioButton Content="{Binding LblCustomConfigJson}"
+                                 GroupName="ConfigMode" FontWeight="SemiBold"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8"
+                            IsVisible="{Binding IsVlessMode}">
+                    <Button Content="{Binding LblAddServers}"
+                            Command="{Binding AddServerCommand}"
+                            Background="#2563EB" Foreground="White"
+                            Padding="14,5" CornerRadius="4" FontWeight="SemiBold"/>
+                    <Button Content="{Binding LblRemove}"
+                            Command="{Binding RemoveServerCommand}"
+                            Padding="14,5" CornerRadius="4"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8"
+                            IsVisible="{Binding !IsVlessMode}">
+                    <Button Content="{Binding LblAddConfig}"
+                            Command="{Binding AddCustomConfigCommand}"
+                            Background="#2563EB" Foreground="White"
+                            Padding="14,5" CornerRadius="4" FontWeight="SemiBold"/>
+                    <Button Content="{Binding LblRemove}"
+                            Command="{Binding RemoveCustomConfigCommand}"
+                            Padding="14,5" CornerRadius="4"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

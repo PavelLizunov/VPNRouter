@@ -52,11 +52,11 @@ foreach ($dir in @($DistDir, $FdDir, $UpdateDir, $PackageDir)) {
 }
 
 # ── Publish all three self-contained to SAME dir (shared runtime) ──
-Write-Host "[2/9] Publishing VPNRouter.GUI (self-contained, shared runtime)..." -ForegroundColor Yellow
-dotnet publish "$Root\VPNRouter.GUI\VPNRouter.GUI.csproj" `
+Write-Host "[2/9] Publishing VPNRouter.App (Avalonia, self-contained)..." -ForegroundColor Yellow
+dotnet publish "$Root\VPNRouter.App\VPNRouter.App.csproj" `
     -c Release -r win-x64 --self-contained `
     -o $DistDir 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "GUI publish failed" }
+if ($LASTEXITCODE -ne 0) { throw "App publish failed" }
 
 Write-Host "[3/9] Publishing VPNRouter.CLI (self-contained, shared runtime)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.CLI\VPNRouter.CLI.csproj" `
@@ -72,7 +72,7 @@ if ($LASTEXITCODE -ne 0) { throw "Service publish failed" }
 
 # ── Publish framework-dependent to temp dir (to identify app-only files) ──
 Write-Host "[5/9] Building app file list (framework-dependent)..." -ForegroundColor Yellow
-dotnet publish "$Root\VPNRouter.GUI\VPNRouter.GUI.csproj" `
+dotnet publish "$Root\VPNRouter.App\VPNRouter.App.csproj" `
     -c Release -r win-x64 --self-contained false --no-build `
     -o $FdDir 2>&1 | Out-Null
 dotnet publish "$Root\VPNRouter.CLI\VPNRouter.CLI.csproj" `
@@ -189,7 +189,7 @@ VPNRouter v$Version
 ====================
 
 Quick Start:
-1. Double-click "Start VPN.cmd" (or run app\VPNRouter.GUI.exe directly)
+1. Double-click "Start VPN.cmd" (or run app\VPNRouter.App.exe directly)
 2. Accept the UAC prompt
 3. Paste your VLESS URI(s) in the Servers tab
 4. Select application groups in the Applications tab
@@ -199,7 +199,7 @@ Folder Structure:
 - Start VPN.cmd            Launcher (double-click to start)
 - README.txt               This file
 - app\                     Application files
-  - VPNRouter.GUI.exe      Main app (tray icon + settings window)
+  - VPNRouter.App.exe      Main app (Avalonia GUI, tray icon, settings)
   - VPNRouter.CLI.exe      Command-line interface (advanced)
   - VPNRouter.Service.exe  Windows Service (optional, for auto-start)
   - sing-box.exe           VPN engine (auto-copied on first run)
@@ -224,7 +224,7 @@ New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 Copy-Item "$DistDir\*" $AppDir -Recurse
 
 # Create Start VPN.cmd launcher in package root
-'@start "" "%~dp0app\VPNRouter.GUI.exe"' | Set-Content (Join-Path $PackageDir "Start VPN.cmd") -Encoding ASCII
+'@start "" "%~dp0app\VPNRouter.App.exe"' | Set-Content (Join-Path $PackageDir "Start VPN.cmd") -Encoding ASCII
 
 # Move README to package root (user-facing, not buried in app/)
 Move-Item (Join-Path $AppDir "README.txt") (Join-Path $PackageDir "README.txt") -Force

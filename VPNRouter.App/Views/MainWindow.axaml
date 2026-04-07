@@ -1,0 +1,174 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:VPNRouter.App.ViewModels"
+        xmlns:conv="using:VPNRouter.App"
+        xmlns:loc="using:VPNRouter.App.Localization"
+        xmlns:pages="using:VPNRouter.App.Views.Pages"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="680"
+        x:Class="VPNRouter.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Virtual Penguin Network"
+        Icon="avares://VPNRouter.App/Assets/penguin_logo.ico"
+        Width="520" Height="640"
+        MinWidth="360" MinHeight="360"
+        FontSize="10"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <conv:BoolToStatusColorConverter x:Key="StatusColorConverter"/>
+        <conv:BoolToLangConverter x:Key="LangConverter"/>
+    </Window.Resources>
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <!-- ═══ Header ═══ -->
+        <Border Grid.Row="0" Padding="10,6" BorderThickness="0,0,0,1"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                Background="{DynamicResource SystemAltHighColor}">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Image Grid.Column="0" Source="{Binding LogoSource}"
+                       Height="44" Width="44" Stretch="Uniform"
+                       Margin="0,0,10,0"/>
+                <StackPanel Grid.Column="1" Spacing="0" VerticalAlignment="Center">
+                    <TextBlock Text="Virtual Penguin Network" FontSize="13" FontWeight="Bold"
+                               Foreground="#2563EB"/>
+                    <TextBlock Text="{Binding VersionText}" FontSize="9" Opacity="0.5"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="2"
+                            VerticalAlignment="Center" HorizontalAlignment="Right">
+                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
+                        <Button Content="{Binding ShowLogsLabel}"
+                                Command="{Binding OpenLogsCommand}"
+                                Padding="6,3" FontSize="10"
+                                Background="Transparent" BorderThickness="0"
+                                ToolTip.Tip="Open logs folder"/>
+                        <Button Content="{Binding CheckLeaksLabel}"
+                                Command="{Binding OpenLeakTestCommand}"
+                                Padding="6,3" FontSize="10"
+                                Background="Transparent" BorderThickness="0"
+                                ToolTip.Tip="ipleak.net"/>
+                        <Button Content="{Binding ThemeToggleText}"
+                                Command="{Binding ToggleThemeCommand}"
+                                Padding="6,3" FontSize="10"
+                                Background="Transparent" BorderThickness="0"/>
+                        <Button Content="{Binding IsRussian, Converter={StaticResource LangConverter}}"
+                                Command="{Binding ToggleLanguageCommand}"
+                                Padding="6,3" FontSize="10"
+                                Background="Transparent" BorderThickness="0"/>
+                    </StackPanel>
+                    <Button Content="{Binding UpdateVm.CheckLinkText}"
+                            Command="{Binding UpdateVm.CheckManuallyCommand}"
+                            IsEnabled="{Binding !UpdateVm.IsChecking}"
+                            Padding="6,1" FontSize="9"
+                            Background="Transparent" BorderThickness="0"
+                            HorizontalAlignment="Right"
+                            Opacity="0.6"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ═══ Update Notification ═══ -->
+        <Border Grid.Row="1"
+                IsVisible="{Binding UpdateVm.IsVisible}"
+                Background="#FEF3C7"
+                BorderBrush="#F59E0B"
+                BorderThickness="0,0,0,1"
+                Padding="16,10">
+            <DockPanel>
+                <Button DockPanel.Dock="Right"
+                        Content="↓ Update"
+                        Command="{Binding UpdateVm.DownloadAndApplyCommand}"
+                        IsVisible="{Binding !UpdateVm.IsDownloading}"
+                        Background="#F59E0B" Foreground="White"
+                        FontWeight="Bold" Padding="14,6" CornerRadius="4"/>
+                <ProgressBar DockPanel.Dock="Right"
+                             Value="{Binding UpdateVm.DownloadProgress}"
+                             Maximum="100"
+                             Width="180" Height="20"
+                             Margin="8,0,0,0"
+                             IsVisible="{Binding UpdateVm.IsDownloading}"/>
+                <TextBlock Text="{Binding UpdateVm.Message}"
+                           VerticalAlignment="Center"
+                           Foreground="#92400E"
+                           FontWeight="Bold"
+                           TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+        </Border>
+
+        <!-- ═══ Tab strip + page area (no TabControl — direct Grid layout) ═══ -->
+        <Grid Grid.Row="2" RowDefinitions="Auto,*">
+            <!-- Tab buttons -->
+            <ListBox Grid.Row="0"
+                     SelectedIndex="{Binding SelectedTabIndex}"
+                     Background="Transparent"
+                     BorderThickness="0,0,0,1"
+                     BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                     Padding="6,2">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="4"/>
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBoxItem Content="{Binding LblTabServers}" Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblTabNetwork}" Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblTabApps}"    Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
+            </ListBox>
+
+            <!-- Pages: all three live in same Grid cell, only selected one visible.
+                 Grid * row constrains them directly — no TabItem ContentPresenter. -->
+            <Grid Grid.Row="1">
+                <pages:ServersPage      IsVisible="{Binding IsServersTabSelected}"/>
+                <pages:NetworkPage      IsVisible="{Binding IsNetworkTabSelected}"/>
+                <pages:ApplicationsPage IsVisible="{Binding IsAppsTabSelected}"/>
+            </Grid>
+        </Grid>
+
+        <!-- ═══ Footer: service / connect / status ═══ -->
+        <Border Grid.Row="3" Padding="12,8" BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+            <StackPanel Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="6"
+                            IsVisible="{Binding ServiceVm.IsAvailable}">
+                    <CheckBox Content="{x:Static loc:Strings.AutostartWithWindows}"
+                              IsChecked="{Binding ServiceVm.AutostartChecked}"
+                              IsEnabled="{Binding !ServiceVm.IsBusy}"
+                              FontSize="11" VerticalAlignment="Center"/>
+                    <Button Content="{x:Static loc:Strings.RestartService}"
+                            Command="{Binding ServiceVm.RestartServiceCommand}"
+                            IsVisible="{Binding ServiceVm.IsRunning}"
+                            IsEnabled="{Binding !ServiceVm.IsBusy}"
+                            Padding="6,3" FontSize="10"/>
+                    <Button Content="{x:Static loc:Strings.ReinstallService}"
+                            Command="{Binding ServiceVm.ReinstallServiceCommand}"
+                            IsVisible="{Binding ServiceVm.IsInstalled}"
+                            IsEnabled="{Binding !ServiceVm.IsBusy}"
+                            Padding="6,3" FontSize="10"/>
+                </StackPanel>
+
+                <Button Content="{Binding ConnectButtonText}"
+                        Command="{Binding ToggleConnectionCommand}"
+                        IsEnabled="{Binding !IsConnecting}"
+                        FontSize="12" FontWeight="Bold"
+                        Padding="0,8"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Background="#2563EB" Foreground="White"
+                        CornerRadius="5"/>
+
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Ellipse Width="8" Height="8"
+                             Fill="{Binding IsConnected, Converter={StaticResource StatusColorConverter}}"
+                             VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding StatusText}" FontSize="11"
+                               Opacity="0.7" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

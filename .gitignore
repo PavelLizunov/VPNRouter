@@ -31,3 +31,13 @@ tools/
 
 # Misc
 *.jpg
+
+# Release artifacts
+*.dmg
+*.zip
+VPNRouter-v*
+VPNRouter-install-*
+VPNRouter-update-*
+b_icon.png
+w_icon.png
+publish/

@@ -1,0 +1,137 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:VPNRouter.App.ViewModels"
+             xmlns:conv="using:VPNRouter.App"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
+             x:Class="VPNRouter.App.Views.Pages.ApplicationsPage"
+             x:DataType="vm:MainWindowViewModel">
+
+    <!-- ═══ MASTER-DETAIL: groups left, selected group's apps right ═══ -->
+    <Grid ColumnDefinitions="180,*"
+          IsEnabled="{Binding IsSplitTunnel}">
+
+        <!-- ─── MASTER (left): group navigator ─── -->
+        <Border Grid.Column="0"
+                BorderThickness="0,0,1,0"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+            <ListBox ItemsSource="{Binding AppGroups}"
+                     SelectedItem="{Binding SelectedAppGroup}"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:AppGroupViewModel">
+                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="2,4">
+                            <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}"
+                                      MinHeight="0" Padding="4,0" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" Spacing="0" VerticalAlignment="Center" Margin="2,0,0,0">
+                                <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Description}" FontSize="9" Opacity="0.55"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <Border Grid.Column="2" Background="#2563EB" CornerRadius="8"
+                                    Padding="6,1" Margin="4,0,2,0" VerticalAlignment="Center"
+                                    IsVisible="{Binding Apps.Count}">
+                                <TextBlock Text="{Binding Apps.Count}" FontSize="9"
+                                           Foreground="White" FontWeight="Bold"/>
+                            </Border>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Border>
+
+        <!-- ─── DETAIL (right): selected group's apps ─── -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto"
+              DataContext="{Binding SelectedAppGroup}"
+              x:DataType="vm:AppGroupViewModel"
+              IsVisible="{Binding Converter={x:Static ObjectConverters.IsNotNull}}">
+
+            <!-- Detail header -->
+            <Border Grid.Row="0" Padding="14,10,14,8"
+                    BorderThickness="0,0,0,1"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Description}" FontSize="10" Opacity="0.6"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Empty state overlay -->
+            <TextBlock Grid.Row="1" Text="No apps in this group yet."
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       FontSize="11" Opacity="0.5" FontStyle="Italic"
+                       IsVisible="{Binding !Apps.Count}"/>
+
+            <!-- Apps list — ListBox has its own ScrollViewer + virtualization -->
+            <ListBox Grid.Row="1"
+                     ItemsSource="{Binding Apps}"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     Padding="10,6,10,6"
+                     SelectionMode="Single"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     IsVisible="{Binding Apps.Count}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:AppItemViewModel">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}"
+                                      MinHeight="0" Padding="4,0">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{Binding ProcessName}" FontSize="11"/>
+                                    <Border Background="#94A3B8" CornerRadius="6" Padding="5,0"
+                                            IsVisible="{Binding IsCustom}" VerticalAlignment="Center">
+                                        <TextBlock Text="custom" FontSize="8" Foreground="White"/>
+                                    </Border>
+                                </StackPanel>
+                            </CheckBox>
+                            <Button Grid.Column="1" Content="✕"
+                                    IsVisible="{Binding IsCustom}"
+                                    Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveCustomAppCommand}"
+                                    CommandParameter="{Binding}"
+                                    Background="Transparent" BorderThickness="0"
+                                    Padding="8,2" MinHeight="0" FontSize="11"
+                                    Opacity="0.5"
+                                    ToolTip.Tip="Remove"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <!-- Bottom add row (only for Custom Apps group) -->
+            <Border Grid.Row="2"
+                    IsVisible="{Binding IsCustomGroup}"
+                    Padding="14,8"
+                    BorderThickness="0,1,0,0"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                    Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBox Grid.Column="0" x:Name="CustomAppInput"
+                             Watermark="process name (e.g. Discord, chrome)"
+                             FontSize="11" Padding="6,4"/>
+                    <Button Grid.Column="1" Content="+ Add"
+                            Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
+                            CommandParameter="{Binding #CustomAppInput.Text}"
+                            Margin="6,0,0,0"
+                            Padding="14,5" FontSize="11" CornerRadius="4"
+                            Background="#2563EB" Foreground="White"
+                            FontWeight="SemiBold"/>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Empty state when no group selected -->
+        <TextBlock Grid.Column="1"
+                   Text="← Select a group to view its applications"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   FontSize="11" Opacity="0.5" FontStyle="Italic"
+                   IsVisible="{Binding SelectedAppGroup, Converter={x:Static ObjectConverters.IsNull}}"/>
+    </Grid>
+</UserControl>
