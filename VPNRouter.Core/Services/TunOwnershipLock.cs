@@ -30,7 +30,7 @@ public sealed class TunOwnershipLock : IDisposable
     private const string MutexName = @"Global\VPNRouter-SingBox-Owner";
 
     private readonly ILogger _logger;
-    private Mutex? _mutex;
+    private Semaphore? _semaphore;
     private bool _owned;
     private bool _disposed;
 
@@ -49,27 +49,20 @@ public sealed class TunOwnershipLock : IDisposable
 
         try
         {
-            // Try to open existing first; if absent, create new.
-            // initiallyOwned: false — we explicitly WaitOne to acquire.
-            _mutex = new Mutex(initiallyOwned: false, name: MutexName, out _);
+            // Named Semaphore with max 1 — works like a mutex but can be
+            // released from any thread (unlike Mutex which is thread-affine
+            // and throws ApplicationException if released from wrong thread).
+            _semaphore = new Semaphore(1, 1, MutexName, out _);
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "[TunLock] Failed to create mutex (continuing without lock)");
-            return true; // fail-open: don't block sing-box if mutex itself is broken
+            _logger.Warning(ex, "[TunLock] Failed to create semaphore (continuing without lock)");
+            return true; // fail-open
         }
 
         try
         {
-            // Zero timeout: don't block, return immediately.
-            _owned = _mutex.WaitOne(TimeSpan.Zero);
-        }
-        catch (AbandonedMutexException)
-        {
-            // Previous owner died without releasing. Windows handed us
-            // ownership anyway — that's fine, we treat it as acquired.
-            _logger.Information("[TunLock] Previous owner died unclean — taking over");
-            _owned = true;
+            _owned = _semaphore.WaitOne(TimeSpan.Zero);
         }
         catch (Exception ex)
         {
@@ -87,11 +80,15 @@ public sealed class TunOwnershipLock : IDisposable
 
     public void Release()
     {
-        if (!_owned || _mutex == null) return;
+        if (!_owned || _semaphore == null) return;
         try
         {
-            _mutex.ReleaseMutex();
+            _semaphore.Release();
             _logger.Information("[TunLock] Released");
+        }
+        catch (SemaphoreFullException)
+        {
+            // Already released — harmless
         }
         catch (Exception ex)
         {
@@ -108,8 +105,8 @@ public sealed class TunOwnershipLock : IDisposable
         if (_disposed) return;
         _disposed = true;
         Release();
-        _mutex?.Dispose();
-        _mutex = null;
+        _semaphore?.Dispose();
+        _semaphore = null;
     }
 }
 
