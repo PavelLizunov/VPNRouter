@@ -221,6 +221,15 @@ public class UpdateChecker
 
         var guiExe = Path.Combine(appDir, "VPNRouter.GUI.exe");
 
+        // Kill sing-box before copying — it's a running process that locks
+        // its exe file. Without this, sing-box.exe silently fails to update.
+        foreach (var proc in Process.GetProcessesByName("sing-box"))
+        {
+            try { proc.Kill(entireProcessTree: true); proc.WaitForExit(3000); }
+            catch { }
+            finally { proc.Dispose(); }
+        }
+
         foreach (var srcFile in Directory.GetFiles(extractedDir, "*", SearchOption.AllDirectories))
         {
             var relativePath = Path.GetRelativePath(extractedDir, srcFile);
@@ -238,8 +247,8 @@ public class UpdateChecker
             {
                 var bakPath = destPath + ".bak";
                 try { File.Delete(bakPath); } catch { }
-                File.Move(destPath, bakPath);
-                File.Copy(srcFile, destPath);
+                try { File.Move(destPath, bakPath); } catch { }
+                try { File.Copy(srcFile, destPath); } catch { }
             }
         }
 
