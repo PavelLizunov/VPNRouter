@@ -371,7 +371,13 @@ public static class ConfigGenerator
                     Enabled   = true,
                     PublicKey = reality.PublicKey,
                     ShortId   = reality.ShortId
-                }
+                },
+                // TLS record fragmentation: splits ClientHello across multiple TLS
+                // records to bypass DPI that inspects the first record for SNI.
+                // Available since sing-box 1.12.0. Falls back to normal handshake
+                // if fragmented attempt doesn't complete within 500ms.
+                RecordFragment = true,
+                FragmentFallbackDelay = "500ms"
             };
         }
 

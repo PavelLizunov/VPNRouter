@@ -236,6 +236,29 @@ public class TlsConfig
     /// <summary>TLS fingerprint for uTLS/Reality: firefox | chrome | safari | etc.</summary>
     [JsonProperty("utls", NullValueHandling = NullValueHandling.Ignore)]
     public UtlsConfig? Utls { get; set; }
+
+    /// <summary>
+    /// TLS record fragmentation — splits TLS handshake records into multiple
+    /// smaller TLS records. Bypasses DPI that inspects the first TLS record
+    /// for SNI. Available since sing-box 1.12.0.
+    /// </summary>
+    [JsonProperty("record_fragment", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? RecordFragment { get; set; }
+
+    /// <summary>
+    /// TCP-level ClientHello fragmentation — more aggressive than record_fragment.
+    /// Splits the TCP segments carrying the TLS ClientHello.
+    /// </summary>
+    [JsonProperty("fragment", NullValueHandling = NullValueHandling.Ignore)]
+    public bool? Fragment { get; set; }
+
+    /// <summary>
+    /// Fallback delay for fragmentation. If the fragmented handshake doesn't
+    /// complete within this duration, sing-box retries without fragmentation.
+    /// Default: 500ms.
+    /// </summary>
+    [JsonProperty("fragment_fallback_delay", NullValueHandling = NullValueHandling.Ignore)]
+    public string? FragmentFallbackDelay { get; set; }
 }
 
 public class RealityConfig
