@@ -507,20 +507,21 @@ public partial class MainWindowViewModel : ViewModelBase
                 IsConnected = true;
                 IsConnecting = false;
                 ConnectButtonText = Strings.StopVPN;
-                string? serverName, serverIp;
+                // Use engine's actual runtime state — not stale ViewModel cache.
+                // This prevents "status says 104 but actually running 194" mismatch.
+                var serverIp = _engine.ActiveServerAddress;
+                string? serverName;
                 if (IsVlessMode)
                 {
                     var s = SelectedServer ?? Servers.FirstOrDefault();
                     serverName = s?.DisplayName;
-                    serverIp = s?.Server;
                 }
                 else
                 {
-                    var c = SelectedCustomConfig
-                        ?? CustomConfigs.FirstOrDefault(x => x.IsActive)
+                    var c = CustomConfigs.FirstOrDefault(x => x.IsActive)
+                        ?? SelectedCustomConfig
                         ?? CustomConfigs.FirstOrDefault();
                     serverName = c?.Name;
-                    serverIp = c?.Server;
                 }
                 var modeLabel = IsSplitTunnel ? "split" : "full";
                 StatusText = Strings.Connected(modeLabel, serverName, serverIp);
@@ -576,7 +577,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
             try
             {
-                await Task.Run(() => _engine.StartAsync(_settings));
+                // Hard 30s timeout — if VpnEngine.StartAsync hangs (TUN creation,
+                // sing-box process, DNS warm-up), don't leave UI stuck on "Starting...".
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
             }
             catch (TunOwnershipException)
             {
@@ -586,6 +590,19 @@ public partial class MainWindowViewModel : ViewModelBase
                     ? "VPN адаптер занят другим экземпляром VPNRouter. Отключите Windows Service в Network → Service Controls."
                     : "TUN adapter is owned by another VPNRouter instance. Disable Windows Service in Network → Service Controls.";
                 ConnectButtonText = Strings.StartVPN;
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.Error("[VM] Start timed out after 30s");
+                try { await Task.Run(() => _engine.Stop()); } catch { }
+                IsConnecting = false;
+                IsConnected = false;
+                StatusText = IsRussian
+                    ? "Таймаут при запуске (30 сек). Проверьте логи."
+                    : "Startup timed out (30s). Check logs.";
+                ConnectButtonText = Strings.StartVPN;
+                return;
             }
             catch (Exception ex)
             {
@@ -593,6 +610,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 IsConnecting = false;
                 StatusText = $"{Strings.FailedStartVpn} {ex.Message}";
                 ConnectButtonText = Strings.StartVPN;
+                return;
             }
         }
     }
@@ -731,11 +749,61 @@ public partial class MainWindowViewModel : ViewModelBase
         SaveSettings();
     }
 
-    // Auto-activate config when selected in the list (left-click = switch)
+    // Auto-activate config when selected in the list (left-click = switch).
+    // If VPN is already running, auto-reconnect with the new config.
     partial void OnSelectedCustomConfigChanged(CustomConfigViewModel? value)
     {
         if (_isLoadingUI || value == null) return;
+        if (value.IsActive) return; // already active, no-op
+
         SetActiveCustomConfig(value);
+
+        // If connected in custom mode → reconnect with new config
+        if (IsConnected && !IsVlessMode && !IsConnecting)
+        {
+            StatusText = IsRussian
+                ? $"Переключение на {value.Name}..."
+                : $"Switching to {value.Name}...";
+            _ = ReconnectAsync();
+        }
+    }
+
+    private async Task ReconnectAsync()
+    {
+        IsConnecting = true;
+        try
+        {
+            await Task.Run(() => _engine.Stop());
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[VM] Error stopping during reconnect");
+        }
+
+        SaveSettings();
+        _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+
+        try
+        {
+            await Task.Run(() => _engine.StartAsync(_settings));
+        }
+        catch (TunOwnershipException)
+        {
+            IsConnected = false;
+            IsConnecting = false;
+            StatusText = IsRussian
+                ? "VPN адаптер занят другим экземпляром"
+                : "TUN adapter owned by another instance";
+            ConnectButtonText = Strings.StartVPN;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] Reconnect failed");
+            IsConnected = false;
+            IsConnecting = false;
+            StatusText = $"{Strings.FailedStartVpn} {ex.Message}";
+            ConnectButtonText = Strings.StartVPN;
+        }
     }
 
     [RelayCommand]
