@@ -89,6 +89,13 @@ public class AppConfig
     public string ActiveCustomConfig { get; set; } = string.Empty;
 
     /// <summary>
+    /// Subscription URL (e.g. https://ninitux.com/api/v1/app/config/{device_id}).
+    /// Returns base64-encoded VLESS URIs. Used when config_mode = "subscribe".
+    /// </summary>
+    [YamlMember(Alias = "subscription_url")]
+    public string SubscriptionUrl { get; set; } = string.Empty;
+
+    /// <summary>
     /// When true, traffic to Russian sites/IPs is routed directly (real IP),
     /// not through VPN. Protects VPN server from being blacklisted by RU services
     /// and unblocks RU sites that geo-restrict non-RU IPs.

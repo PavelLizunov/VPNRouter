@@ -16,6 +16,13 @@ public static class Strings
     // ── Config mode ──
     public static string VlessServers => Ru ? "VLESS Серверы" : "VLESS Servers";
     public static string CustomConfigJson => Ru ? "Свой конфиг (JSON)" : "Custom Config (JSON)";
+    public static string SubscribeMode => Ru ? "Подписка" : "Subscribe";
+    public static string SubscriptionUrlHint => Ru ? "URL подписки (subscription link)" : "Subscription URL";
+    public static string SyncButton => Ru ? "Обновить" : "Sync";
+    public static string Syncing => Ru ? "Синхронизация..." : "Syncing...";
+    public static string SyncComplete(int count) => Ru ? $"Получено {count} серверов" : $"Fetched {count} servers";
+    public static string SyncFailed(string err) => Ru ? $"Ошибка синхронизации: {err}" : $"Sync failed: {err}";
+    public static string SyncEmpty => Ru ? "Подписка вернула 0 серверов" : "Subscription returned 0 servers";
     public static string PasteVlessUri => Ru ? "Вставьте VLESS URI:" : "Paste VLESS URI(s):";
 
     // ── Buttons ──

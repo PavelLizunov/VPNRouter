@@ -42,7 +42,17 @@ public partial class MainWindowViewModel : ViewModelBase
     private static Bitmap LoadAsset(string uri) => new(AssetLoader.Open(new System.Uri(uri)));
     [ObservableProperty] private string _themeToggleText = Strings.ThemeDark;
     [ObservableProperty] private bool _isRussian;
-    [ObservableProperty] private bool _isVlessMode = true;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsServerListMode))]
+    private bool _isVlessMode = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsServerListMode))]
+    private bool _isSubscribeMode = false;
+
+    /// <summary>True when the server ListBox should be visible (VLESS or Subscribe mode).</summary>
+    public bool IsServerListMode => IsVlessMode || IsSubscribeMode;
+    [ObservableProperty] private string _subscriptionUrl = string.Empty;
     [ObservableProperty] private bool _isSplitTunnel = true;
     [ObservableProperty] private bool _bypassRussianTraffic = true;
     [ObservableProperty] private bool _strictMode = false;
@@ -104,6 +114,9 @@ public partial class MainWindowViewModel : ViewModelBase
     public string LblDoubleClickEditServer => Strings.DoubleClickEditServer;
     public string LblDoubleClickActiveConfig => Strings.DoubleClickActiveConfig;
     public string LblClickToActivateConfig => IsRussian ? "Нажмите на конфиг для активации" : "Click a config to activate it";
+    public string LblSubscribeMode => Strings.SubscribeMode;
+    public string LblSubscriptionUrlHint => Strings.SubscriptionUrlHint;
+    public string LblSyncButton => Strings.SyncButton;
     public string LblAddCustomAppHint => Strings.AddCustomAppHint;
     public string LblTcpUdpHint => Strings.TcpUdpHint;
     public string BypassRuLabel => Strings.BypassRussianTrafficLabel;
@@ -223,9 +236,11 @@ public partial class MainWindowViewModel : ViewModelBase
         IsDarkTheme = (_settings.App.Theme ?? "light").Equals("dark", StringComparison.OrdinalIgnoreCase);
         ApplyTheme();
 
-        // Config mode
-        IsVlessMode = !(_settings.App.ConfigMode ?? "generated")
-            .Equals("custom", StringComparison.OrdinalIgnoreCase);
+        // Config mode (three-way: generated / custom / subscribe)
+        var configMode = _settings.App.ConfigMode ?? "generated";
+        IsSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
+        IsVlessMode = !configMode.Equals("custom", StringComparison.OrdinalIgnoreCase) && !IsSubscribeMode;
+        SubscriptionUrl = _settings.App.SubscriptionUrl ?? "";
 
         // Routing mode
         IsSplitTunnel = !(_settings.App.RoutingMode ?? "split")
@@ -446,8 +461,9 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         catch (Exception ex) { _logger.Debug(ex, "[Settings] Backup failed"); }
 
-        // Config mode
-        _settings.App.ConfigMode = IsVlessMode ? "generated" : "custom";
+        // Config mode (three-way)
+        _settings.App.ConfigMode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "generated" : "custom";
+        _settings.App.SubscriptionUrl = SubscriptionUrl;
 
         // Routing mode
         _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
@@ -636,6 +652,43 @@ public partial class MainWindowViewModel : ViewModelBase
                 ConnectButtonText = Strings.StartVPN;
                 return;
             }
+        }
+    }
+
+    [RelayCommand]
+    private async Task SyncSubscriptionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(SubscriptionUrl))
+        {
+            StatusText = IsRussian ? "Введите URL подписки" : "Enter subscription URL";
+            return;
+        }
+
+        StatusText = Strings.Syncing;
+        try
+        {
+            var entries = await SubscriptionFetcher.FetchAsync(SubscriptionUrl, _logger);
+
+            if (entries.Count == 0)
+            {
+                StatusText = Strings.SyncEmpty;
+                return;
+            }
+
+            // Replace servers list with subscription data
+            Servers.Clear();
+            foreach (var entry in entries)
+                Servers.Add(new ServerViewModel(entry));
+
+            // Select first server as active
+            SelectedServer = Servers.FirstOrDefault();
+            SaveSettings();
+            StatusText = Strings.SyncComplete(entries.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] Subscription sync failed");
+            StatusText = Strings.SyncFailed(ex.Message);
         }
     }
 
