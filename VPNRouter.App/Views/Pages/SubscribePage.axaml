@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:VPNRouter.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
+             x:Class="VPNRouter.App.Views.Pages.SubscribePage"
+             x:DataType="vm:MainWindowViewModel">
+
+    <Grid RowDefinitions="*,Auto">
+
+        <!-- Server list from subscription -->
+        <ListBox Grid.Row="0"
+                 ItemsSource="{Binding SubscriptionServers}"
+                 SelectedItem="{Binding SelectedSubscriptionServer}"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 Padding="10,8,10,6"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:ServerViewModel">
+                    <Grid ColumnDefinitions="*,*,50,70">
+                        <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Column="1" Text="{Binding Server}" Opacity="0.7"/>
+                        <TextBlock Grid.Column="2" Text="{Binding Port}" Opacity="0.5" TextAlignment="Center"/>
+                        <TextBlock Grid.Column="3" Text="{Binding Security}" Opacity="0.4" TextAlignment="Right"/>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- Empty state -->
+        <TextBlock Grid.Row="0"
+                   IsVisible="{Binding !SubscriptionServers.Count}"
+                   Text="Enter subscription URL below and click Sync"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   FontSize="11" Opacity="0.5" FontStyle="Italic"/>
+
+        <!-- Bottom: URL + Sync -->
+        <Border Grid.Row="1" Padding="10,6"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+            <StackPanel Spacing="6">
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Right" Content="{Binding LblSyncButton}"
+                            Command="{Binding SyncSubscriptionCommand}"
+                            Margin="6,0,0,0"
+                            Background="#2563EB" Foreground="White"
+                            Padding="14,5" CornerRadius="4" FontWeight="SemiBold"/>
+                    <TextBox Text="{Binding SubscriptionUrl}"
+                             Watermark="{Binding LblSubscriptionUrlHint}"
+                             FontSize="10" Padding="6,4"/>
+                </DockPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

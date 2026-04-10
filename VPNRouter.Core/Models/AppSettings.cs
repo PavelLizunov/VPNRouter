@@ -96,6 +96,17 @@ public class AppConfig
     public string SubscriptionUrl { get; set; } = string.Empty;
 
     /// <summary>
+    /// Servers fetched from subscription (cached for offline startup).
+    /// Separate from Vless.Servers which holds manually-added servers.
+    /// </summary>
+    [YamlMember(Alias = "subscription_servers")]
+    public List<VlessServerEntry> SubscriptionServers { get; set; } = new();
+
+    /// <summary>Active subscription server name (like Vless.ActiveServer for manual).</summary>
+    [YamlMember(Alias = "active_subscription_server")]
+    public string ActiveSubscriptionServer { get; set; } = string.Empty;
+
+    /// <summary>
     /// When true, traffic to Russian sites/IPs is routed directly (real IP),
     /// not through VPN. Protects VPN server from being blacklisted by RU services
     /// and unblocks RU sites that geo-restrict non-RU IPs.

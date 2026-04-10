@@ -69,6 +69,25 @@ public partial class MainWindowViewModel : ViewModelBase
         IsSubscribeMode = value == 1;
         // value == 2 → custom (both false)
     }
+
+    // Detect subscribe mode from tab selection too
+    partial void OnSelectedTabIndexChanged(int value)
+    {
+        if (_isLoadingUI) return;
+        // Tab 0 = Manual (Servers), Tab 1 = Subscribe
+        if (value == 0 && !IsVlessMode)
+        {
+            IsVlessMode = true;
+            IsSubscribeMode = false;
+            ConfigModeIndex = 0;
+        }
+        else if (value == 1 && !IsSubscribeMode)
+        {
+            IsSubscribeMode = true;
+            IsVlessMode = false;
+            ConfigModeIndex = 1;
+        }
+    }
     [ObservableProperty] private string _subscriptionUrl = string.Empty;
     [ObservableProperty] private bool _isSplitTunnel = true;
     [ObservableProperty] private bool _bypassRussianTraffic = true;
@@ -80,13 +99,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServersTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsSubscribeTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsNetworkTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsAppsTabSelected))]
     private int _selectedTabIndex;
 
     public bool IsServersTabSelected => SelectedTabIndex == 0;
-    public bool IsNetworkTabSelected => SelectedTabIndex == 1;
-    public bool IsAppsTabSelected => SelectedTabIndex == 2;
+    public bool IsSubscribeTabSelected => SelectedTabIndex == 1;
+    public bool IsNetworkTabSelected => SelectedTabIndex == 2;
+    public bool IsAppsTabSelected => SelectedTabIndex == 3;
 
     [ObservableProperty] private AppGroupViewModel? _selectedAppGroup;
 
@@ -111,6 +132,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // ── Localized labels (proxies to Strings.cs, refreshed on language toggle) ──
     public string LblTabServers => Strings.TabServers;
+    public string LblTabManual => Strings.ModeManual;
+    public string LblTabSubscribe => Strings.ModeSubscribe;
     public string LblTabApps => Strings.TabApps;
     public string LblTabNetwork => Strings.TabNetwork;
     public string LblVlessServers => Strings.VlessServers;
@@ -200,6 +223,8 @@ public partial class MainWindowViewModel : ViewModelBase
     // ── Collections ──
     public ObservableCollection<ServerViewModel> Servers { get; } = new();
     public ObservableCollection<CustomConfigViewModel> CustomConfigs { get; } = new();
+    public ObservableCollection<ServerViewModel> SubscriptionServers { get; } = new();
+    [ObservableProperty] private ServerViewModel? _selectedSubscriptionServer;
     public ObservableCollection<AppGroupViewModel> AppGroups { get; } = new();
 
     // ── Selected items ──
@@ -290,6 +315,19 @@ public partial class MainWindowViewModel : ViewModelBase
                 activeServer = vm;
         }
         SelectedServer = activeServer ?? Servers.FirstOrDefault();
+
+        // Load subscription servers (cached from last sync)
+        SubscriptionServers.Clear();
+        ServerViewModel? activeSubServer = null;
+        foreach (var entry in _settings.App.SubscriptionServers ?? new())
+        {
+            var vm = new ServerViewModel(entry);
+            SubscriptionServers.Add(vm);
+            if (!string.IsNullOrEmpty(_settings.App.ActiveSubscriptionServer) &&
+                entry.Name?.Equals(_settings.App.ActiveSubscriptionServer, StringComparison.OrdinalIgnoreCase) == true)
+                activeSubServer = vm;
+        }
+        SelectedSubscriptionServer = activeSubServer ?? SubscriptionServers.FirstOrDefault();
 
         // Load custom configs
         CustomConfigs.Clear();
@@ -483,6 +521,11 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.App.ConfigMode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "generated" : "custom";
         _settings.App.SubscriptionUrl = SubscriptionUrl;
 
+        // Subscription servers (cached)
+        _settings.App.SubscriptionServers = SubscriptionServers.Select(s => s.ToEntry()).ToList();
+        var activeSub = SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault();
+        _settings.App.ActiveSubscriptionServer = activeSub?.Name ?? "";
+
         // Routing mode
         _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
 
@@ -569,7 +612,12 @@ public partial class MainWindowViewModel : ViewModelBase
                 // This prevents "status says 104 but actually running 194" mismatch.
                 var serverIp = _engine.ActiveServerAddress;
                 string? serverName;
-                if (IsVlessMode)
+                if (IsSubscribeMode)
+                {
+                    var s = SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault();
+                    serverName = s?.DisplayName;
+                }
+                else if (IsVlessMode)
                 {
                     var s = SelectedServer ?? Servers.FirstOrDefault();
                     serverName = s?.DisplayName;
@@ -628,6 +676,14 @@ public partial class MainWindowViewModel : ViewModelBase
 
             SaveSettings();
             _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+
+            // Subscribe mode: feed subscription servers into VLESS engine path
+            if (IsSubscribeMode && _settings.App.SubscriptionServers?.Count > 0)
+            {
+                _settings.Vless.Servers = _settings.App.SubscriptionServers;
+                _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
+                _settings.App.ConfigMode = "generated"; // engine treats it as VLESS
+            }
 
             // macOS: ensure sudo access (one-time password prompt)
             if (OperatingSystem.IsMacOS())
@@ -693,13 +749,13 @@ public partial class MainWindowViewModel : ViewModelBase
                 return;
             }
 
-            // Replace servers list with subscription data
-            Servers.Clear();
+            // Replace subscription servers list
+            SubscriptionServers.Clear();
             foreach (var entry in entries)
-                Servers.Add(new ServerViewModel(entry));
+                SubscriptionServers.Add(new ServerViewModel(entry));
 
             // Select first server as active
-            SelectedServer = Servers.FirstOrDefault();
+            SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault();
             SaveSettings();
             StatusText = Strings.SyncComplete(entries.Count);
         }
@@ -847,6 +903,16 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private bool _isReconnecting;
 
+    // Subscribe: selecting a subscription server = choosing which to route through.
+    partial void OnSelectedSubscriptionServerChanged(ServerViewModel? value)
+    {
+        if (_isLoadingUI || value == null || _isReconnecting) return;
+        if (IsConnected && IsSubscribeMode && !IsConnecting)
+        {
+            _ = ReconnectAsync(value.DisplayName);
+        }
+    }
+
     // VLESS: selecting a server = choosing which server to route through.
     partial void OnSelectedServerChanged(ServerViewModel? value)
     {
@@ -893,6 +959,14 @@ public partial class MainWindowViewModel : ViewModelBase
             // Save + reload settings with the new active config
             SaveSettings();
             _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+
+            // Subscribe mode: feed subscription servers into engine
+            if (IsSubscribeMode && _settings.App.SubscriptionServers?.Count > 0)
+            {
+                _settings.Vless.Servers = _settings.App.SubscriptionServers;
+                _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
+                _settings.App.ConfigMode = "generated";
+            }
 
             // Start with new config (with timeout)
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
