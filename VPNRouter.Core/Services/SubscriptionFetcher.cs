@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
@@ -48,17 +49,49 @@ public static class SubscriptionFetcher
                 return result;
             }
 
-            // Try base64 decode. If it fails, treat response as plain text.
+            // Extract base64 content — supports:
+            // 1. JSON wrapper: {"config":"base64..."} (ninitux.com format)
+            // 2. Raw base64 (v2rayNG/Streisand format)
+            // 3. Plain VLESS URIs (one per line)
             string decoded;
-            try
+            var trimmed = response.Trim();
+
+            // Try JSON with "config" field first
+            if (trimmed.StartsWith("{"))
             {
-                var bytes = Convert.FromBase64String(response.Trim());
-                decoded = Encoding.UTF8.GetString(bytes);
+                try
+                {
+                    using var doc = JsonDocument.Parse(trimmed);
+                    if (doc.RootElement.TryGetProperty("config", out var configEl))
+                    {
+                        var b64 = configEl.GetString() ?? "";
+                        decoded = Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+                        logger?.Debug("[Subscription] Parsed JSON wrapper, config decoded ({Len} chars)", decoded.Length);
+                    }
+                    else
+                    {
+                        logger?.Warning("[Subscription] JSON response has no 'config' field");
+                        return result;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.Warning(ex, "[Subscription] Failed to parse JSON response");
+                    decoded = trimmed;
+                }
             }
-            catch (FormatException)
+            // Try raw base64
+            else
             {
-                // Not base64 — might be plain VLESS URIs
-                decoded = response;
+                try
+                {
+                    decoded = Encoding.UTF8.GetString(Convert.FromBase64String(trimmed));
+                }
+                catch (FormatException)
+                {
+                    // Not base64 — plain VLESS URIs
+                    decoded = trimmed;
+                }
             }
 
             var lines = decoded.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
