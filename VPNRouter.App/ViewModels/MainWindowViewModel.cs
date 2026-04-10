@@ -252,11 +252,18 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Load custom configs
         CustomConfigs.Clear();
+        CustomConfigViewModel? activeConfig = null;
         foreach (var entry in _settings.App.CustomConfigs ?? new())
         {
             var isActive = entry.Name == _settings.App.ActiveCustomConfig;
-            CustomConfigs.Add(new CustomConfigViewModel(entry, isActive));
+            var vm = new CustomConfigViewModel(entry, isActive);
+            CustomConfigs.Add(vm);
+            if (isActive) activeConfig = vm;
         }
+        // Pre-select the active config so ListBox highlights it on startup.
+        // Use _isLoadingUI guard so OnSelectedCustomConfigChanged doesn't
+        // trigger a reconnect during initial load.
+        SelectedCustomConfig = activeConfig ?? CustomConfigs.FirstOrDefault();
 
         // Load apps from profiles + custom apps
         LoadApps();
@@ -749,48 +756,60 @@ public partial class MainWindowViewModel : ViewModelBase
         SaveSettings();
     }
 
+    private bool _isReconnecting;
+
     // Auto-activate config when selected in the list (left-click = switch).
     // If VPN is already running, auto-reconnect with the new config.
     partial void OnSelectedCustomConfigChanged(CustomConfigViewModel? value)
     {
         if (_isLoadingUI || value == null) return;
         if (value.IsActive) return; // already active, no-op
+        if (_isReconnecting) return; // don't re-enter during reconnect
 
         SetActiveCustomConfig(value);
 
         // If connected in custom mode → reconnect with new config
         if (IsConnected && !IsVlessMode && !IsConnecting)
         {
-            StatusText = IsRussian
-                ? $"Переключение на {value.Name}..."
-                : $"Switching to {value.Name}...";
-            _ = ReconnectAsync();
+            _ = ReconnectAsync(value.Name);
         }
     }
 
-    private async Task ReconnectAsync()
+    private async Task ReconnectAsync(string configName)
     {
+        if (_isReconnecting) return;
+        _isReconnecting = true;
         IsConnecting = true;
+        StatusText = IsRussian
+            ? $"Переключение на {configName}..."
+            : $"Switching to {configName}...";
+
         try
         {
+            // Stop current VPN
             await Task.Run(() => _engine.Stop());
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(ex, "[VM] Error stopping during reconnect");
-        }
 
-        SaveSettings();
-        _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+            // Save + reload settings with the new active config
+            SaveSettings();
+            _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
 
-        try
+            // Start with new config (with timeout)
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
+        }
+        catch (OperationCanceledException)
         {
-            await Task.Run(() => _engine.StartAsync(_settings));
+            _logger.Error("[VM] Reconnect timed out");
+            try { await Task.Run(() => _engine.Stop()); } catch { }
+            IsConnected = false;
+            StatusText = IsRussian
+                ? "Таймаут переключения. Попробуйте снова."
+                : "Switch timed out. Try again.";
+            ConnectButtonText = Strings.StartVPN;
         }
         catch (TunOwnershipException)
         {
             IsConnected = false;
-            IsConnecting = false;
             StatusText = IsRussian
                 ? "VPN адаптер занят другим экземпляром"
                 : "TUN adapter owned by another instance";
@@ -800,9 +819,13 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             _logger.Error(ex, "[VM] Reconnect failed");
             IsConnected = false;
-            IsConnecting = false;
             StatusText = $"{Strings.FailedStartVpn} {ex.Message}";
             ConnectButtonText = Strings.StartVPN;
+        }
+        finally
+        {
+            IsConnecting = false;
+            _isReconnecting = false;
         }
     }
 
