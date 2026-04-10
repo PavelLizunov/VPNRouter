@@ -16,19 +16,12 @@
         <!-- ═══ VLESS Panel ═══ -->
         <Grid Grid.Row="0"
               IsVisible="{Binding IsVlessMode}"
-              RowDefinitions="Auto,*,Auto,Auto"
+              RowDefinitions="*,Auto,Auto"
               Margin="10,8,10,4">
-
-            <!-- URI input -->
-            <TextBox Grid.Row="0"
-                     Text="{Binding VlessUri}"
-                     Watermark="vless://uuid@server:443?security=reality&amp;sni=...#name"
-                     AcceptsReturn="True" MinHeight="50" MaxHeight="60"
-                     Margin="0,0,0,6"/>
 
             <!-- Server list — fills * row, has its own scroll
                  Left click = select active. Right click = open detail editor. -->
-            <ListBox Grid.Row="1"
+            <ListBox Grid.Row="0"
                      x:Name="ServerList"
                      ItemsSource="{Binding Servers}"
                      SelectedItem="{Binding SelectedServer}"
@@ -48,7 +41,7 @@
             </ListBox>
 
             <!-- Hints -->
-            <StackPanel Grid.Row="2" Spacing="2" Margin="0,4,0,0">
+            <StackPanel Grid.Row="1" Spacing="2" Margin="0,4,0,0">
                 <TextBlock Text="Left click = select active. Right click = edit details."
                            FontSize="10" Opacity="0.5"/>
                 <TextBlock Text="{Binding LblTcpUdpHint}"
@@ -56,7 +49,7 @@
             </StackPanel>
 
             <!-- Server detail editor (opened via right-click; close via ✕) -->
-            <Border Grid.Row="3"
+            <Border Grid.Row="2"
                     IsVisible="{Binding DetailServer, Converter={x:Static ObjectConverters.IsNotNull}}"
                     BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                     BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,6,0,0">
@@ -131,17 +124,22 @@
                     <RadioButton Content="{Binding LblCustomConfigJson}"
                                  GroupName="ManualMode" FontWeight="SemiBold"/>
                 </StackPanel>
-                <!-- VLESS buttons -->
-                <StackPanel Orientation="Horizontal" Spacing="8"
-                            IsVisible="{Binding IsVlessMode}">
-                    <Button Content="{Binding LblAddServers}"
+                <!-- VLESS: URI input + Add/Remove -->
+                <DockPanel IsVisible="{Binding IsVlessMode}" LastChildFill="True">
+                    <Button DockPanel.Dock="Right" Content="{Binding LblAddServers}"
                             Command="{Binding AddServerCommand}"
+                            Margin="6,0,0,0"
                             Background="#2563EB" Foreground="White"
                             Padding="14,5" CornerRadius="4" FontWeight="SemiBold"/>
-                    <Button Content="{Binding LblRemove}"
+                    <Button DockPanel.Dock="Right" Content="{Binding LblRemove}"
                             Command="{Binding RemoveServerCommand}"
+                            Margin="6,0,0,0"
                             Padding="14,5" CornerRadius="4"/>
-                </StackPanel>
+                    <TextBox Text="{Binding VlessUri}"
+                             Watermark="vless://uuid@server:443?...#name"
+                             FontSize="10" Padding="6,4"
+                             AcceptsReturn="False"/>
+                </DockPanel>
                 <!-- Custom Config buttons -->
                 <StackPanel Orientation="Horizontal" Spacing="8"
                             IsVisible="{Binding !IsVlessMode}">
