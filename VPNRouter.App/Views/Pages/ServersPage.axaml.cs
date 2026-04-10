@@ -13,14 +13,6 @@ public partial class ServersPage : UserControl
         InitializeComponent();
     }
 
-    private void CustomConfigList_DoubleTapped(object? sender, TappedEventArgs e)
-    {
-        if (DataContext is MainWindowViewModel vm && vm.SelectedCustomConfig != null)
-        {
-            vm.SetActiveCustomConfigCommand.Execute(vm.SelectedCustomConfig);
-        }
-    }
-
     // Right click on a server item → open detail editor for THAT item.
     // ContextRequested fires for right-click universally and walks the visual tree.
     private void ServerList_ContextRequested(object? sender, ContextRequestedEventArgs e)

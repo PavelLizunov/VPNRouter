@@ -96,23 +96,25 @@
                      ItemsSource="{Binding CustomConfigs}"
                      SelectedItem="{Binding SelectedCustomConfig}"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     DoubleTapped="CustomConfigList_DoubleTapped">
+                     ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:CustomConfigViewModel">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                            <TextBlock Grid.Column="0" Text="{Binding Name}"
+                        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                            <TextBlock Grid.Column="0" Text="●" Foreground="#22C55E"
+                                       IsVisible="{Binding IsActive}"
+                                       VerticalAlignment="Center" Margin="0,0,6,0" FontSize="8"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Name}"
                                        FontWeight="{Binding IsActive, Converter={StaticResource ActiveFontConverter}}"
                                        VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="2" Text="{Binding Protocols}"
+                            <TextBlock Grid.Column="3" Text="{Binding Protocols}"
                                        Opacity="0.6" Margin="8,0" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="3" Text="{Binding Server}"
+                            <TextBlock Grid.Column="4" Text="{Binding Server}"
                                        Opacity="0.4" VerticalAlignment="Center"/>
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
-            <TextBlock Grid.Row="1" Text="{Binding LblDoubleClickActiveConfig}"
+            <TextBlock Grid.Row="1" Text="{Binding LblClickToActivateConfig}"
                        FontSize="10" Opacity="0.5" Margin="0,4,0,0"/>
         </Grid>
 

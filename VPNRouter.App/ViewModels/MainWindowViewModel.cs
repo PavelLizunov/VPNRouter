@@ -103,6 +103,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public string LblFieldShortId => Strings.FieldShortId;
     public string LblDoubleClickEditServer => Strings.DoubleClickEditServer;
     public string LblDoubleClickActiveConfig => Strings.DoubleClickActiveConfig;
+    public string LblClickToActivateConfig => IsRussian ? "Нажмите на конфиг для активации" : "Click a config to activate it";
     public string LblAddCustomAppHint => Strings.AddCustomAppHint;
     public string LblTcpUdpHint => Strings.TcpUdpHint;
     public string BypassRuLabel => Strings.BypassRussianTrafficLabel;
@@ -633,56 +634,91 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task AddCustomConfigAsync()
     {
-        var window = GetMainWindow();
-        if (window == null) return;
-
-        var files = await window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        try
         {
-            Title = Strings.SelectSingBoxConfig,
-            AllowMultiple = false,
-            FileTypeFilter = new[]
+            var window = GetMainWindow();
+            if (window == null)
             {
-                new FilePickerFileType("JSON") { Patterns = new[] { "*.json" } }
+                _logger.Warning("[VM] AddCustomConfig: MainWindow not found");
+                StatusText = IsRussian ? "Не удалось открыть диалог выбора файла" : "Failed to open file picker";
+                return;
             }
-        });
 
-        if (files.Count == 0) return;
+            var files = await window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = Strings.SelectSingBoxConfig,
+                AllowMultiple = false,
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType("JSON") { Patterns = new[] { "*.json" } }
+                }
+            });
 
-        var file = files[0];
-        var sourcePath = file.TryGetLocalPath();
-        if (string.IsNullOrEmpty(sourcePath)) return;
+            if (files.Count == 0) return;
 
-        var configName = Path.GetFileNameWithoutExtension(sourcePath);
+            var file = files[0];
+            var sourcePath = file.TryGetLocalPath();
+            if (string.IsNullOrEmpty(sourcePath)) return;
 
-        // Check duplicate
-        if (CustomConfigs.Any(c => c.Name.Equals(configName, StringComparison.OrdinalIgnoreCase)))
-        {
-            StatusText = Strings.ConfigExists(configName);
-            return;
+            var configName = Path.GetFileNameWithoutExtension(sourcePath);
+
+            // Check duplicate
+            if (CustomConfigs.Any(c => c.Name.Equals(configName, StringComparison.OrdinalIgnoreCase)))
+            {
+                StatusText = Strings.ConfigExists(configName);
+                return;
+            }
+
+            // Validate
+            var json = await File.ReadAllTextAsync(sourcePath);
+            var (isValid, errors) = CustomConfigInjector.Validate(json);
+            if (!isValid)
+            {
+                StatusText = $"{Strings.InvalidConfig} {string.Join("; ", errors)}";
+                return;
+            }
+
+            // Copy to app support
+            var destPath = CustomConfigInjector.CopyToProgramData(sourcePath, configName);
+            var entry = new CustomConfigEntry { Name = configName, Path = destPath };
+
+            var isFirst = CustomConfigs.Count == 0;
+            var vm = new CustomConfigViewModel(entry, isFirst);
+            CustomConfigs.Add(vm);
+
+            // Auto-select and save
+            SelectedCustomConfig = vm;
+            SaveSettings();
+            StatusText = IsRussian
+                ? $"Конфиг \"{configName}\" добавлен" + (isFirst ? " и активирован" : "")
+                : $"Config \"{configName}\" added" + (isFirst ? " and activated" : "");
         }
-
-        // Validate
-        var json = await File.ReadAllTextAsync(sourcePath);
-        var (isValid, errors) = CustomConfigInjector.Validate(json);
-        if (!isValid)
+        catch (Exception ex)
         {
-            StatusText = $"{Strings.InvalidConfig} {string.Join("; ", errors)}";
-            return;
+            _logger.Error(ex, "[VM] AddCustomConfig failed");
+            StatusText = IsRussian
+                ? $"Ошибка добавления конфига: {ex.Message}"
+                : $"Failed to add config: {ex.Message}";
         }
-
-        // Copy to app support
-        var destPath = CustomConfigInjector.CopyToProgramData(sourcePath, configName);
-        var entry = new CustomConfigEntry { Name = configName, Path = destPath };
-
-        var vm = new CustomConfigViewModel(entry, CustomConfigs.Count == 0);
-        CustomConfigs.Add(vm);
     }
 
     [RelayCommand]
     private void RemoveCustomConfig()
     {
-        if (SelectedCustomConfig != null)
-            CustomConfigs.Remove(SelectedCustomConfig);
+        if (SelectedCustomConfig == null) return;
+        var name = SelectedCustomConfig.Name;
+        var wasActive = SelectedCustomConfig.IsActive;
+        CustomConfigs.Remove(SelectedCustomConfig);
+
+        // If removed the active one, activate the first remaining
+        if (wasActive && CustomConfigs.Count > 0)
+        {
+            CustomConfigs[0].IsActive = true;
+            SelectedCustomConfig = CustomConfigs[0];
+        }
+
+        SaveSettings();
+        StatusText = IsRussian ? $"Конфиг \"{name}\" удалён" : $"Config \"{name}\" removed";
     }
 
     [RelayCommand]
@@ -692,6 +728,14 @@ public partial class MainWindowViewModel : ViewModelBase
         foreach (var c in CustomConfigs)
             c.IsActive = false;
         config.IsActive = true;
+        SaveSettings();
+    }
+
+    // Auto-activate config when selected in the list (left-click = switch)
+    partial void OnSelectedCustomConfigChanged(CustomConfigViewModel? value)
+    {
+        if (_isLoadingUI || value == null) return;
+        SetActiveCustomConfig(value);
     }
 
     [RelayCommand]
