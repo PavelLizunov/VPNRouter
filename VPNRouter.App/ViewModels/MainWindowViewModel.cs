@@ -50,8 +50,25 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsServerListMode))]
     private bool _isSubscribeMode = false;
 
-    /// <summary>True when the server ListBox should be visible (VLESS or Subscribe mode).</summary>
+    /// <summary>True when the server ListBox should be visible (Manual or Subscribe mode).</summary>
     public bool IsServerListMode => IsVlessMode || IsSubscribeMode;
+
+    // ComboBox mode selector: 0=Manual, 1=Subscribe, 2=Custom Config
+    [ObservableProperty] private int _configModeIndex;
+    public string[] ConfigModeItems => new[]
+    {
+        Strings.ModeManual,
+        Strings.ModeSubscribe,
+        Strings.ModeCustomConfig
+    };
+
+    partial void OnConfigModeIndexChanged(int value)
+    {
+        if (_isLoadingUI) return;
+        IsVlessMode = value == 0;
+        IsSubscribeMode = value == 1;
+        // value == 2 → custom (both false)
+    }
     [ObservableProperty] private string _subscriptionUrl = string.Empty;
     [ObservableProperty] private bool _isSplitTunnel = true;
     [ObservableProperty] private bool _bypassRussianTraffic = true;
@@ -241,6 +258,7 @@ public partial class MainWindowViewModel : ViewModelBase
         IsSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
         IsVlessMode = !configMode.Equals("custom", StringComparison.OrdinalIgnoreCase) && !IsSubscribeMode;
         SubscriptionUrl = _settings.App.SubscriptionUrl ?? "";
+        ConfigModeIndex = IsSubscribeMode ? 1 : IsVlessMode ? 0 : 2;
 
         // Routing mode
         IsSplitTunnel = !(_settings.App.RoutingMode ?? "split")

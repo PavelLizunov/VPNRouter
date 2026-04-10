@@ -16,6 +16,9 @@ public static class Strings
     // ── Config mode ──
     public static string VlessServers => Ru ? "VLESS Серверы" : "VLESS Servers";
     public static string CustomConfigJson => Ru ? "Свой конфиг (JSON)" : "Custom Config (JSON)";
+    public static string ModeManual => Ru ? "Ручной" : "Manual";
+    public static string ModeSubscribe => Ru ? "Подписка" : "Subscribe";
+    public static string ModeCustomConfig => Ru ? "Свой конфиг" : "Custom Config";
     public static string SubscribeMode => Ru ? "Подписка" : "Subscribe";
     public static string SubscriptionUrlHint => Ru ? "URL подписки (subscription link)" : "Subscription URL";
     public static string SyncButton => Ru ? "Обновить" : "Sync";
