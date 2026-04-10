@@ -70,23 +70,22 @@ public partial class MainWindowViewModel : ViewModelBase
         // value == 2 → custom (both false)
     }
 
-    // Detect subscribe mode from tab selection too
+    // Sync mode flags when tab changes. Saves on tab switch so Connect
+    // always uses the mode matching the visible tab.
     partial void OnSelectedTabIndexChanged(int value)
     {
-        if (_isLoadingUI) return;
-        // Tab 0 = Manual (Servers), Tab 1 = Subscribe
-        if (value == 0 && !IsVlessMode)
+        if (_isLoadingUI || _isReconnecting) return;
+        if (value == 0) // Manual tab
         {
             IsVlessMode = true;
             IsSubscribeMode = false;
-            ConfigModeIndex = 0;
         }
-        else if (value == 1 && !IsSubscribeMode)
+        else if (value == 1) // Subscribe tab
         {
             IsSubscribeMode = true;
             IsVlessMode = false;
-            ConfigModeIndex = 1;
         }
+        // Tab 2 (Network), Tab 3 (Applications) — don't change mode
     }
     [ObservableProperty] private string _subscriptionUrl = string.Empty;
     [ObservableProperty] private bool _isSplitTunnel = true;
@@ -699,10 +698,12 @@ public partial class MainWindowViewModel : ViewModelBase
             catch (TunOwnershipException)
             {
                 _logger.Warning("[VM] TUN adapter owned by another VPNRouter instance");
+                try { await Task.Run(() => _engine.Stop()); } catch { }
+                IsConnected = false;
                 IsConnecting = false;
                 StatusText = IsRussian
-                    ? "VPN адаптер занят другим экземпляром VPNRouter. Отключите Windows Service в Network → Service Controls."
-                    : "TUN adapter is owned by another VPNRouter instance. Disable Windows Service in Network → Service Controls.";
+                    ? "VPN адаптер занят другим экземпляром VPNRouter. Отключите Autostart with Windows."
+                    : "TUN adapter is owned by another VPNRouter instance. Disable Autostart with Windows.";
                 ConnectButtonText = Strings.StartVPN;
                 return;
             }
@@ -764,6 +765,16 @@ public partial class MainWindowViewModel : ViewModelBase
             _logger.Error(ex, "[VM] Subscription sync failed");
             StatusText = Strings.SyncFailed(ex.Message);
         }
+    }
+
+    [RelayCommand]
+    private void ClearSubscription()
+    {
+        SubscriptionServers.Clear();
+        SubscriptionUrl = string.Empty;
+        SelectedSubscriptionServer = null;
+        SaveSettings();
+        StatusText = IsRussian ? "Подписка удалена" : "Subscription cleared";
     }
 
     [RelayCommand]

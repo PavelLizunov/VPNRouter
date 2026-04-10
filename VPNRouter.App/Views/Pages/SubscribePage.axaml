@@ -31,17 +31,24 @@
         </ListBox>
 
         <!-- Empty state -->
-        <TextBlock Grid.Row="0"
-                   IsVisible="{Binding !SubscriptionServers.Count}"
-                   Text="Enter subscription URL below and click Sync"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                   FontSize="11" Opacity="0.5" FontStyle="Italic"/>
+        <StackPanel Grid.Row="0"
+                    IsVisible="{Binding !SubscriptionServers.Count}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Spacing="6">
+            <TextBlock Text="No subscription servers"
+                       FontSize="13" FontWeight="SemiBold" Opacity="0.6"
+                       HorizontalAlignment="Center"/>
+            <TextBlock Text="Enter a subscription URL below and click Sync"
+                       FontSize="11" Opacity="0.4"
+                       HorizontalAlignment="Center"/>
+        </StackPanel>
 
-        <!-- Bottom: URL + Sync -->
+        <!-- Bottom: URL + buttons -->
         <Border Grid.Row="1" Padding="10,6"
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
             <StackPanel Spacing="6">
+                <!-- URL input + Sync -->
                 <DockPanel LastChildFill="True">
                     <Button DockPanel.Dock="Right" Content="{Binding LblSyncButton}"
                             Command="{Binding SyncSubscriptionCommand}"
@@ -51,6 +58,21 @@
                     <TextBox Text="{Binding SubscriptionUrl}"
                              Watermark="{Binding LblSubscriptionUrlHint}"
                              FontSize="10" Padding="6,4"/>
+                </DockPanel>
+                <!-- Server count + Clear -->
+                <DockPanel IsVisible="{Binding SubscriptionServers.Count}">
+                    <Button DockPanel.Dock="Right" Content="✕ Clear"
+                            Command="{Binding ClearSubscriptionCommand}"
+                            Background="Transparent" BorderThickness="0"
+                            Padding="6,2" FontSize="10" Opacity="0.6"/>
+                    <TextBlock VerticalAlignment="Center"
+                               FontSize="10" Opacity="0.5">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="{}{0} servers">
+                                <Binding Path="SubscriptionServers.Count"/>
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
                 </DockPanel>
             </StackPanel>
         </Border>
