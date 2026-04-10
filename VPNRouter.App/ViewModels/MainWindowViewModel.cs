@@ -127,7 +127,41 @@ public partial class MainWindowViewModel : ViewModelBase
     private void OpenCustomConfigDetail(CustomConfigViewModel? cfg) => DetailCustomConfig = cfg;
 
     // ── Version ──
-    public string VersionText => $"by NiniTux  \u00b7  v{AppVersion.Version}";
+    public string VersionText => $"by NiniTux  \u00b7  v{AppVersion.Version}  \u00b7  sing-box {GetSingBoxVersion()}";
+
+    private static string GetSingBoxVersion()
+    {
+        try
+        {
+            var exePath = OperatingSystem.IsWindows()
+                ? Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\bin\sing-box.exe")
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "Library/Application Support/VPNRouter/bin/sing-box");
+            if (!File.Exists(exePath)) return "?";
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = exePath,
+                Arguments = "version",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi);
+            var output = proc?.StandardOutput.ReadToEnd() ?? "";
+            proc?.WaitForExit(3000);
+
+            // Parse "sing-box version 1.13.7" or "sing-box version unknown"
+            foreach (var line in output.Split('\n'))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("sing-box version", StringComparison.OrdinalIgnoreCase))
+                    return trimmed.Substring("sing-box version".Length).Trim();
+            }
+            return "?";
+        }
+        catch { return "?"; }
+    }
 
     // ── Localized labels (proxies to Strings.cs, refreshed on language toggle) ──
     public string LblTabServers => Strings.TabServers;
