@@ -979,9 +979,23 @@ public partial class MainWindowViewModel : ViewModelBase
                 _settings.App.ConfigMode = "generated";
             }
 
-            // Start with new config (with timeout)
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
+            // Start with new config. Retry up to 3 times because Windows Service
+            // may briefly grab the TUN lock between our Stop and Start.
+            const int maxRetries = 3;
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                    await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
+                    break; // success
+                }
+                catch (TunOwnershipException) when (attempt < maxRetries)
+                {
+                    _logger.Warning("[VM] Reconnect: TUN lock stolen by service, retry {A}/{M}", attempt, maxRetries);
+                    await Task.Delay(2000); // wait for service to release
+                }
+            }
         }
         catch (OperationCanceledException)
         {

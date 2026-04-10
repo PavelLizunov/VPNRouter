@@ -416,8 +416,6 @@ public class VpnEngine : IDisposable
     {
         OnStatus("Stopping...");
 
-        // Restore Windows DNS settings before tearing down TUN —
-        // SMHNR back to default, parallel A/AAAA back to default.
 #if PLATFORM_WINDOWS
         try { WindowsDnsHardening.Restore(_logger); } catch { }
 #endif
