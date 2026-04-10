@@ -652,10 +652,11 @@ public partial class MainWindowViewModel : ViewModelBase
             try
             {
                 var entry = VlessUriParser.Parse(line);
-                // Check duplicate
-                if (Servers.Any(s => s.Server == entry.Server && s.Port == entry.Port))
+                // Check duplicate by name (same IP+port with different name/uuid is OK)
+                if (Servers.Any(s => s.Name == entry.Name && s.Server == entry.Server))
                     continue;
                 Servers.Add(new ServerViewModel(entry));
+                SaveSettings();
             }
             catch (Exception ex)
             {
