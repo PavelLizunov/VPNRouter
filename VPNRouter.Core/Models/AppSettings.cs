@@ -205,8 +205,21 @@ public class VlessConfig
     public List<VlessServerEntry> Servers { get; set; } = new();
 
     /// <summary>
+    /// Name of the actively selected server. Only this server (and its
+    /// TCP/UDP pair with same IP) is used for routing. Other servers remain
+    /// in the list but are NOT included in the generated config.
+    /// When empty, the first server is used.
+    /// </summary>
+    [YamlMember(Alias = "active_server")]
+    public string ActiveServer { get; set; } = string.Empty;
+
+    /// <summary>
     /// Builds the effective server list. If 'servers' is populated, returns it.
     /// Otherwise creates a single entry from the legacy fields.
+    /// </summary>
+    /// <summary>
+    /// Returns the full list of servers (for UI display).
+    /// Use <see cref="GetActiveServers"/> for the servers to actually route through.
     /// </summary>
     public List<VlessServerEntry> GetEffectiveServers()
     {
@@ -233,6 +246,30 @@ public class VlessConfig
         }
 
         return new List<VlessServerEntry>();
+    }
+
+    /// <summary>
+    /// Returns ONLY the servers to route through — the active server and
+    /// its TCP/UDP pair (same IP, different flow). This is what
+    /// ConfigGenerator uses to build sing-box outbounds.
+    /// </summary>
+    public List<VlessServerEntry> GetActiveServers()
+    {
+        var all = GetEffectiveServers();
+        if (all.Count <= 1) return all;
+
+        // Find active by name
+        VlessServerEntry? active = null;
+        if (!string.IsNullOrEmpty(ActiveServer))
+            active = all.FirstOrDefault(s =>
+                s.Name?.Equals(ActiveServer, StringComparison.OrdinalIgnoreCase) == true);
+
+        // Fallback: first server
+        active ??= all[0];
+
+        // Include all servers with the same IP (TCP + UDP pair)
+        var activeIp = active.Server;
+        return all.Where(s => s.Server == activeIp).ToList();
     }
 }
 

@@ -245,10 +245,18 @@ public partial class MainWindowViewModel : ViewModelBase
         // Update channel
         ReceivePrereleases = _settings.Update.IsExperimental;
 
-        // Load servers
+        // Load servers + select the active one
         Servers.Clear();
+        ServerViewModel? activeServer = null;
         foreach (var entry in _settings.Vless.GetEffectiveServers())
-            Servers.Add(new ServerViewModel(entry));
+        {
+            var vm = new ServerViewModel(entry);
+            Servers.Add(vm);
+            if (!string.IsNullOrEmpty(_settings.Vless.ActiveServer) &&
+                entry.Name?.Equals(_settings.Vless.ActiveServer, StringComparison.OrdinalIgnoreCase) == true)
+                activeServer = vm;
+        }
+        SelectedServer = activeServer ?? Servers.FirstOrDefault();
 
         // Load custom configs
         CustomConfigs.Clear();
@@ -462,17 +470,20 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.App.Theme = IsDarkTheme ? "dark" : "light";
         _settings.App.Language = IsRussian ? "ru" : "en";
 
-        // Servers
+        // Servers — save all + mark which one is active
         _settings.Vless.Servers = Servers.Select(s => s.ToEntry()).ToList();
+        var activeVless = SelectedServer ?? Servers.FirstOrDefault();
+        _settings.Vless.ActiveServer = activeVless?.Name ?? "";
         if (_settings.Vless.Servers.Count > 0)
         {
-            var first = _settings.Vless.Servers[0];
-            _settings.Vless.Server = first.Server;
-            _settings.Vless.Port = first.Port;
-            _settings.Vless.Uuid = first.Uuid;
-            _settings.Vless.Flow = first.Flow;
-            _settings.Vless.Security = first.Security;
-            _settings.Vless.Reality = first.Reality;
+            // Write active server to root fields for backward compat
+            var entry = activeVless?.ToEntry() ?? _settings.Vless.Servers[0];
+            _settings.Vless.Server = entry.Server;
+            _settings.Vless.Port = entry.Port;
+            _settings.Vless.Uuid = entry.Uuid;
+            _settings.Vless.Flow = entry.Flow;
+            _settings.Vless.Security = entry.Security;
+            _settings.Vless.Reality = entry.Reality;
         }
 
         // Custom configs
@@ -763,6 +774,18 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     private bool _isReconnecting;
+
+    // VLESS: selecting a server = choosing which server to route through.
+    partial void OnSelectedServerChanged(ServerViewModel? value)
+    {
+        if (_isLoadingUI || value == null || _isReconnecting) return;
+
+        // If connected in VLESS mode → reconnect with newly selected server
+        if (IsConnected && IsVlessMode && !IsConnecting)
+        {
+            _ = ReconnectAsync(value.DisplayName);
+        }
+    }
 
     // Auto-activate config when selected in the list (left-click = switch).
     // If VPN is already running, auto-reconnect with the new config.

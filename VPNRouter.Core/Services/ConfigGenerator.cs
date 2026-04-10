@@ -242,7 +242,7 @@ public static class ConfigGenerator
     /// </summary>
     private static List<SingBoxOutbound> BuildOutbounds(AppSettings settings, out bool hasUdpProxy)
     {
-        var servers = settings.Vless.GetEffectiveServers();
+        var servers = settings.Vless.GetActiveServers();
         var outbounds = new List<SingBoxOutbound>();
 
         // Auto-detect: split servers by flow presence

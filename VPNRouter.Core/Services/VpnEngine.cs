@@ -131,15 +131,16 @@ public class VpnEngine : IDisposable
         }
         else
         {
-            var servers = settings.Vless.GetEffectiveServers()
+            var allServers = settings.Vless.GetEffectiveServers()
                 .Where(s => !string.IsNullOrWhiteSpace(s.Server) && s.Server != "your.server.com")
                 .ToList();
-            if (servers.Count == 0)
+            if (allServers.Count == 0)
                 throw new InvalidOperationException("VLESS server not configured.");
 
-            // Filter out placeholders so config generation doesn't include them
-            settings.Vless.Servers = servers;
-            ActiveServerAddress = servers[0].Server;
+            settings.Vless.Servers = allServers;
+            // Show the active server's IP (what actually runs), not just [0]
+            var activeServers = settings.Vless.GetActiveServers();
+            ActiveServerAddress = activeServers.Count > 0 ? activeServers[0].Server : allServers[0].Server;
         }
 
         ct.ThrowIfCancellationRequested();
