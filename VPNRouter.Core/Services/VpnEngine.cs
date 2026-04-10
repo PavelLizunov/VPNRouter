@@ -451,22 +451,23 @@ public class VpnEngine : IDisposable
     /// </summary>
     private static string ResolveCustomConfigPath(AppSettings settings)
     {
-        // Try multi-config list first
-        if (settings.App.CustomConfigs?.Count > 0 && !string.IsNullOrEmpty(settings.App.ActiveCustomConfig))
+        // Try multi-config list
+        if (settings.App.CustomConfigs?.Count > 0)
         {
-            var entry = settings.App.CustomConfigs
-                .FirstOrDefault(c => c.Name == settings.App.ActiveCustomConfig);
-            if (entry != null)
-            {
-                var path = Environment.ExpandEnvironmentVariables(entry.Path);
-                if (File.Exists(path))
-                    return path;
+            // Pick active config by name, or fall back to first in list
+            var entry = !string.IsNullOrEmpty(settings.App.ActiveCustomConfig)
+                ? settings.App.CustomConfigs
+                    .FirstOrDefault(c => c.Name == settings.App.ActiveCustomConfig)
+                    ?? settings.App.CustomConfigs[0]
+                : settings.App.CustomConfigs[0];
 
-                // Try ProgramData path
-                var pdPath = CustomConfigInjector.GetProgramDataPath(entry.Name);
-                if (File.Exists(pdPath))
-                    return pdPath;
-            }
+            var path = Environment.ExpandEnvironmentVariables(entry.Path);
+            if (File.Exists(path))
+                return path;
+
+            var pdPath = CustomConfigInjector.GetProgramDataPath(entry.Name);
+            if (File.Exists(pdPath))
+                return pdPath;
         }
 
         // Fallback: single custom_config path (backward compat)

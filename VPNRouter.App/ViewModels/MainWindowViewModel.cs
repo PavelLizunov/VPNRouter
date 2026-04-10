@@ -260,10 +260,16 @@ public partial class MainWindowViewModel : ViewModelBase
             CustomConfigs.Add(vm);
             if (isActive) activeConfig = vm;
         }
-        // Pre-select the active config so ListBox highlights it on startup.
-        // Use _isLoadingUI guard so OnSelectedCustomConfigChanged doesn't
-        // trigger a reconnect during initial load.
-        SelectedCustomConfig = activeConfig ?? CustomConfigs.FirstOrDefault();
+        // Ensure exactly one config is active. If none matched by name
+        // (first launch, or saved name deleted), activate the first one.
+        if (activeConfig == null && CustomConfigs.Count > 0)
+        {
+            activeConfig = CustomConfigs[0];
+            activeConfig.IsActive = true;
+            // Persist so engine reads the right config on Connect
+            _settings.App.ActiveCustomConfig = activeConfig.Name;
+        }
+        SelectedCustomConfig = activeConfig;
 
         // Load apps from profiles + custom apps
         LoadApps();
