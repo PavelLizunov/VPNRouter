@@ -707,6 +707,34 @@ public partial class MainWindowViewModel : ViewModelBase
             StatusText = Strings.Starting;
             ConnectButtonText = Strings.Starting;
 
+            // Stop Windows Service if running — UI takes priority over background service.
+            // This eliminates TUN lock competition entirely.
+#if PLATFORM_WINDOWS
+            await Task.Run(() =>
+            {
+                try
+                {
+                    OrphanCleanup.KillOrphans();
+                    // Stop service via sc.exe (non-blocking, fire-and-forget)
+                    var psi = new System.Diagnostics.ProcessStartInfo("sc.exe", "stop VPNRouter")
+                    {
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    };
+                    using var proc = System.Diagnostics.Process.Start(psi);
+                    proc?.WaitForExit(5000);
+                    // Give service time to release TUN
+                    if (proc?.ExitCode == 0) Thread.Sleep(2000);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug(ex, "[VM] sc stop VPNRouter (non-critical)");
+                }
+            });
+#endif
+
             SaveSettings();
             _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
 
@@ -715,7 +743,7 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 _settings.Vless.Servers = _settings.App.SubscriptionServers;
                 _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
-                _settings.App.ConfigMode = "generated"; // engine treats it as VLESS
+                _settings.App.ConfigMode = "generated";
             }
 
             // macOS: ensure sudo access (one-time password prompt)
@@ -724,8 +752,6 @@ public partial class MainWindowViewModel : ViewModelBase
 
             try
             {
-                // Hard 30s timeout — if VpnEngine.StartAsync hangs (TUN creation,
-                // sing-box process, DNS warm-up), don't leave UI stuck on "Starting...".
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                 await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
             }
@@ -736,8 +762,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 IsConnected = false;
                 IsConnecting = false;
                 StatusText = IsRussian
-                    ? "VPN адаптер занят другим экземпляром VPNRouter. Отключите Autostart with Windows."
-                    : "TUN adapter is owned by another VPNRouter instance. Disable Autostart with Windows.";
+                    ? "VPN адаптер занят. Попробуйте ещё раз."
+                    : "TUN adapter busy. Try again.";
                 ConnectButtonText = Strings.StartVPN;
                 return;
             }

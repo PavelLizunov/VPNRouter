@@ -62,13 +62,22 @@ public class VPNRouterService : BackgroundService
             _engine.Warning += msg =>
                 _logger.LogWarning("[VPNRouterService] {Warn}", msg);
 
-            // Wait for the TUN adapter to become free. If a desktop UI
-            // (VPNRouter.App.exe) is currently running and owns sing-box,
-            // we idle here instead of crashing with FATAL. When the UI
-            // exits, the named mutex is released and our next attempt
-            // succeeds.
+            // Wait for the TUN adapter AND the desktop UI to be free.
+            // If VPNRouter.App.exe is running, the user is managing VPN
+            // from the GUI — service should stay idle until the UI exits.
             while (true)
             {
+                // Check if desktop UI is running — if yes, defer to it
+                var uiRunning = Process.GetProcessesByName("VPNRouter.App").Length > 0;
+                if (uiRunning)
+                {
+                    _logger.LogInformation(
+                        "[VPNRouterService] Desktop UI is running — idling, will retry in 30s");
+                    _startupComplete.TrySetResult();
+                    await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+                    continue;
+                }
+
                 try
                 {
                     await _engine.StartAsync(settings, stoppingToken);
@@ -77,9 +86,7 @@ public class VPNRouterService : BackgroundService
                 catch (TunOwnershipException)
                 {
                     _logger.LogInformation(
-                        "[VPNRouterService] TUN adapter owned by another VPNRouter instance — idling, will retry in 30s");
-                    // Signal startup completion to unblock StopAsync waiters,
-                    // even though we haven't actually started yet.
+                        "[VPNRouterService] TUN adapter owned by another instance — idling, will retry in 30s");
                     _startupComplete.TrySetResult();
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                 }
