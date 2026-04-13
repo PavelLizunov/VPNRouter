@@ -95,6 +95,8 @@ public class ZapretManager : IDisposable
 
         _logger.Information("[Zapret] Starting with strategy '{Strategy}': {Args}", strategy, args);
 
+        // Set error mode to suppress system error dialogs (missing DLL, etc.)
+        // so they don't block the UI with modal popups.
         var psi = new ProcessStartInfo
         {
             FileName = exePath,
@@ -105,6 +107,8 @@ public class ZapretManager : IDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        // Suppress WER (Windows Error Reporting) dialog for child process
+        psi.Environment["__COMPAT_LAYER"] = "RUNASINVOKER";
 
         _process = Process.Start(psi);
         if (_process == null)

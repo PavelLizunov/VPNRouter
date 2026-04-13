@@ -902,12 +902,29 @@ public partial class MainWindowViewModel : ViewModelBase
     {
 #if PLATFORM_WINDOWS
         try { _zapret?.Stop(); } catch { }
+
+        // Force kill by process name
         foreach (var proc in System.Diagnostics.Process.GetProcessesByName("winws"))
         {
             try { proc.Kill(entireProcessTree: true); proc.WaitForExit(3000); }
             catch { }
             finally { proc.Dispose(); }
         }
+
+        // Fallback: taskkill /F as last resort
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("taskkill", "/F /IM winws.exe")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            using var p = System.Diagnostics.Process.Start(psi);
+            p?.WaitForExit(3000);
+        }
+        catch { }
 #endif
     }
 
