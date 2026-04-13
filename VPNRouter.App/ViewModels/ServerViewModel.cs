@@ -40,16 +40,18 @@ public partial class ServerViewModel : ViewModelBase
         Flow = entry.Flow;
         Security = entry.Security;
 
-        // Reality fields (for detail editor)
-        if (entry.Reality != null)
+        // Pick fields based on security type, not object nullity
+        // (YamlDotNet creates empty objects even when YAML has no values)
+        var isReality = Security?.Equals("reality", StringComparison.OrdinalIgnoreCase) == true;
+
+        if (isReality && entry.Reality != null)
         {
             ServerName = entry.Reality.ServerName ?? "yahoo.com";
             Fingerprint = entry.Reality.Fingerprint ?? "firefox";
             PublicKey = entry.Reality.PublicKey ?? "";
             ShortId = entry.Reality.ShortId ?? "";
         }
-        // TLS fields (for display — SNI as ServerName)
-        else if (entry.Tls != null && entry.Tls.Enabled)
+        else if (entry.Tls != null)
         {
             ServerName = entry.Tls.ServerName ?? entry.Server;
             Fingerprint = entry.Tls.Fingerprint ?? "";
