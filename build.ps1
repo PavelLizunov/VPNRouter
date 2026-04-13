@@ -283,6 +283,14 @@ if (Test-Path $singBoxInDist) {
     $updateFileCount++
     Write-Host "       sing-box.exe included in update" -ForegroundColor Gray
 }
+# Include zapret (DPI bypass)
+$zapretInDist = Join-Path $DistDir "zapret"
+if (Test-Path $zapretInDist) {
+    $UpdateZapretDst = Join-Path $UpdateDir "zapret"
+    New-Item -ItemType Directory -Force -Path $UpdateZapretDst | Out-Null
+    Copy-Item "$zapretInDist\*" $UpdateZapretDst -Recurse
+    Write-Host "       zapret included in update" -ForegroundColor Gray
+}
 # Also include profiles and README
 $UpdateProfilesDst = Join-Path $UpdateDir "profiles"
 if (Test-Path $ProfilesSrc) {
