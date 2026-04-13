@@ -62,13 +62,10 @@ public partial class MainWindowViewModel : ViewModelBase
         Strings.ModeCustomConfig
     };
 
-    partial void OnConfigModeIndexChanged(int value)
-    {
-        if (_isLoadingUI) return;
-        IsVlessMode = value == 0;
-        IsSubscribeMode = value == 1;
-        // value == 2 → custom (both false)
-    }
+    // ConfigModeIndex is no longer used for mode switching.
+    // Mode is determined solely by tab selection (OnSelectedTabIndexChanged).
+    // ComboBox removed from UI in v2.5.0; this handler kept as no-op safety.
+    partial void OnConfigModeIndexChanged(int value) { }
 
     // Sync mode flags when tab changes. Saves on tab switch so Connect
     // always uses the mode matching the visible tab.
@@ -312,11 +309,14 @@ public partial class MainWindowViewModel : ViewModelBase
         ApplyTheme();
 
         // Config mode (three-way: generated / custom / subscribe)
+        // Mode is determined by which tab is active. On load, select the
+        // correct tab based on saved config_mode.
         var configMode = _settings.App.ConfigMode ?? "generated";
         IsSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
         IsVlessMode = !configMode.Equals("custom", StringComparison.OrdinalIgnoreCase) && !IsSubscribeMode;
         SubscriptionUrl = _settings.App.SubscriptionUrl ?? "";
-        ConfigModeIndex = IsSubscribeMode ? 1 : IsVlessMode ? 0 : 2;
+        // Set initial tab: 0=Manual, 1=Subscribe, 2=Network, 3=Applications
+        SelectedTabIndex = IsSubscribeMode ? 1 : 0;
 
         // Routing mode
         IsSplitTunnel = !(_settings.App.RoutingMode ?? "split")
