@@ -16,7 +16,7 @@ public class SingBoxManager : IDisposable
     private Process? _process;
     private string _currentConfigPath = string.Empty;
     private bool _disposed;
-    private readonly TunOwnershipLock _tunLock;
+    private TunOwnershipLock _tunLock;
 
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(3) };
 
@@ -28,7 +28,7 @@ public class SingBoxManager : IDisposable
     {
         _settings = settings;
         _logger = logger ?? Log.Logger;
-        _tunLock = new TunOwnershipLock(_logger);
+        _tunLock = TunOwnershipLock.Instance(_logger);
 
         // Release lock on ungraceful process exit (Environment.Exit, Ctrl+C, crash).
         AppDomain.CurrentDomain.ProcessExit += (_, _) => _tunLock.Dispose();

@@ -34,6 +34,15 @@ public sealed class TunOwnershipLock : IDisposable
     private bool _owned;
     private bool _disposed;
 
+    // Singleton: one lock per process. Prevents orphaned locks when
+    // VpnEngine creates a new SingBoxManager for each connection.
+    private static TunOwnershipLock? _instance;
+    public static TunOwnershipLock Instance(ILogger? logger = null)
+    {
+        _instance ??= new TunOwnershipLock(logger);
+        return _instance;
+    }
+
     public TunOwnershipLock(ILogger? logger = null)
     {
         _logger = logger ?? Log.Logger;
