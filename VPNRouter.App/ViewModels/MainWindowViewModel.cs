@@ -964,7 +964,9 @@ public partial class MainWindowViewModel : ViewModelBase
             if (_zapret.IsRunning || IsZapretRunning())
             {
                 ZapretEnabled = true;
-                ZapretStatus = $"Running (PID {_zapret.Pid})";
+                ZapretStatus = IsRussian
+                    ? $"Работает [{strategy}] (PID {_zapret.Pid})"
+                    : $"Running [{strategy}] (PID {_zapret.Pid})";
             }
             else
             {
