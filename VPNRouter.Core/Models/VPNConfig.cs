@@ -292,8 +292,13 @@ public class TransportConfig
     [JsonProperty("type")]
     public string Type { get; set; } = "ws";
 
+    /// <summary>WebSocket path (e.g. /vless-ws). Only for type=ws.</summary>
     [JsonProperty("path", NullValueHandling = NullValueHandling.Ignore)]
     public string? Path { get; set; }
+
+    /// <summary>gRPC service name. Only for type=grpc.</summary>
+    [JsonProperty("service_name", NullValueHandling = NullValueHandling.Ignore)]
+    public string? ServiceName { get; set; }
 
     [JsonProperty("headers", NullValueHandling = NullValueHandling.Ignore)]
     public Dictionary<string, string>? Headers { get; set; }

@@ -338,9 +338,10 @@ public static class ConfigGenerator
                 ? null
                 : new TransportConfig
                 {
-                    Type    = transportType,
-                    Path    = transport.Path,
-                    Headers = transport.Headers?.Count > 0 ? transport.Headers : null
+                    Type        = transportType,
+                    Path        = transportType.Equals("grpc", StringComparison.OrdinalIgnoreCase) ? null : transport.Path,
+                    ServiceName = transportType.Equals("grpc", StringComparison.OrdinalIgnoreCase) ? transport.Path : null,
+                    Headers     = transport.Headers?.Count > 0 ? transport.Headers : null
                 },
             DomainResolver = "local-dns"
         };

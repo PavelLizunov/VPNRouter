@@ -53,10 +53,14 @@ public static class VlessUriParser
         };
 
         // Transport
+        var transportType = query["type"] ?? "tcp";
         entry.Transport = new VlessTransportConfig
         {
-            Type = query["type"] ?? "tcp",
-            Path = query["spx"] ?? query["path"] ?? "/"
+            Type = transportType,
+            // gRPC uses serviceName, WS uses path, Reality uses spx
+            Path = transportType.Equals("grpc", StringComparison.OrdinalIgnoreCase)
+                ? query["serviceName"] ?? query["service_name"] ?? ""
+                : query["spx"] ?? query["path"] ?? "/"
         };
 
         var host = query["host"];
