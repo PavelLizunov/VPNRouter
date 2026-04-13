@@ -707,15 +707,26 @@ public partial class MainWindowViewModel : ViewModelBase
             StatusText = Strings.Starting;
             ConnectButtonText = Strings.Starting;
 
-            // Stop Windows Service if running — UI takes priority over background service.
-            // This eliminates TUN lock competition entirely.
-#if PLATFORM_WINDOWS
+            // Ensure clean state: stop any existing VPN, kill orphans,
+            // stop Windows Service. This guarantees the TUN lock is free.
             await Task.Run(() =>
             {
                 try
                 {
-                    OrphanCleanup.KillOrphans();
-                    // Stop service via sc.exe (non-blocking, fire-and-forget)
+                    // Stop our own engine if it's somehow still running
+                    if (_engine.IsRunning)
+                        _engine.Stop();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug(ex, "[VM] Pre-start engine stop");
+                }
+
+                try { OrphanCleanup.KillOrphans(); } catch { }
+
+#if PLATFORM_WINDOWS
+                try
+                {
                     var psi = new System.Diagnostics.ProcessStartInfo("sc.exe", "stop VPNRouter")
                     {
                         UseShellExecute = false,
@@ -725,15 +736,11 @@ public partial class MainWindowViewModel : ViewModelBase
                     };
                     using var proc = System.Diagnostics.Process.Start(psi);
                     proc?.WaitForExit(5000);
-                    // Give service time to release TUN
                     if (proc?.ExitCode == 0) Thread.Sleep(2000);
                 }
-                catch (Exception ex)
-                {
-                    _logger.Debug(ex, "[VM] sc stop VPNRouter (non-critical)");
-                }
-            });
+                catch { }
 #endif
+            });
 
             SaveSettings();
             _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
