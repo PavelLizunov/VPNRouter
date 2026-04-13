@@ -68,39 +68,39 @@ public class ZapretManager : IDisposable
                 $"--dpi-desync-split-pos=1 " +
                 $"--dpi-desync-fake-tls=0x00000000000000000000",
 
-            // Flowseal-based strategies with full filter files (Discord media, STUN, QUIC)
+            // Flowseal-based strategies — use relative paths (WorkingDirectory=zapretDir)
             "discord+youtube" =>
                 "--wf-tcp=80,443 " +
-                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.discord_media.txt")}\" " +
-                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.stun.txt")}\" " +
-                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.quic_initial_ietf.txt")}\" " +
+                @"--wf-raw-part=@""windivert.filter\windivert_part.discord_media.txt"" " +
+                @"--wf-raw-part=@""windivert.filter\windivert_part.stun.txt"" " +
+                @"--wf-raw-part=@""windivert.filter\windivert_part.quic_initial_ietf.txt"" " +
                 "--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new " +
                 "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig --new " +
-                $"--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=\"{Path.Combine(zapretDir, "files", "quic_initial_www_google_com.bin")}\" --new " +
+                @"--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
                 "--filter-l7=stun,discord --dpi-desync=fake --dpi-desync-repeats=2",
 
             "discord+youtube (aggressive)" =>
                 "--wf-tcp=80,443 " +
-                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.discord_media.txt")}\" " +
-                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.stun.txt")}\" " +
-                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.quic_initial_ietf.txt")}\" " +
+                @"--wf-raw-part=@""windivert.filter\windivert_part.discord_media.txt"" " +
+                @"--wf-raw-part=@""windivert.filter\windivert_part.stun.txt"" " +
+                @"--wf-raw-part=@""windivert.filter\windivert_part.quic_initial_ietf.txt"" " +
                 "--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new " +
-                $"--filter-tcp=443 --hostlist=\"{Path.Combine(zapretDir, "files", "list-youtube.txt")}\" --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --new " +
+                @"--filter-tcp=443 --hostlist=""files\list-youtube.txt"" --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --new " +
                 "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig --new " +
-                $"--filter-l7=quic --hostlist=\"{Path.Combine(zapretDir, "files", "list-youtube.txt")}\" --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=\"{Path.Combine(zapretDir, "files", "quic_initial_www_google_com.bin")}\" --new " +
+                @"--filter-l7=quic --hostlist=""files\list-youtube.txt"" --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
                 "--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11 --new " +
                 "--filter-l7=stun,discord --dpi-desync=fake --dpi-desync-repeats=2",
 
             "all services" =>
                 "--wf-tcp=80,443 " +
-                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.discord_media.txt")}\" " +
-                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.stun.txt")}\" " +
-                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.quic_initial_ietf.txt")}\" " +
-                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.wireguard.txt")}\" " +
+                @"--wf-raw-part=@""windivert.filter\windivert_part.discord_media.txt"" " +
+                @"--wf-raw-part=@""windivert.filter\windivert_part.stun.txt"" " +
+                @"--wf-raw-part=@""windivert.filter\windivert_part.quic_initial_ietf.txt"" " +
+                @"--wf-raw-part=@""windivert.filter\windivert_part.wireguard.txt"" " +
                 "--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new " +
-                $"--filter-tcp=443 --hostlist=\"{Path.Combine(zapretDir, "files", "list-youtube.txt")}\" --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --new " +
+                @"--filter-tcp=443 --hostlist=""files\list-youtube.txt"" --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --new " +
                 "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig --new " +
-                $"--filter-l7=quic --hostlist=\"{Path.Combine(zapretDir, "files", "list-youtube.txt")}\" --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=\"{Path.Combine(zapretDir, "files", "quic_initial_www_google_com.bin")}\" --new " +
+                @"--filter-l7=quic --hostlist=""files\list-youtube.txt"" --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
                 "--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11 --new " +
                 "--filter-l7=stun,discord --dpi-desync=fake --dpi-desync-repeats=2",
 
@@ -109,7 +109,20 @@ public class ZapretManager : IDisposable
             _ => throw new ArgumentException($"Unknown zapret strategy: {strategy}")
         };
 
-        _logger.Information("[Zapret] Starting with strategy '{Strategy}': {Args}", strategy, args);
+        _logger.Information("[Zapret] Starting with strategy '{Strategy}'", strategy);
+        _logger.Information("[Zapret] WorkingDir: {Dir}", zapretDir);
+        _logger.Information("[Zapret] Args: {Args}", args);
+
+        // Verify critical files exist for Flowseal strategies
+        if (strategy.Contains("discord") || strategy.Contains("all"))
+        {
+            var filterDir = Path.Combine(zapretDir, "windivert.filter");
+            var filesDir = Path.Combine(zapretDir, "files");
+            if (!Directory.Exists(filterDir))
+                _logger.Warning("[Zapret] Filter dir missing: {Dir}", filterDir);
+            if (!Directory.Exists(filesDir))
+                _logger.Warning("[Zapret] Files dir missing: {Dir}", filesDir);
+        }
 
         // Set error mode to suppress system error dialogs (missing DLL, etc.)
         // so they don't block the UI with modal popups.
