@@ -109,7 +109,6 @@ public partial class MainWindowViewModel : ViewModelBase
         "fake+disorder",
         "discord+youtube",
         "discord+youtube (aggressive)",
-        "telegram",
         "all services",
         "custom"
     };
@@ -234,8 +233,8 @@ public partial class MainWindowViewModel : ViewModelBase
         : "DPI Bypass fragments TLS handshake packets to prevent ISP/TSPU from detecting and blocking VPN connections. Use when your VPN server is blocked by DPI (not by IP). Also works without VPN — unblocks sites directly.";
     public string LblDpiStrategy => IsRussian ? "Стратегия" : "Strategy";
     public string LblDpiStrategies => IsRussian
-        ? "Базовые (для VPN серверов):\n• multisplit — фрагменты (безопасно)\n• fake+multisplit — фейк + фрагменты\n• fake+disorder — фейк + перемешка\n\nДля сервисов (без VPN):\n• discord+youtube — Discord + YouTube\n• discord+youtube (aggressive) — усиленный\n• telegram — Telegram\n• all services — всё вместе\n• custom — свои аргументы"
-        : "Basic (for VPN servers):\n• multisplit — fragments (safest)\n• fake+multisplit — fake + fragments\n• fake+disorder — fake + reorder\n\nFor services (without VPN):\n• discord+youtube — Discord + YouTube\n• discord+youtube (aggressive) — stronger\n• telegram — Telegram\n• all services — everything combined\n• custom — your own arguments";
+        ? "Базовые (для VPN серверов):\n• multisplit — фрагменты (безопасно)\n• fake+multisplit — фейк + фрагменты\n• fake+disorder — фейк + перемешка\n\nДля сервисов (без VPN):\n• discord+youtube — Discord + YouTube\n• discord+youtube (aggressive) — усиленный\n• all services — всё вместе\n• custom — свои аргументы"
+        : "Basic (for VPN servers):\n• multisplit — fragments (safest)\n• fake+multisplit — fake + fragments\n• fake+disorder — fake + reorder\n\nFor services (without VPN):\n• discord+youtube — Discord + YouTube\n• discord+youtube (aggressive) — stronger\n• all services — everything combined\n• custom — your own arguments";
     public string LblDpiWarning => IsRussian
         ? "⚠ Обход DPI помогает только когда сервер заблокирован по TLS, НЕ когда заблокирован сам IP. Только Windows. Запускайте ДО подключения VPN."
         : "⚠ DPI bypass helps only when server is blocked by TLS detection, NOT when IP itself is blocked. Windows only. Start BEFORE connecting VPN.";

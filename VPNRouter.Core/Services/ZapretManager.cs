@@ -81,11 +81,6 @@ public class ZapretManager : IDisposable
                 "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid --new " +
                 "--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11",
 
-            "telegram" =>
-                "--wf-tcp=80,443 " +
-                "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld " +
-                "--dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig --dpi-desync-autottl=2",
-
             "all services" =>
                 "--wf-tcp=80,443 " +
                 "--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new " +
