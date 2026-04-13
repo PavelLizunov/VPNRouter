@@ -891,11 +891,20 @@ public partial class MainWindowViewModel : ViewModelBase
     private void ToggleZapret()
     {
 #if PLATFORM_WINDOWS
-        if (_zapret?.IsRunning == true)
+        // If enabled (or any winws process running) → stop
+        if (ZapretEnabled || _zapret?.IsRunning == true)
         {
-            _zapret.Stop();
+            try { _zapret?.Stop(); } catch { }
+
+            // Force kill all winws.exe in case Stop() missed them
+            foreach (var proc in System.Diagnostics.Process.GetProcessesByName("winws"))
+            {
+                try { proc.Kill(); proc.WaitForExit(2000); } catch { }
+                finally { proc.Dispose(); }
+            }
+
             ZapretEnabled = false;
-            ZapretStatus = "Stopped";
+            ZapretStatus = IsRussian ? "Остановлен" : "Stopped";
             SaveSettings();
             return;
         }
@@ -906,8 +915,21 @@ public partial class MainWindowViewModel : ViewModelBase
             var strategy = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Length
                 ? ZapretStrategies[ZapretStrategyIndex] : "multisplit";
             _zapret.Start(strategy, ZapretCustomArgs);
-            ZapretEnabled = true;
-            ZapretStatus = $"Running (PID {_zapret.Pid})";
+
+            // Verify it actually started (winws.exe may exit instantly on error)
+            System.Threading.Thread.Sleep(500);
+            if (_zapret.IsRunning)
+            {
+                ZapretEnabled = true;
+                ZapretStatus = $"Running (PID {_zapret.Pid})";
+            }
+            else
+            {
+                ZapretEnabled = false;
+                ZapretStatus = IsRussian
+                    ? "Ошибка: winws.exe завершился сразу. Проверьте стратегию."
+                    : "Error: winws.exe exited immediately. Check strategy.";
+            }
             SaveSettings();
         }
         catch (Exception ex)
