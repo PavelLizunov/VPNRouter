@@ -51,6 +51,7 @@ public class ZapretManager : IDisposable
 
         var args = strategy switch
         {
+            // Basic strategies
             "multisplit" =>
                 $"--wf-tcp={targetPort},8443 --wf-l3=ipv4 " +
                 $"--dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2",
@@ -66,6 +67,31 @@ public class ZapretManager : IDisposable
                 $"--dpi-desync=fake,disorder2 --dpi-desync-ttl=2 " +
                 $"--dpi-desync-split-pos=1 " +
                 $"--dpi-desync-fake-tls=0x00000000000000000000",
+
+            // Flowseal-based strategies (Discord/YouTube/general)
+            "discord+youtube" =>
+                "--wf-tcp=80,443 " +
+                "--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new " +
+                "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig --new " +
+                "--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11",
+
+            "discord+youtube (aggressive)" =>
+                "--wf-tcp=80,443 " +
+                "--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new " +
+                "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid --new " +
+                "--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11",
+
+            "telegram" =>
+                "--wf-tcp=80,443 " +
+                "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld " +
+                "--dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig --dpi-desync-autottl=2",
+
+            "all services" =>
+                "--wf-tcp=80,443 " +
+                "--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new " +
+                "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld " +
+                "--dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid --new " +
+                "--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11",
 
             "custom" => customArgs ?? "",
 
