@@ -376,10 +376,20 @@ public partial class MainWindowViewModel : ViewModelBase
         FlushDnsOnStart = _settings.App.FlushDnsOnStart;
         StrictDns = _settings.App.StrictDns;
         BlockAds = _settings.App.BlockAds;
-        ZapretEnabled = _settings.App.ZapretEnabled;
         ZapretStrategyIndex = Array.IndexOf(ZapretStrategies, _settings.App.ZapretStrategy);
         if (ZapretStrategyIndex < 0) ZapretStrategyIndex = 0;
         ZapretCustomArgs = _settings.App.ZapretCustomArgs;
+        // Detect zapret state from actual process, not saved flag
+        if (IsZapretRunning())
+        {
+            ZapretEnabled = true;
+            ZapretStatus = IsRussian ? "Работает (из предыдущей сессии)" : "Running (from previous session)";
+        }
+        else
+        {
+            ZapretEnabled = false;
+            ZapretStatus = IsRussian ? "Остановлен" : "Stopped";
+        }
 
         // Update channel
         ReceivePrereleases = _settings.Update.IsExperimental;
@@ -887,22 +897,38 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Kill ALL winws.exe processes system-wide.</summary>
+    private void KillAllZapret()
+    {
+#if PLATFORM_WINDOWS
+        try { _zapret?.Stop(); } catch { }
+        foreach (var proc in System.Diagnostics.Process.GetProcessesByName("winws"))
+        {
+            try { proc.Kill(entireProcessTree: true); proc.WaitForExit(3000); }
+            catch { }
+            finally { proc.Dispose(); }
+        }
+#endif
+    }
+
+    /// <summary>Check if winws.exe is running (from previous session or manual start).</summary>
+    private bool IsZapretRunning()
+    {
+#if PLATFORM_WINDOWS
+        return System.Diagnostics.Process.GetProcessesByName("winws").Length > 0;
+#else
+        return false;
+#endif
+    }
+
     [RelayCommand]
     private void ToggleZapret()
     {
 #if PLATFORM_WINDOWS
-        // If enabled (or any winws process running) → stop
-        if (ZapretEnabled || _zapret?.IsRunning == true)
+        // If any winws process running → stop ALL
+        if (ZapretEnabled || IsZapretRunning())
         {
-            try { _zapret?.Stop(); } catch { }
-
-            // Force kill all winws.exe in case Stop() missed them
-            foreach (var proc in System.Diagnostics.Process.GetProcessesByName("winws"))
-            {
-                try { proc.Kill(); proc.WaitForExit(2000); } catch { }
-                finally { proc.Dispose(); }
-            }
-
+            KillAllZapret();
             ZapretEnabled = false;
             ZapretStatus = IsRussian ? "Остановлен" : "Stopped";
             SaveSettings();
@@ -916,9 +942,9 @@ public partial class MainWindowViewModel : ViewModelBase
                 ? ZapretStrategies[ZapretStrategyIndex] : "multisplit";
             _zapret.Start(strategy, ZapretCustomArgs);
 
-            // Verify it actually started (winws.exe may exit instantly on error)
+            // Verify it actually started
             System.Threading.Thread.Sleep(500);
-            if (_zapret.IsRunning)
+            if (_zapret.IsRunning || IsZapretRunning())
             {
                 ZapretEnabled = true;
                 ZapretStatus = $"Running (PID {_zapret.Pid})";
@@ -1283,6 +1309,9 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (_engine.IsRunning)
             _engine.Stop();
+
+        // Kill zapret on app exit
+        KillAllZapret();
 
         SaveSettings();
 
