@@ -359,6 +359,14 @@ public class VlessTlsConfig
 
     [YamlMember(Alias = "insecure")]
     public bool Insecure { get; set; } = false;
+
+    /// <summary>uTLS fingerprint (chrome, firefox, safari, etc.)</summary>
+    [YamlMember(Alias = "fingerprint")]
+    public string Fingerprint { get; set; } = string.Empty;
+
+    /// <summary>ALPN negotiation (e.g. "http/1.1", "h2", "h2,http/1.1")</summary>
+    [YamlMember(Alias = "alpn")]
+    public string Alpn { get; set; } = string.Empty;
 }
 
 public class VlessTransportConfig

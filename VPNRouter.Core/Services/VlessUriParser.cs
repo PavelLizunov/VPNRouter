@@ -83,7 +83,9 @@ public static class VlessUriParser
             {
                 Enabled = true,
                 ServerName = query["sni"] ?? server,
-                Insecure = query["allowInsecure"] == "1"
+                Insecure = query["allowInsecure"] == "1",
+                Fingerprint = query["fp"] ?? "",
+                Alpn = query["alpn"] ?? ""
             };
         }
 

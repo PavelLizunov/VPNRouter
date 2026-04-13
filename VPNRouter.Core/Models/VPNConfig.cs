@@ -237,6 +237,10 @@ public class TlsConfig
     [JsonProperty("utls", NullValueHandling = NullValueHandling.Ignore)]
     public UtlsConfig? Utls { get; set; }
 
+    /// <summary>ALPN negotiation protocols (e.g. ["http/1.1"] or ["h2", "http/1.1"])</summary>
+    [JsonProperty("alpn", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? Alpn { get; set; }
+
     /// <summary>
     /// TLS record fragmentation — splits TLS handshake records into multiple
     /// smaller TLS records. Bypasses DPI that inspects the first TLS record

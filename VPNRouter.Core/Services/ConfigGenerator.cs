@@ -381,14 +381,34 @@ public static class ConfigGenerator
             };
         }
 
-        // Plain TLS fallback
+        // Plain TLS (e.g. VLESS+WS+TLS via CDN)
         var tls = entry.Tls ?? new VlessTlsConfig();
-        return new TlsConfig
+        var tlsConfig = new TlsConfig
         {
             Enabled    = tls.Enabled,
             ServerName = tls.ServerName,
             Insecure   = tls.Insecure
         };
+
+        // uTLS fingerprint (critical for Cloudflare CDN — without it, handshake fails)
+        if (!string.IsNullOrEmpty(tls.Fingerprint))
+        {
+            tlsConfig.Utls = new UtlsConfig
+            {
+                Enabled = true,
+                Fingerprint = tls.Fingerprint
+            };
+        }
+
+        // ALPN (e.g. "http/1.1" for WebSocket, "h2" for gRPC)
+        if (!string.IsNullOrEmpty(tls.Alpn))
+        {
+            tlsConfig.Alpn = tls.Alpn
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+        }
+
+        return tlsConfig;
     }
 
     // ─── Route (sing-box 1.12+ action-based format) ──────────────────────────
