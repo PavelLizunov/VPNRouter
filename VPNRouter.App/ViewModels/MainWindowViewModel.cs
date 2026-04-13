@@ -91,6 +91,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _forceIpv4Only = true;
     [ObservableProperty] private bool _flushDnsOnStart = true;
     [ObservableProperty] private bool _strictDns = false;
+    [ObservableProperty] private bool _blockAds = false;
     [ObservableProperty] private bool _receivePrereleases = false;
 
     [ObservableProperty]
@@ -198,6 +199,10 @@ public partial class MainWindowViewModel : ViewModelBase
     public string ForceIpv4Label => Strings.ForceIpv4Label;
     public string FlushDnsLabel => Strings.FlushDnsLabel;
     public string StrictDnsLabel => Strings.StrictDnsLabel;
+    public string BlockAdsLabel => IsRussian ? "Блокировать рекламу и трекеры" : "Block ads & trackers";
+    public string BlockAdsHint => IsRussian
+        ? "AdGuard DNS + adblock rule_set (~300K доменов)"
+        : "AdGuard DNS + adblock rule_set (~300K domains)";
     public string ReceivePrereleasesLabel => IsRussian ? "Получать prerelease обновления (experimental канал)" : "Receive prereleases (experimental channel)";
     public string UpdateChannelHeader => IsRussian ? "Канал обновлений" : "Update channel";
 
@@ -332,6 +337,7 @@ public partial class MainWindowViewModel : ViewModelBase
         ForceIpv4Only = _settings.App.ForceIpv4Only;
         FlushDnsOnStart = _settings.App.FlushDnsOnStart;
         StrictDns = _settings.App.StrictDns;
+        BlockAds = _settings.App.BlockAds;
 
         // Update channel
         ReceivePrereleases = _settings.Update.IsExperimental;
@@ -572,6 +578,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.App.ForceIpv4Only = ForceIpv4Only;
         _settings.App.FlushDnsOnStart = FlushDnsOnStart;
         _settings.App.StrictDns = StrictDns;
+        _settings.App.BlockAds = BlockAds;
 
         // Update channel
         _settings.Update.Channel = ReceivePrereleases ? "experimental" : "stable";

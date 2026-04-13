@@ -149,6 +149,13 @@ public class AppConfig
     public bool StrictDns { get; set; } = false;
 
     /// <summary>
+    /// Block ads, trackers and malware at DNS + routing level.
+    /// When enabled: VPN DNS switches to AdGuard DNS + adblock rule_set is added.
+    /// </summary>
+    [YamlMember(Alias = "block_ads")]
+    public bool BlockAds { get; set; } = false;
+
+    /// <summary>
     /// When true, flush system DNS cache when VPN starts to prevent
     /// resolved-pre-connect entries from leaking through direct route.
     /// </summary>

@@ -347,8 +347,14 @@ public class RuleSetEntry
     [JsonProperty("format")]
     public string Format { get; set; } = "binary";
 
-    [JsonProperty("path")]
-    public string Path { get; set; } = string.Empty;
+    [JsonProperty("path", NullValueHandling = NullValueHandling.Ignore)]
+    public string? Path { get; set; }
+
+    [JsonProperty("url", NullValueHandling = NullValueHandling.Ignore)]
+    public string? Url { get; set; }
+
+    [JsonProperty("download_detour", NullValueHandling = NullValueHandling.Ignore)]
+    public string? DownloadDetour { get; set; }
 }
 
 /// <summary>sing-box 1.12+ route rule — uses action-based format</summary>

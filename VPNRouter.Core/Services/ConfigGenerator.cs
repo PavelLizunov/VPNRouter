@@ -53,7 +53,49 @@ public static class ConfigGenerator
             ApplyGeoBypass(config);
         }
 
+        // Ad blocking — remote rule_set + DNS reject rule.
+        // AdGuard DNS is already set as VPN DNS above when BlockAds=true.
+        // This adds a second layer: sing-box-level domain blocking via rule_set.
+        if (settings.App.BlockAds)
+        {
+            ApplyAdBlock(config);
+        }
+
         return config;
+    }
+
+    // ─── Ad blocking ──────────────────────────────────────────────────────────
+
+    private const string AdBlockRuleSetTag = "vpnrouter-adblock";
+    private const string AdBlockRuleSetUrl =
+        "https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs";
+
+    private static void ApplyAdBlock(SingBoxConfig config)
+    {
+        // 1. Remote rule_set — downloaded and cached by sing-box
+        config.Route.RuleSet ??= new List<RuleSetEntry>();
+        config.Route.RuleSet.Add(new RuleSetEntry
+        {
+            Type = "remote",
+            Tag = AdBlockRuleSetTag,
+            Format = "binary",
+            Url = AdBlockRuleSetUrl,
+            DownloadDetour = "direct"
+        });
+
+        // 2. DNS rule — reject DNS queries for ad domains (before other rules)
+        config.Dns.Rules.Insert(0, new DnsRule
+        {
+            RuleSet = new List<string> { AdBlockRuleSetTag },
+            Action = "reject"
+        });
+
+        // 3. Route rule — reject connections to ad domains (before other rules)
+        config.Route.Rules.Insert(0, new RouteRule
+        {
+            RuleSet = new List<string> { AdBlockRuleSetTag },
+            Action = "reject"
+        });
     }
 
     // ─── Russian geo bypass ───────────────────────────────────────────────────
@@ -152,15 +194,16 @@ public static class ConfigGenerator
             Final = (isFullTunnel || settings.App.StrictDns) ? "vpn-dns" : "local-dns",
             Servers = new List<DnsServer>
             {
-                // Remote DoH server routed through VPN proxy
-                // sing-box 1.12+: type=https uses server/server_port/path instead of address URL
+                // Remote DoH server routed through VPN proxy.
+                // When BlockAds is on, use AdGuard DNS (blocks ads + trackers + malware).
+                // Otherwise use user-configured VPN DNS.
                 new()
                 {
                     Tag        = "vpn-dns",
                     Type       = "https",
-                    Server     = ParseDohHost(settings.Dns.VpnDns),
-                    ServerPort = ParseDohPort(settings.Dns.VpnDns),
-                    Path       = ParseDohPath(settings.Dns.VpnDns),
+                    Server     = settings.App.BlockAds ? "dns.adguard-dns.com" : ParseDohHost(settings.Dns.VpnDns),
+                    ServerPort = settings.App.BlockAds ? 443 : ParseDohPort(settings.Dns.VpnDns),
+                    Path       = settings.App.BlockAds ? "/dns-query" : ParseDohPath(settings.Dns.VpnDns),
                     Detour     = "proxy"
                 },
                 // Local DNS — Cloudflare DoH via dns-direct outbound (real NIC).
