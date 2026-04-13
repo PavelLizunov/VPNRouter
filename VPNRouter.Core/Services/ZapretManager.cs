@@ -68,25 +68,41 @@ public class ZapretManager : IDisposable
                 $"--dpi-desync-split-pos=1 " +
                 $"--dpi-desync-fake-tls=0x00000000000000000000",
 
-            // Flowseal-based strategies (Discord/YouTube/general)
+            // Flowseal-based strategies with full filter files (Discord media, STUN, QUIC)
             "discord+youtube" =>
                 "--wf-tcp=80,443 " +
+                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.discord_media.txt")}\" " +
+                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.stun.txt")}\" " +
+                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.quic_initial_ietf.txt")}\" " +
                 "--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new " +
                 "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig --new " +
-                "--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11",
+                $"--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=\"{Path.Combine(zapretDir, "files", "quic_initial_www_google_com.bin")}\" --new " +
+                "--filter-l7=stun,discord --dpi-desync=fake --dpi-desync-repeats=2",
 
             "discord+youtube (aggressive)" =>
                 "--wf-tcp=80,443 " +
+                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.discord_media.txt")}\" " +
+                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.stun.txt")}\" " +
+                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.quic_initial_ietf.txt")}\" " +
                 "--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new " +
-                "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid --new " +
-                "--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11",
+                $"--filter-tcp=443 --hostlist=\"{Path.Combine(zapretDir, "files", "list-youtube.txt")}\" --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --new " +
+                "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig --new " +
+                $"--filter-l7=quic --hostlist=\"{Path.Combine(zapretDir, "files", "list-youtube.txt")}\" --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=\"{Path.Combine(zapretDir, "files", "quic_initial_www_google_com.bin")}\" --new " +
+                "--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11 --new " +
+                "--filter-l7=stun,discord --dpi-desync=fake --dpi-desync-repeats=2",
 
             "all services" =>
                 "--wf-tcp=80,443 " +
+                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.discord_media.txt")}\" " +
+                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.stun.txt")}\" " +
+                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.quic_initial_ietf.txt")}\" " +
+                $"--wf-raw-part=@\"{Path.Combine(zapretDir, "windivert.filter", "windivert_part.wireguard.txt")}\" " +
                 "--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new " +
-                "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld " +
-                "--dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid --new " +
-                "--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11",
+                $"--filter-tcp=443 --hostlist=\"{Path.Combine(zapretDir, "files", "list-youtube.txt")}\" --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --new " +
+                "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig --new " +
+                $"--filter-l7=quic --hostlist=\"{Path.Combine(zapretDir, "files", "list-youtube.txt")}\" --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=\"{Path.Combine(zapretDir, "files", "quic_initial_www_google_com.bin")}\" --new " +
+                "--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11 --new " +
+                "--filter-l7=stun,discord --dpi-desync=fake --dpi-desync-repeats=2",
 
             "custom" => customArgs ?? "",
 
