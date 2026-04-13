@@ -95,7 +95,9 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _flushDnsOnStart = true;
     [ObservableProperty] private bool _strictDns = false;
     [ObservableProperty] private bool _blockAds = false;
-    [ObservableProperty] private bool _zapretEnabled = false;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblDpiToggle))]
+    private bool _zapretEnabled = false;
     [ObservableProperty] private int _zapretStrategyIndex = 0;
     [ObservableProperty] private string _zapretCustomArgs = string.Empty;
     [ObservableProperty] private string _zapretStatus = "Stopped";
@@ -220,6 +222,22 @@ public partial class MainWindowViewModel : ViewModelBase
     public string BlockAdsHint => IsRussian
         ? "AdGuard DNS + adblock rule_set (~300K доменов)"
         : "AdGuard DNS + adblock rule_set (~300K domains)";
+
+    // DPI Bypass labels
+    public string LblDpiBypassTab => IsRussian ? "Обход DPI" : "DPI Bypass";
+    public string LblDpiDescription => IsRussian
+        ? "Обход DPI фрагментирует TLS handshake пакеты, чтобы провайдер/ТСПУ не мог обнаружить и заблокировать VPN-соединение. Используйте когда сервер заблокирован по DPI (не по IP). Также работает без VPN — открывает доступ к заблокированным сайтам напрямую."
+        : "DPI Bypass fragments TLS handshake packets to prevent ISP/TSPU from detecting and blocking VPN connections. Use when your VPN server is blocked by DPI (not by IP). Also works without VPN — unblocks sites directly.";
+    public string LblDpiStrategy => IsRussian ? "Стратегия" : "Strategy";
+    public string LblDpiStrategies => IsRussian
+        ? "• multisplit — разбивает ClientHello на фрагменты (безопасно)\n• fake+multisplit — фейк пакет + фрагменты (сильнее)\n• fake+disorder — фейк + перемешанные сегменты (максимум)\n• custom — свои аргументы winws.exe"
+        : "• multisplit — splits ClientHello into fragments (safest)\n• fake+multisplit — fake packet + fragments (stronger)\n• fake+disorder — fake + out-of-order segments (strongest)\n• custom — your own winws.exe arguments";
+    public string LblDpiWarning => IsRussian
+        ? "⚠ Обход DPI помогает только когда сервер заблокирован по TLS, НЕ когда заблокирован сам IP. Только Windows. Запускайте ДО подключения VPN."
+        : "⚠ DPI bypass helps only when server is blocked by TLS detection, NOT when IP itself is blocked. Windows only. Start BEFORE connecting VPN.";
+    public string LblDpiToggle => IsRussian
+        ? (ZapretEnabled ? "Остановить обход DPI" : "Запустить обход DPI")
+        : (ZapretEnabled ? "Stop DPI Bypass" : "Start DPI Bypass");
     public string ReceivePrereleasesLabel => IsRussian ? "Получать prerelease обновления (experimental канал)" : "Receive prereleases (experimental channel)";
     public string UpdateChannelHeader => IsRussian ? "Канал обновлений" : "Update channel";
 

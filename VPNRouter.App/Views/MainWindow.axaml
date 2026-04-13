@@ -118,7 +118,7 @@
                 <ListBoxItem Content="{Binding LblTabSubscribe}" Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
                 <ListBoxItem Content="{Binding LblTabNetwork}"   Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
                 <ListBoxItem Content="{Binding LblTabApps}"      Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
-                <ListBoxItem Content="DPI Bypass"                Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblDpiBypassTab}" Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
             </ListBox>
 
             <!-- Pages: all five live in same Grid cell, only selected one visible. -->
