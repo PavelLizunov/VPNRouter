@@ -132,12 +132,13 @@ public class ZapretManager : IDisposable
             Arguments = args,
             WorkingDirectory = zapretDir,
             UseShellExecute = false,
-            CreateNoWindow = true,
+            // Cygwin apps (winws.exe) need a console to initialize properly.
+            // CreateNoWindow=false creates a hidden console window.
+            CreateNoWindow = false,
             RedirectStandardOutput = true,
-            RedirectStandardError = true
+            RedirectStandardError = true,
+            WindowStyle = ProcessWindowStyle.Hidden
         };
-        // Suppress WER (Windows Error Reporting) dialog for child process
-        psi.Environment["__COMPAT_LAYER"] = "RUNASINVOKER";
 
         _process = Process.Start(psi);
         if (_process == null)
