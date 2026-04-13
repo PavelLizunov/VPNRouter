@@ -188,6 +188,17 @@ if (Test-Path $SingBoxPath) {
     Write-Host "       WARNING: sing-box.exe not found at $SingBoxPath" -ForegroundColor Red
 }
 
+# ── Bundle zapret (DPI bypass, Windows-only) ──
+$ZapretSrc = Join-Path $Root "tools\zapret"
+$ZapretDst = Join-Path $DistDir "zapret"
+if (Test-Path $ZapretSrc) {
+    New-Item -ItemType Directory -Force -Path $ZapretDst | Out-Null
+    Copy-Item "$ZapretSrc\*" $ZapretDst -Recurse
+    Write-Host "       Zapret bundled ($(Get-ChildItem $ZapretDst -File | Measure-Object Length -Sum | ForEach-Object { [math]::Round($_.Sum/1KB) }) KB)" -ForegroundColor Gray
+} else {
+    Write-Host "       WARNING: zapret not found at $ZapretSrc" -ForegroundColor Yellow
+}
+
 # ── Bundle profiles ──
 $ProfilesSrc = Join-Path $Root "profiles"
 $ProfilesDst = Join-Path $DistDir "profiles"

@@ -155,6 +155,18 @@ public class AppConfig
     [YamlMember(Alias = "block_ads")]
     public bool BlockAds { get; set; } = false;
 
+    /// <summary>DPI bypass via zapret (winws.exe). Windows-only.</summary>
+    [YamlMember(Alias = "zapret_enabled")]
+    public bool ZapretEnabled { get; set; } = false;
+
+    /// <summary>Zapret strategy: "multisplit", "fake+multisplit", "fake+disorder", "custom"</summary>
+    [YamlMember(Alias = "zapret_strategy")]
+    public string ZapretStrategy { get; set; } = "multisplit";
+
+    /// <summary>Custom zapret arguments (used when ZapretStrategy="custom")</summary>
+    [YamlMember(Alias = "zapret_custom_args")]
+    public string ZapretCustomArgs { get; set; } = string.Empty;
+
     /// <summary>
     /// When true, flush system DNS cache when VPN starts to prevent
     /// resolved-pre-connect entries from leaking through direct route.

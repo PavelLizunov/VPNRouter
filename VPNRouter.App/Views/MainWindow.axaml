@@ -118,14 +118,16 @@
                 <ListBoxItem Content="{Binding LblTabSubscribe}" Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
                 <ListBoxItem Content="{Binding LblTabNetwork}"   Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
                 <ListBoxItem Content="{Binding LblTabApps}"      Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
+                <ListBoxItem Content="DPI Bypass"                Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
             </ListBox>
 
-            <!-- Pages: all four live in same Grid cell, only selected one visible. -->
+            <!-- Pages: all five live in same Grid cell, only selected one visible. -->
             <Grid Grid.Row="1">
                 <pages:ServersPage      IsVisible="{Binding IsServersTabSelected}"/>
                 <pages:SubscribePage    IsVisible="{Binding IsSubscribeTabSelected}"/>
                 <pages:NetworkPage      IsVisible="{Binding IsNetworkTabSelected}"/>
                 <pages:ApplicationsPage IsVisible="{Binding IsAppsTabSelected}"/>
+                <pages:DpiBypassPage    IsVisible="{Binding IsDpiBypassTabSelected}"/>
             </Grid>
         </Grid>
 

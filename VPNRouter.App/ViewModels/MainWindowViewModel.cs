@@ -22,6 +22,9 @@ namespace VPNRouter.App.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly VpnEngine _engine;
+#if PLATFORM_WINDOWS
+    private ZapretManager? _zapret;
+#endif
     private readonly ILogger _logger;
     private AppSettings _settings;
     private bool _isLoadingUI;
@@ -92,6 +95,18 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _flushDnsOnStart = true;
     [ObservableProperty] private bool _strictDns = false;
     [ObservableProperty] private bool _blockAds = false;
+    [ObservableProperty] private bool _zapretEnabled = false;
+    [ObservableProperty] private int _zapretStrategyIndex = 0;
+    [ObservableProperty] private string _zapretCustomArgs = string.Empty;
+    [ObservableProperty] private string _zapretStatus = "Stopped";
+
+    public string[] ZapretStrategies => new[]
+    {
+        "multisplit",
+        "fake+multisplit",
+        "fake+disorder",
+        "custom"
+    };
     [ObservableProperty] private bool _receivePrereleases = false;
 
     [ObservableProperty]
@@ -99,12 +114,14 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsSubscribeTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsNetworkTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsAppsTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsDpiBypassTabSelected))]
     private int _selectedTabIndex;
 
     public bool IsServersTabSelected => SelectedTabIndex == 0;
     public bool IsSubscribeTabSelected => SelectedTabIndex == 1;
     public bool IsNetworkTabSelected => SelectedTabIndex == 2;
     public bool IsAppsTabSelected => SelectedTabIndex == 3;
+    public bool IsDpiBypassTabSelected => SelectedTabIndex == 4;
 
     [ObservableProperty] private AppGroupViewModel? _selectedAppGroup;
 
@@ -338,6 +355,10 @@ public partial class MainWindowViewModel : ViewModelBase
         FlushDnsOnStart = _settings.App.FlushDnsOnStart;
         StrictDns = _settings.App.StrictDns;
         BlockAds = _settings.App.BlockAds;
+        ZapretEnabled = _settings.App.ZapretEnabled;
+        ZapretStrategyIndex = Array.IndexOf(ZapretStrategies, _settings.App.ZapretStrategy);
+        if (ZapretStrategyIndex < 0) ZapretStrategyIndex = 0;
+        ZapretCustomArgs = _settings.App.ZapretCustomArgs;
 
         // Update channel
         ReceivePrereleases = _settings.Update.IsExperimental;
@@ -579,6 +600,10 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.App.FlushDnsOnStart = FlushDnsOnStart;
         _settings.App.StrictDns = StrictDns;
         _settings.App.BlockAds = BlockAds;
+        _settings.App.ZapretEnabled = ZapretEnabled;
+        _settings.App.ZapretStrategy = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Length
+            ? ZapretStrategies[ZapretStrategyIndex] : "multisplit";
+        _settings.App.ZapretCustomArgs = ZapretCustomArgs;
 
         // Update channel
         _settings.Update.Channel = ReceivePrereleases ? "experimental" : "stable";
@@ -839,6 +864,38 @@ public partial class MainWindowViewModel : ViewModelBase
             _logger.Error(ex, "[VM] Subscription sync failed");
             StatusText = Strings.SyncFailed(ex.Message);
         }
+    }
+
+    [RelayCommand]
+    private void ToggleZapret()
+    {
+#if PLATFORM_WINDOWS
+        if (_zapret?.IsRunning == true)
+        {
+            _zapret.Stop();
+            ZapretEnabled = false;
+            ZapretStatus = "Stopped";
+            SaveSettings();
+            return;
+        }
+
+        try
+        {
+            _zapret ??= new ZapretManager(_logger);
+            var strategy = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Length
+                ? ZapretStrategies[ZapretStrategyIndex] : "multisplit";
+            _zapret.Start(strategy, ZapretCustomArgs);
+            ZapretEnabled = true;
+            ZapretStatus = $"Running (PID {_zapret.Pid})";
+            SaveSettings();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] Zapret start failed");
+            ZapretStatus = $"Error: {ex.Message}";
+            ZapretEnabled = false;
+        }
+#endif
     }
 
     [RelayCommand]
