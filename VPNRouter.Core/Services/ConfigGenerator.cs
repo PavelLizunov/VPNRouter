@@ -336,14 +336,25 @@ public static class ConfigGenerator
             Tls        = BuildTlsConfig(entry),
             Transport  = transportType.Equals("tcp", StringComparison.OrdinalIgnoreCase)
                 ? null
-                : new TransportConfig
-                {
-                    Type        = transportType,
-                    Path        = transportType.Equals("grpc", StringComparison.OrdinalIgnoreCase) ? null : transport.Path,
-                    ServiceName = transportType.Equals("grpc", StringComparison.OrdinalIgnoreCase) ? transport.Path : null,
-                    Headers     = transport.Headers?.Count > 0 ? transport.Headers : null
-                },
+                : BuildTransportConfig(transportType, transport),
             DomainResolver = "local-dns"
+        };
+    }
+
+    // ─── Transport ────────────────────────────────────────────────────────────
+
+    private static TransportConfig BuildTransportConfig(string type, VlessTransportConfig source)
+    {
+        var isGrpc = type.Equals("grpc", StringComparison.OrdinalIgnoreCase);
+
+        return new TransportConfig
+        {
+            Type        = type,
+            // gRPC: service_name (no path, no headers)
+            // WS: path + headers
+            Path        = isGrpc ? null : source.Path,
+            ServiceName = isGrpc ? source.Path : null,
+            Headers     = isGrpc ? null : (source.Headers?.Count > 0 ? source.Headers : null)
         };
     }
 
