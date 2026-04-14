@@ -1228,6 +1228,11 @@ public partial class MainWindowViewModel : ViewModelBase
             TgProxyStatus = IsRussian ? "Остановлен" : "Stopped";
             TgProxyStats = "";
             SaveSettings();
+
+            // Open tg:// link — Telegram will show "Disable proxy?" dialog
+            if (!string.IsNullOrEmpty(TgProxySecret))
+                TgProxyManager.OpenInTelegram("127.0.0.1", TgProxyPort, TgProxySecret);
+
             return;
         }
 
@@ -1248,15 +1253,10 @@ public partial class MainWindowViewModel : ViewModelBase
             }
 
             _tgProxy ??= new TgProxyManager(_logger);
-
-            // Subscribe to stats updates
-            _tgProxy.StatsUpdated += stats =>
-                Dispatcher.UIThread.Post(() => TgProxyStats = ParseStatsShort(stats));
-
             _tgProxy.Start(TgProxyPort, TgProxySecret);
 
             // Verify it actually started
-            await Task.Delay(1000);
+            await Task.Delay(2000);
             if (_tgProxy.IsRunning || TgProxyManager.IsAnyRunning())
             {
                 TgProxyEnabled = true;
@@ -1264,6 +1264,9 @@ public partial class MainWindowViewModel : ViewModelBase
                 TgProxyStatus = IsRussian
                     ? $"Работает (PID {_tgProxy.Pid})"
                     : $"Running (PID {_tgProxy.Pid})";
+
+                // Open tg:// link — Telegram will show "Enable proxy?" dialog
+                TgProxyManager.OpenInTelegram("127.0.0.1", TgProxyPort, TgProxySecret);
             }
             else
             {
@@ -1320,29 +1323,7 @@ public partial class MainWindowViewModel : ViewModelBase
         catch { }
     }
 
-    /// <summary>Parse stats line into short summary for UI display.</summary>
-    private static string ParseStatsShort(string statsLine)
-    {
-        // Input: "stats: total=10 active=2 ws=8 tcp_fb=1 cf=0 bad=1 ..."
-        var parts = new Dictionary<string, string>();
-        foreach (System.Text.RegularExpressions.Match m in
-            System.Text.RegularExpressions.Regex.Matches(statsLine, @"(\w+)=(\S+)"))
-        {
-            parts[m.Groups[1].Value] = m.Groups[2].Value;
-        }
-
-        parts.TryGetValue("active", out var active);
-        parts.TryGetValue("total", out var total);
-        parts.TryGetValue("up", out var up);
-        parts.TryGetValue("down", out var down);
-
-        var sb = new System.Text.StringBuilder();
-        if (active != null) sb.Append($"Active: {active}");
-        if (total != null) sb.Append($" | Total: {total}");
-        if (up != null) sb.Append($" | \u2191{up}");
-        if (down != null) sb.Append($" \u2193{down}");
-        return sb.ToString();
-    }
+    // Stats parsing removed — stdout not redirected (PyInstaller + UseShellExecute=true).
 
     [RelayCommand]
     private void ClearSubscription()
