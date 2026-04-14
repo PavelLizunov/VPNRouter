@@ -104,12 +104,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public string[] ZapretStrategies => new[]
     {
+        "general",
+        "general (ALT)",
+        "general (ALT2)",
+        "general (ALT3)",
         "multisplit",
         "fake+multisplit",
-        "fake+disorder",
-        "discord+youtube",
-        "discord+youtube (aggressive)",
-        "all services",
         "custom"
     };
     [ObservableProperty] private bool _receivePrereleases = false;
@@ -229,12 +229,12 @@ public partial class MainWindowViewModel : ViewModelBase
     // DPI Bypass labels
     public string LblDpiBypassTab => IsRussian ? "Обход DPI" : "DPI Bypass";
     public string LblDpiDescription => IsRussian
-        ? "Обход DPI фрагментирует TLS handshake пакеты, чтобы провайдер/ТСПУ не мог обнаружить и заблокировать VPN-соединение. Используйте когда сервер заблокирован по DPI (не по IP). Также работает без VPN — открывает доступ к заблокированным сайтам напрямую."
-        : "DPI Bypass fragments TLS handshake packets to prevent ISP/TSPU from detecting and blocking VPN connections. Use when your VPN server is blocked by DPI (not by IP). Also works without VPN — unblocks sites directly.";
+        ? "Обход DPI (zapret) — обходит блокировки провайдера/ТСПУ. Обрабатывает TCP (TLS, HTTP) и UDP (QUIC, Discord voice/STUN). Если стратегия не работает — пробуйте другие варианты (ALT/ALT2/ALT3), блокировки отличаются между провайдерами."
+        : "DPI Bypass (zapret) — bypasses ISP/TSPU blocking. Handles TCP (TLS, HTTP) and UDP (QUIC, Discord voice/STUN). If a strategy doesn't work — try alternatives (ALT/ALT2/ALT3), blocking methods differ between ISPs.";
     public string LblDpiStrategy => IsRussian ? "Стратегия" : "Strategy";
     public string LblDpiStrategies => IsRussian
-        ? "Базовые (для VPN серверов):\n• multisplit — фрагменты (безопасно)\n• fake+multisplit — фейк + фрагменты\n• fake+disorder — фейк + перемешка\n\nДля сервисов (без VPN):\n• discord+youtube — Discord + YouTube\n• discord+youtube (aggressive) — усиленный\n• all services — всё вместе\n• custom — свои аргументы"
-        : "Basic (for VPN servers):\n• multisplit — fragments (safest)\n• fake+multisplit — fake + fragments\n• fake+disorder — fake + reorder\n\nFor services (without VPN):\n• discord+youtube — Discord + YouTube\n• discord+youtube (aggressive) — stronger\n• all services — everything combined\n• custom — your own arguments";
+        ? "Discord + YouTube + сервисы:\n• general — базовая (fake+fakedsplit, ts)\n• general (ALT) — МГТС/Ростелеком (multisplit+seqovl)\n• general (ALT2) — усиленная (fake+multisplit, x8 повторов)\n• general (ALT3) — агрессивная (multidisorder, md5sig)\n\nДля VPN серверов:\n• multisplit — фрагменты (безопасно)\n• fake+multisplit — фейк + фрагменты\n• custom — свои аргументы"
+        : "Discord + YouTube + services:\n• general — baseline (fake+fakedsplit, ts)\n• general (ALT) — MGTS/Rostelecom (multisplit+seqovl)\n• general (ALT2) — stronger (fake+multisplit, x8 repeats)\n• general (ALT3) — aggressive (multidisorder, md5sig)\n\nFor VPN servers:\n• multisplit — fragments (safest)\n• fake+multisplit — fake + fragments\n• custom — your own arguments";
     public string LblDpiWarning => IsRussian
         ? "⚠ Обход DPI помогает только когда сервер заблокирован по TLS, НЕ когда заблокирован сам IP. Только Windows. Запускайте ДО подключения VPN."
         : "⚠ DPI bypass helps only when server is blocked by TLS detection, NOT when IP itself is blocked. Windows only. Start BEFORE connecting VPN.";

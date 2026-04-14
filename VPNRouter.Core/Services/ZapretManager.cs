@@ -51,7 +51,7 @@ public class ZapretManager : IDisposable
 
         var args = strategy switch
         {
-            // Basic strategies
+            // === Basic strategies (TCP only, for simple DPI) ===
             "multisplit" =>
                 $"--wf-tcp={targetPort},8443 --wf-l3=ipv4 " +
                 $"--dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2",
@@ -62,47 +62,108 @@ public class ZapretManager : IDisposable
                 $"--dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2 " +
                 $"--dpi-desync-fake-tls=0x00000000000000000000",
 
-            "fake+disorder" =>
-                $"--wf-tcp={targetPort},8443 --wf-l3=ipv4 " +
-                $"--dpi-desync=fake,disorder2 --dpi-desync-ttl=2 " +
-                $"--dpi-desync-split-pos=1 " +
-                $"--dpi-desync-fake-tls=0x00000000000000000000",
+            // === Flowseal-based strategies (TCP + UDP, Discord + YouTube) ===
+            // All use relative paths (WorkingDirectory=zapretDir)
 
-            // Flowseal-based strategies — use relative paths (WorkingDirectory=zapretDir)
-            "discord+youtube" =>
-                "--wf-tcp=80,443 " +
-                @"--wf-raw-part=@""windivert.filter\windivert_part.discord_media.txt"" " +
-                @"--wf-raw-part=@""windivert.filter\windivert_part.stun.txt"" " +
-                @"--wf-raw-part=@""windivert.filter\windivert_part.quic_initial_ietf.txt"" " +
-                "--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new " +
-                "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig --new " +
-                @"--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
-                "--filter-l7=stun,discord --dpi-desync=fake --dpi-desync-repeats=2",
+            // General — baseline Flowseal strategy (fake,fakedsplit + ts fooling)
+            "general" =>
+                "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
+                "--wf-udp=443,19294-19344,50000-50100 " +
+                // QUIC on UDP 443
+                @"--filter-udp=443 --hostlist=""files\list-general.txt"" " +
+                @"--dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
+                // Discord voice (STUN/RTC) on UDP 19294-19344, 50000-50100
+                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
+                "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
+                // Discord CDN on TCP 2053,2083,2087,2096,8443
+                "--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media " +
+                @"--dpi-desync=fake,fakedsplit --dpi-desync-repeats=6 --dpi-desync-fooling=ts --dpi-desync-fakedsplit-pattern=0x00 --dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" --new " +
+                // Google/YouTube on TCP 443
+                @"--filter-tcp=443 --hostlist=""files\list-google.txt"" --ip-id=zero " +
+                @"--dpi-desync=fake,fakedsplit --dpi-desync-repeats=6 --dpi-desync-fooling=ts --dpi-desync-fakedsplit-pattern=0x00 --dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" --new " +
+                // General (Discord, Cloudflare, etc.) on TCP 80,443
+                @"--filter-tcp=80,443 --hostlist=""files\list-general.txt"" " +
+                @"--dpi-desync=fake,fakedsplit --dpi-desync-repeats=6 --dpi-desync-fooling=ts --dpi-desync-fakedsplit-pattern=0x00 " +
+                @"--dpi-desync-fake-tls=""files\stun.bin"" --dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" " +
+                @"--dpi-desync-fake-http=""files\tls_clienthello_max_ru.bin""",
 
-            "discord+youtube (aggressive)" =>
-                "--wf-tcp=80,443 " +
-                @"--wf-raw-part=@""windivert.filter\windivert_part.discord_media.txt"" " +
-                @"--wf-raw-part=@""windivert.filter\windivert_part.stun.txt"" " +
-                @"--wf-raw-part=@""windivert.filter\windivert_part.quic_initial_ietf.txt"" " +
-                "--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new " +
-                @"--filter-tcp=443 --hostlist=""files\list-youtube.txt"" --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --new " +
-                "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig --new " +
-                @"--filter-l7=quic --hostlist=""files\list-youtube.txt"" --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
-                "--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11 --new " +
-                "--filter-l7=stun,discord --dpi-desync=fake --dpi-desync-repeats=2",
+            // General ALT — multisplit with seqovl (for МГТС and similar DPI)
+            "general (ALT)" =>
+                "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
+                "--wf-udp=443,19294-19344,50000-50100 " +
+                // QUIC on UDP 443
+                @"--filter-udp=443 --hostlist=""files\list-general.txt"" " +
+                @"--dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
+                // Discord voice
+                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
+                "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
+                // Discord CDN — multisplit with seqovl pattern
+                "--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media " +
+                @"--dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 " +
+                @"--dpi-desync-split-seqovl-pattern=""files\tls_clienthello_www_google_com.bin"" --new " +
+                // Google/YouTube
+                @"--filter-tcp=443 --hostlist=""files\list-google.txt"" --ip-id=zero " +
+                @"--dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 " +
+                @"--dpi-desync-split-seqovl-pattern=""files\tls_clienthello_www_google_com.bin"" --new " +
+                // General
+                @"--filter-tcp=80,443 --hostlist=""files\list-general.txt"" " +
+                @"--dpi-desync=multisplit --dpi-desync-split-seqovl=664 --dpi-desync-split-pos=1 " +
+                @"--dpi-desync-split-seqovl-pattern=""files\tls_clienthello_max_ru.bin""",
 
-            "all services" =>
-                "--wf-tcp=80,443 " +
-                @"--wf-raw-part=@""windivert.filter\windivert_part.discord_media.txt"" " +
-                @"--wf-raw-part=@""windivert.filter\windivert_part.stun.txt"" " +
-                @"--wf-raw-part=@""windivert.filter\windivert_part.quic_initial_ietf.txt"" " +
-                @"--wf-raw-part=@""windivert.filter\windivert_part.wireguard.txt"" " +
-                "--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new " +
-                @"--filter-tcp=443 --hostlist=""files\list-youtube.txt"" --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --new " +
-                "--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig --new " +
-                @"--filter-l7=quic --hostlist=""files\list-youtube.txt"" --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
-                "--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11 --new " +
-                "--filter-l7=stun,discord --dpi-desync=fake --dpi-desync-repeats=2",
+            // General ALT2 — fake,multisplit with seqovl + ts fooling + higher repeats
+            "general (ALT2)" =>
+                "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
+                "--wf-udp=443,19294-19344,50000-50100 " +
+                // QUIC on UDP 443 — higher repeats
+                @"--filter-udp=443 --hostlist=""files\list-general.txt"" " +
+                @"--dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
+                // Discord voice
+                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
+                "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
+                // Discord CDN — fake+multisplit with seqovl + ts fooling
+                "--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media " +
+                @"--dpi-desync=fake,multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 " +
+                @"--dpi-desync-fooling=ts --dpi-desync-repeats=8 " +
+                @"--dpi-desync-split-seqovl-pattern=""files\tls_clienthello_www_google_com.bin"" " +
+                @"--dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" --new " +
+                // Google/YouTube
+                @"--filter-tcp=443 --hostlist=""files\list-google.txt"" --ip-id=zero " +
+                @"--dpi-desync=fake,multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 " +
+                @"--dpi-desync-fooling=ts --dpi-desync-repeats=8 " +
+                @"--dpi-desync-split-seqovl-pattern=""files\tls_clienthello_www_google_com.bin"" " +
+                @"--dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" --new " +
+                // General
+                @"--filter-tcp=80,443 --hostlist=""files\list-general.txt"" " +
+                @"--dpi-desync=fake,multisplit --dpi-desync-split-seqovl=664 --dpi-desync-split-pos=1 " +
+                @"--dpi-desync-fooling=ts --dpi-desync-repeats=8 " +
+                @"--dpi-desync-split-seqovl-pattern=""files\tls_clienthello_max_ru.bin"" " +
+                @"--dpi-desync-fake-tls=""files\stun.bin"" --dpi-desync-fake-tls=""files\tls_clienthello_max_ru.bin"" " +
+                @"--dpi-desync-fake-http=""files\tls_clienthello_max_ru.bin""",
+
+            // General ALT3 — aggressive: fake,multidisorder + md5sig + high repeats
+            "general (ALT3)" =>
+                "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
+                "--wf-udp=443,19294-19344,50000-50100 " +
+                // QUIC
+                @"--filter-udp=443 --hostlist=""files\list-general.txt"" " +
+                @"--dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
+                // Discord voice — higher repeats
+                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
+                "--dpi-desync=fake --dpi-desync-repeats=11 --new " +
+                // Discord CDN — multidisorder + md5sig
+                "--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media " +
+                @"--dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 " +
+                "--dpi-desync-fooling=md5sig " +
+                @"--dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" --new " +
+                // Google/YouTube — aggressive
+                @"--filter-tcp=443 --hostlist=""files\list-google.txt"" " +
+                @"--dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 " +
+                "--dpi-desync-fooling=md5sig " +
+                @"--dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" --new " +
+                // General — aggressive
+                @"--filter-tcp=80,443 --hostlist=""files\list-general.txt"" " +
+                @"--dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 " +
+                "--dpi-desync-fooling=badseq,md5sig",
 
             "custom" => customArgs ?? "",
 
@@ -114,14 +175,27 @@ public class ZapretManager : IDisposable
         _logger.Information("[Zapret] Args: {Args}", args);
 
         // Verify critical files exist for Flowseal strategies
-        if (strategy.Contains("discord") || strategy.Contains("all"))
+        if (strategy.StartsWith("general"))
         {
-            var filterDir = Path.Combine(zapretDir, "windivert.filter");
             var filesDir = Path.Combine(zapretDir, "files");
-            if (!Directory.Exists(filterDir))
-                _logger.Warning("[Zapret] Filter dir missing: {Dir}", filterDir);
             if (!Directory.Exists(filesDir))
                 _logger.Warning("[Zapret] Files dir missing: {Dir}", filesDir);
+            else
+            {
+                var requiredFiles = new[]
+                {
+                    "list-general.txt", "list-google.txt",
+                    "quic_initial_www_google_com.bin",
+                    "tls_clienthello_www_google_com.bin",
+                    "tls_clienthello_max_ru.bin", "stun.bin"
+                };
+                foreach (var f in requiredFiles)
+                {
+                    var path = Path.Combine(filesDir, f);
+                    if (!File.Exists(path))
+                        _logger.Warning("[Zapret] Required file missing: {File}", path);
+                }
+            }
         }
 
         // Set error mode to suppress system error dialogs (missing DLL, etc.)
