@@ -67,11 +67,12 @@ public class TgProxyUpdater
             await DownloadPythonAsync(ct);
         }
 
-        // Step 2: cryptography wheel (one-time, ~3 MB)
+        // Step 2: Python dependencies — cryptography + cffi + pycparser (one-time)
         var cryptoMarker = Path.Combine(PythonDir, "Lib", "cryptography", "__init__.py");
-        if (!File.Exists(cryptoMarker))
+        var cffiMarker = Path.Combine(PythonDir, "Lib", "cffi", "__init__.py");
+        if (!File.Exists(cryptoMarker) || !File.Exists(cffiMarker))
         {
-            await DownloadCryptographyAsync(ct);
+            await DownloadDependenciesAsync(ct);
         }
 
         // Step 3: Proxy source from GitHub (updated each time)
@@ -132,71 +133,82 @@ public class TgProxyUpdater
         }
     }
 
-    /// <summary>Download cryptography wheel from PyPI and extract to Lib/.</summary>
-    private async Task DownloadCryptographyAsync(CancellationToken ct)
+    /// <summary>Download Python wheels from PyPI and extract to Lib/.</summary>
+    private async Task DownloadDependenciesAsync(CancellationToken ct)
     {
-        StatusChanged?.Invoke("Downloading cryptography...");
-
-        // Query PyPI for the wheel URL
-        var pypiUrl = "https://pypi.org/pypi/cryptography/json";
-
-        // Use a separate HttpClient without GitHub Accept header
         using var pypiHttp = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
         pypiHttp.DefaultRequestHeaders.Add("User-Agent", "VPNRouter");
 
-        var resp = await pypiHttp.GetStringAsync(pypiUrl, ct);
-        using var doc = JsonDocument.Parse(resp);
-        var root = doc.RootElement;
+        var libDir = Path.Combine(PythonDir, "Lib");
+        Directory.CreateDirectory(libDir);
 
-        // Find cp39-abi3-win_amd64 wheel (compatible with Python 3.9+)
-        string? wheelUrl = null;
-        foreach (var urlEntry in root.GetProperty("urls").EnumerateArray())
+        // cryptography needs cffi, cffi needs pycparser — install all three
+        var packages = new[]
         {
-            var filename = urlEntry.GetProperty("filename").GetString() ?? "";
-            if (filename.Contains("cp39-abi3-win_amd64") && filename.EndsWith(".whl"))
-            {
-                wheelUrl = urlEntry.GetProperty("url").GetString();
-                break;
-            }
-        }
+            ("pycparser", "py3-none-any"),       // pure Python, any platform
+            ("cffi", "cp312-cp312-win_amd64"),   // compiled C extension
+            ("cryptography", "cp39-abi3-win_amd64"), // Rust-based, ABI3 compatible
+        };
 
-        // Fallback: try cp312-win_amd64
-        if (wheelUrl == null)
+        foreach (var (pkgName, wheelPattern) in packages)
         {
-            foreach (var urlEntry in root.GetProperty("urls").EnumerateArray())
+            StatusChanged?.Invoke($"Installing {pkgName}...");
+            _logger.Information("[TgProxy] Downloading {Package}...", pkgName);
+
+            var pypiUrl = $"https://pypi.org/pypi/{pkgName}/json";
+            var resp = await pypiHttp.GetStringAsync(pypiUrl, ct);
+            using var doc = JsonDocument.Parse(resp);
+
+            // Find matching wheel
+            string? wheelUrl = null;
+            foreach (var urlEntry in doc.RootElement.GetProperty("urls").EnumerateArray())
             {
                 var filename = urlEntry.GetProperty("filename").GetString() ?? "";
-                if (filename.Contains("win_amd64") && filename.EndsWith(".whl"))
+                if (filename.Contains(wheelPattern) && filename.EndsWith(".whl"))
                 {
                     wheelUrl = urlEntry.GetProperty("url").GetString();
                     break;
                 }
             }
-        }
 
-        if (wheelUrl == null)
-            throw new Exception("Could not find cryptography wheel for Windows AMD64");
+            // Fallback: try any win_amd64 wheel
+            if (wheelUrl == null)
+            {
+                foreach (var urlEntry in doc.RootElement.GetProperty("urls").EnumerateArray())
+                {
+                    var filename = urlEntry.GetProperty("filename").GetString() ?? "";
+                    if (filename.Contains("win_amd64") && filename.EndsWith(".whl"))
+                    {
+                        wheelUrl = urlEntry.GetProperty("url").GetString();
+                        break;
+                    }
+                    // Pure Python wheel
+                    if (filename.Contains("py3-none-any") && filename.EndsWith(".whl"))
+                    {
+                        wheelUrl = urlEntry.GetProperty("url").GetString();
+                        break;
+                    }
+                }
+            }
 
-        _logger.Information("[TgProxy] Downloading cryptography: {Url}", wheelUrl);
+            if (wheelUrl == null)
+                throw new Exception($"Could not find wheel for {pkgName}");
 
-        // Download and extract the wheel (it's a ZIP file)
-        var tempWhl = Path.GetTempFileName() + ".whl";
-        try
-        {
-            using (var stream = await pypiHttp.GetStreamAsync(wheelUrl, ct))
-            using (var file = File.Create(tempWhl))
-                await stream.CopyToAsync(file, ct);
+            // Download and extract (wheel = ZIP)
+            var tempWhl = Path.GetTempFileName() + ".whl";
+            try
+            {
+                using (var stream = await pypiHttp.GetStreamAsync(wheelUrl, ct))
+                using (var file = File.Create(tempWhl))
+                    await stream.CopyToAsync(file, ct);
 
-            StatusChanged?.Invoke("Installing cryptography...");
-            var libDir = Path.Combine(PythonDir, "Lib");
-            Directory.CreateDirectory(libDir);
-            ZipFile.ExtractToDirectory(tempWhl, libDir, overwriteFiles: true);
-
-            _logger.Information("[TgProxy] cryptography installed to {Dir}", libDir);
-        }
-        finally
-        {
-            try { File.Delete(tempWhl); } catch { }
+                ZipFile.ExtractToDirectory(tempWhl, libDir, overwriteFiles: true);
+                _logger.Information("[TgProxy] {Package} installed", pkgName);
+            }
+            finally
+            {
+                try { File.Delete(tempWhl); } catch { }
+            }
         }
     }
 
