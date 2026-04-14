@@ -1228,11 +1228,6 @@ public partial class MainWindowViewModel : ViewModelBase
             TgProxyStatus = IsRussian ? "Остановлен" : "Stopped";
             TgProxyStats = "";
             SaveSettings();
-
-            // Open tg:// link — Telegram will show "Disable proxy?" dialog
-            if (!string.IsNullOrEmpty(TgProxySecret))
-                TgProxyManager.OpenInTelegram("127.0.0.1", TgProxyPort, TgProxySecret);
-
             return;
         }
 
@@ -1264,9 +1259,6 @@ public partial class MainWindowViewModel : ViewModelBase
                 TgProxyStatus = IsRussian
                     ? $"Работает (PID {_tgProxy.Pid})"
                     : $"Running (PID {_tgProxy.Pid})";
-
-                // Open tg:// link — Telegram will show "Enable proxy?" dialog
-                TgProxyManager.OpenInTelegram("127.0.0.1", TgProxyPort, TgProxySecret);
             }
             else
             {
@@ -1292,6 +1284,13 @@ public partial class MainWindowViewModel : ViewModelBase
         if (string.IsNullOrEmpty(TgProxyLink)) return;
         CopyToClipboard(TgProxyLink);
         TgProxyStatus = Strings.TgProxyCopied;
+    }
+
+    [RelayCommand]
+    private void OpenTgProxyInTelegram()
+    {
+        if (string.IsNullOrEmpty(TgProxySecret)) return;
+        TgProxyManager.OpenInTelegram("127.0.0.1", TgProxyPort, TgProxySecret);
     }
 
     [RelayCommand]

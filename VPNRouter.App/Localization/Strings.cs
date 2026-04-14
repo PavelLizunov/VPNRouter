@@ -174,6 +174,10 @@ public static class Strings
     public static string TgProxyRegenerate => Ru ? "Новый" : "New";
     public static string TgProxyStart => Ru ? "Запустить Telegram Proxy" : "Start Telegram Proxy";
     public static string TgProxyStop => Ru ? "Остановить Telegram Proxy" : "Stop Telegram Proxy";
+    public static string TgProxyOpenInTelegram => Ru ? "Открыть в Telegram" : "Open in Telegram";
+    public static string TgProxySetupOnce => Ru
+        ? "Нажмите 'Открыть в Telegram' один раз для настройки прокси. После этого просто Start/Stop."
+        : "Click 'Open in Telegram' once to set up the proxy. After that just Start/Stop.";
 
     // ── Service (Windows-only) ──
     public static string AutostartWithWindows => Ru ? "Автозапуск с Windows" : "Autostart with Windows";

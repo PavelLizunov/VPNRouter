@@ -70,42 +70,26 @@
                 <!-- Status -->
                 <Border Padding="10,8" CornerRadius="4"
                         Background="{DynamicResource SystemControlBackgroundListLowBrush}">
-                    <StackPanel Spacing="4">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                                     Fill="{Binding TgProxyEnabled, Converter={StaticResource StatusColorConverter}}"/>
-                            <TextBlock Text="{Binding TgProxyStatus}" FontSize="11"
-                                       VerticalAlignment="Center"/>
-                        </StackPanel>
-                        <TextBlock Text="{Binding TgProxyStats}" FontSize="10" Opacity="0.6"
-                                   IsVisible="{Binding TgProxyEnabled}"
-                                   FontFamily="Consolas,Courier New,monospace"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                 Fill="{Binding TgProxyEnabled, Converter={StaticResource StatusColorConverter}}"/>
+                        <TextBlock Text="{Binding TgProxyStatus}" FontSize="11"
+                                   VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
-                <!-- Proxy Link (visible only when running) -->
-                <Border Padding="10,8" CornerRadius="4"
-                        IsVisible="{Binding TgProxyEnabled}"
-                        Background="{DynamicResource SystemControlBackgroundListLowBrush}">
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="{x:Static loc:Strings.TgProxyLink}" FontWeight="SemiBold"
-                                   Opacity="0.7" FontSize="10"/>
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBox Text="{Binding TgProxyLink}"
-                                     FontSize="9" Padding="4,2"
-                                     FontFamily="Consolas,Courier New,monospace"
-                                     IsReadOnly="True" MinWidth="300"
-                                     BorderThickness="0"
-                                     Background="Transparent"/>
-                            <Button Content="{x:Static loc:Strings.TgProxyCopy}"
-                                    Command="{Binding CopyTgProxyLinkCommand}"
-                                    FontSize="10" Padding="8,4" CornerRadius="4"/>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
+                <!-- Open in Telegram button (one-time setup) -->
+                <StackPanel Spacing="4">
+                    <Button Content="{x:Static loc:Strings.TgProxyOpenInTelegram}"
+                            Command="{Binding OpenTgProxyInTelegramCommand}"
+                            FontSize="11" Padding="12,6"
+                            CornerRadius="4"/>
+                    <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.5" FontStyle="Italic"
+                               Text="{x:Static loc:Strings.TgProxySetupOnce}"/>
+                </StackPanel>
 
-                <!-- Setup hint -->
-                <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.5" FontStyle="Italic"
+                <!-- Setup path hint -->
+                <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.4"
                            Text="{Binding LblTgProxySetupHint}"/>
 
             </StackPanel>
