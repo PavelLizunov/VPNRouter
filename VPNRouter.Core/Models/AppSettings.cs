@@ -167,10 +167,6 @@ public class AppConfig
     [YamlMember(Alias = "zapret_custom_args")]
     public string ZapretCustomArgs { get; set; } = string.Empty;
 
-    /// <summary>TgWsProxy (local MTProto proxy for Telegram). Windows-only.</summary>
-    [YamlMember(Alias = "tg_proxy_enabled")]
-    public bool TgProxyEnabled { get; set; } = false;
-
     /// <summary>
     /// When true, flush system DNS cache when VPN starts to prevent
     /// resolved-pre-connect entries from leaking through direct route.
