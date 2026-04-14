@@ -62,108 +62,73 @@ public class ZapretManager : IDisposable
                 $"--dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2 " +
                 $"--dpi-desync-fake-tls=0x00000000000000000000",
 
-            // === Flowseal-based strategies (TCP + UDP, Discord + YouTube) ===
-            // All use relative paths (WorkingDirectory=zapretDir)
+            // === Full strategies (TCP + UDP, Discord voice + YouTube + all services) ===
+            // NO hostlist filtering — process ALL traffic on target ports (reliable)
+            // Multi-profile: different desync methods for TCP vs UDP vs QUIC
 
-            // General — baseline Flowseal strategy (fake,fakedsplit + ts fooling)
+            // General — multisplit (proven working) + Discord UDP
             "general" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
                 "--wf-udp=443,19294-19344,50000-50100 " +
                 // QUIC on UDP 443
-                @"--filter-udp=443 --hostlist=""files\list-general.txt"" " +
-                @"--dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
+                @"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
                 // Discord voice (STUN/RTC) on UDP 19294-19344, 50000-50100
                 "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
                 "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
-                // Discord CDN on TCP 2053,2083,2087,2096,8443
-                "--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media " +
-                @"--dpi-desync=fake,fakedsplit --dpi-desync-repeats=6 --dpi-desync-fooling=ts --dpi-desync-fakedsplit-pattern=0x00 --dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" --new " +
-                // Google/YouTube on TCP 443
-                @"--filter-tcp=443 --hostlist=""files\list-google.txt"" --ip-id=zero " +
-                @"--dpi-desync=fake,fakedsplit --dpi-desync-repeats=6 --dpi-desync-fooling=ts --dpi-desync-fakedsplit-pattern=0x00 --dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" --new " +
-                // General (Discord, Cloudflare, etc.) on TCP 80,443
-                @"--filter-tcp=80,443 --hostlist=""files\list-general.txt"" " +
-                @"--dpi-desync=fake,fakedsplit --dpi-desync-repeats=6 --dpi-desync-fooling=ts --dpi-desync-fakedsplit-pattern=0x00 " +
-                @"--dpi-desync-fake-tls=""files\stun.bin"" --dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" " +
-                @"--dpi-desync-fake-http=""files\tls_clienthello_max_ru.bin""",
+                // Discord CDN on TCP alt-ports
+                "--filter-tcp=2053,2083,2087,2096,8443 " +
+                "--dpi-desync=fake,multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2 --dpi-desync-repeats=6 --new " +
+                // All TCP 80,443 — same as working multisplit
+                "--filter-tcp=80,443 " +
+                "--dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2",
 
-            // General ALT — multisplit with seqovl (for МГТС and similar DPI)
+            // General ALT — fake,fakedsplit + ts fooling + Discord UDP
             "general (ALT)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
                 "--wf-udp=443,19294-19344,50000-50100 " +
-                // QUIC on UDP 443
-                @"--filter-udp=443 --hostlist=""files\list-general.txt"" " +
-                @"--dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
+                // QUIC
+                @"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
                 // Discord voice
                 "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
                 "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
-                // Discord CDN — multisplit with seqovl pattern
-                "--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media " +
-                @"--dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 " +
-                @"--dpi-desync-split-seqovl-pattern=""files\tls_clienthello_www_google_com.bin"" --new " +
-                // Google/YouTube
-                @"--filter-tcp=443 --hostlist=""files\list-google.txt"" --ip-id=zero " +
-                @"--dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 " +
-                @"--dpi-desync-split-seqovl-pattern=""files\tls_clienthello_www_google_com.bin"" --new " +
-                // General
-                @"--filter-tcp=80,443 --hostlist=""files\list-general.txt"" " +
-                @"--dpi-desync=multisplit --dpi-desync-split-seqovl=664 --dpi-desync-split-pos=1 " +
-                @"--dpi-desync-split-seqovl-pattern=""files\tls_clienthello_max_ru.bin""",
+                // Discord CDN
+                "--filter-tcp=2053,2083,2087,2096,8443 " +
+                "--dpi-desync=fake,fakedsplit --dpi-desync-repeats=6 --dpi-desync-fooling=ts --dpi-desync-fakedsplit-pattern=0x00 --new " +
+                // All TCP 80,443
+                "--filter-tcp=80,443 " +
+                "--dpi-desync=fake,fakedsplit --dpi-desync-repeats=6 --dpi-desync-fooling=ts --dpi-desync-fakedsplit-pattern=0x00",
 
-            // General ALT2 — fake,multisplit with seqovl + ts fooling + higher repeats
+            // General ALT2 — fake,multidisorder + md5sig (aggressive) + Discord UDP
             "general (ALT2)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
                 "--wf-udp=443,19294-19344,50000-50100 " +
-                // QUIC on UDP 443 — higher repeats
-                @"--filter-udp=443 --hostlist=""files\list-general.txt"" " +
-                @"--dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
-                // Discord voice
+                // QUIC — high repeats
+                @"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
+                // Discord voice — high repeats
                 "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
-                "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
-                // Discord CDN — fake+multisplit with seqovl + ts fooling
-                "--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media " +
-                @"--dpi-desync=fake,multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 " +
-                @"--dpi-desync-fooling=ts --dpi-desync-repeats=8 " +
-                @"--dpi-desync-split-seqovl-pattern=""files\tls_clienthello_www_google_com.bin"" " +
-                @"--dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" --new " +
-                // Google/YouTube
-                @"--filter-tcp=443 --hostlist=""files\list-google.txt"" --ip-id=zero " +
-                @"--dpi-desync=fake,multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 " +
-                @"--dpi-desync-fooling=ts --dpi-desync-repeats=8 " +
-                @"--dpi-desync-split-seqovl-pattern=""files\tls_clienthello_www_google_com.bin"" " +
-                @"--dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" --new " +
-                // General
-                @"--filter-tcp=80,443 --hostlist=""files\list-general.txt"" " +
-                @"--dpi-desync=fake,multisplit --dpi-desync-split-seqovl=664 --dpi-desync-split-pos=1 " +
-                @"--dpi-desync-fooling=ts --dpi-desync-repeats=8 " +
-                @"--dpi-desync-split-seqovl-pattern=""files\tls_clienthello_max_ru.bin"" " +
-                @"--dpi-desync-fake-tls=""files\stun.bin"" --dpi-desync-fake-tls=""files\tls_clienthello_max_ru.bin"" " +
-                @"--dpi-desync-fake-http=""files\tls_clienthello_max_ru.bin""",
+                "--dpi-desync=fake --dpi-desync-repeats=11 --new " +
+                // Discord CDN
+                "--filter-tcp=2053,2083,2087,2096,8443 " +
+                "--dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --new " +
+                // All TCP 80,443
+                "--filter-tcp=80,443 " +
+                "--dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig",
 
-            // General ALT3 — aggressive: fake,multidisorder + md5sig + high repeats
+            // General ALT3 — fake+multisplit with seqovl + ts + Discord UDP
             "general (ALT3)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
                 "--wf-udp=443,19294-19344,50000-50100 " +
                 // QUIC
-                @"--filter-udp=443 --hostlist=""files\list-general.txt"" " +
-                @"--dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
-                // Discord voice — higher repeats
+                @"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=""files\quic_initial_www_google_com.bin"" --new " +
+                // Discord voice
                 "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
-                "--dpi-desync=fake --dpi-desync-repeats=11 --new " +
-                // Discord CDN — multidisorder + md5sig
-                "--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media " +
-                @"--dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 " +
-                "--dpi-desync-fooling=md5sig " +
-                @"--dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" --new " +
-                // Google/YouTube — aggressive
-                @"--filter-tcp=443 --hostlist=""files\list-google.txt"" " +
-                @"--dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 " +
-                "--dpi-desync-fooling=md5sig " +
-                @"--dpi-desync-fake-tls=""files\tls_clienthello_www_google_com.bin"" --new " +
-                // General — aggressive
-                @"--filter-tcp=80,443 --hostlist=""files\list-general.txt"" " +
-                @"--dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 " +
-                "--dpi-desync-fooling=badseq,md5sig",
+                "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
+                // Discord CDN
+                "--filter-tcp=2053,2083,2087,2096,8443 " +
+                "--dpi-desync=fake,multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=1 --dpi-desync-fooling=ts --dpi-desync-repeats=8 --new " +
+                // All TCP 80,443
+                "--filter-tcp=80,443 " +
+                "--dpi-desync=fake,multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=1 --dpi-desync-fooling=ts --dpi-desync-repeats=8",
 
             "custom" => customArgs ?? "",
 
