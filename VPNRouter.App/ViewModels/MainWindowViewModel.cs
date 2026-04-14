@@ -24,6 +24,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly VpnEngine _engine;
 #if PLATFORM_WINDOWS
     private ZapretManager? _zapret;
+    private TgProxyManager? _tgProxy;
 #endif
     private readonly ILogger _logger;
     private AppSettings _settings;
@@ -115,12 +116,25 @@ public partial class MainWindowViewModel : ViewModelBase
     private List<VPNRouter.Core.Services.ZapretStrategy> _parsedStrategies = new();
     [ObservableProperty] private bool _receivePrereleases = false;
 
+    // Telegram proxy
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblTgProxyToggle))]
+    private bool _tgProxyEnabled = false;
+    [ObservableProperty] private string _tgProxyStatus = "Stopped";
+    [ObservableProperty] private int _tgProxyPort = 1443;
+    [ObservableProperty] private string _tgProxySecret = "";
+    [ObservableProperty] private string _tgProxyLink = "";
+    [ObservableProperty] private string _tgProxyVersionText = "";
+    [ObservableProperty] private bool _isTgProxyDownloading = false;
+    [ObservableProperty] private string _tgProxyStats = "";
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServersTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsSubscribeTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsNetworkTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsAppsTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsDpiBypassTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsTelegramTabSelected))]
     private int _selectedTabIndex;
 
     public bool IsServersTabSelected => SelectedTabIndex == 0;
@@ -128,6 +142,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public bool IsNetworkTabSelected => SelectedTabIndex == 2;
     public bool IsAppsTabSelected => SelectedTabIndex == 3;
     public bool IsDpiBypassTabSelected => SelectedTabIndex == 4;
+    public bool IsTelegramTabSelected => SelectedTabIndex == 5;
 
     [ObservableProperty] private AppGroupViewModel? _selectedAppGroup;
 
@@ -250,6 +265,15 @@ public partial class MainWindowViewModel : ViewModelBase
         : "Redirects Discord voice servers (finland*.discord.media) to working Cloudflare IP. Fixes voice channels.";
     public string ReceivePrereleasesLabel => IsRussian ? "Получать prerelease обновления (experimental канал)" : "Receive prereleases (experimental channel)";
     public string UpdateChannelHeader => IsRussian ? "Канал обновлений" : "Update channel";
+
+    // Telegram proxy labels
+    public string LblTabTelegram => Strings.TabTelegram;
+    public string LblTgProxyDescription => Strings.TgProxyDescription;
+    public string LblTgProxySetupHint => Strings.TgProxySetupHint;
+    public string LblTgProxyToggle => TgProxyEnabled ? Strings.TgProxyStop : Strings.TgProxyStart;
+    public string LblUpdateTgProxy => IsRussian
+        ? (TgProxyUpdater.IsInstalled() ? "Обновить" : "Скачать")
+        : (TgProxyUpdater.IsInstalled() ? "Update" : "Download");
 
 
     [RelayCommand]
@@ -401,7 +425,24 @@ public partial class MainWindowViewModel : ViewModelBase
 #if PLATFORM_WINDOWS
         DiscordHostsInstalled = VPNRouter.Core.Services.HostsManager.IsInstalled();
 
-
+        // Telegram proxy
+        TgProxyPort = _settings.App.TgProxyPort > 0 ? _settings.App.TgProxyPort : 1443;
+        TgProxySecret = _settings.App.TgProxySecret;
+        TgProxyVersionText = TgProxyUpdater.IsInstalled()
+            ? (TgProxyUpdater.GetLocalVersion() ?? "?")
+            : (IsRussian ? "Не установлен" : "Not installed");
+        if (TgProxyManager.IsAnyRunning())
+        {
+            TgProxyEnabled = true;
+            TgProxyStatus = IsRussian ? "Работает (из предыдущей сессии)" : "Running (from previous session)";
+            if (!string.IsNullOrEmpty(TgProxySecret))
+                TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", TgProxyPort, TgProxySecret);
+        }
+        else
+        {
+            TgProxyEnabled = false;
+            TgProxyStatus = IsRussian ? "Остановлен" : "Stopped";
+        }
 #endif
 
         // Update channel
@@ -648,6 +689,9 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.App.ZapretStrategy = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Count
             ? ZapretStrategies[ZapretStrategyIndex] : "multisplit";
         _settings.App.ZapretCustomArgs = ZapretCustomArgs;
+        _settings.App.TgProxyEnabled = TgProxyEnabled;
+        _settings.App.TgProxyPort = TgProxyPort;
+        _settings.App.TgProxySecret = TgProxySecret;
 
         // Update channel
         _settings.Update.Channel = ReceivePrereleases ? "experimental" : "stable";
@@ -1128,6 +1172,178 @@ public partial class MainWindowViewModel : ViewModelBase
 #endif
     }
 
+    // ── Telegram proxy commands ──
+
+    [RelayCommand]
+    private async Task UpdateTgProxyAsync()
+    {
+#if PLATFORM_WINDOWS
+        if (IsTgProxyDownloading) return;
+        IsTgProxyDownloading = true;
+        TgProxyStatus = IsRussian ? "Загрузка tg-ws-proxy..." : "Downloading tg-ws-proxy...";
+
+        try
+        {
+            // Stop if running
+            if (TgProxyEnabled || TgProxyManager.IsAnyRunning())
+            {
+                _tgProxy?.Stop();
+                TgProxyManager.KillAll();
+                TgProxyEnabled = false;
+            }
+
+            var updater = new TgProxyUpdater(_logger);
+            updater.StatusChanged += s =>
+                Dispatcher.UIThread.Post(() => TgProxyStatus = s);
+
+            await updater.DownloadAsync(CancellationToken.None);
+
+            TgProxyVersionText = TgProxyUpdater.GetLocalVersion() ?? "?";
+            TgProxyStatus = IsRussian
+                ? $"tg-ws-proxy {TgProxyVersionText} установлен"
+                : $"tg-ws-proxy {TgProxyVersionText} installed";
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] TgProxy download failed");
+            TgProxyStatus = $"Download error: {ex.Message}";
+        }
+        finally
+        {
+            IsTgProxyDownloading = false;
+        }
+#endif
+    }
+
+    [RelayCommand]
+    private async Task ToggleTgProxyAsync()
+    {
+#if PLATFORM_WINDOWS
+        // If running → stop
+        if (TgProxyEnabled || TgProxyManager.IsAnyRunning())
+        {
+            _tgProxy?.Stop();
+            TgProxyManager.KillAll();
+            TgProxyEnabled = false;
+            TgProxyStatus = IsRussian ? "Остановлен" : "Stopped";
+            TgProxyStats = "";
+            SaveSettings();
+            return;
+        }
+
+        // Auto-download if not installed
+        if (!TgProxyUpdater.IsInstalled())
+        {
+            await UpdateTgProxyAsync();
+            if (!TgProxyUpdater.IsInstalled()) return;
+        }
+
+        try
+        {
+            // Generate secret if empty
+            if (string.IsNullOrWhiteSpace(TgProxySecret))
+            {
+                var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
+                TgProxySecret = Convert.ToHexString(bytes).ToLowerInvariant();
+            }
+
+            _tgProxy ??= new TgProxyManager(_logger);
+
+            // Subscribe to stats updates
+            _tgProxy.StatsUpdated += stats =>
+                Dispatcher.UIThread.Post(() => TgProxyStats = ParseStatsShort(stats));
+
+            _tgProxy.Start(TgProxyPort, TgProxySecret);
+
+            // Verify it actually started
+            await Task.Delay(1000);
+            if (_tgProxy.IsRunning || TgProxyManager.IsAnyRunning())
+            {
+                TgProxyEnabled = true;
+                TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", TgProxyPort, TgProxySecret);
+                TgProxyStatus = IsRussian
+                    ? $"Работает (PID {_tgProxy.Pid})"
+                    : $"Running (PID {_tgProxy.Pid})";
+            }
+            else
+            {
+                TgProxyEnabled = false;
+                TgProxyStatus = IsRussian
+                    ? "Ошибка: tg-ws-proxy завершился сразу."
+                    : "Error: tg-ws-proxy exited immediately.";
+            }
+            SaveSettings();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] TgProxy start failed");
+            TgProxyStatus = $"Error: {ex.Message}";
+            TgProxyEnabled = false;
+        }
+#endif
+    }
+
+    [RelayCommand]
+    private void CopyTgProxyLink()
+    {
+        if (string.IsNullOrEmpty(TgProxyLink)) return;
+        CopyToClipboard(TgProxyLink);
+        TgProxyStatus = Strings.TgProxyCopied;
+    }
+
+    [RelayCommand]
+    private void CopyTgProxySecret()
+    {
+        if (string.IsNullOrEmpty(TgProxySecret)) return;
+        CopyToClipboard(TgProxySecret);
+        TgProxyStatus = Strings.TgProxyCopied;
+    }
+
+    [RelayCommand]
+    private void RegenerateTgProxySecret()
+    {
+        var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
+        TgProxySecret = Convert.ToHexString(bytes).ToLowerInvariant();
+        TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", TgProxyPort, TgProxySecret);
+        SaveSettings();
+    }
+
+    private void CopyToClipboard(string text)
+    {
+        try
+        {
+            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                desktop.MainWindow?.Clipboard?.SetTextAsync(text);
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>Parse stats line into short summary for UI display.</summary>
+    private static string ParseStatsShort(string statsLine)
+    {
+        // Input: "stats: total=10 active=2 ws=8 tcp_fb=1 cf=0 bad=1 ..."
+        var parts = new Dictionary<string, string>();
+        foreach (System.Text.RegularExpressions.Match m in
+            System.Text.RegularExpressions.Regex.Matches(statsLine, @"(\w+)=(\S+)"))
+        {
+            parts[m.Groups[1].Value] = m.Groups[2].Value;
+        }
+
+        parts.TryGetValue("active", out var active);
+        parts.TryGetValue("total", out var total);
+        parts.TryGetValue("up", out var up);
+        parts.TryGetValue("down", out var down);
+
+        var sb = new System.Text.StringBuilder();
+        if (active != null) sb.Append($"Active: {active}");
+        if (total != null) sb.Append($" | Total: {total}");
+        if (up != null) sb.Append($" | \u2191{up}");
+        if (down != null) sb.Append($" \u2193{down}");
+        return sb.ToString();
+    }
+
     [RelayCommand]
     private void ClearSubscription()
     {
@@ -1473,6 +1689,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Kill zapret on app exit
         KillAllZapret();
+
+        // Kill tg-ws-proxy on app exit
+#if PLATFORM_WINDOWS
+        try { _tgProxy?.Stop(); TgProxyManager.KillAll(); } catch { }
+#endif
 
         SaveSettings();
 

@@ -167,6 +167,18 @@ public class AppConfig
     [YamlMember(Alias = "zapret_custom_args")]
     public string ZapretCustomArgs { get; set; } = string.Empty;
 
+    /// <summary>Telegram MTProto proxy (tg-ws-proxy) enabled state.</summary>
+    [YamlMember(Alias = "tg_proxy_enabled")]
+    public bool TgProxyEnabled { get; set; } = false;
+
+    /// <summary>Telegram proxy listen port (default 1443).</summary>
+    [YamlMember(Alias = "tg_proxy_port")]
+    public int TgProxyPort { get; set; } = 1443;
+
+    /// <summary>Telegram proxy secret (32 hex chars, auto-generated if empty).</summary>
+    [YamlMember(Alias = "tg_proxy_secret")]
+    public string TgProxySecret { get; set; } = string.Empty;
+
     /// <summary>
     /// When true, flush system DNS cache when VPN starts to prevent
     /// resolved-pre-connect entries from leaking through direct route.

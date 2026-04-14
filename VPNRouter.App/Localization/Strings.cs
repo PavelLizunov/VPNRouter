@@ -158,6 +158,23 @@ public static class Strings
     public static string ChannelStable => Ru ? "● Стабильная" : "● Stable";
     public static string ChannelExperimental => Ru ? "⚠ Эксперимент." : "⚠ Experimental";
 
+    // ── Telegram Proxy ──
+    public static string TabTelegram => "Telegram";
+    public static string TgProxyDescription => Ru
+        ? "MTProto прокси для обхода блокировки Telegram. Работает локально, трафик идёт напрямую к серверам Telegram через WebSocket."
+        : "MTProto proxy to bypass Telegram blocking. Runs locally, traffic goes directly to Telegram servers via WebSocket.";
+    public static string TgProxySetupHint => Ru
+        ? "Настройка: Telegram \u2192 Настройки \u2192 Продвинутые \u2192 Тип соединения \u2192 MTProto Proxy"
+        : "Setup: Telegram \u2192 Settings \u2192 Advanced \u2192 Connection type \u2192 MTProto Proxy";
+    public static string TgProxyPort => Ru ? "Порт:" : "Port:";
+    public static string TgProxySecret => Ru ? "Secret:" : "Secret:";
+    public static string TgProxyLink => Ru ? "Ссылка для подключения:" : "Proxy link:";
+    public static string TgProxyCopy => Ru ? "Копировать" : "Copy";
+    public static string TgProxyCopied => Ru ? "Скопировано!" : "Copied!";
+    public static string TgProxyRegenerate => Ru ? "Новый" : "New";
+    public static string TgProxyStart => Ru ? "Запустить Telegram Proxy" : "Start Telegram Proxy";
+    public static string TgProxyStop => Ru ? "Остановить Telegram Proxy" : "Stop Telegram Proxy";
+
     // ── Service (Windows-only) ──
     public static string AutostartWithWindows => Ru ? "Автозапуск с Windows" : "Autostart with Windows";
     public static string RestartService => Ru ? "Перезапустить службу" : "Restart Service";
