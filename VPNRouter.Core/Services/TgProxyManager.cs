@@ -1,13 +1,12 @@
 using System.Diagnostics;
-using System.Text.Json;
 using Serilog;
 
 namespace VPNRouter.Core.Services;
 
 /// <summary>
-/// Manages tg-ws-proxy (Flowseal) process lifecycle for Telegram MTProto proxy.
-/// The Windows exe ignores CLI args — it reads config from %APPDATA%/TgWsProxy/config.json.
-/// We write that config before launching, then open tg:// deep link to auto-configure Telegram.
+/// Manages tg-ws-proxy process lifecycle via Python embeddable.
+/// Runs headless: python.exe -m proxy.tg_ws_proxy --port X --secret Y
+/// No tray icon, no GUI — pure background process.
 /// </summary>
 public class TgProxyManager : IDisposable
 {
@@ -18,54 +17,21 @@ public class TgProxyManager : IDisposable
     public bool IsRunning => _process != null && !_process.HasExited;
     public int? Pid => IsRunning ? _process?.Id : null;
 
+    /// <summary>Last parsed stats line from stdout.</summary>
+    public string? LastStats { get; private set; }
+
+    /// <summary>Fired when stats line is parsed from output.</summary>
+    public event Action<string>? StatsUpdated;
+
     public TgProxyManager(ILogger? logger = null)
     {
         _logger = logger ?? Log.Logger;
     }
 
     /// <summary>
-    /// Config path that tg-ws-proxy.exe reads: %APPDATA%/TgWsProxy/config.json
+    /// Start tg-ws-proxy via Python embeddable. No tray, no GUI.
     /// </summary>
-    private static string ConfigDir => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "TgWsProxy");
-
-    private static string ConfigPath => Path.Combine(ConfigDir, "config.json");
-
-    /// <summary>
-    /// Write config.json so tg-ws-proxy uses our secret/port.
-    /// Must be called BEFORE starting the exe.
-    /// </summary>
-    private void WriteConfig(int port, string secret)
-    {
-        Directory.CreateDirectory(ConfigDir);
-
-        var config = new Dictionary<string, object>
-        {
-            ["port"] = port,
-            ["host"] = "127.0.0.1",
-            ["secret"] = secret,
-            ["dc_ip"] = new[] { "2:149.154.167.220", "4:149.154.167.220" },
-            ["verbose"] = false,
-            ["check_updates"] = false, // we manage updates ourselves
-            ["buf_kb"] = 256,
-            ["pool_size"] = 4,
-            ["cfproxy"] = true,
-            ["cfproxy_priority"] = true,
-            ["cfproxy_user_domain"] = "",
-            ["log_max_mb"] = 5
-        };
-
-        var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(ConfigPath, json);
-        _logger.Information("[TgProxy] Wrote config to {Path}", ConfigPath);
-    }
-
-    /// <summary>
-    /// Start tg-ws-proxy.exe. Writes config.json first, then launches exe.
-    /// The exe will show a tray icon (can't suppress) — but we also open tg:// link.
-    /// </summary>
-    public void Start(int port, string secret)
+    public void Start(int port, string secret, bool verbose = false)
     {
         if (IsRunning)
         {
@@ -73,39 +39,33 @@ public class TgProxyManager : IDisposable
             Stop();
         }
 
-        var exePath = TgProxyUpdater.ExePath;
-        if (!File.Exists(exePath))
-        {
-            _logger.Error("[TgProxy] tg-ws-proxy.exe not found at {Path}", exePath);
-            throw new FileNotFoundException("tg-ws-proxy.exe not found. Download it first.");
-        }
+        if (!File.Exists(TgProxyUpdater.PythonExePath))
+            throw new FileNotFoundException("Python not found. Download tg-ws-proxy first.");
 
-        // Write config with OUR secret/port — the exe reads from %APPDATA%/TgWsProxy/config.json
-        WriteConfig(port, secret);
+        if (!Directory.Exists(TgProxyUpdater.ProxySourceDir))
+            throw new FileNotFoundException("Proxy source not found. Download tg-ws-proxy first.");
 
-        // Also mark first-run as done so the popup doesn't appear
-        try
-        {
-            var marker = Path.Combine(ConfigDir, ".first_run_done_mtproto");
-            if (!File.Exists(marker))
-                File.WriteAllText(marker, "");
-        }
-        catch { }
+        var args = $"-m proxy.tg_ws_proxy --port {port} --host 127.0.0.1 --secret {secret}";
+        if (verbose) args += " --verbose";
 
-        _logger.Information("[TgProxy] Starting: {Exe}", exePath);
+        _logger.Information("[TgProxy] Starting: python.exe {Args}", args);
 
         var psi = new ProcessStartInfo
         {
-            FileName = exePath,
-            UseShellExecute = true,
-            WindowStyle = ProcessWindowStyle.Hidden
+            FileName = TgProxyUpdater.PythonExePath,
+            Arguments = args,
+            WorkingDirectory = TgProxyUpdater.TgProxyDir,
+            CreateNoWindow = true,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
         };
 
         _process = Process.Start(psi);
         if (_process == null)
         {
             _logger.Error("[TgProxy] Failed to start process");
-            throw new InvalidOperationException("Failed to start tg-ws-proxy.exe");
+            throw new InvalidOperationException("Failed to start tg-ws-proxy");
         }
 
         _process.EnableRaisingEvents = true;
@@ -114,22 +74,37 @@ public class TgProxyManager : IDisposable
             _logger.Warning("[TgProxy] Process exited (exit code: {Code})", _process?.ExitCode);
         };
 
+        // Capture stdout/stderr for stats and error detection
+        _process.OutputDataReceived += OnOutputData;
+        _process.ErrorDataReceived += OnOutputData;
+        _process.BeginOutputReadLine();
+        _process.BeginErrorReadLine();
+
         _logger.Information("[TgProxy] Started (PID {Pid})", _process.Id);
     }
 
+    private void OnOutputData(object sender, DataReceivedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.Data)) return;
+
+        // Parse stats line: "stats: total=X active=Y ws=Z ..."
+        if (e.Data.Contains("stats:"))
+        {
+            LastStats = e.Data;
+            StatsUpdated?.Invoke(e.Data);
+        }
+    }
+
     /// <summary>
-    /// Build the tg://proxy deep link. Opens Telegram and prompts to enable/disable this proxy.
-    /// dd prefix = random padding mode (standard).
+    /// Build the tg://proxy deep link for Telegram Desktop.
+    /// dd prefix = random padding mode (standard MTProto).
     /// </summary>
     public static string BuildProxyLink(string host, int port, string secret)
     {
         return $"tg://proxy?server={host}&port={port}&secret=dd{secret}";
     }
 
-    /// <summary>
-    /// Open tg://proxy link in default handler (Telegram Desktop).
-    /// This triggers the "Enable proxy?" dialog in Telegram.
-    /// </summary>
+    /// <summary>Open tg://proxy link in Telegram Desktop.</summary>
     public static void OpenInTelegram(string host, int port, string secret)
     {
         var url = BuildProxyLink(host, port, secret);
@@ -174,9 +149,10 @@ public class TgProxyManager : IDisposable
         }
     }
 
-    /// <summary>Check if tg-ws-proxy is running (from previous session or manual start).</summary>
+    /// <summary>Check if tg-ws-proxy is running (any instance).</summary>
     public static bool IsAnyRunning()
     {
+        // Check both the old exe name and python-based process
         return Process.GetProcessesByName("tg-ws-proxy").Length > 0
             || Process.GetProcessesByName("TgWsProxy_windows").Length > 0;
     }

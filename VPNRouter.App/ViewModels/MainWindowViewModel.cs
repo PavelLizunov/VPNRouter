@@ -1248,6 +1248,8 @@ public partial class MainWindowViewModel : ViewModelBase
             }
 
             _tgProxy ??= new TgProxyManager(_logger);
+            _tgProxy.StatsUpdated += stats =>
+                Dispatcher.UIThread.Post(() => TgProxyStats = ParseStatsShort(stats));
             _tgProxy.Start(TgProxyPort, TgProxySecret);
 
             // Verify it actually started
@@ -1322,7 +1324,29 @@ public partial class MainWindowViewModel : ViewModelBase
         catch { }
     }
 
-    // Stats parsing removed — stdout not redirected (PyInstaller + UseShellExecute=true).
+    /// <summary>Parse stats line into short summary for UI display.</summary>
+    private static string ParseStatsShort(string statsLine)
+    {
+        // Input: "stats: total=10 active=2 ws=8 tcp_fb=1 cf=0 bad=1 ..."
+        var parts = new Dictionary<string, string>();
+        foreach (System.Text.RegularExpressions.Match m in
+            System.Text.RegularExpressions.Regex.Matches(statsLine, @"(\w+)=(\S+)"))
+        {
+            parts[m.Groups[1].Value] = m.Groups[2].Value;
+        }
+
+        parts.TryGetValue("active", out var active);
+        parts.TryGetValue("total", out var total);
+        parts.TryGetValue("up", out var up);
+        parts.TryGetValue("down", out var down);
+
+        var sb = new System.Text.StringBuilder();
+        if (active != null) sb.Append($"Active: {active}");
+        if (total != null) sb.Append($" | Total: {total}");
+        if (up != null) sb.Append($" | \u2191{up}");
+        if (down != null) sb.Append($" \u2193{down}");
+        return sb.ToString();
+    }
 
     [RelayCommand]
     private void ClearSubscription()
