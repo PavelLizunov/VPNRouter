@@ -115,12 +115,22 @@ public partial class MainWindowViewModel : ViewModelBase
     private List<VPNRouter.Core.Services.ZapretStrategy> _parsedStrategies = new();
     [ObservableProperty] private bool _receivePrereleases = false;
 
+    // Telegram proxy
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblTgProxyToggle))]
+    private bool _tgProxyEnabled = false;
+    [ObservableProperty] private string _tgProxyStatus = "Stopped";
+    [ObservableProperty] private string _tgProxyVersionText = "";
+    [ObservableProperty] private bool _isTgProxyDownloading = false;
+    private VPNRouter.Core.Services.TgWsProxyManager? _tgProxy;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServersTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsSubscribeTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsNetworkTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsAppsTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsDpiBypassTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsTelegramTabSelected))]
     private int _selectedTabIndex;
 
     public bool IsServersTabSelected => SelectedTabIndex == 0;
@@ -128,6 +138,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public bool IsNetworkTabSelected => SelectedTabIndex == 2;
     public bool IsAppsTabSelected => SelectedTabIndex == 3;
     public bool IsDpiBypassTabSelected => SelectedTabIndex == 4;
+    public bool IsTelegramTabSelected => SelectedTabIndex == 5;
 
     [ObservableProperty] private AppGroupViewModel? _selectedAppGroup;
 
@@ -250,6 +261,22 @@ public partial class MainWindowViewModel : ViewModelBase
         : "Redirects Discord voice servers (finland*.discord.media) to working Cloudflare IP. Fixes voice channels.";
     public string ReceivePrereleasesLabel => IsRussian ? "Получать prerelease обновления (experimental канал)" : "Receive prereleases (experimental channel)";
     public string UpdateChannelHeader => IsRussian ? "Канал обновлений" : "Update channel";
+
+    // Telegram proxy labels
+    public string LblTelegramTab => "Telegram";
+    public string LblTgProxyDescription => IsRussian
+        ? "Локальный MTProto прокси для Telegram (tg-ws-proxy от Flowseal). Ускоряет и обходит блокировки Telegram, перенаправляя трафик через WebSocket."
+        : "Local MTProto proxy for Telegram (tg-ws-proxy by Flowseal). Speeds up and bypasses Telegram blocking by routing traffic through WebSocket.";
+    public string LblTgProxyToggle => IsRussian
+        ? (TgProxyEnabled ? "Остановить Telegram прокси" : "Запустить Telegram прокси")
+        : (TgProxyEnabled ? "Stop Telegram proxy" : "Start Telegram proxy");
+    public string LblUpdateTgProxy => IsRussian
+        ? (VPNRouter.Core.Services.TgWsProxyUpdater.IsInstalled() ? "Обновить" : "Скачать")
+        : (VPNRouter.Core.Services.TgWsProxyUpdater.IsInstalled() ? "Update" : "Download");
+    public string LblTgProxySetupTitle => IsRussian ? "Как настроить Telegram" : "How to configure Telegram";
+    public string LblTgProxySetup => IsRussian
+        ? "1. Запустите прокси кнопкой ниже\n2. Откройте Telegram → Настройки → Данные и хранение → Тип соединения → Использовать прокси\n3. Добавить прокси → MTPROTO\n4. Сервер: 127.0.0.1, Порт: 1443\n5. Секрет: оставьте пустым (генерируется автоматически)"
+        : "1. Start the proxy with the button below\n2. Open Telegram → Settings → Data and Storage → Connection type → Use proxy\n3. Add proxy → MTPROTO\n4. Server: 127.0.0.1, Port: 1443\n5. Secret: leave empty (auto-generated)";
 
     [RelayCommand]
     private void OpenLeakTest()
@@ -399,6 +426,20 @@ public partial class MainWindowViewModel : ViewModelBase
 
 #if PLATFORM_WINDOWS
         DiscordHostsInstalled = VPNRouter.Core.Services.HostsManager.IsInstalled();
+
+        // TgWsProxy state
+        TgProxyVersionText = VPNRouter.Core.Services.TgWsProxyUpdater.GetLocalVersion()
+            ?? (IsRussian ? "Не установлен" : "Not installed");
+        if (IsTgProxyRunning())
+        {
+            TgProxyEnabled = true;
+            TgProxyStatus = IsRussian ? "Работает (из предыдущей сессии)" : "Running (from previous session)";
+        }
+        else
+        {
+            TgProxyEnabled = false;
+            TgProxyStatus = IsRussian ? "Остановлен" : "Stopped";
+        }
 #endif
 
         // Update channel
@@ -645,6 +686,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.App.ZapretStrategy = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Count
             ? ZapretStrategies[ZapretStrategyIndex] : "multisplit";
         _settings.App.ZapretCustomArgs = ZapretCustomArgs;
+        _settings.App.TgProxyEnabled = TgProxyEnabled;
 
         // Update channel
         _settings.Update.Channel = ReceivePrereleases ? "experimental" : "stable";
@@ -1122,6 +1164,101 @@ public partial class MainWindowViewModel : ViewModelBase
             _logger.Error(ex, "[VM] Discord hosts toggle failed");
             ZapretStatus = $"Hosts error: {ex.Message}";
         }
+#endif
+    }
+
+    // === Telegram proxy commands ===
+
+    [RelayCommand]
+    private async Task UpdateTgProxyAsync()
+    {
+#if PLATFORM_WINDOWS
+        if (IsTgProxyDownloading) return;
+        IsTgProxyDownloading = true;
+        TgProxyStatus = IsRussian ? "Загрузка..." : "Downloading...";
+
+        try
+        {
+            if (TgProxyEnabled) { _tgProxy?.Stop(); TgProxyEnabled = false; }
+
+            var updater = new VPNRouter.Core.Services.TgWsProxyUpdater(_logger);
+            updater.StatusChanged += s =>
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => TgProxyStatus = s);
+
+            await updater.DownloadAndExtractAsync(System.Threading.CancellationToken.None);
+            TgProxyVersionText = VPNRouter.Core.Services.TgWsProxyUpdater.GetLocalVersion() ?? "?";
+            TgProxyStatus = IsRussian
+                ? $"tg-ws-proxy {TgProxyVersionText} установлен"
+                : $"tg-ws-proxy {TgProxyVersionText} installed";
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] TgWsProxy download failed");
+            TgProxyStatus = $"Error: {ex.Message}";
+        }
+        finally { IsTgProxyDownloading = false; }
+#endif
+    }
+
+    [RelayCommand]
+    private async Task ToggleTgProxyAsync()
+    {
+#if PLATFORM_WINDOWS
+        if (TgProxyEnabled)
+        {
+            _tgProxy?.Stop();
+            // Also kill any orphan processes
+            foreach (var p in System.Diagnostics.Process.GetProcessesByName("TgWsProxy_windows"))
+                try { p.Kill(); } catch { }
+            TgProxyEnabled = false;
+            TgProxyStatus = IsRussian ? "Остановлен" : "Stopped";
+            SaveSettings();
+            return;
+        }
+
+        if (!VPNRouter.Core.Services.TgWsProxyUpdater.IsInstalled())
+        {
+            await UpdateTgProxyAsync();
+            if (!VPNRouter.Core.Services.TgWsProxyUpdater.IsInstalled()) return;
+        }
+
+        try
+        {
+            _tgProxy ??= new VPNRouter.Core.Services.TgWsProxyManager(_logger);
+            _tgProxy.Start(1443);
+
+            await Task.Delay(1000);
+            if (_tgProxy.IsRunning)
+            {
+                TgProxyEnabled = true;
+                TgProxyStatus = IsRussian
+                    ? $"Работает (PID {_tgProxy.Pid}) — 127.0.0.1:1443"
+                    : $"Running (PID {_tgProxy.Pid}) — 127.0.0.1:1443";
+            }
+            else
+            {
+                TgProxyEnabled = false;
+                TgProxyStatus = IsRussian
+                    ? "Ошибка: процесс завершился сразу"
+                    : "Error: process exited immediately";
+            }
+            SaveSettings();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] TgWsProxy start failed");
+            TgProxyStatus = $"Error: {ex.Message}";
+            TgProxyEnabled = false;
+        }
+#endif
+    }
+
+    private bool IsTgProxyRunning()
+    {
+#if PLATFORM_WINDOWS
+        return System.Diagnostics.Process.GetProcessesByName("TgWsProxy_windows").Length > 0;
+#else
+        return false;
 #endif
     }
 

@@ -119,15 +119,17 @@
                 <ListBoxItem Content="{Binding LblTabNetwork}"   Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
                 <ListBoxItem Content="{Binding LblTabApps}"      Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
                 <ListBoxItem Content="{Binding LblDpiBypassTab}" Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblTelegramTab}" Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
             </ListBox>
 
-            <!-- Pages: all five live in same Grid cell, only selected one visible. -->
+            <!-- Pages: all six live in same Grid cell, only selected one visible. -->
             <Grid Grid.Row="1">
                 <pages:ServersPage      IsVisible="{Binding IsServersTabSelected}"/>
                 <pages:SubscribePage    IsVisible="{Binding IsSubscribeTabSelected}"/>
                 <pages:NetworkPage      IsVisible="{Binding IsNetworkTabSelected}"/>
                 <pages:ApplicationsPage IsVisible="{Binding IsAppsTabSelected}"/>
                 <pages:DpiBypassPage    IsVisible="{Binding IsDpiBypassTabSelected}"/>
+                <pages:TelegramPage     IsVisible="{Binding IsTelegramTabSelected}"/>
             </Grid>
         </Grid>
 
