@@ -191,8 +191,11 @@ public class ZapretUpdater
         var result = new List<ZapretStrategy>();
         if (!Directory.Exists(ZapretDir)) return result;
 
-        var binPath = BinDir + Path.DirectorySeparatorChar;
-        var listsPath = ListsDir + Path.DirectorySeparatorChar;
+        // Use relative paths from bin/ dir (WorkingDirectory = bin/)
+        // Cygwin winws.exe has issues with absolute Windows paths (C:\...)
+        // Flowseal .bat files use "cd /d %BIN%" then reference files relatively
+        var binPath = ""; // files in bin/ are relative to CWD
+        var listsPath = @"..\lists\"; // lists/ is one level up from bin/
 
         foreach (var batFile in Directory.GetFiles(ZapretDir, "general*.bat"))
         {
