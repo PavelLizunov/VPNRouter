@@ -236,8 +236,8 @@ public partial class MainWindowViewModel : ViewModelBase
         : "DPI Bypass (zapret) — bypasses ISP/TSPU blocking. Handles TCP (TLS, HTTP) and UDP (QUIC, Discord voice/STUN). If a strategy doesn't work — try alternatives (ALT/ALT2/ALT3), blocking methods differ between ISPs.";
     public string LblDpiStrategy => IsRussian ? "Стратегия" : "Strategy";
     public string LblDpiStrategies => IsRussian
-        ? "Discord + YouTube (TCP + UDP):\n• general — Flowseal (multisplit+seqovl, безопасно)\n• general (ALT) — seqovl google pattern\n• general (ALT2) — простой multisplit + UDP\n• general (ALT3) — fake+autottl (сильнее, рискованнее)\n\nТолько TCP (для VPN серверов):\n• multisplit — фрагменты\n• fake+multisplit — фейк + фрагменты\n• custom — свои аргументы"
-        : "Discord + YouTube (TCP + UDP):\n• general — Flowseal (multisplit+seqovl, safe)\n• general (ALT) — seqovl google pattern\n• general (ALT2) — plain multisplit + UDP\n• general (ALT3) — fake+autottl (stronger, riskier)\n\nTCP only (for VPN servers):\n• multisplit — fragments\n• fake+multisplit — fake + fragments\n• custom — your own arguments";
+        ? "Discord + YouTube (TCP + UDP):\n• general — Flowseal с hostlist (Discord+YouTube)\n• general (ALT) — seqovl для всего трафика\n• general (ALT2) — простой multisplit + UDP\n• general (ALT3) — fake+autottl (сильнее)\n\nТолько TCP:\n• multisplit / fake+multisplit / custom"
+        : "Discord + YouTube (TCP + UDP):\n• general — Flowseal with hostlist (Discord+YouTube)\n• general (ALT) — seqovl for all traffic\n• general (ALT2) — plain multisplit + UDP\n• general (ALT3) — fake+autottl (stronger)\n\nTCP only:\n• multisplit / fake+multisplit / custom";
     public string LblDpiWarning => IsRussian
         ? "⚠ Обход DPI помогает только когда сервер заблокирован по TLS, НЕ когда заблокирован сам IP. Только Windows. Запускайте ДО подключения VPN."
         : "⚠ DPI bypass helps only when server is blocked by TLS detection, NOT when IP itself is blocked. Windows only. Start BEFORE connecting VPN.";

@@ -71,21 +71,28 @@ public class ZapretManager : IDisposable
             // UDP: fake for QUIC/STUN (safe — only targeted protocols)
             // Uses absolute paths for hostlists (Cygwin path compatibility)
 
-            // General — exact Flowseal general.bat (multisplit+seqovl, no fake on TCP)
+            // General — exact Flowseal general.bat (multisplit+seqovl)
+            // Discord text+voice: seqovl masks TLS SNI with fake ClientHello pattern
+            // YouTube: seqovl also works, no ERR_SSL because no fake packets
             "general" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
                 "--wf-udp=443,19294-19344,50000-65535 " +
-                // QUIC on UDP 443
-                $"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
+                // QUIC on UDP 443 (hostlist = only Discord/YouTube domains)
+                $"--filter-udp=443 --hostlist=\"{P("list-general.txt")}\" " +
+                $"--dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
                 // Discord voice (STUN/RTC)
                 "--filter-udp=19294-19344,50000-65535 --filter-l7=discord,stun " +
                 "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
-                // Discord CDN on TCP alt-ports — multisplit+seqovl (safe, no fake)
+                // Discord CDN on TCP alt-ports
                 $"--filter-tcp=2053,2083,2087,2096,8443 --dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\" --new " +
-                // All TCP 80,443 — multisplit+seqovl (safe, no fake)
-                $"--filter-tcp=80,443 --dpi-desync=multisplit --dpi-desync-split-seqovl=568 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_4pda_to.bin")}\"",
+                // Google/YouTube on TCP 443 (separate profile)
+                $"--filter-tcp=443 --hostlist=\"{P("list-google.txt")}\" " +
+                $"--dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\" --new " +
+                // Discord + Cloudflare on TCP 80,443 (hostlist = only target domains)
+                $"--filter-tcp=80,443 --hostlist=\"{P("list-general.txt")}\" " +
+                $"--dpi-desync=multisplit --dpi-desync-split-seqovl=568 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_4pda_to.bin")}\"",
 
-            // General ALT — same but with seqovl=681 everywhere (google pattern)
+            // General ALT — same seqovl but NO hostlist (processes ALL traffic)
             "general (ALT)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
                 "--wf-udp=443,19294-19344,50000-65535 " +
@@ -93,9 +100,9 @@ public class ZapretManager : IDisposable
                 "--filter-udp=19294-19344,50000-65535 --filter-l7=discord,stun " +
                 "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
                 $"--filter-tcp=2053,2083,2087,2096,8443 --dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\" --new " +
-                $"--filter-tcp=80,443 --dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\"",
+                $"--filter-tcp=80,443 --dpi-desync=multisplit --dpi-desync-split-seqovl=568 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_4pda_to.bin")}\"",
 
-            // General ALT2 — plain multisplit (no seqovl, simplest — proven for YouTube)
+            // General ALT2 — plain multisplit + Discord UDP (simplest, proven YouTube)
             "general (ALT2)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
                 "--wf-udp=443,19294-19344,50000-65535 " +
@@ -105,7 +112,7 @@ public class ZapretManager : IDisposable
                 "--filter-tcp=2053,2083,2087,2096,8443 --dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2 --new " +
                 "--filter-tcp=80,443 --dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2",
 
-            // General ALT3 — fake,fakedsplit + autottl (stronger but riskier)
+            // General ALT3 — fake+autottl (stronger but may break some sites)
             "general (ALT3)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
                 "--wf-udp=443,19294-19344,50000-65535 " +
