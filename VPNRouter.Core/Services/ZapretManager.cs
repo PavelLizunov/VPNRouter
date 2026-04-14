@@ -65,6 +65,8 @@ public class ZapretManager : IDisposable
             // === Full strategies (TCP + UDP, Discord voice + YouTube + all services) ===
             // NO hostlist filtering — process ALL traffic on target ports (reliable)
             // Multi-profile: different desync methods for TCP vs UDP vs QUIC
+            // IMPORTANT: all TCP fake strategies use --dpi-desync-autottl=2 so fakes
+            // expire AFTER the DPI but BEFORE the real server (prevents ERR_SSL_PROTOCOL_ERROR)
 
             // General — multisplit (proven working) + Discord UDP
             "general" =>
@@ -77,12 +79,12 @@ public class ZapretManager : IDisposable
                 "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
                 // Discord CDN on TCP alt-ports
                 "--filter-tcp=2053,2083,2087,2096,8443 " +
-                "--dpi-desync=fake,multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2 --dpi-desync-repeats=6 --new " +
-                // All TCP 80,443 — same as working multisplit
+                "--dpi-desync=fake,multisplit --dpi-desync-autottl=2 --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2 --dpi-desync-repeats=6 --new " +
+                // All TCP 80,443 — same as working multisplit (no fake = safe)
                 "--filter-tcp=80,443 " +
                 "--dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2",
 
-            // General ALT — fake,fakedsplit + ts fooling + Discord UDP
+            // General ALT — fake,fakedsplit + autottl + ts fooling + Discord UDP
             "general (ALT)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
                 "--wf-udp=443,19294-19344,50000-50100 " +
@@ -93,12 +95,12 @@ public class ZapretManager : IDisposable
                 "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
                 // Discord CDN
                 "--filter-tcp=2053,2083,2087,2096,8443 " +
-                "--dpi-desync=fake,fakedsplit --dpi-desync-repeats=6 --dpi-desync-fooling=ts --dpi-desync-fakedsplit-pattern=0x00 --new " +
-                // All TCP 80,443
+                "--dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-repeats=6 --dpi-desync-fooling=ts --dpi-desync-fakedsplit-pattern=0x00 --new " +
+                // All TCP 80,443 — autottl prevents fakes reaching server
                 "--filter-tcp=80,443 " +
-                "--dpi-desync=fake,fakedsplit --dpi-desync-repeats=6 --dpi-desync-fooling=ts --dpi-desync-fakedsplit-pattern=0x00",
+                "--dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-repeats=6 --dpi-desync-fooling=ts --dpi-desync-fakedsplit-pattern=0x00",
 
-            // General ALT2 — fake,multidisorder + md5sig (aggressive) + Discord UDP
+            // General ALT2 — fake,multidisorder + autottl + md5sig + Discord UDP
             "general (ALT2)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
                 "--wf-udp=443,19294-19344,50000-50100 " +
@@ -109,12 +111,12 @@ public class ZapretManager : IDisposable
                 "--dpi-desync=fake --dpi-desync-repeats=11 --new " +
                 // Discord CDN
                 "--filter-tcp=2053,2083,2087,2096,8443 " +
-                "--dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --new " +
-                // All TCP 80,443
+                "--dpi-desync=fake,multidisorder --dpi-desync-autottl=2 --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --new " +
+                // All TCP 80,443 — autottl + badseq,md5sig
                 "--filter-tcp=80,443 " +
-                "--dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig",
+                "--dpi-desync=fake,multidisorder --dpi-desync-autottl=2 --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig",
 
-            // General ALT3 — fake+multisplit with seqovl + ts + Discord UDP
+            // General ALT3 — fake+multisplit + autottl + ts + Discord UDP
             "general (ALT3)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
                 "--wf-udp=443,19294-19344,50000-50100 " +
@@ -125,10 +127,10 @@ public class ZapretManager : IDisposable
                 "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
                 // Discord CDN
                 "--filter-tcp=2053,2083,2087,2096,8443 " +
-                "--dpi-desync=fake,multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=1 --dpi-desync-fooling=ts --dpi-desync-repeats=8 --new " +
-                // All TCP 80,443
+                "--dpi-desync=fake,multisplit --dpi-desync-autottl=2 --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=1 --dpi-desync-fooling=ts --dpi-desync-repeats=8 --new " +
+                // All TCP 80,443 — autottl + ts
                 "--filter-tcp=80,443 " +
-                "--dpi-desync=fake,multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=1 --dpi-desync-fooling=ts --dpi-desync-repeats=8",
+                "--dpi-desync=fake,multisplit --dpi-desync-autottl=2 --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=1 --dpi-desync-fooling=ts --dpi-desync-repeats=8",
 
             "custom" => customArgs ?? "",
 
