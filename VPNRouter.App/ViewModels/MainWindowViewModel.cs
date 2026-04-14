@@ -98,7 +98,11 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblDpiToggle))]
     private bool _zapretEnabled = false;
-    [ObservableProperty] private int _zapretStrategyIndex = 0;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCustomStrategy))]
+    private int _zapretStrategyIndex = 0;
+    public bool IsCustomStrategy => ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Count
+        && ZapretStrategies[ZapretStrategyIndex] == "custom";
     [ObservableProperty] private string _zapretCustomArgs = string.Empty;
     [ObservableProperty] private string _zapretStatus = "Stopped";
     [ObservableProperty]
@@ -226,18 +230,15 @@ public partial class MainWindowViewModel : ViewModelBase
     // DPI Bypass labels
     public string LblDpiBypassTab => IsRussian ? "Обход DPI" : "DPI Bypass";
     public string LblDpiDescription => IsRussian
-        ? "Обход DPI (zapret) — обходит блокировки провайдера/ТСПУ. Обрабатывает TCP (TLS, HTTP) и UDP (QUIC, Discord voice/STUN). Если стратегия не работает — пробуйте другие варианты (ALT/ALT2/ALT3), блокировки отличаются между провайдерами."
-        : "DPI Bypass (zapret) — bypasses ISP/TSPU blocking. Handles TCP (TLS, HTTP) and UDP (QUIC, Discord voice/STUN). If a strategy doesn't work — try alternatives (ALT/ALT2/ALT3), blocking methods differ between ISPs.";
+        ? "Обход блокировок провайдера (zapret от Flowseal). Работает с Discord, YouTube, и другими заблокированными сервисами. Если стратегия не работает — пробуйте другую."
+        : "Bypass ISP blocking (zapret by Flowseal). Works with Discord, YouTube, and other blocked services. If a strategy doesn't work — try another.";
     public string LblDpiStrategy => IsRussian ? "Стратегия" : "Strategy";
-    public string LblDpiStrategies => IsRussian
-        ? "Стратегии из Flowseal zapret. Если одна не работает — пробуйте другие, блокировки отличаются у разных провайдеров.\nВнизу: multisplit / fake+multisplit (для VPN серверов) и custom."
-        : "Strategies from Flowseal zapret. If one doesn't work — try others, blocking differs between ISPs.\nBottom: multisplit / fake+multisplit (for VPN servers) and custom.";
     public string LblUpdateZapret => IsRussian
         ? (VPNRouter.Core.Services.ZapretUpdater.IsInstalled() ? "Обновить" : "Скачать")
         : (VPNRouter.Core.Services.ZapretUpdater.IsInstalled() ? "Update" : "Download");
     public string LblDpiWarning => IsRussian
-        ? "⚠ Обход DPI помогает только когда сервер заблокирован по TLS, НЕ когда заблокирован сам IP. Только Windows. Запускайте ДО подключения VPN."
-        : "⚠ DPI bypass helps only when server is blocked by TLS detection, NOT when IP itself is blocked. Windows only. Start BEFORE connecting VPN.";
+        ? "⚠ Только Windows. Можно использовать без VPN и вместе с VPN."
+        : "⚠ Windows only. Can be used without VPN and alongside VPN.";
     public string LblDpiToggle => IsRussian
         ? (ZapretEnabled ? "Остановить обход DPI" : "Запустить обход DPI")
         : (ZapretEnabled ? "Stop DPI Bypass" : "Start DPI Bypass");
