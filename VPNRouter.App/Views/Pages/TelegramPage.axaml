@@ -88,6 +88,19 @@
                                Text="{x:Static loc:Strings.TgProxySetupOnce}"/>
                 </StackPanel>
 
+                <!-- Open folder + GitHub -->
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                    <Button Content="{x:Static loc:Strings.OpenFolder}"
+                            Command="{Binding OpenTgProxyFolderCommand}"
+                            FontSize="10" Padding="8,4" CornerRadius="4"/>
+                    <Button Content="{x:Static loc:Strings.OpenGitHub}"
+                            Command="{Binding OpenTgProxyGitHubCommand}"
+                            FontSize="10" Padding="8,4" CornerRadius="4"
+                            Foreground="#2563EB"/>
+                    <TextBlock Text="Flowseal/tg-ws-proxy" FontSize="9" Opacity="0.4"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+
                 <!-- Setup path hint -->
                 <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.4"
                            Text="{Binding LblTgProxySetupHint}"/>

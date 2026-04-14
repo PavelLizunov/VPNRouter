@@ -178,6 +178,8 @@ public static class Strings
     public static string TgProxySetupOnce => Ru
         ? "Нажмите 'Открыть в Telegram' один раз для настройки прокси. После этого просто Start/Stop."
         : "Click 'Open in Telegram' once to set up the proxy. After that just Start/Stop.";
+    public static string OpenFolder => Ru ? "Открыть папку" : "Open folder";
+    public static string OpenGitHub => "GitHub";
 
     // ── Service (Windows-only) ──
     public static string AutostartWithWindows => Ru ? "Автозапуск с Windows" : "Autostart with Windows";

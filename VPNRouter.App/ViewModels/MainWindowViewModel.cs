@@ -1296,6 +1296,49 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private void OpenTgProxyFolder()
+    {
+        OpenFolderInExplorer(TgProxyUpdater.TgProxyDir);
+    }
+
+    [RelayCommand]
+    private void OpenTgProxyGitHub()
+    {
+        OpenUrl("https://github.com/Flowseal/tg-ws-proxy");
+    }
+
+    [RelayCommand]
+    private void OpenZapretFolder()
+    {
+        OpenFolderInExplorer(ZapretUpdater.ZapretDir);
+    }
+
+    [RelayCommand]
+    private void OpenZapretGitHub()
+    {
+        OpenUrl("https://github.com/Flowseal/zapret-discord-youtube");
+    }
+
+    private static void OpenFolderInExplorer(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
+        }
+        catch { }
+    }
+
+    private static void OpenUrl(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+        }
+        catch { }
+    }
+
+    [RelayCommand]
     private void CopyTgProxySecret()
     {
         if (string.IsNullOrEmpty(TgProxySecret)) return;
