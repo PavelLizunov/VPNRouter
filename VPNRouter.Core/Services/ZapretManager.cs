@@ -50,17 +50,23 @@ public class ZapretManager : IDisposable
         _logger.Information("[Zapret] WorkingDir: {Dir}", binDir);
         _logger.Information("[Zapret] Args: {Args}", args);
 
-        // Launch via cmd.exe — Cygwin winws.exe needs a real console,
-        // not pipe-redirected stdout/stderr. Direct Process.Start with
-        // RedirectStandardOutput=true causes exit code 1 on Cygwin apps.
-        // Bat files work because cmd.exe creates a proper console window.
+        // Write a temporary .bat file and launch it — exactly like Flowseal.
+        // Cygwin winws.exe REQUIRES:
+        // 1. A real console (not pipe-redirected stdout)
+        // 2. SET variables for paths (CMD variable expansion handles quoting
+        //    correctly for Cygwin, direct literal paths fail with "cannot access")
+        var batPath = Path.Combine(binDir, "_vpnrouter_launch.bat");
+        var batContent = "@echo off\r\n" +
+            $"set \"BIN={binDir}{Path.DirectorySeparatorChar}\"\r\n" +
+            $"set \"LISTS={ZapretUpdater.ListsDir}{Path.DirectorySeparatorChar}\"\r\n" +
+            $"cd /d \"%BIN%\"\r\n" +
+            $"winws.exe {args}\r\n";
+        File.WriteAllText(batPath, batContent);
+
         var psi = new ProcessStartInfo
         {
-            FileName = "cmd.exe",
-            Arguments = $"/c cd /d \"{binDir}\" && winws.exe {args}",
-            WorkingDirectory = binDir,
-            UseShellExecute = false,
-            CreateNoWindow = false,
+            FileName = batPath,
+            UseShellExecute = true,
             WindowStyle = ProcessWindowStyle.Hidden
         };
 
