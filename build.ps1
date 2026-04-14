@@ -188,16 +188,8 @@ if (Test-Path $SingBoxPath) {
     Write-Host "       WARNING: sing-box.exe not found at $SingBoxPath" -ForegroundColor Red
 }
 
-# ── Bundle zapret (DPI bypass, Windows-only) ──
-$ZapretSrc = Join-Path $Root "tools\zapret"
-$ZapretDst = Join-Path $DistDir "zapret"
-if (Test-Path $ZapretSrc) {
-    New-Item -ItemType Directory -Force -Path $ZapretDst | Out-Null
-    Copy-Item "$ZapretSrc\*" $ZapretDst -Recurse
-    Write-Host "       Zapret bundled ($(Get-ChildItem $ZapretDst -File | Measure-Object Length -Sum | ForEach-Object { [math]::Round($_.Sum/1KB) }) KB)" -ForegroundColor Gray
-} else {
-    Write-Host "       WARNING: zapret not found at $ZapretSrc" -ForegroundColor Yellow
-}
+# ── Zapret (DPI bypass) — downloaded on demand from Flowseal/zapret-discord-youtube ──
+Write-Host "       Zapret: downloaded on demand (not bundled)" -ForegroundColor Gray
 
 # ── Bundle profiles ──
 $ProfilesSrc = Join-Path $Root "profiles"
@@ -283,14 +275,7 @@ if (Test-Path $singBoxInDist) {
     $updateFileCount++
     Write-Host "       sing-box.exe included in update" -ForegroundColor Gray
 }
-# Include zapret (DPI bypass)
-$zapretInDist = Join-Path $DistDir "zapret"
-if (Test-Path $zapretInDist) {
-    $UpdateZapretDst = Join-Path $UpdateDir "zapret"
-    New-Item -ItemType Directory -Force -Path $UpdateZapretDst | Out-Null
-    Copy-Item "$zapretInDist\*" $UpdateZapretDst -Recurse
-    Write-Host "       zapret included in update" -ForegroundColor Gray
-}
+# Zapret: downloaded on demand, not in update package
 # Also include profiles and README
 $UpdateProfilesDst = Join-Path $UpdateDir "profiles"
 if (Test-Path $ProfilesSrc) {

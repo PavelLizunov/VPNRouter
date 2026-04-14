@@ -104,17 +104,11 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblDiscordHosts))]
     private bool _discordHostsInstalled = false;
+    [ObservableProperty] private string _zapretVersionText = "";
+    [ObservableProperty] private bool _isZapretDownloading = false;
 
-    public string[] ZapretStrategies => new[]
-    {
-        "general (ALT3)",
-        "general",
-        "general (ALT)",
-        "general (ALT2)",
-        "multisplit",
-        "fake+multisplit",
-        "custom"
-    };
+    [ObservableProperty] private System.Collections.ObjectModel.ObservableCollection<string> _zapretStrategies = new();
+    private List<VPNRouter.Core.Services.ZapretStrategy> _parsedStrategies = new();
     [ObservableProperty] private bool _receivePrereleases = false;
 
     [ObservableProperty]
@@ -236,8 +230,11 @@ public partial class MainWindowViewModel : ViewModelBase
         : "DPI Bypass (zapret) — bypasses ISP/TSPU blocking. Handles TCP (TLS, HTTP) and UDP (QUIC, Discord voice/STUN). If a strategy doesn't work — try alternatives (ALT/ALT2/ALT3), blocking methods differ between ISPs.";
     public string LblDpiStrategy => IsRussian ? "Стратегия" : "Strategy";
     public string LblDpiStrategies => IsRussian
-        ? "Discord + YouTube (TCP + UDP):\n• general (ALT3) — SNI подмена (Discord+YouTube) ✓\n• general — multisplit+seqovl с hostlist\n• general (ALT) — SNI подмена без hostlist\n• general (ALT2) — простой multisplit + UDP\n\nТолько TCP:\n• multisplit / fake+multisplit / custom"
-        : "Discord + YouTube (TCP + UDP):\n• general (ALT3) — SNI spoofing (Discord+YouTube) ✓\n• general — multisplit+seqovl with hostlist\n• general (ALT) — SNI spoofing without hostlist\n• general (ALT2) — plain multisplit + UDP\n\nTCP only:\n• multisplit / fake+multisplit / custom";
+        ? "Стратегии из Flowseal zapret. Если одна не работает — пробуйте другие, блокировки отличаются у разных провайдеров.\nВнизу: multisplit / fake+multisplit (для VPN серверов) и custom."
+        : "Strategies from Flowseal zapret. If one doesn't work — try others, blocking differs between ISPs.\nBottom: multisplit / fake+multisplit (for VPN servers) and custom.";
+    public string LblUpdateZapret => IsRussian
+        ? (VPNRouter.Core.Services.ZapretUpdater.IsInstalled() ? "Обновить" : "Скачать")
+        : (VPNRouter.Core.Services.ZapretUpdater.IsInstalled() ? "Update" : "Download");
     public string LblDpiWarning => IsRussian
         ? "⚠ Обход DPI помогает только когда сервер заблокирован по TLS, НЕ когда заблокирован сам IP. Только Windows. Запускайте ДО подключения VPN."
         : "⚠ DPI bypass helps only when server is blocked by TLS detection, NOT when IP itself is blocked. Windows only. Start BEFORE connecting VPN.";
@@ -385,8 +382,7 @@ public partial class MainWindowViewModel : ViewModelBase
         FlushDnsOnStart = _settings.App.FlushDnsOnStart;
         StrictDns = _settings.App.StrictDns;
         BlockAds = _settings.App.BlockAds;
-        ZapretStrategyIndex = Array.IndexOf(ZapretStrategies, _settings.App.ZapretStrategy);
-        if (ZapretStrategyIndex < 0) ZapretStrategyIndex = 0;
+        LoadZapretStrategies();
         ZapretCustomArgs = _settings.App.ZapretCustomArgs;
         // Detect zapret state from actual process, not saved flag
         if (IsZapretRunning())
@@ -645,7 +641,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.App.StrictDns = StrictDns;
         _settings.App.BlockAds = BlockAds;
         _settings.App.ZapretEnabled = ZapretEnabled;
-        _settings.App.ZapretStrategy = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Length
+        _settings.App.ZapretStrategy = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Count
             ? ZapretStrategies[ZapretStrategyIndex] : "multisplit";
         _settings.App.ZapretCustomArgs = ZapretCustomArgs;
 
@@ -951,8 +947,80 @@ public partial class MainWindowViewModel : ViewModelBase
 #endif
     }
 
+    /// <summary>Load strategies from Flowseal .bat files + legacy built-ins.</summary>
+    private void LoadZapretStrategies()
+    {
+        var names = new List<string>();
+
+#if PLATFORM_WINDOWS
+        if (VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
+        {
+            _parsedStrategies = VPNRouter.Core.Services.ZapretUpdater.ParseStrategies();
+            names.AddRange(_parsedStrategies.Select(s => s.Name));
+            ZapretVersionText = VPNRouter.Core.Services.ZapretUpdater.GetLocalVersion() ?? "?";
+        }
+        else
+        {
+            _parsedStrategies = new();
+            ZapretVersionText = IsRussian ? "Не установлен" : "Not installed";
+        }
+#endif
+        // Always add legacy + custom
+        names.Add("multisplit");
+        names.Add("fake+multisplit");
+        names.Add("custom");
+
+        ZapretStrategies = new System.Collections.ObjectModel.ObservableCollection<string>(names);
+
+        // Restore saved strategy index
+        var saved = _settings.App.ZapretStrategy;
+        var idx = names.IndexOf(saved);
+        ZapretStrategyIndex = idx >= 0 ? idx : 0;
+    }
+
     [RelayCommand]
-    private void ToggleZapret()
+    private async Task UpdateZapretAsync()
+    {
+#if PLATFORM_WINDOWS
+        if (IsZapretDownloading) return;
+        IsZapretDownloading = true;
+        ZapretStatus = IsRussian ? "Загрузка zapret..." : "Downloading zapret...";
+
+        try
+        {
+            // Stop zapret if running
+            if (ZapretEnabled || IsZapretRunning())
+            {
+                KillAllZapret();
+                ZapretEnabled = false;
+            }
+
+            var updater = new VPNRouter.Core.Services.ZapretUpdater(_logger);
+            updater.StatusChanged += s =>
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => ZapretStatus = s);
+
+            await updater.DownloadAndExtractAsync(System.Threading.CancellationToken.None);
+
+            LoadZapretStrategies();
+
+            ZapretStatus = IsRussian
+                ? $"zapret {ZapretVersionText} установлен"
+                : $"zapret {ZapretVersionText} installed";
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] Zapret download failed");
+            ZapretStatus = $"Download error: {ex.Message}";
+        }
+        finally
+        {
+            IsZapretDownloading = false;
+        }
+#endif
+    }
+
+    [RelayCommand]
+    private async Task ToggleZapretAsync()
     {
 #if PLATFORM_WINDOWS
         // If any winws process running → stop ALL
@@ -965,21 +1033,49 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        // Auto-download if not installed
+        if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
+        {
+            await UpdateZapretAsync();
+            if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled()) return;
+        }
+
         try
         {
             _zapret ??= new ZapretManager(_logger);
-            var strategy = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Length
+            var strategyName = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Count
                 ? ZapretStrategies[ZapretStrategyIndex] : "multisplit";
-            _zapret.Start(strategy, ZapretCustomArgs);
+
+            string args;
+            if (strategyName == "custom")
+            {
+                args = ZapretCustomArgs;
+            }
+            else if (strategyName == "multisplit" || strategyName == "fake+multisplit")
+            {
+                args = ZapretManager.BuildLegacyArgs(strategyName);
+            }
+            else
+            {
+                var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == strategyName);
+                if (parsed == null)
+                {
+                    ZapretStatus = $"Strategy not found: {strategyName}";
+                    return;
+                }
+                args = parsed.Arguments;
+            }
+
+            _zapret.Start(args);
 
             // Verify it actually started
-            System.Threading.Thread.Sleep(500);
+            await Task.Delay(500);
             if (_zapret.IsRunning || IsZapretRunning())
             {
                 ZapretEnabled = true;
                 ZapretStatus = IsRussian
-                    ? $"Работает [{strategy}] (PID {_zapret.Pid})"
-                    : $"Running [{strategy}] (PID {_zapret.Pid})";
+                    ? $"Работает [{strategyName}] (PID {_zapret.Pid})"
+                    : $"Running [{strategyName}] (PID {_zapret.Pid})";
             }
             else
             {

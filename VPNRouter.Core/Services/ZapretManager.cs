@@ -7,7 +7,7 @@ namespace VPNRouter.Core.Services;
 
 /// <summary>
 /// Manages zapret (winws.exe) process lifecycle for DPI bypass.
-/// Fragments TLS ClientHello to bypass DPI that blocks VPN connections.
+/// Accepts pre-built argument strings (from ZapretUpdater.ParseStrategies or custom).
 /// Windows-only — uses WinDivert driver.
 /// </summary>
 public class ZapretManager : IDisposable
@@ -27,12 +27,10 @@ public class ZapretManager : IDisposable
     }
 
     /// <summary>
-    /// Start zapret with the given strategy.
+    /// Start winws.exe with pre-built argument string.
+    /// Arguments come from ZapretUpdater.ParseStrategies() or custom user input.
     /// </summary>
-    /// <param name="strategy">Predefined strategy name: "multisplit", "fake+multisplit", or "custom"</param>
-    /// <param name="customArgs">Custom arguments when strategy="custom"</param>
-    /// <param name="targetPort">TCP port to filter (default 443)</param>
-    public void Start(string strategy = "multisplit", string? customArgs = null, int targetPort = 443)
+    public void Start(string args)
     {
         if (IsRunning)
         {
@@ -40,133 +38,23 @@ public class ZapretManager : IDisposable
             Stop();
         }
 
-        var zapretDir = GetZapretDir();
-        var exePath = Path.Combine(zapretDir, "winws.exe");
-
-        // Helper: build absolute path to a file in zapret/files/ dir
-        // Cygwin winws.exe may not resolve relative paths from WorkingDirectory
-        string P(string filename) => Path.Combine(zapretDir, "files", filename);
+        var binDir = ZapretUpdater.BinDir;
+        var exePath = ZapretUpdater.WinwsExePath;
 
         if (!File.Exists(exePath))
         {
             _logger.Error("[Zapret] winws.exe not found at {Path}", exePath);
-            throw new FileNotFoundException($"winws.exe not found at: {exePath}");
+            throw new FileNotFoundException($"winws.exe not found. Download zapret first.");
         }
 
-        var args = strategy switch
-        {
-            // === Basic strategies (TCP only, for simple DPI) ===
-            "multisplit" =>
-                $"--wf-tcp={targetPort},8443 --wf-l3=ipv4 " +
-                $"--dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2",
-
-            "fake+multisplit" =>
-                $"--wf-tcp={targetPort},8443 --wf-l3=ipv4 " +
-                $"--dpi-desync=fake,multisplit --dpi-desync-ttl=2 " +
-                $"--dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2 " +
-                $"--dpi-desync-fake-tls=0x00000000000000000000",
-
-            // === Flowseal-based strategies (TCP + UDP, Discord + YouTube) ===
-            // TCP: ONLY multisplit+seqovl-pattern (NO fake = no ERR_SSL errors)
-            // UDP: fake for QUIC/STUN (safe — only targeted protocols)
-            // Uses absolute paths for hostlists (Cygwin path compatibility)
-
-            // === Exact Flowseal 1.9.7b strategies (proven working) ===
-            // Uses hostfakesplit with SNI spoofing (www.google.com / ya.ru)
-            // DPI sees google.com/ya.ru in TLS, actual traffic goes to discord.com
-            // REQUIRES Flowseal winws.exe (supports hostfakesplit, fake-tls-mod)
-
-            // General — Flowseal general.bat (multisplit+seqovl, safe)
-            "general" =>
-                "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
-                "--wf-udp=443,19294-19344,50000-50100 " +
-                $"--filter-udp=443 --hostlist=\"{P("list-general.txt")}\" " +
-                $"--dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
-                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
-                "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
-                $"--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media --dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\" --new " +
-                $"--filter-tcp=443 --hostlist=\"{P("list-google.txt")}\" --ip-id=zero --dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\" --new " +
-                $"--filter-tcp=80,443 --hostlist=\"{P("list-general.txt")}\" " +
-                $"--dpi-desync=multisplit --dpi-desync-split-seqovl=568 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_4pda_to.bin")}\"",
-
-            // General ALT3 — Flowseal ALT3 (PROVEN WORKING for Discord+YouTube)
-            // Uses hostfakesplit + SNI spoofing (www.google.com for Google, ya.ru for rest)
-            "general (ALT3)" =>
-                "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
-                "--wf-udp=443,19294-19344,50000-50100 " +
-                $"--filter-udp=443 --hostlist=\"{P("list-general.txt")}\" " +
-                $"--dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
-                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
-                "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
-                "--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media " +
-                "--dpi-desync=fake,hostfakesplit --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --dpi-desync-hostfakesplit-mod=host=www.google.com,altorder=1 --dpi-desync-fooling=ts --new " +
-                $"--filter-tcp=443 --hostlist=\"{P("list-google.txt")}\" --ip-id=zero " +
-                "--dpi-desync=fake,hostfakesplit --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --dpi-desync-hostfakesplit-mod=host=www.google.com,altorder=1 --dpi-desync-fooling=ts --new " +
-                $"--filter-tcp=80,443 --hostlist=\"{P("list-general.txt")}\" " +
-                $"--dpi-desync=fake,hostfakesplit --dpi-desync-fake-tls-mod=rnd,dupsid,sni=ya.ru --dpi-desync-hostfakesplit-mod=host=ya.ru,altorder=1 --dpi-desync-fooling=ts --dpi-desync-fake-http=\"{P("tls_clienthello_max_ru.bin")}\"",
-
-            // General ALT — no hostlist version of ALT3 (if hostlist fails)
-            "general (ALT)" =>
-                "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
-                "--wf-udp=443,19294-19344,50000-50100 " +
-                $"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
-                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
-                "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
-                "--filter-tcp=2053,2083,2087,2096,8443 " +
-                "--dpi-desync=fake,hostfakesplit --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --dpi-desync-hostfakesplit-mod=host=www.google.com,altorder=1 --dpi-desync-fooling=ts --new " +
-                "--filter-tcp=80,443 " +
-                "--dpi-desync=fake,hostfakesplit --dpi-desync-fake-tls-mod=rnd,dupsid,sni=ya.ru --dpi-desync-hostfakesplit-mod=host=ya.ru,altorder=1 --dpi-desync-fooling=ts",
-
-            // General ALT2 — plain multisplit + Discord UDP (simplest, proven YouTube)
-            "general (ALT2)" =>
-                "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
-                "--wf-udp=443,19294-19344,50000-50100 " +
-                $"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
-                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
-                "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
-                "--filter-tcp=2053,2083,2087,2096,8443 --dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2 --new " +
-                "--filter-tcp=80,443 --dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2",
-
-            "custom" => customArgs ?? "",
-
-            _ => throw new ArgumentException($"Unknown zapret strategy: {strategy}")
-        };
-
-        _logger.Information("[Zapret] Starting with strategy '{Strategy}'", strategy);
-        _logger.Information("[Zapret] WorkingDir: {Dir}", zapretDir);
+        _logger.Information("[Zapret] WorkingDir: {Dir}", binDir);
         _logger.Information("[Zapret] Args: {Args}", args);
 
-        // Verify critical files exist for Flowseal strategies
-        if (strategy.StartsWith("general"))
-        {
-            var filesDir = Path.Combine(zapretDir, "files");
-            if (!Directory.Exists(filesDir))
-                _logger.Warning("[Zapret] Files dir missing: {Dir}", filesDir);
-            else
-            {
-                var requiredFiles = new[]
-                {
-                    "list-general.txt", "list-google.txt",
-                    "quic_initial_www_google_com.bin",
-                    "tls_clienthello_www_google_com.bin",
-                    "tls_clienthello_max_ru.bin", "stun.bin"
-                };
-                foreach (var f in requiredFiles)
-                {
-                    var path = Path.Combine(filesDir, f);
-                    if (!File.Exists(path))
-                        _logger.Warning("[Zapret] Required file missing: {File}", path);
-                }
-            }
-        }
-
-        // Set error mode to suppress system error dialogs (missing DLL, etc.)
-        // so they don't block the UI with modal popups.
         var psi = new ProcessStartInfo
         {
             FileName = exePath,
             Arguments = args,
-            WorkingDirectory = zapretDir,
+            WorkingDirectory = binDir,
             UseShellExecute = false,
             // Cygwin apps (winws.exe) need a console to initialize properly.
             // CreateNoWindow=false creates a hidden console window.
@@ -189,7 +77,6 @@ public class ZapretManager : IDisposable
             _logger.Warning("[Zapret] Process exited (exit code: {Code})", _process?.ExitCode);
         };
 
-        // Capture output for UI log
         _process.OutputDataReceived += (_, e) =>
         {
             if (!string.IsNullOrEmpty(e.Data))
@@ -210,6 +97,25 @@ public class ZapretManager : IDisposable
         _process.BeginErrorReadLine();
 
         _logger.Information("[Zapret] Started (PID {Pid})", _process.Id);
+    }
+
+    /// <summary>Build arguments for legacy built-in strategies (no Flowseal needed).</summary>
+    public static string BuildLegacyArgs(string strategy, int targetPort = 443)
+    {
+        return strategy switch
+        {
+            "multisplit" =>
+                $"--wf-tcp={targetPort},8443 --wf-l3=ipv4 " +
+                $"--dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2",
+
+            "fake+multisplit" =>
+                $"--wf-tcp={targetPort},8443 --wf-l3=ipv4 " +
+                $"--dpi-desync=fake,multisplit --dpi-desync-ttl=2 " +
+                $"--dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2 " +
+                $"--dpi-desync-fake-tls=0x00000000000000000000",
+
+            _ => throw new ArgumentException($"Unknown legacy strategy: {strategy}")
+        };
     }
 
     public void Stop()
@@ -237,24 +143,6 @@ public class ZapretManager : IDisposable
             _process = null;
             _logger.Information("[Zapret] Stopped");
         }
-    }
-
-    private static string GetZapretDir()
-    {
-        // Look for zapret binaries in app directory
-        var appDir = AppContext.BaseDirectory;
-        var zapretDir = Path.Combine(appDir, "zapret");
-        if (Directory.Exists(zapretDir) && File.Exists(Path.Combine(zapretDir, "winws.exe")))
-            return zapretDir;
-
-        // Fallback: ProgramData
-        var pdDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "VPNRouter", "zapret");
-        if (Directory.Exists(pdDir))
-            return pdDir;
-
-        return zapretDir; // Will fail with FileNotFound
     }
 
     public void Dispose()
