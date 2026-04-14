@@ -74,11 +74,11 @@ public class ZapretManager : IDisposable
             // General — exact Flowseal general.bat (multisplit+seqovl, no fake on TCP)
             "general" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
-                "--wf-udp=443,19294-19344,50000-50100 " +
+                "--wf-udp=443,19294-19344,50000-65535 " +
                 // QUIC on UDP 443
                 $"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
                 // Discord voice (STUN/RTC)
-                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
+                "--filter-udp=19294-19344,50000-65535 --filter-l7=discord,stun " +
                 "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
                 // Discord CDN on TCP alt-ports — multisplit+seqovl (safe, no fake)
                 $"--filter-tcp=2053,2083,2087,2096,8443 --dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\" --new " +
@@ -88,9 +88,9 @@ public class ZapretManager : IDisposable
             // General ALT — same but with seqovl=681 everywhere (google pattern)
             "general (ALT)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
-                "--wf-udp=443,19294-19344,50000-50100 " +
+                "--wf-udp=443,19294-19344,50000-65535 " +
                 $"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
-                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
+                "--filter-udp=19294-19344,50000-65535 --filter-l7=discord,stun " +
                 "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
                 $"--filter-tcp=2053,2083,2087,2096,8443 --dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\" --new " +
                 $"--filter-tcp=80,443 --dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\"",
@@ -98,9 +98,9 @@ public class ZapretManager : IDisposable
             // General ALT2 — plain multisplit (no seqovl, simplest — proven for YouTube)
             "general (ALT2)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
-                "--wf-udp=443,19294-19344,50000-50100 " +
+                "--wf-udp=443,19294-19344,50000-65535 " +
                 $"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
-                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
+                "--filter-udp=19294-19344,50000-65535 --filter-l7=discord,stun " +
                 "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
                 "--filter-tcp=2053,2083,2087,2096,8443 --dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2 --new " +
                 "--filter-tcp=80,443 --dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2",
@@ -108,9 +108,9 @@ public class ZapretManager : IDisposable
             // General ALT3 — fake,fakedsplit + autottl (stronger but riskier)
             "general (ALT3)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
-                "--wf-udp=443,19294-19344,50000-50100 " +
+                "--wf-udp=443,19294-19344,50000-65535 " +
                 $"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
-                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
+                "--filter-udp=19294-19344,50000-65535 --filter-l7=discord,stun " +
                 "--dpi-desync=fake --dpi-desync-repeats=11 --new " +
                 "--filter-tcp=2053,2083,2087,2096,8443 --dpi-desync=fake,multisplit --dpi-desync-autottl=2 --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=1 --dpi-desync-repeats=6 --new " +
                 "--filter-tcp=80,443 --dpi-desync=fake,multisplit --dpi-desync-autottl=2 --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=1 --dpi-desync-repeats=6",

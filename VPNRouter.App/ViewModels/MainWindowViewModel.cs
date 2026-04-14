@@ -101,6 +101,9 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private int _zapretStrategyIndex = 0;
     [ObservableProperty] private string _zapretCustomArgs = string.Empty;
     [ObservableProperty] private string _zapretStatus = "Stopped";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblDiscordHosts))]
+    private bool _discordHostsInstalled = false;
 
     public string[] ZapretStrategies => new[]
     {
@@ -241,6 +244,12 @@ public partial class MainWindowViewModel : ViewModelBase
     public string LblDpiToggle => IsRussian
         ? (ZapretEnabled ? "Остановить обход DPI" : "Запустить обход DPI")
         : (ZapretEnabled ? "Stop DPI Bypass" : "Start DPI Bypass");
+    public string LblDiscordHosts => IsRussian
+        ? (DiscordHostsInstalled ? "Удалить Discord hosts" : "Добавить Discord hosts")
+        : (DiscordHostsInstalled ? "Remove Discord hosts" : "Add Discord hosts");
+    public string LblDiscordHostsDesc => IsRussian
+        ? "Перенаправляет Discord voice серверы (finland*.discord.media) на рабочий Cloudflare IP. Фиксит голосовые каналы."
+        : "Redirects Discord voice servers (finland*.discord.media) to working Cloudflare IP. Fixes voice channels.";
     public string ReceivePrereleasesLabel => IsRussian ? "Получать prerelease обновления (experimental канал)" : "Receive prereleases (experimental channel)";
     public string UpdateChannelHeader => IsRussian ? "Канал обновлений" : "Update channel";
 
@@ -390,6 +399,10 @@ public partial class MainWindowViewModel : ViewModelBase
             ZapretEnabled = false;
             ZapretStatus = IsRussian ? "Остановлен" : "Stopped";
         }
+
+#if PLATFORM_WINDOWS
+        DiscordHostsInstalled = VPNRouter.Core.Services.HostsManager.IsInstalled();
+#endif
 
         // Update channel
         ReceivePrereleases = _settings.Update.IsExperimental;
@@ -982,6 +995,35 @@ public partial class MainWindowViewModel : ViewModelBase
             _logger.Error(ex, "[VM] Zapret start failed");
             ZapretStatus = $"Error: {ex.Message}";
             ZapretEnabled = false;
+        }
+#endif
+    }
+
+    [RelayCommand]
+    private void ToggleDiscordHosts()
+    {
+#if PLATFORM_WINDOWS
+        try
+        {
+            if (DiscordHostsInstalled)
+            {
+                var (ok, msg) = VPNRouter.Core.Services.HostsManager.Uninstall(_logger);
+                DiscordHostsInstalled = !ok || VPNRouter.Core.Services.HostsManager.IsInstalled();
+                ZapretStatus = ok ? (IsRussian ? "Discord hosts удалены" : "Discord hosts removed")
+                                  : msg;
+            }
+            else
+            {
+                var (ok, msg) = VPNRouter.Core.Services.HostsManager.Install(_logger);
+                DiscordHostsInstalled = VPNRouter.Core.Services.HostsManager.IsInstalled();
+                ZapretStatus = ok ? (IsRussian ? "Discord hosts добавлены (200 серверов)" : "Discord hosts added (200 servers)")
+                                  : msg;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] Discord hosts toggle failed");
+            ZapretStatus = $"Hosts error: {ex.Message}";
         }
 #endif
     }
