@@ -71,56 +71,61 @@ public class ZapretManager : IDisposable
             // UDP: fake for QUIC/STUN (safe — only targeted protocols)
             // Uses absolute paths for hostlists (Cygwin path compatibility)
 
-            // General — exact Flowseal general.bat (multisplit+seqovl)
-            // Discord text+voice: seqovl masks TLS SNI with fake ClientHello pattern
-            // YouTube: seqovl also works, no ERR_SSL because no fake packets
+            // === Exact Flowseal 1.9.7b strategies (proven working) ===
+            // Uses hostfakesplit with SNI spoofing (www.google.com / ya.ru)
+            // DPI sees google.com/ya.ru in TLS, actual traffic goes to discord.com
+            // REQUIRES Flowseal winws.exe (supports hostfakesplit, fake-tls-mod)
+
+            // General — Flowseal general.bat (multisplit+seqovl, safe)
             "general" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
-                "--wf-udp=443,19294-19344,50000-65535 " +
-                // QUIC on UDP 443 (hostlist = only Discord/YouTube domains)
+                "--wf-udp=443,19294-19344,50000-50100 " +
                 $"--filter-udp=443 --hostlist=\"{P("list-general.txt")}\" " +
                 $"--dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
-                // Discord voice (STUN/RTC)
-                "--filter-udp=19294-19344,50000-65535 --filter-l7=discord,stun " +
+                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
                 "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
-                // Discord CDN on TCP alt-ports
-                $"--filter-tcp=2053,2083,2087,2096,8443 --dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\" --new " +
-                // Google/YouTube on TCP 443 (separate profile)
-                $"--filter-tcp=443 --hostlist=\"{P("list-google.txt")}\" " +
-                $"--dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\" --new " +
-                // Discord + Cloudflare on TCP 80,443 (hostlist = only target domains)
+                $"--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media --dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\" --new " +
+                $"--filter-tcp=443 --hostlist=\"{P("list-google.txt")}\" --ip-id=zero --dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\" --new " +
                 $"--filter-tcp=80,443 --hostlist=\"{P("list-general.txt")}\" " +
                 $"--dpi-desync=multisplit --dpi-desync-split-seqovl=568 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_4pda_to.bin")}\"",
 
-            // General ALT — same seqovl but NO hostlist (processes ALL traffic)
+            // General ALT3 — Flowseal ALT3 (PROVEN WORKING for Discord+YouTube)
+            // Uses hostfakesplit + SNI spoofing (www.google.com for Google, ya.ru for rest)
+            "general (ALT3)" =>
+                "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
+                "--wf-udp=443,19294-19344,50000-50100 " +
+                $"--filter-udp=443 --hostlist=\"{P("list-general.txt")}\" " +
+                $"--dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
+                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
+                "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
+                "--filter-tcp=2053,2083,2087,2096,8443 --hostlist-domains=discord.media " +
+                "--dpi-desync=fake,hostfakesplit --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --dpi-desync-hostfakesplit-mod=host=www.google.com,altorder=1 --dpi-desync-fooling=ts --new " +
+                $"--filter-tcp=443 --hostlist=\"{P("list-google.txt")}\" --ip-id=zero " +
+                "--dpi-desync=fake,hostfakesplit --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --dpi-desync-hostfakesplit-mod=host=www.google.com,altorder=1 --dpi-desync-fooling=ts --new " +
+                $"--filter-tcp=80,443 --hostlist=\"{P("list-general.txt")}\" " +
+                $"--dpi-desync=fake,hostfakesplit --dpi-desync-fake-tls-mod=rnd,dupsid,sni=ya.ru --dpi-desync-hostfakesplit-mod=host=ya.ru,altorder=1 --dpi-desync-fooling=ts --dpi-desync-fake-http=\"{P("tls_clienthello_max_ru.bin")}\"",
+
+            // General ALT — no hostlist version of ALT3 (if hostlist fails)
             "general (ALT)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
-                "--wf-udp=443,19294-19344,50000-65535 " +
+                "--wf-udp=443,19294-19344,50000-50100 " +
                 $"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
-                "--filter-udp=19294-19344,50000-65535 --filter-l7=discord,stun " +
+                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
                 "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
-                $"--filter-tcp=2053,2083,2087,2096,8443 --dpi-desync=multisplit --dpi-desync-split-seqovl=681 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_www_google_com.bin")}\" --new " +
-                $"--filter-tcp=80,443 --dpi-desync=multisplit --dpi-desync-split-seqovl=568 --dpi-desync-split-pos=1 --dpi-desync-split-seqovl-pattern=\"{P("tls_clienthello_4pda_to.bin")}\"",
+                "--filter-tcp=2053,2083,2087,2096,8443 " +
+                "--dpi-desync=fake,hostfakesplit --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --dpi-desync-hostfakesplit-mod=host=www.google.com,altorder=1 --dpi-desync-fooling=ts --new " +
+                "--filter-tcp=80,443 " +
+                "--dpi-desync=fake,hostfakesplit --dpi-desync-fake-tls-mod=rnd,dupsid,sni=ya.ru --dpi-desync-hostfakesplit-mod=host=ya.ru,altorder=1 --dpi-desync-fooling=ts",
 
             // General ALT2 — plain multisplit + Discord UDP (simplest, proven YouTube)
             "general (ALT2)" =>
                 "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
-                "--wf-udp=443,19294-19344,50000-65535 " +
+                "--wf-udp=443,19294-19344,50000-50100 " +
                 $"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
-                "--filter-udp=19294-19344,50000-65535 --filter-l7=discord,stun " +
+                "--filter-udp=19294-19344,50000-50100 --filter-l7=discord,stun " +
                 "--dpi-desync=fake --dpi-desync-repeats=6 --new " +
                 "--filter-tcp=2053,2083,2087,2096,8443 --dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2 --new " +
                 "--filter-tcp=80,443 --dpi-desync=multisplit --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=2",
-
-            // General ALT3 — fake+autottl (stronger but may break some sites)
-            "general (ALT3)" =>
-                "--wf-tcp=80,443,2053,2083,2087,2096,8443 " +
-                "--wf-udp=443,19294-19344,50000-65535 " +
-                $"--filter-udp=443 --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic=\"{P("quic_initial_www_google_com.bin")}\" --new " +
-                "--filter-udp=19294-19344,50000-65535 --filter-l7=discord,stun " +
-                "--dpi-desync=fake --dpi-desync-repeats=11 --new " +
-                "--filter-tcp=2053,2083,2087,2096,8443 --dpi-desync=fake,multisplit --dpi-desync-autottl=2 --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=1 --dpi-desync-repeats=6 --new " +
-                "--filter-tcp=80,443 --dpi-desync=fake,multisplit --dpi-desync-autottl=2 --dpi-desync-split-seqovl=2 --dpi-desync-split-pos=1 --dpi-desync-repeats=6",
 
             "custom" => customArgs ?? "",
 
