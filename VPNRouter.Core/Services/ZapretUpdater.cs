@@ -289,24 +289,37 @@ public class ZapretUpdater
         args = args.Replace("%BIN%", binPath, StringComparison.OrdinalIgnoreCase);
         args = args.Replace("%LISTS%", listsPath, StringComparison.OrdinalIgnoreCase);
 
-        // Strip game filter variables from port lists
-        // e.g. "--wf-tcp=80,443,...,%GameFilterTCP%" → "--wf-tcp=80,443,..."
+        // Strip game filter variables from --wf-tcp/--wf-udp port lists
+        // e.g. "--wf-tcp=80,443,%GameFilterTCP%" → "--wf-tcp=80,443"
         args = Regex.Replace(args, @",\s*%GameFilter\w+%", "", RegexOptions.IgnoreCase);
         args = Regex.Replace(args, @"%GameFilter\w+%\s*,?", "", RegexOptions.IgnoreCase);
 
-        // Strip entire --new blocks that ONLY reference game filter ports
-        // These are blocks like: --new --filter-tcp=%GameFilterTCP% ...
-        // After variable substitution, %GameFilterTCP% becomes empty, leaving --filter-tcp= with no ports
-        args = Regex.Replace(args,
-            @"--new\s+--filter-(?:tcp|udp)=\s+[^-]*(--new|$)",
-            "$1", RegexOptions.IgnoreCase);
+        // Split into --new segments and filter out game-filter-only blocks
+        // After GameFilter substitution, blocks like "--filter-tcp=%GameFilterTCP% ..."
+        // become "--filter-tcp= ..." (empty port) which crashes winws.exe
+        var segments = Regex.Split(args, @"\s+--new\s+");
+        var validSegments = new List<string>();
+        foreach (var seg in segments)
+        {
+            var trimmed = seg.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed)) continue;
 
-        // Clean up: collapse whitespace, remove trailing --new
+            // Check if this segment has --filter-tcp= or --filter-udp= with empty port
+            // e.g. "--filter-tcp=--ipset=..." or "--filter-tcp= --ipset=..."
+            if (Regex.IsMatch(trimmed, @"--filter-(?:tcp|udp)=(?:\s|--)", RegexOptions.IgnoreCase))
+                continue; // Skip: empty port filter = game filter block
+            if (Regex.IsMatch(trimmed, @"--filter-(?:tcp|udp)=$", RegexOptions.IgnoreCase))
+                continue; // Skip: trailing empty filter
+
+            validSegments.Add(trimmed);
+        }
+
+        args = string.Join(" --new ", validSegments);
+
+        // Clean up: collapse whitespace
         args = Regex.Replace(args, @"\s+", " ").Trim();
-        args = Regex.Replace(args, @"\s*--new\s*$", "").Trim();
 
         // Remove double backslashes that Path.Combine might create
-        // (e.g. bin\\ → bin\)
         args = args.Replace("\\\\", "\\");
 
         return args;
