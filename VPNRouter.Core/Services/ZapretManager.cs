@@ -50,17 +50,17 @@ public class ZapretManager : IDisposable
         _logger.Information("[Zapret] WorkingDir: {Dir}", binDir);
         _logger.Information("[Zapret] Args: {Args}", args);
 
+        // Launch via cmd.exe — Cygwin winws.exe needs a real console,
+        // not pipe-redirected stdout/stderr. Direct Process.Start with
+        // RedirectStandardOutput=true causes exit code 1 on Cygwin apps.
+        // Bat files work because cmd.exe creates a proper console window.
         var psi = new ProcessStartInfo
         {
-            FileName = exePath,
-            Arguments = args,
+            FileName = "cmd.exe",
+            Arguments = $"/c cd /d \"{binDir}\" && winws.exe {args}",
             WorkingDirectory = binDir,
             UseShellExecute = false,
-            // Cygwin apps (winws.exe) need a console to initialize properly.
-            // CreateNoWindow=false creates a hidden console window.
             CreateNoWindow = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
             WindowStyle = ProcessWindowStyle.Hidden
         };
 
@@ -76,25 +76,6 @@ public class ZapretManager : IDisposable
         {
             _logger.Warning("[Zapret] Process exited (exit code: {Code})", _process?.ExitCode);
         };
-
-        _process.OutputDataReceived += (_, e) =>
-        {
-            if (!string.IsNullOrEmpty(e.Data))
-            {
-                _logger.Debug("[Zapret] {Line}", e.Data);
-                OutputReceived?.Invoke(e.Data);
-            }
-        };
-        _process.ErrorDataReceived += (_, e) =>
-        {
-            if (!string.IsNullOrEmpty(e.Data))
-            {
-                _logger.Debug("[Zapret] {Line}", e.Data);
-                OutputReceived?.Invoke(e.Data);
-            }
-        };
-        _process.BeginOutputReadLine();
-        _process.BeginErrorReadLine();
 
         _logger.Information("[Zapret] Started (PID {Pid})", _process.Id);
     }
