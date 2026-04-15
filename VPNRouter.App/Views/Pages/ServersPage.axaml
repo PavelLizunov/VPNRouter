@@ -11,16 +11,31 @@
         <conv:BoolToFontWeightConverter x:Key="ActiveFontConverter"/>
     </UserControl.Resources>
 
-    <Grid RowDefinitions="*,Auto">
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Sub-tab strip: VLESS Servers / Custom Config -->
+        <ListBox Grid.Row="0"
+                 SelectedIndex="{Binding SelectedServerModeIndex}"
+                 Background="Transparent"
+                 BorderThickness="0,0,0,1"
+                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                 Padding="6,2">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="4"/>
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBoxItem Content="{Binding LblServerModeVless}"  Padding="10,4" FontSize="11"/>
+            <ListBoxItem Content="{Binding LblServerModeCustom}" Padding="10,4" FontSize="11"/>
+        </ListBox>
 
         <!-- ═══ VLESS Panel ═══ -->
-        <Grid Grid.Row="0"
+        <Grid Grid.Row="1"
               IsVisible="{Binding IsVlessMode}"
               RowDefinitions="*,Auto,Auto"
               Margin="10,8,10,4">
 
-            <!-- Server list — fills * row, has its own scroll
-                 Left click = select active. Right click = open detail editor. -->
+            <!-- Server list -->
             <ListBox Grid.Row="0"
                      x:Name="ServerList"
                      ItemsSource="{Binding Servers}"
@@ -48,13 +63,13 @@
                            FontSize="10" Opacity="0.6" TextWrapping="Wrap"/>
             </StackPanel>
 
-            <!-- Server detail editor (opened via right-click; close via ✕) -->
+            <!-- Server detail editor (opened via right-click) -->
             <Border Grid.Row="2"
                     IsVisible="{Binding DetailServer, Converter={x:Static ObjectConverters.IsNotNull}}"
                     BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                     BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,6,0,0">
                 <DockPanel>
-                    <Button DockPanel.Dock="Top" HorizontalAlignment="Right" Content="✕"
+                    <Button DockPanel.Dock="Top" HorizontalAlignment="Right" Content="X"
                             Command="{Binding CloseServerDetailCommand}"
                             Background="Transparent" BorderThickness="0"
                             Padding="6,0" MinHeight="0" FontSize="11" Opacity="0.6"
@@ -81,7 +96,7 @@
         </Grid>
 
         <!-- ═══ Custom Config Panel ═══ -->
-        <Grid Grid.Row="0"
+        <Grid Grid.Row="1"
               IsVisible="{Binding !IsVlessMode}"
               RowDefinitions="*,Auto"
               Margin="10,8,10,4">
@@ -93,7 +108,7 @@
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:CustomConfigViewModel">
                         <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
-                            <TextBlock Grid.Column="0" Text="●" Foreground="#22C55E"
+                            <TextBlock Grid.Column="0" Text="O" Foreground="#22C55E"
                                        IsVisible="{Binding IsActive}"
                                        VerticalAlignment="Center" Margin="0,0,6,0" FontSize="8"/>
                             <TextBlock Grid.Column="1" Text="{Binding Name}"
@@ -111,19 +126,11 @@
                        FontSize="10" Opacity="0.5" Margin="0,4,0,0"/>
         </Grid>
 
-        <!-- ═══ Bottom action bar: mode + add/remove ═══ -->
-        <Border Grid.Row="1" Padding="10,6"
+        <!-- ═══ Bottom action bar ═══ -->
+        <Border Grid.Row="2" Padding="10,6"
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
             <StackPanel Spacing="6">
-                <!-- Mode toggle: VLESS / Custom Config -->
-                <StackPanel Orientation="Horizontal" Spacing="16">
-                    <RadioButton Content="{Binding LblVlessServers}"
-                                 IsChecked="{Binding IsVlessMode}"
-                                 GroupName="ManualMode" FontWeight="SemiBold"/>
-                    <RadioButton Content="{Binding LblCustomConfigJson}"
-                                 GroupName="ManualMode" FontWeight="SemiBold"/>
-                </StackPanel>
                 <!-- VLESS: URI input + Add/Remove -->
                 <DockPanel IsVisible="{Binding IsVlessMode}" LastChildFill="True">
                     <Button DockPanel.Dock="Right" Content="{Binding LblAddServers}"

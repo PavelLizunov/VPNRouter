@@ -144,6 +144,19 @@ public partial class MainWindowViewModel : ViewModelBase
     public bool IsAppsTabSelected => SelectedTabIndex == 3;
     public bool IsToolsTabSelected => SelectedTabIndex == 4;
 
+    // Servers sub-tabs (VLESS / Custom Config)
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVlessMode))]
+    private int _selectedServerModeIndex;
+
+    partial void OnSelectedServerModeIndexChanged(int value)
+    {
+        if (_isLoadingUI) return;
+        // Sync IsVlessMode with sub-tab index (0=VLESS, 1=Custom)
+        IsVlessMode = value == 0;
+        SaveSettings();
+    }
+
     // Tools sub-tabs
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsZapretToolSelected))]
@@ -253,6 +266,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // DPI Bypass labels
     public string LblTabTools => IsRussian ? "Инструменты" : "Tools";
+    public string LblServerModeVless => Strings.VlessServers;
+    public string LblServerModeCustom => Strings.CustomConfigJson;
     public string LblToolZapret => Strings.TabZapret;
     public string LblToolTgProxy => Strings.TabTgWsProxy;
     public string LblDpiBypassTab => Strings.TabZapret;
@@ -401,6 +416,7 @@ public partial class MainWindowViewModel : ViewModelBase
         var configMode = _settings.App.ConfigMode ?? "generated";
         IsSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
         IsVlessMode = !configMode.Equals("custom", StringComparison.OrdinalIgnoreCase) && !IsSubscribeMode;
+        SelectedServerModeIndex = IsVlessMode ? 0 : 1;
         SubscriptionUrl = _settings.App.SubscriptionUrl ?? "";
         // Set initial tab: 0=Manual, 1=Subscribe, 2=Network, 3=Applications
         SelectedTabIndex = IsSubscribeMode ? 1 : 0;
