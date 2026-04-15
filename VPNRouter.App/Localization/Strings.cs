@@ -12,6 +12,9 @@ public static class Strings
     public static string TabServers => Ru ? "Серверы" : "Servers";
     public static string TabApps => Ru ? "Приложения" : "Applications";
     public static string TabNetwork => Ru ? "Сеть" : "Network";
+    public static string TabSettings => Ru ? "Настройки" : "Settings";
+    public static string TabZapret => "Zapret";
+    public static string TabTgWsProxy => "Tg-ws-proxy";
 
     // ── Config mode ──
     public static string VlessServers => Ru ? "VLESS Серверы" : "VLESS Servers";

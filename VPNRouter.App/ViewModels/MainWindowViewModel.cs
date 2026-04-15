@@ -203,10 +203,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // ── Localized labels (proxies to Strings.cs, refreshed on language toggle) ──
     public string LblTabServers => Strings.TabServers;
-    public string LblTabManual => Strings.ModeManual;
+    public string LblTabManual => Strings.TabServers;
     public string LblTabSubscribe => Strings.ModeSubscribe;
     public string LblTabApps => Strings.TabApps;
-    public string LblTabNetwork => Strings.TabNetwork;
+    public string LblTabNetwork => Strings.TabSettings;
     public string LblVlessServers => Strings.VlessServers;
     public string LblCustomConfigJson => Strings.CustomConfigJson;
     public string LblAddServers => Strings.AddServers;
@@ -245,7 +245,7 @@ public partial class MainWindowViewModel : ViewModelBase
         : "AdGuard DNS + adblock rule_set (~300K domains)";
 
     // DPI Bypass labels
-    public string LblDpiBypassTab => IsRussian ? "Обход DPI" : "DPI Bypass";
+    public string LblDpiBypassTab => Strings.TabZapret;
     public string LblDpiDescription => IsRussian
         ? "Обход блокировок провайдера (zapret от Flowseal). Работает с Discord, YouTube, и другими заблокированными сервисами. Если стратегия не работает — пробуйте другую."
         : "Bypass ISP blocking (zapret by Flowseal). Works with Discord, YouTube, and other blocked services. If a strategy doesn't work — try another.";
@@ -269,7 +269,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public string UpdateChannelHeader => IsRussian ? "Канал обновлений" : "Update channel";
 
     // Telegram proxy labels
-    public string LblTabTelegram => Strings.TabTelegram;
+    public string LblTabTelegram => Strings.TabTgWsProxy;
     public string LblTgProxyDescription => Strings.TgProxyDescription;
     public string LblTgProxySetupHint => Strings.TgProxySetupHint;
     public string LblTgProxyToggle => TgProxyEnabled ? Strings.TgProxyStop : Strings.TgProxyStart;

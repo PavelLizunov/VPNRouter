@@ -118,7 +118,7 @@
                 <ListBoxItem Content="{Binding LblTabSubscribe}" Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
                 <ListBoxItem Content="{Binding LblTabNetwork}"   Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
                 <ListBoxItem Content="{Binding LblTabApps}"      Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblDpiBypassTab}" Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblDpiBypassTab}" Padding="14,6" FontSize="12" FontWeight="SemiBold" Margin="12,0,0,0"/>
                 <ListBoxItem Content="{Binding LblTabTelegram}" Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
             </ListBox>
 
