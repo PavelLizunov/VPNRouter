@@ -114,12 +114,12 @@
                         <StackPanel Orientation="Horizontal" Spacing="4"/>
                     </ItemsPanelTemplate>
                 </ListBox.ItemsPanel>
-                <ListBoxItem Content="{Binding LblTabManual}"    Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblTabSubscribe}" Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblTabNetwork}"   Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblTabApps}"      Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblDpiBypassTab}" Padding="14,6" FontSize="12" FontWeight="SemiBold" Margin="12,0,0,0"/>
-                <ListBoxItem Content="{Binding LblTabTelegram}" Padding="14,6" FontSize="12" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblTabManual}"    Padding="10,6" FontSize="11" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblTabSubscribe}" Padding="10,6" FontSize="11" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblTabNetwork}"   Padding="10,6" FontSize="11" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblTabApps}"      Padding="10,6" FontSize="11" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblDpiBypassTab}" Padding="10,6" FontSize="11" FontWeight="SemiBold" Margin="10,0,0,0"/>
+                <ListBoxItem Content="{Binding LblTabTelegram}"  Padding="10,6" FontSize="11" FontWeight="SemiBold"/>
             </ListBox>
 
             <!-- Pages: all five live in same Grid cell, only selected one visible. -->
