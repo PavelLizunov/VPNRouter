@@ -135,16 +135,23 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsSubscribeTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsNetworkTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsAppsTabSelected))]
-    [NotifyPropertyChangedFor(nameof(IsDpiBypassTabSelected))]
-    [NotifyPropertyChangedFor(nameof(IsTelegramTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsToolsTabSelected))]
     private int _selectedTabIndex;
 
     public bool IsServersTabSelected => SelectedTabIndex == 0;
     public bool IsSubscribeTabSelected => SelectedTabIndex == 1;
     public bool IsNetworkTabSelected => SelectedTabIndex == 2;
     public bool IsAppsTabSelected => SelectedTabIndex == 3;
-    public bool IsDpiBypassTabSelected => SelectedTabIndex == 4;
-    public bool IsTelegramTabSelected => SelectedTabIndex == 5;
+    public bool IsToolsTabSelected => SelectedTabIndex == 4;
+
+    // Tools sub-tabs
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsZapretToolSelected))]
+    [NotifyPropertyChangedFor(nameof(IsTgProxyToolSelected))]
+    private int _selectedToolIndex;
+
+    public bool IsZapretToolSelected => SelectedToolIndex == 0;
+    public bool IsTgProxyToolSelected => SelectedToolIndex == 1;
 
     [ObservableProperty] private AppGroupViewModel? _selectedAppGroup;
 
@@ -245,6 +252,9 @@ public partial class MainWindowViewModel : ViewModelBase
         : "AdGuard DNS + adblock rule_set (~300K domains)";
 
     // DPI Bypass labels
+    public string LblTabTools => IsRussian ? "Инструменты" : "Tools";
+    public string LblToolZapret => Strings.TabZapret;
+    public string LblToolTgProxy => Strings.TabTgWsProxy;
     public string LblDpiBypassTab => Strings.TabZapret;
     public string LblDpiDescription => IsRussian
         ? "Обход блокировок провайдера (zapret от Flowseal). Работает с Discord, YouTube, и другими заблокированными сервисами. Если стратегия не работает — пробуйте другую."
@@ -433,7 +443,7 @@ public partial class MainWindowViewModel : ViewModelBase
         TgProxyVersionText = TgProxyUpdater.IsInstalled()
             ? (TgProxyUpdater.GetLocalVersion() ?? "?")
             : (IsRussian ? "Не установлен" : "Not installed");
-        if (TgProxyManager.IsAnyRunning())
+        if (TgProxyManager.IsAnyRunning(TgProxyPort))
         {
             TgProxyEnabled = true;
             TgProxyStatus = IsRussian ? "Работает (из предыдущей сессии)" : "Running (from previous session)";
@@ -1277,7 +1287,7 @@ public partial class MainWindowViewModel : ViewModelBase
         try
         {
             // Stop if running
-            if (TgProxyEnabled || TgProxyManager.IsAnyRunning())
+            if (TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort))
             {
                 _tgProxy?.Stop();
                 TgProxyManager.KillAll();
@@ -1312,7 +1322,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
 #if PLATFORM_WINDOWS
         // If running → stop
-        if (TgProxyEnabled || TgProxyManager.IsAnyRunning())
+        if (TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort))
         {
             _tgProxy?.Stop();
             TgProxyManager.KillAll();
@@ -1346,7 +1356,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
             // Verify it actually started
             await Task.Delay(2000);
-            if (_tgProxy.IsRunning || TgProxyManager.IsAnyRunning())
+            if (_tgProxy.IsRunning || TgProxyManager.IsAnyRunning(TgProxyPort))
             {
                 TgProxyEnabled = true;
                 TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", TgProxyPort, TgProxySecret);

@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:VPNRouter.App.ViewModels"
+             xmlns:pages="using:VPNRouter.App.Views.Pages"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
+             x:Class="VPNRouter.App.Views.Pages.ToolsPage"
+             x:DataType="vm:MainWindowViewModel">
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- Sub-tab strip -->
+        <ListBox Grid.Row="0"
+                 SelectedIndex="{Binding SelectedToolIndex}"
+                 Background="Transparent"
+                 BorderThickness="0,0,0,1"
+                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                 Padding="6,2">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="4"/>
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBoxItem Content="{Binding LblToolZapret}"  Padding="10,4" FontSize="11"/>
+            <ListBoxItem Content="{Binding LblToolTgProxy}" Padding="10,4" FontSize="11"/>
+        </ListBox>
+
+        <!-- Sub-pages -->
+        <Grid Grid.Row="1">
+            <pages:DpiBypassPage IsVisible="{Binding IsZapretToolSelected}"/>
+            <pages:TelegramPage  IsVisible="{Binding IsTgProxyToolSelected}"/>
+        </Grid>
+
+    </Grid>
+</UserControl>

@@ -114,12 +114,11 @@
                         <StackPanel Orientation="Horizontal" Spacing="4"/>
                     </ItemsPanelTemplate>
                 </ListBox.ItemsPanel>
-                <ListBoxItem Content="{Binding LblTabManual}"    Padding="10,6" FontSize="11" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblTabSubscribe}" Padding="10,6" FontSize="11" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblTabNetwork}"   Padding="10,6" FontSize="11" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblTabApps}"      Padding="10,6" FontSize="11" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblDpiBypassTab}" Padding="10,6" FontSize="11" FontWeight="SemiBold" Margin="10,0,0,0"/>
-                <ListBoxItem Content="{Binding LblTabTelegram}"  Padding="10,6" FontSize="11" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblTabManual}"    Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblTabSubscribe}" Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblTabNetwork}"   Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblTabApps}"      Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblTabTools}"     Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
             </ListBox>
 
             <!-- Pages: all five live in same Grid cell, only selected one visible. -->
@@ -128,8 +127,7 @@
                 <pages:SubscribePage    IsVisible="{Binding IsSubscribeTabSelected}"/>
                 <pages:NetworkPage      IsVisible="{Binding IsNetworkTabSelected}"/>
                 <pages:ApplicationsPage IsVisible="{Binding IsAppsTabSelected}"/>
-                <pages:DpiBypassPage    IsVisible="{Binding IsDpiBypassTabSelected}"/>
-                <pages:TelegramPage     IsVisible="{Binding IsTelegramTabSelected}"/>
+                <pages:ToolsPage        IsVisible="{Binding IsToolsTabSelected}"/>
             </Grid>
         </Grid>
 

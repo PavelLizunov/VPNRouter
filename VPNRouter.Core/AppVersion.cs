@@ -7,5 +7,5 @@ namespace VPNRouter.Core;
 /// </summary>
 public static class AppVersion
 {
-    public const string Version = "2.10.9";
+    public const string Version = "2.10.10";
 }

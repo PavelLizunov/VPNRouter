@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.NetworkInformation;
 using Serilog;
 
 namespace VPNRouter.Core.Services;
@@ -149,12 +150,15 @@ public class TgProxyManager : IDisposable
         }
     }
 
-    /// <summary>Check if tg-ws-proxy is running (any instance).</summary>
-    public static bool IsAnyRunning()
+    /// <summary>Check if tg-ws-proxy is running by checking if the port is in use.</summary>
+    public static bool IsAnyRunning(int port = 1443)
     {
-        // Check both the old exe name and python-based process
-        return Process.GetProcessesByName("tg-ws-proxy").Length > 0
-            || Process.GetProcessesByName("TgWsProxy_windows").Length > 0;
+        try
+        {
+            var listeners = IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners();
+            return listeners.Any(l => l.Port == port);
+        }
+        catch { return false; }
     }
 
     /// <summary>Kill ALL tg-ws-proxy processes system-wide.</summary>
