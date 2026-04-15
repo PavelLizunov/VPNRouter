@@ -30,6 +30,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private AppSettings _settings;
     private bool _isLoadingUI;
     private bool _appsLoaded;
+    private System.Threading.Timer? _subRefreshTimer;
+    private const int SubRefreshIntervalMs = 3600_000; // 1 hour
 
     // ── Observable state ──
 
@@ -761,6 +763,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 IsConnected = true;
                 IsConnecting = false;
                 ConnectButtonText = Strings.StopVPN;
+                StartSubRefreshTimer();
                 // Use engine's actual runtime state — not stale ViewModel cache.
                 // This prevents "status says 104 but actually running 194" mismatch.
                 var serverIp = _engine.ActiveServerAddress;
@@ -791,6 +794,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 IsConnecting = false;
                 ConnectButtonText = Strings.StartVPN;
                 StatusText = Strings.NotConnected;
+                StopSubRefreshTimer();
             }
         });
     }
@@ -951,6 +955,94 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             _logger.Error(ex, "[VM] Subscription sync failed");
             StatusText = Strings.SyncFailed(ex.Message);
+        }
+    }
+
+    // ── Subscription auto-refresh ──
+
+    /// <summary>Start periodic subscription refresh (when VPN connected in subscribe mode).</summary>
+    private void StartSubRefreshTimer()
+    {
+        StopSubRefreshTimer();
+        if (!IsSubscribeMode || string.IsNullOrWhiteSpace(SubscriptionUrl)) return;
+
+        _logger.Information("[SubRefresh] Starting timer (interval: {Sec}s)", SubRefreshIntervalMs / 1000);
+        _subRefreshTimer = new System.Threading.Timer(
+            _ => Dispatcher.UIThread.Post(async () => await RefreshSubscriptionSilentAsync()),
+            null,
+            SubRefreshIntervalMs,
+            SubRefreshIntervalMs);
+    }
+
+    /// <summary>Stop the subscription refresh timer.</summary>
+    private void StopSubRefreshTimer()
+    {
+        _subRefreshTimer?.Dispose();
+        _subRefreshTimer = null;
+    }
+
+    /// <summary>
+    /// Silent subscription refresh — fetches new servers, compares UUIDs,
+    /// and reconnects if they changed (e.g. server rotated UUID).
+    /// </summary>
+    private async Task RefreshSubscriptionSilentAsync()
+    {
+        if (!IsConnected || !IsSubscribeMode || string.IsNullOrWhiteSpace(SubscriptionUrl))
+            return;
+
+        try
+        {
+            _logger.Information("[SubRefresh] Checking for server updates...");
+            var entries = await SubscriptionFetcher.FetchAsync(SubscriptionUrl, _logger);
+
+            if (entries.Count == 0)
+            {
+                _logger.Warning("[SubRefresh] Empty response, skipping");
+                return;
+            }
+
+            // Compare UUIDs of current vs fetched servers
+            var currentUuids = SubscriptionServers
+                .Select(s => s.Uuid)
+                .OrderBy(u => u)
+                .ToList();
+            var newUuids = entries
+                .Select(e => e.Uuid)
+                .OrderBy(u => u)
+                .ToList();
+
+            var changed = !currentUuids.SequenceEqual(newUuids);
+
+            if (!changed)
+            {
+                _logger.Information("[SubRefresh] Servers unchanged, no action needed");
+                return;
+            }
+
+            _logger.Information("[SubRefresh] Servers changed! Updating and reconnecting...");
+
+            // Update server list
+            SubscriptionServers.Clear();
+            foreach (var entry in entries)
+                SubscriptionServers.Add(new ServerViewModel(entry));
+
+            // Keep same server name if still exists, otherwise pick first
+            var activeName = SelectedSubscriptionServer?.Name;
+            var match = SubscriptionServers.FirstOrDefault(s =>
+                s.Name?.Equals(activeName, StringComparison.OrdinalIgnoreCase) == true);
+            SelectedSubscriptionServer = match ?? SubscriptionServers.FirstOrDefault();
+
+            SaveSettings();
+
+            // Reconnect with new servers
+            var reconnectName = SelectedSubscriptionServer?.Name ?? "subscription";
+            await ReconnectAsync(reconnectName);
+
+            _logger.Information("[SubRefresh] Reconnected with updated servers");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[SubRefresh] Auto-refresh failed");
         }
     }
 
@@ -1733,6 +1825,8 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (_engine.IsRunning)
             _engine.Stop();
+
+        StopSubRefreshTimer();
 
         // Kill zapret on app exit
         KillAllZapret();
