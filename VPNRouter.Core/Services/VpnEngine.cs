@@ -150,6 +150,58 @@ public class VpnEngine : IDisposable
         var sources = BuildProfileSources(settings);
         var manager = new ProfileManager(sources, _logger);
         var collection = await manager.LoadAsync(ct);
+
+        // 2a. Merge user-added apps into default groups (custom_group_apps)
+        if (settings.CustomGroupApps?.Count > 0)
+        {
+            foreach (var (groupName, extras) in settings.CustomGroupApps)
+            {
+                var profile = collection.Profiles.FirstOrDefault(p =>
+                    p.Name.Equals(groupName, StringComparison.OrdinalIgnoreCase));
+                if (profile == null) continue;
+                foreach (var app in extras ?? new())
+                {
+                    if (string.IsNullOrWhiteSpace(app)) continue;
+                    var name = app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app : app + ".exe";
+                    if (profile.Processes.Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                        continue;
+                    profile.Processes.Add(new ProcessRule
+                    {
+                        Name = name, IncludeChildren = true, ScanPatterns = new[] { name }
+                    });
+                }
+            }
+        }
+
+        // 2b. Inject user-created categories (custom_categories) as profiles
+        if (settings.CustomCategories?.Count > 0)
+        {
+            foreach (var cat in settings.CustomCategories)
+            {
+                if (string.IsNullOrWhiteSpace(cat.Name)) continue;
+                if (collection.Profiles.Any(p => p.Name.Equals(cat.Name, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+                var profile = new Profile
+                {
+                    Name = cat.Name,
+                    Description = "User category",
+                    DnsMode = "vpn_only",
+                    BlockOnVpnFail = false,
+                    Processes = new List<ProcessRule>()
+                };
+                foreach (var app in cat.Apps ?? new())
+                {
+                    if (string.IsNullOrWhiteSpace(app)) continue;
+                    var name = app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app : app + ".exe";
+                    profile.Processes.Add(new ProcessRule
+                    {
+                        Name = name, IncludeChildren = true, ScanPatterns = new[] { name }
+                    });
+                }
+                collection.Profiles.Add(profile);
+            }
+        }
+
         _logger?.Information("[VpnEngine] Loaded {Count} profiles", collection.Profiles.Count);
 
         ct.ThrowIfCancellationRequested();
