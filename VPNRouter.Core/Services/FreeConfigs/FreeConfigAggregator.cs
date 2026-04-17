@@ -44,13 +44,13 @@ public sealed class FreeConfigAggregator
     /// Full refresh: fetch → parse → dedupe → geoip → test → persist.
     /// Returns the fresh list of configs.
     ///
-    /// <paramref name="maxTestCount"/> caps how many configs are actually TCP-tested
-    /// (still fetches/parses all, but skipped ones keep their last known status).
-    /// With 2000+ configs on first run, testing all can take 10+ minutes.
+    /// <paramref name="maxTestCount"/> caps how many configs are actually TCP-tested.
+    /// Default = int.MaxValue (test everything). Set lower to limit first-run time.
+    /// Incremental cache saves every 50 tests / 5 seconds, so Cancel preserves progress.
     /// </summary>
     public async Task<List<FreeConfigEntry>> RefreshAsync(
         IReadOnlyList<FreeConfigSource>? sources = null,
-        int maxTestCount = 500,
+        int maxTestCount = int.MaxValue,
         CancellationToken ct = default)
     {
         sources ??= FreeConfigSources.Default;

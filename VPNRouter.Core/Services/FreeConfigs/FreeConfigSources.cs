@@ -50,5 +50,48 @@ public static class FreeConfigSources
             Url  = "https://raw.githubusercontent.com/ByeWhiteLists/ByeWhiteLists2/refs/heads/main/ByeWhiteLists2.txt",
             ExpectedCount = 1000,
         },
+        // ── Added v2.13.10 ──
+        new()
+        {
+            Name = "sevcator/5ubscrpt10n",
+            Url  = "https://raw.githubusercontent.com/sevcator/5ubscrpt10n/main/protocols/vl.txt",
+            ExpectedCount = 22000,
+        },
+        new()
+        {
+            Name = "ebrasha/free-v2ray-public-list",
+            Url  = "https://raw.githubusercontent.com/ebrasha/free-v2ray-public-list/main/vless_configs.txt",
+            ExpectedCount = 17000,
+        },
+        new()
+        {
+            Name = "barry-far/V2ray-config",
+            Url  = "https://raw.githubusercontent.com/barry-far/V2ray-config/main/Splitted-By-Protocol/vless.txt",
+            ExpectedCount = 1700,
+        },
+        new()
+        {
+            Name = "kort0881/vpn-vless-configs-russia",
+            Url  = "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/githubmirror/clean/vless.txt",
+            ExpectedCount = 3500,
+        },
+        new()
+        {
+            Name = "Epodonios/v2ray-configs",
+            Url  = "https://raw.githubusercontent.com/Epodonios/v2ray-configs/main/All_Configs_Sub.txt",
+            ExpectedCount = 2000,
+        },
+        new()
+        {
+            Name = "MatinGhanbari/v2ray-configs (base64)",
+            Url  = "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/filtered/subs/vless.txt",
+            ExpectedCount = 260,
+        },
+        new()
+        {
+            Name = "V2RayRoot/V2RayConfig",
+            Url  = "https://raw.githubusercontent.com/V2RayRoot/V2RayConfig/main/Config/vless.txt",
+            ExpectedCount = 150,
+        },
     };
 }
