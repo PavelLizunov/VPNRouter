@@ -18,6 +18,7 @@ public partial class AppGroupViewModel : ViewModelBase
     [ObservableProperty] private bool _isChecked;
     [ObservableProperty] private bool _isExpanded;
     [ObservableProperty] private bool _isCustomGroup;
+    [ObservableProperty] private bool _isCustomCategory;
 
     public ObservableCollection<AppItemViewModel> Apps { get; } = new();
 

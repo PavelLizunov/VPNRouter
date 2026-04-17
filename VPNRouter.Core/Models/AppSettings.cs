@@ -43,6 +43,10 @@ public class AppSettings
     [YamlMember(Alias = "custom_group_apps")]
     public Dictionary<string, List<string>> CustomGroupApps { get; set; } = new();
 
+    /// <summary>User-created categories (beyond the bundled default groups).</summary>
+    [YamlMember(Alias = "custom_categories")]
+    public List<CustomCategory> CustomCategories { get; set; } = new();
+
     [YamlMember(Alias = "update")]
     public UpdateSettings Update { get; set; } = new();
 }
@@ -211,6 +215,19 @@ public class AppConfig
     /// </summary>
     [YamlMember(Alias = "flush_dns_on_start")]
     public bool FlushDnsOnStart { get; set; } = true;
+}
+
+/// <summary>A user-created Applications category.</summary>
+public class CustomCategory
+{
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = string.Empty;
+
+    [YamlMember(Alias = "apps")]
+    public List<string> Apps { get; set; } = new();
+
+    [YamlMember(Alias = "enabled")]
+    public bool Enabled { get; set; } = true;
 }
 
 /// <summary>A saved custom sing-box config entry.</summary>

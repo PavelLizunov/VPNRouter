@@ -698,6 +698,19 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         AppGroups.Add(customGroup);
 
+        // User-created categories (persisted separately from default groups)
+        foreach (var cat in _settings.CustomCategories ?? new())
+        {
+            if (string.IsNullOrWhiteSpace(cat.Name)) continue;
+            var group = new AppGroupViewModel(cat.Name, "", cat.Enabled) { IsCustomCategory = true };
+            foreach (var app in cat.Apps ?? new())
+            {
+                if (string.IsNullOrWhiteSpace(app)) continue;
+                group.Apps.Add(new AppItemViewModel(StripExe(app), cat.Enabled, isCustom: true));
+            }
+            AppGroups.Add(group);
+        }
+
         _appsLoaded = true;
     }
 
@@ -871,16 +884,27 @@ public partial class MainWindowViewModel : ViewModelBase
                 .Select(a => a.ProcessName)
                 .ToList() ?? new();
 
-            // Persist user-added apps for every group (except "Custom Apps" which has its own list)
+            // Persist user-added apps for every default group (except Custom Apps / custom categories)
             var customGroupApps = new Dictionary<string, List<string>>();
             foreach (var group in AppGroups)
             {
-                if (group.Name == "Custom Apps") continue;
+                if (group.Name == "Custom Apps" || group.IsCustomCategory) continue;
                 var extras = group.Apps.Where(a => a.IsCustom).Select(a => a.ProcessName).ToList();
                 if (extras.Count > 0)
                     customGroupApps[group.Name] = extras;
             }
             _settings.CustomGroupApps = customGroupApps;
+
+            // Persist user-created categories (full content)
+            _settings.CustomCategories = AppGroups
+                .Where(g => g.IsCustomCategory)
+                .Select(g => new CustomCategory
+                {
+                    Name = g.Name,
+                    Enabled = g.IsChecked,
+                    Apps = g.Apps.Select(a => a.ProcessName).ToList()
+                })
+                .ToList();
         }
 
         SettingsLoader.Save(_settings, AppPaths.ConfigYamlPath);
@@ -1886,6 +1910,32 @@ public partial class MainWindowViewModel : ViewModelBase
             IsConnecting = false;
             _isReconnecting = false;
         }
+    }
+
+    [ObservableProperty] private string _newCategoryName = string.Empty;
+
+    [RelayCommand]
+    private void AddCategory()
+    {
+        var name = NewCategoryName?.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+        if (AppGroups.Any(g => g.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) return;
+
+        var group = new AppGroupViewModel(name!, "", isChecked: true) { IsCustomCategory = true };
+        AppGroups.Add(group);
+        SelectedAppGroup = group;
+        NewCategoryName = string.Empty;
+        SaveSettings();
+    }
+
+    [RelayCommand]
+    private void RemoveCategory(AppGroupViewModel? group)
+    {
+        if (group == null || !group.IsCustomCategory) return;
+        AppGroups.Remove(group);
+        if (SelectedAppGroup == group)
+            SelectedAppGroup = AppGroups.FirstOrDefault();
+        SaveSettings();
     }
 
     [RelayCommand]

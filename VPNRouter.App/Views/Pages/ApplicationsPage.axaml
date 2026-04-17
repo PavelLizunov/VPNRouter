@@ -2,73 +2,101 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:conv="using:VPNRouter.App"
+             xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
              x:Class="VPNRouter.App.Views.Pages.ApplicationsPage"
              x:DataType="vm:MainWindowViewModel">
 
-    <!-- ═══ MASTER-DETAIL: groups left, selected group's apps right ═══ -->
     <Grid ColumnDefinitions="160,*"
           IsEnabled="{Binding IsSplitTunnel}">
 
-        <!-- ─── MASTER (left): group navigator ─── -->
+        <!-- ─── MASTER (left): category names only (like Settings) ─── -->
         <Border Grid.Column="0"
                 BorderThickness="0,0,1,0"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                 Background="{DynamicResource SystemControlBackgroundListLowBrush}">
-            <ListBox ItemsSource="{Binding AppGroups}"
-                     SelectedItem="{Binding SelectedAppGroup}"
-                     Background="Transparent"
-                     BorderThickness="0"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto">
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:AppGroupViewModel">
-                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,1">
-                            <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}"
-                                      MinHeight="0" Padding="2,0" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
-                                       FontSize="11" FontWeight="SemiBold"
-                                       VerticalAlignment="Center" Margin="4,0,0,0"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <Border Grid.Column="2" Background="#2563EB" CornerRadius="8"
-                                    Padding="5,0" Margin="4,0,2,0" VerticalAlignment="Center"
-                                    IsVisible="{Binding Apps.Count}">
-                                <TextBlock Text="{Binding Apps.Count}" FontSize="9"
-                                           Foreground="White" FontWeight="Bold"/>
-                            </Border>
-                        </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+            <Grid RowDefinitions="*,Auto,Auto">
+                <ListBox Grid.Row="0"
+                         ItemsSource="{Binding AppGroups}"
+                         SelectedItem="{Binding SelectedAppGroup}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:AppGroupViewModel">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,1">
+                                <TextBlock Grid.Column="0" Text="{Binding DisplayName}"
+                                           FontSize="11" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" Margin="2,0"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <Border Grid.Column="1" Background="#2563EB" CornerRadius="8"
+                                        Padding="5,0" Margin="4,0,2,0" VerticalAlignment="Center"
+                                        IsVisible="{Binding Apps.Count}">
+                                    <TextBlock Text="{Binding Apps.Count}" FontSize="9"
+                                               Foreground="White" FontWeight="Bold"/>
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- New category input -->
+                <TextBox Grid.Row="1" x:Name="NewCategoryInput"
+                         Text="{Binding NewCategoryName}"
+                         Watermark="{x:Static loc:Strings.CategoryNamePrompt}"
+                         FontSize="10" Padding="6,4" Margin="4,4,4,2"/>
+                <Button Grid.Row="2"
+                        Content="{x:Static loc:Strings.AddCategory}"
+                        Command="{Binding AddCategoryCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Margin="4,0,4,4" Padding="4,4"
+                        FontSize="10" FontWeight="SemiBold" CornerRadius="4"
+                        Background="#2563EB" Foreground="White"/>
+            </Grid>
         </Border>
 
-        <!-- ─── DETAIL (right): selected group's apps ─── -->
-        <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto"
+        <!-- ─── DETAIL (right): header + master toggle + apps + add ─── -->
+        <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto"
               DataContext="{Binding SelectedAppGroup}"
               x:DataType="vm:AppGroupViewModel"
               IsVisible="{Binding Converter={x:Static ObjectConverters.IsNotNull}}">
 
-            <!-- Detail header -->
-            <Border Grid.Row="0" Padding="14,10,14,8"
+            <!-- Header with DisplayName + Delete button (custom only) -->
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto"
+                  Margin="14,10,14,6">
+                <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="14" FontWeight="Bold"
+                           VerticalAlignment="Center"/>
+                <Button Grid.Column="1" Content="X"
+                        IsVisible="{Binding IsCustomCategory}"
+                        Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveCategoryCommand}"
+                        CommandParameter="{Binding}"
+                        Background="Transparent" BorderThickness="0"
+                        Padding="8,2" MinHeight="0" FontSize="11"
+                        Opacity="0.6"
+                        ToolTip.Tip="Remove category"/>
+            </Grid>
+
+            <!-- Master enable toggle -->
+            <Border Grid.Row="1" Padding="14,4,14,8"
                     BorderThickness="0,0,0,1"
                     BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
-                <StackPanel Spacing="2">
-                    <TextBlock Text="{Binding DisplayName}" FontSize="14" FontWeight="Bold"/>
-                    <TextBlock Text="{Binding Description}" FontSize="10" Opacity="0.6"
-                               TextWrapping="Wrap"/>
-                </StackPanel>
+                <CheckBox IsChecked="{Binding IsChecked}"
+                          Content="{x:Static loc:Strings.EnableWholeGroup}"
+                          FontWeight="SemiBold" MinHeight="0" Padding="4,0"/>
             </Border>
 
-            <!-- Empty state overlay -->
-            <TextBlock Grid.Row="1" Text="No apps in this group yet."
+            <!-- Empty state -->
+            <TextBlock Grid.Row="2" Text="No apps in this group yet."
                        HorizontalAlignment="Center" VerticalAlignment="Center"
                        FontSize="11" Opacity="0.5" FontStyle="Italic"
                        IsVisible="{Binding !Apps.Count}"/>
 
-            <!-- Apps list — ListBox has its own ScrollViewer + virtualization -->
-            <ListBox Grid.Row="1"
+            <!-- Apps list -->
+            <ListBox Grid.Row="2"
                      ItemsSource="{Binding Apps}"
                      Background="Transparent"
                      BorderThickness="0"
@@ -90,7 +118,7 @@
                                     </Border>
                                 </StackPanel>
                             </CheckBox>
-                            <Button Grid.Column="1" Content="✕"
+                            <Button Grid.Column="1" Content="X"
                                     IsVisible="{Binding IsCustom}"
                                     Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveCustomAppCommand}"
                                     CommandParameter="{Binding}"
@@ -103,15 +131,15 @@
                 </ListBox.ItemTemplate>
             </ListBox>
 
-            <!-- Bottom add row (visible for all groups) -->
-            <Border Grid.Row="2"
+            <!-- Add app input -->
+            <Border Grid.Row="3"
                     Padding="14,8"
                     BorderThickness="0,1,0,0"
                     BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                     Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBox Grid.Column="0" x:Name="CustomAppInput"
-                             Watermark="process name (e.g. Discord, chrome)"
+                             Watermark="{x:Static loc:Strings.AddAppHint}"
                              FontSize="11" Padding="6,4"/>
                     <Button Grid.Column="1" Content="+ Add"
                             Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
@@ -126,7 +154,7 @@
 
         <!-- Empty state when no group selected -->
         <TextBlock Grid.Column="1"
-                   Text="← Select a group to view its applications"
+                   Text="← Select a category"
                    HorizontalAlignment="Center" VerticalAlignment="Center"
                    FontSize="11" Opacity="0.5" FontStyle="Italic"
                    IsVisible="{Binding SelectedAppGroup, Converter={x:Static ObjectConverters.IsNull}}"/>

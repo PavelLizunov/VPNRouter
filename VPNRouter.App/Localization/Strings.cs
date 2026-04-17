@@ -185,6 +185,11 @@ public static class Strings
     public static string OpenGitHub => "GitHub";
 
     // ── Autostart ──
+    public static string AddCategory => Ru ? "+ Новая категория" : "+ New category";
+    public static string EnableWholeGroup => Ru ? "Включить всю группу" : "Enable whole group";
+    public static string CategoryNamePrompt => Ru ? "Имя категории:" : "Category name:";
+    public static string AddAppHint => Ru ? "имя процесса (например Discord)" : "process name (e.g. Discord)";
+
     // ── App group display names ──
     public static string GroupDisplayName(string internalName) => internalName switch
     {
