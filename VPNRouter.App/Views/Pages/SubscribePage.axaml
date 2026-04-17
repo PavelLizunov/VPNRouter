@@ -2,9 +2,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:conv="using:VPNRouter.App"
+             xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
+             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="640"
              x:Class="VPNRouter.App.Views.Pages.SubscribePage"
              x:DataType="vm:MainWindowViewModel">
 
@@ -12,9 +13,9 @@
         <conv:BoolToFontWeightConverter x:Key="ActiveFontConverter"/>
     </UserControl.Resources>
 
-    <Grid RowDefinitions="*,Auto">
+    <Grid RowDefinitions="*,Auto,Auto,Auto">
 
-        <!-- Server list from subscription -->
+        <!-- Aggregated server pool (from all enabled subscriptions) -->
         <ListBox Grid.Row="0"
                  x:Name="SubList"
                  ItemsSource="{Binding SubscriptionServers}"
@@ -45,46 +46,99 @@
                     IsVisible="{Binding !SubscriptionServers.Count}"
                     HorizontalAlignment="Center" VerticalAlignment="Center"
                     Spacing="6">
-            <TextBlock Text="No subscription servers"
+            <TextBlock Text="No servers"
                        FontSize="13" FontWeight="SemiBold" Opacity="0.6"
                        HorizontalAlignment="Center"/>
-            <TextBlock Text="Enter a subscription URL below and click Sync"
+            <TextBlock Text="Add a subscription below"
                        FontSize="11" Opacity="0.4"
                        HorizontalAlignment="Center"/>
         </StackPanel>
 
-        <!-- Bottom: URL + buttons -->
-        <Border Grid.Row="1" Padding="10,6"
+        <!-- Subscriptions section header -->
+        <Border Grid.Row="1" Padding="10,6,10,4"
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
-            <StackPanel Spacing="6">
-                <!-- URL input + Sync -->
-                <DockPanel LastChildFill="True">
-                    <Button DockPanel.Dock="Right" Content="{Binding LblSyncButton}"
-                            Command="{Binding SyncSubscriptionCommand}"
-                            Margin="6,0,0,0"
-                            Background="#2563EB" Foreground="White"
-                            Padding="14,5" CornerRadius="4" FontWeight="SemiBold"/>
-                    <TextBox Text="{Binding SubscriptionUrl}"
-                             Watermark="{Binding LblSubscriptionUrlHint}"
-                             FontSize="10" Padding="6,4"/>
-                </DockPanel>
-                <!-- Server count + Clear -->
-                <DockPanel IsVisible="{Binding SubscriptionServers.Count}">
-                    <Button DockPanel.Dock="Right" Content="✕ Clear"
-                            Command="{Binding ClearSubscriptionCommand}"
-                            Background="Transparent" BorderThickness="0"
-                            Padding="6,2" FontSize="10" Opacity="0.6"/>
-                    <TextBlock VerticalAlignment="Center"
-                               FontSize="10" Opacity="0.5">
-                        <TextBlock.Text>
-                            <MultiBinding StringFormat="{}{0} servers">
-                                <Binding Path="SubscriptionServers.Count"/>
-                            </MultiBinding>
-                        </TextBlock.Text>
-                    </TextBlock>
-                </DockPanel>
-            </StackPanel>
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                           Text="{x:Static loc:Strings.SubscriptionsSection}"
+                           FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+                <Button Grid.Column="1"
+                        Content="{x:Static loc:Strings.RefreshAll}"
+                        Command="{Binding RefreshAllSubscriptionsCommand}"
+                        FontSize="10" Padding="8,3" CornerRadius="4"/>
+            </Grid>
+        </Border>
+
+        <!-- Subscriptions list (each with toggle, refresh, delete) -->
+        <ItemsControl Grid.Row="2"
+                      ItemsSource="{Binding Subscriptions}"
+                      Padding="10,0,10,4">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:SubscriptionViewModel">
+                    <Border Padding="8,5" Margin="0,2" CornerRadius="4"
+                            Background="{DynamicResource SystemControlBackgroundListLowBrush}"
+                            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                            BorderThickness="1">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                            <CheckBox Grid.Column="0" IsChecked="{Binding Enabled}"
+                                      MinHeight="0" Padding="2,0" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" Spacing="0" Margin="4,0,6,0"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock FontSize="9" Opacity="0.5" TextTrimming="CharacterEllipsis">
+                                    <TextBlock.Text>
+                                        <MultiBinding StringFormat="{}{0}  •  {1} servers">
+                                            <Binding Path="LastRefreshedDisplay"/>
+                                            <Binding Path="LastServerCount"/>
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </StackPanel>
+                            <ProgressBar Grid.Column="2" IsVisible="{Binding IsRefreshing}"
+                                         IsIndeterminate="True"
+                                         Height="3" Width="60" VerticalAlignment="Center"
+                                         Margin="2,0,4,0" Foreground="#2563EB"/>
+                            <Button Grid.Column="3" Content="🔄"
+                                    Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RefreshSubscriptionCommand}"
+                                    CommandParameter="{Binding}"
+                                    IsEnabled="{Binding !IsRefreshing}"
+                                    FontSize="11" Padding="6,2" CornerRadius="4"
+                                    Background="Transparent" BorderThickness="0"
+                                    ToolTip.Tip="Refresh"/>
+                            <Button Grid.Column="4" Content="✕"
+                                    Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveSubscriptionCommand}"
+                                    CommandParameter="{Binding}"
+                                    FontSize="11" Padding="6,2" CornerRadius="4"
+                                    Background="Transparent" BorderThickness="0"
+                                    Opacity="0.6"
+                                    ToolTip.Tip="Remove"/>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Add new subscription -->
+        <Border Grid.Row="3" Padding="10,6"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+            <Grid ColumnDefinitions="100,*,Auto" ColumnSpacing="4">
+                <TextBox Grid.Column="0"
+                         Text="{Binding NewSubName}"
+                         Watermark="{x:Static loc:Strings.SubscriptionNameHint}"
+                         FontSize="10" Padding="6,4"/>
+                <TextBox Grid.Column="1"
+                         Text="{Binding NewSubUrl}"
+                         Watermark="{Binding LblSubscriptionUrlHint}"
+                         FontSize="10" Padding="6,4"/>
+                <Button Grid.Column="2"
+                        Content="{x:Static loc:Strings.AddSubscription}"
+                        Command="{Binding AddSubscriptionCommand}"
+                        Background="#2563EB" Foreground="White"
+                        FontSize="11" FontWeight="SemiBold"
+                        Padding="12,5" CornerRadius="4"/>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

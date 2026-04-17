@@ -185,6 +185,14 @@ public static class Strings
     public static string OpenGitHub => "GitHub";
 
     // ── Autostart ──
+    // ── Subscriptions (multi) ──
+    public static string SubscriptionsSection => Ru ? "Подписки" : "Subscriptions";
+    public static string SubscriptionNameHint => Ru ? "Имя" : "Name";
+    public static string AddSubscription => Ru ? "+ Добавить" : "+ Add";
+    public static string RefreshAll => Ru ? "Обновить все" : "Refresh all";
+    public static string NeverRefreshed => Ru ? "никогда" : "never";
+    public static string SubUpdatedAt => Ru ? "Обновлено" : "Updated";
+
     public static string AddCategory => Ru ? "+ Новая категория" : "+ New category";
     public static string EnableWholeGroup => Ru ? "Включить всю группу" : "Enable whole group";
     public static string CategoryNamePrompt => Ru ? "Имя категории:" : "Category name:";

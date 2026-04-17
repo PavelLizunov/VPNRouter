@@ -123,21 +123,34 @@ public class VPNRouterService : BackgroundService
         _engine.Warning += msg =>
             _logger.LogWarning("[Service] {Warn}", msg);
 
-        // Subscription mode: refresh servers before connecting
-        if (settings.App.ConfigMode?.Equals("subscribe", StringComparison.OrdinalIgnoreCase) == true
+        // Subscription mode: parallel refresh of ALL enabled subscriptions
+        var isSubscribe = settings.App.ConfigMode?.Equals("subscribe", StringComparison.OrdinalIgnoreCase) == true;
+
+        // Legacy migration: if only old SubscriptionUrl, promote to Subscriptions list
+        if (isSubscribe
+            && settings.App.Subscriptions.Count == 0
             && !string.IsNullOrEmpty(settings.App.SubscriptionUrl))
         {
-            _logger.LogInformation("[Service] Refreshing subscription before connect...");
+            settings.App.Subscriptions.Add(new SubscriptionEntry
+            {
+                Name = "Default",
+                Url = settings.App.SubscriptionUrl,
+                Enabled = true,
+                Servers = settings.App.SubscriptionServers ?? new()
+            });
+        }
+
+        if (isSubscribe && settings.App.Subscriptions.Count > 0)
+        {
+            _logger.LogInformation("[Service] Refreshing {Count} subscription(s) in parallel...",
+                settings.App.Subscriptions.Count(s => s.Enabled));
             try
             {
-                var entries = await SubscriptionFetcher.FetchAsync(
-                    settings.App.SubscriptionUrl, Serilog.Log.Logger, ct);
-
-                if (entries.Count > 0)
-                {
-                    settings.App.SubscriptionServers = entries;
-                    _logger.LogInformation("[Service] Subscription refreshed: {Count} servers", entries.Count);
-                }
+                await Task.WhenAll(settings.App.Subscriptions
+                    .Where(s => s.Enabled)
+                    .Select(s => SubscriptionFetcher.RefreshEntryAsync(s, Serilog.Log.Logger, ct)));
+                var total = settings.App.Subscriptions.Where(s => s.Enabled).Sum(s => s.Servers.Count);
+                _logger.LogInformation("[Service] Subscriptions refreshed: {Total} total servers", total);
             }
             catch (Exception ex)
             {
@@ -145,13 +158,19 @@ public class VPNRouterService : BackgroundService
             }
         }
 
-        // Sync subscription/manual servers to Vless engine
-        if (settings.App.ConfigMode?.Equals("subscribe", StringComparison.OrdinalIgnoreCase) == true
-            && settings.App.SubscriptionServers?.Count > 0)
+        // Aggregate all enabled subscription servers → Vless engine
+        if (isSubscribe)
         {
-            settings.Vless.Servers = settings.App.SubscriptionServers;
-            settings.Vless.ActiveServer = settings.App.ActiveSubscriptionServer;
-            settings.App.ConfigMode = "generated";
+            var aggregated = settings.App.Subscriptions
+                .Where(s => s.Enabled)
+                .SelectMany(s => s.Servers)
+                .ToList();
+            if (aggregated.Count > 0)
+            {
+                settings.Vless.Servers = aggregated;
+                settings.Vless.ActiveServer = settings.App.ActiveSubscriptionServer;
+                settings.App.ConfigMode = "generated";
+            }
         }
 
         // Start VPN with retry loop (defer to UI if running)

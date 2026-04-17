@@ -93,6 +93,11 @@ public partial class MainWindowViewModel : ViewModelBase
         // Tab 2 (Network), Tab 3 (Applications) — don't change mode
     }
     [ObservableProperty] private string _subscriptionUrl = string.Empty;
+
+    // Multiple subscriptions support (v2.12+)
+    public ObservableCollection<SubscriptionViewModel> Subscriptions { get; } = new();
+    [ObservableProperty] private string _newSubName = string.Empty;
+    [ObservableProperty] private string _newSubUrl = string.Empty;
     [ObservableProperty] private bool _isSplitTunnel = true;
     [ObservableProperty] private bool _bypassRussianTraffic = true;
     [ObservableProperty] private bool _strictMode = false;
@@ -607,18 +612,29 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         SelectedServer = activeServer ?? Servers.FirstOrDefault();
 
-        // Load subscription servers (cached from last sync)
-        SubscriptionServers.Clear();
-        ServerViewModel? activeSubServer = null;
-        foreach (var entry in _settings.App.SubscriptionServers ?? new())
+        // Migrate legacy single subscription → first entry in Subscriptions list
+        if (_settings.App.Subscriptions.Count == 0
+            && !string.IsNullOrWhiteSpace(_settings.App.SubscriptionUrl))
         {
-            var vm = new ServerViewModel(entry);
-            SubscriptionServers.Add(vm);
-            if (!string.IsNullOrEmpty(_settings.App.ActiveSubscriptionServer) &&
-                entry.Name?.Equals(_settings.App.ActiveSubscriptionServer, StringComparison.OrdinalIgnoreCase) == true)
-                activeSubServer = vm;
+            _settings.App.Subscriptions.Add(new SubscriptionEntry
+            {
+                Name = "Default",
+                Url = _settings.App.SubscriptionUrl,
+                Enabled = true,
+                Servers = _settings.App.SubscriptionServers ?? new(),
+                LastServerCount = (_settings.App.SubscriptionServers ?? new()).Count,
+                LastRefreshedAt = DateTimeOffset.UtcNow
+            });
+            _logger.Information("[VM] Migrated legacy subscription_url → Subscriptions[0]");
         }
-        SelectedSubscriptionServer = activeSubServer ?? SubscriptionServers.FirstOrDefault();
+
+        // Load subscriptions into VM
+        Subscriptions.Clear();
+        foreach (var entry in _settings.App.Subscriptions)
+            Subscriptions.Add(new SubscriptionViewModel(entry));
+
+        // Rebuild aggregated server pool from all enabled subscriptions
+        RebuildSubscriptionPool();
 
         // Load custom configs
         CustomConfigs.Clear();
@@ -837,12 +853,17 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Config mode (three-way)
         _settings.App.ConfigMode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "generated" : "custom";
-        _settings.App.SubscriptionUrl = SubscriptionUrl;
 
-        // Subscription servers (cached)
-        _settings.App.SubscriptionServers = SubscriptionServers.Select(s => s.ToEntry()).ToList();
+        // Persist all subscription entries (multi-subscription support)
+        _settings.App.Subscriptions = Subscriptions.Select(sv => sv.ToEntry()).ToList();
+
+        // Active server name — from aggregated pool
         var activeSub = SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault();
         _settings.App.ActiveSubscriptionServer = activeSub?.Name ?? "";
+
+        // Clear legacy single-subscription fields (kept in model for read-only migration)
+        _settings.App.SubscriptionUrl = string.Empty;
+        _settings.App.SubscriptionServers = new();
 
         // Routing mode
         _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
@@ -1068,10 +1089,14 @@ public partial class MainWindowViewModel : ViewModelBase
             SaveSettings();
             _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
 
-            // Subscribe mode: feed subscription servers into VLESS engine path
-            if (IsSubscribeMode && _settings.App.SubscriptionServers?.Count > 0)
+            // Subscribe mode: aggregate enabled subscriptions → feed into VLESS engine path
+            var aggregatedServers = _settings.App.Subscriptions
+                .Where(s => s.Enabled)
+                .SelectMany(s => s.Servers)
+                .ToList();
+            if (IsSubscribeMode && aggregatedServers.Count > 0)
             {
-                _settings.Vless.Servers = _settings.App.SubscriptionServers;
+                _settings.Vless.Servers = aggregatedServers;
                 _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
                 _settings.App.ConfigMode = "generated";
             }
@@ -1118,6 +1143,110 @@ public partial class MainWindowViewModel : ViewModelBase
                 return;
             }
         }
+    }
+
+    /// <summary>Rebuild aggregated server pool from all enabled subscriptions.</summary>
+    private void RebuildSubscriptionPool()
+    {
+        var selectedName = SelectedSubscriptionServer?.Name;
+        SubscriptionServers.Clear();
+
+        foreach (var sub in Subscriptions)
+        {
+            if (!sub.Enabled) continue;
+            foreach (var serverEntry in sub.UnderlyingEntry.Servers)
+                SubscriptionServers.Add(new ServerViewModel(serverEntry));
+        }
+
+        // Restore selection if possible
+        SelectedSubscriptionServer = SubscriptionServers
+            .FirstOrDefault(s => s.Name == selectedName)
+            ?? SubscriptionServers.FirstOrDefault();
+    }
+
+    [RelayCommand]
+    private async Task AddSubscriptionAsync()
+    {
+        var url = (NewSubUrl ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(url)) return;
+
+        var name = (NewSubName ?? "").Trim();
+        if (string.IsNullOrEmpty(name)) name = $"Sub {Subscriptions.Count + 1}";
+
+        var entry = new SubscriptionEntry { Name = name, Url = url, Enabled = true };
+        _settings.App.Subscriptions.Add(entry);
+        var svm = new SubscriptionViewModel(entry);
+        Subscriptions.Add(svm);
+
+        NewSubName = string.Empty;
+        NewSubUrl = string.Empty;
+
+        // Immediately refresh this new subscription
+        await RefreshSubscriptionAsync(svm);
+        SaveSettings();
+    }
+
+    [RelayCommand]
+    private void RemoveSubscription(SubscriptionViewModel? sub)
+    {
+        if (sub == null) return;
+        Subscriptions.Remove(sub);
+        _settings.App.Subscriptions.RemoveAll(e => e.Id == sub.Id);
+        RebuildSubscriptionPool();
+        SaveSettings();
+    }
+
+    [RelayCommand]
+    private async Task RefreshSubscriptionAsync(SubscriptionViewModel? sub)
+    {
+        if (sub == null || string.IsNullOrWhiteSpace(sub.Url)) return;
+        if (sub.IsRefreshing) return;
+
+        sub.IsRefreshing = true;
+        try
+        {
+            var count = await SubscriptionFetcher.RefreshEntryAsync(
+                sub.UnderlyingEntry, _logger, CancellationToken.None);
+            sub.LastServerCount = count;
+            sub.LastRefreshedAt = sub.UnderlyingEntry.LastRefreshedAt;
+            RebuildSubscriptionPool();
+            SaveSettings();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] RefreshSubscription failed for {Url}", sub.Url);
+        }
+        finally { sub.IsRefreshing = false; }
+    }
+
+    [RelayCommand]
+    private async Task RefreshAllSubscriptionsAsync()
+    {
+        var enabled = Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
+        if (enabled.Count == 0) return;
+
+        foreach (var s in enabled) s.IsRefreshing = true;
+        try
+        {
+            await Task.WhenAll(enabled.Select(async s =>
+            {
+                try
+                {
+                    var count = await SubscriptionFetcher.RefreshEntryAsync(
+                        s.UnderlyingEntry, _logger, CancellationToken.None);
+                    s.LastServerCount = count;
+                    s.LastRefreshedAt = s.UnderlyingEntry.LastRefreshedAt;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "[VM] Refresh of {Url} failed", s.Url);
+                }
+            }));
+        }
+        finally { foreach (var s in enabled) s.IsRefreshing = false; }
+
+        RebuildSubscriptionPool();
+        SaveSettings();
     }
 
     [RelayCommand]
@@ -1186,8 +1315,10 @@ public partial class MainWindowViewModel : ViewModelBase
     /// </summary>
     private async Task RefreshSubscriptionSilentAsync()
     {
-        if (!IsConnected || !IsSubscribeMode || string.IsNullOrWhiteSpace(SubscriptionUrl))
-            return;
+        if (!IsConnected || !IsSubscribeMode) return;
+
+        var enabled = Subscriptions.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)).ToList();
+        if (enabled.Count == 0) return;
 
         // Cancel previous refresh if still running (prevents concurrent fetches on slow network)
         _subRefreshCts?.Cancel();
@@ -1196,55 +1327,43 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            _logger.Information("[SubRefresh] Checking for server updates...");
-            var entries = await SubscriptionFetcher.FetchAsync(SubscriptionUrl, _logger, ct);
+            _logger.Information("[SubRefresh] Checking {Count} subscription(s)...", enabled.Count);
+
+            // Snapshot current aggregated UUIDs
+            var beforeUuids = SubscriptionServers.Select(s => s.Uuid).OrderBy(u => u).ToList();
+
+            // Parallel refresh, ignore per-entry failures
+            await Task.WhenAll(enabled.Select(async s =>
+            {
+                try
+                {
+                    var count = await SubscriptionFetcher.RefreshEntryAsync(s.UnderlyingEntry, _logger, ct);
+                    s.LastServerCount = count;
+                    s.LastRefreshedAt = s.UnderlyingEntry.LastRefreshedAt;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "[SubRefresh] Failed for {Url}", s.Url);
+                }
+            }));
 
             if (ct.IsCancellationRequested) return;
 
-            if (entries.Count == 0)
-            {
-                _logger.Warning("[SubRefresh] Empty response, skipping");
-                return;
-            }
+            RebuildSubscriptionPool();
+            SaveSettings();
 
-            // Compare UUIDs of current vs fetched servers
-            var currentUuids = SubscriptionServers
-                .Select(s => s.Uuid)
-                .OrderBy(u => u)
-                .ToList();
-            var newUuids = entries
-                .Select(e => e.Uuid)
-                .OrderBy(u => u)
-                .ToList();
-
-            var changed = !currentUuids.SequenceEqual(newUuids);
+            var afterUuids = SubscriptionServers.Select(s => s.Uuid).OrderBy(u => u).ToList();
+            var changed = !beforeUuids.SequenceEqual(afterUuids);
 
             if (!changed)
             {
-                _logger.Information("[SubRefresh] Servers unchanged, no action needed");
+                _logger.Information("[SubRefresh] No UUID changes, no reconnect needed");
                 return;
             }
 
-            _logger.Information("[SubRefresh] Servers changed! Updating and reconnecting...");
-
-            // Update server list
-            SubscriptionServers.Clear();
-            foreach (var entry in entries)
-                SubscriptionServers.Add(new ServerViewModel(entry));
-
-            // Keep same server name if still exists, otherwise pick first
-            var activeName = SelectedSubscriptionServer?.Name;
-            var match = SubscriptionServers.FirstOrDefault(s =>
-                s.Name?.Equals(activeName, StringComparison.OrdinalIgnoreCase) == true);
-            SelectedSubscriptionServer = match ?? SubscriptionServers.FirstOrDefault();
-
-            SaveSettings();
-
-            // Reconnect with new servers
+            _logger.Information("[SubRefresh] Servers changed, reconnecting...");
             var reconnectName = SelectedSubscriptionServer?.Name ?? "subscription";
             await ReconnectAsync(reconnectName);
-
-            _logger.Information("[SubRefresh] Reconnected with updated servers");
         }
         catch (Exception ex)
         {
@@ -1893,10 +2012,14 @@ public partial class MainWindowViewModel : ViewModelBase
             SaveSettings();
             _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
 
-            // Subscribe mode: feed subscription servers into engine
-            if (IsSubscribeMode && _settings.App.SubscriptionServers?.Count > 0)
+            // Subscribe mode: aggregate enabled subscriptions → feed into engine
+            var aggregated = _settings.App.Subscriptions
+                .Where(s => s.Enabled)
+                .SelectMany(s => s.Servers)
+                .ToList();
+            if (IsSubscribeMode && aggregated.Count > 0)
             {
-                _settings.Vless.Servers = _settings.App.SubscriptionServers;
+                _settings.Vless.Servers = aggregated;
                 _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
                 _settings.App.ConfigMode = "generated";
             }

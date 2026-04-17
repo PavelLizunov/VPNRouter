@@ -137,4 +137,22 @@ public static class SubscriptionFetcher
 
         return result;
     }
+
+    /// <summary>
+    /// Refresh a single SubscriptionEntry: fetch servers, update timestamps.
+    /// Returns the number of servers fetched (0 on failure).
+    /// </summary>
+    public static async Task<int> RefreshEntryAsync(
+        SubscriptionEntry entry, ILogger? logger = null, CancellationToken ct = default)
+    {
+        if (entry == null || string.IsNullOrWhiteSpace(entry.Url)) return 0;
+
+        var servers = await FetchAsync(entry.Url, logger, ct);
+        if (ct.IsCancellationRequested) return 0;
+
+        entry.Servers = servers;
+        entry.LastServerCount = servers.Count;
+        entry.LastRefreshedAt = DateTimeOffset.UtcNow;
+        return servers.Count;
+    }
 }

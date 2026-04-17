@@ -119,6 +119,13 @@ public class AppConfig
     public string ActiveSubscriptionServer { get; set; } = string.Empty;
 
     /// <summary>
+    /// Multiple subscription URLs support. Each has its own server list, refresh state,
+    /// and enabled flag. Legacy SubscriptionUrl migrates to Subscriptions[0] on first load.
+    /// </summary>
+    [YamlMember(Alias = "subscriptions")]
+    public List<SubscriptionEntry> Subscriptions { get; set; } = new();
+
+    /// <summary>
     /// When true, traffic to Russian sites/IPs is routed directly (real IP),
     /// not through VPN. Protects VPN server from being blacklisted by RU services
     /// and unblocks RU sites that geo-restrict non-RU IPs.
@@ -215,6 +222,31 @@ public class AppConfig
     /// </summary>
     [YamlMember(Alias = "flush_dns_on_start")]
     public bool FlushDnsOnStart { get; set; } = true;
+}
+
+/// <summary>A single VLESS subscription source (URL + its servers).</summary>
+public class SubscriptionEntry
+{
+    [YamlMember(Alias = "id")]
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = string.Empty;
+
+    [YamlMember(Alias = "url")]
+    public string Url { get; set; } = string.Empty;
+
+    [YamlMember(Alias = "enabled")]
+    public bool Enabled { get; set; } = true;
+
+    [YamlMember(Alias = "last_refreshed_at")]
+    public DateTimeOffset? LastRefreshedAt { get; set; }
+
+    [YamlMember(Alias = "last_server_count")]
+    public int LastServerCount { get; set; }
+
+    [YamlMember(Alias = "servers")]
+    public List<VlessServerEntry> Servers { get; set; } = new();
 }
 
 /// <summary>A user-created Applications category.</summary>
