@@ -24,6 +24,13 @@ public sealed class FreeConfigTester
     /// <summary>Above this latency (ms) mark as "Slow" even if reachable.</summary>
     private const int SlowThresholdMs = 800;
 
+    /// <summary>
+    /// Below this latency, the TCP response can't have come from a real remote server
+    /// (internet RTT to any non-local host is ≥ 5 ms; sub-5ms means the connection was
+    /// intercepted locally — usually by the user's active VPN TUN adapter).
+    /// </summary>
+    private const int ImplausibleThresholdMs = 5;
+
     public int MaxConcurrency { get; set; } = 30;
 
     /// <summary>
@@ -92,6 +99,15 @@ public sealed class FreeConfigTester
         }
 
         var bestLatency = latencies.Min();
+
+        // ── Plausibility gate: sub-5ms TCP means local intercept (active VPN / proxy). ──
+        if (bestLatency < ImplausibleThresholdMs)
+        {
+            cfg.LatencyMs = bestLatency;
+            cfg.Status = FreeConfigStatus.Implausible;
+            cfg.LastError = "latency < 5 ms (local intercept?)";
+            return;
+        }
 
         // ── Stage 2: TLS handshake ──
         if (RequireTlsHandshake)

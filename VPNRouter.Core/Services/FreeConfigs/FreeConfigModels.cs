@@ -22,6 +22,10 @@ public enum FreeConfigStatus
     Slow = 5,
     /// <summary>TCP connects but TLS handshake fails (dead endpoint, wrong SNI, expired cert).</summary>
     TlsFailed = 6,
+    /// <summary>Latency under plausible threshold (&lt; 5 ms = likely local intercept / active VPN).</summary>
+    Implausible = 7,
+    /// <summary>Deep-verified: real HTTP request through sing-box succeeded. Gold standard.</summary>
+    Verified = 8,
 }
 
 /// <summary>

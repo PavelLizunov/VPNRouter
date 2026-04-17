@@ -278,6 +278,18 @@ public static class Strings
     public static string FcDashboardTimeout   => Ru ? "Timeout"       : "Timeout";
     public static string FcDashboardUnreach   => Ru ? "Недоступны"    : "Unreachable";
     public static string FcDashboardTlsFail   => Ru ? "TLS провал"    : "TLS failed";
+    public static string FcDashboardVerified  => Ru ? "Проверено"     : "Verified";
+    public static string FcDashboardFake      => Ru ? "Подозр."       : "Fake";
+    public static string FcDeepVerify         => Ru ? "✓✓ Глубокая проверка" : "✓✓ Deep verify";
+    public static string FcStatusNoDeepCandidates => Ru
+        ? "Нет кандидатов для глубокой проверки — сначала «Обновить список»."
+        : "No candidates to deep-verify — click 'Refresh list' first.";
+    public static string FcStatusDeepVerifyStart(int n) => Ru
+        ? $"Глубокая проверка {n} конфигов через sing-box..."
+        : $"Deep-verifying {n} configs via sing-box...";
+    public static string FcStatusDeepVerifyDone(int verified) => Ru
+        ? $"Проверено: {verified} реально рабочих"
+        : $"Verified: {verified} truly working";
     public static string FcCountryFilter      => Ru ? "Страна:"       : "Country:";
     public static string FcOnlyWorking        => Ru ? "Только рабочие" : "Only working";
     public static string FcRefreshSources     => Ru ? "↻ Обновить список"    : "↻ Refresh list";

@@ -35,8 +35,10 @@ public partial class FreeConfigItemViewModel : ObservableObject
 
     public string LatencyDisplay => Entry.Status switch
     {
+        FreeConfigStatus.Verified    => $"{Entry.LatencyMs} ms ✓✓",
         FreeConfigStatus.Ok          => $"{Entry.LatencyMs} ms ✓",
         FreeConfigStatus.Slow        => $"{Entry.LatencyMs} ms slow",
+        FreeConfigStatus.Implausible => "fake (<5ms)",
         FreeConfigStatus.TlsFailed   => "TLS failed",
         FreeConfigStatus.Timeout     => "timeout",
         FreeConfigStatus.Unreachable => "unreachable",
@@ -46,8 +48,10 @@ public partial class FreeConfigItemViewModel : ObservableObject
 
     public int LatencySortKey => Entry.Status switch
     {
-        FreeConfigStatus.Ok when Entry.LatencyMs > 0 => Entry.LatencyMs,
-        FreeConfigStatus.Slow                         => Entry.LatencyMs + 10_000,
+        FreeConfigStatus.Verified                     => Entry.LatencyMs, // best rank
+        FreeConfigStatus.Ok when Entry.LatencyMs > 0 => Entry.LatencyMs + 100_000,
+        FreeConfigStatus.Slow                         => Entry.LatencyMs + 200_000,
+        FreeConfigStatus.Implausible                  => 400_000,
         FreeConfigStatus.TlsFailed                    => 500_000,
         FreeConfigStatus.Timeout                      => 1_000_000,
         FreeConfigStatus.Unreachable                  => 1_000_001,
@@ -59,11 +63,13 @@ public partial class FreeConfigItemViewModel : ObservableObject
     /// <summary>Hex color string for latency badge.</summary>
     public string LatencyColor => Entry.Status switch
     {
-        FreeConfigStatus.Ok   when Entry.LatencyMs < 100 => "#22C55E",  // green — verified + fast
-        FreeConfigStatus.Ok   when Entry.LatencyMs < 300 => "#65A30D",  // lime — verified + OK
-        FreeConfigStatus.Ok                               => "#F59E0B",  // orange — verified + slow-ish
-        FreeConfigStatus.Slow                             => "#EF4444",  // red — too slow
-        FreeConfigStatus.TlsFailed                        => "#F97316",  // orange — reachable but fake/dead
+        FreeConfigStatus.Verified                         => "#059669",  // emerald — deep-verified ✓✓
+        FreeConfigStatus.Ok   when Entry.LatencyMs < 100 => "#22C55E",  // green — TCP+TLS OK + fast
+        FreeConfigStatus.Ok   when Entry.LatencyMs < 300 => "#65A30D",  // lime
+        FreeConfigStatus.Ok                               => "#F59E0B",  // orange — slower
+        FreeConfigStatus.Slow                             => "#EF4444",  // red
+        FreeConfigStatus.Implausible                      => "#DC2626",  // dark red — fake
+        FreeConfigStatus.TlsFailed                        => "#F97316",  // orange — dead
         _                                                  => "#9CA3AF",  // gray — offline
     };
 

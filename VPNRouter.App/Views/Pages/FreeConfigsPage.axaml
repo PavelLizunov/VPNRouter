@@ -18,44 +18,52 @@
                    FontSize="10" Opacity="0.65"
                    Margin="12,10,14,6"/>
 
-        <!-- ═══ Dashboard (5 chips) ═══ -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*,*" Margin="12,0,14,6">
-            <Border Grid.Column="0" Margin="0,0,3,0" Padding="6,5" CornerRadius="4"
+        <!-- ═══ Dashboard (6 chips incl. ✓✓ Verified) ═══ -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*,*,*" Margin="12,0,14,6">
+            <Border Grid.Column="0" Margin="0,0,2,0" Padding="5,4" CornerRadius="4"
                     Background="{DynamicResource SystemControlBackgroundListLowBrush}">
                 <StackPanel>
-                    <TextBlock Text="🌐" FontSize="13"/>
+                    <TextBlock Text="🌐" FontSize="12"/>
                     <TextBlock Text="{x:Static loc:Strings.FcDashboardTotal}" FontSize="9" Opacity="0.6"/>
                     <TextBlock Text="{Binding FreeConfigsVm.TotalCount}" FontWeight="Bold" FontSize="13"/>
                 </StackPanel>
             </Border>
-            <Border Grid.Column="1" Margin="3,0,3,0" Padding="6,5" CornerRadius="4"
+            <Border Grid.Column="1" Margin="2,0,2,0" Padding="5,4" CornerRadius="4"
+                    Background="#A7F3D0" BorderBrush="#059669" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="✓✓" FontSize="12" FontWeight="Bold" Foreground="#065F46"/>
+                    <TextBlock Text="{x:Static loc:Strings.FcDashboardVerified}" FontSize="9" Opacity="0.7" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding FreeConfigsVm.VerifiedCount}" FontWeight="Bold" FontSize="13" Foreground="#065F46"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="2" Margin="2,0,2,0" Padding="5,4" CornerRadius="4"
                     Background="#DCFCE7">
                 <StackPanel>
-                    <TextBlock Text="✅" FontSize="13"/>
+                    <TextBlock Text="✅" FontSize="12"/>
                     <TextBlock Text="{x:Static loc:Strings.FcDashboardWorking}" FontSize="9" Opacity="0.6"/>
                     <TextBlock Text="{Binding FreeConfigsVm.WorkingCount}" FontWeight="Bold" FontSize="13" Foreground="#166534"/>
                 </StackPanel>
             </Border>
-            <Border Grid.Column="2" Margin="3,0,3,0" Padding="6,5" CornerRadius="4"
+            <Border Grid.Column="3" Margin="2,0,2,0" Padding="5,4" CornerRadius="4"
+                    Background="#FECACA">
+                <StackPanel>
+                    <TextBlock Text="⚠" FontSize="12"/>
+                    <TextBlock Text="{x:Static loc:Strings.FcDashboardFake}" FontSize="9" Opacity="0.6"/>
+                    <TextBlock Text="{Binding FreeConfigsVm.ImplausibleCount}" FontWeight="Bold" FontSize="13" Foreground="#991B1B"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="4" Margin="2,0,2,0" Padding="5,4" CornerRadius="4"
                     Background="#FFEDD5">
                 <StackPanel>
-                    <TextBlock Text="🔒" FontSize="13"/>
+                    <TextBlock Text="🔒" FontSize="12"/>
                     <TextBlock Text="{x:Static loc:Strings.FcDashboardTlsFail}" FontSize="9" Opacity="0.6"/>
                     <TextBlock Text="{Binding FreeConfigsVm.TlsFailedCount}" FontWeight="Bold" FontSize="13" Foreground="#9A3412"/>
                 </StackPanel>
             </Border>
-            <Border Grid.Column="3" Margin="3,0,3,0" Padding="6,5" CornerRadius="4"
-                    Background="#FEF3C7">
-                <StackPanel>
-                    <TextBlock Text="⏱" FontSize="13"/>
-                    <TextBlock Text="{x:Static loc:Strings.FcDashboardTimeout}" FontSize="9" Opacity="0.6"/>
-                    <TextBlock Text="{Binding FreeConfigsVm.TimeoutCount}" FontWeight="Bold" FontSize="13" Foreground="#92400E"/>
-                </StackPanel>
-            </Border>
-            <Border Grid.Column="4" Margin="3,0,0,0" Padding="6,5" CornerRadius="4"
+            <Border Grid.Column="5" Margin="2,0,0,0" Padding="5,4" CornerRadius="4"
                     Background="#FEE2E2">
                 <StackPanel>
-                    <TextBlock Text="🚫" FontSize="13"/>
+                    <TextBlock Text="🚫" FontSize="12"/>
                     <TextBlock Text="{x:Static loc:Strings.FcDashboardUnreach}" FontSize="9" Opacity="0.6"/>
                     <TextBlock Text="{Binding FreeConfigsVm.UnreachableCount}" FontWeight="Bold" FontSize="13" Foreground="#991B1B"/>
                 </StackPanel>
@@ -87,6 +95,15 @@
                         Padding="14,8" FontSize="11" CornerRadius="5"
                         Background="#EF4444" Foreground="White"/>
             </Grid>
+
+            <!-- Deep verify — emerald, separate row to emphasize it's the strong test -->
+            <Button Content="{x:Static loc:Strings.FcDeepVerify}"
+                    Command="{Binding FreeConfigsVm.DeepVerifyTopCommand}"
+                    IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                    Padding="0,9" FontSize="12" FontWeight="Bold" CornerRadius="5"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                    Background="#059669" Foreground="White"
+                    ToolTip.Tip="Spawns sing-box with each config, does a real HTTP GET through it. Tests top 30. ~2-3 min."/>
 
             <!-- Filter row (country + only working) -->
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">

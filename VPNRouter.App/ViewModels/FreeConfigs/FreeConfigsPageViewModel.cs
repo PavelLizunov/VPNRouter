@@ -15,6 +15,7 @@ namespace VPNRouter.App.ViewModels.FreeConfigs;
 public partial class FreeConfigsPageViewModel : ObservableObject
 {
     private readonly FreeConfigAggregator _aggregator;
+    private readonly FreeConfigDeepVerifier _deepVerifier;
     private readonly ILogger _logger;
     private readonly Func<FreeConfigEntry, Task<bool>> _applyAsync;
 
@@ -28,6 +29,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         _aggregator = new FreeConfigAggregator(logger);
         _aggregator.OnStageChanged += OnAggregatorStage;
         _aggregator.OnTestProgress  += OnAggregatorProgress;
+        _deepVerifier = new FreeConfigDeepVerifier(logger);
 
         // Load cached snapshot if exists.
         var file = _aggregator.Cache.Load();
@@ -50,7 +52,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject
 
     [ObservableProperty] private int _totalCount;
     [ObservableProperty] private int _workingCount;
+    [ObservableProperty] private int _verifiedCount;
     [ObservableProperty] private int _tlsFailedCount;
+    [ObservableProperty] private int _implausibleCount;
     [ObservableProperty] private int _timeoutCount;
     [ObservableProperty] private int _unreachableCount;
 
@@ -152,6 +156,82 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         _refreshCts?.Cancel();
     }
 
+    /// <summary>
+    /// Deep-verify the top-N candidates (by latency among TCP+TLS-OK entries) using real sing-box + HTTP.
+    /// This is the only test that proves a config actually carries traffic.
+    /// </summary>
+    [RelayCommand]
+    private async Task DeepVerifyTopAsync()
+    {
+        if (IsBusy) return;
+        IsBusy = true;
+        _refreshCts = new CancellationTokenSource();
+        try
+        {
+            // Pick top-30 candidates: prefer Ok/Slow/Verified (TCP+TLS OK), then Implausible
+            // (might be real but measurement was wrong via local intercept).
+            var candidates = _allConfigs
+                .Where(c => c.Status == FreeConfigStatus.Ok
+                         || c.Status == FreeConfigStatus.Slow
+                         || c.Status == FreeConfigStatus.Verified
+                         || c.Status == FreeConfigStatus.Implausible)
+                .OrderBy(c => c.Status == FreeConfigStatus.Verified ? 0
+                            : c.Status == FreeConfigStatus.Ok       ? 1
+                            : c.Status == FreeConfigStatus.Slow     ? 2
+                                                                     : 3)
+                .ThenBy(c => c.LatencyMs > 0 ? c.LatencyMs : int.MaxValue)
+                .Take(30)
+                .ToList();
+
+            if (candidates.Count == 0)
+            {
+                StatusText = Strings.FcStatusNoDeepCandidates;
+                return;
+            }
+
+            StatusText = Strings.FcStatusDeepVerifyStart(candidates.Count);
+            ProgressTotal = candidates.Count;
+            ProgressDone = 0;
+
+            var progress = new Progress<(int done, int total)>(p =>
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    ProgressDone = p.done;
+                    ProgressTotal = p.total;
+                });
+            });
+
+            await Task.Run(() => _deepVerifier.VerifyBatchAsync(candidates, progress, _refreshCts.Token));
+
+            // Save cache after deep verification (entries mutated in place).
+            var cacheFile = _aggregator.Cache.Load();
+            cacheFile.Configs = _allConfigs;
+            _aggregator.Cache.Save(cacheFile);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                ApplyFiltersAndStats();
+                StatusText = Strings.FcStatusDeepVerifyDone(VerifiedCount);
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = Strings.FcStatusCancelled;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "DeepVerify failed");
+            StatusText = Strings.FcStatusFailed(ex.Message);
+        }
+        finally
+        {
+            IsBusy = false;
+            ProgressTotal = 0;
+            ProgressDone = 0;
+        }
+    }
+
     [RelayCommand]
     private async Task ApplySelectedAsync()
     {
@@ -199,7 +279,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         {
             TotalCount       = _allConfigs.Count;
             WorkingCount     = _allConfigs.Count(c => c.Status == FreeConfigStatus.Ok);
+            VerifiedCount    = _allConfigs.Count(c => c.Status == FreeConfigStatus.Verified);
             TlsFailedCount   = _allConfigs.Count(c => c.Status == FreeConfigStatus.TlsFailed);
+            ImplausibleCount = _allConfigs.Count(c => c.Status == FreeConfigStatus.Implausible);
             TimeoutCount     = _allConfigs.Count(c => c.Status == FreeConfigStatus.Timeout);
             UnreachableCount = _allConfigs.Count(c => c.Status == FreeConfigStatus.Unreachable);
 
@@ -218,7 +300,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject
             // Apply filter + sort.
             IEnumerable<FreeConfigEntry> q = _allConfigs;
             if (OnlyWorking)
-                q = q.Where(c => c.Status == FreeConfigStatus.Ok);
+                q = q.Where(c => c.Status == FreeConfigStatus.Ok || c.Status == FreeConfigStatus.Verified);
             if (!string.Equals(SelectedCountry, "All", StringComparison.OrdinalIgnoreCase))
                 q = q.Where(c => string.Equals(c.CountryCode, SelectedCountry, StringComparison.OrdinalIgnoreCase));
 
