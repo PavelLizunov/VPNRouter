@@ -202,6 +202,37 @@ public static class Strings
         ? "Открыть меню service.bat"
         : "Open service.bat menu";
 
+    // ── Zapret sections (master-detail) ──
+    public static string ZapretSecStatus       => Ru ? "Статус" : "Status";
+    public static string ZapretSecStrategy     => Ru ? "Стратегия" : "Strategy";
+    public static string ZapretSecHosts        => "Hosts";
+    public static string ZapretSecFilters      => Ru ? "Фильтры" : "Filters";
+    public static string ZapretSecUpdates      => Ru ? "Обновления" : "Updates";
+    public static string ZapretSecDiagnostics  => Ru ? "Диагностика" : "Diagnostics";
+    public static string ZapretSecAdvanced     => Ru ? "Дополнительно" : "Advanced";
+
+    // Filters
+    public static string GameFilter => Ru ? "Игровой фильтр (диапазон 1024-65535)" : "Game filter (port range 1024-65535)";
+    public static string GameFilterOff => Ru ? "Выкл" : "Off";
+    public static string GameFilterAll => Ru ? "TCP + UDP" : "TCP + UDP";
+    public static string GameFilterTcp => "TCP";
+    public static string GameFilterUdp => "UDP";
+
+    public static string IpSetFilter => Ru ? "IPSet фильтр" : "IPSet filter";
+    public static string IpSetAny => Ru ? "Any (весь трафик)" : "Any (all traffic)";
+    public static string IpSetLoaded => Ru ? "Loaded (список из файла)" : "Loaded (from list file)";
+    public static string IpSetNone => Ru ? "None (отключено)" : "None (disabled)";
+
+    // Updates
+    public static string UpdateIpSet => Ru ? "Обновить IPSet список" : "Update IPSet list";
+    public static string AutoUpdateCheckLabel => Ru
+        ? "Авто-проверка обновлений zapret"
+        : "Auto-check zapret updates";
+
+    // Advanced
+    public static string RunTestsLabel => Ru ? "Запустить тесты сети" : "Run network tests";
+    public static string RemoveServiceLabel => Ru ? "Удалить службу zapret" : "Remove zapret service";
+
     public static string ApplyChanges => Ru ? "↻  Применить изменения" : "↻  Apply changes";
     public static string ChangesApplied => Ru ? "Изменения применены" : "Changes applied";
     public static string ApplyFailed => Ru ? "Не удалось применить" : "Apply failed";

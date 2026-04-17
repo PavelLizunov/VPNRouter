@@ -240,6 +240,241 @@ public static class ZapretActions
         catch { }
     }
 
+    // ── Game filter (utils/game_filter.enabled) ──
+
+    public enum GameFilterMode { Off = 0, All = 1, TcpOnly = 2, UdpOnly = 3 }
+
+    private static string GameFilterFlagPath =>
+        Path.Combine(ZapretUpdater.ZapretDir, "utils", "game_filter.enabled");
+
+    public static GameFilterMode GetGameFilterMode()
+    {
+        try
+        {
+            if (!File.Exists(GameFilterFlagPath)) return GameFilterMode.Off;
+            var content = File.ReadAllText(GameFilterFlagPath).Trim().ToLowerInvariant();
+            return content switch
+            {
+                "all" => GameFilterMode.All,
+                "tcp" => GameFilterMode.TcpOnly,
+                "udp" => GameFilterMode.UdpOnly,
+                _ => GameFilterMode.Off
+            };
+        }
+        catch { return GameFilterMode.Off; }
+    }
+
+    public static void SetGameFilterMode(GameFilterMode mode)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(GameFilterFlagPath)!);
+            if (mode == GameFilterMode.Off)
+            {
+                if (File.Exists(GameFilterFlagPath)) File.Delete(GameFilterFlagPath);
+                return;
+            }
+            var val = mode switch
+            {
+                GameFilterMode.All => "all",
+                GameFilterMode.TcpOnly => "tcp",
+                GameFilterMode.UdpOnly => "udp",
+                _ => ""
+            };
+            File.WriteAllText(GameFilterFlagPath, val);
+        }
+        catch { }
+    }
+
+    // ── IPSet filter (lists/ipset-all.txt) ──
+
+    public enum IpSetMode { Any = 0, Loaded = 1, None = 2 }
+
+    private static string IpSetListPath =>
+        Path.Combine(ZapretUpdater.ZapretDir, "lists", "ipset-all.txt");
+
+    private static string IpSetBackupPath =>
+        Path.Combine(ZapretUpdater.ZapretDir, "lists", "ipset-all.txt.backup");
+
+    public static IpSetMode GetIpSetMode()
+    {
+        try
+        {
+            if (!File.Exists(IpSetListPath)) return IpSetMode.Any;
+            var content = File.ReadAllText(IpSetListPath).Trim();
+            if (content.Length == 0) return IpSetMode.Any;
+            if (content == "203.0.113.113/32") return IpSetMode.None;
+            return IpSetMode.Loaded;
+        }
+        catch { return IpSetMode.Any; }
+    }
+
+    public static void SetIpSetMode(IpSetMode mode)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(IpSetListPath)!);
+            var current = GetIpSetMode();
+            if (current == mode) return;
+
+            if (mode == IpSetMode.Any)
+            {
+                // If switching from Loaded, back it up first
+                if (current == IpSetMode.Loaded && File.Exists(IpSetListPath))
+                {
+                    if (File.Exists(IpSetBackupPath)) File.Delete(IpSetBackupPath);
+                    File.Move(IpSetListPath, IpSetBackupPath);
+                }
+                File.WriteAllText(IpSetListPath, "");
+            }
+            else if (mode == IpSetMode.None)
+            {
+                // Back up loaded list if present
+                if (current == IpSetMode.Loaded && File.Exists(IpSetListPath))
+                {
+                    if (File.Exists(IpSetBackupPath)) File.Delete(IpSetBackupPath);
+                    File.Move(IpSetListPath, IpSetBackupPath);
+                }
+                File.WriteAllText(IpSetListPath, "203.0.113.113/32");
+            }
+            else if (mode == IpSetMode.Loaded)
+            {
+                // Restore from backup
+                if (File.Exists(IpSetBackupPath))
+                {
+                    if (File.Exists(IpSetListPath)) File.Delete(IpSetListPath);
+                    File.Move(IpSetBackupPath, IpSetListPath);
+                }
+                // else: no backup — user needs to update IPSet list
+            }
+        }
+        catch { }
+    }
+
+    // ── IPSet list update ──
+
+    public static async IAsyncEnumerable<string> UpdateIpSetListAsync(
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        const string url = "https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/refs/heads/main/.service/ipset-service.txt";
+        yield return "=== Update IPSet list ===";
+        var (ok, content) = await DownloadIpSetAsync(url, ct);
+        if (!ok)
+        {
+            yield return $"✗ Failed: {content}";
+            yield break;
+        }
+        yield return $"✓ Downloaded {content.Length} bytes";
+        var lines = content.Split('\n').Count(l => !string.IsNullOrWhiteSpace(l));
+        yield return $"✓ {lines} entries";
+        yield return SaveIpSetLine(content);
+        yield return "=== Done ===";
+    }
+
+    private static async Task<(bool ok, string content)> DownloadIpSetAsync(string url, CancellationToken ct)
+    {
+        try { return (true, await _http.GetStringAsync(url, ct)); }
+        catch (Exception ex) { return (false, ex.Message); }
+    }
+
+    private static string SaveIpSetLine(string content)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(IpSetListPath)!);
+            File.WriteAllText(IpSetListPath, content);
+            return $"✓ Saved to {IpSetListPath}";
+        }
+        catch (Exception ex) { return $"✗ Save failed: {ex.Message}"; }
+    }
+
+    // ── Auto-update check toggle ──
+
+    private static string AutoUpdateFlagPath =>
+        Path.Combine(ZapretUpdater.ZapretDir, "utils", "check_updates.enabled");
+
+    public static bool IsAutoUpdateCheckEnabled() => File.Exists(AutoUpdateFlagPath);
+
+    public static void SetAutoUpdateCheck(bool enabled)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(AutoUpdateFlagPath)!);
+            if (enabled) File.WriteAllText(AutoUpdateFlagPath, "ENABLED");
+            else if (File.Exists(AutoUpdateFlagPath)) File.Delete(AutoUpdateFlagPath);
+        }
+        catch { }
+    }
+
+    // ── Run network tests (test zapret.ps1) ──
+
+    public static void RunTests()
+    {
+        var testPath = Path.Combine(ZapretUpdater.ZapretDir, "utils", "test zapret.ps1");
+        if (!File.Exists(testPath)) throw new FileNotFoundException(testPath);
+        Process.Start(new ProcessStartInfo("powershell",
+            $"-NoProfile -ExecutionPolicy Bypass -File \"{testPath}\"")
+        {
+            UseShellExecute = true,
+            WorkingDirectory = ZapretUpdater.ZapretDir
+        });
+    }
+
+    // ── Remove zapret / WinDivert services ──
+
+    public static async IAsyncEnumerable<string> RemoveZapretServiceAsync(
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        yield return "=== Remove zapret service ===";
+        foreach (var svc in new[] { "zapret", "WinDivert", "WinDivert14" })
+        {
+            yield return await StopDeleteServiceLineAsync(svc);
+        }
+        yield return "=== Done ===";
+    }
+
+    private static async Task<string> StopDeleteServiceLineAsync(string svc)
+    {
+        try
+        {
+            if (!IsServiceRunning(svc) && !ServiceExists(svc))
+                return $"— {svc}: not installed";
+            await RunSc($"stop {svc}");
+            await RunSc($"delete {svc}");
+            return $"✓ {svc}: removed";
+        }
+        catch (Exception ex) { return $"✗ {svc}: {ex.Message}"; }
+    }
+
+    private static bool ServiceExists(string svc)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("sc", $"query \"{svc}\"")
+            {
+                UseShellExecute = false, CreateNoWindow = true,
+                RedirectStandardOutput = true, RedirectStandardError = true
+            };
+            using var p = Process.Start(psi);
+            p?.WaitForExit(2000);
+            var output = p?.StandardOutput.ReadToEnd() ?? "";
+            return output.Contains("SERVICE_NAME", StringComparison.OrdinalIgnoreCase)
+                || output.Contains("STATE", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
+    private static async Task RunSc(string args)
+    {
+        var psi = new ProcessStartInfo("sc", args)
+        {
+            UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardOutput = true, RedirectStandardError = true
+        };
+        using var p = Process.Start(psi);
+        if (p != null) await p.WaitForExitAsync();
+    }
+
     // ── Launch Flowseal service menu ──
 
     public static void OpenServiceMenu()

@@ -194,6 +194,37 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnAutostartZapretChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
     partial void OnAutostartTgProxyChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
 
+    // Zapret section navigator (master-detail)
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsZapretStatusSection))]
+    [NotifyPropertyChangedFor(nameof(IsZapretStrategySection))]
+    [NotifyPropertyChangedFor(nameof(IsZapretHostsSection))]
+    [NotifyPropertyChangedFor(nameof(IsZapretFiltersSection))]
+    [NotifyPropertyChangedFor(nameof(IsZapretUpdatesSection))]
+    [NotifyPropertyChangedFor(nameof(IsZapretDiagnosticsSection))]
+    [NotifyPropertyChangedFor(nameof(IsZapretAdvancedSection))]
+    private int _selectedZapretSectionIndex;
+
+    public bool IsZapretStatusSection => SelectedZapretSectionIndex == 0;
+    public bool IsZapretStrategySection => SelectedZapretSectionIndex == 1;
+    public bool IsZapretHostsSection => SelectedZapretSectionIndex == 2;
+    public bool IsZapretFiltersSection => SelectedZapretSectionIndex == 3;
+    public bool IsZapretUpdatesSection => SelectedZapretSectionIndex == 4;
+    public bool IsZapretDiagnosticsSection => SelectedZapretSectionIndex == 5;
+    public bool IsZapretAdvancedSection => SelectedZapretSectionIndex == 6;
+
+    // Zapret tool state
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblFlowsealHosts))]
+    private bool _flowsealHostsInstalled;
+    [ObservableProperty] private int _gameFilterModeIndex;
+    [ObservableProperty] private int _ipSetModeIndex;
+    [ObservableProperty] private bool _zapretAutoUpdateCheck;
+
+    public string LblFlowsealHosts => IsRussian
+        ? (FlowsealHostsInstalled ? "Убрать Flowseal hosts" : "Добавить Flowseal hosts")
+        : (FlowsealHostsInstalled ? "Remove Flowseal hosts" : "Add Flowseal hosts");
+
     // Settings section navigator (master-detail)
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsSettingsRoutingSelected))]
@@ -579,6 +610,14 @@ public partial class MainWindowViewModel : ViewModelBase
 
 #if PLATFORM_WINDOWS
         DiscordHostsInstalled = VPNRouter.Core.Services.HostsManager.IsInstalled();
+        FlowsealHostsInstalled = VPNRouter.Core.Services.HostsManager.IsFlowsealInstalled();
+
+        if (VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
+        {
+            GameFilterModeIndex = (int)VPNRouter.Core.Services.ZapretActions.GetGameFilterMode();
+            IpSetModeIndex = (int)VPNRouter.Core.Services.ZapretActions.GetIpSetMode();
+            ZapretAutoUpdateCheck = VPNRouter.Core.Services.ZapretActions.IsAutoUpdateCheckEnabled();
+        }
 
         // Telegram proxy
         TgProxyPort = _settings.App.TgProxyPort > 0 ? _settings.App.TgProxyPort : 1443;
@@ -1736,19 +1775,96 @@ public partial class MainWindowViewModel : ViewModelBase
         ZapretActionOutput.Clear();
         try
         {
-            await foreach (var line in action(CancellationToken.None))
+            // Stream enumeration on background thread — sub-processes (sc, netsh)
+            // should not block UI thread.
+            await Task.Run(async () =>
             {
-                var captured = line;
-                Dispatcher.UIThread.Post(() => ZapretActionOutput.Add(captured));
-            }
+                await foreach (var line in action(CancellationToken.None))
+                {
+                    var captured = line;
+                    await Dispatcher.UIThread.InvokeAsync(() => ZapretActionOutput.Add(captured));
+                }
+            });
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "[VM] Zapret action failed");
-            Dispatcher.UIThread.Post(() => ZapretActionOutput.Add($"ERROR: {ex.Message}"));
+            await Dispatcher.UIThread.InvokeAsync(() => ZapretActionOutput.Add($"ERROR: {ex.Message}"));
         }
         finally { IsZapretActionRunning = false; }
     }
+
+    [RelayCommand]
+    private async Task ToggleFlowsealHostsAsync()
+    {
+#if PLATFORM_WINDOWS
+        try
+        {
+            if (FlowsealHostsInstalled)
+            {
+                var (ok, msg) = VPNRouter.Core.Services.HostsManager.UninstallFlowseal(_logger);
+                FlowsealHostsInstalled = VPNRouter.Core.Services.HostsManager.IsFlowsealInstalled();
+                ZapretStatus = ok ? (IsRussian ? "Flowseal hosts удалены" : "Flowseal hosts removed") : msg;
+            }
+            else
+            {
+                var (ok, msg) = await VPNRouter.Core.Services.HostsManager.InstallFlowsealAsync(_logger);
+                FlowsealHostsInstalled = VPNRouter.Core.Services.HostsManager.IsFlowsealInstalled();
+                ZapretStatus = ok ? msg : msg;
+            }
+        }
+        catch (Exception ex) { ZapretStatus = $"Error: {ex.Message}"; }
+#endif
+    }
+
+    [RelayCommand]
+    private async Task UpdateIpSetListAsync()
+    {
+#if PLATFORM_WINDOWS
+        await RunZapretActionAsync(IsRussian ? "Обновить IPSet" : "Update IPSet list",
+            ct => ZapretActions.UpdateIpSetListAsync(ct));
+        // Refresh IpSetModeIndex after update (list content may have changed)
+        IpSetModeIndex = (int)ZapretActions.GetIpSetMode();
+#endif
+    }
+
+    [RelayCommand]
+    private void RunZapretTests()
+    {
+#if PLATFORM_WINDOWS
+        try { ZapretActions.RunTests(); }
+        catch (Exception ex) { _logger.Error(ex, "[VM] RunTests"); }
+#endif
+    }
+
+    [RelayCommand]
+    private async Task RemoveZapretServiceAsync()
+    {
+#if PLATFORM_WINDOWS
+        await RunZapretActionAsync(IsRussian ? "Удалить службу zapret" : "Remove zapret service",
+            ct => ZapretActions.RemoveZapretServiceAsync(ct));
+#endif
+    }
+
+#if PLATFORM_WINDOWS
+    partial void OnGameFilterModeIndexChanged(int value)
+    {
+        if (_isLoadingUI) return;
+        ZapretActions.SetGameFilterMode((ZapretActions.GameFilterMode)value);
+    }
+
+    partial void OnIpSetModeIndexChanged(int value)
+    {
+        if (_isLoadingUI) return;
+        ZapretActions.SetIpSetMode((ZapretActions.IpSetMode)value);
+    }
+
+    partial void OnZapretAutoUpdateCheckChanged(bool value)
+    {
+        if (_isLoadingUI) return;
+        ZapretActions.SetAutoUpdateCheck(value);
+    }
+#endif
 
     [RelayCommand]
     private void ToggleDiscordHosts()
