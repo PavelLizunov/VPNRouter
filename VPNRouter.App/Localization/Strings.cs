@@ -292,6 +292,21 @@ public static class Strings
     public static string FcEmptyHint          => Ru
         ? "Нажмите «Обновить источники», чтобы загрузить список публичных VLESS-конфигов."
         : "Click 'Refresh sources' to load the list of public VLESS configs.";
+    public static string FcEmptyCtaTitle      => Ru
+        ? "Нет загруженных конфигов"
+        : "No configs loaded yet";
+    public static string FcEmptyCtaSubtitle   => Ru
+        ? "Скачайте публичные VLESS-конфиги и узнайте какие из них работают прямо сейчас."
+        : "Download public VLESS configs and see which ones are working right now.";
+    public static string FcEmptyCtaButton     => Ru
+        ? "⚡ Загрузить список конфигов"
+        : "⚡ Load configs list";
+    public static string FcFilteredEmpty      => Ru
+        ? "Ничего не найдено по фильтру. Снимите «Только рабочие» или выберите «Все страны»."
+        : "No results for current filter. Uncheck 'Only working' or choose 'All countries'.";
+    public static string FcRefreshHint        => Ru
+        ? "Первый запуск ≈1 мин. Тестируется до 500 серверов за раз — повторяйте для более полных данных."
+        : "First run ≈1 min. Tests up to 500 servers at a time — repeat for fuller coverage.";
     public static string FcPageDescription    => Ru
         ? "Публичные VLESS-конфиги из открытых источников. Рабочие отсортированы по пингу. Клик — подключение через sing-box."
         : "Public VLESS configs from open sources. Working ones sorted by latency. Click to connect via sing-box.";

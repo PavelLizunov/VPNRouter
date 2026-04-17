@@ -43,9 +43,14 @@ public sealed class FreeConfigAggregator
     /// <summary>
     /// Full refresh: fetch → parse → dedupe → geoip → test → persist.
     /// Returns the fresh list of configs.
+    ///
+    /// <paramref name="maxTestCount"/> caps how many configs are actually TCP-tested
+    /// (still fetches/parses all, but skipped ones keep their last known status).
+    /// With 2000+ configs on first run, testing all can take 10+ minutes.
     /// </summary>
     public async Task<List<FreeConfigEntry>> RefreshAsync(
         IReadOnlyList<FreeConfigSource>? sources = null,
+        int maxTestCount = 500,
         CancellationToken ct = default)
     {
         sources ??= FreeConfigSources.Default;
@@ -129,18 +134,57 @@ public sealed class FreeConfigAggregator
             }
         }
 
-        // ── Stage 4: test connectivity ──
-        OnStageChanged?.Invoke("Testing connectivity...");
-        var progress = new Progress<(int done, int total)>(p => OnTestProgress?.Invoke(p.done, p.total));
-        await _tester.TestAllAsync(configs, progress, ct);
+        // ── Stage 4: test connectivity (capped) ──
+        // Prioritize: previously-working > previously-unknown > previously-failed.
+        // Save cache at start (so partial data survives crashes) and every 50 results.
+        var toTest = configs
+            .OrderBy(c => c.Status switch
+            {
+                FreeConfigStatus.Ok          => 0,
+                FreeConfigStatus.Slow        => 1,
+                FreeConfigStatus.Unknown     => 2,
+                FreeConfigStatus.Timeout     => 3,
+                FreeConfigStatus.Unreachable => 4,
+                _                            => 5,
+            })
+            .ThenBy(c => c.LatencyMs > 0 ? c.LatencyMs : int.MaxValue)
+            .Take(maxTestCount)
+            .ToList();
 
-        // ── Stage 5: persist ──
-        OnStageChanged?.Invoke("Saving cache...");
-        _cache.Save(new FreeConfigCache.CacheFile
+        var cacheFile = new FreeConfigCache.CacheFile
         {
             LastAggregatedAt = DateTime.UtcNow,
             Configs = configs,
+        };
+        _cache.Save(cacheFile); // initial save so partial results survive unexpected exit
+
+        OnStageChanged?.Invoke($"Testing {toTest.Count} configs...");
+        var lastSave = DateTime.UtcNow;
+        var progress = new Progress<(int done, int total)>(p =>
+        {
+            OnTestProgress?.Invoke(p.done, p.total);
+            // Periodic incremental save every ~50 tests or every 5 seconds.
+            if (p.done % 50 == 0 || (DateTime.UtcNow - lastSave).TotalSeconds > 5)
+            {
+                lastSave = DateTime.UtcNow;
+                _cache.Save(cacheFile);
+            }
         });
+
+        try
+        {
+            await _tester.TestAllAsync(toTest, progress, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Save whatever we have so far, then re-throw for UI to handle.
+            _cache.Save(cacheFile);
+            throw;
+        }
+
+        // ── Stage 5: persist final state ──
+        OnStageChanged?.Invoke("Saving cache...");
+        _cache.Save(cacheFile);
 
         OnStageChanged?.Invoke("Done");
         return configs;

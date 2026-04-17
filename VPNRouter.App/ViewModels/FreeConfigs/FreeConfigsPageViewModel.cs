@@ -62,8 +62,15 @@ public partial class FreeConfigsPageViewModel : ObservableObject
     [ObservableProperty] private string _selectedCountry = "All";
     partial void OnSelectedCountryChanged(string value) => ApplyFiltersAndStats();
 
-    [ObservableProperty] private bool _onlyWorking = true;
+    [ObservableProperty] private bool _onlyWorking = false;
     partial void OnOnlyWorkingChanged(bool value) => ApplyFiltersAndStats();
+
+    /// <summary>True when no configs have been aggregated yet (cache is empty).</summary>
+    public bool IsEmpty => _allConfigs.Count == 0;
+    /// <summary>True when filters hide everything but cache isn't empty.</summary>
+    public bool IsFilteredEmpty => _allConfigs.Count > 0 && DisplayedConfigs.Count == 0;
+    /// <summary>True when there is data to show in the list (not empty and not filtered out).</summary>
+    public bool IsListVisible => !IsEmpty && !IsFilteredEmpty;
 
     [ObservableProperty] private string _statusText = string.Empty;
     [ObservableProperty] private bool _isBusy;
@@ -187,37 +194,51 @@ public partial class FreeConfigsPageViewModel : ObservableObject
 
     private void ApplyFiltersAndStats()
     {
-        TotalCount       = _allConfigs.Count;
-        WorkingCount     = _allConfigs.Count(c => c.Status == FreeConfigStatus.Ok);
-        TimeoutCount     = _allConfigs.Count(c => c.Status == FreeConfigStatus.Timeout);
-        UnreachableCount = _allConfigs.Count(c => c.Status == FreeConfigStatus.Unreachable);
+        try
+        {
+            TotalCount       = _allConfigs.Count;
+            WorkingCount     = _allConfigs.Count(c => c.Status == FreeConfigStatus.Ok);
+            TimeoutCount     = _allConfigs.Count(c => c.Status == FreeConfigStatus.Timeout);
+            UnreachableCount = _allConfigs.Count(c => c.Status == FreeConfigStatus.Unreachable);
 
-        // Populate country filter dropdown.
-        var cc = _allConfigs
-            .Where(c => !string.IsNullOrEmpty(c.CountryCode))
-            .Select(c => c.CountryCode!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            // Populate country filter dropdown.
+            var cc = _allConfigs
+                .Where(c => !string.IsNullOrEmpty(c.CountryCode))
+                .Select(c => c.CountryCode!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
-        Countries = new ObservableCollection<string>(new[] { "All" }.Concat(cc));
-        if (!Countries.Contains(SelectedCountry))
-            SelectedCountry = "All";
+            Countries = new ObservableCollection<string>(new[] { "All" }.Concat(cc));
+            if (!Countries.Contains(SelectedCountry))
+                SelectedCountry = "All";
 
-        // Apply filter + sort.
-        IEnumerable<FreeConfigEntry> q = _allConfigs;
-        if (OnlyWorking)
-            q = q.Where(c => c.Status == FreeConfigStatus.Ok);
-        if (!string.Equals(SelectedCountry, "All", StringComparison.OrdinalIgnoreCase))
-            q = q.Where(c => string.Equals(c.CountryCode, SelectedCountry, StringComparison.OrdinalIgnoreCase));
+            // Apply filter + sort.
+            IEnumerable<FreeConfigEntry> q = _allConfigs;
+            if (OnlyWorking)
+                q = q.Where(c => c.Status == FreeConfigStatus.Ok);
+            if (!string.Equals(SelectedCountry, "All", StringComparison.OrdinalIgnoreCase))
+                q = q.Where(c => string.Equals(c.CountryCode, SelectedCountry, StringComparison.OrdinalIgnoreCase));
 
-        var items = q
-            .Select(c => new FreeConfigItemViewModel(c))
-            .OrderBy(vm => vm.LatencySortKey)
-            .Take(500) // cap at 500 visible to keep DataGrid responsive
-            .ToList();
+            var items = q
+                .Select(c => new FreeConfigItemViewModel(c))
+                .OrderBy(vm => vm.LatencySortKey)
+                .Take(300) // cap at 300 visible to keep ListBox responsive with emoji flags
+                .ToList();
 
-        DisplayedConfigs = new ObservableCollection<FreeConfigItemViewModel>(items);
+            DisplayedConfigs = new ObservableCollection<FreeConfigItemViewModel>(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "ApplyFiltersAndStats failed");
+            DisplayedConfigs = new ObservableCollection<FreeConfigItemViewModel>();
+        }
+        finally
+        {
+            OnPropertyChanged(nameof(IsEmpty));
+            OnPropertyChanged(nameof(IsFilteredEmpty));
+            OnPropertyChanged(nameof(IsListVisible));
+        }
     }
 
     private static string FormatAge(TimeSpan t)
