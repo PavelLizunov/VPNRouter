@@ -193,6 +193,15 @@ public static class Strings
     public static string NeverRefreshed => Ru ? "никогда" : "never";
     public static string SubUpdatedAt => Ru ? "Обновлено" : "Updated";
 
+    // ── Zapret tools ──
+    public static string ToolsSection => Ru ? "Инструменты" : "Tools";
+    public static string RunDiagnostics => Ru ? "Запустить диагностику" : "Run diagnostics";
+    public static string ClearDiscordCache => Ru ? "Очистить кэш Discord" : "Clear Discord cache";
+    public static string UpdateHostsFile => Ru ? "Обновить hosts (Flowseal)" : "Update hosts (Flowseal)";
+    public static string OpenServiceMenu => Ru
+        ? "Открыть меню service.bat"
+        : "Open service.bat menu";
+
     public static string ApplyChanges => Ru ? "↻  Применить изменения" : "↻  Apply changes";
     public static string ChangesApplied => Ru ? "Изменения применены" : "Changes applied";
     public static string ApplyFailed => Ru ? "Не удалось применить" : "Apply failed";

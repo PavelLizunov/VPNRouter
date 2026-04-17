@@ -91,6 +91,61 @@
                                Text="{Binding LblDiscordHostsDesc}"/>
                 </StackPanel>
 
+                <!-- Tools expander: diagnostics, discord cache, hosts, service menu -->
+                <Expander Header="{x:Static loc:Strings.ToolsSection}"
+                          FontSize="11" FontWeight="SemiBold" Margin="0,4,0,0">
+                    <StackPanel Spacing="4" Margin="0,4">
+                        <Button Content="{x:Static loc:Strings.RunDiagnostics}"
+                                Command="{Binding RunZapretDiagnosticsCommand}"
+                                IsEnabled="{Binding !IsZapretActionRunning}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                FontSize="10" Padding="8,4" CornerRadius="4"/>
+                        <Button Content="{x:Static loc:Strings.ClearDiscordCache}"
+                                Command="{Binding ClearDiscordCacheCommand}"
+                                IsEnabled="{Binding !IsZapretActionRunning}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                FontSize="10" Padding="8,4" CornerRadius="4"/>
+                        <Button Content="{x:Static loc:Strings.UpdateHostsFile}"
+                                Command="{Binding UpdateZapretHostsCommand}"
+                                IsEnabled="{Binding !IsZapretActionRunning}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                FontSize="10" Padding="8,4" CornerRadius="4"/>
+                        <Button Content="{x:Static loc:Strings.OpenServiceMenu}"
+                                Command="{Binding OpenZapretServiceMenuCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                FontSize="10" Padding="8,4" CornerRadius="4"/>
+
+                        <!-- Output panel — shows streaming log of last action -->
+                        <Border IsVisible="{Binding ZapretActionOutput.Count}"
+                                Padding="8" Margin="0,4,0,0"
+                                Background="{DynamicResource SystemControlBackgroundListLowBrush}"
+                                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                                BorderThickness="1" CornerRadius="4">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="{Binding ZapretActionTitle}"
+                                           FontWeight="SemiBold" FontSize="10" Opacity="0.7"/>
+                                <ScrollViewer MaxHeight="140"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding ZapretActionOutput}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}" FontSize="9"
+                                                           FontFamily="Consolas,Courier New,monospace"
+                                                           TextWrapping="Wrap"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Expander>
+
             </StackPanel>
         </ScrollViewer>
 

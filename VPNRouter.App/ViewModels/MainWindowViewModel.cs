@@ -1685,6 +1685,71 @@ public partial class MainWindowViewModel : ViewModelBase
 #endif
     }
 
+    // ── Zapret tools (diagnostics, Discord cache, hosts, service menu) ──
+
+    [ObservableProperty] private bool _isZapretActionRunning;
+    [ObservableProperty] private string _zapretActionTitle = string.Empty;
+    public ObservableCollection<string> ZapretActionOutput { get; } = new();
+
+    [RelayCommand]
+    private async Task RunZapretDiagnosticsAsync()
+    {
+#if PLATFORM_WINDOWS
+        await RunZapretActionAsync(Strings.RunDiagnostics,
+            ct => ZapretActions.RunDiagnosticsAsync(ct));
+#endif
+    }
+
+    [RelayCommand]
+    private async Task ClearDiscordCacheAsync()
+    {
+#if PLATFORM_WINDOWS
+        await RunZapretActionAsync(Strings.ClearDiscordCache,
+            ct => ZapretActions.ClearDiscordCacheAsync(ct));
+#endif
+    }
+
+    [RelayCommand]
+    private async Task UpdateZapretHostsAsync()
+    {
+#if PLATFORM_WINDOWS
+        await RunZapretActionAsync(Strings.UpdateHostsFile,
+            ct => ZapretActions.UpdateHostsAsync(ct));
+#endif
+    }
+
+    [RelayCommand]
+    private void OpenZapretServiceMenu()
+    {
+#if PLATFORM_WINDOWS
+        try { ZapretActions.OpenServiceMenu(); }
+        catch (Exception ex) { _logger.Error(ex, "[VM] OpenServiceMenu failed"); }
+#endif
+    }
+
+    private async Task RunZapretActionAsync(string title,
+        Func<CancellationToken, IAsyncEnumerable<string>> action)
+    {
+        if (IsZapretActionRunning) return;
+        IsZapretActionRunning = true;
+        ZapretActionTitle = title;
+        ZapretActionOutput.Clear();
+        try
+        {
+            await foreach (var line in action(CancellationToken.None))
+            {
+                var captured = line;
+                Dispatcher.UIThread.Post(() => ZapretActionOutput.Add(captured));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] Zapret action failed");
+            Dispatcher.UIThread.Post(() => ZapretActionOutput.Add($"ERROR: {ex.Message}"));
+        }
+        finally { IsZapretActionRunning = false; }
+    }
+
     [RelayCommand]
     private void ToggleDiscordHosts()
     {
