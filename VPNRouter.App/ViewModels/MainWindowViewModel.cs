@@ -32,6 +32,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _isLoadingUI;
     private bool _appsLoaded;
     private System.Threading.Timer? _subRefreshTimer;
+    private CancellationTokenSource? _subRefreshCts;
     private const int SubRefreshIntervalMs = 3600_000; // 1 hour
 
     // ── Observable state ──
@@ -453,6 +454,35 @@ public partial class MainWindowViewModel : ViewModelBase
     /// Detect if VPN is already running via Windows Service (sing-box process alive).
     /// Sets IsConnected so the UI reflects reality instead of showing "Not connected".
     /// </summary>
+    /// <summary>Raised when the active server (green-dot) changes — views scroll to it.</summary>
+    public event Action<ServerViewModel?>? ActiveServerChanged;
+
+    /// <summary>
+    /// Update IsActive flag on all ServerViewModels so the UI shows a green dot
+    /// next to the currently-active server (both VLESS and Subscription lists).
+    /// </summary>
+    private void RefreshActiveIndicator()
+    {
+        var activeIp = _engine?.ActiveServerAddress;
+        ServerViewModel? active = null;
+
+        foreach (var s in Servers)
+        {
+            var isActive = IsConnected && !string.IsNullOrEmpty(activeIp) && s.Server == activeIp;
+            s.IsActive = isActive;
+            if (isActive) active = s;
+        }
+
+        foreach (var s in SubscriptionServers)
+        {
+            var isActive = IsConnected && !string.IsNullOrEmpty(activeIp) && s.Server == activeIp;
+            s.IsActive = isActive;
+            if (isActive) active = s;
+        }
+
+        ActiveServerChanged?.Invoke(active);
+    }
+
     private void DetectServiceManagedVpn()
     {
         try
@@ -931,6 +961,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 IsConnecting = false;
                 ConnectButtonText = Strings.StopVPN;
                 StartSubRefreshTimer();
+                RefreshActiveIndicator();
                 // Use engine's actual runtime state — not stale ViewModel cache.
                 // This prevents "status says 104 but actually running 194" mismatch.
                 var serverIp = _engine.ActiveServerAddress;
@@ -962,6 +993,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 ConnectButtonText = Strings.StartVPN;
                 StatusText = Strings.NotConnected;
                 StopSubRefreshTimer();
+                RefreshActiveIndicator();
             }
         });
     }
@@ -1157,10 +1189,17 @@ public partial class MainWindowViewModel : ViewModelBase
         if (!IsConnected || !IsSubscribeMode || string.IsNullOrWhiteSpace(SubscriptionUrl))
             return;
 
+        // Cancel previous refresh if still running (prevents concurrent fetches on slow network)
+        _subRefreshCts?.Cancel();
+        _subRefreshCts = new CancellationTokenSource();
+        var ct = _subRefreshCts.Token;
+
         try
         {
             _logger.Information("[SubRefresh] Checking for server updates...");
-            var entries = await SubscriptionFetcher.FetchAsync(SubscriptionUrl, _logger);
+            var entries = await SubscriptionFetcher.FetchAsync(SubscriptionUrl, _logger, ct);
+
+            if (ct.IsCancellationRequested) return;
 
             if (entries.Count == 0)
             {

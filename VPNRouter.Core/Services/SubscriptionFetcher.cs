@@ -112,6 +112,22 @@ public static class SubscriptionFetcher
                 }
             }
 
+            // Deduplicate by Server:Port:UUID:Flow (Flow differs for TCP/UDP split pairs)
+            var seen = new HashSet<string>();
+            var deduped = new List<VlessServerEntry>(result.Count);
+            foreach (var e in result)
+            {
+                var key = $"{e.Server}:{e.Port}:{e.Uuid}:{e.Flow}";
+                if (seen.Add(key)) deduped.Add(e);
+            }
+            if (deduped.Count < result.Count)
+                logger?.Information("[Subscription] Deduplicated {Before}→{After} servers",
+                    result.Count, deduped.Count);
+            result = deduped;
+
+            if (result.Count >= 500)
+                logger?.Warning("[Subscription] Large subscription: {Count} servers — may impact performance", result.Count);
+
             logger?.Information("[Subscription] Fetched {Count} servers from {Url}", result.Count, url);
         }
         catch (Exception ex)

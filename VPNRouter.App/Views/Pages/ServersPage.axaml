@@ -45,11 +45,15 @@
                      ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:ServerViewModel">
-                        <Grid ColumnDefinitions="*,*,50,70">
-                            <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontWeight="SemiBold"/>
-                            <TextBlock Grid.Column="1" Text="{Binding Server}" Opacity="0.7"/>
-                            <TextBlock Grid.Column="2" Text="{Binding Port}" Opacity="0.5" TextAlignment="Center"/>
-                            <TextBlock Grid.Column="3" Text="{Binding Security}" Opacity="0.4" TextAlignment="Right"/>
+                        <Grid ColumnDefinitions="Auto,*,*,50,70">
+                            <TextBlock Grid.Column="0" Text="●" Foreground="#22C55E"
+                                       IsVisible="{Binding IsActive}" FontSize="9"
+                                       VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
+                                       FontWeight="{Binding IsActive, Converter={StaticResource ActiveFontConverter}}"/>
+                            <TextBlock Grid.Column="2" Text="{Binding Server}" Opacity="0.7"/>
+                            <TextBlock Grid.Column="3" Text="{Binding Port}" Opacity="0.5" TextAlignment="Center"/>
+                            <TextBlock Grid.Column="4" Text="{Binding Security}" Opacity="0.4" TextAlignment="Right"/>
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>

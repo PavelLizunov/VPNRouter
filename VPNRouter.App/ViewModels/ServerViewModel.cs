@@ -25,6 +25,9 @@ public partial class ServerViewModel : ViewModelBase
     [ObservableProperty] private string _shortId = string.Empty;
     [ObservableProperty] private bool _isSelected;
 
+    /// <summary>True when this server is the one VPN is currently connected through.</summary>
+    [ObservableProperty] private bool _isActive;
+
     public ServerViewModel()
     {
         _originalEntry = new VlessServerEntry();

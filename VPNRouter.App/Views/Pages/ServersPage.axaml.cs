@@ -11,10 +11,28 @@ public partial class ServersPage : UserControl
     public ServersPage()
     {
         InitializeComponent();
+        DataContextChanged += OnDataContextChanged;
+    }
+
+    private void OnDataContextChanged(object? sender, System.EventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm)
+            vm.ActiveServerChanged += OnActiveServerChanged;
+    }
+
+    private void OnActiveServerChanged(ServerViewModel? active)
+    {
+        if (active == null) return;
+        var list = this.FindControl<ListBox>("ServerList");
+        if (list == null || !list.Items.Cast<object?>().Contains(active)) return;
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            try { list.ScrollIntoView(active); } catch { }
+        });
     }
 
     // Right click on a server item → open detail editor for THAT item.
-    // ContextRequested fires for right-click universally and walks the visual tree.
     private void ServerList_ContextRequested(object? sender, ContextRequestedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm) return;
