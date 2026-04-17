@@ -305,6 +305,16 @@ public static class Strings
     public static string FcDeepHint        => Ru
         ? "Глубокая проверка: временный sing-box + реальный HTTP. Ищет пока не найдёт N рабочих или не кончатся кандидаты. Может идти часами — это норм."
         : "Deep verify: spins up a temporary sing-box + real HTTP. Runs until N working configs are found or candidates exhausted. May take hours — that's fine.";
+
+    public static string FcClearFailed      => Ru ? "🗑 Убрать мусор"       : "🗑 Clear dead";
+    public static string FcKeepVerified     => Ru ? "⭐ Только ✓✓ Verified"  : "⭐ Keep Verified only";
+    public static string FcClearAll         => Ru ? "💥 Очистить всё"        : "💥 Clear all";
+    public static string FcCleanupHint      => Ru
+        ? "Очистка: убери мусорные записи, чтобы быстрее работал Refresh. При следующем обновлении всё перезагрузится из источников."
+        : "Cleanup: remove dead entries to speed up Refresh. Next Refresh re-fetches from sources.";
+    public static string FcStatusCleared(int removed, int kept) => Ru
+        ? $"Удалено {removed} · осталось {kept}"
+        : $"Removed {removed} · kept {kept}";
     public static string FcCountryFilter      => Ru ? "Страна:"       : "Country:";
     public static string FcOnlyWorking        => Ru ? "Только рабочие" : "Only working";
     public static string FcRefreshSources     => Ru ? "↻ Обновить список"    : "↻ Refresh list";

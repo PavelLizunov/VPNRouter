@@ -140,6 +140,28 @@
                           IsChecked="{Binding FreeConfigsVm.OnlyWorking}"
                           FontSize="10" VerticalAlignment="Center"/>
             </StackPanel>
+
+            <!-- Cleanup row -->
+            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                <Button Content="{x:Static loc:Strings.FcClearFailed}"
+                        Command="{Binding FreeConfigsVm.ClearFailedCommand}"
+                        IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                        Padding="8,3" FontSize="10" CornerRadius="4"
+                        Background="#FEF3C7" Foreground="#92400E"
+                        ToolTip.Tip="Remove Timeout/Unreachable/TlsFailed/Implausible entries. Keeps Verified + Ok + Unknown."/>
+                <Button Content="{x:Static loc:Strings.FcKeepVerified}"
+                        Command="{Binding FreeConfigsVm.KeepVerifiedOnlyCommand}"
+                        IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                        Padding="8,3" FontSize="10" CornerRadius="4"
+                        Background="#DCFCE7" Foreground="#166534"
+                        ToolTip.Tip="Drop everything except ✓✓ Verified entries."/>
+                <Button Content="{x:Static loc:Strings.FcClearAll}"
+                        Command="{Binding FreeConfigsVm.ClearAllCommand}"
+                        IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                        Padding="8,3" FontSize="10" CornerRadius="4"
+                        Background="#FEE2E2" Foreground="#991B1B"
+                        ToolTip.Tip="Wipe the entire cache. Next Refresh will re-fetch everything from scratch."/>
+            </StackPanel>
         </StackPanel>
 
         <!-- ═══ List + Empty states ═══ -->

@@ -135,17 +135,21 @@ public sealed class FreeConfigAggregator
         }
 
         // ── Stage 4: test connectivity (capped) ──
-        // Prioritize: previously-working > previously-unknown > previously-failed.
-        // Save cache at start (so partial data survives crashes) and every 50 results.
+        // Skip already-Verified entries: those are gold, the weaker TCP+TLS test can only
+        // downgrade them (status Verified is only produced by the deep verifier).
+        // Prioritize remaining: previously-Ok > Slow > Unknown > Implausible > TlsFailed > Timeout > Unreachable
         var toTest = configs
+            .Where(c => c.Status != FreeConfigStatus.Verified)
             .OrderBy(c => c.Status switch
             {
                 FreeConfigStatus.Ok          => 0,
                 FreeConfigStatus.Slow        => 1,
                 FreeConfigStatus.Unknown     => 2,
-                FreeConfigStatus.Timeout     => 3,
-                FreeConfigStatus.Unreachable => 4,
-                _                            => 5,
+                FreeConfigStatus.Implausible => 3,
+                FreeConfigStatus.TlsFailed   => 4,
+                FreeConfigStatus.Timeout     => 5,
+                FreeConfigStatus.Unreachable => 6,
+                _                            => 7,
             })
             .ThenBy(c => c.LatencyMs > 0 ? c.LatencyMs : int.MaxValue)
             .Take(maxTestCount)

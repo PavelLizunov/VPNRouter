@@ -162,6 +162,54 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         _refreshCts?.Cancel();
     }
 
+    /// <summary>Remove configs with clearly-dead status (TlsFailed/Timeout/Unreachable/Implausible).</summary>
+    [RelayCommand]
+    private void ClearFailed()
+    {
+        if (IsBusy) return;
+        var before = _allConfigs.Count;
+        _allConfigs = _allConfigs.Where(c =>
+            c.Status == FreeConfigStatus.Verified ||
+            c.Status == FreeConfigStatus.Ok       ||
+            c.Status == FreeConfigStatus.Slow     ||
+            c.Status == FreeConfigStatus.Unknown).ToList();
+        PersistAllConfigs();
+        ApplyFiltersAndStats();
+        StatusText = Strings.FcStatusCleared(before - _allConfigs.Count, _allConfigs.Count);
+    }
+
+    /// <summary>Keep only ✓✓ Verified configs — discard everything else.</summary>
+    [RelayCommand]
+    private void KeepVerifiedOnly()
+    {
+        if (IsBusy) return;
+        var before = _allConfigs.Count;
+        _allConfigs = _allConfigs.Where(c => c.Status == FreeConfigStatus.Verified).ToList();
+        PersistAllConfigs();
+        ApplyFiltersAndStats();
+        StatusText = Strings.FcStatusCleared(before - _allConfigs.Count, _allConfigs.Count);
+    }
+
+    /// <summary>Wipe the entire cache.</summary>
+    [RelayCommand]
+    private void ClearAll()
+    {
+        if (IsBusy) return;
+        var before = _allConfigs.Count;
+        _allConfigs = new List<FreeConfigEntry>();
+        SelectedItem = null;
+        PersistAllConfigs();
+        ApplyFiltersAndStats();
+        StatusText = Strings.FcStatusCleared(before, 0);
+    }
+
+    private void PersistAllConfigs()
+    {
+        var file = _aggregator.Cache.Load();
+        file.Configs = _allConfigs;
+        _aggregator.Cache.Save(file);
+    }
+
     /// <summary>
     /// Goal-seeking deep verification: iterate through all candidates (in priority order)
     /// until we find <see cref="DeepVerifyTargetCount"/> Verified configs, or exhaust the
