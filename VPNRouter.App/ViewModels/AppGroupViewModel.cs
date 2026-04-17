@@ -38,4 +38,7 @@ public partial class AppGroupViewModel : ViewModelBase
         foreach (var app in Apps)
             app.IsChecked = value;
     }
+
+    /// <summary>Force DisplayName to re-evaluate (call after Strings.Lang changes).</summary>
+    public void NotifyDisplayNameChanged() => OnPropertyChanged(nameof(DisplayName));
 }

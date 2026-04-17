@@ -442,8 +442,37 @@ public partial class MainWindowViewModel : ViewModelBase
 
         LoadSettingsIntoUI();
 
+        // Detect VPN already running (e.g. started by Windows Service on boot)
+        DetectServiceManagedVpn();
+
         // Background update check (fire-and-forget, silent fail)
         _ = UpdateVm.CheckOnStartupAsync();
+    }
+
+    /// <summary>
+    /// Detect if VPN is already running via Windows Service (sing-box process alive).
+    /// Sets IsConnected so the UI reflects reality instead of showing "Not connected".
+    /// </summary>
+    private void DetectServiceManagedVpn()
+    {
+        try
+        {
+            var singboxRunning = Process.GetProcessesByName("sing-box").Length > 0;
+            if (!singboxRunning) return;
+
+            IsConnected = true;
+            ConnectButtonText = Strings.StopVPN;
+            var mode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "manual" : "custom";
+            StatusText = IsRussian
+                ? $"Подключено через службу [{mode}]"
+                : $"Connected via service [{mode}]";
+            StartSubRefreshTimer();
+            _logger.Information("[VM] Detected VPN running via service (sing-box alive)");
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[VM] DetectServiceManagedVpn failed");
+        }
     }
 
     // ── Settings Load/Save ──
@@ -1991,6 +2020,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Notify all properties — refreshes every Lbl* and other localized binding
         OnPropertyChanged(string.Empty);
+
+        // Propagate to child view models — they have their own property notifiers
+        foreach (var group in AppGroups)
+            group.NotifyDisplayNameChanged();
     }
 
     // ── Helpers ──
