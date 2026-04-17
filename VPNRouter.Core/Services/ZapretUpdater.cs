@@ -146,9 +146,10 @@ public class ZapretUpdater
                         $"Extracted contents: [{actualContents}]");
                 }
 
-                // Overwrite-copy extracted content on top of existing dir.
-                // Can't just delete old dir: WinDivert64.sys is loaded as kernel driver
-                // and locked while zapret ever ran since boot.
+                // WinDivert64.sys is locked while driver is loaded in kernel.
+                // Stop the service to unload it, then we can overwrite freely.
+                StopWinDivertService();
+
                 StatusChanged?.Invoke("Installing...");
                 Directory.CreateDirectory(ZapretDir);
                 CopyDirectoryOverwrite(extractedRoot, ZapretDir, _logger);
@@ -175,6 +176,40 @@ public class ZapretUpdater
         {
             try { File.Delete(tempZip); } catch { }
         }
+    }
+
+    /// <summary>
+    /// Stop the WinDivert kernel driver service so WinDivert64.sys can be
+    /// overwritten on disk. Without this, we end up with mismatched winws.exe
+    /// (new) + WinDivert64.sys (old in memory) → winws.exe crashes immediately.
+    /// </summary>
+    private void StopWinDivertService()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        foreach (var name in new[] { "WinDivert", "WinDivert14", "windivert" })
+        {
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo("sc", $"stop {name}")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+                using var p = System.Diagnostics.Process.Start(psi);
+                p?.WaitForExit(5000);
+                if (p?.ExitCode == 0)
+                    _logger.Information("[ZapretUpdater] Stopped {Svc} driver service", name);
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug("[ZapretUpdater] sc stop {Svc} failed: {Msg}", name, ex.Message);
+            }
+        }
+        // Driver needs a moment to unload from kernel
+        System.Threading.Thread.Sleep(500);
     }
 
     private static void CopyDirectory(string source, string dest)
