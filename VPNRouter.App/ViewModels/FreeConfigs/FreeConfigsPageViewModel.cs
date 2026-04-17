@@ -1,0 +1,230 @@
+using System.Collections.ObjectModel;
+using Avalonia.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Serilog;
+using VPNRouter.App.Localization;
+using VPNRouter.Core.Services.FreeConfigs;
+
+namespace VPNRouter.App.ViewModels.FreeConfigs;
+
+/// <summary>
+/// ViewModel for the "Free Configs" page.
+/// Owns the aggregator, the displayed list, filters, and the Apply command.
+/// </summary>
+public partial class FreeConfigsPageViewModel : ObservableObject
+{
+    private readonly FreeConfigAggregator _aggregator;
+    private readonly ILogger _logger;
+    private readonly Func<FreeConfigEntry, Task<bool>> _applyAsync;
+
+    private List<FreeConfigEntry> _allConfigs = new();
+    private CancellationTokenSource? _refreshCts;
+
+    public FreeConfigsPageViewModel(ILogger logger, Func<FreeConfigEntry, Task<bool>> applyAsync)
+    {
+        _logger = logger;
+        _applyAsync = applyAsync;
+        _aggregator = new FreeConfigAggregator(logger);
+        _aggregator.OnStageChanged += OnAggregatorStage;
+        _aggregator.OnTestProgress  += OnAggregatorProgress;
+
+        // Load cached snapshot if exists.
+        var file = _aggregator.Cache.Load();
+        _allConfigs = file.Configs;
+        ApplyFiltersAndStats();
+
+        if (file.LastAggregatedAt == DateTime.MinValue)
+        {
+            StatusText = Strings.FcStatusEmpty;
+        }
+        else
+        {
+            var age = DateTime.UtcNow - file.LastAggregatedAt;
+            StatusText = Strings.FcStatusCacheAge(FormatAge(age));
+        }
+    }
+
+    [ObservableProperty] private ObservableCollection<FreeConfigItemViewModel> _displayedConfigs = new();
+    [ObservableProperty] private ObservableCollection<string> _countries = new();
+
+    [ObservableProperty] private int _totalCount;
+    [ObservableProperty] private int _workingCount;
+    [ObservableProperty] private int _timeoutCount;
+    [ObservableProperty] private int _unreachableCount;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelection))]
+    private FreeConfigItemViewModel? _selectedItem;
+
+    public bool HasSelection => SelectedItem != null;
+
+    [ObservableProperty] private string _selectedCountry = "All";
+    partial void OnSelectedCountryChanged(string value) => ApplyFiltersAndStats();
+
+    [ObservableProperty] private bool _onlyWorking = true;
+    partial void OnOnlyWorkingChanged(bool value) => ApplyFiltersAndStats();
+
+    [ObservableProperty] private string _statusText = string.Empty;
+    [ObservableProperty] private bool _isBusy;
+    [ObservableProperty] private int _progressDone;
+    [ObservableProperty] private int _progressTotal;
+    public bool HasProgress => ProgressTotal > 0;
+    partial void OnProgressTotalChanged(int value) => OnPropertyChanged(nameof(HasProgress));
+
+    [RelayCommand]
+    private async Task RefreshAsync()
+    {
+        if (IsBusy) return;
+        IsBusy = true;
+        _refreshCts = new CancellationTokenSource();
+        try
+        {
+            var fresh = await Task.Run(() => _aggregator.RefreshAsync(ct: _refreshCts.Token));
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                _allConfigs = fresh;
+                ApplyFiltersAndStats();
+                StatusText = Strings.FcStatusRefreshed(fresh.Count);
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = Strings.FcStatusCancelled;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("FreeConfigs refresh failed: {err}", ex.Message);
+            StatusText = Strings.FcStatusFailed(ex.Message);
+        }
+        finally
+        {
+            IsBusy = false;
+            ProgressTotal = 0;
+            ProgressDone = 0;
+        }
+    }
+
+    [RelayCommand]
+    private async Task RetestAsync()
+    {
+        if (IsBusy) return;
+        IsBusy = true;
+        _refreshCts = new CancellationTokenSource();
+        try
+        {
+            var fresh = await Task.Run(() => _aggregator.RetestAsync(_refreshCts.Token));
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                _allConfigs = fresh;
+                ApplyFiltersAndStats();
+                StatusText = Strings.FcStatusTested(fresh.Count);
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = Strings.FcStatusCancelled;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("FreeConfigs retest failed: {err}", ex.Message);
+            StatusText = Strings.FcStatusFailed(ex.Message);
+        }
+        finally
+        {
+            IsBusy = false;
+            ProgressTotal = 0;
+            ProgressDone = 0;
+        }
+    }
+
+    [RelayCommand]
+    private void Cancel()
+    {
+        _refreshCts?.Cancel();
+    }
+
+    [RelayCommand]
+    private async Task ApplySelectedAsync()
+    {
+        var sel = SelectedItem;
+        if (sel == null) return;
+        if (IsBusy) return;
+
+        IsBusy = true;
+        StatusText = Strings.FcStatusApplying(sel.Endpoint);
+        try
+        {
+            var ok = await _applyAsync(sel.Entry);
+            StatusText = ok
+                ? Strings.FcStatusApplied(sel.Endpoint)
+                : Strings.FcStatusApplyFailed;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("FreeConfigs apply failed: {err}", ex.Message);
+            StatusText = Strings.FcStatusFailed(ex.Message);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private void OnAggregatorStage(string stage)
+    {
+        Dispatcher.UIThread.Post(() => StatusText = stage);
+    }
+
+    private void OnAggregatorProgress(int done, int total)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            ProgressDone = done;
+            ProgressTotal = total;
+        });
+    }
+
+    private void ApplyFiltersAndStats()
+    {
+        TotalCount       = _allConfigs.Count;
+        WorkingCount     = _allConfigs.Count(c => c.Status == FreeConfigStatus.Ok);
+        TimeoutCount     = _allConfigs.Count(c => c.Status == FreeConfigStatus.Timeout);
+        UnreachableCount = _allConfigs.Count(c => c.Status == FreeConfigStatus.Unreachable);
+
+        // Populate country filter dropdown.
+        var cc = _allConfigs
+            .Where(c => !string.IsNullOrEmpty(c.CountryCode))
+            .Select(c => c.CountryCode!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        Countries = new ObservableCollection<string>(new[] { "All" }.Concat(cc));
+        if (!Countries.Contains(SelectedCountry))
+            SelectedCountry = "All";
+
+        // Apply filter + sort.
+        IEnumerable<FreeConfigEntry> q = _allConfigs;
+        if (OnlyWorking)
+            q = q.Where(c => c.Status == FreeConfigStatus.Ok);
+        if (!string.Equals(SelectedCountry, "All", StringComparison.OrdinalIgnoreCase))
+            q = q.Where(c => string.Equals(c.CountryCode, SelectedCountry, StringComparison.OrdinalIgnoreCase));
+
+        var items = q
+            .Select(c => new FreeConfigItemViewModel(c))
+            .OrderBy(vm => vm.LatencySortKey)
+            .Take(500) // cap at 500 visible to keep DataGrid responsive
+            .ToList();
+
+        DisplayedConfigs = new ObservableCollection<FreeConfigItemViewModel>(items);
+    }
+
+    private static string FormatAge(TimeSpan t)
+    {
+        if (t.TotalMinutes < 1)   return "just now";
+        if (t.TotalMinutes < 60)  return $"{(int)t.TotalMinutes}m ago";
+        if (t.TotalHours   < 24)  return $"{(int)t.TotalHours}h ago";
+        return $"{(int)t.TotalDays}d ago";
+    }
+}

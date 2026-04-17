@@ -15,8 +15,10 @@ using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.FreeConfigs;
 using VPNRouter.Core.Platform;
 using VPNRouter.App.Localization;
+using VPNRouter.App.ViewModels.FreeConfigs;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -153,6 +155,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsNetworkTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsAppsTabSelected))]
     [NotifyPropertyChangedFor(nameof(IsToolsTabSelected))]
+    [NotifyPropertyChangedFor(nameof(IsFreeConfigsTabSelected))]
     private int _selectedTabIndex;
 
     public bool IsServersTabSelected => SelectedTabIndex == 0;
@@ -160,6 +163,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public bool IsNetworkTabSelected => SelectedTabIndex == 2;
     public bool IsAppsTabSelected => SelectedTabIndex == 3;
     public bool IsToolsTabSelected => SelectedTabIndex == 4;
+    public bool IsFreeConfigsTabSelected => SelectedTabIndex == 5;
 
     // Servers sub-tabs (VLESS / Custom Config)
     [ObservableProperty]
@@ -349,6 +353,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // DPI Bypass labels
     public string LblTabTools => IsRussian ? "Инструменты" : "Tools";
+    public string LblTabFreeConfigs => Strings.TabFreeConfigs;
     public string LblSettingsRouting => Strings.SectionRouting;
     public string LblSettingsLeak => Strings.SectionLeakProtection;
     public string LblSettingsContent => Strings.SectionContent;
@@ -458,6 +463,7 @@ public partial class MainWindowViewModel : ViewModelBase
     // ── Sub-ViewModels ──
     public UpdateNotificationViewModel UpdateVm { get; }
     public ServiceViewModel ServiceVm { get; }
+    public FreeConfigsPageViewModel FreeConfigsVm { get; private set; } = null!;
 
     public MainWindowViewModel()
     {
@@ -480,6 +486,7 @@ public partial class MainWindowViewModel : ViewModelBase
         // Sub-VMs
         UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger);
         ServiceVm = new ServiceViewModel(_logger);
+        FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync);
 
         LoadSettingsIntoUI();
 
@@ -2589,5 +2596,65 @@ public partial class MainWindowViewModel : ViewModelBase
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             return desktop.MainWindow;
         return null;
+    }
+
+    /// <summary>
+    /// Apply a free config (from the Free Configs page) as the active VLESS server and (re)start the VPN.
+    /// </summary>
+    private async Task<bool> ApplyFreeConfigAsync(FreeConfigEntry entry)
+    {
+        try
+        {
+            var newEntry = entry.ToVlessServerEntry();
+            var displayName = newEntry.Name;
+
+            // Ensure uniqueness: if a server with same host:port:uuid exists, reuse its name.
+            var existing = _settings.Vless.Servers.FirstOrDefault(s =>
+                string.Equals(s.Server, newEntry.Server, StringComparison.OrdinalIgnoreCase) &&
+                s.Port == newEntry.Port &&
+                string.Equals(s.Uuid, newEntry.Uuid, StringComparison.OrdinalIgnoreCase));
+
+            if (existing != null)
+            {
+                displayName = existing.Name ?? displayName;
+            }
+            else
+            {
+                // Ensure display name is unique in the list.
+                var baseName = displayName;
+                var suffix = 2;
+                while (_settings.Vless.Servers.Any(s => string.Equals(s.Name, displayName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    displayName = $"{baseName} #{suffix++}";
+                }
+                newEntry.Name = displayName;
+                _settings.Vless.Servers.Add(newEntry);
+            }
+
+            _settings.Vless.ActiveServer = displayName;
+            _settings.App.ConfigMode = "generated";
+            IsVlessMode = true;
+            SelectedServerModeIndex = 0;
+
+            SaveSettings();
+            _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+
+            // Stop current VPN if running.
+            if (IsConnected)
+            {
+                try { await Task.Run(() => _engine.Stop()); } catch { }
+                IsConnected = false;
+            }
+
+            // Start with the new active server.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "ApplyFreeConfig failed");
+            return false;
+        }
     }
 }

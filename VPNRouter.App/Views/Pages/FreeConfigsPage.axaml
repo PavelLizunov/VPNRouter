@@ -1,0 +1,186 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:VPNRouter.App.ViewModels"
+             xmlns:fcvm="using:VPNRouter.App.ViewModels.FreeConfigs"
+             xmlns:loc="using:VPNRouter.App.Localization"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="520"
+             x:Class="VPNRouter.App.Views.Pages.FreeConfigsPage"
+             x:DataType="vm:MainWindowViewModel">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+
+        <!-- ═══ Description ═══ -->
+        <TextBlock Grid.Row="0"
+                   Text="{x:Static loc:Strings.FcPageDescription}"
+                   TextWrapping="Wrap"
+                   FontSize="10" Opacity="0.65"
+                   Margin="12,10,14,6"/>
+
+        <!-- ═══ Dashboard (3 chips) ═══ -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" Margin="12,0,14,6">
+            <Border Grid.Column="0" Margin="0,0,3,0" Padding="8,5" CornerRadius="4"
+                    Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+                <StackPanel>
+                    <TextBlock Text="🌐" FontSize="14"/>
+                    <TextBlock Text="{x:Static loc:Strings.FcDashboardTotal}" FontSize="9" Opacity="0.6"/>
+                    <TextBlock Text="{Binding FreeConfigsVm.TotalCount}" FontWeight="Bold" FontSize="14"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="1" Margin="3,0,3,0" Padding="8,5" CornerRadius="4"
+                    Background="#DCFCE7">
+                <StackPanel>
+                    <TextBlock Text="✅" FontSize="14"/>
+                    <TextBlock Text="{x:Static loc:Strings.FcDashboardWorking}" FontSize="9" Opacity="0.6"/>
+                    <TextBlock Text="{Binding FreeConfigsVm.WorkingCount}" FontWeight="Bold" FontSize="14" Foreground="#166534"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="2" Margin="3,0,3,0" Padding="8,5" CornerRadius="4"
+                    Background="#FEF3C7">
+                <StackPanel>
+                    <TextBlock Text="⏱" FontSize="14"/>
+                    <TextBlock Text="{x:Static loc:Strings.FcDashboardTimeout}" FontSize="9" Opacity="0.6"/>
+                    <TextBlock Text="{Binding FreeConfigsVm.TimeoutCount}" FontWeight="Bold" FontSize="14" Foreground="#92400E"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="3" Margin="3,0,0,0" Padding="8,5" CornerRadius="4"
+                    Background="#FEE2E2">
+                <StackPanel>
+                    <TextBlock Text="🚫" FontSize="14"/>
+                    <TextBlock Text="{x:Static loc:Strings.FcDashboardUnreach}" FontSize="9" Opacity="0.6"/>
+                    <TextBlock Text="{Binding FreeConfigsVm.UnreachableCount}" FontWeight="Bold" FontSize="14" Foreground="#991B1B"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ═══ Toolbar (country filter + actions) ═══ -->
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="12,0,14,6">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                <TextBlock Text="{x:Static loc:Strings.FcCountryFilter}" FontSize="10" VerticalAlignment="Center"/>
+                <ComboBox ItemsSource="{Binding FreeConfigsVm.Countries}"
+                          SelectedItem="{Binding FreeConfigsVm.SelectedCountry}"
+                          MinWidth="80" Padding="6,2" FontSize="10"/>
+            </StackPanel>
+
+            <CheckBox Grid.Column="1" Margin="10,0,0,0"
+                      Content="{x:Static loc:Strings.FcOnlyWorking}"
+                      IsChecked="{Binding FreeConfigsVm.OnlyWorking}"
+                      FontSize="10" VerticalAlignment="Center"/>
+
+            <Button Grid.Column="2" Margin="0,0,4,0"
+                    Content="{x:Static loc:Strings.FcRefreshSources}"
+                    Command="{Binding FreeConfigsVm.RefreshCommand}"
+                    IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                    Padding="8,3" FontSize="10" CornerRadius="4"/>
+            <Button Grid.Column="3" Margin="0,0,4,0"
+                    Content="{x:Static loc:Strings.FcRetestAll}"
+                    Command="{Binding FreeConfigsVm.RetestCommand}"
+                    IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                    Padding="8,3" FontSize="10" CornerRadius="4"/>
+            <Button Grid.Column="4"
+                    Content="{x:Static loc:Strings.FcCancel}"
+                    Command="{Binding FreeConfigsVm.CancelCommand}"
+                    IsVisible="{Binding FreeConfigsVm.IsBusy}"
+                    Padding="8,3" FontSize="10" CornerRadius="4"/>
+        </Grid>
+
+        <!-- ═══ List (DataGrid-like via ListBox for simplicity) ═══ -->
+        <Border Grid.Row="3" Margin="12,0,14,6"
+                BorderThickness="1" CornerRadius="4"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+            <Grid RowDefinitions="Auto,*">
+
+                <!-- Column header row -->
+                <Grid Grid.Row="0" Background="{DynamicResource SystemControlBackgroundListLowBrush}"
+                      ColumnDefinitions="44,*,88,70,72" Height="24">
+                    <TextBlock Grid.Column="0" Text="{x:Static loc:Strings.FcColCountry}"
+                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="{x:Static loc:Strings.FcColEndpoint}"
+                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
+                               VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    <TextBlock Grid.Column="2" Text="{x:Static loc:Strings.FcColLatency}"
+                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
+                               VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
+                    <TextBlock Grid.Column="3" Text="{x:Static loc:Strings.FcColSni}"
+                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                    <TextBlock Grid.Column="4" Text="{x:Static loc:Strings.FcColTransport}"
+                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                </Grid>
+
+                <!-- Rows -->
+                <ListBox Grid.Row="1"
+                         ItemsSource="{Binding FreeConfigsVm.DisplayedConfigs}"
+                         SelectedItem="{Binding FreeConfigsVm.SelectedItem}"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="fcvm:FreeConfigItemViewModel">
+                            <Grid ColumnDefinitions="44,*,88,70,72" Height="22">
+                                <TextBlock Grid.Column="0" Text="{Binding CountryDisplay}"
+                                           FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="{Binding Endpoint}"
+                                           FontSize="10" VerticalAlignment="Center" Margin="8,0,0,0"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <Border Grid.Column="2" CornerRadius="3"
+                                        Padding="4,1" HorizontalAlignment="Right" Margin="0,0,4,0"
+                                        VerticalAlignment="Center"
+                                        Background="{Binding LatencyColor}">
+                                    <TextBlock Text="{Binding LatencyDisplay}"
+                                               Foreground="White" FontSize="9" FontWeight="SemiBold"/>
+                                </Border>
+                                <TextBlock Grid.Column="3" Text="{Binding Sni}"
+                                           FontSize="9" Opacity="0.6"
+                                           VerticalAlignment="Center" HorizontalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Grid.Column="4" Text="{Binding Transport}"
+                                           FontSize="9" Opacity="0.6"
+                                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Border>
+
+        <!-- ═══ Bottom status + Apply button ═══ -->
+        <Border Grid.Row="4" Padding="12,8,14,8"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+            <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding FreeConfigsVm.StatusText}"
+                               FontSize="10" Opacity="0.7"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Grid.Column="1"
+                               FontSize="10" Opacity="0.7"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding FreeConfigsVm.HasProgress}">
+                        <Run Text="{Binding FreeConfigsVm.ProgressDone}"/>
+                        <Run Text="/"/>
+                        <Run Text="{Binding FreeConfigsVm.ProgressTotal}"/>
+                    </TextBlock>
+                </Grid>
+                <ProgressBar Value="{Binding FreeConfigsVm.ProgressDone}"
+                             Maximum="{Binding FreeConfigsVm.ProgressTotal}"
+                             IsVisible="{Binding FreeConfigsVm.HasProgress}"
+                             Height="4" CornerRadius="2"/>
+                <Button Content="{x:Static loc:Strings.FcApplySelected}"
+                        Command="{Binding FreeConfigsVm.ApplySelectedCommand}"
+                        IsEnabled="{Binding FreeConfigsVm.HasSelection}"
+                        FontSize="12" FontWeight="Bold"
+                        Padding="0,8"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Background="#2563EB" Foreground="White"
+                        CornerRadius="5"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

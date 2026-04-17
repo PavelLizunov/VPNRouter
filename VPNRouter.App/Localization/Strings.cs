@@ -271,6 +271,52 @@ public static class Strings
         ? "Запускать интерфейс при входе в Windows"
         : "Start UI on Windows logon";
 
+    // ── Free Configs ──
+    public static string TabFreeConfigs => Ru ? "Free" : "Free";
+    public static string FcDashboardTotal     => Ru ? "Всего"         : "Total";
+    public static string FcDashboardWorking   => Ru ? "Работают"      : "Working";
+    public static string FcDashboardTimeout   => Ru ? "Timeout"       : "Timeout";
+    public static string FcDashboardUnreach   => Ru ? "Недоступны"    : "Unreachable";
+    public static string FcCountryFilter      => Ru ? "Страна:"       : "Country:";
+    public static string FcOnlyWorking        => Ru ? "Только рабочие" : "Only working";
+    public static string FcRefreshSources     => Ru ? "Обновить источники" : "Refresh sources";
+    public static string FcRetestAll          => Ru ? "Перепроверить"  : "Retest all";
+    public static string FcCancel             => Ru ? "Отмена"        : "Cancel";
+    public static string FcApplySelected      => Ru ? "Подключить"    : "Connect";
+    public static string FcCountryAll         => Ru ? "Все страны"    : "All countries";
+    public static string FcColCountry         => Ru ? "Страна"        : "Country";
+    public static string FcColEndpoint        => Ru ? "Адрес"         : "Endpoint";
+    public static string FcColLatency         => Ru ? "Пинг"          : "Latency";
+    public static string FcColSni             => "SNI";
+    public static string FcColTransport       => Ru ? "Транспорт"     : "Transport";
+    public static string FcEmptyHint          => Ru
+        ? "Нажмите «Обновить источники», чтобы загрузить список публичных VLESS-конфигов."
+        : "Click 'Refresh sources' to load the list of public VLESS configs.";
+    public static string FcPageDescription    => Ru
+        ? "Публичные VLESS-конфиги из открытых источников. Рабочие отсортированы по пингу. Клик — подключение через sing-box."
+        : "Public VLESS configs from open sources. Working ones sorted by latency. Click to connect via sing-box.";
+    public static string FcStatusEmpty        => Ru ? "Кэш пуст — нажмите «Обновить»" : "Cache is empty — click 'Refresh'";
+    public static string FcStatusCancelled    => Ru ? "Отменено" : "Cancelled";
+    public static string FcStatusApplyFailed  => Ru ? "Не удалось подключиться" : "Apply failed";
+    public static string FcStatusCacheAge(string age) => Ru
+        ? $"Обновлено {age}"
+        : $"Updated {age}";
+    public static string FcStatusRefreshed(int n) => Ru
+        ? $"Загружено {n} конфигов"
+        : $"Loaded {n} configs";
+    public static string FcStatusTested(int n) => Ru
+        ? $"Протестировано {n} конфигов"
+        : $"Tested {n} configs";
+    public static string FcStatusFailed(string err) => Ru
+        ? $"Ошибка: {err}"
+        : $"Error: {err}";
+    public static string FcStatusApplying(string ep) => Ru
+        ? $"Подключение к {ep}..."
+        : $"Connecting to {ep}...";
+    public static string FcStatusApplied(string ep) => Ru
+        ? $"Подключено: {ep}"
+        : $"Connected: {ep}";
+
     // ── Service (Windows-only) ──
     public static string AutostartWithWindows => Ru ? "Автозапуск с Windows" : "Autostart with Windows";
     public static string RestartService => Ru ? "Перезапустить службу" : "Restart Service";
