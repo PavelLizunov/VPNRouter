@@ -2600,38 +2600,45 @@ public partial class MainWindowViewModel : ViewModelBase
 
     /// <summary>
     /// Apply a free config (from the Free Configs page) as the active VLESS server and (re)start the VPN.
+    /// IMPORTANT: mutates the VM-level <see cref="Servers"/> collection (not _settings directly) because
+    /// SaveSettings() rebuilds _settings.Vless.Servers from the VM collection — direct mutations to
+    /// _settings.Vless.Servers would be wiped out.
     /// </summary>
     private async Task<bool> ApplyFreeConfigAsync(FreeConfigEntry entry)
     {
         try
         {
             var newEntry = entry.ToVlessServerEntry();
-            var displayName = newEntry.Name;
 
-            // Ensure uniqueness: if a server with same host:port:uuid exists, reuse its name.
-            var existing = _settings.Vless.Servers.FirstOrDefault(s =>
+            // Does the Free config already exist in the user's Server list? Match by host:port:uuid.
+            var existingVm = Servers.FirstOrDefault(s =>
                 string.Equals(s.Server, newEntry.Server, StringComparison.OrdinalIgnoreCase) &&
                 s.Port == newEntry.Port &&
                 string.Equals(s.Uuid, newEntry.Uuid, StringComparison.OrdinalIgnoreCase));
 
-            if (existing != null)
+            ServerViewModel target;
+            if (existingVm != null)
             {
-                displayName = existing.Name ?? displayName;
+                target = existingVm;
             }
             else
             {
-                // Ensure display name is unique in the list.
-                var baseName = displayName;
+                // Ensure display name is unique in the VM collection.
+                var displayName = newEntry.Name;
+                var baseName = string.IsNullOrWhiteSpace(displayName) ? "⚡ free" : displayName;
+                displayName = baseName;
                 var suffix = 2;
-                while (_settings.Vless.Servers.Any(s => string.Equals(s.Name, displayName, StringComparison.OrdinalIgnoreCase)))
-                {
+                while (Servers.Any(s => string.Equals(s.Name, displayName, StringComparison.OrdinalIgnoreCase)))
                     displayName = $"{baseName} #{suffix++}";
-                }
                 newEntry.Name = displayName;
-                _settings.Vless.Servers.Add(newEntry);
+
+                target = new ServerViewModel(newEntry);
+                Servers.Add(target);
             }
 
-            _settings.Vless.ActiveServer = displayName;
+            // Make it the active server for the Manual/VLESS mode.
+            // SaveSettings() reads SelectedServer + the Servers OC and persists them correctly.
+            SelectedServer = target;
             _settings.App.ConfigMode = "generated";
             IsVlessMode = true;
             SelectedServerModeIndex = 0;
