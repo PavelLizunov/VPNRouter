@@ -277,6 +277,7 @@ public static class Strings
     public static string FcDashboardWorking   => Ru ? "Работают"      : "Working";
     public static string FcDashboardTimeout   => Ru ? "Timeout"       : "Timeout";
     public static string FcDashboardUnreach   => Ru ? "Недоступны"    : "Unreachable";
+    public static string FcDashboardTlsFail   => Ru ? "TLS провал"    : "TLS failed";
     public static string FcCountryFilter      => Ru ? "Страна:"       : "Country:";
     public static string FcOnlyWorking        => Ru ? "Только рабочие" : "Only working";
     public static string FcRefreshSources     => Ru ? "↻ Обновить список"    : "↻ Refresh list";
@@ -313,8 +314,8 @@ public static class Strings
         ? "Первый запуск ≈1 мин. Тестируется до 500 серверов за раз — повторяйте для более полных данных."
         : "First run ≈1 min. Tests up to 500 servers at a time — repeat for fuller coverage.";
     public static string FcPageDescription    => Ru
-        ? "Публичные VLESS-конфиги из открытых источников. Рабочие отсортированы по пингу. Клик — подключение через sing-box."
-        : "Public VLESS configs from open sources. Working ones sorted by latency. Click to connect via sing-box.";
+        ? "Публичные VLESS-конфиги. Проверка: TCP + TLS handshake с валидацией сертификата. ✓ = сервер живой и TLS-валидный."
+        : "Public VLESS configs. Tests: TCP + TLS handshake with cert validation. ✓ = server alive and TLS-valid.";
     public static string FcStatusEmpty        => Ru ? "Кэш пуст — нажмите «Обновить»" : "Cache is empty — click 'Refresh'";
     public static string FcStatusCancelled    => Ru ? "Отменено" : "Cancelled";
     public static string FcStatusApplyFailed  => Ru ? "Не удалось подключиться" : "Apply failed";

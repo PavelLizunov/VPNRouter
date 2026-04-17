@@ -50,6 +50,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject
 
     [ObservableProperty] private int _totalCount;
     [ObservableProperty] private int _workingCount;
+    [ObservableProperty] private int _tlsFailedCount;
     [ObservableProperty] private int _timeoutCount;
     [ObservableProperty] private int _unreachableCount;
 
@@ -62,7 +63,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject
     [ObservableProperty] private string _selectedCountry = "All";
     partial void OnSelectedCountryChanged(string value) => ApplyFiltersAndStats();
 
-    [ObservableProperty] private bool _onlyWorking = false;
+    [ObservableProperty] private bool _onlyWorking = true;
     partial void OnOnlyWorkingChanged(bool value) => ApplyFiltersAndStats();
 
     /// <summary>True when no configs have been aggregated yet (cache is empty).</summary>
@@ -198,6 +199,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         {
             TotalCount       = _allConfigs.Count;
             WorkingCount     = _allConfigs.Count(c => c.Status == FreeConfigStatus.Ok);
+            TlsFailedCount   = _allConfigs.Count(c => c.Status == FreeConfigStatus.TlsFailed);
             TimeoutCount     = _allConfigs.Count(c => c.Status == FreeConfigStatus.Timeout);
             UnreachableCount = _allConfigs.Count(c => c.Status == FreeConfigStatus.Unreachable);
 

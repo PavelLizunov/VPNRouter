@@ -18,38 +18,46 @@
                    FontSize="10" Opacity="0.65"
                    Margin="12,10,14,6"/>
 
-        <!-- ═══ Dashboard (3 chips) ═══ -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" Margin="12,0,14,6">
-            <Border Grid.Column="0" Margin="0,0,3,0" Padding="8,5" CornerRadius="4"
+        <!-- ═══ Dashboard (5 chips) ═══ -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*,*" Margin="12,0,14,6">
+            <Border Grid.Column="0" Margin="0,0,3,0" Padding="6,5" CornerRadius="4"
                     Background="{DynamicResource SystemControlBackgroundListLowBrush}">
                 <StackPanel>
-                    <TextBlock Text="🌐" FontSize="14"/>
+                    <TextBlock Text="🌐" FontSize="13"/>
                     <TextBlock Text="{x:Static loc:Strings.FcDashboardTotal}" FontSize="9" Opacity="0.6"/>
-                    <TextBlock Text="{Binding FreeConfigsVm.TotalCount}" FontWeight="Bold" FontSize="14"/>
+                    <TextBlock Text="{Binding FreeConfigsVm.TotalCount}" FontWeight="Bold" FontSize="13"/>
                 </StackPanel>
             </Border>
-            <Border Grid.Column="1" Margin="3,0,3,0" Padding="8,5" CornerRadius="4"
+            <Border Grid.Column="1" Margin="3,0,3,0" Padding="6,5" CornerRadius="4"
                     Background="#DCFCE7">
                 <StackPanel>
-                    <TextBlock Text="✅" FontSize="14"/>
+                    <TextBlock Text="✅" FontSize="13"/>
                     <TextBlock Text="{x:Static loc:Strings.FcDashboardWorking}" FontSize="9" Opacity="0.6"/>
-                    <TextBlock Text="{Binding FreeConfigsVm.WorkingCount}" FontWeight="Bold" FontSize="14" Foreground="#166534"/>
+                    <TextBlock Text="{Binding FreeConfigsVm.WorkingCount}" FontWeight="Bold" FontSize="13" Foreground="#166534"/>
                 </StackPanel>
             </Border>
-            <Border Grid.Column="2" Margin="3,0,3,0" Padding="8,5" CornerRadius="4"
+            <Border Grid.Column="2" Margin="3,0,3,0" Padding="6,5" CornerRadius="4"
+                    Background="#FFEDD5">
+                <StackPanel>
+                    <TextBlock Text="🔒" FontSize="13"/>
+                    <TextBlock Text="{x:Static loc:Strings.FcDashboardTlsFail}" FontSize="9" Opacity="0.6"/>
+                    <TextBlock Text="{Binding FreeConfigsVm.TlsFailedCount}" FontWeight="Bold" FontSize="13" Foreground="#9A3412"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="3" Margin="3,0,3,0" Padding="6,5" CornerRadius="4"
                     Background="#FEF3C7">
                 <StackPanel>
-                    <TextBlock Text="⏱" FontSize="14"/>
+                    <TextBlock Text="⏱" FontSize="13"/>
                     <TextBlock Text="{x:Static loc:Strings.FcDashboardTimeout}" FontSize="9" Opacity="0.6"/>
-                    <TextBlock Text="{Binding FreeConfigsVm.TimeoutCount}" FontWeight="Bold" FontSize="14" Foreground="#92400E"/>
+                    <TextBlock Text="{Binding FreeConfigsVm.TimeoutCount}" FontWeight="Bold" FontSize="13" Foreground="#92400E"/>
                 </StackPanel>
             </Border>
-            <Border Grid.Column="3" Margin="3,0,0,0" Padding="8,5" CornerRadius="4"
+            <Border Grid.Column="4" Margin="3,0,0,0" Padding="6,5" CornerRadius="4"
                     Background="#FEE2E2">
                 <StackPanel>
-                    <TextBlock Text="🚫" FontSize="14"/>
+                    <TextBlock Text="🚫" FontSize="13"/>
                     <TextBlock Text="{x:Static loc:Strings.FcDashboardUnreach}" FontSize="9" Opacity="0.6"/>
-                    <TextBlock Text="{Binding FreeConfigsVm.UnreachableCount}" FontWeight="Bold" FontSize="14" Foreground="#991B1B"/>
+                    <TextBlock Text="{Binding FreeConfigsVm.UnreachableCount}" FontWeight="Bold" FontSize="13" Foreground="#991B1B"/>
                 </StackPanel>
             </Border>
         </Grid>

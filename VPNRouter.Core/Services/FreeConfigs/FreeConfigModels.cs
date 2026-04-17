@@ -20,6 +20,8 @@ public enum FreeConfigStatus
     ParseError = 4,
     /// <summary>TCP established but very slow (probable throttling / DPI interference).</summary>
     Slow = 5,
+    /// <summary>TCP connects but TLS handshake fails (dead endpoint, wrong SNI, expired cert).</summary>
+    TlsFailed = 6,
 }
 
 /// <summary>
@@ -69,6 +71,9 @@ public sealed class FreeConfigEntry
 
     /// <summary>When this config was first observed (UTC).</summary>
     public DateTime FirstSeenAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Optional short reason for last failure (e.g. "cert mismatch", "tls timeout"). For UI diagnostics.</summary>
+    public string? LastError { get; set; }
 
     /// <summary>
     /// Builds a VlessServerEntry from this free config, suitable for insertion into AppSettings.Vless.Servers.

@@ -35,18 +35,20 @@ public partial class FreeConfigItemViewModel : ObservableObject
 
     public string LatencyDisplay => Entry.Status switch
     {
-        FreeConfigStatus.Ok       => $"{Entry.LatencyMs} ms",
-        FreeConfigStatus.Slow     => $"{Entry.LatencyMs} ms (slow)",
-        FreeConfigStatus.Timeout  => "timeout",
+        FreeConfigStatus.Ok          => $"{Entry.LatencyMs} ms ✓",
+        FreeConfigStatus.Slow        => $"{Entry.LatencyMs} ms slow",
+        FreeConfigStatus.TlsFailed   => "TLS failed",
+        FreeConfigStatus.Timeout     => "timeout",
         FreeConfigStatus.Unreachable => "unreachable",
         FreeConfigStatus.ParseError  => "parse error",
-        _                          => "—",
+        _                             => "—",
     };
 
     public int LatencySortKey => Entry.Status switch
     {
         FreeConfigStatus.Ok when Entry.LatencyMs > 0 => Entry.LatencyMs,
         FreeConfigStatus.Slow                         => Entry.LatencyMs + 10_000,
+        FreeConfigStatus.TlsFailed                    => 500_000,
         FreeConfigStatus.Timeout                      => 1_000_000,
         FreeConfigStatus.Unreachable                  => 1_000_001,
         _                                              => 999_999,
@@ -57,12 +59,16 @@ public partial class FreeConfigItemViewModel : ObservableObject
     /// <summary>Hex color string for latency badge.</summary>
     public string LatencyColor => Entry.Status switch
     {
-        FreeConfigStatus.Ok   when Entry.LatencyMs < 100 => "#22C55E",  // green
-        FreeConfigStatus.Ok   when Entry.LatencyMs < 300 => "#EAB308",  // amber
-        FreeConfigStatus.Ok                               => "#F59E0B",  // orange
-        FreeConfigStatus.Slow                             => "#EF4444",  // red
-        _                                                  => "#9CA3AF",  // gray
+        FreeConfigStatus.Ok   when Entry.LatencyMs < 100 => "#22C55E",  // green — verified + fast
+        FreeConfigStatus.Ok   when Entry.LatencyMs < 300 => "#65A30D",  // lime — verified + OK
+        FreeConfigStatus.Ok                               => "#F59E0B",  // orange — verified + slow-ish
+        FreeConfigStatus.Slow                             => "#EF4444",  // red — too slow
+        FreeConfigStatus.TlsFailed                        => "#F97316",  // orange — reachable but fake/dead
+        _                                                  => "#9CA3AF",  // gray — offline
     };
+
+    /// <summary>Tooltip shown on hover — human-readable reason.</summary>
+    public string ErrorTooltip => Entry.LastError ?? string.Empty;
 
     /// <summary>Display name from vless:// fragment, fallback to endpoint.</summary>
     public string DisplayName => string.IsNullOrWhiteSpace(Entry.Name) ? Endpoint : Entry.Name;
