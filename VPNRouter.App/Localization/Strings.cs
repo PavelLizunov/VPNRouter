@@ -184,6 +184,21 @@ public static class Strings
     public static string OpenFolder => Ru ? "Открыть папку" : "Open folder";
     public static string OpenGitHub => "GitHub";
 
+    // ── Autostart ──
+    public static string AutostartSection => Ru ? "Автозапуск" : "Autostart";
+    public static string AutostartVpn => Ru
+        ? "Запускать VPN при старте системы"
+        : "Start VPN on system boot";
+    public static string AutostartZapret => Ru
+        ? "Запускать Zapret при старте системы"
+        : "Start Zapret on system boot";
+    public static string AutostartTgProxy => Ru
+        ? "Запускать TgProxy при старте системы"
+        : "Start TgProxy on system boot";
+    public static string AutostartUi => Ru
+        ? "Запускать интерфейс при входе в Windows"
+        : "Start UI on Windows logon";
+
     // ── Service (Windows-only) ──
     public static string AutostartWithWindows => Ru ? "Автозапуск с Windows" : "Autostart with Windows";
     public static string RestartService => Ru ? "Перезапустить службу" : "Restart Service";

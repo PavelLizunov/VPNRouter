@@ -82,6 +82,30 @@
                                    TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
+
+                <!-- ═══ Autostart ═══ -->
+                <TextBlock Text="{Binding LblAutostartSection}"
+                           FontWeight="Bold" FontSize="12" Margin="0,8,0,0"/>
+
+                <Border Padding="8,6" CornerRadius="4"
+                        Background="{DynamicResource SystemControlBackgroundListLowBrush}"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="4">
+                        <CheckBox IsChecked="{Binding AutostartVpn}"
+                                  Content="{Binding LblAutostartVpn}"
+                                  MinHeight="0" Padding="4,0"/>
+                        <CheckBox IsChecked="{Binding AutostartZapret}"
+                                  Content="{Binding LblAutostartZapret}"
+                                  MinHeight="0" Padding="4,0"/>
+                        <CheckBox IsChecked="{Binding AutostartTgProxy}"
+                                  Content="{Binding LblAutostartTgProxy}"
+                                  MinHeight="0" Padding="4,0"/>
+                        <CheckBox IsChecked="{Binding AutostartUi}"
+                                  Content="{Binding LblAutostartUi}"
+                                  MinHeight="0" Padding="4,0"/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </ScrollViewer>
     </Grid>

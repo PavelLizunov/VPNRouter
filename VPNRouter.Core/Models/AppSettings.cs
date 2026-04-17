@@ -179,6 +179,24 @@ public class AppConfig
     [YamlMember(Alias = "tg_proxy_secret")]
     public string TgProxySecret { get; set; } = string.Empty;
 
+    // ── Autostart ──
+
+    /// <summary>Auto-start VPN connection when Windows Service starts.</summary>
+    [YamlMember(Alias = "autostart_vpn")]
+    public bool AutostartVpn { get; set; } = false;
+
+    /// <summary>Auto-start Zapret (DPI bypass) when Windows Service starts.</summary>
+    [YamlMember(Alias = "autostart_zapret")]
+    public bool AutostartZapret { get; set; } = false;
+
+    /// <summary>Auto-start TgProxy (Telegram MTProto proxy) when Windows Service starts.</summary>
+    [YamlMember(Alias = "autostart_tgproxy")]
+    public bool AutostartTgProxy { get; set; } = false;
+
+    /// <summary>Auto-start GUI minimized to tray on Windows logon (HKCU\Run).</summary>
+    [YamlMember(Alias = "autostart_ui")]
+    public bool AutostartUi { get; set; } = false;
+
     /// <summary>
     /// When true, flush system DNS cache when VPN starts to prevent
     /// resolved-pre-connect entries from leaking through direct route.

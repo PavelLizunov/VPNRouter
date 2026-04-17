@@ -10,12 +10,14 @@ namespace VPNRouter.App;
 
 sealed class Program
 {
-    // Initialization code. Don't use any Avalonia, third-party APIs or any
-    // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
-    // yet and stuff might break.
+    /// <summary>True when launched with --minimized (autostart, starts hidden in tray).</summary>
+    public static bool StartMinimized { get; private set; }
+
     [STAThread]
     public static void Main(string[] args)
     {
+        StartMinimized = args.Contains("--minimized");
+
 #if PLATFORM_WINDOWS
         // Auto-elevate to admin (required for TUN + ETW + Firewall)
         if (OperatingSystem.IsWindows() && !IsAdmin())

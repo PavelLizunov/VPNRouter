@@ -50,6 +50,12 @@ public partial class App : Application
 
             // Setup tray icon
             SetupTrayIcon(desktop);
+
+            // --minimized: start hidden in tray (autostart on logon)
+            if (Program.StartMinimized)
+                mainWindow.Hide();
+            else
+                mainWindow.Show();
         }
 
         base.OnFrameworkInitializationCompleted();

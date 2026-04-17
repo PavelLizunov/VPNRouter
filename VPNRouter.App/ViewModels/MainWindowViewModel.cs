@@ -15,6 +15,7 @@ using VPNRouter.Core;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
+using VPNRouter.Core.Platform;
 using VPNRouter.App.Localization;
 
 namespace VPNRouter.App.ViewModels;
@@ -98,6 +99,12 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _flushDnsOnStart = true;
     [ObservableProperty] private bool _strictDns = false;
     [ObservableProperty] private bool _blockAds = false;
+
+    // Autostart
+    [ObservableProperty] private bool _autostartVpn = false;
+    [ObservableProperty] private bool _autostartZapret = false;
+    [ObservableProperty] private bool _autostartTgProxy = false;
+    [ObservableProperty] private bool _autostartUi = false;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblDpiToggle))]
     private bool _zapretEnabled = false;
@@ -154,6 +161,22 @@ public partial class MainWindowViewModel : ViewModelBase
         if (_isLoadingUI) return;
         // Sync IsVlessMode with sub-tab index (0=VLESS, 1=Custom)
         IsVlessMode = value == 0;
+        SaveSettings();
+    }
+
+    partial void OnAutostartUiChanged(bool value)
+    {
+        if (_isLoadingUI) return;
+#if PLATFORM_WINDOWS
+        try
+        {
+            if (value)
+                AutostartHelper.Enable(Environment.ProcessPath!);
+            else
+                AutostartHelper.Disable();
+        }
+        catch (Exception ex) { _logger.Error(ex, "[VM] Autostart UI toggle failed"); }
+#endif
         SaveSettings();
     }
 
@@ -266,6 +289,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // DPI Bypass labels
     public string LblTabTools => IsRussian ? "Инструменты" : "Tools";
+    public string LblAutostartSection => Strings.AutostartSection;
+    public string LblAutostartVpn => Strings.AutostartVpn;
+    public string LblAutostartZapret => Strings.AutostartZapret;
+    public string LblAutostartTgProxy => Strings.AutostartTgProxy;
+    public string LblAutostartUi => Strings.AutostartUi;
     public string LblServerModeVless => Strings.VlessServers;
     public string LblServerModeCustom => Strings.CustomConfigJson;
     public string LblToolZapret => Strings.TabZapret;
@@ -436,6 +464,14 @@ public partial class MainWindowViewModel : ViewModelBase
         FlushDnsOnStart = _settings.App.FlushDnsOnStart;
         StrictDns = _settings.App.StrictDns;
         BlockAds = _settings.App.BlockAds;
+
+        // Autostart
+        AutostartVpn = _settings.App.AutostartVpn;
+        AutostartZapret = _settings.App.AutostartZapret;
+        AutostartTgProxy = _settings.App.AutostartTgProxy;
+#if PLATFORM_WINDOWS
+        AutostartUi = AutostartHelper.IsEnabled();
+#endif
         LoadZapretStrategies();
         ZapretCustomArgs = _settings.App.ZapretCustomArgs;
         // Detect zapret state from actual process, not saved flag
@@ -713,6 +749,10 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.App.FlushDnsOnStart = FlushDnsOnStart;
         _settings.App.StrictDns = StrictDns;
         _settings.App.BlockAds = BlockAds;
+        _settings.App.AutostartVpn = AutostartVpn;
+        _settings.App.AutostartZapret = AutostartZapret;
+        _settings.App.AutostartTgProxy = AutostartTgProxy;
+        _settings.App.AutostartUi = AutostartUi;
         _settings.App.ZapretEnabled = ZapretEnabled;
         _settings.App.ZapretStrategy = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Count
             ? ZapretStrategies[ZapretStrategyIndex] : "multisplit";
