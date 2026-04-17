@@ -6,12 +6,39 @@
              mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
              x:Class="VPNRouter.App.Views.Pages.NetworkPage"
              x:DataType="vm:MainWindowViewModel">
-    <Grid>
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+
+    <!-- Master-detail: section list left, controls right -->
+    <Grid ColumnDefinitions="160,*">
+
+        <!-- MASTER (left): section navigator -->
+        <Border Grid.Column="0"
+                BorderThickness="0,0,1,0"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+            <ListBox SelectedIndex="{Binding SelectedSettingsIndex}"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListBoxItem Content="{Binding LblSettingsRouting}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblSettingsLeak}"       Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblSettingsContent}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblSettingsUpdates}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                <ListBoxItem Content="{Binding LblAutostartSection}"   Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+            </ListBox>
+        </Border>
+
+        <!-- DETAIL (right): selected section -->
+        <ScrollViewer Grid.Column="1"
+                      HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto"
-                      Padding="10,8,16,12">
-            <StackPanel Spacing="10">
-                <!-- Routing Mode -->
+                      Padding="14,10,14,12">
+          <StackPanel>
+
+            <!-- Routing section -->
+            <StackPanel Spacing="10" IsVisible="{Binding IsSettingsRoutingSelected}">
+                <TextBlock Text="{Binding LblSettingsRouting}" FontWeight="Bold" FontSize="14"/>
+
                 <StackPanel Spacing="4">
                     <TextBlock Text="Routing mode" FontWeight="SemiBold" Opacity="0.7"/>
                     <StackPanel Orientation="Horizontal" Spacing="16">
@@ -23,7 +50,6 @@
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Russian Geo Bypass -->
                 <Border Padding="8,6" CornerRadius="4"
                         Background="{DynamicResource SystemControlBackgroundListLowBrush}"
                         BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
@@ -37,27 +63,17 @@
                                    TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
+            </StackPanel>
 
-                <!-- Update channel -->
+            <!-- Leak Protection section -->
+            <StackPanel Spacing="10" IsVisible="{Binding IsSettingsLeakSelected}">
+                <TextBlock Text="{Binding LblSettingsLeak}" FontWeight="Bold" FontSize="14"/>
+
                 <Border Padding="8,6" CornerRadius="4"
                         Background="{DynamicResource SystemControlBackgroundListLowBrush}"
                         BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                         BorderThickness="1">
-                    <StackPanel Spacing="3">
-                        <TextBlock Text="{Binding UpdateChannelHeader}" FontWeight="SemiBold" Opacity="0.7"/>
-                        <CheckBox IsChecked="{Binding ReceivePrereleases}"
-                                  Content="{Binding ReceivePrereleasesLabel}"
-                                  MinHeight="0" Padding="4,0"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Leak protection -->
-                <Border Padding="8,6" CornerRadius="4"
-                        Background="{DynamicResource SystemControlBackgroundListLowBrush}"
-                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                        BorderThickness="1">
-                    <StackPanel Spacing="3">
-                        <TextBlock Text="Leak protection" FontWeight="SemiBold" Opacity="0.7"/>
+                    <StackPanel Spacing="4">
                         <CheckBox IsChecked="{Binding StrictMode}" Content="{Binding StrictModeLabel}"
                                   MinHeight="0" Padding="4,0"/>
                         <CheckBox IsChecked="{Binding ForceIpv4Only}" Content="{Binding ForceIpv4Label}"
@@ -68,7 +84,12 @@
                                   MinHeight="0" Padding="4,0"/>
                     </StackPanel>
                 </Border>
-                <!-- Ad blocking -->
+            </StackPanel>
+
+            <!-- Content section -->
+            <StackPanel Spacing="10" IsVisible="{Binding IsSettingsContentSelected}">
+                <TextBlock Text="{Binding LblSettingsContent}" FontWeight="Bold" FontSize="14"/>
+
                 <Border Padding="8,6" CornerRadius="4"
                         Background="{DynamicResource SystemControlBackgroundListLowBrush}"
                         BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
@@ -82,16 +103,34 @@
                                    TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
+            </StackPanel>
 
-                <!-- ═══ Autostart ═══ -->
-                <TextBlock Text="{Binding LblAutostartSection}"
-                           FontWeight="Bold" FontSize="12" Margin="0,8,0,0"/>
+            <!-- Updates section -->
+            <StackPanel Spacing="10" IsVisible="{Binding IsSettingsUpdatesSelected}">
+                <TextBlock Text="{Binding LblSettingsUpdates}" FontWeight="Bold" FontSize="14"/>
 
                 <Border Padding="8,6" CornerRadius="4"
                         Background="{DynamicResource SystemControlBackgroundListLowBrush}"
                         BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                         BorderThickness="1">
-                    <StackPanel Spacing="4">
+                    <StackPanel Spacing="3">
+                        <TextBlock Text="{Binding UpdateChannelHeader}" FontWeight="SemiBold" Opacity="0.7"/>
+                        <CheckBox IsChecked="{Binding ReceivePrereleases}"
+                                  Content="{Binding ReceivePrereleasesLabel}"
+                                  MinHeight="0" Padding="4,0"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Autostart section -->
+            <StackPanel Spacing="10" IsVisible="{Binding IsSettingsAutostartSelected}">
+                <TextBlock Text="{Binding LblAutostartSection}" FontWeight="Bold" FontSize="14"/>
+
+                <Border Padding="8,6" CornerRadius="4"
+                        Background="{DynamicResource SystemControlBackgroundListLowBrush}"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="6">
                         <CheckBox IsChecked="{Binding AutostartVpn}"
                                   Content="{Binding LblAutostartVpn}"
                                   MinHeight="0" Padding="4,0"/>
@@ -107,6 +146,8 @@
                     </StackPanel>
                 </Border>
             </StackPanel>
+
+          </StackPanel>
         </ScrollViewer>
     </Grid>
 </UserControl>

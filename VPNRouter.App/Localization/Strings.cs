@@ -185,6 +185,10 @@ public static class Strings
     public static string OpenGitHub => "GitHub";
 
     // ── Autostart ──
+    public static string SectionRouting => Ru ? "Маршрутизация" : "Routing";
+    public static string SectionLeakProtection => Ru ? "Защита от утечек" : "Leak Protection";
+    public static string SectionContent => Ru ? "Контент" : "Content";
+    public static string SectionUpdates => Ru ? "Обновления" : "Updates";
     public static string AutostartSection => Ru ? "Автозапуск" : "Autostart";
     public static string AutostartVpn => Ru
         ? "Запускать VPN при старте системы"

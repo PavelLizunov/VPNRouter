@@ -184,6 +184,21 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnAutostartZapretChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
     partial void OnAutostartTgProxyChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
 
+    // Settings section navigator (master-detail)
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSettingsRoutingSelected))]
+    [NotifyPropertyChangedFor(nameof(IsSettingsLeakSelected))]
+    [NotifyPropertyChangedFor(nameof(IsSettingsContentSelected))]
+    [NotifyPropertyChangedFor(nameof(IsSettingsUpdatesSelected))]
+    [NotifyPropertyChangedFor(nameof(IsSettingsAutostartSelected))]
+    private int _selectedSettingsIndex;
+
+    public bool IsSettingsRoutingSelected => SelectedSettingsIndex == 0;
+    public bool IsSettingsLeakSelected => SelectedSettingsIndex == 1;
+    public bool IsSettingsContentSelected => SelectedSettingsIndex == 2;
+    public bool IsSettingsUpdatesSelected => SelectedSettingsIndex == 3;
+    public bool IsSettingsAutostartSelected => SelectedSettingsIndex == 4;
+
     // Tools sub-tabs
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsZapretToolSelected))]
@@ -293,6 +308,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
     // DPI Bypass labels
     public string LblTabTools => IsRussian ? "Инструменты" : "Tools";
+    public string LblSettingsRouting => Strings.SectionRouting;
+    public string LblSettingsLeak => Strings.SectionLeakProtection;
+    public string LblSettingsContent => Strings.SectionContent;
+    public string LblSettingsUpdates => Strings.SectionUpdates;
     public string LblAutostartSection => Strings.AutostartSection;
     public string LblAutostartVpn => Strings.AutostartVpn;
     public string LblAutostartZapret => Strings.AutostartZapret;
