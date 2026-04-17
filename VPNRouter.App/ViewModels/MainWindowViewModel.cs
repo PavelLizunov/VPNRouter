@@ -849,7 +849,7 @@ public partial class MainWindowViewModel : ViewModelBase
             if (ok)
             {
                 HasPendingAppChanges = false;
-                StatusText = IsRussian ? "Изменения применены" : "Changes applied";
+                RestoreConnectedStatus();
             }
             else
             {
@@ -862,6 +862,20 @@ public partial class MainWindowViewModel : ViewModelBase
             StatusText = $"Apply failed: {ex.Message}";
         }
         finally { IsApplying = false; }
+    }
+
+    /// <summary>Rebuild the "Connected [mode] → server (ip)" status line after Apply.</summary>
+    private void RestoreConnectedStatus()
+    {
+        if (!IsConnected) return;
+        var serverIp = _engine.ActiveServerAddress;
+        string? serverName = null;
+        if (IsSubscribeMode)
+            serverName = (SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName;
+        else
+            serverName = (SelectedServer ?? Servers.FirstOrDefault())?.DisplayName;
+        var modeLabel = IsSubscribeMode ? "subscribe" : IsVlessMode ? "split" : "custom";
+        StatusText = Strings.Connected(modeLabel, serverName, serverIp);
     }
 
     /// <summary>

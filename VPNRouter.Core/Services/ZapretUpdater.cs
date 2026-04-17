@@ -146,22 +146,12 @@ public class ZapretUpdater
                         $"Extracted contents: [{actualContents}]");
                 }
 
-                // Delete old zapret directory (may be locked if winws running)
-                if (Directory.Exists(ZapretDir))
-                {
-                    _logger.Information("[ZapretUpdater] Removing old zapret dir");
-                    try { Directory.Delete(ZapretDir, recursive: true); }
-                    catch (Exception ex)
-                    {
-                        throw new Exception(
-                            $"Cannot remove old zapret dir (stop zapret first?): {ex.Message}", ex);
-                    }
-                }
-
-                // Copy extracted content (Move fails across different drives)
+                // Overwrite-copy extracted content on top of existing dir.
+                // Can't just delete old dir: WinDivert64.sys is loaded as kernel driver
+                // and locked while zapret ever ran since boot.
                 StatusChanged?.Invoke("Installing...");
                 Directory.CreateDirectory(ZapretDir);
-                CopyDirectory(extractedRoot, ZapretDir);
+                CopyDirectoryOverwrite(extractedRoot, ZapretDir, _logger);
 
                 // Write version file
                 var version = ParseVersionFromServiceBat() ?? tagName;
@@ -194,6 +184,30 @@ public class ZapretUpdater
             File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: true);
         foreach (var dir in Directory.GetDirectories(source))
             CopyDirectory(dir, Path.Combine(dest, Path.GetFileName(dir)));
+    }
+
+    /// <summary>
+    /// Copy source tree into dest tree, overwriting files where possible,
+    /// skipping files that are locked (e.g. WinDivert64.sys loaded as kernel driver).
+    /// </summary>
+    private static void CopyDirectoryOverwrite(string source, string dest, ILogger logger)
+    {
+        Directory.CreateDirectory(dest);
+        foreach (var file in Directory.GetFiles(source))
+        {
+            var destFile = Path.Combine(dest, Path.GetFileName(file));
+            try
+            {
+                File.Copy(file, destFile, overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                logger.Warning("[ZapretUpdater] Skipped locked file {File}: {Msg}",
+                    Path.GetFileName(file), ex.Message);
+            }
+        }
+        foreach (var dir in Directory.GetDirectories(source))
+            CopyDirectoryOverwrite(dir, Path.Combine(dest, Path.GetFileName(dir)), logger);
     }
 
     private static string? ParseVersionFromServiceBat()
