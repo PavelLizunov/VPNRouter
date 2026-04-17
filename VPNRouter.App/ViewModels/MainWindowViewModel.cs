@@ -1630,14 +1630,13 @@ public partial class MainWindowViewModel : ViewModelBase
             var strategyName = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Count
                 ? ZapretStrategies[ZapretStrategyIndex] : "multisplit";
 
-            string args;
             if (strategyName == "custom")
             {
-                args = ZapretCustomArgs;
+                _zapret.Start(ZapretCustomArgs);
             }
             else if (strategyName == "multisplit" || strategyName == "fake+multisplit")
             {
-                args = ZapretManager.BuildLegacyArgs(strategyName);
+                _zapret.Start(ZapretManager.BuildLegacyArgs(strategyName));
             }
             else
             {
@@ -1647,19 +1646,24 @@ public partial class MainWindowViewModel : ViewModelBase
                     ZapretStatus = $"Strategy not found: {strategyName}";
                     return;
                 }
-                args = parsed.Arguments;
+                // Prefer the original .bat file — it runs Flowseal's prologue
+                // (service.bat load_user_lists, etc.) which is required for winws.exe.
+                if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
+                    _zapret.StartFromBat(parsed.BatPath);
+                else
+                    _zapret.Start(parsed.Arguments);
             }
 
-            _zapret.Start(args);
-
-            // Verify it actually started
-            await Task.Delay(500);
-            if (_zapret.IsRunning || IsZapretRunning())
+            // Verify winws actually started (bat wrapper exits fast; check winws by name)
+            await Task.Delay(1500);
+            var winwsPid = ZapretManager.WinwsPid;
+            if (_zapret.IsRunning || winwsPid != null)
             {
                 ZapretEnabled = true;
+                var pid = winwsPid ?? _zapret.Pid;
                 ZapretStatus = IsRussian
-                    ? $"Работает [{strategyName}] (PID {_zapret.Pid})"
-                    : $"Running [{strategyName}] (PID {_zapret.Pid})";
+                    ? $"Работает [{strategyName}] (PID {pid})"
+                    : $"Running [{strategyName}] (PID {pid})";
             }
             else
             {

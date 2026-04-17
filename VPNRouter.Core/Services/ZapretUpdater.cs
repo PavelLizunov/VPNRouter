@@ -187,7 +187,23 @@ public class ZapretUpdater
     {
         if (!OperatingSystem.IsWindows()) return;
 
-        foreach (var name in new[] { "WinDivert", "WinDivert14", "windivert" })
+        // 1. Kill any winws.exe instances first — they use the driver
+        foreach (var proc in System.Diagnostics.Process.GetProcessesByName("winws"))
+        {
+            try
+            {
+                proc.Kill(entireProcessTree: true);
+                proc.WaitForExit(3000);
+                _logger.Information("[ZapretUpdater] Killed winws.exe (PID {Pid}) before update", proc.Id);
+            }
+            catch { }
+            finally { proc.Dispose(); }
+        }
+
+        // 2. Try stopping known WinDivert service names. WinDivert registers under
+        //    various names depending on version (WinDivert, WinDivert14, WinDivertXX).
+        var serviceNames = new[] { "WinDivert", "WinDivert14", "WinDivert15", "windivert" };
+        foreach (var name in serviceNames)
         {
             try
             {
@@ -200,7 +216,8 @@ public class ZapretUpdater
                 };
                 using var p = System.Diagnostics.Process.Start(psi);
                 p?.WaitForExit(5000);
-                if (p?.ExitCode == 0)
+                var stdout = p?.StandardOutput.ReadToEnd() ?? "";
+                if (p?.ExitCode == 0 || stdout.Contains("STOPPED", StringComparison.OrdinalIgnoreCase))
                     _logger.Information("[ZapretUpdater] Stopped {Svc} driver service", name);
             }
             catch (Exception ex)
@@ -208,8 +225,27 @@ public class ZapretUpdater
                 _logger.Debug("[ZapretUpdater] sc stop {Svc} failed: {Msg}", name, ex.Message);
             }
         }
-        // Driver needs a moment to unload from kernel
-        System.Threading.Thread.Sleep(500);
+
+        // 3. Also try to delete the service (frees the driver file immediately)
+        foreach (var name in serviceNames)
+        {
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo("sc", $"delete {name}")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+                using var p = System.Diagnostics.Process.Start(psi);
+                p?.WaitForExit(3000);
+            }
+            catch { }
+        }
+
+        // 4. Wait for kernel to unload the driver (2 seconds)
+        System.Threading.Thread.Sleep(2000);
     }
 
     private static void CopyDirectory(string source, string dest)
@@ -284,7 +320,7 @@ public class ZapretUpdater
                 var name = Path.GetFileNameWithoutExtension(batFile);
                 var args = ExtractWinwsArgs(batFile, binPath, listsPath);
                 if (!string.IsNullOrWhiteSpace(args))
-                    result.Add(new ZapretStrategy(name, args));
+                    result.Add(new ZapretStrategy(name, args, batFile));
             }
             catch (Exception ex)
             {
@@ -409,4 +445,4 @@ public class ZapretUpdater
     }
 }
 
-public record ZapretStrategy(string Name, string Arguments);
+public record ZapretStrategy(string Name, string Arguments, string? BatPath = null);

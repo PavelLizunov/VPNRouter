@@ -22,9 +22,16 @@ public partial class SubscriptionViewModel : ObservableObject
     [ObservableProperty] private int _lastServerCount;
     [ObservableProperty] private bool _isRefreshing;
 
-    public string LastRefreshedDisplay => LastRefreshedAt == null
-        ? "—"
-        : LastRefreshedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+    public string LastRefreshedDisplay
+    {
+        get
+        {
+            // Treat null and MinValue (YamlDotNet default for missing nullable) as "never"
+            if (LastRefreshedAt == null || LastRefreshedAt.Value.Year < 2000)
+                return "—";
+            return LastRefreshedAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        }
+    }
 
     public SubscriptionViewModel(SubscriptionEntry entry)
     {
