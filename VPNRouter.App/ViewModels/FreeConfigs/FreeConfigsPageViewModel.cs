@@ -70,6 +70,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject
     [ObservableProperty] private bool _onlyWorking = true;
     partial void OnOnlyWorkingChanged(bool value) => ApplyFiltersAndStats();
 
+    /// <summary>How many Verified configs to hunt for in a deep-verify session.</summary>
+    [ObservableProperty] private int _deepVerifyTargetCount = 5;
+
+    /// <summary>If true, skip Russian-country configs during deep-verify (user is bypassing RU blocks).</summary>
+    [ObservableProperty] private bool _excludeRu = true;
+
     /// <summary>True when no configs have been aggregated yet (cache is empty).</summary>
     public bool IsEmpty => _allConfigs.Count == 0;
     /// <summary>True when filters hide everything but cache isn't empty.</summary>
@@ -157,8 +163,10 @@ public partial class FreeConfigsPageViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Deep-verify the top-N candidates (by latency among TCP+TLS-OK entries) using real sing-box + HTTP.
-    /// This is the only test that proves a config actually carries traffic.
+    /// Goal-seeking deep verification: iterate through all candidates (in priority order)
+    /// until we find <see cref="DeepVerifyTargetCount"/> Verified configs, or exhaust the
+    /// list, or user cancels. No hidden limit — user said "find at least a few definitely
+    /// working configs, no matter if it takes 5 min or 1 hour".
     /// </summary>
     [RelayCommand]
     private async Task DeepVerifyTopAsync()
@@ -166,21 +174,30 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         if (IsBusy) return;
         IsBusy = true;
         _refreshCts = new CancellationTokenSource();
+        var ct = _refreshCts.Token;
+
         try
         {
-            // Pick top-30 candidates: prefer Ok/Slow/Verified (TCP+TLS OK), then Implausible
-            // (might be real but measurement was wrong via local intercept).
+            // Priority: Verified first (cheap recheck), then TCP+TLS-passed, then those with
+            // only TCP, then even the "failed" ones because our pre-test may be wrong when
+            // the user's VPN is active. Within each group: non-RU first, then by latency.
+            int Priority(FreeConfigStatus s) => s switch
+            {
+                FreeConfigStatus.Verified    => 0,
+                FreeConfigStatus.Ok          => 1,
+                FreeConfigStatus.Slow        => 2,
+                FreeConfigStatus.Implausible => 3,
+                FreeConfigStatus.TlsFailed   => 4,
+                FreeConfigStatus.Timeout     => 5,
+                FreeConfigStatus.Unreachable => 6,
+                _                             => 7,
+            };
+
             var candidates = _allConfigs
-                .Where(c => c.Status == FreeConfigStatus.Ok
-                         || c.Status == FreeConfigStatus.Slow
-                         || c.Status == FreeConfigStatus.Verified
-                         || c.Status == FreeConfigStatus.Implausible)
-                .OrderBy(c => c.Status == FreeConfigStatus.Verified ? 0
-                            : c.Status == FreeConfigStatus.Ok       ? 1
-                            : c.Status == FreeConfigStatus.Slow     ? 2
-                                                                     : 3)
+                .Where(c => !ExcludeRu ||
+                            !string.Equals(c.CountryCode, "RU", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(c => Priority(c.Status))
                 .ThenBy(c => c.LatencyMs > 0 ? c.LatencyMs : int.MaxValue)
-                .Take(30)
                 .ToList();
 
             if (candidates.Count == 0)
@@ -189,35 +206,100 @@ public partial class FreeConfigsPageViewModel : ObservableObject
                 return;
             }
 
-            StatusText = Strings.FcStatusDeepVerifyStart(candidates.Count);
-            ProgressTotal = candidates.Count;
-            ProgressDone = 0;
+            var target = Math.Max(1, DeepVerifyTargetCount);
+            StatusText = Strings.FcStatusDeepVerifyStart(target);
 
-            var progress = new Progress<(int done, int total)>(p =>
+            var foundVerified = 0;
+            var tested = 0;
+            var lastSaveAt = DateTime.UtcNow;
+
+            // Limit concurrency inside the goal-seeking loop so we can stop as soon as target is reached.
+            var sem = new SemaphoreSlim(5);
+            var runningTasks = new List<Task>();
+
+            async Task TestOneWithUI(FreeConfigEntry cfg)
             {
-                Dispatcher.UIThread.Post(() =>
+                await sem.WaitAsync(ct);
+                try
                 {
-                    ProgressDone = p.done;
-                    ProgressTotal = p.total;
-                });
+                    var shortHost = $"{cfg.Host}:{cfg.Port} [{cfg.CountryCode ?? "??"}]";
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        StatusText = Strings.FcStatusDeepVerifyProbe(foundVerified, target, tested, shortHost);
+                    });
+
+                    await _deepVerifier.VerifyOneAsync(cfg, ct);
+
+                    Interlocked.Increment(ref tested);
+                    if (cfg.Status == FreeConfigStatus.Verified)
+                        Interlocked.Increment(ref foundVerified);
+
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        ApplyFiltersAndStats();
+                        ProgressDone = tested;
+                        ProgressTotal = candidates.Count;
+                        StatusText = Strings.FcStatusDeepVerifyProgress(foundVerified, target, tested, candidates.Count);
+                    });
+
+                    // Incremental cache save every 15s.
+                    if ((DateTime.UtcNow - lastSaveAt).TotalSeconds > 15)
+                    {
+                        lastSaveAt = DateTime.UtcNow;
+                        var file = _aggregator.Cache.Load();
+                        file.Configs = _allConfigs;
+                        _aggregator.Cache.Save(file);
+                    }
+                }
+                finally
+                {
+                    sem.Release();
+                }
+            }
+
+            await Task.Run(async () =>
+            {
+                foreach (var cfg in candidates)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    if (Volatile.Read(ref foundVerified) >= target) break;
+
+                    runningTasks.Add(TestOneWithUI(cfg));
+                    // Keep tasks list trimmed to concurrency window.
+                    if (runningTasks.Count >= 20)
+                    {
+                        var done = await Task.WhenAny(runningTasks);
+                        runningTasks.Remove(done);
+                    }
+                }
+                await Task.WhenAll(runningTasks);
             });
 
-            await Task.Run(() => _deepVerifier.VerifyBatchAsync(candidates, progress, _refreshCts.Token));
-
-            // Save cache after deep verification (entries mutated in place).
-            var cacheFile = _aggregator.Cache.Load();
-            cacheFile.Configs = _allConfigs;
-            _aggregator.Cache.Save(cacheFile);
+            // Final persist.
+            var finalFile = _aggregator.Cache.Load();
+            finalFile.Configs = _allConfigs;
+            _aggregator.Cache.Save(finalFile);
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 ApplyFiltersAndStats();
-                StatusText = Strings.FcStatusDeepVerifyDone(VerifiedCount);
+                StatusText = foundVerified >= target
+                    ? Strings.FcStatusDeepVerifyDone(foundVerified)
+                    : Strings.FcStatusDeepVerifyExhausted(foundVerified, tested);
             });
         }
         catch (OperationCanceledException)
         {
-            StatusText = Strings.FcStatusCancelled;
+            // Save whatever we have so far.
+            var file = _aggregator.Cache.Load();
+            file.Configs = _allConfigs;
+            _aggregator.Cache.Save(file);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                ApplyFiltersAndStats();
+                StatusText = Strings.FcStatusCancelled;
+            });
         }
         catch (Exception ex)
         {

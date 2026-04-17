@@ -284,12 +284,27 @@ public static class Strings
     public static string FcStatusNoDeepCandidates => Ru
         ? "Нет кандидатов для глубокой проверки — сначала «Обновить список»."
         : "No candidates to deep-verify — click 'Refresh list' first.";
-    public static string FcStatusDeepVerifyStart(int n) => Ru
-        ? $"Глубокая проверка {n} конфигов через sing-box..."
-        : $"Deep-verifying {n} configs via sing-box...";
+    public static string FcStatusDeepVerifyStart(int target) => Ru
+        ? $"Ищу {target} реально рабочих конфигов..."
+        : $"Hunting for {target} truly working configs...";
+    public static string FcStatusDeepVerifyProbe(int found, int target, int tested, string host) => Ru
+        ? $"Найдено {found}/{target} · проверяю {host}..."
+        : $"Found {found}/{target} · probing {host}...";
+    public static string FcStatusDeepVerifyProgress(int found, int target, int tested, int totalQueue) => Ru
+        ? $"Найдено {found}/{target} · проверено {tested}/{totalQueue}"
+        : $"Found {found}/{target} · tested {tested}/{totalQueue}";
     public static string FcStatusDeepVerifyDone(int verified) => Ru
-        ? $"Проверено: {verified} реально рабочих"
-        : $"Verified: {verified} truly working";
+        ? $"Готово: найдено {verified} реально рабочих (✓✓)"
+        : $"Done: {verified} truly working found (✓✓)";
+    public static string FcStatusDeepVerifyExhausted(int verified, int tested) => Ru
+        ? $"Список исчерпан — протестировано {tested}, найдено {verified} рабочих"
+        : $"Queue exhausted — tested {tested}, found {verified} working";
+
+    public static string FcDeepTargetLabel => Ru ? "Цель:" : "Target:";
+    public static string FcDeepExcludeRu   => Ru ? "Пропускать RU" : "Skip RU servers";
+    public static string FcDeepHint        => Ru
+        ? "Глубокая проверка: временный sing-box + реальный HTTP. Ищет пока не найдёт N рабочих или не кончатся кандидаты. Может идти часами — это норм."
+        : "Deep verify: spins up a temporary sing-box + real HTTP. Runs until N working configs are found or candidates exhausted. May take hours — that's fine.";
     public static string FcCountryFilter      => Ru ? "Страна:"       : "Country:";
     public static string FcOnlyWorking        => Ru ? "Только рабочие" : "Only working";
     public static string FcRefreshSources     => Ru ? "↻ Обновить список"    : "↻ Refresh list";

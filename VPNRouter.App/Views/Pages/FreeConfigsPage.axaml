@@ -96,14 +96,39 @@
                         Background="#EF4444" Foreground="White"/>
             </Grid>
 
-            <!-- Deep verify — emerald, separate row to emphasize it's the strong test -->
-            <Button Content="{x:Static loc:Strings.FcDeepVerify}"
-                    Command="{Binding FreeConfigsVm.DeepVerifyTopCommand}"
-                    IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
-                    Padding="0,9" FontSize="12" FontWeight="Bold" CornerRadius="5"
-                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                    Background="#059669" Foreground="White"
-                    ToolTip.Tip="Spawns sing-box with each config, does a real HTTP GET through it. Tests top 30. ~2-3 min."/>
+            <!-- Deep verify block — big emerald button + target count + skip-RU options -->
+            <Border Padding="8,8,8,10" CornerRadius="6"
+                    BorderThickness="1" BorderBrush="#059669" Background="#ECFDF5">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="{x:Static loc:Strings.FcDeepHint}"
+                               TextWrapping="Wrap" FontSize="10" Opacity="0.8"
+                               Foreground="#065F46"/>
+
+                    <!-- Target count + exclude RU -->
+                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Static loc:Strings.FcDeepTargetLabel}"
+                                       FontSize="11" Opacity="0.75" VerticalAlignment="Center"
+                                       Foreground="#065F46"/>
+                            <NumericUpDown Value="{Binding FreeConfigsVm.DeepVerifyTargetCount}"
+                                           Minimum="1" Maximum="50" Increment="1"
+                                           FormatString="0"
+                                           MinWidth="80" Padding="4,2" FontSize="11"/>
+                        </StackPanel>
+                        <CheckBox Content="{x:Static loc:Strings.FcDeepExcludeRu}"
+                                  IsChecked="{Binding FreeConfigsVm.ExcludeRu}"
+                                  FontSize="11" VerticalAlignment="Center"
+                                  Foreground="#065F46"/>
+                    </StackPanel>
+
+                    <Button Content="{x:Static loc:Strings.FcDeepVerify}"
+                            Command="{Binding FreeConfigsVm.DeepVerifyTopCommand}"
+                            IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                            Padding="0,9" FontSize="12" FontWeight="Bold" CornerRadius="5"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Background="#059669" Foreground="White"/>
+                </StackPanel>
+            </Border>
 
             <!-- Filter row (country + only working) -->
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
