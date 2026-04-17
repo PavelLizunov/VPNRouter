@@ -43,11 +43,12 @@ public class ZapretManager : IDisposable
 
     /// <summary>
     /// <summary>
-    /// Start Flowseal strategy via its original .bat file. This runs the full
-    /// prologue (service.bat load_user_lists, check_updates, etc.) before
-    /// launching winws.exe with all correct env vars populated.
+    /// Start Flowseal strategy silently by generating a wrapper .bat that
+    /// sources the original's prologue (service.bat calls) and runs winws.exe
+    /// directly (no `start` cmd) so it inherits hidden parent window.
+    /// Takes parsed args from ZapretUpdater.ParseStrategies.
     /// </summary>
-    public void StartFromBat(string batPath)
+    public void StartFromBat(string batPath, string parsedArgs)
     {
         if (!File.Exists(batPath))
             throw new FileNotFoundException($"Strategy .bat not found: {batPath}");
@@ -58,32 +59,47 @@ public class ZapretManager : IDisposable
             Stop();
         }
 
-        _logger.Information("[Zapret] Launching .bat: {Path}", batPath);
+        var zapretDir = Path.GetDirectoryName(batPath)!;
+        var binDir = Path.Combine(zapretDir, "bin");
+        var listsDir = Path.Combine(zapretDir, "lists");
 
-        // Run the original Flowseal .bat with hidden window.
-        // The .bat itself does `start /min winws.exe ...` which spawns winws
-        // as a detached process, then the .bat exits. We then track winws
-        // by process name via IsAnyRunning (below).
+        // Generate silent wrapper .bat: run prologue + winws.exe directly (no `start`)
+        var wrapperPath = Path.Combine(zapretDir, "_vpnrouter_silent.bat");
+        var wrapper = "@echo off\r\n" +
+            "chcp 65001 > nul\r\n" +
+            $"cd /d \"{zapretDir}\"\r\n" +
+            "call service.bat status_zapret >nul 2>&1\r\n" +
+            "call service.bat check_updates >nul 2>&1\r\n" +
+            "call service.bat load_game_filter >nul 2>&1\r\n" +
+            "call service.bat load_user_lists >nul 2>&1\r\n" +
+            $"set \"BIN={binDir}{Path.DirectorySeparatorChar}\"\r\n" +
+            $"set \"LISTS={listsDir}{Path.DirectorySeparatorChar}\"\r\n" +
+            "cd /d \"%BIN%\"\r\n" +
+            // No `start` — winws runs as child of hidden cmd, no separate window
+            $"winws.exe {parsedArgs}\r\n";
+        File.WriteAllText(wrapperPath, wrapper);
+
+        _logger.Information("[Zapret] Launching silent wrapper: {Path}", wrapperPath);
+
         var psi = new ProcessStartInfo
         {
-            FileName = batPath,
+            FileName = wrapperPath,
             UseShellExecute = true,
             WindowStyle = ProcessWindowStyle.Hidden,
-            WorkingDirectory = Path.GetDirectoryName(batPath)
+            WorkingDirectory = zapretDir
         };
 
         _process = Process.Start(psi);
         if (_process == null)
-            throw new InvalidOperationException("Failed to launch strategy .bat");
+            throw new InvalidOperationException("Failed to launch silent wrapper");
 
         _process.EnableRaisingEvents = true;
         _process.Exited += (_, _) =>
         {
-            _logger.Debug("[Zapret] Bat wrapper exited (exit code: {Code}). winws.exe runs separately.",
-                _process?.ExitCode);
+            _logger.Warning("[Zapret] Wrapper exited (exit code: {Code})", _process?.ExitCode);
         };
 
-        _logger.Information("[Zapret] .bat launched (wrapper PID {Pid}). winws.exe starts separately.", _process.Id);
+        _logger.Information("[Zapret] Silent wrapper started (PID {Pid})", _process.Id);
     }
 
     /// <summary>

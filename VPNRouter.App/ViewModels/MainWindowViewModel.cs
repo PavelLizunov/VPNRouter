@@ -1648,8 +1648,10 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
                 // Prefer the original .bat file — it runs Flowseal's prologue
                 // (service.bat load_user_lists, etc.) which is required for winws.exe.
+                // Silent wrapper: same prologue + winws.exe run directly (no `start`),
+                // so it inherits hidden parent window instead of appearing in taskbar.
                 if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
-                    _zapret.StartFromBat(parsed.BatPath);
+                    _zapret.StartFromBat(parsed.BatPath, parsed.Arguments);
                 else
                     _zapret.Start(parsed.Arguments);
             }
