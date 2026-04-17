@@ -16,9 +16,15 @@ public static class FreeConfigSources
         },
         new()
         {
-            Name = "EtoNeYaProject",
+            Name = "EtoNeYaProject (github)",
             Url  = "https://raw.githubusercontent.com/EtoNeYaProject/etoneyaproject.github.io/refs/heads/main/1",
             ExpectedCount = 2200,
+        },
+        new()
+        {
+            Name = "EtoNeYaProject (a9fm mirror)",
+            Url  = "https://etoneya.a9fm.site/1",
+            ExpectedCount = 1100,
         },
         new()
         {
