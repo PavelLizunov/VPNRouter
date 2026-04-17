@@ -227,6 +227,10 @@ public partial class FreeConfigsPageViewModel : ObservableObject
                 .ToList();
 
             DisplayedConfigs = new ObservableCollection<FreeConfigItemViewModel>(items);
+
+            // Auto-select first item so the Connect button is immediately actionable.
+            if (SelectedItem == null || !DisplayedConfigs.Contains(SelectedItem))
+                SelectedItem = DisplayedConfigs.FirstOrDefault();
         }
         catch (Exception ex)
         {

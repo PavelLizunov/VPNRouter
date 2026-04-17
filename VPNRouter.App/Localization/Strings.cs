@@ -279,8 +279,13 @@ public static class Strings
     public static string FcDashboardUnreach   => Ru ? "Недоступны"    : "Unreachable";
     public static string FcCountryFilter      => Ru ? "Страна:"       : "Country:";
     public static string FcOnlyWorking        => Ru ? "Только рабочие" : "Only working";
-    public static string FcRefreshSources     => Ru ? "Обновить источники" : "Refresh sources";
-    public static string FcRetestAll          => Ru ? "Перепроверить"  : "Retest all";
+    public static string FcRefreshSources     => Ru ? "↻ Обновить список"    : "↻ Refresh list";
+    public static string FcRetestAll          => Ru ? "▶ Перепроверить"      : "▶ Retest all";
+    public static string FcConnectHint        => Ru ? "Выберите строку ↑ и нажмите Connect (или двойной клик)"
+                                                    : "Select a row ↑ and click Connect (or double-click)";
+    public static string FcTipVpnActive       => Ru
+        ? "⚠ VPN активен — результаты пинга проходят через туннель и могут быть недостоверны. Для точного теста отключите VPN."
+        : "⚠ VPN is active — ping results go through the tunnel and may be inaccurate. Disconnect VPN for accurate tests.";
     public static string FcCancel             => Ru ? "Отмена"        : "Cancel";
     public static string FcApplySelected      => Ru ? "Подключить"    : "Connect";
     public static string FcCountryAll         => Ru ? "Все страны"    : "All countries";

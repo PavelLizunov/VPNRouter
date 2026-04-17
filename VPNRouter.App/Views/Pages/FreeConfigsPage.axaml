@@ -54,36 +54,43 @@
             </Border>
         </Grid>
 
-        <!-- ═══ Toolbar (country filter + actions) ═══ -->
-        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="12,0,14,6">
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+        <!-- ═══ Toolbar (big prominent action buttons) ═══ -->
+        <StackPanel Grid.Row="2" Margin="12,0,14,8" Spacing="6">
+            <!-- Primary action buttons — big + purple -->
+            <Grid ColumnDefinitions="*,*,Auto">
+                <Button Grid.Column="0" Margin="0,0,3,0"
+                        Content="{x:Static loc:Strings.FcRefreshSources}"
+                        Command="{Binding FreeConfigsVm.RefreshCommand}"
+                        IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                        Padding="0,8" FontSize="12" FontWeight="SemiBold" CornerRadius="5"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Background="#7C3AED" Foreground="White"/>
+                <Button Grid.Column="1" Margin="3,0,0,0"
+                        Content="{x:Static loc:Strings.FcRetestAll}"
+                        Command="{Binding FreeConfigsVm.RetestCommand}"
+                        IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                        Padding="0,8" FontSize="12" FontWeight="SemiBold" CornerRadius="5"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                        Background="#A78BFA" Foreground="White"/>
+                <Button Grid.Column="2" Margin="6,0,0,0"
+                        Content="{x:Static loc:Strings.FcCancel}"
+                        Command="{Binding FreeConfigsVm.CancelCommand}"
+                        IsVisible="{Binding FreeConfigsVm.IsBusy}"
+                        Padding="14,8" FontSize="11" CornerRadius="5"
+                        Background="#EF4444" Foreground="White"/>
+            </Grid>
+
+            <!-- Filter row (country + only working) -->
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                 <TextBlock Text="{x:Static loc:Strings.FcCountryFilter}" FontSize="10" VerticalAlignment="Center"/>
                 <ComboBox ItemsSource="{Binding FreeConfigsVm.Countries}"
                           SelectedItem="{Binding FreeConfigsVm.SelectedCountry}"
-                          MinWidth="80" Padding="6,2" FontSize="10"/>
+                          MinWidth="100" Padding="6,2" FontSize="10"/>
+                <CheckBox Content="{x:Static loc:Strings.FcOnlyWorking}"
+                          IsChecked="{Binding FreeConfigsVm.OnlyWorking}"
+                          FontSize="10" VerticalAlignment="Center"/>
             </StackPanel>
-
-            <CheckBox Grid.Column="1" Margin="10,0,0,0"
-                      Content="{x:Static loc:Strings.FcOnlyWorking}"
-                      IsChecked="{Binding FreeConfigsVm.OnlyWorking}"
-                      FontSize="10" VerticalAlignment="Center"/>
-
-            <Button Grid.Column="2" Margin="0,0,4,0"
-                    Content="{x:Static loc:Strings.FcRefreshSources}"
-                    Command="{Binding FreeConfigsVm.RefreshCommand}"
-                    IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
-                    Padding="8,3" FontSize="10" CornerRadius="4"/>
-            <Button Grid.Column="3" Margin="0,0,4,0"
-                    Content="{x:Static loc:Strings.FcRetestAll}"
-                    Command="{Binding FreeConfigsVm.RetestCommand}"
-                    IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
-                    Padding="8,3" FontSize="10" CornerRadius="4"/>
-            <Button Grid.Column="4"
-                    Content="{x:Static loc:Strings.FcCancel}"
-                    Command="{Binding FreeConfigsVm.CancelCommand}"
-                    IsVisible="{Binding FreeConfigsVm.IsBusy}"
-                    Padding="8,3" FontSize="10" CornerRadius="4"/>
-        </Grid>
+        </StackPanel>
 
         <!-- ═══ List + Empty states ═══ -->
         <Grid Grid.Row="3" Margin="12,0,14,6">
@@ -157,10 +164,12 @@
                                    VerticalAlignment="Center" HorizontalAlignment="Center"/>
                     </Grid>
 
-                    <!-- Rows -->
+                    <!-- Rows — double-click to Connect immediately -->
                     <ListBox Grid.Row="1"
+                             x:Name="ConfigsList"
                              ItemsSource="{Binding FreeConfigsVm.DisplayedConfigs}"
                              SelectedItem="{Binding FreeConfigsVm.SelectedItem}"
+                             DoubleTapped="ConfigsList_DoubleTapped"
                              BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              ScrollViewer.VerticalScrollBarVisibility="Auto">
@@ -218,14 +227,23 @@
                              Maximum="{Binding FreeConfigsVm.ProgressTotal}"
                              IsVisible="{Binding FreeConfigsVm.HasProgress}"
                              Height="4" CornerRadius="2"/>
+
+                <!-- Hint shown when no row selected -->
+                <TextBlock Text="{x:Static loc:Strings.FcConnectHint}"
+                           IsVisible="{Binding !FreeConfigsVm.HasSelection}"
+                           FontSize="10" Opacity="0.55"
+                           HorizontalAlignment="Center" TextAlignment="Center"
+                           TextWrapping="Wrap"/>
+
+                <!-- Bright Connect button when row selected -->
                 <Button Content="{x:Static loc:Strings.FcApplySelected}"
                         Command="{Binding FreeConfigsVm.ApplySelectedCommand}"
                         IsEnabled="{Binding FreeConfigsVm.HasSelection}"
-                        FontSize="12" FontWeight="Bold"
-                        Padding="0,8"
+                        FontSize="13" FontWeight="Bold"
+                        Padding="0,10"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
-                        Background="#2563EB" Foreground="White"
+                        Background="#16A34A" Foreground="White"
                         CornerRadius="5"/>
             </StackPanel>
         </Border>
