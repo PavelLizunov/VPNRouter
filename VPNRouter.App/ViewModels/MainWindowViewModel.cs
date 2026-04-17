@@ -634,6 +634,20 @@ public partial class MainWindowViewModel : ViewModelBase
                             group.Apps.Add(new AppItemViewModel(name, isActive));
                         }
 
+                        // Merge user-added custom apps for this group
+                        if (_settings.CustomGroupApps != null
+                            && _settings.CustomGroupApps.TryGetValue(profile.Name, out var extras))
+                        {
+                            foreach (var extra in extras)
+                            {
+                                if (string.IsNullOrWhiteSpace(extra)) continue;
+                                var extraName = StripExe(extra);
+                                if (group.Apps.Any(a => a.ProcessName.Equals(extraName, StringComparison.OrdinalIgnoreCase)))
+                                    continue;
+                                group.Apps.Add(new AppItemViewModel(extraName, isActive, isCustom: true));
+                            }
+                        }
+
                         AppGroups.Add(group);
                     }
                 }
@@ -827,6 +841,17 @@ public partial class MainWindowViewModel : ViewModelBase
                 .Where(a => a.IsChecked)
                 .Select(a => a.ProcessName)
                 .ToList() ?? new();
+
+            // Persist user-added apps for every group (except "Custom Apps" which has its own list)
+            var customGroupApps = new Dictionary<string, List<string>>();
+            foreach (var group in AppGroups)
+            {
+                if (group.Name == "Custom Apps") continue;
+                var extras = group.Apps.Where(a => a.IsCustom).Select(a => a.ProcessName).ToList();
+                if (extras.Count > 0)
+                    customGroupApps[group.Name] = extras;
+            }
+            _settings.CustomGroupApps = customGroupApps;
         }
 
         SettingsLoader.Save(_settings, AppPaths.ConfigYamlPath);
@@ -1840,19 +1865,24 @@ public partial class MainWindowViewModel : ViewModelBase
         if (string.IsNullOrWhiteSpace(processName)) return;
 
         var name = StripExe(processName.Trim());
+        var target = SelectedAppGroup;
 
-        // Find or create Custom Apps group
-        var customGroup = AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
-        if (customGroup == null)
+        // Fallback: if no group selected, use "Custom Apps"
+        if (target == null)
         {
-            customGroup = new AppGroupViewModel("Custom Apps", "Your custom applications", true);
-            AppGroups.Add(customGroup);
+            target = AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
+            if (target == null)
+            {
+                target = new AppGroupViewModel("Custom Apps", "Your custom applications", true) { IsCustomGroup = true };
+                AppGroups.Add(target);
+            }
         }
 
-        if (customGroup.Apps.Any(a => a.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase)))
+        if (target.Apps.Any(a => a.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase)))
             return;
 
-        customGroup.Apps.Add(new AppItemViewModel(name, true, isCustom: true));
+        target.Apps.Add(new AppItemViewModel(name, true, isCustom: true));
+        SaveSettings();
     }
 
     [RelayCommand]
@@ -1864,14 +1894,22 @@ public partial class MainWindowViewModel : ViewModelBase
         var toRemove = customGroup.Apps.Where(a => a.IsChecked).ToList();
         foreach (var app in toRemove)
             customGroup.Apps.Remove(app);
+        SaveSettings();
     }
 
     [RelayCommand]
     private void RemoveCustomApp(AppItemViewModel? app)
     {
         if (app == null) return;
-        var customGroup = AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
-        customGroup?.Apps.Remove(app);
+        // Search ALL groups — user can add custom apps to any group now
+        foreach (var group in AppGroups)
+        {
+            if (group.Apps.Remove(app))
+            {
+                SaveSettings();
+                return;
+            }
+        }
     }
 
     [RelayCommand]

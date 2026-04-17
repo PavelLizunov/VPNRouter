@@ -35,6 +35,14 @@ public class AppSettings
     [YamlMember(Alias = "custom_apps")]
     public List<string> CustomApps { get; set; } = new();
 
+    /// <summary>
+    /// User-added apps per group (Discord, Browsers, etc.). Merged with
+    /// defaults from profiles/default.json on load. Allows adding/removing
+    /// custom apps in any group without touching the bundled defaults.
+    /// </summary>
+    [YamlMember(Alias = "custom_group_apps")]
+    public Dictionary<string, List<string>> CustomGroupApps { get; set; } = new();
+
     [YamlMember(Alias = "update")]
     public UpdateSettings Update { get; set; } = new();
 }

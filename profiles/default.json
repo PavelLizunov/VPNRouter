@@ -19,24 +19,6 @@
       "block_on_vpn_fail": true
     },
     {
-      "name": "Gaming_Full",
-      "description": "Все игровые приложения",
-      "processes": [
-        {
-          "name": "Games.exe",
-          "include_children": true,
-          "scan_patterns": ["Games*.exe"]
-        },
-        {
-          "name": "Endfield.exe",
-          "include_children": true,
-          "scan_patterns": ["Endfield*.exe", "EndField*.exe"]
-        }
-      ],
-      "dns_mode": "vpn_only",
-      "block_on_vpn_fail": false
-    },
-    {
       "name": "Work_Suite",
       "description": "Рабочие приложения",
       "processes": [

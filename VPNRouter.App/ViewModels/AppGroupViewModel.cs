@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using VPNRouter.App.Localization;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -9,13 +10,19 @@ namespace VPNRouter.App.ViewModels;
 /// </summary>
 public partial class AppGroupViewModel : ViewModelBase
 {
-    [ObservableProperty] private string _name = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DisplayName))]
+    private string _name = string.Empty;
+
     [ObservableProperty] private string _description = string.Empty;
     [ObservableProperty] private bool _isChecked;
     [ObservableProperty] private bool _isExpanded;
     [ObservableProperty] private bool _isCustomGroup;
 
     public ObservableCollection<AppItemViewModel> Apps { get; } = new();
+
+    /// <summary>Localized display name derived from Name (internal ID stays in config.yaml).</summary>
+    public string DisplayName => Strings.GroupDisplayName(Name);
 
     public AppGroupViewModel() { }
 

@@ -185,6 +185,17 @@ public static class Strings
     public static string OpenGitHub => "GitHub";
 
     // ── Autostart ──
+    // ── App group display names ──
+    public static string GroupDisplayName(string internalName) => internalName switch
+    {
+        "Discord_Privacy" => "Discord",
+        "Work_Suite"      => Ru ? "Работа" : "Work",
+        "Browsers"        => Ru ? "Браузеры" : "Browsers",
+        "Terminal"        => Ru ? "Терминал" : "Terminal",
+        "Custom Apps"     => Ru ? "Свои" : "Custom",
+        _                 => internalName
+    };
+
     public static string SectionRouting => Ru ? "Маршрутизация" : "Routing";
     public static string SectionLeakProtection => Ru ? "Защита от утечек" : "Leak Protection";
     public static string SectionContent => Ru ? "Контент" : "Content";
