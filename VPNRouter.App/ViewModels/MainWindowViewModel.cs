@@ -180,6 +180,10 @@ public partial class MainWindowViewModel : ViewModelBase
         SaveSettings();
     }
 
+    partial void OnAutostartVpnChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
+    partial void OnAutostartZapretChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
+    partial void OnAutostartTgProxyChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
+
     // Tools sub-tabs
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsZapretToolSelected))]

@@ -27,6 +27,7 @@ sealed class Program
                 var psi = new ProcessStartInfo
                 {
                     FileName = Environment.ProcessPath!,
+                    Arguments = string.Join(" ", args.Select(a => $"\"{a}\"")),
                     UseShellExecute = true,
                     Verb = "runas"
                 };
@@ -42,6 +43,18 @@ sealed class Program
         // Defensive cleanup: kill orphan sing-box / older VPNRouter instances
         // left behind by failed updates or v2.3.x→v2.4.x migration.
         try { OrphanCleanup.KillOrphans(); } catch { }
+
+        // Clean leftover firewall kill-switch rules that may block internet
+        // after improper shutdown (ERR_NETWORK_ACCESS_DENIED symptom).
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                var fw = new FirewallManager(Serilog.Log.Logger ?? new Serilog.LoggerConfiguration().CreateLogger());
+                fw.CleanupOrphanedRules();
+            }
+        }
+        catch { }
 #endif
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
