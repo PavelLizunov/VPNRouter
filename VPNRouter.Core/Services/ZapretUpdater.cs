@@ -123,30 +123,45 @@ public class ZapretUpdater
             var tempDir = Path.Combine(Path.GetTempPath(), $"zapret-extract-{Guid.NewGuid():N}");
             try
             {
+                _logger.Information("[ZapretUpdater] Extracting to {Dir}", tempDir);
                 ZipFile.ExtractToDirectory(tempZip, tempDir, overwriteFiles: true);
 
-                // Find the root folder inside ZIP (e.g. "zapret-discord-youtube-1.9.7b/")
+                // Find the root folder inside ZIP (some releases wrap, some don't)
                 var extractedRoot = tempDir;
                 var subdirs = Directory.GetDirectories(tempDir);
-                if (subdirs.Length == 1 && Directory.GetFiles(tempDir).Length == 0)
+                var rootFiles = Directory.GetFiles(tempDir);
+                _logger.Information("[ZapretUpdater] Extracted: {Dirs} dirs, {Files} files in root",
+                    subdirs.Length, rootFiles.Length);
+
+                if (subdirs.Length == 1 && rootFiles.Length == 0)
                     extractedRoot = subdirs[0]; // ZIP has a wrapper folder
 
                 // Verify it has bin/winws.exe
                 var testWinws = Path.Combine(extractedRoot, "bin", "winws.exe");
                 if (!File.Exists(testWinws))
-                    throw new Exception($"Invalid release: bin/winws.exe not found in {extractedRoot}");
+                {
+                    var actualContents = string.Join(", ",
+                        Directory.GetFileSystemEntries(extractedRoot).Select(Path.GetFileName));
+                    throw new Exception($"Invalid release: bin/winws.exe not found. " +
+                        $"Extracted contents: [{actualContents}]");
+                }
 
-                // Delete old zapret directory
+                // Delete old zapret directory (may be locked if winws running)
                 if (Directory.Exists(ZapretDir))
                 {
                     _logger.Information("[ZapretUpdater] Removing old zapret dir");
-                    Directory.Delete(ZapretDir, recursive: true);
+                    try { Directory.Delete(ZapretDir, recursive: true); }
+                    catch (Exception ex)
+                    {
+                        throw new Exception(
+                            $"Cannot remove old zapret dir (stop zapret first?): {ex.Message}", ex);
+                    }
                 }
 
-                // Move extracted content
+                // Copy extracted content (Move fails across different drives)
                 StatusChanged?.Invoke("Installing...");
-                Directory.CreateDirectory(Path.GetDirectoryName(ZapretDir)!);
-                Directory.Move(extractedRoot, ZapretDir);
+                Directory.CreateDirectory(ZapretDir);
+                CopyDirectory(extractedRoot, ZapretDir);
 
                 // Write version file
                 var version = ParseVersionFromServiceBat() ?? tagName;
@@ -154,6 +169,12 @@ public class ZapretUpdater
                 _logger.Information("[ZapretUpdater] Installed version {Version}", version);
 
                 StatusChanged?.Invoke($"Installed {version}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[ZapretUpdater] Extract/install failed");
+                StatusChanged?.Invoke($"Error: {ex.Message}");
+                throw;
             }
             finally
             {
@@ -164,6 +185,15 @@ public class ZapretUpdater
         {
             try { File.Delete(tempZip); } catch { }
         }
+    }
+
+    private static void CopyDirectory(string source, string dest)
+    {
+        Directory.CreateDirectory(dest);
+        foreach (var file in Directory.GetFiles(source))
+            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: true);
+        foreach (var dir in Directory.GetDirectories(source))
+            CopyDirectory(dir, Path.Combine(dest, Path.GetFileName(dir)));
     }
 
     private static string? ParseVersionFromServiceBat()

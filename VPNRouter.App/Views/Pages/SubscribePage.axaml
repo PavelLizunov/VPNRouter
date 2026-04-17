@@ -70,9 +70,12 @@
         </Border>
 
         <!-- Subscriptions list (each with toggle, refresh, delete) -->
-        <ItemsControl Grid.Row="2"
-                      ItemsSource="{Binding Subscriptions}"
+        <ScrollViewer Grid.Row="2"
+                      MaxHeight="180"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto"
                       Padding="10,0,10,4">
+        <ItemsControl ItemsSource="{Binding Subscriptions}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:SubscriptionViewModel">
                     <Border Padding="8,5" Margin="0,2" CornerRadius="4"
@@ -118,6 +121,7 @@
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
+        </ScrollViewer>
 
         <!-- Add new subscription -->
         <Border Grid.Row="3" Padding="10,6"
