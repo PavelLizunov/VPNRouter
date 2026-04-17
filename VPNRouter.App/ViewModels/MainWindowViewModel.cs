@@ -106,6 +106,10 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _strictDns = false;
     [ObservableProperty] private bool _blockAds = false;
 
+    // Apply changes (hot-reload) UX state
+    [ObservableProperty] private bool _hasPendingAppChanges;
+    [ObservableProperty] private bool _isApplying;
+
     // Autostart
     [ObservableProperty] private bool _autostartVpn = false;
     [ObservableProperty] private bool _autostartZapret = false;
@@ -758,6 +762,106 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         _appsLoaded = true;
+        WireAppChangeTracking();
+    }
+
+    /// <summary>
+    /// Hook property-change listeners on all AppGroups + their Apps to set
+    /// HasPendingAppChanges when user edits the list while VPN is running.
+    /// </summary>
+    private bool _appChangeTrackingWired;
+
+    private void WireAppChangeTracking()
+    {
+        if (!_appChangeTrackingWired)
+        {
+            AppGroups.CollectionChanged += (s, e) =>
+            {
+                if (_isLoadingUI) return;
+                if (e.NewItems != null)
+                    foreach (AppGroupViewModel g in e.NewItems)
+                    {
+                        g.PropertyChanged -= OnAppGroupPropertyChanged;
+                        g.PropertyChanged += OnAppGroupPropertyChanged;
+                        g.Apps.CollectionChanged -= OnAppsCollectionChanged;
+                        g.Apps.CollectionChanged += OnAppsCollectionChanged;
+                        foreach (var a in g.Apps)
+                        {
+                            a.PropertyChanged -= OnAppItemPropertyChanged;
+                            a.PropertyChanged += OnAppItemPropertyChanged;
+                        }
+                    }
+                HasPendingAppChanges = IsConnected;
+            };
+            _appChangeTrackingWired = true;
+        }
+
+        foreach (var group in AppGroups)
+        {
+            group.PropertyChanged -= OnAppGroupPropertyChanged;
+            group.PropertyChanged += OnAppGroupPropertyChanged;
+            group.Apps.CollectionChanged -= OnAppsCollectionChanged;
+            group.Apps.CollectionChanged += OnAppsCollectionChanged;
+            foreach (var app in group.Apps)
+            {
+                app.PropertyChanged -= OnAppItemPropertyChanged;
+                app.PropertyChanged += OnAppItemPropertyChanged;
+            }
+        }
+    }
+
+    private void OnAppGroupPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_isLoadingUI) return;
+        if (e.PropertyName == nameof(AppGroupViewModel.IsChecked))
+            HasPendingAppChanges = IsConnected;
+    }
+
+    private void OnAppsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (_isLoadingUI) return;
+        if (e.NewItems != null)
+            foreach (AppItemViewModel a in e.NewItems)
+            {
+                a.PropertyChanged -= OnAppItemPropertyChanged;
+                a.PropertyChanged += OnAppItemPropertyChanged;
+            }
+        HasPendingAppChanges = IsConnected;
+    }
+
+    private void OnAppItemPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_isLoadingUI) return;
+        if (e.PropertyName == nameof(AppItemViewModel.IsChecked))
+            HasPendingAppChanges = IsConnected;
+    }
+
+    [RelayCommand]
+    private async Task ApplyPendingChangesAsync()
+    {
+        if (IsApplying || !IsConnected) return;
+        IsApplying = true;
+        try
+        {
+            SaveSettings();
+            _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+            var ok = await Task.Run(() => _engine.ApplyAsync(_settings));
+            if (ok)
+            {
+                HasPendingAppChanges = false;
+                StatusText = IsRussian ? "Изменения применены" : "Changes applied";
+            }
+            else
+            {
+                StatusText = IsRussian ? "Не удалось применить" : "Apply failed";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] ApplyPendingChanges failed");
+            StatusText = $"Apply failed: {ex.Message}";
+        }
+        finally { IsApplying = false; }
     }
 
     /// <summary>
@@ -1015,6 +1119,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 StatusText = Strings.NotConnected;
                 StopSubRefreshTimer();
                 RefreshActiveIndicator();
+                HasPendingAppChanges = false;
             }
         });
     }

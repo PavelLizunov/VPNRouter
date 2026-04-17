@@ -193,6 +193,10 @@ public static class Strings
     public static string NeverRefreshed => Ru ? "никогда" : "never";
     public static string SubUpdatedAt => Ru ? "Обновлено" : "Updated";
 
+    public static string ApplyChanges => Ru ? "↻  Применить изменения" : "↻  Apply changes";
+    public static string ChangesApplied => Ru ? "Изменения применены" : "Changes applied";
+    public static string ApplyFailed => Ru ? "Не удалось применить" : "Apply failed";
+
     public static string AddCategory => Ru ? "+ Новая категория" : "+ New category";
     public static string EnableWholeGroup => Ru ? "Включить всю группу" : "Enable whole group";
     public static string CategoryNamePrompt => Ru ? "Имя категории:" : "Category name:";

@@ -131,24 +131,37 @@
                 </ListBox.ItemTemplate>
             </ListBox>
 
-            <!-- Add app input -->
+            <!-- Add app input + Apply button -->
             <Border Grid.Row="3"
                     Padding="14,8"
                     BorderThickness="0,1,0,0"
                     BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                     Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
-                <Grid ColumnDefinitions="*,Auto">
-                    <TextBox Grid.Column="0" x:Name="CustomAppInput"
-                             Watermark="{x:Static loc:Strings.AddAppHint}"
-                             FontSize="11" Padding="6,4"/>
-                    <Button Grid.Column="1" Content="+ Add"
-                            Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
-                            CommandParameter="{Binding #CustomAppInput.Text}"
-                            Margin="6,0,0,0"
-                            Padding="14,5" FontSize="11" CornerRadius="4"
-                            Background="#2563EB" Foreground="White"
-                            FontWeight="SemiBold"/>
-                </Grid>
+                <StackPanel Spacing="6">
+                    <!-- Amber Apply button — visible only when pending changes exist -->
+                    <Button Content="{x:Static loc:Strings.ApplyChanges}"
+                            Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ApplyPendingChangesCommand}"
+                            IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HasPendingAppChanges}"
+                            IsEnabled="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsConnected}"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Background="#F59E0B" Foreground="White"
+                            FontSize="11" FontWeight="SemiBold"
+                            Padding="0,6" CornerRadius="4"/>
+                    <!-- Add app input -->
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Grid.Column="0" x:Name="CustomAppInput"
+                                 Watermark="{x:Static loc:Strings.AddAppHint}"
+                                 FontSize="11" Padding="6,4"/>
+                        <Button Grid.Column="1" Content="+ Add"
+                                Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
+                                CommandParameter="{Binding #CustomAppInput.Text}"
+                                Margin="6,0,0,0"
+                                Padding="14,5" FontSize="11" CornerRadius="4"
+                                Background="#2563EB" Foreground="White"
+                                FontWeight="SemiBold"/>
+                    </Grid>
+                </StackPanel>
             </Border>
         </Grid>
 

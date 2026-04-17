@@ -462,6 +462,147 @@ public class VpnEngine : IDisposable
         OnStatus("VPN Router is running");
     }
 
+    // ─── Apply (hot-reload config changes) ──────────────────────────────────
+
+    /// <summary>
+    /// Hot-reload config after user changed app list (groups, custom apps, categories).
+    /// Re-resolves profile, re-scans processes, regenerates sing-box config,
+    /// then tries Clash API hot-reload. Falls back to full restart on failure.
+    /// Returns true on success (either hot-reload or restart).
+    /// </summary>
+    public async Task<bool> ApplyAsync(AppSettings settings, CancellationToken ct = default)
+    {
+        if (_singBox == null || !_singBox.IsRunning())
+        {
+            _logger?.Warning("[VpnEngine] Apply called but sing-box not running");
+            return false;
+        }
+
+        OnStatus("Applying config changes...");
+
+        try
+        {
+            // Re-resolve active profile (repeat StartAsync profile logic)
+            var sources = BuildProfileSources(settings);
+            var manager = new ProfileManager(sources, _logger);
+            var collection = await manager.LoadAsync(ct);
+
+            // Merge custom_group_apps
+            if (settings.CustomGroupApps?.Count > 0)
+            {
+                foreach (var (groupName, extras) in settings.CustomGroupApps)
+                {
+                    var p = collection.Profiles.FirstOrDefault(x =>
+                        x.Name.Equals(groupName, StringComparison.OrdinalIgnoreCase));
+                    if (p == null) continue;
+                    foreach (var app in extras ?? new())
+                    {
+                        if (string.IsNullOrWhiteSpace(app)) continue;
+                        var name = app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app : app + ".exe";
+                        if (p.Processes.Any(pr => pr.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) continue;
+                        p.Processes.Add(new ProcessRule { Name = name, IncludeChildren = true, ScanPatterns = new[] { name } });
+                    }
+                }
+            }
+
+            // Inject custom_categories
+            if (settings.CustomCategories?.Count > 0)
+            {
+                foreach (var cat in settings.CustomCategories)
+                {
+                    if (string.IsNullOrWhiteSpace(cat.Name)) continue;
+                    if (collection.Profiles.Any(p => p.Name.Equals(cat.Name, StringComparison.OrdinalIgnoreCase))) continue;
+                    var profile = new Profile
+                    {
+                        Name = cat.Name,
+                        Description = "User category",
+                        DnsMode = "vpn_only",
+                        BlockOnVpnFail = false,
+                        Processes = new List<ProcessRule>()
+                    };
+                    foreach (var app in cat.Apps ?? new())
+                    {
+                        if (string.IsNullOrWhiteSpace(app)) continue;
+                        var name = app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app : app + ".exe";
+                        profile.Processes.Add(new ProcessRule { Name = name, IncludeChildren = true, ScanPatterns = new[] { name } });
+                    }
+                    collection.Profiles.Add(profile);
+                }
+            }
+
+            // Resolve active profile
+            var profileName = settings.ActiveProfile;
+            var isFullTunnel = (settings.App.RoutingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase);
+            var isCustomConfig = settings.App.ConfigMode?.Equals("custom", StringComparison.OrdinalIgnoreCase) == true;
+
+            if (!string.IsNullOrEmpty(profileName))
+            {
+                var names = profileName.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                _activeProfile = names.Length == 1 ? manager.GetProfile(names[0]) : manager.MergeProfiles(names);
+            }
+            else if (isCustomConfig)
+                _activeProfile = new Profile { Name = "CustomConfig", DnsMode = "vpn_only" };
+            else
+                _activeProfile = new Profile { Name = "FullTunnel", DnsMode = "vpn_only" };
+
+            // Inject custom apps from GUI
+            if (settings.CustomApps?.Count > 0 && _activeProfile != null)
+            {
+                foreach (var app in settings.CustomApps)
+                {
+                    if (string.IsNullOrEmpty(app)) continue;
+                    if (_activeProfile.Processes.Any(p => p.Name.Equals(app, StringComparison.OrdinalIgnoreCase))) continue;
+                    _activeProfile.Processes.Add(new ProcessRule
+                    {
+                        Name = app, IncludeChildren = true, ScanPatterns = new[] { app }
+                    });
+                }
+            }
+
+            // Re-scan processes
+            _scanResult = _scanner.ScanForProfile(_activeProfile!);
+
+            // Regenerate config JSON (generated mode only — custom mode uses injected routing)
+            string configJson;
+            if (isCustomConfig)
+            {
+                var customPath = Environment.ExpandEnvironmentVariables(settings.App.CustomConfig ?? "");
+                if (!File.Exists(customPath))
+                {
+                    _logger?.Warning("[VpnEngine] Apply: custom config not found, skipping");
+                    return false;
+                }
+                var rawJson = File.ReadAllText(customPath);
+                configJson = CustomConfigInjector.Inject(rawJson, _scanResult.ProcessNames, settings);
+            }
+            else
+            {
+                var sbConfig = ConfigGenerator.Generate(_activeProfile!, _scanResult.ProcessNames, settings);
+                configJson = ConfigGenerator.Serialize(sbConfig);
+            }
+
+            // Try hot-reload first (no process restart)
+            if (_singBox.TryReloadConfigJson(configJson))
+            {
+                OnStatus($"Applied (hot-reload, PID {_singBox.Pid})");
+                _logger?.Information("[VpnEngine] Applied via hot-reload");
+                return true;
+            }
+
+            // Fallback: full reload (stop + start via ReloadConfigJson — it handles both)
+            _logger?.Warning("[VpnEngine] Hot-reload failed, falling back to full restart");
+            _singBox.ReloadConfigJson(configJson);
+            OnStatus($"Applied (restart, PID {_singBox.Pid})");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error(ex, "[VpnEngine] Apply failed");
+            OnStatus($"Apply failed: {ex.Message}");
+            return false;
+        }
+    }
+
     // ─── Stop ────────────────────────────────────────────────────────────────
 
     public void Stop()
