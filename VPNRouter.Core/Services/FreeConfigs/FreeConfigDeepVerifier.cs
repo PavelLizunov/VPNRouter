@@ -90,9 +90,14 @@ public sealed class FreeConfigDeepVerifier
         var clashPort = FindFreePort();
         string? tmpConfigPath = null;
         Process? process = null;
+        var stderrBuffer = new System.Text.StringBuilder(capacity: 2048);
+        var stdoutBuffer = new System.Text.StringBuilder(capacity: 512);
 
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         overallCts.CancelAfter(OverallTimeout);
+
+        var sw = Stopwatch.StartNew();
+        var cc = cfg.CountryCode ?? "??";
 
         try
         {
@@ -102,7 +107,7 @@ public sealed class FreeConfigDeepVerifier
             tmpConfigPath = Path.Combine(Path.GetTempPath(), $"sb-verify-{Guid.NewGuid():N}.json");
             await File.WriteAllTextAsync(tmpConfigPath, configJson, overallCts.Token);
 
-            // 2. Launch sing-box.
+            // 2. Launch sing-box with stdout/stderr capture for diagnostics.
             process = new Process
             {
                 StartInfo = new ProcessStartInfo
@@ -114,18 +119,33 @@ public sealed class FreeConfigDeepVerifier
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                 },
+                EnableRaisingEvents = false,
+            };
+            process.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data != null) stdoutBuffer.Append(e.Data).Append('\n');
+            };
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data != null) stderrBuffer.Append(e.Data).Append('\n');
             };
 
             if (!process.Start())
             {
                 cfg.LastError = "sing-box spawn failed";
+                _logger.Warning("[DV] {host}:{port} [{cc}] → spawn failed", cfg.Host, cfg.Port, cc);
                 return;
             }
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
 
             // 3. Wait for sing-box to bind. Poll the SOCKS port.
             if (!await WaitForPortBoundAsync(socksPort, SingBoxWarmup, overallCts.Token))
             {
-                cfg.LastError = "sing-box didn't bind";
+                var stderrSnip = TrimSnippet(stderrBuffer.ToString(), 300);
+                cfg.LastError = $"sing-box didn't bind: {TrimSnippet(stderrSnip, 80)}";
+                _logger.Warning("[DV] {host}:{port} [{cc}] → didn't bind. stderr: {err}",
+                    cfg.Host, cfg.Port, cc, stderrSnip);
                 return;
             }
 
@@ -137,6 +157,8 @@ public sealed class FreeConfigDeepVerifier
                 cfg.Status = FreeConfigStatus.Verified;
                 cfg.LatencyMs = httpLatencyMs;
                 cfg.LastError = null;
+                _logger.Information("[DV] {host}:{port} [{cc}] ✓✓ VERIFIED in {ms}ms",
+                    cfg.Host, cfg.Port, cc, httpLatencyMs);
             }
             else
             {
@@ -144,15 +166,23 @@ public sealed class FreeConfigDeepVerifier
                 if (cfg.Status == FreeConfigStatus.Ok || cfg.Status == FreeConfigStatus.Slow)
                     cfg.Status = FreeConfigStatus.TlsFailed;
                 cfg.LastError = httpErr ?? "http failed";
+
+                var stderrSnip = TrimSnippet(stderrBuffer.ToString(), 200);
+                _logger.Information("[DV] {host}:{port} [{cc}] ✗ {err} (total {total}ms){sbErr}",
+                    cfg.Host, cfg.Port, cc, httpErr, sw.ElapsedMilliseconds,
+                    string.IsNullOrWhiteSpace(stderrSnip) ? "" : $" | sb-err: {stderrSnip}");
             }
         }
         catch (OperationCanceledException)
         {
             cfg.LastError = "deep verify timeout";
+            _logger.Warning("[DV] {host}:{port} [{cc}] → TIMEOUT after {ms}ms",
+                cfg.Host, cfg.Port, cc, sw.ElapsedMilliseconds);
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "DeepVerify threw for {host}:{port}", cfg.Host, cfg.Port);
+            _logger.Warning(ex, "[DV] {host}:{port} [{cc}] → THREW {type}",
+                cfg.Host, cfg.Port, cc, ex.GetType().Name);
             cfg.LastError = ex.GetType().Name;
         }
         finally
@@ -174,6 +204,12 @@ public sealed class FreeConfigDeepVerifier
                 try { File.Delete(tmpConfigPath); } catch { }
             }
         }
+    }
+
+    private static string TrimSnippet(string s, int max)
+    {
+        s = s.Replace('\n', ' ').Replace('\r', ' ').Trim();
+        return s.Length > max ? s[..max] + "…" : s;
     }
 
     /// <summary>

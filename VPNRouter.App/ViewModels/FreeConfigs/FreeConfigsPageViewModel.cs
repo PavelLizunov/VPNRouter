@@ -210,6 +210,40 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         _aggregator.Cache.Save(file);
     }
 
+    /// <summary>Open the logs folder in Explorer so the user can see per-config deep-verify outcomes.</summary>
+    [RelayCommand]
+    private void OpenLogs()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = VPNRouter.Core.AppPaths.LogsDir,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            StatusText = Strings.FcStatusFailed(ex.Message);
+        }
+    }
+
+    /// <summary>Detect whether the main (TUN-mode) sing-box process is running.</summary>
+    private static bool IsMainVpnActive()
+    {
+        try
+        {
+            // There will usually be our temporary verifier sing-box instances running during
+            // deep-verify, but THIS check is made BEFORE we spawn any — so any sing-box we see
+            // is the user's main VPN.
+            return System.Diagnostics.Process.GetProcessesByName("sing-box").Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Goal-seeking deep verification: iterate through all candidates (in priority order)
     /// until we find <see cref="DeepVerifyTargetCount"/> Verified configs, or exhaust the
@@ -220,6 +254,15 @@ public partial class FreeConfigsPageViewModel : ObservableObject
     private async Task DeepVerifyTopAsync()
     {
         if (IsBusy) return;
+
+        // Warn if main VPN is active — it transparently proxies test traffic.
+        if (IsMainVpnActive())
+        {
+            StatusText = Strings.FcStatusMainVpnActive;
+            _logger.Warning("[DV] Main sing-box.exe is running — deep verify will route test traffic through it, results unreliable");
+            // Proceed anyway — but user has been warned.
+        }
+
         IsBusy = true;
         _refreshCts = new CancellationTokenSource();
         var ct = _refreshCts.Token;

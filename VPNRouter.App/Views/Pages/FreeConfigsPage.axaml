@@ -141,8 +141,13 @@
                           FontSize="10" VerticalAlignment="Center"/>
             </StackPanel>
 
-            <!-- Cleanup row -->
+            <!-- Cleanup + logs row -->
             <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                <Button Content="{x:Static loc:Strings.FcOpenLogs}"
+                        Command="{Binding FreeConfigsVm.OpenLogsCommand}"
+                        Padding="8,3" FontSize="10" CornerRadius="4"
+                        Background="#EDE9FE" Foreground="#5B21B6"
+                        ToolTip.Tip="Open %ProgramData%\VPNRouter\logs — see per-config deep verify outcomes (lines starting with [DV])."/>
                 <Button Content="{x:Static loc:Strings.FcClearFailed}"
                         Command="{Binding FreeConfigsVm.ClearFailedCommand}"
                         IsEnabled="{Binding !FreeConfigsVm.IsBusy}"

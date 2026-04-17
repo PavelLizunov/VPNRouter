@@ -305,9 +305,13 @@ public static class Strings
     public static string FcDeepHint        => Ru
         ? "Глубокая проверка: временный sing-box + реальный HTTP. Ищет пока не найдёт N рабочих или не кончатся кандидаты. Может идти часами — это норм."
         : "Deep verify: spins up a temporary sing-box + real HTTP. Runs until N working configs are found or candidates exhausted. May take hours — that's fine.";
-
-    public static string FcClearFailed      => Ru ? "🗑 Убрать мусор"       : "🗑 Clear dead";
-    public static string FcKeepVerified     => Ru ? "⭐ Только ✓✓ Verified"  : "⭐ Keep Verified only";
+    public static string FcStatusMainVpnActive => Ru
+        ? "⚠ Основной VPN активен — результаты проверки могут быть недостоверны. Отключите VPN перед deep verify."
+        : "⚠ Main VPN is active — verification results may be unreliable. Disconnect VPN first.";
+    public static string FcOpenLogs         => Ru ? "📁 Логи"                : "📁 Logs";
+    public static string FcClearFailed      => Ru ? "🧹 Убрать мусор"        : "🧹 Clear dead";
+    public static string FcKeepVerified     => Ru ? "⭐ Только ✓✓"           : "⭐ Keep ✓✓ only";
+    public static string FcKeepVerifiedOnly => FcKeepVerified;
     public static string FcClearAll         => Ru ? "💥 Очистить всё"        : "💥 Clear all";
     public static string FcCleanupHint      => Ru
         ? "Очистка: убери мусорные записи, чтобы быстрее работал Refresh. При следующем обновлении всё перезагрузится из источников."
