@@ -270,13 +270,23 @@
                                            TextWrapping="Wrap" FontSize="9" Opacity="0.65"
                                            Foreground="#78350F"
                                            IsVisible="{Binding FreeConfigsVm.MeasureBandwidth}"/>
+                                <!-- Deep verify button (hidden when busy — Stop takes its place) -->
                                 <Button Content="{x:Static loc:Strings.FcDeepVerify}"
                                         Command="{Binding FreeConfigsVm.DeepVerifyTopCommand}"
-                                        IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                                        IsVisible="{Binding !FreeConfigsVm.IsBusy}"
                                         Padding="0,9" FontSize="12" FontWeight="Bold" CornerRadius="5"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                         Background="#059669" Foreground="White"
                                         ToolTip.Tip="{x:Static loc:Strings.FcDeepVerifyTooltip}"/>
+
+                                <!-- v2.14.10: Stop button — only during active Deep Verify, same action as Cancel -->
+                                <Button Content="{x:Static loc:Strings.FcDeepStop}"
+                                        Command="{Binding FreeConfigsVm.CancelCommand}"
+                                        IsVisible="{Binding FreeConfigsVm.IsBusy}"
+                                        Padding="0,9" FontSize="12" FontWeight="Bold" CornerRadius="5"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                        Background="#EF4444" Foreground="White"
+                                        ToolTip.Tip="{x:Static loc:Strings.FcDeepStopTooltip}"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

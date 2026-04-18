@@ -401,6 +401,12 @@ public static class Strings
     public static string FcListHeader    => Ru ? "📋 Конфиги"       : "📋 Configs";
     public static string FcListShown     => Ru ? "показано"         : "shown";
 
+    // v2.14.10 — Stop button in Deep Verify section
+    public static string FcDeepStop        => Ru ? "⏹ Остановить Deep Verify" : "⏹ Stop Deep Verify";
+    public static string FcDeepStopTooltip => Ru
+        ? "Прекратить текущую проверку. Найденные до отмены конфиги сохранены в кэше."
+        : "Abort the current verification run. Configs found before cancel are preserved in cache.";
+
     // v2.13.18 — Fast scan toggle
     public static string FcFastScanLabel => Ru ? "⚡ Fast scan (только TCP, без TLS)" : "⚡ Fast scan (TCP only, no TLS)";
     public static string FcFastScanHint  => Ru
