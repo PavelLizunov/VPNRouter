@@ -3,6 +3,8 @@ using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
@@ -2608,6 +2610,16 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         try
         {
+            // v2.13.19 — one-time privacy warning before first-ever Free Config Connect.
+            // User can dismiss once via the dialog's confirm button; reset via Settings.
+            if (!_settings.App.FreeConfigSecurityWarningAcked)
+            {
+                var proceed = await ShowFreeConfigSecurityWarningAsync();
+                if (!proceed) return false;
+                _settings.App.FreeConfigSecurityWarningAcked = true;
+                SaveSettings();
+            }
+
             var newEntry = entry.ToVlessServerEntry();
 
             // Does the Free config already exist in the user's Server list? Match by host:port:uuid.
@@ -2663,5 +2675,115 @@ public partial class MainWindowViewModel : ViewModelBase
             _logger.Warning(ex, "ApplyFreeConfig failed");
             return false;
         }
+    }
+
+    /// <summary>
+    /// v2.13.19 — one-time privacy warning shown before first Connect from Free Configs.
+    /// Modal dialog: explains operator can see metadata (not HTTPS content), lists what
+    /// to avoid (banking/email/2FA) and what's safe (YouTube/Wikipedia/Discord).
+    /// Returns true if user clicked "Proceed", false if user cancelled.
+    /// </summary>
+    private async Task<bool> ShowFreeConfigSecurityWarningAsync()
+    {
+        var owner = GetMainWindow();
+        if (owner == null) return true; // edge case: no window — proceed silently
+
+        var tcs = new TaskCompletionSource<bool>();
+
+        var proceedBtn = new Button
+        {
+            Content = Strings.FcSecWarnProceed,
+            Padding = new Thickness(12, 6),
+            FontWeight = FontWeight.SemiBold,
+            Background = Avalonia.Media.Brush.Parse("#059669"),
+            Foreground = Avalonia.Media.Brushes.White,
+            CornerRadius = new CornerRadius(4),
+        };
+        var cancelBtn = new Button
+        {
+            Content = Strings.FcSecWarnCancel,
+            Padding = new Thickness(12, 6),
+            CornerRadius = new CornerRadius(4),
+        };
+
+        var dialog = new Window
+        {
+            Title = Strings.FcSecWarnTitle,
+            Width = 520,
+            Height = 440,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
+            ShowInTaskbar = false,
+            Content = new Border
+            {
+                Padding = new Thickness(20),
+                Child = new StackPanel
+                {
+                    Spacing = 10,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = "⚠ " + Strings.FcSecWarnHeader,
+                            FontSize = 15,
+                            FontWeight = FontWeight.Bold,
+                            Foreground = Avalonia.Media.Brush.Parse("#B45309"),
+                            TextWrapping = TextWrapping.Wrap,
+                        },
+                        new TextBlock
+                        {
+                            Text = Strings.FcSecWarnBody,
+                            FontSize = 11,
+                            TextWrapping = TextWrapping.Wrap,
+                        },
+                        new Border
+                        {
+                            Padding = new Thickness(10, 8),
+                            Background = Avalonia.Media.Brush.Parse("#FEF3C7"),
+                            BorderBrush = Avalonia.Media.Brush.Parse("#F59E0B"),
+                            BorderThickness = new Thickness(1),
+                            CornerRadius = new CornerRadius(4),
+                            Child = new TextBlock
+                            {
+                                Text = Strings.FcSecWarnDontUseList,
+                                FontSize = 11,
+                                TextWrapping = TextWrapping.Wrap,
+                                Foreground = Avalonia.Media.Brush.Parse("#78350F"),
+                            },
+                        },
+                        new Border
+                        {
+                            Padding = new Thickness(10, 8),
+                            Background = Avalonia.Media.Brush.Parse("#DCFCE7"),
+                            BorderBrush = Avalonia.Media.Brush.Parse("#059669"),
+                            BorderThickness = new Thickness(1),
+                            CornerRadius = new CornerRadius(4),
+                            Child = new TextBlock
+                            {
+                                Text = Strings.FcSecWarnGoodFor,
+                                FontSize = 11,
+                                TextWrapping = TextWrapping.Wrap,
+                                Foreground = Avalonia.Media.Brush.Parse("#14532D"),
+                            },
+                        },
+                        new StackPanel
+                        {
+                            Orientation = Orientation.Horizontal,
+                            HorizontalAlignment = HorizontalAlignment.Right,
+                            Spacing = 8,
+                            Margin = new Thickness(0, 10, 0, 0),
+                            Children = { cancelBtn, proceedBtn },
+                        },
+                    },
+                },
+            },
+        };
+
+        proceedBtn.Click += (_, _) => { tcs.TrySetResult(true); dialog.Close(); };
+        cancelBtn.Click += (_, _) => { tcs.TrySetResult(false); dialog.Close(); };
+        dialog.Closed += (_, _) => tcs.TrySetResult(false);
+
+        await dialog.ShowDialog(owner);
+        return await tcs.Task;
     }
 }

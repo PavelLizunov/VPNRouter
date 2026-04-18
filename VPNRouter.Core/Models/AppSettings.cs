@@ -152,6 +152,13 @@ public class AppConfig
     public bool StrictMode { get; set; } = false;
 
     /// <summary>
+    /// v2.13.19 — one-time dismissible flag for Free Configs privacy warning.
+    /// Reset via Settings/Network if user wants to see the reminder again.
+    /// </summary>
+    [YamlMember(Alias = "free_config_security_warning_acked")]
+    public bool FreeConfigSecurityWarningAcked { get; set; } = false;
+
+    /// <summary>
     /// "Strict DNS" — when true, ALL DNS queries are routed through the VPN
     /// (vpn-dns), not just queries from routed processes. Eliminates DNS leaks
     /// from system services (svchost DnsCache), background apps, and any process

@@ -374,6 +374,25 @@ public static class Strings
     public static string FcSmartRefreshHint  => Ru
         ? "Ускоряет Refresh: остановка как только накопится N конфигов с низким пингом. Отключите для полного сканирования."
         : "Speeds up Refresh: stops once N low-ping configs are found. Uncheck for full scan.";
+
+    // v2.13.19 — Privacy warning on first Connect from Free Configs
+    public static string FcSecWarnTitle => Ru
+        ? "Публичный прокси — предупреждение"
+        : "Public proxy — privacy warning";
+    public static string FcSecWarnHeader => Ru
+        ? "Вы подключаетесь к публичному прокси-серверу"
+        : "You're connecting to a public proxy operator";
+    public static string FcSecWarnBody => Ru
+        ? "Оператор этого конфига может видеть метаданные вашего трафика — к каким сайтам вы обращаетесь, когда, как часто. Содержимое HTTPS-сайтов (логины, пароли, сообщения) защищено TLS и недоступно оператору."
+        : "The operator of this config can see your traffic metadata — which sites you visit, when, how often. HTTPS content (logins, passwords, messages) is protected by TLS and invisible to the operator.";
+    public static string FcSecWarnDontUseList => Ru
+        ? "🚫 НЕ используйте для:\n  • банковских приложений / онлайн-банков\n  • входа в почту (Gmail, Яндекс.Почта, Mail.ru)\n  • Госуслуги, налоговая, банки\n  • 2FA / SMS-коды / криптокошельки\n  • любых паролей, которые вы цените"
+        : "🚫 DO NOT use for:\n  • banking apps / online banking\n  • email logins (Gmail, Outlook, etc.)\n  • government services, tax sites\n  • 2FA / SMS codes / crypto wallets\n  • any passwords you care about";
+    public static string FcSecWarnGoodFor => Ru
+        ? "✅ Подходит для: YouTube, новостей, Wikipedia, Discord, Telegram, публичного веба"
+        : "✅ Good for: YouTube, news, Wikipedia, Discord, Telegram, public web browsing";
+    public static string FcSecWarnProceed => Ru ? "Понял, подключить" : "Understood, connect";
+    public static string FcSecWarnCancel  => Ru ? "Отмена" : "Cancel";
     public static string FcPageDescription    => Ru
         ? "Публичные VLESS-конфиги. Проверка: TCP + TLS handshake с валидацией сертификата. ✓ = сервер живой и TLS-валидный."
         : "Public VLESS configs. Tests: TCP + TLS handshake with cert validation. ✓ = server alive and TLS-valid.";
