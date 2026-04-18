@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>VPNRouter.Tools.PoolAggregator</RootNamespace>
+    <AssemblyName>PoolAggregator</AssemblyName>
+    <!--
+      Runs on any OS (Linux in GitHub Actions). VPNRouter.Core has Windows-only
+      subsystems (ETW, Registry) guarded by OperatingSystem.IsWindows() so they
+      compile on all targets and skip execution on non-Windows.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\VPNRouter.Core\VPNRouter.Core.csproj" />
+  </ItemGroup>
+
+</Project>

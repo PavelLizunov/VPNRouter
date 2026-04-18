@@ -1,0 +1,85 @@
+name: Build Free Configs Pool
+
+# Aggregates VLESS configs from all 14 public sources into a single pool.json
+# and publishes to the rolling 'free-pool-latest' GitHub release.
+# NO validation — just metadata (country, host, port, SNI) + raw URI.
+# Client validates per-user locally (TCP/TLS/HTTP via sing-box).
+
+on:
+  schedule:
+    # Every 6 hours at :17 past the hour (offset from :00 to dodge CI load spikes)
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: "Force rebuild even if recent (for testing)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: free-pool
+  cancel-in-progress: false
+
+jobs:
+  aggregate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build and run PoolAggregator
+        run: |
+          mkdir -p /tmp/out
+          dotnet run --project VPNRouter.Tools/PoolAggregator \
+            --configuration Release \
+            -- --output /tmp/out/pool.json
+
+      - name: Inspect output
+        run: |
+          SIZE=$(stat -c%s /tmp/out/pool.json)
+          COUNT=$(jq '.totalConfigs' /tmp/out/pool.json)
+          UPDATED=$(jq -r '.updatedAt' /tmp/out/pool.json)
+          echo "Pool size: $(($SIZE / 1024)) KB, $COUNT entries, updated $UPDATED"
+
+          if [ "$COUNT" -lt 1000 ]; then
+            echo "::warning::Pool has only $COUNT entries (expected > 10000) — sources may be broken"
+          fi
+
+          # Compress for smaller download + ETag stability
+          gzip -k /tmp/out/pool.json
+          ls -la /tmp/out/
+
+      - name: Upload pool.json to rolling release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Create the rolling 'free-pool-latest' release if missing.
+          # This release lives forever and gets new pool.json every 6h via --clobber.
+          if ! gh release view free-pool-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Creating rolling release 'free-pool-latest'..."
+            gh release create free-pool-latest \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Free Configs Pool (rolling)" \
+              --notes "Auto-updated every 6 hours. Aggregated metadata of public VLESS sources. **Not** a released app version — the VPNRouter app downloads \`pool.json\` from this release for fast refresh. See v2.14.1+ for client integration." \
+              --prerelease \
+              --target main
+          fi
+
+          gh release upload free-pool-latest \
+            /tmp/out/pool.json /tmp/out/pool.json.gz \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+
+          echo "✓ Uploaded to https://github.com/$GITHUB_REPOSITORY/releases/tag/free-pool-latest"

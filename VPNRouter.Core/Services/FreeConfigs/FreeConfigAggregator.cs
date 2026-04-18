@@ -20,6 +20,7 @@ public sealed class FreeConfigAggregator
     private readonly FreeConfigTester _tester;
     private readonly FreeConfigGeoIp _geoIp;
     private readonly FreeConfigCache _cache;
+    private readonly FreeConfigPoolFetcher _poolFetcher;
     private readonly ILogger _logger;
 
     public FreeConfigAggregator(ILogger logger)
@@ -29,7 +30,11 @@ public sealed class FreeConfigAggregator
         _tester = new FreeConfigTester();
         _geoIp = new FreeConfigGeoIp(logger);
         _cache = new FreeConfigCache(logger);
+        _poolFetcher = new FreeConfigPoolFetcher(logger);
     }
+
+    /// <summary>v2.14.1: whether to prefer server-side pool.json over direct source fetch.</summary>
+    public bool UseServerPool { get; set; } = true;
 
     /// <summary>Access to the underlying cache for UI (path, current snapshot).</summary>
     public FreeConfigCache Cache => _cache;
@@ -58,75 +63,109 @@ public sealed class FreeConfigAggregator
     {
         sources ??= FreeConfigSources.Default;
 
-        // ── Stage 1: fetch all sources in parallel, with per-source progress ──
-        var enabledSources = sources.Where(s => s.Enabled).ToList();
-        OnStageChanged?.Invoke($"Fetching sources (0/{enabledSources.Count})...");
-
-        var fetchedCount = 0;
-        var currentlyFetching = new System.Collections.Concurrent.ConcurrentBag<string>();
-
-        var fetchTasks = enabledSources.Select(async s =>
+        // ── Stage 0 (v2.14.1): try server-side pool.json first ──
+        // If successful, skip fetching 14 sources + skip GeoIP entirely.
+        // Pool is refreshed by GitHub Actions every 6h — contains metadata + country codes.
+        var poolLoaded = false;
+        List<FreeConfigEntry>? poolEntries = null;
+        if (UseServerPool)
         {
-            currentlyFetching.Add(s.Name);
+            OnStageChanged?.Invoke("Fetching pool.json from GitHub Releases...");
             try
             {
-                var raws = await _fetcher.FetchAsync(s, ct);
-                var done = Interlocked.Increment(ref fetchedCount);
-                // Show remaining source name(s) so user sees what's actually being downloaded.
-                var remaining = currentlyFetching.Where(n => n != s.Name).FirstOrDefault() ?? "";
-                var label = done == enabledSources.Count
-                    ? $"Fetching sources ({done}/{enabledSources.Count}) — done"
-                    : remaining.Length > 0
-                        ? $"Fetching sources ({done}/{enabledSources.Count}): {remaining}..."
-                        : $"Fetching sources ({done}/{enabledSources.Count})...";
-                OnStageChanged?.Invoke(label);
-                return (s, raws);
-            }
-            finally
-            {
-                // best-effort removal — ConcurrentBag doesn't support remove, leave it
-            }
-        });
-        var fetched = await Task.WhenAll(fetchTasks);
-
-        // ── Stage 2: parse + dedupe ──
-        OnStageChanged?.Invoke("Parsing configs...");
-        var byId = new Dictionary<string, FreeConfigEntry>(StringComparer.OrdinalIgnoreCase);
-        var parseErrors = 0;
-
-        foreach (var (src, raws) in fetched)
-        {
-            foreach (var raw in raws)
-            {
-                try
+                poolEntries = await _poolFetcher.FetchPoolAsync(ct);
+                if (poolEntries != null && poolEntries.Count > 1000)
                 {
-                    var vless = VlessUriParser.Parse(raw);
-                    var id = BuildId(vless.Server, vless.Port, vless.Uuid);
-                    if (byId.ContainsKey(id)) continue;
-
-                    byId[id] = new FreeConfigEntry
-                    {
-                        Id         = id,
-                        SourceUrl  = src.Url,
-                        RawUri     = raw,
-                        Host       = vless.Server,
-                        Port       = vless.Port,
-                        Uuid       = vless.Uuid,
-                        Name       = vless.Name ?? "",
-                        Sni        = vless.Reality?.ServerName ?? vless.Tls?.ServerName ?? "",
-                        Transport  = vless.Transport?.Type ?? "tcp",
-                        Security   = vless.Security ?? "reality",
-                    };
+                    poolLoaded = true;
+                    _logger.Information("Pool loaded: {n} entries — skipping per-source fetch + GeoIP", poolEntries.Count);
+                    OnStageChanged?.Invoke($"Pool loaded: {poolEntries.Count} configs (country codes included)");
                 }
-                catch
+                else if (poolEntries != null)
                 {
-                    parseErrors++;
+                    _logger.Warning("Pool has only {n} entries — falling back to per-source fetch", poolEntries.Count);
                 }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.Warning("Pool fetch failed: {err} — falling back to per-source fetch", ex.Message);
             }
         }
 
-        _logger.Information("FreeConfigAggregator: parsed {ok} unique ({err} errors) from {src} sources",
-            byId.Count, parseErrors, fetched.Length);
+        Dictionary<string, FreeConfigEntry> byId;
+
+        if (poolLoaded && poolEntries != null)
+        {
+            // Pool already contains parsed + deduped + GeoIP-enriched entries.
+            // Skip Stages 1-2 entirely, build byId directly.
+            byId = poolEntries.ToDictionary(e => e.Id, StringComparer.OrdinalIgnoreCase);
+            _logger.Information("FreeConfigAggregator: using {n} entries from pool.json (GeoIP pre-enriched)", byId.Count);
+        }
+        else
+        {
+            // ── Stage 1: fetch all sources in parallel, with per-source progress ──
+            var enabledSources = sources.Where(s => s.Enabled).ToList();
+            OnStageChanged?.Invoke($"Fetching sources (0/{enabledSources.Count})...");
+
+            var fetchedCount = 0;
+            var currentlyFetching = new System.Collections.Concurrent.ConcurrentBag<string>();
+
+            var fetchTasks = enabledSources.Select(async s =>
+            {
+                currentlyFetching.Add(s.Name);
+                try
+                {
+                    var raws = await _fetcher.FetchAsync(s, ct);
+                    var done = Interlocked.Increment(ref fetchedCount);
+                    var remaining = currentlyFetching.Where(n => n != s.Name).FirstOrDefault() ?? "";
+                    var label = done == enabledSources.Count
+                        ? $"Fetching sources ({done}/{enabledSources.Count}) — done"
+                        : remaining.Length > 0
+                            ? $"Fetching sources ({done}/{enabledSources.Count}): {remaining}..."
+                            : $"Fetching sources ({done}/{enabledSources.Count})...";
+                    OnStageChanged?.Invoke(label);
+                    return (s, raws);
+                }
+                finally { /* best-effort; ConcurrentBag doesn't support remove */ }
+            });
+            var fetched = await Task.WhenAll(fetchTasks);
+
+            // ── Stage 2: parse + dedupe ──
+            OnStageChanged?.Invoke("Parsing configs...");
+            byId = new Dictionary<string, FreeConfigEntry>(StringComparer.OrdinalIgnoreCase);
+            var parseErrors = 0;
+
+            foreach (var (src, raws) in fetched)
+            {
+                foreach (var raw in raws)
+                {
+                    try
+                    {
+                        var vless = VlessUriParser.Parse(raw);
+                        var id = BuildId(vless.Server, vless.Port, vless.Uuid);
+                        if (byId.ContainsKey(id)) continue;
+
+                        byId[id] = new FreeConfigEntry
+                        {
+                            Id         = id,
+                            SourceUrl  = src.Url,
+                            RawUri     = raw,
+                            Host       = vless.Server,
+                            Port       = vless.Port,
+                            Uuid       = vless.Uuid,
+                            Name       = vless.Name ?? "",
+                            Sni        = vless.Reality?.ServerName ?? vless.Tls?.ServerName ?? "",
+                            Transport  = vless.Transport?.Type ?? "tcp",
+                            Security   = vless.Security ?? "reality",
+                        };
+                    }
+                    catch { parseErrors++; }
+                }
+            }
+
+            _logger.Information("FreeConfigAggregator: parsed {ok} unique ({err} errors) from {src} sources",
+                byId.Count, parseErrors, fetched.Length);
+        }
 
         var configs = byId.Values.ToList();
 
