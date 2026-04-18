@@ -166,9 +166,17 @@ public sealed class FreeConfigGeoIp
                     _ipToCountry[ip] = cc;
             }
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Only rethrow if it's the USER's cancellation. HttpClient timeout also throws
+            // TaskCanceledException (a subtype of OperationCanceledException) but should be
+            // swallowed as a normal batch failure.
+            throw;
+        }
         catch (OperationCanceledException)
         {
-            throw;
+            // HttpClient timeout (15s) or our own CancelAfter. Treat as network failure — skip this batch.
+            _logger.Warning("GeoIP batch timed out after 15s — skipping batch of {n} IPs", ips.Length);
         }
         catch (Exception ex)
         {
