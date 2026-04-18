@@ -101,59 +101,7 @@
         <!-- ═══ Toolbar (big prominent action buttons) ═══ -->
         <StackPanel Grid.Row="3" Margin="12,0,14,8" Spacing="6">
 
-            <!-- v2.13.17: Smart Refresh goal settings -->
-            <Border Padding="8,5" CornerRadius="4"
-                    Background="#EFF6FF" BorderBrush="#2563EB" BorderThickness="1">
-                <StackPanel Spacing="4">
-                    <CheckBox Content="{x:Static loc:Strings.FcSmartRefreshLabel}"
-                              IsChecked="{Binding FreeConfigsVm.UseLatencyGoal}"
-                              FontSize="11" FontWeight="SemiBold"
-                              Foreground="#1E3A8A"
-                              MinHeight="0" Padding="4,0"/>
-                    <StackPanel Orientation="Horizontal" Spacing="6"
-                                IsVisible="{Binding FreeConfigsVm.UseLatencyGoal}">
-                        <TextBlock Text="{x:Static loc:Strings.FcTargetNLabel}"
-                                   FontSize="10" VerticalAlignment="Center"/>
-                        <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalTarget}"
-                                       Minimum="5" Maximum="500" Increment="5"
-                                       FormatString="0"
-                                       MinWidth="80" Padding="4,2" FontSize="10"/>
-                        <TextBlock Text="{x:Static loc:Strings.FcConfigsWord}"
-                                   FontSize="10" Opacity="0.7" VerticalAlignment="Center"/>
-                        <TextBlock Text="·" FontSize="10" Opacity="0.5" VerticalAlignment="Center" Margin="4,0"/>
-                        <TextBlock Text="{x:Static loc:Strings.FcWithPingUnder}"
-                                   FontSize="10" VerticalAlignment="Center"/>
-                        <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalMaxPingMs}"
-                                       Minimum="20" Maximum="1000" Increment="50"
-                                       FormatString="0"
-                                       MinWidth="90" Padding="4,2" FontSize="10"/>
-                        <TextBlock Text="{x:Static loc:Strings.FcMsUnit}"
-                                   FontSize="10" Opacity="0.7" VerticalAlignment="Center"/>
-                    </StackPanel>
-                    <TextBlock Text="{x:Static loc:Strings.FcSmartRefreshHint}"
-                               FontSize="9" Opacity="0.6" TextWrapping="Wrap"
-                               IsVisible="{Binding FreeConfigsVm.UseLatencyGoal}"/>
-                </StackPanel>
-            </Border>
-
-            <!-- v2.13.18: Fast scan toggle (orthogonal to smart refresh) -->
-            <Border Padding="8,5" CornerRadius="4"
-                    Background="#FEF3C7" BorderBrush="#F59E0B" BorderThickness="1">
-                <StackPanel Spacing="2">
-                    <CheckBox Content="{x:Static loc:Strings.FcFastScanLabel}"
-                              IsChecked="{Binding FreeConfigsVm.FastScanMode}"
-                              FontSize="11" FontWeight="SemiBold"
-                              Foreground="#78350F"
-                              MinHeight="0" Padding="4,0"/>
-                    <TextBlock Text="{x:Static loc:Strings.FcFastScanHint}"
-                               FontSize="9" Opacity="0.7" TextWrapping="Wrap"
-                               Foreground="#78350F"
-                               Margin="22,0,0,0"
-                               IsVisible="{Binding FreeConfigsVm.FastScanMode}"/>
-                </StackPanel>
-            </Border>
-
-            <!-- Primary action buttons — big + purple -->
+            <!-- Primary action buttons — always visible, top of toolbar -->
             <Grid ColumnDefinitions="*,*,Auto">
                 <Button Grid.Column="0" Margin="0,0,3,0"
                         Content="{x:Static loc:Strings.FcRefreshSources}"
@@ -257,10 +205,106 @@
                 </StackPanel>
             </Border>
 
-            <!-- v2.14.4: User-provided sources (collapsible) -->
-            <Expander Header="{x:Static loc:Strings.FcUserSrcSection}"
-                      FontSize="11" FontWeight="SemiBold">
-                <StackPanel Spacing="6" Margin="0,6,0,0">
+            <!-- v2.14.7: All secondary controls collapsed under single "More options" expander -->
+            <Expander Header="{x:Static loc:Strings.FcMoreOptions}"
+                      FontSize="11" FontWeight="SemiBold"
+                      IsExpanded="False">
+                <StackPanel Spacing="8" Margin="0,8,0,0">
+
+                    <!-- v2.13.17: Smart Refresh goal settings -->
+                    <Border Padding="8,5" CornerRadius="4"
+                            Background="#EFF6FF" BorderBrush="#2563EB" BorderThickness="1">
+                        <StackPanel Spacing="4">
+                            <CheckBox Content="{x:Static loc:Strings.FcSmartRefreshLabel}"
+                                      IsChecked="{Binding FreeConfigsVm.UseLatencyGoal}"
+                                      FontSize="11" FontWeight="SemiBold"
+                                      Foreground="#1E3A8A"
+                                      MinHeight="0" Padding="4,0"/>
+                            <StackPanel Orientation="Horizontal" Spacing="6"
+                                        IsVisible="{Binding FreeConfigsVm.UseLatencyGoal}">
+                                <TextBlock Text="{x:Static loc:Strings.FcTargetNLabel}"
+                                           FontSize="10" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalTarget}"
+                                               Minimum="5" Maximum="500" Increment="5"
+                                               FormatString="0"
+                                               MinWidth="80" Padding="4,2" FontSize="10"/>
+                                <TextBlock Text="{x:Static loc:Strings.FcConfigsWord}"
+                                           FontSize="10" Opacity="0.7" VerticalAlignment="Center"/>
+                                <TextBlock Text="·" FontSize="10" Opacity="0.5" VerticalAlignment="Center" Margin="4,0"/>
+                                <TextBlock Text="{x:Static loc:Strings.FcWithPingUnder}"
+                                           FontSize="10" VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalMaxPingMs}"
+                                               Minimum="20" Maximum="1000" Increment="50"
+                                               FormatString="0"
+                                               MinWidth="90" Padding="4,2" FontSize="10"/>
+                                <TextBlock Text="{x:Static loc:Strings.FcMsUnit}"
+                                           FontSize="10" Opacity="0.7" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="{x:Static loc:Strings.FcSmartRefreshHint}"
+                                       FontSize="9" Opacity="0.6" TextWrapping="Wrap"
+                                       IsVisible="{Binding FreeConfigsVm.UseLatencyGoal}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- v2.13.18: Fast scan toggle -->
+                    <Border Padding="8,5" CornerRadius="4"
+                            Background="#FEF3C7" BorderBrush="#F59E0B" BorderThickness="1">
+                        <StackPanel Spacing="2">
+                            <CheckBox Content="{x:Static loc:Strings.FcFastScanLabel}"
+                                      IsChecked="{Binding FreeConfigsVm.FastScanMode}"
+                                      FontSize="11" FontWeight="SemiBold"
+                                      Foreground="#78350F"
+                                      MinHeight="0" Padding="4,0"/>
+                            <TextBlock Text="{x:Static loc:Strings.FcFastScanHint}"
+                                       FontSize="9" Opacity="0.7" TextWrapping="Wrap"
+                                       Foreground="#78350F"
+                                       Margin="22,0,0,0"
+                                       IsVisible="{Binding FreeConfigsVm.FastScanMode}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Filter row -->
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <TextBlock Text="{x:Static loc:Strings.FcCountryFilter}" FontSize="10" VerticalAlignment="Center"/>
+                        <ComboBox ItemsSource="{Binding FreeConfigsVm.Countries}"
+                                  SelectedItem="{Binding FreeConfigsVm.SelectedCountry}"
+                                  MinWidth="100" Padding="6,2" FontSize="10"/>
+                        <CheckBox Content="{x:Static loc:Strings.FcOnlyWorking}"
+                                  IsChecked="{Binding FreeConfigsVm.OnlyWorking}"
+                                  FontSize="10" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Cleanup + logs row -->
+                    <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <Button Content="{x:Static loc:Strings.FcOpenLogs}"
+                                Command="{Binding FreeConfigsVm.OpenLogsCommand}"
+                                Padding="8,3" FontSize="10" CornerRadius="4"
+                                Background="#EDE9FE" Foreground="#5B21B6"
+                                ToolTip.Tip="Open %ProgramData%\VPNRouter\logs"/>
+                        <Button Content="{x:Static loc:Strings.FcClearFailed}"
+                                Command="{Binding FreeConfigsVm.ClearFailedCommand}"
+                                IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                                Padding="8,3" FontSize="10" CornerRadius="4"
+                                Background="#FEF3C7" Foreground="#92400E"
+                                ToolTip.Tip="Remove Timeout/Unreachable/TlsFailed/Implausible entries."/>
+                        <Button Content="{x:Static loc:Strings.FcKeepVerified}"
+                                Command="{Binding FreeConfigsVm.KeepVerifiedOnlyCommand}"
+                                IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                                Padding="8,3" FontSize="10" CornerRadius="4"
+                                Background="#DCFCE7" Foreground="#166534"
+                                ToolTip.Tip="Drop everything except Verified entries."/>
+                        <Button Content="{x:Static loc:Strings.FcClearAll}"
+                                Command="{Binding FreeConfigsVm.ClearAllCommand}"
+                                IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                                Padding="8,3" FontSize="10" CornerRadius="4"
+                                Background="#FEE2E2" Foreground="#991B1B"
+                                ToolTip.Tip="Wipe the entire cache."/>
+                    </StackPanel>
+
+                    <!-- User-provided sources section -->
+                    <TextBlock Text="{x:Static loc:Strings.FcUserSrcSection}"
+                               FontSize="10" FontWeight="SemiBold" Opacity="0.7"
+                               Margin="0,4,0,0"/>
                     <TextBlock Text="{x:Static loc:Strings.FcUserSrcHint}"
                                TextWrapping="Wrap" FontSize="9" Opacity="0.65"/>
 
@@ -310,44 +354,6 @@
                     </Grid>
                 </StackPanel>
             </Expander>
-
-            <!-- Filter row (country + only working) -->
-            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                <TextBlock Text="{x:Static loc:Strings.FcCountryFilter}" FontSize="10" VerticalAlignment="Center"/>
-                <ComboBox ItemsSource="{Binding FreeConfigsVm.Countries}"
-                          SelectedItem="{Binding FreeConfigsVm.SelectedCountry}"
-                          MinWidth="100" Padding="6,2" FontSize="10"/>
-                <CheckBox Content="{x:Static loc:Strings.FcOnlyWorking}"
-                          IsChecked="{Binding FreeConfigsVm.OnlyWorking}"
-                          FontSize="10" VerticalAlignment="Center"/>
-            </StackPanel>
-
-            <!-- Cleanup + logs row -->
-            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                <Button Content="{x:Static loc:Strings.FcOpenLogs}"
-                        Command="{Binding FreeConfigsVm.OpenLogsCommand}"
-                        Padding="8,3" FontSize="10" CornerRadius="4"
-                        Background="#EDE9FE" Foreground="#5B21B6"
-                        ToolTip.Tip="Open %ProgramData%\VPNRouter\logs — see per-config deep verify outcomes (lines starting with [DV])."/>
-                <Button Content="{x:Static loc:Strings.FcClearFailed}"
-                        Command="{Binding FreeConfigsVm.ClearFailedCommand}"
-                        IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
-                        Padding="8,3" FontSize="10" CornerRadius="4"
-                        Background="#FEF3C7" Foreground="#92400E"
-                        ToolTip.Tip="Remove Timeout/Unreachable/TlsFailed/Implausible entries. Keeps Verified + Ok + Unknown."/>
-                <Button Content="{x:Static loc:Strings.FcKeepVerified}"
-                        Command="{Binding FreeConfigsVm.KeepVerifiedOnlyCommand}"
-                        IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
-                        Padding="8,3" FontSize="10" CornerRadius="4"
-                        Background="#DCFCE7" Foreground="#166534"
-                        ToolTip.Tip="Drop everything except ✓✓ Verified entries."/>
-                <Button Content="{x:Static loc:Strings.FcClearAll}"
-                        Command="{Binding FreeConfigsVm.ClearAllCommand}"
-                        IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
-                        Padding="8,3" FontSize="10" CornerRadius="4"
-                        Background="#FEE2E2" Foreground="#991B1B"
-                        ToolTip.Tip="Wipe the entire cache. Next Refresh will re-fetch everything from scratch."/>
-            </StackPanel>
         </StackPanel>
 
         <!-- ═══ List + Empty states ═══ -->

@@ -388,6 +388,9 @@ public static class Strings
         : "3. Select a row with ✓✓ (green badge) and click 'Connect' at the bottom. For accurate testing, disconnect your main VPN before Refresh.";
     public static string FcQuickstartDismiss => Ru ? "Понятно, скрыть гайд" : "Got it, hide guide";
 
+    // v2.14.7 — collapsible More Options
+    public static string FcMoreOptions => Ru ? "⚙ Больше опций (фильтры, очистка, свои источники)" : "⚙ More options (filters, cleanup, user sources)";
+
     // v2.13.18 — Fast scan toggle
     public static string FcFastScanLabel => Ru ? "⚡ Fast scan (только TCP, без TLS)" : "⚡ Fast scan (TCP only, no TLS)";
     public static string FcFastScanHint  => Ru
