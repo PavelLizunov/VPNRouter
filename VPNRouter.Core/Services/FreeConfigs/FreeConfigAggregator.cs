@@ -51,6 +51,7 @@ public sealed class FreeConfigAggregator
     public async Task<List<FreeConfigEntry>> RefreshAsync(
         IReadOnlyList<FreeConfigSource>? sources = null,
         int maxTestCount = int.MaxValue,
+        int skipRecentHours = 6,
         CancellationToken ct = default)
     {
         sources ??= FreeConfigSources.Default;
@@ -172,12 +173,31 @@ public sealed class FreeConfigAggregator
             }
         }
 
-        // ── Stage 4: test connectivity (capped) ──
-        // Skip already-Verified entries: those are gold, the weaker TCP+TLS test can only
-        // downgrade them (status Verified is only produced by the deep verifier).
-        // Prioritize remaining: previously-Ok > Slow > Unknown > Implausible > TlsFailed > Timeout > Unreachable
+        // ── Stage 4: test connectivity (with skip-recent logic) ──
+        // Skip:
+        //   1. Verified entries (gold — the weaker TCP+TLS test can only downgrade them)
+        //   2. Entries tested within the last `skipRecentHours` hours (default 6h):
+        //      their status is fresh enough, re-testing wastes user time. The Retest button
+        //      forces a full re-check regardless of age.
+        // Priority for the rest: Ok > Slow > Unknown > Implausible > TlsFailed > Timeout > Unreachable
+        var now = DateTime.UtcNow;
+        var skipCutoff = now - TimeSpan.FromHours(skipRecentHours);
+        var skippedRecent = 0;
+
         var toTest = configs
-            .Where(c => c.Status != FreeConfigStatus.Verified)
+            .Where(c =>
+            {
+                if (c.Status == FreeConfigStatus.Verified) return false;
+                // Skip if tested recently AND had a definite status (Ok/Slow/TlsFailed/Timeout/Unreachable/Implausible).
+                // Unknown entries always get tested even if "LastTestedAt" was set (can happen with partial runs).
+                if (c.Status != FreeConfigStatus.Unknown &&
+                    c.LastTestedAt.HasValue && c.LastTestedAt.Value >= skipCutoff)
+                {
+                    Interlocked.Increment(ref skippedRecent);
+                    return false;
+                }
+                return true;
+            })
             .OrderBy(c => c.Status switch
             {
                 FreeConfigStatus.Ok          => 0,
@@ -193,6 +213,12 @@ public sealed class FreeConfigAggregator
             .Take(maxTestCount)
             .ToList();
 
+        if (skippedRecent > 0)
+        {
+            _logger.Information("FreeConfigAggregator: skipped {n} recently-tested entries (< {h}h old)",
+                skippedRecent, skipRecentHours);
+        }
+
         var cacheFile = new FreeConfigCache.CacheFile
         {
             LastAggregatedAt = DateTime.UtcNow,
@@ -200,7 +226,10 @@ public sealed class FreeConfigAggregator
         };
         _cache.Save(cacheFile); // initial save so partial results survive unexpected exit
 
-        OnStageChanged?.Invoke($"Testing {toTest.Count} configs...");
+        var stageMsg = skippedRecent > 0
+            ? $"Testing {toTest.Count} configs (skipped {skippedRecent} recently-tested)..."
+            : $"Testing {toTest.Count} configs...";
+        OnStageChanged?.Invoke(stageMsg);
         var lastSave = DateTime.UtcNow;
         var progress = new Progress<(int done, int total)>(p =>
         {
