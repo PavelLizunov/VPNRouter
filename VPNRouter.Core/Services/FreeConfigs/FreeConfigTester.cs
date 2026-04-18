@@ -19,7 +19,7 @@ namespace VPNRouter.Core.Services.FreeConfigs;
 public sealed class FreeConfigTester
 {
     private static readonly TimeSpan TcpConnectTimeout = TimeSpan.FromSeconds(3);
-    private static readonly TimeSpan TlsHandshakeTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan TlsHandshakeTimeout = TimeSpan.FromSeconds(3);  // v2.13.16: was 5s — most real servers handshake in <1s; 3s covers slow links
 
     /// <summary>Above this latency (ms) mark as "Slow" even if reachable.</summary>
     private const int SlowThresholdMs = 800;
@@ -31,7 +31,9 @@ public sealed class FreeConfigTester
     /// </summary>
     private const int ImplausibleThresholdMs = 5;
 
-    public int MaxConcurrency { get; set; } = 30;
+    // v2.13.16: bumped from 30 → 80. Ephemeral ports on Windows: 49152-65535 = ~16k,
+    // TIME_WAIT 2 min → 80 concurrent × 2s/test × 120s = ~9600 ports in flight at peak. Safe.
+    public int MaxConcurrency { get; set; } = 80;
 
     /// <summary>
     /// If true (default), require a valid TLS handshake (cert chain + SAN matching SNI)
@@ -85,9 +87,16 @@ public sealed class FreeConfigTester
             ct.ThrowIfCancellationRequested();
             var (status, latency, _) = await TcpPingAsync(cfg.Host, cfg.Port, ct);
             if (status == FreeConfigStatus.Ok)
+            {
                 latencies.Add(latency);
+            }
             else
+            {
                 tcpError = status;
+                // v2.13.16 smart retry: ConnectionRefused/HostUnreachable/HostNotFound are
+                // definitive — no point wasting a second 3s attempt. Only Timeout deserves retry.
+                if (status == FreeConfigStatus.Unreachable) break;
+            }
         }
 
         if (latencies.Count == 0)
