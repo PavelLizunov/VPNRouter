@@ -119,8 +119,7 @@
                 <ListBoxItem Content="{Binding LblTabNetwork}"     Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
                 <ListBoxItem Content="{Binding LblTabApps}"        Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
                 <ListBoxItem Content="{Binding LblTabTools}"       Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblTabFreeConfigs}" Padding="12,6" FontSize="12" FontWeight="SemiBold"
-                             Foreground="#7C3AED"/>
+                <ListBoxItem Content="{Binding LblTabFreeConfigs}" Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
             </ListBox>
 
             <!-- Pages: all six live in same Grid cell, only selected one visible. -->

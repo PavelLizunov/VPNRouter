@@ -133,14 +133,16 @@
                         IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                         Padding="0,8" FontSize="12" FontWeight="SemiBold" CornerRadius="5"
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                        Background="#7C3AED" Foreground="White"/>
+                        Background="#7C3AED" Foreground="White"
+                        ToolTip.Tip="{x:Static loc:Strings.FcRefreshTooltip}"/>
                 <Button Grid.Column="1" Margin="3,0,0,0"
                         Content="{x:Static loc:Strings.FcRetestAll}"
                         Command="{Binding FreeConfigsVm.RetestCommand}"
                         IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                         Padding="0,8" FontSize="12" FontWeight="SemiBold" CornerRadius="5"
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                        Background="#A78BFA" Foreground="White"/>
+                        Background="#A78BFA" Foreground="White"
+                        ToolTip.Tip="{x:Static loc:Strings.FcRetestTooltip}"/>
                 <Button Grid.Column="2" Margin="6,0,0,0"
                         Content="{x:Static loc:Strings.FcCancel}"
                         Command="{Binding FreeConfigsVm.CancelCommand}"
@@ -222,7 +224,8 @@
                             IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                             Padding="0,9" FontSize="12" FontWeight="Bold" CornerRadius="5"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                            Background="#059669" Foreground="White"/>
+                            Background="#059669" Foreground="White"
+                            ToolTip.Tip="{x:Static loc:Strings.FcDeepVerifyTooltip}"/>
                 </StackPanel>
             </Border>
 

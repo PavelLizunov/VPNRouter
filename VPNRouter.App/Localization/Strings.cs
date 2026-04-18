@@ -410,6 +410,17 @@ public static class Strings
     public static string FcUserSrcInvalidUrl   => Ru ? "Невалидный URL" : "Invalid URL";
     public static string FcUserSrcEmptyUrl     => Ru ? "Введите URL" : "Enter a URL";
 
+    // v2.14.5 — Tooltips
+    public static string FcRefreshTooltip => Ru
+        ? "Загрузить конфиги из всех источников (или pool.json с сервера), проверить TCP+TLS. ~2-15 мин в зависимости от настроек."
+        : "Fetch configs from all sources (or server-side pool.json), test TCP+TLS. ~2-15 min depending on settings.";
+    public static string FcRetestTooltip => Ru
+        ? "Перепроверить все ранее найденные конфиги (игнорирует skip-recent). ~15 мин для 25k."
+        : "Re-test every cached config (ignores skip-recent filter). ~15 min for 25k.";
+    public static string FcDeepVerifyTooltip => Ru
+        ? "Реальный HTTP-тест через временный sing-box. Единственная 100% проверка что конфиг работает. ~3-5 сек/конфиг."
+        : "Real HTTP test via a spawned sing-box. The only 100% proof a config actually works. ~3-5 sec/config.";
+
     // v2.13.19 — Privacy warning on first Connect from Free Configs
     public static string FcSecWarnTitle => Ru
         ? "Публичный прокси — предупреждение"
