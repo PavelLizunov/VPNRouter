@@ -119,6 +119,8 @@ var pool = new PoolFile
 var jsonOpts = new JsonSerializerOptions
 {
     WriteIndented = false,
+    // camelCase to match client-side FreeConfigPoolFetcher.ParsePool expectations
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
 };
 
