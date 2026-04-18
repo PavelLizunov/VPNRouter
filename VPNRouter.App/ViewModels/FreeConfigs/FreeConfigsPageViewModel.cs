@@ -108,7 +108,10 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            StatusText = Strings.FcStatusCancelled;
+            // CRITICAL: Aggregator saves partial test results to cache every 50 tests / 5s.
+            // On cancel, reload cache into the UI so the user sees their accumulated progress
+            // (not the stale pre-refresh state). Otherwise 14k/24k tested feels "reset".
+            await ReloadFromCacheAsync(Strings.FcStatusCancelled);
         }
         catch (Exception ex)
         {
@@ -141,7 +144,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            StatusText = Strings.FcStatusCancelled;
+            await ReloadFromCacheAsync(Strings.FcStatusCancelled);
         }
         catch (Exception ex)
         {
@@ -208,6 +211,32 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         var file = _aggregator.Cache.Load();
         file.Configs = _allConfigs;
         _aggregator.Cache.Save(file);
+    }
+
+    /// <summary>
+    /// Reload _allConfigs from the on-disk cache and refresh UI.
+    /// Used on OperationCanceledException so the user sees their partial test progress
+    /// (which the aggregator saves every 50 tests / 5s during the test stage) instead of
+    /// the stale pre-refresh state.
+    /// </summary>
+    private async Task ReloadFromCacheAsync(string statusText)
+    {
+        try
+        {
+            var file = _aggregator.Cache.Load();
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (file.Configs != null && file.Configs.Count > 0)
+                    _allConfigs = file.Configs;
+                ApplyFiltersAndStats();
+                StatusText = statusText;
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "ReloadFromCache failed");
+            StatusText = statusText;
+        }
     }
 
     /// <summary>Open the logs folder in Explorer so the user can see per-config deep-verify outcomes.</summary>
