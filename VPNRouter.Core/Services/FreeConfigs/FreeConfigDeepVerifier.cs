@@ -38,6 +38,10 @@ public sealed class FreeConfigDeepVerifier
     /// <summary>How many configs to verify in parallel.</summary>
     public int MaxConcurrency { get; set; } = 5;
 
+    /// <summary>v2.14.3: if true, after HTTP trace also measure download throughput
+    /// via a 5 MB file from cloudflare/hetzner/ovh. Adds 3-8s per config.</summary>
+    public bool MeasureBandwidth { get; set; } = false;
+
     public FreeConfigDeepVerifier(ILogger logger)
     {
         _logger = logger;
@@ -157,8 +161,29 @@ public sealed class FreeConfigDeepVerifier
                 cfg.Status = FreeConfigStatus.Verified;
                 cfg.LatencyMs = httpLatencyMs;
                 cfg.LastError = null;
-                _logger.Information("[DV] {host}:{port} [{cc}] ✓✓ VERIFIED in {ms}ms",
-                    cfg.Host, cfg.Port, cc, httpLatencyMs);
+
+                // v2.14.3: optional bandwidth measurement via 5 MB download through same SOCKS proxy.
+                if (MeasureBandwidth)
+                {
+                    var (bwOk, mbps, bwErr) = await MeasureBandwidthViaSocksAsync(socksPort, overallCts.Token);
+                    if (bwOk)
+                    {
+                        cfg.MeasuredBandwidthMbps = (int)Math.Round(mbps);
+                        cfg.BandwidthTestedAt = DateTime.UtcNow;
+                        _logger.Information("[DV] {host}:{port} [{cc}] ✓✓ VERIFIED in {ms}ms · {mbps} Mbps",
+                            cfg.Host, cfg.Port, cc, httpLatencyMs, cfg.MeasuredBandwidthMbps);
+                    }
+                    else
+                    {
+                        _logger.Information("[DV] {host}:{port} [{cc}] ✓✓ VERIFIED in {ms}ms · bw test failed: {err}",
+                            cfg.Host, cfg.Port, cc, httpLatencyMs, bwErr);
+                    }
+                }
+                else
+                {
+                    _logger.Information("[DV] {host}:{port} [{cc}] ✓✓ VERIFIED in {ms}ms",
+                        cfg.Host, cfg.Port, cc, httpLatencyMs);
+                }
             }
             else
             {
@@ -210,6 +235,62 @@ public sealed class FreeConfigDeepVerifier
     {
         s = s.Replace('\n', ' ').Replace('\r', ' ').Trim();
         return s.Length > max ? s[..max] + "…" : s;
+    }
+
+    /// <summary>
+    /// v2.14.3: Measure download throughput via 5 MB file over SOCKS proxy.
+    /// Tries Cloudflare → Hetzner → OVH in sequence. Returns (ok, mbps, err).
+    /// Adds ~3-8s per config depending on pipe bandwidth.
+    /// </summary>
+    private static async Task<(bool ok, double mbps, string? err)> MeasureBandwidthViaSocksAsync(
+        int socksPort, CancellationToken ct)
+    {
+        var handler = new System.Net.Http.SocketsHttpHandler
+        {
+            Proxy = new System.Net.WebProxy($"socks5://127.0.0.1:{socksPort}"),
+            UseProxy = true,
+            ConnectTimeout = TimeSpan.FromSeconds(5),
+        };
+        using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+
+        // Test URLs in priority order. Each returns ≥5 MB (we read exactly 5 MB and close).
+        var urls = new[]
+        {
+            "https://speed.cloudflare.com/__down?bytes=5242880",  // Cloudflare, global
+            "https://proof.ovh.net/files/10Mb.dat",               // OVH, EU
+            "https://ash-speed.hetzner.com/100MB.bin",            // Hetzner, EU (reads only 5 MB)
+        };
+
+        foreach (var url in urls)
+        {
+            try
+            {
+                var sw = Stopwatch.StartNew();
+                using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+                if (!resp.IsSuccessStatusCode) continue;
+
+                using var stream = await resp.Content.ReadAsStreamAsync(ct);
+                var buffer = new byte[8192];
+                long total = 0;
+                const long target = 5_242_880L; // 5 MB
+                while (total < target)
+                {
+                    var n = await stream.ReadAsync(buffer, ct);
+                    if (n == 0) break;
+                    total += n;
+                }
+                sw.Stop();
+
+                if (total < 1_000_000) continue; // too little data, probably cached/error
+                if (sw.ElapsedMilliseconds < 100) continue; // too fast, likely local cache hit
+
+                var mbps = (total * 8.0 / 1_000_000.0) / (sw.ElapsedMilliseconds / 1000.0);
+                return (true, mbps, null);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch { /* try next URL */ }
+        }
+        return (false, 0, "all bandwidth URLs failed");
     }
 
     /// <summary>

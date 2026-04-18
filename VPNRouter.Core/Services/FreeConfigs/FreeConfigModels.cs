@@ -79,6 +79,12 @@ public sealed class FreeConfigEntry
     /// <summary>Optional short reason for last failure (e.g. "cert mismatch", "tls timeout"). For UI diagnostics.</summary>
     public string? LastError { get; set; }
 
+    /// <summary>v2.14.3: measured download throughput in Mbps (during Deep Verify, optional).</summary>
+    public int? MeasuredBandwidthMbps { get; set; }
+
+    /// <summary>v2.14.3: when bandwidth was last measured (UTC).</summary>
+    public DateTime? BandwidthTestedAt { get; set; }
+
     /// <summary>
     /// Builds a VlessServerEntry from this free config, suitable for insertion into AppSettings.Vless.Servers.
     /// </summary>

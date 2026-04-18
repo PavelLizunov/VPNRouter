@@ -84,6 +84,38 @@ public partial class FreeConfigsPageViewModel : ObservableObject
     /// <summary>v2.13.18: if true, Refresh does TCP-only test (skip TLS handshake). 3× faster but misses honeypots.</summary>
     [ObservableProperty] private bool _fastScanMode = false;
 
+    // v2.14.3 — Deep Verify presets (ping + bandwidth goals)
+    /// <summary>Preset index: 0=Gaming, 1=Streaming, 2=Chat, 3=BestEffort, 4=Custom.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCustomPreset))]
+    [NotifyPropertyChangedFor(nameof(MeasureBandwidth))]
+    private int _deepVerifyPresetIndex = 3; // BestEffort default
+
+    /// <summary>Custom preset: max acceptable ping in ms.</summary>
+    [ObservableProperty] private int _customMaxPingMs = 200;
+    /// <summary>Custom preset: min acceptable download throughput in Mbps.</summary>
+    [ObservableProperty] private int _customMinBandwidthMbps = 5;
+
+    public bool IsCustomPreset => DeepVerifyPresetIndex == 4;
+
+    /// <summary>Whether bandwidth measurement is needed for the current preset.</summary>
+    public bool MeasureBandwidth => DeepVerifyPresetIndex switch
+    {
+        0 or 1 or 2 or 4 => true,  // Gaming/Streaming/Chat/Custom all use bw threshold
+        _ => false,                 // BestEffort skips bw test (faster)
+    };
+
+    /// <summary>Resolved (maxPing, minBwMbps) for current preset. null = no limit.</summary>
+    public (int? maxPing, int? minBw) ResolvedGoal => DeepVerifyPresetIndex switch
+    {
+        0 => (60, 2),    // Gaming
+        1 => (250, 10),  // Streaming
+        2 => (300, 1),   // Chat / web
+        3 => (null, null), // Best effort
+        4 => (CustomMaxPingMs, CustomMinBandwidthMbps), // Custom
+        _ => (null, null),
+    };
+
     /// <summary>True when no configs have been aggregated yet (cache is empty).</summary>
     public bool IsEmpty => _allConfigs.Count == 0;
     /// <summary>True when filters hide everything but cache isn't empty.</summary>
@@ -343,6 +375,10 @@ public partial class FreeConfigsPageViewModel : ObservableObject
             var target = Math.Max(1, DeepVerifyTargetCount);
             StatusText = Strings.FcStatusDeepVerifyStart(target);
 
+            // v2.14.3 — apply preset's bandwidth measurement toggle + ping/bw goals
+            _deepVerifier.MeasureBandwidth = MeasureBandwidth;
+            var (maxPing, minBw) = ResolvedGoal;
+
             var foundVerified = 0;
             var tested = 0;
             var lastSaveAt = DateTime.UtcNow;
@@ -365,7 +401,14 @@ public partial class FreeConfigsPageViewModel : ObservableObject
                     await _deepVerifier.VerifyOneAsync(cfg, ct);
 
                     Interlocked.Increment(ref tested);
-                    if (cfg.Status == FreeConfigStatus.Verified)
+
+                    // v2.14.3: count only entries that pass preset's ping+bw thresholds.
+                    var meetsPreset =
+                        cfg.Status == FreeConfigStatus.Verified &&
+                        (maxPing == null || cfg.LatencyMs > 0 && cfg.LatencyMs <= maxPing.Value) &&
+                        (minBw   == null || (cfg.MeasuredBandwidthMbps ?? 0) >= minBw.Value);
+
+                    if (meetsPreset)
                         Interlocked.Increment(ref foundVerified);
 
                     await Dispatcher.UIThread.InvokeAsync(() =>

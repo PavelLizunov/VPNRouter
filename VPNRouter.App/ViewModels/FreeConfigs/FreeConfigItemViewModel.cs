@@ -35,6 +35,9 @@ public partial class FreeConfigItemViewModel : ObservableObject
 
     public string LatencyDisplay => Entry.Status switch
     {
+        // v2.14.3: show bandwidth in the badge when measured
+        FreeConfigStatus.Verified when Entry.MeasuredBandwidthMbps.HasValue =>
+            $"{Entry.LatencyMs}ms · {Entry.MeasuredBandwidthMbps} Mbps ✓✓",
         FreeConfigStatus.Verified    => $"{Entry.LatencyMs} ms ✓✓",
         FreeConfigStatus.Ok          => $"{Entry.LatencyMs} ms ✓",
         FreeConfigStatus.Slow        => $"{Entry.LatencyMs} ms slow",

@@ -157,6 +157,43 @@
                                TextWrapping="Wrap" FontSize="10" Opacity="0.8"
                                Foreground="#065F46"/>
 
+                    <!-- v2.14.3: preset selector -->
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Text="{x:Static loc:Strings.FcPresetLabel}"
+                                   FontSize="11" Opacity="0.75" VerticalAlignment="Center"
+                                   Foreground="#065F46"/>
+                        <ComboBox SelectedIndex="{Binding FreeConfigsVm.DeepVerifyPresetIndex}"
+                                  MinWidth="260" Padding="6,3" FontSize="11">
+                            <ComboBoxItem Content="{x:Static loc:Strings.FcPresetGaming}"/>
+                            <ComboBoxItem Content="{x:Static loc:Strings.FcPresetStream}"/>
+                            <ComboBoxItem Content="{x:Static loc:Strings.FcPresetChat}"/>
+                            <ComboBoxItem Content="{x:Static loc:Strings.FcPresetBest}"/>
+                            <ComboBoxItem Content="{x:Static loc:Strings.FcPresetCustom}"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <!-- Custom ping/bandwidth inputs -->
+                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                                IsVisible="{Binding FreeConfigsVm.IsCustomPreset}">
+                        <TextBlock Text="{x:Static loc:Strings.FcCustomPing}"
+                                   FontSize="10" Opacity="0.75" VerticalAlignment="Center"
+                                   Foreground="#065F46"/>
+                        <NumericUpDown Value="{Binding FreeConfigsVm.CustomMaxPingMs}"
+                                       Minimum="20" Maximum="1000" Increment="20"
+                                       FormatString="0"
+                                       MinWidth="80" Padding="4,2" FontSize="10"/>
+                        <TextBlock Text="ms · " FontSize="10" Opacity="0.5" VerticalAlignment="Center"/>
+                        <TextBlock Text="{x:Static loc:Strings.FcCustomBw}"
+                                   FontSize="10" Opacity="0.75" VerticalAlignment="Center"
+                                   Foreground="#065F46"/>
+                        <NumericUpDown Value="{Binding FreeConfigsVm.CustomMinBandwidthMbps}"
+                                       Minimum="1" Maximum="500" Increment="1"
+                                       FormatString="0"
+                                       MinWidth="80" Padding="4,2" FontSize="10"/>
+                        <TextBlock Text="{x:Static loc:Strings.FcMbpsUnit}"
+                                   FontSize="10" Opacity="0.5" VerticalAlignment="Center"/>
+                    </StackPanel>
+
                     <!-- Target count + exclude RU -->
                     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
@@ -173,6 +210,12 @@
                                   FontSize="11" VerticalAlignment="Center"
                                   Foreground="#065F46"/>
                     </StackPanel>
+
+                    <!-- Bandwidth traffic warning (only if preset needs bw) -->
+                    <TextBlock Text="{x:Static loc:Strings.FcBandwidthHint}"
+                               TextWrapping="Wrap" FontSize="9" Opacity="0.65"
+                               Foreground="#78350F"
+                               IsVisible="{Binding FreeConfigsVm.MeasureBandwidth}"/>
 
                     <Button Content="{x:Static loc:Strings.FcDeepVerify}"
                             Command="{Binding FreeConfigsVm.DeepVerifyTopCommand}"

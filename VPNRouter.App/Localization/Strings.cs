@@ -381,6 +381,20 @@ public static class Strings
         ? "В 3 раза быстрее, но помечает как 'рабочие' даже honeypot-ы (открытый порт ≠ VLESS). Используйте только если Deep Verify отфильтрует дальше."
         : "3× faster but marks as 'working' even honeypots (open port ≠ VLESS). Use only if Deep Verify filters further.";
 
+    // v2.14.3 — Deep Verify presets
+    public static string FcPresetLabel    => Ru ? "Пресет:" : "Preset:";
+    public static string FcPresetGaming   => Ru ? "⚡ Gaming (пинг<60ms, bw>2 Mbps)" : "⚡ Gaming (ping<60ms, bw>2 Mbps)";
+    public static string FcPresetStream   => Ru ? "📺 Streaming (пинг<250ms, bw>10 Mbps)" : "📺 Streaming (ping<250ms, bw>10 Mbps)";
+    public static string FcPresetChat     => Ru ? "💬 Chat/web (пинг<300ms, bw>1 Mbps)" : "💬 Chat/web (ping<300ms, bw>1 Mbps)";
+    public static string FcPresetBest     => Ru ? "🚀 Best effort (любой рабочий)" : "🚀 Best effort (any verified)";
+    public static string FcPresetCustom   => Ru ? "⚙ Custom" : "⚙ Custom";
+    public static string FcCustomPing     => Ru ? "Макс пинг:" : "Max ping:";
+    public static string FcCustomBw       => Ru ? "Мин bw:" : "Min bw:";
+    public static string FcMbpsUnit       => "Mbps";
+    public static string FcBandwidthHint  => Ru
+        ? "Замер bandwidth скачивает ~5 MB через прокси (~150 MB для 30 кандидатов). OK на wifi, осторожно на мобильном."
+        : "Bandwidth test downloads ~5 MB per config via proxy (~150 MB for 30 candidates). OK on wifi, mind mobile data.";
+
     // v2.13.19 — Privacy warning on first Connect from Free Configs
     public static string FcSecWarnTitle => Ru
         ? "Публичный прокси — предупреждение"
