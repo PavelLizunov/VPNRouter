@@ -398,6 +398,8 @@ public static class Strings
     public static string FcSecFilters    => Ru ? "⚙ Фильтры"        : "⚙ Filters";
     public static string FcSecMySources  => Ru ? "👤 Мои источники" : "👤 My sources";
     public static string FcSecCleanup    => Ru ? "🧹 Очистка"       : "🧹 Cleanup";
+    public static string FcListHeader    => Ru ? "📋 Конфиги"       : "📋 Configs";
+    public static string FcListShown     => Ru ? "показано"         : "shown";
 
     // v2.13.18 — Fast scan toggle
     public static string FcFastScanLabel => Ru ? "⚡ Fast scan (только TCP, без TLS)" : "⚡ Fast scan (TCP only, no TLS)";

@@ -31,15 +31,15 @@
             </ListBox>
         </Border>
 
-        <!-- DETAIL (right): selected section on top + always-visible list below -->
+        <!-- DETAIL (right): selected section on top (Auto-sized) + always-visible list below -->
         <Grid Grid.Row="0" Grid.Column="1" RowDefinitions="Auto,*">
 
-            <!-- Top area: section-specific controls (scrollable, capped height) -->
-            <ScrollViewer Grid.Row="0"
-                          MaxHeight="300"
-                          HorizontalScrollBarVisibility="Disabled"
-                          VerticalScrollBarVisibility="Auto"
-                          Padding="12,10,14,8">
+            <!-- Top area: section-specific controls, Auto-sized. No inner scrollbar — if content
+                 overflows the window, the whole right panel is already inside the main window. -->
+            <Border Grid.Row="0"
+                    Padding="12,10,14,8"
+                    BorderThickness="0,0,0,1"
+                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
                 <StackPanel>
 
                     <!-- ─── Overview section ─── -->
@@ -375,10 +375,24 @@
                     </StackPanel>
 
                 </StackPanel>
-            </ScrollViewer>
+            </Border>
 
             <!-- ─── Always-visible list at bottom of right panel ─── -->
-            <Grid Grid.Row="1" Margin="12,4,14,6">
+            <Grid Grid.Row="1" Margin="12,6,14,6" RowDefinitions="Auto,*">
+
+                <!-- List header — makes it clear this is the MAIN pool, not user sources -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
+                    <TextBlock Text="{x:Static loc:Strings.FcListHeader}"
+                               FontSize="11" FontWeight="SemiBold" Opacity="0.75"
+                               VerticalAlignment="Center"/>
+                    <TextBlock FontSize="9" Opacity="0.5" VerticalAlignment="Center">
+                        <Run Text="{Binding FreeConfigsVm.DisplayedConfigs.Count}"/>
+                        <Run Text="{x:Static loc:Strings.FcListShown}"/>
+                    </TextBlock>
+                </StackPanel>
+
+                <!-- Empty / filtered-empty / populated states go in Row 1 -->
+                <Grid Grid.Row="1">
                 <!-- Empty state -->
                 <Border IsVisible="{Binding FreeConfigsVm.IsEmpty}"
                         BorderThickness="2" CornerRadius="6"
@@ -474,6 +488,7 @@
                         </ListBox>
                     </Grid>
                 </Border>
+            </Grid>
             </Grid>
         </Grid>
 
