@@ -279,6 +279,9 @@ public sealed class FreeConfigDeepVerifier
             };
         }
 
+        // sing-box 1.13.3 quirk: DNS server with detour:"direct" is FATAL if the direct
+        // outbound is "empty" (just {type:direct,tag:direct}). Workaround: separate
+        // 'dns-direct' outbound with udp_fragment:true so it's non-empty.
         var root = new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = "error" },
@@ -286,9 +289,9 @@ public sealed class FreeConfigDeepVerifier
             {
                 ["servers"] = new JsonArray
                 {
-                    new JsonObject { ["type"] = "udp", ["tag"] = "dns-direct", ["server"] = "1.1.1.1", ["detour"] = "direct" },
+                    new JsonObject { ["type"] = "udp", ["tag"] = "dns-google", ["server"] = "1.1.1.1", ["detour"] = "dns-direct-out" },
                 },
-                ["final"] = "dns-direct",
+                ["final"] = "dns-google",
             },
             ["inbounds"] = new JsonArray
             {
@@ -304,12 +307,13 @@ public sealed class FreeConfigDeepVerifier
             ["outbounds"] = new JsonArray
             {
                 outbound,
-                new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
+                // Dedicated non-empty direct outbound for DNS detour (udp_fragment:true makes it non-empty in 1.13).
+                new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true },
             },
             ["route"] = new JsonObject
             {
                 ["final"] = "proxy",
-                ["default_domain_resolver"] = new JsonObject { ["server"] = "dns-direct" },
+                ["default_domain_resolver"] = new JsonObject { ["server"] = "dns-google" },
                 ["rules"] = new JsonArray
                 {
                     new JsonObject { ["action"] = "sniff" },
