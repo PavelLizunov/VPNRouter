@@ -9,17 +9,45 @@
              x:Class="VPNRouter.App.Views.Pages.FreeConfigsPage"
              x:DataType="vm:MainWindowViewModel">
 
-    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+
+        <!-- ═══ v2.13.17: 3-step quickstart banner (dismissible) ═══ -->
+        <Border Grid.Row="0"
+                IsVisible="{Binding FreeConfigsVm.ShowQuickstart}"
+                Margin="12,10,14,6" Padding="14,10"
+                CornerRadius="6"
+                Background="#EEF2FF" BorderBrush="#6366F1" BorderThickness="1">
+            <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0"
+                               Text="{x:Static loc:Strings.FcQuickstartTitle}"
+                               FontSize="13" FontWeight="Bold"
+                               Foreground="#3730A3"/>
+                    <Button Grid.Column="1"
+                            Content="✕"
+                            Command="{Binding FreeConfigsVm.DismissQuickstartCommand}"
+                            Background="Transparent" BorderThickness="0"
+                            Padding="6,2" FontSize="12" Opacity="0.6"
+                            ToolTip.Tip="{x:Static loc:Strings.FcQuickstartDismiss}"/>
+                </Grid>
+                <TextBlock Text="{x:Static loc:Strings.FcQuickstartStep1}"
+                           TextWrapping="Wrap" FontSize="10" Foreground="#3730A3"/>
+                <TextBlock Text="{x:Static loc:Strings.FcQuickstartStep2}"
+                           TextWrapping="Wrap" FontSize="10" Foreground="#3730A3"/>
+                <TextBlock Text="{x:Static loc:Strings.FcQuickstartStep3}"
+                           TextWrapping="Wrap" FontSize="10" Foreground="#3730A3"/>
+            </StackPanel>
+        </Border>
 
         <!-- ═══ Description ═══ -->
-        <TextBlock Grid.Row="0"
+        <TextBlock Grid.Row="1"
                    Text="{x:Static loc:Strings.FcPageDescription}"
                    TextWrapping="Wrap"
                    FontSize="10" Opacity="0.65"
-                   Margin="12,10,14,6"/>
+                   Margin="12,0,14,6"/>
 
         <!-- ═══ Dashboard (6 chips incl. ✓✓ Verified) ═══ -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*,*,*" Margin="12,0,14,6">
+        <Grid Grid.Row="2" ColumnDefinitions="*,*,*,*,*,*" Margin="12,0,14,6">
             <Border Grid.Column="0" Margin="0,0,2,0" Padding="5,4" CornerRadius="4"
                     Background="{DynamicResource SystemControlBackgroundListLowBrush}">
                 <StackPanel>
@@ -71,7 +99,7 @@
         </Grid>
 
         <!-- ═══ Toolbar (big prominent action buttons) ═══ -->
-        <StackPanel Grid.Row="2" Margin="12,0,14,8" Spacing="6">
+        <StackPanel Grid.Row="3" Margin="12,0,14,8" Spacing="6">
 
             <!-- v2.13.17: Smart Refresh goal settings -->
             <Border Padding="8,5" CornerRadius="4"
@@ -323,7 +351,7 @@
         </StackPanel>
 
         <!-- ═══ List + Empty states ═══ -->
-        <Grid Grid.Row="3" Margin="12,0,14,6">
+        <Grid Grid.Row="4" Margin="12,0,14,6">
 
             <!-- Empty state: no configs in cache at all — big CTA button -->
             <Border IsVisible="{Binding FreeConfigsVm.IsEmpty}"
@@ -434,7 +462,7 @@
         </Grid>
 
         <!-- ═══ Bottom status + Apply button ═══ -->
-        <Border Grid.Row="4" Padding="12,8,14,8"
+        <Border Grid.Row="5" Padding="12,8,14,8"
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
             <StackPanel Spacing="6">

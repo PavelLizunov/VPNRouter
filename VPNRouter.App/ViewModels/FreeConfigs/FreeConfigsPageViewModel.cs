@@ -87,6 +87,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject
     [ObservableProperty] private int _latencyGoalTarget = 50;
     [ObservableProperty] private int _latencyGoalMaxPingMs = 200;
 
+    /// <summary>v2.13.17: show the 3-step quickstart banner at top of page. User can dismiss.</summary>
+    [ObservableProperty] private bool _showQuickstart = true;
+
+    [RelayCommand]
+    private void DismissQuickstart() => ShowQuickstart = false;
+
     /// <summary>v2.13.18: if true, Refresh does TCP-only test (skip TLS handshake). 3× faster but misses honeypots.</summary>
     [ObservableProperty] private bool _fastScanMode = false;
 

@@ -375,6 +375,19 @@ public static class Strings
         ? "Ускоряет Refresh: остановка как только накопится N конфигов с низким пингом. Отключите для полного сканирования."
         : "Speeds up Refresh: stops once N low-ping configs are found. Uncheck for full scan.";
 
+    // v2.13.17 — Quickstart banner
+    public static string FcQuickstartTitle => Ru ? "👋 Как начать (3 шага)" : "👋 How to start (3 steps)";
+    public static string FcQuickstartStep1 => Ru
+        ? "1. Нажмите «Обновить список» — приложение скачает конфиги из 14 публичных источников и проверит их (TCP + TLS). Это занимает ~15 мин в первый раз."
+        : "1. Click 'Refresh list' — app downloads configs from 14 public sources and tests them (TCP + TLS). Takes ~15 min first time.";
+    public static string FcQuickstartStep2 => Ru
+        ? "2. Нажмите «Deep verify» — временный sing-box проверит реально ли конфиг несёт трафик через HTTPS запрос. Обычно находит 5 рабочих из 30 за ~3 мин."
+        : "2. Click 'Deep verify' — a temporary sing-box tests whether each config actually carries HTTPS traffic. Usually finds 5 working out of 30 in ~3 min.";
+    public static string FcQuickstartStep3 => Ru
+        ? "3. Выберите строку с ✓✓ (зелёный бейдж) и нажмите «Connect» внизу. Для точного теста отключите текущий VPN перед Refresh."
+        : "3. Select a row with ✓✓ (green badge) and click 'Connect' at the bottom. For accurate testing, disconnect your main VPN before Refresh.";
+    public static string FcQuickstartDismiss => Ru ? "Понятно, скрыть гайд" : "Got it, hide guide";
+
     // v2.13.18 — Fast scan toggle
     public static string FcFastScanLabel => Ru ? "⚡ Fast scan (только TCP, без TLS)" : "⚡ Fast scan (TCP only, no TLS)";
     public static string FcFastScanHint  => Ru
