@@ -120,10 +120,20 @@ public sealed class FreeConfigAggregator
         }
 
         // ── Stage 3: enrich GeoIP (only for entries without CC) ──
-        OnStageChanged?.Invoke("Resolving country codes...");
         var needGeo = configs.Where(c => string.IsNullOrEmpty(c.CountryCode)).ToList();
         if (needGeo.Count > 0)
         {
+            OnStageChanged?.Invoke($"Resolving country codes ({needGeo.Count} IPs)...");
+
+            // Forward GeoIP internal progress to UI so user sees what's happening.
+            _geoIp.Progress = new Progress<(string stage, int done, int total)>(p =>
+            {
+                var label = p.stage == "dns"
+                    ? $"Resolving DNS: {p.done}/{p.total}"
+                    : $"Resolving country (batch {p.done}/{p.total})";
+                OnStageChanged?.Invoke(label);
+            });
+
             try
             {
                 await _geoIp.EnrichAsync(needGeo, ct);
@@ -131,6 +141,10 @@ public sealed class FreeConfigAggregator
             catch (Exception ex)
             {
                 _logger.Warning("GeoIP enrich failed: {err}", ex.Message);
+            }
+            finally
+            {
+                _geoIp.Progress = null;
             }
         }
 

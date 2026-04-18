@@ -19,9 +19,13 @@ public sealed class FreeConfigGeoIp
     private readonly SemaphoreSlim _rateLimit = new(1, 1);
     private DateTime _lastBatchAt = DateTime.MinValue;
 
-    // ip-api.com: 45 requests/minute for unauthenticated free tier.
-    // We do batches of up to 100 IPs → very comfortable limit.
-    private static readonly TimeSpan MinDelayBetweenBatches = TimeSpan.FromSeconds(2);
+    // ip-api.com: 45 requests/minute for unauthenticated free tier = 1 req per 1.33s.
+    // We respect that with a safety margin — 1.5s between batches (40 batches/min).
+    // Each batch is 100 IPs so 40 batches × 100 = 4000 IPs/min throughput.
+    private static readonly TimeSpan MinDelayBetweenBatches = TimeSpan.FromMilliseconds(1500);
+
+    /// <summary>Optional progress reporter for UI: (stage, done, total).</summary>
+    public IProgress<(string stage, int done, int total)>? Progress { get; set; }
 
     public FreeConfigGeoIp(ILogger logger)
     {
@@ -36,22 +40,33 @@ public sealed class FreeConfigGeoIp
     public async Task EnrichAsync(IReadOnlyList<FreeConfigEntry> configs, CancellationToken ct = default)
     {
         // Step 1: DNS resolve in parallel (limited).
-        using var sem = new SemaphoreSlim(20);
+        using var sem = new SemaphoreSlim(30);
+        var total = configs.Count;
+        var done = 0;
+
         var resolveTasks = configs.Select(async cfg =>
         {
-            if (cfg.ResolvedIp != null) return;
+            if (cfg.ResolvedIp != null)
+            {
+                var d = Interlocked.Increment(ref done);
+                Progress?.Report(("dns", d, total));
+                return;
+            }
 
-            // Host may already be an IPv4 literal.
             if (IPAddress.TryParse(cfg.Host, out var ip))
             {
                 cfg.ResolvedIp = ip.ToString();
+                var d = Interlocked.Increment(ref done);
+                Progress?.Report(("dns", d, total));
                 return;
             }
 
             await sem.WaitAsync(ct);
             try
             {
-                var entries = await Dns.GetHostAddressesAsync(cfg.Host, ct);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(TimeSpan.FromSeconds(3));
+                var entries = await Dns.GetHostAddressesAsync(cfg.Host, cts.Token);
                 var v4 = entries.FirstOrDefault(e => e.AddressFamily == AddressFamily.InterNetwork);
                 cfg.ResolvedIp = v4?.ToString();
             }
@@ -62,6 +77,8 @@ public sealed class FreeConfigGeoIp
             finally
             {
                 sem.Release();
+                var d = Interlocked.Increment(ref done);
+                Progress?.Report(("dns", d, total));
             }
         });
         await Task.WhenAll(resolveTasks);
@@ -75,11 +92,17 @@ public sealed class FreeConfigGeoIp
             .ToList();
 
         // Step 3: Batch ip-api.com calls (100 IPs per request).
-        foreach (var batch in uncached.Chunk(100))
+        var batches = uncached.Chunk(100).ToList();
+        var batchDone = 0;
+        Progress?.Report(("geoip", 0, batches.Count));
+
+        foreach (var batch in batches)
         {
             ct.ThrowIfCancellationRequested();
             await RespectRateLimitAsync(ct);
             await QueryBatchAsync(batch, ct);
+            batchDone++;
+            Progress?.Report(("geoip", batchDone, batches.Count));
         }
 
         // Step 4: Assign country codes from cache.

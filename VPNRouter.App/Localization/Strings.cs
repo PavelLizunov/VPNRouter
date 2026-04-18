@@ -158,6 +158,16 @@ public static class Strings
     public static string UpdateFailed => Ru ? "Ошибка обновления: {0}" : "Update failed: {0}";
 
     // ── Channel ──
+    public static string SettingsAutosaved => Ru
+        ? "✓ Настройки сохраняются автоматически при изменении"
+        : "✓ Settings are auto-saved on every change";
+    public static string ApplyNowReloadVpn => Ru
+        ? "↻ Применить сейчас (перезапустить VPN)"
+        : "↻ Apply now (reload VPN)";
+    public static string ApplyNowHint => Ru
+        ? "Переприменить настройки к работающему VPN без переподключения (hot-reload через Clash API)"
+        : "Re-apply settings to the running VPN without a reconnect (hot-reload via Clash API)";
+
     public static string ChannelStable => Ru ? "● Стабильная" : "● Stable";
     public static string ChannelExperimental => Ru ? "⚠ Эксперимент." : "⚠ Experimental";
 

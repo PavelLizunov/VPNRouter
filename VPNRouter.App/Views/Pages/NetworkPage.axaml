@@ -1,17 +1,18 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
+             xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
              x:Class="VPNRouter.App.Views.Pages.NetworkPage"
              x:DataType="vm:MainWindowViewModel">
 
-    <!-- Master-detail: section list left, controls right -->
-    <Grid ColumnDefinitions="160,*">
+    <!-- Master-detail: section list left, controls right + bottom confirmation bar -->
+    <Grid RowDefinitions="*,Auto" ColumnDefinitions="160,*">
 
         <!-- MASTER (left): section navigator -->
-        <Border Grid.Column="0"
+        <Border Grid.Row="0" Grid.Column="0"
                 BorderThickness="0,0,1,0"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
                 Background="{DynamicResource SystemControlBackgroundListLowBrush}">
@@ -29,7 +30,7 @@
         </Border>
 
         <!-- DETAIL (right): selected section -->
-        <ScrollViewer Grid.Column="1"
+        <ScrollViewer Grid.Row="0" Grid.Column="1"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto"
                       Padding="14,10,14,12">
@@ -149,5 +150,27 @@
 
           </StackPanel>
         </ScrollViewer>
+
+        <!-- Bottom bar: auto-save confirmation + explicit Apply button -->
+        <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                Padding="14,8,14,10"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                           Text="{x:Static loc:Strings.SettingsAutosaved}"
+                           FontSize="10" FontWeight="SemiBold"
+                           Foreground="#059669"
+                           VerticalAlignment="Center"/>
+                <Button Grid.Column="1"
+                        Content="{x:Static loc:Strings.ApplyNowReloadVpn}"
+                        Command="{Binding ApplyPendingChangesCommand}"
+                        IsEnabled="{Binding IsConnected}"
+                        Padding="10,5" FontSize="10" FontWeight="SemiBold" CornerRadius="4"
+                        Background="#2563EB" Foreground="White"
+                        ToolTip.Tip="{x:Static loc:Strings.ApplyNowHint}"/>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>
