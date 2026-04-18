@@ -159,6 +159,13 @@ public class AppConfig
     public bool FreeConfigSecurityWarningAcked { get; set; } = false;
 
     /// <summary>
+    /// v2.14.4 — user-provided VLESS source URLs (private subscriptions).
+    /// Merged with built-in sources during Refresh. Each entry has name, URL, enabled flag.
+    /// </summary>
+    [YamlMember(Alias = "user_free_sources")]
+    public List<UserFreeSource> UserFreeSources { get; set; } = new();
+
+    /// <summary>
     /// "Strict DNS" — when true, ALL DNS queries are routed through the VPN
     /// (vpn-dns), not just queries from routed processes. Eliminates DNS leaks
     /// from system services (svchost DnsCache), background apps, and any process
@@ -589,4 +596,24 @@ public class UpdateSettings
     [YamlIgnore]
     public bool IsExperimental =>
         Channel.Equals("experimental", StringComparison.OrdinalIgnoreCase);
+}
+
+
+/// <summary>
+/// v2.14.4 — user-provided source URL for Free Configs aggregation.
+/// Private subscriptions that user wants to include alongside the 14 public sources.
+/// </summary>
+public class UserFreeSource
+{
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = string.Empty;
+
+    [YamlMember(Alias = "url")]
+    public string Url { get; set; } = string.Empty;
+
+    [YamlMember(Alias = "enabled")]
+    public bool Enabled { get; set; } = true;
+
+    [YamlMember(Alias = "added_at")]
+    public DateTime AddedAt { get; set; } = DateTime.UtcNow;
 }

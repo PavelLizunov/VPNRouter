@@ -1,3 +1,5 @@
+using VPNRouter.Core.Models;
+
 namespace VPNRouter.Core.Services.FreeConfigs;
 
 /// <summary>
@@ -6,6 +8,38 @@ namespace VPNRouter.Core.Services.FreeConfigs;
 /// </summary>
 public static class FreeConfigSources
 {
+    /// <summary>
+    /// v2.14.4: merge built-in sources with user-provided ones (enabled only).
+    /// User sources are appended last (lower priority).
+    /// </summary>
+    public static List<FreeConfigSource> GetAll(AppSettings? settings = null)
+    {
+        var result = new List<FreeConfigSource>(Default);
+        if (settings?.App.UserFreeSources == null) return result;
+
+        foreach (var u in settings.App.UserFreeSources.Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)))
+        {
+            result.Add(new FreeConfigSource
+            {
+                Name = string.IsNullOrWhiteSpace(u.Name) ? $"👤 {TrimHost(u.Url)}" : $"👤 {u.Name}",
+                Url = u.Url,
+                Enabled = true,
+                ExpectedCount = 0, // unknown for user sources
+            });
+        }
+        return result;
+    }
+
+    private static string TrimHost(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            return uri.Host;
+        }
+        catch { return "user source"; }
+    }
+
     public static IReadOnlyList<FreeConfigSource> Default { get; } = new List<FreeConfigSource>
     {
         new()

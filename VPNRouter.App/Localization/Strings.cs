@@ -395,6 +395,21 @@ public static class Strings
         ? "Замер bandwidth скачивает ~5 MB через прокси (~150 MB для 30 кандидатов). OK на wifi, осторожно на мобильном."
         : "Bandwidth test downloads ~5 MB per config via proxy (~150 MB for 30 candidates). OK on wifi, mind mobile data.";
 
+    // v2.14.4 — User sources
+    public static string FcUserSrcSection      => Ru ? "👤 Мои источники" : "👤 My sources";
+    public static string FcUserSrcNamePlaceholder => Ru ? "Имя (опционально)" : "Name (optional)";
+    public static string FcUserSrcUrlPlaceholder  => Ru ? "URL подписки (https://...)" : "Subscription URL (https://...)";
+    public static string FcUserSrcAdd          => Ru ? "+ Добавить" : "+ Add";
+    public static string FcUserSrcHint         => Ru
+        ? "Ваши собственные VLESS-подписки (raw или base64). Объединяются с 14 встроенными источниками при Refresh."
+        : "Your own VLESS subscription URLs (raw or base64). Merged with the 14 built-in sources during Refresh.";
+    public static string FcUserSrcEmpty        => Ru ? "Пусто. Добавьте URL выше." : "Empty. Add a URL above.";
+    public static string FcUserSrcAdded        => Ru ? "Источник добавлен" : "Source added";
+    public static string FcUserSrcRemoved      => Ru ? "Источник удалён" : "Source removed";
+    public static string FcUserSrcDuplicate    => Ru ? "Этот URL уже добавлен" : "URL already in list";
+    public static string FcUserSrcInvalidUrl   => Ru ? "Невалидный URL" : "Invalid URL";
+    public static string FcUserSrcEmptyUrl     => Ru ? "Введите URL" : "Enter a URL";
+
     // v2.13.19 — Privacy warning on first Connect from Free Configs
     public static string FcSecWarnTitle => Ru
         ? "Публичный прокси — предупреждение"

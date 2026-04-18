@@ -488,7 +488,7 @@ public partial class MainWindowViewModel : ViewModelBase
         // Sub-VMs
         UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger);
         ServiceVm = new ServiceViewModel(_logger);
-        FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync);
+        FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync, () => _settings);
 
         LoadSettingsIntoUI();
 

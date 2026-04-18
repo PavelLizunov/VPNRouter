@@ -18,18 +18,24 @@ public partial class FreeConfigsPageViewModel : ObservableObject
     private readonly FreeConfigDeepVerifier _deepVerifier;
     private readonly ILogger _logger;
     private readonly Func<FreeConfigEntry, Task<bool>> _applyAsync;
+    private readonly Func<VPNRouter.Core.Models.AppSettings>? _getSettings;
 
     private List<FreeConfigEntry> _allConfigs = new();
     private CancellationTokenSource? _refreshCts;
 
-    public FreeConfigsPageViewModel(ILogger logger, Func<FreeConfigEntry, Task<bool>> applyAsync)
+    public FreeConfigsPageViewModel(
+        ILogger logger,
+        Func<FreeConfigEntry, Task<bool>> applyAsync,
+        Func<VPNRouter.Core.Models.AppSettings>? getSettings = null)
     {
         _logger = logger;
         _applyAsync = applyAsync;
+        _getSettings = getSettings;
         _aggregator = new FreeConfigAggregator(logger);
         _aggregator.OnStageChanged += OnAggregatorStage;
         _aggregator.OnTestProgress  += OnAggregatorProgress;
         _deepVerifier = new FreeConfigDeepVerifier(logger);
+        ReloadUserSources(); // v2.14.4
 
         // Load cached snapshot if exists.
         var file = _aggregator.Cache.Load();
@@ -141,7 +147,11 @@ public partial class FreeConfigsPageViewModel : ObservableObject
             // v2.13.18: apply fast scan toggle before RefreshAsync reads it
             _aggregator.RequireTlsHandshake = !FastScanMode;
 
+            // v2.14.4: merge user-provided sources with built-in 14.
+            var sources = FreeConfigSources.GetAll(_getSettings?.Invoke());
+
             var fresh = await Task.Run(() => _aggregator.RefreshAsync(
+                sources: sources,
                 goalTargetCount:  UseLatencyGoal ? LatencyGoalTarget : (int?)null,
                 goalMaxLatencyMs: UseLatencyGoal ? LatencyGoalMaxPingMs : (int?)null,
                 ct: _refreshCts.Token));
@@ -301,6 +311,80 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         {
             StatusText = Strings.FcStatusFailed(ex.Message);
         }
+    }
+
+    // ── v2.14.4: User-provided source management ──
+
+    /// <summary>Input for adding a new user source.</summary>
+    [ObservableProperty] private string _newUserSourceName = string.Empty;
+    [ObservableProperty] private string _newUserSourceUrl = string.Empty;
+
+    public System.Collections.ObjectModel.ObservableCollection<VPNRouter.Core.Models.UserFreeSource> UserSources { get; } = new();
+
+    /// <summary>Reload user sources from _getSettings into the local ObservableCollection.</summary>
+    public void ReloadUserSources()
+    {
+        UserSources.Clear();
+        if (_getSettings?.Invoke() is { } s)
+            foreach (var u in s.App.UserFreeSources)
+                UserSources.Add(u);
+    }
+
+    [RelayCommand]
+    private void AddUserSource()
+    {
+        var url = (NewUserSourceUrl ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            StatusText = Strings.FcUserSrcEmptyUrl;
+            return;
+        }
+        if (!Uri.TryCreate(url, UriKind.Absolute, out _))
+        {
+            StatusText = Strings.FcUserSrcInvalidUrl;
+            return;
+        }
+
+        var settings = _getSettings?.Invoke();
+        if (settings == null) return;
+
+        // Dedup by URL
+        if (settings.App.UserFreeSources.Any(s => string.Equals(s.Url, url, StringComparison.OrdinalIgnoreCase)))
+        {
+            StatusText = Strings.FcUserSrcDuplicate;
+            return;
+        }
+
+        settings.App.UserFreeSources.Add(new VPNRouter.Core.Models.UserFreeSource
+        {
+            Name = (NewUserSourceName ?? string.Empty).Trim(),
+            Url = url,
+            Enabled = true,
+            AddedAt = DateTime.UtcNow,
+        });
+
+        // Persist via the settings accessor (which points to MainWindowViewModel._settings)
+        VPNRouter.Core.Services.SettingsLoader.Save(settings, VPNRouter.Core.AppPaths.ConfigYamlPath);
+
+        ReloadUserSources();
+        NewUserSourceName = string.Empty;
+        NewUserSourceUrl = string.Empty;
+        StatusText = Strings.FcUserSrcAdded;
+    }
+
+    [RelayCommand]
+    private void RemoveUserSource(VPNRouter.Core.Models.UserFreeSource src)
+    {
+        if (src == null) return;
+        var settings = _getSettings?.Invoke();
+        if (settings == null) return;
+
+        settings.App.UserFreeSources.RemoveAll(s =>
+            string.Equals(s.Url, src.Url, StringComparison.OrdinalIgnoreCase));
+
+        VPNRouter.Core.Services.SettingsLoader.Save(settings, VPNRouter.Core.AppPaths.ConfigYamlPath);
+        ReloadUserSources();
+        StatusText = Strings.FcUserSrcRemoved;
     }
 
     /// <summary>Detect whether the main (TUN-mode) sing-box process is running.</summary>
