@@ -27,12 +27,13 @@ Routes **selected applications** through a VLESS+Reality proxy (via [sing-box](h
 
 Add-ons on top of the core router:
 
-- **Free Configs tab** — aggregates public VLESS configs from 6 open sources, TCP-pings each server, sorts by latency. Click to connect.
+- **Free Configs tab** — aggregates **25 000+ public VLESS configs** from 14 open sources, TCP+TLS-validates each server, and verifies real connectivity through a temporary sing-box with an HTTP round-trip. Server-side aggregator (GitHub Actions cron) pre-computes GeoIP every 6 hours. Includes presets (Gaming / Streaming / Chat / Best effort) with latency + bandwidth goals, skip-RU option, per-user subscription sources, and a security-warning dialog on first connect.
 - **DPI bypass (Zapret)** — integrated [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) for platforms blocked by DPI without needing a proxy.
 - **Telegram proxy** — embedded MTProto proxy ([Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy)) for Telegram-only bypass.
 - **Custom sing-box configs** — bring your own JSON (TUIC, Hysteria2, Shadowsocks), keep per-process routing.
 - **Subscriptions** — multiple VLESS subscription URLs with auto-refresh, unified server pool.
 - **Windows Service mode** — runs at boot, survives user logoff.
+- **macOS support** — full Avalonia UI + sing-box TUN on Apple Silicon. Automated DMG builds via GitHub Actions.
 
 ## Screenshots
 
@@ -44,19 +45,27 @@ Add-ons on top of the core router:
 
 Grab the latest build from [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest):
 
+| File | Platform | What it is |
+|---|---|---|
+| `VPNRouter-v{version}-win.zip` | 🪟 Windows | Full installer (first install) |
+| `VPNRouter-update-v{version}-win.zip` | 🪟 Windows | DLL-only update (if you're already on a recent version) |
+| `VPNRouter-v{version}-mac.dmg` | 🍎 macOS | Drag-install DMG (Apple Silicon) with `InstallGuide.html` for one-time sudoers setup |
+| `VPNRouter-v{version}-mac.zip` | 🍎 macOS | Raw `.app` bundle (for manual install) |
+
+Also served automatically every 6 hours:
+
 | File | What it is |
 |---|---|
-| `VPNRouter-v{version}-win.zip` | Full installer (first install) |
-| `VPNRouter-update-v{version}-win.zip` | DLL-only update (if you're already on a recent version) |
+| [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Aggregated ~25 000 public VLESS configs + GeoIP metadata. Consumed by the in-app Free Configs tab. |
 
-Run `VPNRouter.App.exe` as Administrator (required for TUN adapter + ETW process monitor + Windows Firewall rules).
+Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + ETW process monitor + Firewall rules). On macOS, follow the in-DMG `InstallGuide.html` for the one-time sudoers entry that lets TUN come up without a password prompt each time.
 
 ## Requirements
 
-- Windows 10/11 x64 (macOS support is partial — TUN works, some features are Windows-only)
-- Administrator rights (TUN, firewall, ETW)
-- [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) — bundled in the installer ZIP
-- A VLESS+Reality server (or use the Free Configs tab for a public one)
+- **Windows 10/11 x64** — Administrator rights (TUN, firewall, ETW)
+- **macOS 12+** — Apple Silicon (arm64). Intel is not currently packaged. First-run sudoers setup required (guided)
+- [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) — bundled in the installer
+- A VLESS+Reality server, or use the Free Configs tab for a public one
 
 ## Build from source
 
@@ -67,21 +76,30 @@ dotnet build VPNRouter.sln
 dotnet run --project VPNRouter.App
 ```
 
-Release build + packaging (Windows only, Administrator PowerShell):
+Release build + packaging:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.13.2"
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.14.10"
 ```
+
+```bash
+# macOS DMG — runs on any Mac with .NET 8 SDK
+./build-mac.sh 2.14.10
+```
+
+Both releases (Win ZIP + Mac DMG) are also built automatically via GitHub Actions on every `v*` tag push — see `.github/workflows/build-mac.yml` and `.github/workflows/build-free-pool.yml` (the latter publishes the rolling Free Configs pool).
 
 ## Architecture
 
 ```
 VPNRouter.sln
-├── VPNRouter.Core      — services, models, interfaces (cross-platform)
-├── VPNRouter.App       — Avalonia UI (cross-platform desktop)
-├── VPNRouter.CLI       — CLI tool (Spectre.Console)
-├── VPNRouter.Service   — Windows Service wrapper
-└── VPNRouter.Tests     — xUnit
+├── VPNRouter.Core                  — services, models, interfaces (cross-platform)
+├── VPNRouter.App                   — Avalonia UI (cross-platform desktop)
+├── VPNRouter.CLI                   — CLI tool (Spectre.Console)
+├── VPNRouter.Service               — Windows Service wrapper
+├── VPNRouter.Tools/PoolAggregator  — CI tool that builds the Free Configs pool.json
+└── VPNRouter.Tests                 — xUnit
 ```
 
 Core services live in `VPNRouter.Core/Services/` — `VpnEngine`, `SingBoxManager`, `HealthMonitor`, `ProcessScanner`, `ConfigGenerator`, `FirewallManager`, `EtwProcessMonitor`, `LeakProtection`, plus subsystems for Zapret, Telegram proxy, subscriptions, free configs, etc. See [`CLAUDE.md`](CLAUDE.md) for the deeper tour.
@@ -117,8 +135,10 @@ Standing on the shoulders of giants:
 - [bol-van/zapret](https://github.com/bol-van/zapret) — the original DPI bypass engine (MIT)
 - [Serilog](https://serilog.net/) · [CommunityToolkit.Mvvm](https://learn.microsoft.com/dotnet/communitytoolkit/mvvm/) · [YamlDotNet](https://github.com/aaubry/YamlDotNet)
 
-Public VLESS config aggregators used by the Free Configs tab:
-[zieng2/wl](https://github.com/zieng2/wl) · [EtoNeYaProject](https://github.com/EtoNeYaProject/etoneyaproject.github.io) · [igareck/vpn-configs-for-russia](https://github.com/igareck/vpn-configs-for-russia) · [CidVpn](https://github.com/CidVpn/cid-vpn-config) · [ByeWhiteLists2](https://github.com/ByeWhiteLists/ByeWhiteLists2) · [nowmeow.pw](https://nowmeow.pw)
+Public VLESS config aggregators used by the Free Configs tab (14 sources):
+[zieng2/wl](https://github.com/zieng2/wl) · [EtoNeYaProject](https://github.com/EtoNeYaProject/etoneyaproject.github.io) · [igareck/vpn-configs-for-russia](https://github.com/igareck/vpn-configs-for-russia) · [CidVpn](https://github.com/CidVpn/cid-vpn-config) · [ByeWhiteLists2](https://github.com/ByeWhiteLists/ByeWhiteLists2) · [nowmeow.pw](https://nowmeow.pw) · [sevcator/5ubscrpt10n](https://github.com/sevcator/5ubscrpt10n) · [ebrasha/free-v2ray-public-list](https://github.com/ebrasha/free-v2ray-public-list) · [barry-far/V2ray-config](https://github.com/barry-far/V2ray-config) · [kort0881/vpn-vless-configs-russia](https://github.com/kort0881/vpn-vless-configs-russia) · [Epodonios/v2ray-configs](https://github.com/Epodonios/v2ray-configs) · [MatinGhanbari/v2ray-configs](https://github.com/MatinGhanbari/v2ray-configs) · [V2RayRoot/V2RayConfig](https://github.com/V2RayRoot/V2RayConfig) · [etoneya.a9fm.site mirror](https://etoneya.a9fm.site)
+
+GeoIP enrichment for the server-side pool aggregator: [ip-api.com](https://ip-api.com) (free tier, batch endpoint, no API key required).
 
 ## License
 
