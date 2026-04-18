@@ -36,6 +36,14 @@ public sealed class FreeConfigAggregator
     /// <summary>v2.14.1: whether to prefer server-side pool.json over direct source fetch.</summary>
     public bool UseServerPool { get; set; } = true;
 
+    /// <summary>v2.13.18: toggle TLS handshake validation during TCP+TLS test stage.
+    /// true = full validation (default), false = TCP-only fast scan (~3× faster, misses honeypots).</summary>
+    public bool RequireTlsHandshake
+    {
+        get => _tester.RequireTlsHandshake;
+        set => _tester.RequireTlsHandshake = value;
+    }
+
     /// <summary>Access to the underlying cache for UI (path, current snapshot).</summary>
     public FreeConfigCache Cache => _cache;
 

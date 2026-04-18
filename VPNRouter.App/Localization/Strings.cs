@@ -375,6 +375,12 @@ public static class Strings
         ? "Ускоряет Refresh: остановка как только накопится N конфигов с низким пингом. Отключите для полного сканирования."
         : "Speeds up Refresh: stops once N low-ping configs are found. Uncheck for full scan.";
 
+    // v2.13.18 — Fast scan toggle
+    public static string FcFastScanLabel => Ru ? "⚡ Fast scan (только TCP, без TLS)" : "⚡ Fast scan (TCP only, no TLS)";
+    public static string FcFastScanHint  => Ru
+        ? "В 3 раза быстрее, но помечает как 'рабочие' даже honeypot-ы (открытый порт ≠ VLESS). Используйте только если Deep Verify отфильтрует дальше."
+        : "3× faster but marks as 'working' even honeypots (open port ≠ VLESS). Use only if Deep Verify filters further.";
+
     // v2.13.19 — Privacy warning on first Connect from Free Configs
     public static string FcSecWarnTitle => Ru
         ? "Публичный прокси — предупреждение"

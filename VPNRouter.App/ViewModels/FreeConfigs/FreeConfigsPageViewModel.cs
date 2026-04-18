@@ -81,6 +81,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject
     [ObservableProperty] private int _latencyGoalTarget = 50;
     [ObservableProperty] private int _latencyGoalMaxPingMs = 200;
 
+    /// <summary>v2.13.18: if true, Refresh does TCP-only test (skip TLS handshake). 3× faster but misses honeypots.</summary>
+    [ObservableProperty] private bool _fastScanMode = false;
+
     /// <summary>True when no configs have been aggregated yet (cache is empty).</summary>
     public bool IsEmpty => _allConfigs.Count == 0;
     /// <summary>True when filters hide everything but cache isn't empty.</summary>
@@ -103,6 +106,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         _refreshCts = new CancellationTokenSource();
         try
         {
+            // v2.13.18: apply fast scan toggle before RefreshAsync reads it
+            _aggregator.RequireTlsHandshake = !FastScanMode;
+
             var fresh = await Task.Run(() => _aggregator.RefreshAsync(
                 goalTargetCount:  UseLatencyGoal ? LatencyGoalTarget : (int?)null,
                 goalMaxLatencyMs: UseLatencyGoal ? LatencyGoalMaxPingMs : (int?)null,
