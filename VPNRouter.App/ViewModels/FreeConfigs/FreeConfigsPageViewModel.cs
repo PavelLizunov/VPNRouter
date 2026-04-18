@@ -76,6 +76,11 @@ public partial class FreeConfigsPageViewModel : ObservableObject
     /// <summary>If true, skip Russian-country configs during deep-verify (user is bypassing RU blocks).</summary>
     [ObservableProperty] private bool _excludeRu = true;
 
+    /// <summary>v2.13.17: if true, Refresh stops early once N configs matching the latency criterion are found.</summary>
+    [ObservableProperty] private bool _useLatencyGoal = false;
+    [ObservableProperty] private int _latencyGoalTarget = 50;
+    [ObservableProperty] private int _latencyGoalMaxPingMs = 200;
+
     /// <summary>True when no configs have been aggregated yet (cache is empty).</summary>
     public bool IsEmpty => _allConfigs.Count == 0;
     /// <summary>True when filters hide everything but cache isn't empty.</summary>
@@ -98,7 +103,10 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         _refreshCts = new CancellationTokenSource();
         try
         {
-            var fresh = await Task.Run(() => _aggregator.RefreshAsync(ct: _refreshCts.Token));
+            var fresh = await Task.Run(() => _aggregator.RefreshAsync(
+                goalTargetCount:  UseLatencyGoal ? LatencyGoalTarget : (int?)null,
+                goalMaxLatencyMs: UseLatencyGoal ? LatencyGoalMaxPingMs : (int?)null,
+                ct: _refreshCts.Token));
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 _allConfigs = fresh;

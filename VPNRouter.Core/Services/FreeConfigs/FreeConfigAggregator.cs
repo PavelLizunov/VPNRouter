@@ -52,6 +52,8 @@ public sealed class FreeConfigAggregator
         IReadOnlyList<FreeConfigSource>? sources = null,
         int maxTestCount = int.MaxValue,
         int skipRecentHours = 6,
+        int? goalTargetCount = null,
+        int? goalMaxLatencyMs = null,
         CancellationToken ct = default)
     {
         sources ??= FreeConfigSources.Default;
@@ -226,14 +228,49 @@ public sealed class FreeConfigAggregator
         };
         _cache.Save(cacheFile); // initial save so partial results survive unexpected exit
 
-        var stageMsg = skippedRecent > 0
-            ? $"Testing {toTest.Count} configs (skipped {skippedRecent} recently-tested)..."
-            : $"Testing {toTest.Count} configs...";
+        // v2.13.17: goal-seeking mode — stop early once N entries match latency criterion.
+        var goalMode = goalTargetCount.HasValue && goalMaxLatencyMs.HasValue;
+        using var goalCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        var stageMsg = goalMode
+            ? $"Testing {toTest.Count} configs · goal: find {goalTargetCount} with ping < {goalMaxLatencyMs}ms"
+            : skippedRecent > 0
+                ? $"Testing {toTest.Count} configs (skipped {skippedRecent} recently-tested)..."
+                : $"Testing {toTest.Count} configs...";
         OnStageChanged?.Invoke(stageMsg);
+
         var lastSave = DateTime.UtcNow;
+        var foundMatching = 0;
+        var goalReached = false;
+
         var progress = new Progress<(int done, int total)>(p =>
         {
             OnTestProgress?.Invoke(p.done, p.total);
+
+            // Goal-seeking early stop: count how many entries pass the latency gate.
+            if (goalMode && !goalReached)
+            {
+                var matching = toTest.Count(c =>
+                    c.Status == FreeConfigStatus.Ok &&
+                    c.LatencyMs > 0 &&
+                    c.LatencyMs <= goalMaxLatencyMs!.Value);
+
+                if (matching > foundMatching)
+                {
+                    foundMatching = matching;
+                    OnStageChanged?.Invoke(
+                        $"Testing ({p.done}/{p.total}) · found {foundMatching}/{goalTargetCount}");
+                }
+
+                if (matching >= goalTargetCount!.Value)
+                {
+                    goalReached = true;
+                    _logger.Information("Latency goal reached: {found}/{target} after {done}/{total} tests",
+                        matching, goalTargetCount, p.done, p.total);
+                    goalCts.Cancel(); // stop the tester early
+                }
+            }
+
             // Periodic incremental save every ~50 tests or every 5 seconds.
             if (p.done % 50 == 0 || (DateTime.UtcNow - lastSave).TotalSeconds > 5)
             {
@@ -244,17 +281,25 @@ public sealed class FreeConfigAggregator
 
         try
         {
-            await _tester.TestAllAsync(toTest, progress, ct);
+            await _tester.TestAllAsync(toTest, progress, goalCts.Token);
+        }
+        catch (OperationCanceledException) when (goalReached && !ct.IsCancellationRequested)
+        {
+            // Goal-reached early stop — NOT a user cancellation. Proceed to save + return normally.
+            _logger.Information("Goal-reached stop at {found}/{target} matching entries",
+                foundMatching, goalTargetCount);
         }
         catch (OperationCanceledException)
         {
-            // Save whatever we have so far, then re-throw for UI to handle.
+            // User cancel — save partial progress, then re-throw so UI shows "Cancelled".
             _cache.Save(cacheFile);
             throw;
         }
 
         // ── Stage 5: persist final state ──
-        OnStageChanged?.Invoke("Saving cache...");
+        OnStageChanged?.Invoke(goalReached
+            ? $"Goal reached: {foundMatching} configs with ping < {goalMaxLatencyMs}ms"
+            : "Saving cache...");
         _cache.Save(cacheFile);
 
         OnStageChanged?.Invoke("Done");

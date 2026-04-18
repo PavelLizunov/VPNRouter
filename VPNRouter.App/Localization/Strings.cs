@@ -364,6 +364,16 @@ public static class Strings
     public static string FcRefreshHint        => Ru
         ? "Первый запуск ≈1 мин. Тестируется до 500 серверов за раз — повторяйте для более полных данных."
         : "First run ≈1 min. Tests up to 500 servers at a time — repeat for fuller coverage.";
+
+    // v2.13.17 — Smart Refresh (latency goal)
+    public static string FcSmartRefreshLabel => Ru ? "🎯 Smart Refresh (стоп при достижении цели)" : "🎯 Smart Refresh (stop when goal reached)";
+    public static string FcTargetNLabel      => Ru ? "Найти:" : "Find:";
+    public static string FcConfigsWord       => Ru ? "конфигов" : "configs";
+    public static string FcWithPingUnder     => Ru ? "с пингом <" : "with ping <";
+    public static string FcMsUnit            => "ms";
+    public static string FcSmartRefreshHint  => Ru
+        ? "Ускоряет Refresh: остановка как только накопится N конфигов с низким пингом. Отключите для полного сканирования."
+        : "Speeds up Refresh: stops once N low-ping configs are found. Uncheck for full scan.";
     public static string FcPageDescription    => Ru
         ? "Публичные VLESS-конфиги. Проверка: TCP + TLS handshake с валидацией сертификата. ✓ = сервер живой и TLS-валидный."
         : "Public VLESS configs. Tests: TCP + TLS handshake with cert validation. ✓ = server alive and TLS-valid.";
