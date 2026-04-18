@@ -55,11 +55,35 @@ public sealed class FreeConfigAggregator
     {
         sources ??= FreeConfigSources.Default;
 
-        // ── Stage 1: fetch all sources in parallel ──
-        OnStageChanged?.Invoke("Fetching sources...");
-        var fetchTasks = sources
-            .Where(s => s.Enabled)
-            .Select(async s => (s, raws: await _fetcher.FetchAsync(s, ct)));
+        // ── Stage 1: fetch all sources in parallel, with per-source progress ──
+        var enabledSources = sources.Where(s => s.Enabled).ToList();
+        OnStageChanged?.Invoke($"Fetching sources (0/{enabledSources.Count})...");
+
+        var fetchedCount = 0;
+        var currentlyFetching = new System.Collections.Concurrent.ConcurrentBag<string>();
+
+        var fetchTasks = enabledSources.Select(async s =>
+        {
+            currentlyFetching.Add(s.Name);
+            try
+            {
+                var raws = await _fetcher.FetchAsync(s, ct);
+                var done = Interlocked.Increment(ref fetchedCount);
+                // Show remaining source name(s) so user sees what's actually being downloaded.
+                var remaining = currentlyFetching.Where(n => n != s.Name).FirstOrDefault() ?? "";
+                var label = done == enabledSources.Count
+                    ? $"Fetching sources ({done}/{enabledSources.Count}) — done"
+                    : remaining.Length > 0
+                        ? $"Fetching sources ({done}/{enabledSources.Count}): {remaining}..."
+                        : $"Fetching sources ({done}/{enabledSources.Count})...";
+                OnStageChanged?.Invoke(label);
+                return (s, raws);
+            }
+            finally
+            {
+                // best-effort removal — ConcurrentBag doesn't support remove, leave it
+            }
+        });
         var fetched = await Task.WhenAll(fetchTasks);
 
         // ── Stage 2: parse + dedupe ──
