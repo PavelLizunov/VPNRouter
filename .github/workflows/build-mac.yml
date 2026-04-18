@@ -1,0 +1,94 @@
+name: Build macOS DMG
+
+# Triggered by:
+#  - pushing a v* tag (automatic on release)
+#  - manual dispatch (for testing or re-uploading missing artifacts)
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (without 'v' prefix, e.g. 2.13.12)"
+        required: true
+        type: string
+      upload_to_release:
+        description: "Upload built DMG + ZIP to the matching GitHub release"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write  # needed to upload release assets
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Resolve version from tag or input
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Strip leading 'v' from tag (v2.13.12 → 2.13.12).
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building version: $VERSION"
+
+      - name: Build macOS DMG + ZIP
+        run: |
+          chmod +x ./build-mac.sh
+          ./build-mac.sh "${{ steps.version.outputs.version }}"
+
+      - name: Locate artifacts
+        id: artifacts
+        run: |
+          DMG="/tmp/VPNRouter-v${{ steps.version.outputs.version }}-mac.dmg"
+          ZIP="/tmp/VPNRouter-v${{ steps.version.outputs.version }}-mac.zip"
+          ls -la "$DMG" "$ZIP"
+          echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Upload as workflow artifacts (always — preserves build even if release upload fails)
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build-v${{ steps.version.outputs.version }}
+          path: |
+            /tmp/VPNRouter-v*-mac.dmg
+            /tmp/VPNRouter-v*-mac.zip
+          retention-days: 30
+
+      - name: Upload to GitHub Release
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.upload_to_release)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          DMG="${{ steps.artifacts.outputs.dmg }}"
+          ZIP="${{ steps.artifacts.outputs.zip }}"
+
+          # Ensure the release exists before uploading. gh release view exits 1 if missing.
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::warning::Release $TAG does not exist yet — skipping upload. Create the release first, then re-run this workflow."
+            exit 0
+          fi
+
+          echo "Uploading to release $TAG..."
+          gh release upload "$TAG" "$DMG" "$ZIP" --repo "$GITHUB_REPOSITORY" --clobber
+          echo "✓ Uploaded DMG + ZIP to $TAG"
