@@ -1,5 +1,7 @@
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -27,6 +29,81 @@ public partial class ServerViewModel : ViewModelBase
 
     /// <summary>True when this server is the one VPN is currently connected through.</summary>
     [ObservableProperty] private bool _isActive;
+
+    // ── Connectivity test state (v2.15.2) ────────────────────────────────
+
+    /// <summary>Last TCP+TLS probe outcome. Unknown = never tested.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PingDisplay))]
+    [NotifyPropertyChangedFor(nameof(StatusDot))]
+    [NotifyPropertyChangedFor(nameof(StatusDotBrush))]
+    [NotifyPropertyChangedFor(nameof(HasTestResult))]
+    private ServerProbeStatus _testStatus = ServerProbeStatus.Unknown;
+
+    /// <summary>Measured round-trip latency (ms) from the last probe. 0 = never tested.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PingDisplay))]
+    private int _pingMs;
+
+    /// <summary>Human-readable error from last probe (null = no error / success).</summary>
+    [ObservableProperty] private string? _testError;
+
+    /// <summary>True while a Test operation is running for this server — disables the per-row button.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusDot))]
+    [NotifyPropertyChangedFor(nameof(StatusDotBrush))]
+    private bool _isTesting;
+
+    // ── Computed display properties ──────────────────────────────────────
+
+    /// <summary>True once any probe has completed (TestStatus != Unknown).</summary>
+    public bool HasTestResult => TestStatus != ServerProbeStatus.Unknown;
+
+    /// <summary>
+    /// Compact ping text for the list column: "42 ms", "—" when not tested,
+    /// "×" when unreachable/timeout.
+    /// </summary>
+    public string PingDisplay => TestStatus switch
+    {
+        ServerProbeStatus.Unknown                          => "—",
+        ServerProbeStatus.Unreachable or ServerProbeStatus.Timeout => "×",
+        ServerProbeStatus.TlsFailed                        => "TLS ×",
+        ServerProbeStatus.Implausible                      => "<5 ms",
+        _                                                  => PingMs > 0 ? $"{PingMs} ms" : "—"
+    };
+
+    /// <summary>One-character status dot (🟢/🟡/🔴) or testing spinner text.</summary>
+    public string StatusDot => IsTesting ? "…" : TestStatus switch
+    {
+        ServerProbeStatus.Ok           => "●",
+        ServerProbeStatus.Slow         => "●",
+        ServerProbeStatus.Unreachable  => "●",
+        ServerProbeStatus.Timeout      => "●",
+        ServerProbeStatus.TlsFailed    => "●",
+        ServerProbeStatus.Implausible  => "●",
+        _                              => "○"
+    };
+
+    /// <summary>Brush for <see cref="StatusDot"/>.</summary>
+    public IBrush StatusDotBrush => TestStatus switch
+    {
+        ServerProbeStatus.Ok           => new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81)),  // emerald
+        ServerProbeStatus.Slow         => new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B)),  // amber
+        ServerProbeStatus.TlsFailed    => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)),  // red
+        ServerProbeStatus.Unreachable  => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)),
+        ServerProbeStatus.Timeout      => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)),
+        ServerProbeStatus.Implausible  => new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B)),
+        _                              => new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF))   // gray
+    };
+
+    /// <summary>Apply a probe result to this VM (updates PingMs, Status, Error, clears IsTesting).</summary>
+    public void ApplyProbeResult(ServerProbeResult result)
+    {
+        IsTesting = false;
+        TestStatus = result.Status;
+        PingMs = result.LatencyMs;
+        TestError = result.Error;
+    }
 
     public ServerViewModel()
     {

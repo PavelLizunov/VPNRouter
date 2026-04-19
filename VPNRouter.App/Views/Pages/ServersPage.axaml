@@ -45,15 +45,33 @@
                      ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:ServerViewModel">
-                        <Grid ColumnDefinitions="Auto,*,*,50,70">
+                        <Grid ColumnDefinitions="Auto,Auto,*,*,60,45,Auto">
                             <TextBlock Grid.Column="0" Text="●" Foreground="#22C55E"
                                        IsVisible="{Binding IsActive}" FontSize="9"
                                        VerticalAlignment="Center" Margin="0,0,4,0"/>
-                            <TextBlock Grid.Column="1" Text="{Binding DisplayName}"
-                                       FontWeight="{Binding IsActive, Converter={StaticResource ActiveFontConverter}}"/>
-                            <TextBlock Grid.Column="2" Text="{Binding Server}" Opacity="0.7"/>
-                            <TextBlock Grid.Column="3" Text="{Binding Port}" Opacity="0.5" TextAlignment="Center"/>
-                            <TextBlock Grid.Column="4" Text="{Binding Security}" Opacity="0.4" TextAlignment="Right"/>
+                            <TextBlock Grid.Column="1" Text="{Binding StatusDot}"
+                                       Foreground="{Binding StatusDotBrush}"
+                                       FontSize="11" VerticalAlignment="Center"
+                                       Margin="0,0,4,0"
+                                       ToolTip.Tip="{Binding TestError}"/>
+                            <TextBlock Grid.Column="2" Text="{Binding DisplayName}"
+                                       FontWeight="{Binding IsActive, Converter={StaticResource ActiveFontConverter}}"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="3" Text="{Binding Server}" Opacity="0.7"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Grid.Column="4" Text="{Binding PingDisplay}"
+                                       Opacity="0.8" FontSize="10" TextAlignment="Right"
+                                       VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Grid.Column="5" Text="{Binding Port}" Opacity="0.5"
+                                       TextAlignment="Center" FontSize="10" VerticalAlignment="Center"/>
+                            <Button Grid.Column="6"
+                                    Content="⟳"
+                                    Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
+                                    CommandParameter="{Binding}"
+                                    IsEnabled="{Binding !IsTesting}"
+                                    FontSize="10" Padding="6,1" MinHeight="0"
+                                    Background="Transparent" BorderThickness="0"
+                                    ToolTip.Tip="Test TCP + TLS"/>
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
@@ -135,6 +153,22 @@
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
             <StackPanel Spacing="6">
+                <!-- Test all + progress row -->
+                <Grid ColumnDefinitions="Auto,*,Auto"
+                      IsVisible="{Binding IsVlessMode}">
+                    <Button Grid.Column="0"
+                            Content="{Binding ServerTestButtonText}"
+                            Command="{Binding TestAllServersCommand}"
+                            Padding="10,4" CornerRadius="4"
+                            FontSize="10"
+                            Background="#059669" Foreground="White"/>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding ServerTestProgressText}"
+                               VerticalAlignment="Center"
+                               Margin="10,0,0,0"
+                               FontSize="10" Opacity="0.7"/>
+                </Grid>
+
                 <!-- VLESS: URI input + Add/Remove -->
                 <DockPanel IsVisible="{Binding IsVlessMode}" LastChildFill="True">
                     <Button DockPanel.Dock="Right" Content="{Binding LblAddServers}"
