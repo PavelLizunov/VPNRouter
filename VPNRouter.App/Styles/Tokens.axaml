@@ -1,0 +1,275 @@
+<!--
+    VPNRouter · Design tokens (Light + Dark)
+    Arctic / Glacier system — friendly power-user tool.
+    Semantic tokens mirroring VPNRouter Design System/tokens.css.
+    11 px base, 4 px spacing grid.
+
+    Architecture: Avalonia 11 ThemeDictionaries. The same key exists under
+    both Light and Dark sections; Avalonia auto-picks based on
+    Application.RequestedThemeVariant. To toggle dark mode at runtime,
+    just set `Application.Current.RequestedThemeVariant = ThemeVariant.Dark`.
+
+    Naming: no prefix. Our token keys don't collide with Avalonia's
+    SystemControlForegroundBaseMediumLowBrush etc. (very different shape).
+    Every semantic key exists as BOTH a Color and a SolidColorBrush; use
+    the *Brush* in bindings, the Color is for programmatic mixing from C#.
+
+    Non-theme-variant resources (type scale, spacing, radii) are kept
+    outside ThemeDictionaries — they don't change between light and dark.
+-->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=netstandard">
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             LIGHT (default)
+             ═══════════════════════════════════════════════════════════ -->
+        <ResourceDictionary x:Key="Light">
+
+            <!-- Surfaces — 4 layers from app bg up to elevated card -->
+            <Color x:Key="SurfaceApp">#FFF5F7FA</Color>
+            <Color x:Key="SurfaceSunken">#FFEBEEF3</Color>
+            <Color x:Key="SurfaceBase">#FFFFFFFF</Color>
+            <Color x:Key="SurfaceRaised">#FFFFFFFF</Color>
+            <Color x:Key="SurfaceOverlay">#FFFFFFFF</Color>
+            <SolidColorBrush x:Key="SurfaceAppBrush" Color="#FFF5F7FA"/>
+            <SolidColorBrush x:Key="SurfaceSunkenBrush" Color="#FFEBEEF3"/>
+            <SolidColorBrush x:Key="SurfaceBaseBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="SurfaceOverlayBrush" Color="#FFFFFFFF"/>
+
+            <!-- Text — 5 levels -->
+            <Color x:Key="TextPrimary">#FF0F1320</Color>
+            <Color x:Key="TextSecondary">#FF475067</Color>
+            <Color x:Key="TextMuted">#FF94A0B2</Color>
+            <Color x:Key="TextInverse">#FFFFFFFF</Color>
+            <Color x:Key="TextAccent">#FF0369A1</Color>
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FF0F1320"/>
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FF475067"/>
+            <SolidColorBrush x:Key="TextMutedBrush" Color="#FF94A0B2"/>
+            <SolidColorBrush x:Key="TextInverseBrush" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="TextAccentBrush" Color="#FF0369A1"/>
+
+            <!-- Borders — 4 steps -->
+            <Color x:Key="BorderSubtle">#FFEBEEF3</Color>
+            <Color x:Key="BorderDefault">#FFDCE1E9</Color>
+            <Color x:Key="BorderStrong">#FFC2C9D5</Color>
+            <Color x:Key="BorderAccent">#FF38BDF8</Color>
+            <SolidColorBrush x:Key="BorderSubtleBrush" Color="#FFEBEEF3"/>
+            <SolidColorBrush x:Key="BorderDefaultBrush" Color="#FFDCE1E9"/>
+            <SolidColorBrush x:Key="BorderStrongBrush" Color="#FFC2C9D5"/>
+            <SolidColorBrush x:Key="BorderAccentBrush" Color="#FF38BDF8"/>
+
+            <!-- Accent — arctic, primary actions & focus -->
+            <Color x:Key="AccentBgSubtle">#FFECFEFF</Color>
+            <Color x:Key="AccentBgMuted">#FFCFFAFE</Color>
+            <Color x:Key="AccentBorder">#FF67E8F9</Color>
+            <Color x:Key="AccentFg">#FF0369A1</Color>
+            <Color x:Key="AccentSolid">#FF0EA5E9</Color>
+            <Color x:Key="AccentSolidHover">#FF0284C7</Color>
+            <Color x:Key="AccentOnSolid">#FFFFFFFF</Color>
+            <SolidColorBrush x:Key="AccentBgSubtleBrush" Color="#FFECFEFF"/>
+            <SolidColorBrush x:Key="AccentBgMutedBrush" Color="#FFCFFAFE"/>
+            <SolidColorBrush x:Key="AccentBorderBrush" Color="#FF67E8F9"/>
+            <SolidColorBrush x:Key="AccentFgBrush" Color="#FF0369A1"/>
+            <SolidColorBrush x:Key="AccentSolidBrush" Color="#FF0EA5E9"/>
+            <SolidColorBrush x:Key="AccentSolidHoverBrush" Color="#FF0284C7"/>
+            <SolidColorBrush x:Key="AccentOnSolidBrush" Color="#FFFFFFFF"/>
+
+            <!-- State: Success -->
+            <Color x:Key="SuccessBg">#FFDCFCE7</Color>
+            <Color x:Key="SuccessBorder">#FF86EFAC</Color>
+            <Color x:Key="SuccessFg">#FF15803D</Color>
+            <Color x:Key="SuccessSolid">#FF16A34A</Color>
+            <SolidColorBrush x:Key="SuccessBgBrush" Color="#FFDCFCE7"/>
+            <SolidColorBrush x:Key="SuccessBorderBrush" Color="#FF86EFAC"/>
+            <SolidColorBrush x:Key="SuccessFgBrush" Color="#FF15803D"/>
+            <SolidColorBrush x:Key="SuccessSolidBrush" Color="#FF16A34A"/>
+
+            <!-- State: Warning -->
+            <Color x:Key="WarningBg">#FFFEF3C7</Color>
+            <Color x:Key="WarningBorder">#FFFCD34D</Color>
+            <Color x:Key="WarningFg">#FF92400E</Color>
+            <Color x:Key="WarningSolid">#FFD97706</Color>
+            <SolidColorBrush x:Key="WarningBgBrush" Color="#FFFEF3C7"/>
+            <SolidColorBrush x:Key="WarningBorderBrush" Color="#FFFCD34D"/>
+            <SolidColorBrush x:Key="WarningFgBrush" Color="#FF92400E"/>
+            <SolidColorBrush x:Key="WarningSolidBrush" Color="#FFD97706"/>
+
+            <!-- State: Danger -->
+            <Color x:Key="DangerBg">#FFFEE2E2</Color>
+            <Color x:Key="DangerBorder">#FFFCA5A5</Color>
+            <Color x:Key="DangerFg">#FFB91C1C</Color>
+            <Color x:Key="DangerSolid">#FFDC2626</Color>
+            <SolidColorBrush x:Key="DangerBgBrush" Color="#FFFEE2E2"/>
+            <SolidColorBrush x:Key="DangerBorderBrush" Color="#FFFCA5A5"/>
+            <SolidColorBrush x:Key="DangerFgBrush" Color="#FFB91C1C"/>
+            <SolidColorBrush x:Key="DangerSolidBrush" Color="#FFDC2626"/>
+
+            <!-- State: Info -->
+            <Color x:Key="InfoBg">#FFE0F2FE</Color>
+            <Color x:Key="InfoBorder">#FF7DD3FC</Color>
+            <Color x:Key="InfoFg">#FF075985</Color>
+            <Color x:Key="InfoSolid">#FF0284C7</Color>
+            <SolidColorBrush x:Key="InfoBgBrush" Color="#FFE0F2FE"/>
+            <SolidColorBrush x:Key="InfoBorderBrush" Color="#FF7DD3FC"/>
+            <SolidColorBrush x:Key="InfoFgBrush" Color="#FF075985"/>
+            <SolidColorBrush x:Key="InfoSolidBrush" Color="#FF0284C7"/>
+
+            <!-- Shadows (arctic-tinted, soft) -->
+            <BoxShadows x:Key="ShadowXs">0 1 1 0 #0A0F1320</BoxShadows>
+            <BoxShadows x:Key="ShadowSm">0 1 2 0 #0F0F1320, 0 1 1 0 #0A0F1320</BoxShadows>
+            <BoxShadows x:Key="ShadowMd">0 4 12 0 #120F1320, 0 1 2 0 #0A0F1320</BoxShadows>
+            <BoxShadows x:Key="ShadowLg">0 12 28 0 #1A0F1320, 0 2 6 0 #0D0F1320</BoxShadows>
+
+        </ResourceDictionary>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             DARK
+             ═══════════════════════════════════════════════════════════ -->
+        <ResourceDictionary x:Key="Dark">
+
+            <!-- Surfaces — deeper slate layers -->
+            <Color x:Key="SurfaceApp">#FF070A14</Color>
+            <Color x:Key="SurfaceSunken">#FF0F1320</Color>
+            <Color x:Key="SurfaceBase">#FF1C2231</Color>
+            <Color x:Key="SurfaceRaised">#FF232A3B</Color>
+            <Color x:Key="SurfaceOverlay">#FF2B3347</Color>
+            <SolidColorBrush x:Key="SurfaceAppBrush" Color="#FF070A14"/>
+            <SolidColorBrush x:Key="SurfaceSunkenBrush" Color="#FF0F1320"/>
+            <SolidColorBrush x:Key="SurfaceBaseBrush" Color="#FF1C2231"/>
+            <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="#FF232A3B"/>
+            <SolidColorBrush x:Key="SurfaceOverlayBrush" Color="#FF2B3347"/>
+
+            <!-- Text — brightened -->
+            <Color x:Key="TextPrimary">#FFEEF1F6</Color>
+            <Color x:Key="TextSecondary">#FFA6B0C2</Color>
+            <Color x:Key="TextMuted">#FF6C788F</Color>
+            <Color x:Key="TextInverse">#FF0F1320</Color>
+            <Color x:Key="TextAccent">#FF67E8F9</Color>
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFEEF1F6"/>
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FFA6B0C2"/>
+            <SolidColorBrush x:Key="TextMutedBrush" Color="#FF6C788F"/>
+            <SolidColorBrush x:Key="TextInverseBrush" Color="#FF0F1320"/>
+            <SolidColorBrush x:Key="TextAccentBrush" Color="#FF67E8F9"/>
+
+            <!-- Borders — translucent white levels -->
+            <Color x:Key="BorderSubtle">#0AFFFFFF</Color>
+            <Color x:Key="BorderDefault">#14FFFFFF</Color>
+            <Color x:Key="BorderStrong">#29FFFFFF</Color>
+            <Color x:Key="BorderAccent">#FF38BDF8</Color>
+            <SolidColorBrush x:Key="BorderSubtleBrush" Color="#0AFFFFFF"/>
+            <SolidColorBrush x:Key="BorderDefaultBrush" Color="#14FFFFFF"/>
+            <SolidColorBrush x:Key="BorderStrongBrush" Color="#29FFFFFF"/>
+            <SolidColorBrush x:Key="BorderAccentBrush" Color="#FF38BDF8"/>
+
+            <!-- Accent — shifted brighter for contrast against dark slate -->
+            <Color x:Key="AccentBgSubtle">#1438BDF8</Color>
+            <Color x:Key="AccentBgMuted">#2938BDF8</Color>
+            <Color x:Key="AccentBorder">#6638BDF8</Color>
+            <Color x:Key="AccentFg">#FF67E8F9</Color>
+            <Color x:Key="AccentSolid">#FF38BDF8</Color>
+            <Color x:Key="AccentSolidHover">#FF67E8F9</Color>
+            <Color x:Key="AccentOnSolid">#FF070A14</Color>
+            <SolidColorBrush x:Key="AccentBgSubtleBrush" Color="#1438BDF8"/>
+            <SolidColorBrush x:Key="AccentBgMutedBrush" Color="#2938BDF8"/>
+            <SolidColorBrush x:Key="AccentBorderBrush" Color="#6638BDF8"/>
+            <SolidColorBrush x:Key="AccentFgBrush" Color="#FF67E8F9"/>
+            <SolidColorBrush x:Key="AccentSolidBrush" Color="#FF38BDF8"/>
+            <SolidColorBrush x:Key="AccentSolidHoverBrush" Color="#FF67E8F9"/>
+            <SolidColorBrush x:Key="AccentOnSolidBrush" Color="#FF070A14"/>
+
+            <!-- State: Success — muted on dark -->
+            <Color x:Key="SuccessBg">#1F22C55E</Color>
+            <Color x:Key="SuccessBorder">#5922C55E</Color>
+            <Color x:Key="SuccessFg">#FF4ADE80</Color>
+            <Color x:Key="SuccessSolid">#FF22C55E</Color>
+            <SolidColorBrush x:Key="SuccessBgBrush" Color="#1F22C55E"/>
+            <SolidColorBrush x:Key="SuccessBorderBrush" Color="#5922C55E"/>
+            <SolidColorBrush x:Key="SuccessFgBrush" Color="#FF4ADE80"/>
+            <SolidColorBrush x:Key="SuccessSolidBrush" Color="#FF22C55E"/>
+
+            <!-- State: Warning -->
+            <Color x:Key="WarningBg">#1FF59E0B</Color>
+            <Color x:Key="WarningBorder">#59F59E0B</Color>
+            <Color x:Key="WarningFg">#FFFCD34D</Color>
+            <Color x:Key="WarningSolid">#FFF59E0B</Color>
+            <SolidColorBrush x:Key="WarningBgBrush" Color="#1FF59E0B"/>
+            <SolidColorBrush x:Key="WarningBorderBrush" Color="#59F59E0B"/>
+            <SolidColorBrush x:Key="WarningFgBrush" Color="#FFFCD34D"/>
+            <SolidColorBrush x:Key="WarningSolidBrush" Color="#FFF59E0B"/>
+
+            <!-- State: Danger -->
+            <Color x:Key="DangerBg">#1FEF4444</Color>
+            <Color x:Key="DangerBorder">#59EF4444</Color>
+            <Color x:Key="DangerFg">#FFFCA5A5</Color>
+            <Color x:Key="DangerSolid">#FFEF4444</Color>
+            <SolidColorBrush x:Key="DangerBgBrush" Color="#1FEF4444"/>
+            <SolidColorBrush x:Key="DangerBorderBrush" Color="#59EF4444"/>
+            <SolidColorBrush x:Key="DangerFgBrush" Color="#FFFCA5A5"/>
+            <SolidColorBrush x:Key="DangerSolidBrush" Color="#FFEF4444"/>
+
+            <!-- State: Info -->
+            <Color x:Key="InfoBg">#1F0EA5E9</Color>
+            <Color x:Key="InfoBorder">#590EA5E9</Color>
+            <Color x:Key="InfoFg">#FF7DD3FC</Color>
+            <Color x:Key="InfoSolid">#FF0EA5E9</Color>
+            <SolidColorBrush x:Key="InfoBgBrush" Color="#1F0EA5E9"/>
+            <SolidColorBrush x:Key="InfoBorderBrush" Color="#590EA5E9"/>
+            <SolidColorBrush x:Key="InfoFgBrush" Color="#FF7DD3FC"/>
+            <SolidColorBrush x:Key="InfoSolidBrush" Color="#FF0EA5E9"/>
+
+            <!-- Shadows — deeper for dark surfaces -->
+            <BoxShadows x:Key="ShadowXs">0 1 1 0 #66000000</BoxShadows>
+            <BoxShadows x:Key="ShadowSm">0 1 2 0 #80000000, 0 1 1 0 #66000000</BoxShadows>
+            <BoxShadows x:Key="ShadowMd">0 4 14 0 #8C000000, 0 1 2 0 #66000000</BoxShadows>
+            <BoxShadows x:Key="ShadowLg">0 16 32 0 #A5000000, 0 2 6 0 #80000000</BoxShadows>
+
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         Theme-invariant tokens (same in light + dark)
+         ═══════════════════════════════════════════════════════════ -->
+
+    <!-- Type scale · 11 px base -->
+    <sys:Double x:Key="Fs2Xs">9</sys:Double>
+    <sys:Double x:Key="FsXs">10</sys:Double>
+    <sys:Double x:Key="FsSm">11</sys:Double>   <!-- ★ body / base -->
+    <sys:Double x:Key="FsMd">12</sys:Double>
+    <sys:Double x:Key="FsLg">13</sys:Double>
+    <sys:Double x:Key="FsXl">15</sys:Double>
+    <sys:Double x:Key="Fs2Xl">18</sys:Double>
+    <sys:Double x:Key="Fs3Xl">22</sys:Double>
+
+    <!-- Weights -->
+    <FontWeight x:Key="FwRegular">Normal</FontWeight>
+    <FontWeight x:Key="FwMedium">Medium</FontWeight>
+    <FontWeight x:Key="FwSemibold">SemiBold</FontWeight>
+    <FontWeight x:Key="FwBold">Bold</FontWeight>
+
+    <!-- Spacing · 4 px grid -->
+    <sys:Double x:Key="Space0">0</sys:Double>
+    <sys:Double x:Key="Space1">2</sys:Double>
+    <sys:Double x:Key="Space2">4</sys:Double>
+    <sys:Double x:Key="Space3">6</sys:Double>
+    <sys:Double x:Key="Space4">8</sys:Double>
+    <sys:Double x:Key="Space5">12</sys:Double>
+    <sys:Double x:Key="Space6">16</sys:Double>
+    <sys:Double x:Key="Space7">20</sys:Double>
+    <sys:Double x:Key="Space8">24</sys:Double>
+    <sys:Double x:Key="Space9">32</sys:Double>
+    <sys:Double x:Key="Space10">40</sys:Double>
+
+    <!-- Radii -->
+    <CornerRadius x:Key="RadiusXs">3</CornerRadius>
+    <CornerRadius x:Key="RadiusSm">6</CornerRadius>
+    <CornerRadius x:Key="RadiusMd">8</CornerRadius>
+    <CornerRadius x:Key="RadiusLg">10</CornerRadius>
+    <CornerRadius x:Key="RadiusXl">14</CornerRadius>
+    <CornerRadius x:Key="RadiusPill">999</CornerRadius>
+
+</ResourceDictionary>

@@ -8,6 +8,15 @@
         <local:ViewLocator/>
     </Application.DataTemplates>
 
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- v2.16.0 Arctic design tokens (Light + Dark via ThemeDictionaries) -->
+                <ResourceInclude Source="avares://VPNRouter.App/Styles/Tokens.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
     <Application.Styles>
         <FluentTheme />
     </Application.Styles>
