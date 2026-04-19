@@ -49,9 +49,55 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(LogoSource))]
     private bool _isDarkTheme;
 
-    private static readonly Bitmap _logo = LoadAsset("avares://VPNRouter.App/Assets/penguin_logo.png");
-    public Bitmap LogoSource => _logo;
+    private static readonly Bitmap _logoLight = LoadAsset("avares://VPNRouter.App/Assets/penguin_logo.png");
+    private static readonly Bitmap _logoDark = TryBuildInvertedLogo(_logoLight) ?? _logoLight;
+    /// <summary>Logo bitmap — inverted RGB when IsDarkTheme is true.</summary>
+    public Bitmap LogoSource => IsDarkTheme ? _logoDark : _logoLight;
     private static Bitmap LoadAsset(string uri) => new(AssetLoader.Open(new System.Uri(uri)));
+
+    /// <summary>
+    /// Produce an RGB-inverted copy of the penguin logo for dark theme.
+    /// Uses WriteableBitmap in Unpremul format so invert is a straight
+    /// 255-channel operation without premultiplied-alpha correction. Returns
+    /// null on any failure (falls back to the original logo).
+    /// </summary>
+    private static Bitmap? TryBuildInvertedLogo(Bitmap source)
+    {
+        try
+        {
+            var size = source.PixelSize;
+            var wb = new Avalonia.Media.Imaging.WriteableBitmap(
+                size,
+                source.Dpi,
+                Avalonia.Platform.PixelFormat.Bgra8888,
+                Avalonia.Platform.AlphaFormat.Unpremul);
+
+            using (var fb = wb.Lock())
+            {
+                int byteCount = fb.RowBytes * size.Height;
+                source.CopyPixels(new Avalonia.PixelRect(size), fb.Address, byteCount, fb.RowBytes);
+
+                var bytes = new byte[byteCount];
+                System.Runtime.InteropServices.Marshal.Copy(fb.Address, bytes, 0, byteCount);
+
+                // BGRA: invert B, G, R; keep A.
+                for (int i = 0; i < bytes.Length; i += 4)
+                {
+                    bytes[i]     = (byte)(255 - bytes[i]);
+                    bytes[i + 1] = (byte)(255 - bytes[i + 1]);
+                    bytes[i + 2] = (byte)(255 - bytes[i + 2]);
+                }
+
+                System.Runtime.InteropServices.Marshal.Copy(bytes, 0, fb.Address, byteCount);
+            }
+
+            return wb;
+        }
+        catch
+        {
+            return null;
+        }
+    }
     [ObservableProperty] private string _themeToggleText = Strings.ThemeDark;
     [ObservableProperty] private bool _isRussian;
     [ObservableProperty]
@@ -2600,6 +2646,19 @@ public partial class MainWindowViewModel : ViewModelBase
             Application.Current.RequestedThemeVariant =
                 IsDarkTheme ? ThemeVariant.Dark : ThemeVariant.Light;
         }
+
+        // DynamicResource bindings in XAML auto-update when the theme variant
+        // changes — no manual refresh needed for those. But any brush
+        // property that resolves from Application.Resources in C# (our
+        // runtime-status badges + ServerViewModel.StatusDotBrush) is cached
+        // in a read-only getter; we must re-fire PropertyChanged so the
+        // binding re-reads the resolved value.
+        OnPropertyChanged(nameof(VpnBadgeBrush));
+        OnPropertyChanged(nameof(ZapretBadgeBrush));
+        OnPropertyChanged(nameof(TgProxyBadgeBrush));
+
+        foreach (var s in Servers)             s.NotifyThemeChanged();
+        foreach (var s in SubscriptionServers) s.NotifyThemeChanged();
     }
 
     // ── Localization refresh ──

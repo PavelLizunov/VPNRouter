@@ -116,6 +116,15 @@ public partial class ServerViewModel : ViewModelBase
         return null;
     }
 
+    /// <summary>
+    /// Called by the parent MainWindowViewModel when the theme variant
+    /// changes so the list-row repaints with the palette-adjusted dot colour.
+    /// </summary>
+    public void NotifyThemeChanged()
+    {
+        OnPropertyChanged(nameof(StatusDotBrush));
+    }
+
     /// <summary>Apply a probe result to this VM (updates PingMs, Status, Error, clears IsTesting).</summary>
     public void ApplyProbeResult(ServerProbeResult result)
     {
