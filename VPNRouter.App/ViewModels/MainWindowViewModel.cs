@@ -657,6 +657,11 @@ public partial class MainWindowViewModel : ViewModelBase
         // SimplePage to a first-class landing page for fresh installs.
         IsSimpleMode = (_settings.App.UiMode ?? "advanced").Equals("simple", StringComparison.OrdinalIgnoreCase);
 
+        // Simple-mode 'Start with Windows' checkbox — mirror of AutostartVpn.
+        // Setter is a no-op during _isLoadingUI so this doesn't re-trigger
+        // ServiceVm.Install.
+        SmpAutostartChecked = _settings.App.AutostartVpn;
+
         // Config mode (three-way: generated / custom / subscribe)
         // Mode is determined by which tab is active. On load, select the
         // correct tab based on saved config_mode.

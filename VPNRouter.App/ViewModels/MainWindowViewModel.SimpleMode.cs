@@ -38,11 +38,22 @@ public partial class MainWindowViewModel
 
     // ── Autostart toggle ─────────────────────────────────────────────────
     /// <summary>
-    /// Mirror of the Simple-mode autostart checkbox. v2.17.3 wires this
-    /// into ServiceInstaller.Install / Uninstall + AppSettings.AutostartVpn.
-    /// For the skeleton release it's a plain observable value only.
+    /// Simple-mode 'Start with Windows' checkbox. Encapsulates two things
+    /// Advanced shows separately:
+    ///   1. Windows Service install + start (via ServiceVm.AutostartChecked).
+    ///   2. AppSettings.App.AutostartVpn = true (so the service actually
+    ///      auto-starts the VPN at boot, not just sits there idle).
+    /// Unchecking removes the service and disables AutostartVpn.
     /// </summary>
     [ObservableProperty] private bool _smpAutostartChecked;
+
+    /// <summary>
+    /// Simple-mode split profile — comma-separated list of built-in profile
+    /// names. ProfileManager's merge path unions their process rules. Covers
+    /// the 'Discord + Browsers + Work apps' default approved with the user
+    /// on 2026-04-20.
+    /// </summary>
+    public const string SimpleSplitProfile = "Browsers,Discord_Privacy,Work_Suite";
 
     // ── Derived button state ─────────────────────────────────────────────
     /// <summary>Big Start/Stop button caption — flips with <see cref="IsConnected"/>.</summary>
@@ -127,6 +138,11 @@ public partial class MainWindowViewModel
         // Tunnel mode (Split vs Full) — already bound to IsSplitTunnel via radio.
         _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
 
+        // Simple-Split uses the hardcoded default profile. Full tunnel
+        // ignores the profile field entirely.
+        if (IsSplitTunnel)
+            _settings.ActiveProfile = SimpleSplitProfile;
+
         SaveSettings();
         _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
 
@@ -203,11 +219,28 @@ public partial class MainWindowViewModel
         return true;
     }
 
-    // ── Change-tracking hooks so the header button caption + colour refresh
-    //    when IsConnected flips ───────────────────────────────────────────
+    // ── Autostart wiring (v2.17.3) ────────────────────────────────────────
+    /// <summary>
+    /// When the Simple-mode 'Start with Windows' toggle changes, mirror
+    /// the two underlying knobs:
+    ///   - ServiceVm.AutostartChecked — installs/removes the Windows Service
+    ///     (and starts it on install). Existing ServiceVm code already
+    ///     handles UAC, elevation, idempotency.
+    ///   - _settings.App.AutostartVpn — flag the Service reads on boot to
+    ///     decide whether to auto-start the VPN. Off = service is installed
+    ///     but sits idle until the user manually starts VPN.
+    /// </summary>
     partial void OnSmpAutostartCheckedChanged(bool value)
     {
-        // v2.17.3: actually install/remove service here. v2.17.1 is just a log.
-        _logger?.Information("[Simple] Autostart checkbox → {Value} (no-op until v2.17.3)", value);
+        if (_isLoadingUI) return;
+
+        // Mirror to ServiceVm → install+start or stop+uninstall.
+        if (ServiceVm.AutostartChecked != value)
+            ServiceVm.AutostartChecked = value;
+
+        // Flip AppSettings.AutostartVpn so the running Service knows whether
+        // to bring up VPN at boot (service re-reads config.yaml on start).
+        _settings.App.AutostartVpn = value;
+        SaveSettings();
     }
 }
