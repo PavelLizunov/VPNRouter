@@ -465,10 +465,10 @@ Total for a full v2.16 rollout: ~3-4 days of focused work.
 - [x] v2.16.2 — Servers + Subscribe migration (shipped 2026-04-19)
 - [x] v2.16.3 — Network / Apps / Tools / DpiBypass / Telegram migration (shipped 2026-04-19)
 - [x] v2.16.4 — FreeConfigsPage migration (shipped 2026-04-19) **Block 2 done**
-- [x] v2.16.5 — Bespoke dark theme + inverted logo (shipped 2026-04-19, **awaiting user test; Block 3 done**)
-- [ ] v2.16.6 — Typography scale pass
-- [ ] v2.16.7 — Spacing + radius pass
-- [ ] v2.16.8 — Motion + focus ring (optional)
+- [x] v2.16.5 — Bespoke dark theme + inverted logo (shipped + USER APPROVED 2026-04-19; Block 3 done)
+- [x] v2.16.6 — Typography scale pass (shipped 2026-04-19; outliers collapsed)
+- [x] v2.16.7 — Spacing + radius pass (shipped 2026-04-19; **Block 4 done, awaiting user test**)
+- [ ] v2.16.8 — Motion + focus ring (explicitly SKIPPED as optional; can add later if users report jarring transitions)
 
 Keep this checklist updated as each release ships so future
 context-compacted sessions pick up where we left off.
