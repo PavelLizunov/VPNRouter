@@ -12,22 +12,14 @@
     -->
     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
-                  Padding="20,16">
+                  Padding="20,20,20,16">
         <Grid MaxWidth="440" HorizontalAlignment="Center">
             <StackPanel Spacing="16">
 
-                <!-- Brand lockup -->
-                <StackPanel Orientation="Horizontal" Spacing="12"
-                            HorizontalAlignment="Center" Margin="0,4,0,4">
-                    <Image Source="{Binding LogoSource}" Width="48" Height="48"/>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Virtual Penguin Network"
-                                   FontSize="16" FontWeight="Bold"
-                                   Foreground="{DynamicResource AccentFgBrush}"/>
-                        <TextBlock Text="{Binding VersionText}"
-                                   FontSize="9" Opacity="0.5"/>
-                    </StackPanel>
-                </StackPanel>
+                <!-- No brand lockup here — the main window header already shows
+                     the logo + title + version + status badges. Having it
+                     again would produce the 'window inside a window' effect
+                     the user reported in v2.17.4 feedback. -->
 
                 <!-- Input — VLESS URI or subscription URL -->
                 <StackPanel Spacing="4">
