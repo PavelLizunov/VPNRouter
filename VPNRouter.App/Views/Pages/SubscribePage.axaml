@@ -88,13 +88,13 @@
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Button Content="{Binding ServerTestButtonText}"
                                 Command="{Binding TestAllSubscriptionServersCommand}"
-                                Padding="10,4" CornerRadius="4"
+                                Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                                 FontSize="10"
                                 Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
                                 ToolTip.Tip="{x:Static loc:Strings.TipTestAllServers}"/>
                         <Button Content="{Binding ServerDeepButtonText}"
                                 Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
-                                Padding="10,4" CornerRadius="4"
+                                Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                                 FontSize="10"
                                 Background="#7C3AED" Foreground="White"
                                 ToolTip.Tip="{x:Static loc:Strings.TipDeepVerifyServers}"/>
@@ -114,7 +114,7 @@
                     <Button Grid.Column="1"
                             Content="{x:Static loc:Strings.RefreshAll}"
                             Command="{Binding RefreshAllSubscriptionsCommand}"
-                            FontSize="10" Padding="8,3" CornerRadius="4"/>
+                            FontSize="10" Padding="8,3" CornerRadius="{StaticResource RadiusSm}"/>
                 </Grid>
             </StackPanel>
         </Border>
@@ -153,13 +153,13 @@
                                 Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RefreshSubscriptionCommand}"
                                 CommandParameter="{Binding}"
                                 IsEnabled="{Binding !IsRefreshing}"
-                                FontSize="10" Padding="4,1" MinHeight="0" CornerRadius="3"
+                                FontSize="10" Padding="4,1" MinHeight="0" CornerRadius="{StaticResource RadiusXs}"
                                 Background="Transparent" BorderThickness="0"
                                 ToolTip.Tip="{x:Static loc:Strings.TipRefreshSubscription}"/>
                         <Button Grid.Column="5" Content="✕"
                                 Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveSubscriptionCommand}"
                                 CommandParameter="{Binding}"
-                                FontSize="10" Padding="4,1" MinHeight="0" CornerRadius="3"
+                                FontSize="10" Padding="4,1" MinHeight="0" CornerRadius="{StaticResource RadiusXs}"
                                 Background="Transparent" BorderThickness="0"
                                 Opacity="0.55"
                                 ToolTip.Tip="{x:Static loc:Strings.TipRemoveSubscription}"/>
@@ -187,7 +187,7 @@
                         Command="{Binding AddSubscriptionCommand}"
                         Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                         FontSize="11" FontWeight="SemiBold"
-                        Padding="12,5" CornerRadius="4"/>
+                        Padding="12,5" CornerRadius="{StaticResource RadiusSm}"/>
             </Grid>
         </Border>
     </Grid>

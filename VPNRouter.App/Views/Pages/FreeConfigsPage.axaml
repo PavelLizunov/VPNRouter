@@ -46,7 +46,7 @@
                     <StackPanel Spacing="8" IsVisible="{Binding IsFreeOverviewSection}">
                         <!-- Quickstart banner (dismissible) -->
                         <Border IsVisible="{Binding FreeConfigsVm.ShowQuickstart}"
-                                Padding="12,8" CornerRadius="6"
+                                Padding="12,8" CornerRadius="{StaticResource RadiusSm}"
                                 Background="{DynamicResource InfoBgBrush}" BorderBrush="{DynamicResource InfoBorderBrush}" BorderThickness="1">
                             <StackPanel Spacing="4">
                                 <Grid ColumnDefinitions="*,Auto">
@@ -75,7 +75,7 @@
 
                         <!-- Dashboard (6 chips) -->
                         <Grid ColumnDefinitions="*,*,*,*,*,*">
-                            <Border Grid.Column="0" Margin="0,0,2,0" Padding="5,4" CornerRadius="4"
+                            <Border Grid.Column="0" Margin="0,0,2,0" Padding="5,4" CornerRadius="{StaticResource RadiusSm}"
                                     Background="{DynamicResource SurfaceSunkenBrush}">
                                 <StackPanel>
                                     <TextBlock Text="🌐" FontSize="12"/>
@@ -83,7 +83,7 @@
                                     <TextBlock Text="{Binding FreeConfigsVm.TotalCount}" FontWeight="Bold" FontSize="13"/>
                                 </StackPanel>
                             </Border>
-                            <Border Grid.Column="1" Margin="2,0" Padding="5,4" CornerRadius="4"
+                            <Border Grid.Column="1" Margin="2,0" Padding="5,4" CornerRadius="{StaticResource RadiusSm}"
                                     Background="{DynamicResource SuccessBgBrush}" BorderBrush="{DynamicResource SuccessSolidBrush}" BorderThickness="1">
                                 <StackPanel>
                                     <TextBlock Text="✓✓" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource SuccessFgBrush}"/>
@@ -91,7 +91,7 @@
                                     <TextBlock Text="{Binding FreeConfigsVm.VerifiedCount}" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource SuccessFgBrush}"/>
                                 </StackPanel>
                             </Border>
-                            <Border Grid.Column="2" Margin="2,0" Padding="5,4" CornerRadius="4"
+                            <Border Grid.Column="2" Margin="2,0" Padding="5,4" CornerRadius="{StaticResource RadiusSm}"
                                     Background="{DynamicResource SuccessBgBrush}">
                                 <StackPanel>
                                     <TextBlock Text="✅" FontSize="12"/>
@@ -99,7 +99,7 @@
                                     <TextBlock Text="{Binding FreeConfigsVm.WorkingCount}" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource SuccessFgBrush}"/>
                                 </StackPanel>
                             </Border>
-                            <Border Grid.Column="3" Margin="2,0" Padding="5,4" CornerRadius="4"
+                            <Border Grid.Column="3" Margin="2,0" Padding="5,4" CornerRadius="{StaticResource RadiusSm}"
                                     Background="{DynamicResource DangerBgBrush}">
                                 <StackPanel>
                                     <TextBlock Text="⚠" FontSize="12"/>
@@ -107,7 +107,7 @@
                                     <TextBlock Text="{Binding FreeConfigsVm.ImplausibleCount}" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource DangerFgBrush}"/>
                                 </StackPanel>
                             </Border>
-                            <Border Grid.Column="4" Margin="2,0" Padding="5,4" CornerRadius="4"
+                            <Border Grid.Column="4" Margin="2,0" Padding="5,4" CornerRadius="{StaticResource RadiusSm}"
                                     Background="{DynamicResource WarningBgBrush}">
                                 <StackPanel>
                                     <TextBlock Text="🔒" FontSize="12"/>
@@ -115,7 +115,7 @@
                                     <TextBlock Text="{Binding FreeConfigsVm.TlsFailedCount}" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource WarningFgBrush}"/>
                                 </StackPanel>
                             </Border>
-                            <Border Grid.Column="5" Margin="2,0,0,0" Padding="5,4" CornerRadius="4"
+                            <Border Grid.Column="5" Margin="2,0,0,0" Padding="5,4" CornerRadius="{StaticResource RadiusSm}"
                                     Background="{DynamicResource DangerBgBrush}">
                                 <StackPanel>
                                     <TextBlock Text="🚫" FontSize="12"/>
@@ -136,7 +136,7 @@
                                     Content="{x:Static loc:Strings.FcRefreshSources}"
                                     Command="{Binding FreeConfigsVm.RefreshCommand}"
                                     IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
-                                    Padding="0,8" FontSize="12" FontWeight="SemiBold" CornerRadius="5"
+                                    Padding="0,8" FontSize="12" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                     Background="#7C3AED" Foreground="White"
                                     ToolTip.Tip="{x:Static loc:Strings.FcRefreshTooltip}"/>
@@ -144,7 +144,7 @@
                                     Content="{x:Static loc:Strings.FcRetestAll}"
                                     Command="{Binding FreeConfigsVm.RetestCommand}"
                                     IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
-                                    Padding="0,8" FontSize="12" FontWeight="SemiBold" CornerRadius="5"
+                                    Padding="0,8" FontSize="12" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                     Background="#A78BFA" Foreground="White"
                                     ToolTip.Tip="{x:Static loc:Strings.FcRetestTooltip}"/>
@@ -152,12 +152,12 @@
                                     Content="{x:Static loc:Strings.FcCancel}"
                                     Command="{Binding FreeConfigsVm.CancelCommand}"
                                     IsVisible="{Binding FreeConfigsVm.IsBusy}"
-                                    Padding="14,8" FontSize="11" CornerRadius="5"
+                                    Padding="14,8" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
                                     Background="{DynamicResource DangerSolidBrush}" Foreground="White"/>
                         </Grid>
 
                         <!-- Smart Refresh goal settings -->
-                        <Border Padding="8,5" CornerRadius="4"
+                        <Border Padding="8,5" CornerRadius="{StaticResource RadiusSm}"
                                 Background="{DynamicResource AccentBgSubtleBrush}" BorderBrush="{DynamicResource AccentBorderBrush}" BorderThickness="1">
                             <StackPanel Spacing="4">
                                 <CheckBox Content="{x:Static loc:Strings.FcSmartRefreshLabel}"
@@ -193,7 +193,7 @@
                         </Border>
 
                         <!-- Fast scan toggle -->
-                        <Border Padding="8,5" CornerRadius="4"
+                        <Border Padding="8,5" CornerRadius="{StaticResource RadiusSm}"
                                 Background="{DynamicResource WarningBgBrush}" BorderBrush="{DynamicResource WarningBorderBrush}" BorderThickness="1">
                             <StackPanel Spacing="2">
                                 <CheckBox Content="{x:Static loc:Strings.FcFastScanLabel}"
@@ -214,7 +214,7 @@
                     <!-- ─── Deep verify section ─── -->
                     <StackPanel Spacing="6" IsVisible="{Binding IsFreeDeepSection}">
                         <TextBlock Text="{x:Static loc:Strings.FcSecDeep}" FontWeight="Bold" FontSize="13"/>
-                        <Border Padding="8,8,8,10" CornerRadius="6"
+                        <Border Padding="8,8,8,10" CornerRadius="{StaticResource RadiusSm}"
                                 BorderThickness="1" BorderBrush="{DynamicResource SuccessSolidBrush}" Background="{DynamicResource SuccessBgBrush}">
                             <StackPanel Spacing="6">
                                 <TextBlock Text="{x:Static loc:Strings.FcDeepHint}"
@@ -277,7 +277,7 @@
                                 <Button Content="{x:Static loc:Strings.FcDeepVerify}"
                                         Command="{Binding FreeConfigsVm.DeepVerifyTopCommand}"
                                         IsVisible="{Binding !FreeConfigsVm.IsBusy}"
-                                        Padding="0,9" FontSize="12" FontWeight="Bold" CornerRadius="5"
+                                        Padding="0,9" FontSize="12" FontWeight="Bold" CornerRadius="{StaticResource RadiusSm}"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                         Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
                                         ToolTip.Tip="{x:Static loc:Strings.FcDeepVerifyTooltip}"/>
@@ -286,7 +286,7 @@
                                 <Button Content="{x:Static loc:Strings.FcDeepStop}"
                                         Command="{Binding FreeConfigsVm.CancelCommand}"
                                         IsVisible="{Binding FreeConfigsVm.IsBusy}"
-                                        Padding="0,9" FontSize="12" FontWeight="Bold" CornerRadius="5"
+                                        Padding="0,9" FontSize="12" FontWeight="Bold" CornerRadius="{StaticResource RadiusSm}"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                                         Background="{DynamicResource DangerSolidBrush}" Foreground="White"
                                         ToolTip.Tip="{x:Static loc:Strings.FcDeepStopTooltip}"/>
@@ -332,7 +332,7 @@
                                                 CommandParameter="{Binding}"
                                                 Padding="6,2" FontSize="10"
                                                 Background="{DynamicResource DangerBgBrush}" Foreground="{DynamicResource DangerFgBrush}"
-                                                CornerRadius="3"
+                                                CornerRadius="{StaticResource RadiusXs}"
                                                 ToolTip.Tip="{x:Static loc:Strings.Remove}"/>
                                     </Grid>
                                 </DataTemplate>
@@ -350,7 +350,7 @@
                                      FontSize="10" Padding="6,3"/>
                             <Button Grid.Column="2" Content="{x:Static loc:Strings.FcUserSrcAdd}"
                                     Command="{Binding FreeConfigsVm.AddUserSourceCommand}"
-                                    Padding="10,3" FontSize="10" FontWeight="SemiBold" CornerRadius="4"
+                                    Padding="10,3" FontSize="10" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
                                     Margin="4,0,0,0"
                                     Background="{DynamicResource SuccessSolidBrush}" Foreground="White"/>
                         </Grid>
@@ -362,28 +362,28 @@
                         <Button Content="{x:Static loc:Strings.FcOpenLogs}"
                                 Command="{Binding FreeConfigsVm.OpenLogsCommand}"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                Padding="8,5" FontSize="11" CornerRadius="4"
+                                Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
                                 Background="#EDE9FE" Foreground="#5B21B6"
                                 ToolTip.Tip="{x:Static loc:Strings.TipOpenFreeConfigLogs}"/>
                         <Button Content="{x:Static loc:Strings.FcClearFailed}"
                                 Command="{Binding FreeConfigsVm.ClearFailedCommand}"
                                 IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                Padding="8,5" FontSize="11" CornerRadius="4"
+                                Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
                                 Background="{DynamicResource WarningBgBrush}" Foreground="{DynamicResource WarningFgBrush}"
                                 ToolTip.Tip="{x:Static loc:Strings.TipClearFailed}"/>
                         <Button Content="{x:Static loc:Strings.FcKeepVerified}"
                                 Command="{Binding FreeConfigsVm.KeepVerifiedOnlyCommand}"
                                 IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                Padding="8,5" FontSize="11" CornerRadius="4"
+                                Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
                                 Background="{DynamicResource SuccessBgBrush}" Foreground="{DynamicResource SuccessFgBrush}"
                                 ToolTip.Tip="{x:Static loc:Strings.TipKeepVerifiedOnly}"/>
                         <Button Content="{x:Static loc:Strings.FcClearAll}"
                                 Command="{Binding FreeConfigsVm.ClearAllCommand}"
                                 IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                Padding="8,5" FontSize="11" CornerRadius="4"
+                                Padding="8,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
                                 Background="{DynamicResource DangerBgBrush}" Foreground="{DynamicResource DangerFgBrush}"
                                 ToolTip.Tip="{x:Static loc:Strings.TipClearAllCache}"/>
                     </StackPanel>
@@ -409,7 +409,7 @@
                 <Grid Grid.Row="1">
                 <!-- Empty state -->
                 <Border IsVisible="{Binding FreeConfigsVm.IsEmpty}"
-                        BorderThickness="2" CornerRadius="6"
+                        BorderThickness="2" CornerRadius="{StaticResource RadiusSm}"
                         BorderBrush="#7C3AED" Background="#F5F3FF"
                         Padding="20">
                     <StackPanel Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Center">
@@ -425,14 +425,14 @@
                                 Command="{Binding FreeConfigsVm.RefreshCommand}"
                                 IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                                 FontSize="12" FontWeight="Bold"
-                                Padding="14,8" CornerRadius="5"
+                                Padding="14,8" CornerRadius="{StaticResource RadiusSm}"
                                 Background="#7C3AED" Foreground="White"
                                 HorizontalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
                 <Border IsVisible="{Binding FreeConfigsVm.IsFilteredEmpty}"
-                        BorderThickness="1" CornerRadius="4"
+                        BorderThickness="1" CornerRadius="{StaticResource RadiusSm}"
                         BorderBrush="{DynamicResource BorderDefaultBrush}"
                         Padding="16">
                     <StackPanel Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
@@ -445,7 +445,7 @@
                 </Border>
 
                 <Border IsVisible="{Binding FreeConfigsVm.IsListVisible}"
-                        BorderThickness="1" CornerRadius="4"
+                        BorderThickness="1" CornerRadius="{StaticResource RadiusSm}"
                         BorderBrush="{DynamicResource BorderDefaultBrush}">
                     <Grid RowDefinitions="Auto,*">
                         <Grid Grid.Row="0" Background="{DynamicResource SurfaceSunkenBrush}"
@@ -482,7 +482,7 @@
                                         <TextBlock Grid.Column="1" Text="{Binding Endpoint}"
                                                    FontSize="10" VerticalAlignment="Center" Margin="8,0,0,0"
                                                    TextTrimming="CharacterEllipsis"/>
-                                        <Border Grid.Column="2" CornerRadius="3"
+                                        <Border Grid.Column="2" CornerRadius="{StaticResource RadiusXs}"
                                                 Padding="4,1" HorizontalAlignment="Right" Margin="0,0,4,0"
                                                 VerticalAlignment="Center"
                                                 Background="{Binding LatencyColor}">
@@ -530,7 +530,7 @@
                 <ProgressBar Value="{Binding FreeConfigsVm.ProgressDone}"
                              Maximum="{Binding FreeConfigsVm.ProgressTotal}"
                              IsVisible="{Binding FreeConfigsVm.HasProgress}"
-                             Height="4" CornerRadius="2"/>
+                             Height="4" CornerRadius="{StaticResource RadiusXs}"/>
                 <TextBlock Text="{x:Static loc:Strings.FcConnectHint}"
                            IsVisible="{Binding !FreeConfigsVm.HasSelection}"
                            FontSize="10" Opacity="0.55"
@@ -544,7 +544,7 @@
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
                         Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
-                        CornerRadius="5"/>
+                        CornerRadius="{StaticResource RadiusSm}"/>
             </StackPanel>
         </Border>
     </Grid>

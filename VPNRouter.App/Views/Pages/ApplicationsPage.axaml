@@ -32,7 +32,7 @@
                                            FontSize="11" FontWeight="SemiBold"
                                            VerticalAlignment="Center" Margin="2,0"
                                            TextTrimming="CharacterEllipsis"/>
-                                <Border Grid.Column="1" Background="{DynamicResource AccentSolidBrush}" CornerRadius="8"
+                                <Border Grid.Column="1" Background="{DynamicResource AccentSolidBrush}" CornerRadius="{StaticResource RadiusMd}"
                                         Padding="5,0" Margin="4,0,2,0" VerticalAlignment="Center"
                                         IsVisible="{Binding Apps.Count}">
                                     <TextBlock Text="{Binding Apps.Count}" FontSize="9"
@@ -54,7 +54,7 @@
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
                         Margin="4,0,4,4" Padding="4,4"
-                        FontSize="10" FontWeight="SemiBold" CornerRadius="4"
+                        FontSize="10" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
                         Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"/>
             </Grid>
         </Border>
@@ -112,7 +112,7 @@
                                       MinHeight="0" Padding="4,0">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <TextBlock Text="{Binding ProcessName}" FontSize="11"/>
-                                    <Border Background="{DynamicResource TextMutedBrush}" CornerRadius="6" Padding="5,0"
+                                    <Border Background="{DynamicResource TextMutedBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="5,0"
                                             IsVisible="{Binding IsCustom}" VerticalAlignment="Center">
                                         <TextBlock Text="{x:Static loc:Strings.LblCustomBadge}" FontSize="9" Foreground="White"/>
                                     </Border>
@@ -147,7 +147,7 @@
                             HorizontalContentAlignment="Center"
                             Background="{DynamicResource WarningSolidBrush}" Foreground="White"
                             FontSize="11" FontWeight="SemiBold"
-                            Padding="0,6" CornerRadius="4"/>
+                            Padding="0,6" CornerRadius="{StaticResource RadiusSm}"/>
                     <!-- Add app input -->
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBox Grid.Column="0" x:Name="CustomAppInput"
@@ -157,7 +157,7 @@
                                 Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
                                 CommandParameter="{Binding #CustomAppInput.Text}"
                                 Margin="6,0,0,0"
-                                Padding="14,5" FontSize="11" CornerRadius="4"
+                                Padding="14,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
                                 Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                                 FontWeight="SemiBold"/>
                     </Grid>

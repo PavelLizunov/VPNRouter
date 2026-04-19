@@ -51,7 +51,7 @@
                     </StackPanel>
                 </StackPanel>
 
-                <Border Padding="8,6" CornerRadius="4"
+                <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
                         Background="{DynamicResource SurfaceSunkenBrush}"
                         BorderBrush="{DynamicResource BorderDefaultBrush}"
                         BorderThickness="1">
@@ -71,7 +71,7 @@
             <StackPanel Spacing="10" IsVisible="{Binding IsSettingsLeakSelected}">
                 <TextBlock Text="{Binding LblSettingsLeak}" FontWeight="Bold" FontSize="13"/>
 
-                <Border Padding="8,6" CornerRadius="4"
+                <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
                         Background="{DynamicResource SurfaceSunkenBrush}"
                         BorderBrush="{DynamicResource BorderDefaultBrush}"
                         BorderThickness="1">
@@ -96,7 +96,7 @@
             <StackPanel Spacing="10" IsVisible="{Binding IsSettingsContentSelected}">
                 <TextBlock Text="{Binding LblSettingsContent}" FontWeight="Bold" FontSize="13"/>
 
-                <Border Padding="8,6" CornerRadius="4"
+                <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
                         Background="{DynamicResource SurfaceSunkenBrush}"
                         BorderBrush="{DynamicResource BorderDefaultBrush}"
                         BorderThickness="1">
@@ -116,7 +116,7 @@
             <StackPanel Spacing="10" IsVisible="{Binding IsSettingsUpdatesSelected}">
                 <TextBlock Text="{Binding LblSettingsUpdates}" FontWeight="Bold" FontSize="13"/>
 
-                <Border Padding="8,6" CornerRadius="4"
+                <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
                         Background="{DynamicResource SurfaceSunkenBrush}"
                         BorderBrush="{DynamicResource BorderDefaultBrush}"
                         BorderThickness="1">
@@ -133,7 +133,7 @@
             <StackPanel Spacing="10" IsVisible="{Binding IsSettingsAutostartSelected}">
                 <TextBlock Text="{Binding LblAutostartSection}" FontWeight="Bold" FontSize="13"/>
 
-                <Border Padding="8,6" CornerRadius="4"
+                <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
                         Background="{DynamicResource SurfaceSunkenBrush}"
                         BorderBrush="{DynamicResource BorderDefaultBrush}"
                         BorderThickness="1">
@@ -173,7 +173,7 @@
                         Content="{x:Static loc:Strings.ApplyNowReloadVpn}"
                         Command="{Binding ApplyPendingChangesCommand}"
                         IsEnabled="{Binding IsConnected}"
-                        Padding="10,5" FontSize="10" FontWeight="SemiBold" CornerRadius="4"
+                        Padding="10,5" FontSize="10" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
                         Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                         ToolTip.Tip="{x:Static loc:Strings.ApplyNowHint}"/>
             </Grid>

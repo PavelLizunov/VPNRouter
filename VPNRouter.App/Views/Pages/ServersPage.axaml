@@ -97,7 +97,7 @@
             <Border Grid.Row="2"
                     IsVisible="{Binding DetailServer, Converter={x:Static ObjectConverters.IsNotNull}}"
                     BorderBrush="{DynamicResource BorderDefaultBrush}"
-                    BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,6,0,0">
+                    BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="10,8" Margin="0,6,0,0">
                 <DockPanel>
                     <Button DockPanel.Dock="Top" HorizontalAlignment="Right" Content="X"
                             Command="{Binding CloseServerDetailCommand}"
@@ -166,13 +166,13 @@
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Button Content="{Binding ServerTestButtonText}"
                                 Command="{Binding TestAllServersCommand}"
-                                Padding="10,4" CornerRadius="4"
+                                Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                                 FontSize="10"
                                 Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
                                 ToolTip.Tip="{x:Static loc:Strings.TipTestAllServers}"/>
                         <Button Content="{Binding ServerDeepButtonText}"
                                 Command="{Binding DeepVerifyAllServersCommand}"
-                                Padding="10,4" CornerRadius="4"
+                                Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                                 FontSize="10"
                                 Background="#7C3AED" Foreground="White"
                                 ToolTip.Tip="{x:Static loc:Strings.TipDeepVerifyServers}"/>
@@ -191,11 +191,11 @@
                             Command="{Binding AddServerCommand}"
                             Margin="6,0,0,0"
                             Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                            Padding="14,5" CornerRadius="4" FontWeight="SemiBold"/>
+                            Padding="14,5" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"/>
                     <Button DockPanel.Dock="Right" Content="{Binding LblRemove}"
                             Command="{Binding RemoveServerCommand}"
                             Margin="6,0,0,0"
-                            Padding="14,5" CornerRadius="4"/>
+                            Padding="14,5" CornerRadius="{StaticResource RadiusSm}"/>
                     <TextBox Text="{Binding VlessUri}"
                              Watermark="{x:Static loc:Strings.WmVlessUri}"
                              FontSize="10" Padding="6,4"
@@ -207,10 +207,10 @@
                     <Button Content="{Binding LblAddConfig}"
                             Command="{Binding AddCustomConfigCommand}"
                             Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                            Padding="14,5" CornerRadius="4" FontWeight="SemiBold"/>
+                            Padding="14,5" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"/>
                     <Button Content="{Binding LblRemove}"
                             Command="{Binding RemoveCustomConfigCommand}"
-                            Padding="14,5" CornerRadius="4"/>
+                            Padding="14,5" CornerRadius="{StaticResource RadiusSm}"/>
                 </StackPanel>
             </StackPanel>
         </Border>

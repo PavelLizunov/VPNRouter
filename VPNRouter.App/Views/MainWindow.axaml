@@ -45,7 +45,7 @@
                         <Button Command="{Binding NavigateToVpnCommand}"
                                 Background="{Binding VpnBadgeBrush}"
                                 BorderThickness="0"
-                                CornerRadius="10"
+                                CornerRadius="{StaticResource RadiusLg}"
                                 Padding="8,2"
                                 MinHeight="0"
                                 ToolTip.Tip="{Binding VpnBadgeTooltip}"
@@ -57,7 +57,7 @@
                         <Button Command="{Binding NavigateToZapretCommand}"
                                 Background="{Binding ZapretBadgeBrush}"
                                 BorderThickness="0"
-                                CornerRadius="10"
+                                CornerRadius="{StaticResource RadiusLg}"
                                 Padding="8,2"
                                 MinHeight="0"
                                 ToolTip.Tip="{Binding ZapretBadgeTooltip}"
@@ -69,7 +69,7 @@
                         <Button Command="{Binding NavigateToTgProxyCommand}"
                                 Background="{Binding TgProxyBadgeBrush}"
                                 BorderThickness="0"
-                                CornerRadius="10"
+                                CornerRadius="{StaticResource RadiusLg}"
                                 Padding="8,2"
                                 MinHeight="0"
                                 ToolTip.Tip="{Binding TgProxyBadgeTooltip}"
@@ -126,7 +126,7 @@
                         Command="{Binding UpdateVm.DownloadAndApplyCommand}"
                         IsVisible="{Binding !UpdateVm.IsDownloading}"
                         Background="{DynamicResource WarningSolidBrush}" Foreground="White"
-                        FontWeight="Bold" Padding="14,6" CornerRadius="4"/>
+                        FontWeight="Bold" Padding="14,6" CornerRadius="{StaticResource RadiusSm}"/>
                 <ProgressBar DockPanel.Dock="Right"
                              Value="{Binding UpdateVm.DownloadProgress}"
                              Maximum="100"
@@ -205,7 +205,7 @@
                         HorizontalContentAlignment="Center"
                         Background="{DynamicResource AccentSolidBrush}"
                         Foreground="{DynamicResource AccentOnSolidBrush}"
-                        CornerRadius="5"/>
+                        CornerRadius="{StaticResource RadiusSm}"/>
 
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <Ellipse Width="8" Height="8"

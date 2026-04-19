@@ -49,7 +49,7 @@
                     <TextBlock Text="{x:Static loc:Strings.ZapretSecStatus}" FontWeight="Bold" FontSize="13"/>
                     <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.7"
                                Text="{Binding LblDpiDescription}"/>
-                    <Border Padding="10,8" CornerRadius="4"
+                    <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Ellipse Width="8" Height="8" VerticalAlignment="Center"
@@ -72,11 +72,11 @@
                         <TextBlock Text="{Binding ZapretVersionText}" FontSize="10" Opacity="0.5" VerticalAlignment="Center"/>
                         <Button Content="{Binding LblUpdateZapret}"
                                 Command="{Binding UpdateZapretCommand}"
-                                FontSize="10" Padding="8,4" CornerRadius="4"
+                                FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"
                                 IsEnabled="{Binding !IsZapretDownloading}"/>
                         <ProgressBar IsVisible="{Binding IsZapretDownloading}"
                                      IsIndeterminate="True" Height="4" Width="100"
-                                     CornerRadius="2" VerticalAlignment="Center"
+                                     CornerRadius="{StaticResource RadiusXs}" VerticalAlignment="Center"
                                      Foreground="#7C3AED"/>
                     </StackPanel>
                     <TextBox Text="{Binding ZapretCustomArgs}"
@@ -90,27 +90,27 @@
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretHostsSection}">
                     <TextBlock Text="{x:Static loc:Strings.ZapretSecHosts}" FontWeight="Bold" FontSize="13"/>
 
-                    <Border Padding="10,8" CornerRadius="4"
+                    <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Spacing="4">
                             <Button Content="{Binding LblDiscordHosts}"
                                     Command="{Binding ToggleDiscordHostsCommand}"
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Left"
-                                    FontSize="10" Padding="8,4" CornerRadius="4"/>
+                                    FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
                             <TextBlock Text="{Binding LblDiscordHostsDesc}"
                                        TextWrapping="Wrap" FontSize="9" Opacity="0.6"/>
                         </StackPanel>
                     </Border>
 
-                    <Border Padding="10,8" CornerRadius="4"
+                    <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Spacing="4">
                             <Button Content="{Binding LblFlowsealHosts}"
                                     Command="{Binding ToggleFlowsealHostsCommand}"
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Left"
-                                    FontSize="10" Padding="8,4" CornerRadius="4"/>
+                                    FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
                             <TextBlock TextWrapping="Wrap" FontSize="9" Opacity="0.6"
                                        Text="{x:Static loc:Strings.ZapretHostsHint}"/>
                         </StackPanel>
@@ -121,7 +121,7 @@
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretFiltersSection}">
                     <TextBlock Text="{x:Static loc:Strings.ZapretSecFilters}" FontWeight="Bold" FontSize="13"/>
 
-                    <Border Padding="10,8" CornerRadius="4"
+                    <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Spacing="4">
                             <TextBlock Text="{x:Static loc:Strings.GameFilter}" FontWeight="SemiBold" FontSize="10"/>
@@ -135,7 +135,7 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Padding="10,8" CornerRadius="4"
+                    <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Spacing="4">
                             <TextBlock Text="{x:Static loc:Strings.IpSetFilter}" FontWeight="SemiBold" FontSize="10"/>
@@ -158,7 +158,7 @@
                             IsEnabled="{Binding !IsZapretActionRunning}"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Left"
-                            FontSize="10" Padding="8,4" CornerRadius="4"/>
+                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
 
                     <CheckBox IsChecked="{Binding ZapretAutoUpdateCheck}"
                               Content="{x:Static loc:Strings.AutoUpdateCheckLabel}"
@@ -175,13 +175,13 @@
                             IsEnabled="{Binding !IsZapretActionRunning}"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Left"
-                            FontSize="10" Padding="8,4" CornerRadius="4"/>
+                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
 
                     <Border IsVisible="{Binding ZapretActionOutput.Count}"
                             Padding="8" MaxHeight="260"
                             Background="{DynamicResource SurfaceSunkenBrush}"
                             BorderBrush="{DynamicResource BorderDefaultBrush}"
-                            BorderThickness="1" CornerRadius="4">
+                            BorderThickness="1" CornerRadius="{StaticResource RadiusSm}">
                         <StackPanel Spacing="2">
                             <TextBlock Text="{Binding ZapretActionTitle}"
                                        FontWeight="SemiBold" FontSize="10" Opacity="0.7"/>
@@ -210,27 +210,27 @@
                             Command="{Binding ClearDiscordCacheCommand}"
                             IsEnabled="{Binding !IsZapretActionRunning}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                            FontSize="10" Padding="8,4" CornerRadius="4"/>
+                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
                     <Button Content="{x:Static loc:Strings.RunTestsLabel}"
                             Command="{Binding RunZapretTestsCommand}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                            FontSize="10" Padding="8,4" CornerRadius="4"/>
+                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
                     <Button Content="{x:Static loc:Strings.RemoveServiceLabel}"
                             Command="{Binding RemoveZapretServiceCommand}"
                             IsEnabled="{Binding !IsZapretActionRunning}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                            FontSize="10" Padding="8,4" CornerRadius="4"/>
+                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
                     <Button Content="{x:Static loc:Strings.OpenServiceMenu}"
                             Command="{Binding OpenZapretServiceMenuCommand}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                            FontSize="10" Padding="8,4" CornerRadius="4"/>
+                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
                     <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
                         <Button Content="{x:Static loc:Strings.OpenFolder}"
                                 Command="{Binding OpenZapretFolderCommand}"
-                                FontSize="10" Padding="8,4" CornerRadius="4"/>
+                                FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
                         <Button Content="{x:Static loc:Strings.OpenGitHub}"
                                 Command="{Binding OpenZapretGitHubCommand}"
-                                FontSize="10" Padding="8,4" CornerRadius="4"
+                                FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"
                                 Foreground="#7C3AED"/>
                         <TextBlock Text="Flowseal/zapret-discord-youtube" FontSize="9" Opacity="0.4"
                                    VerticalAlignment="Center"/>
@@ -252,7 +252,7 @@
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Center"
                     Background="#7C3AED" Foreground="White"
-                    CornerRadius="5"/>
+                    CornerRadius="{StaticResource RadiusSm}"/>
         </Border>
     </Grid>
 </UserControl>
