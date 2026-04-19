@@ -75,19 +75,16 @@ public partial class MainWindowViewModel
     {
         try
         {
-            var nextVpn = RuntimeStatusDetector.IsVpnRunning()
-                ? ComponentRuntimeStatus.Running
-                : ComponentRuntimeStatus.Idle;
-
-            var nextZapret = RuntimeStatusDetector.IsZapretRunning()
-                ? ComponentRuntimeStatus.Running
-                : ComponentRuntimeStatus.Idle;
+            var vpnRunning = RuntimeStatusDetector.IsVpnRunning();
+            var zapretRunning = RuntimeStatusDetector.IsZapretRunning();
 
             var tgPort = _settings?.App?.TgProxyPort ?? 0;
             if (tgPort <= 0) tgPort = 1443;
-            var nextTgProxy = RuntimeStatusDetector.IsTgProxyRunning(tgPort)
-                ? ComponentRuntimeStatus.Running
-                : ComponentRuntimeStatus.Idle;
+            var tgProxyRunning = RuntimeStatusDetector.IsTgProxyRunning(tgPort);
+
+            var nextVpn      = vpnRunning    ? ComponentRuntimeStatus.Running : ComponentRuntimeStatus.Idle;
+            var nextZapret   = zapretRunning ? ComponentRuntimeStatus.Running : ComponentRuntimeStatus.Idle;
+            var nextTgProxy  = tgProxyRunning? ComponentRuntimeStatus.Running : ComponentRuntimeStatus.Idle;
 
             // Preserve "Failed" state until next successful detection
             if (VpnRuntimeStatus != ComponentRuntimeStatus.Failed || nextVpn == ComponentRuntimeStatus.Running)
@@ -98,10 +95,46 @@ public partial class MainWindowViewModel
 
             if (TgProxyRuntimeStatus != ComponentRuntimeStatus.Failed || nextTgProxy == ComponentRuntimeStatus.Running)
                 TgProxyRuntimeStatus = nextTgProxy;
+
+            // Sync IsConnected with real VPN state. This handles the case where
+            // the Windows Service started sing-box before the desktop app opened
+            // — the one-shot DetectServiceManagedVpn() in the ctor may have
+            // missed it if the race was the other way. Also covers external
+            // stop of sing-box (e.g. user killed it from Task Manager).
+            SyncConnectedWithVpnRuntime(vpnRunning);
         }
         catch
         {
             // Poll failures are non-fatal
+        }
+    }
+
+    /// <summary>
+    /// Reconcile the UI's IsConnected flag (and its dependent labels) with the
+    /// actual presence of a sing-box process. Called every poll tick after
+    /// <see cref="UpdateRuntimeStatus"/> has refreshed the VPN badge.
+    /// </summary>
+    private void SyncConnectedWithVpnRuntime(bool vpnRunning)
+    {
+        // Don't disturb state during an explicit connect/disconnect transition
+        if (IsConnecting) return;
+
+        if (vpnRunning && !IsConnected)
+        {
+            IsConnected = true;
+            ConnectButtonText = Strings.StopVPN;
+            var mode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "manual" : "custom";
+            StatusText = IsRussian
+                ? $"Подключено через службу [{mode}]"
+                : $"Connected via service [{mode}]";
+            try { StartSubRefreshTimer(); } catch { }
+        }
+        else if (!vpnRunning && IsConnected)
+        {
+            // sing-box disappeared without the app initiating a stop — reset UI
+            IsConnected = false;
+            ConnectButtonText = Strings.StartVPN;
+            StatusText = Strings.NotConnected;
         }
     }
 
@@ -138,12 +171,30 @@ public partial class MainWindowViewModel
     }
 
     /// <summary>
-    /// Click-handler target for badges: switch to the tab that controls this component.
-    /// Called from MainWindow.axaml via Command binding.
+    /// Click-handler target for the VPN badge: switch to the tab that shows the
+    /// currently-active config source. If the user is running a subscription
+    /// config, jump to the Subscribe tab (tab 1); otherwise land on Manual
+    /// (tab 0) where both VLESS and Custom configs live.
     /// </summary>
     [CommunityToolkit.Mvvm.Input.RelayCommand]
-    private void NavigateToVpn() => SelectedTabIndex = 0;  // Manual/Subscribe
+    private void NavigateToVpn()
+    {
+        SelectedTabIndex = IsSubscribeMode ? 1 : 0;
+    }
 
+    /// <summary>Zapret badge click: switch to Tools tab AND select Zapret sub-section.</summary>
     [CommunityToolkit.Mvvm.Input.RelayCommand]
-    private void NavigateToTools() => SelectedTabIndex = 4;  // Tools tab (Zapret/TgProxy live here)
+    private void NavigateToZapret()
+    {
+        SelectedTabIndex = 4;        // Tools tab
+        SelectedToolIndex = 0;       // Zapret sub-section
+    }
+
+    /// <summary>TgProxy badge click: switch to Tools tab AND select TgProxy sub-section.</summary>
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void NavigateToTgProxy()
+    {
+        SelectedTabIndex = 4;        // Tools tab
+        SelectedToolIndex = 1;       // TgProxy sub-section
+    }
 }

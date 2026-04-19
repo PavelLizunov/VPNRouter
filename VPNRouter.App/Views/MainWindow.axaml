@@ -53,7 +53,7 @@
                                        FontSize="10" FontWeight="SemiBold"
                                        Foreground="White"/>
                         </Button>
-                        <Button Command="{Binding NavigateToToolsCommand}"
+                        <Button Command="{Binding NavigateToZapretCommand}"
                                 Background="{Binding ZapretBadgeBrush}"
                                 BorderThickness="0"
                                 CornerRadius="10"
@@ -65,7 +65,7 @@
                                        FontSize="10" FontWeight="SemiBold"
                                        Foreground="White"/>
                         </Button>
-                        <Button Command="{Binding NavigateToToolsCommand}"
+                        <Button Command="{Binding NavigateToTgProxyCommand}"
                                 Background="{Binding TgProxyBadgeBrush}"
                                 BorderThickness="0"
                                 CornerRadius="10"
