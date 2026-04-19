@@ -84,17 +84,37 @@ public partial class ServerViewModel : ViewModelBase
         _                              => "○"
     };
 
-    /// <summary>Brush for <see cref="StatusDot"/>.</summary>
-    public IBrush StatusDotBrush => TestStatus switch
+    /// <summary>Brush for <see cref="StatusDot"/>. Resolves from the token
+    /// dictionary (Tokens.axaml) so the dot adapts to theme variant in v2.16.5.</summary>
+    public IBrush StatusDotBrush
     {
-        ServerProbeStatus.Ok           => new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81)),  // emerald
-        ServerProbeStatus.Slow         => new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B)),  // amber
-        ServerProbeStatus.TlsFailed    => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)),  // red
-        ServerProbeStatus.Unreachable  => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)),
-        ServerProbeStatus.Timeout      => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)),
-        ServerProbeStatus.Implausible  => new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B)),
-        _                              => new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF))   // gray
-    };
+        get
+        {
+            var key = TestStatus switch
+            {
+                ServerProbeStatus.Ok           => "SuccessSolidBrush",
+                ServerProbeStatus.Slow         => "WarningSolidBrush",
+                ServerProbeStatus.Implausible  => "WarningSolidBrush",
+                ServerProbeStatus.TlsFailed    => "DangerSolidBrush",
+                ServerProbeStatus.Unreachable  => "DangerSolidBrush",
+                ServerProbeStatus.Timeout      => "DangerSolidBrush",
+                _                              => "TextMutedBrush"
+            };
+            return LookupBrush(key) ?? new SolidColorBrush(Color.FromRgb(0x94, 0xA0, 0xB2));
+        }
+    }
+
+    private static IBrush? LookupBrush(string key)
+    {
+        var app = Avalonia.Application.Current;
+        if (app != null &&
+            app.Resources.TryGetResource(key, app.ActualThemeVariant, out var res) &&
+            res is IBrush brush)
+        {
+            return brush;
+        }
+        return null;
+    }
 
     /// <summary>Apply a probe result to this VM (updates PingMs, Status, Error, clears IsTesting).</summary>
     public void ApplyProbeResult(ServerProbeResult result)

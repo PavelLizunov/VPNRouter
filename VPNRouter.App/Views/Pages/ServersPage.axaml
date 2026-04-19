@@ -19,7 +19,7 @@
                  SelectedIndex="{Binding SelectedServerModeIndex}"
                  Background="Transparent"
                  BorderThickness="0,0,0,1"
-                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                 BorderBrush="{DynamicResource BorderDefaultBrush}"
                  Padding="6,2">
             <ListBox.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -47,7 +47,7 @@
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:ServerViewModel">
                         <Grid ColumnDefinitions="Auto,Auto,*,*,55,55,40,Auto">
-                            <TextBlock Grid.Column="0" Text="●" Foreground="#22C55E"
+                            <TextBlock Grid.Column="0" Text="●" Foreground="{DynamicResource SuccessSolidBrush}"
                                        IsVisible="{Binding IsActive}" FontSize="9"
                                        VerticalAlignment="Center" Margin="0,0,4,0"/>
                             <TextBlock Grid.Column="1" Text="{Binding StatusDot}"
@@ -96,7 +96,7 @@
             <!-- Server detail editor (opened via right-click) -->
             <Border Grid.Row="2"
                     IsVisible="{Binding DetailServer, Converter={x:Static ObjectConverters.IsNotNull}}"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                    BorderBrush="{DynamicResource BorderDefaultBrush}"
                     BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,6,0,0">
                 <DockPanel>
                     <Button DockPanel.Dock="Top" HorizontalAlignment="Right" Content="X"
@@ -138,7 +138,7 @@
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:CustomConfigViewModel">
                         <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
-                            <TextBlock Grid.Column="0" Text="O" Foreground="#22C55E"
+                            <TextBlock Grid.Column="0" Text="O" Foreground="{DynamicResource SuccessSolidBrush}"
                                        IsVisible="{Binding IsActive}"
                                        VerticalAlignment="Center" Margin="0,0,6,0" FontSize="8"/>
                             <TextBlock Grid.Column="1" Text="{Binding Name}"
@@ -159,7 +159,7 @@
         <!-- ═══ Bottom action bar ═══ -->
         <Border Grid.Row="2" Padding="10,6"
                 BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+                BorderBrush="{DynamicResource BorderDefaultBrush}">
             <StackPanel Spacing="6">
                 <!-- Test all + Deep verify + progress row -->
                 <StackPanel Spacing="2" IsVisible="{Binding IsVlessMode}">
@@ -168,7 +168,7 @@
                                 Command="{Binding TestAllServersCommand}"
                                 Padding="10,4" CornerRadius="4"
                                 FontSize="10"
-                                Background="#059669" Foreground="White"
+                                Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
                                 ToolTip.Tip="{x:Static loc:Strings.TipTestAllServers}"/>
                         <Button Content="{Binding ServerDeepButtonText}"
                                 Command="{Binding DeepVerifyAllServersCommand}"
@@ -190,7 +190,7 @@
                     <Button DockPanel.Dock="Right" Content="{Binding LblAddServers}"
                             Command="{Binding AddServerCommand}"
                             Margin="6,0,0,0"
-                            Background="#2563EB" Foreground="White"
+                            Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                             Padding="14,5" CornerRadius="4" FontWeight="SemiBold"/>
                     <Button DockPanel.Dock="Right" Content="{Binding LblRemove}"
                             Command="{Binding RemoveServerCommand}"
@@ -206,7 +206,7 @@
                             IsVisible="{Binding !IsVlessMode}">
                     <Button Content="{Binding LblAddConfig}"
                             Command="{Binding AddCustomConfigCommand}"
-                            Background="#2563EB" Foreground="White"
+                            Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                             Padding="14,5" CornerRadius="4" FontWeight="SemiBold"/>
                     <Button Content="{Binding LblRemove}"
                             Command="{Binding RemoveCustomConfigCommand}"
