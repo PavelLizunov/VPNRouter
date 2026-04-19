@@ -86,6 +86,8 @@ public class UpdateChecker
         // ── Find platform-specific assets ──
         var fullAsset = FindFullAsset(latestRelease.Release.assets);
         var liteAsset = FindLiteAsset(latestRelease.Release.assets);
+        var fullSha   = FindChecksumAsset(latestRelease.Release.assets, fullAsset);
+        var liteSha   = FindChecksumAsset(latestRelease.Release.assets, liteAsset);
 
         bool canUseLite = liteAsset != null && IsSharedRuntimeInstall();
 
@@ -109,7 +111,9 @@ public class UpdateChecker
             IsNewer = true,
             LiteDownloadUrl = liteAsset?.browser_download_url,
             LiteSizeBytes = liteAsset?.size ?? 0,
-            HasLiteUpdate = canUseLite
+            HasLiteUpdate = canUseLite,
+            FullChecksumUrl = (string?)fullSha?.browser_download_url,
+            LiteChecksumUrl = (string?)liteSha?.browser_download_url,
         };
 
         UpdateAvailable?.Invoke(info);
@@ -121,6 +125,7 @@ public class UpdateChecker
         var useLite = info.HasLiteUpdate && !string.IsNullOrEmpty(info.LiteDownloadUrl);
         var downloadUrl = useLite ? info.LiteDownloadUrl! : info.DownloadUrl;
         var expectedSize = useLite ? info.LiteSizeBytes : info.SizeBytes;
+        var checksumUrl = useLite ? info.LiteChecksumUrl : info.FullChecksumUrl;
         var label = useLite ? "lite update" : "full update";
 
         StatusChanged?.Invoke($"Downloading {label}...");
@@ -159,6 +164,40 @@ public class UpdateChecker
         if (expectedSize > 0 && downloadedSize < expectedSize * 0.9)
             throw new InvalidOperationException(
                 $"Downloaded file is too small ({downloadedSize / 1024 / 1024} MB vs expected {expectedSize / 1024 / 1024} MB). Download may be corrupted.");
+
+        // ── Verify SHA256 against .sha256 asset on the release (v2.15.8) ──
+        if (!string.IsNullOrEmpty(checksumUrl))
+        {
+            StatusChanged?.Invoke("Verifying checksum...");
+            var expectedSha = (await _http.GetStringAsync(checksumUrl, ct)).Trim().ToLowerInvariant();
+
+            // Strip any trailing filename portion if the .sha256 file used "HASH  filename" format
+            if (expectedSha.Contains(' '))
+                expectedSha = expectedSha.Split(' ', 2)[0].Trim();
+
+            if (expectedSha.Length != 64)
+                throw new InvalidOperationException(
+                    $"Checksum file content is not a valid SHA256 (got {expectedSha.Length} hex chars, expected 64).");
+
+            string actualSha;
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            await using (var fs = File.OpenRead(zipPath))
+            {
+                var hashBytes = await sha.ComputeHashAsync(fs, ct);
+                actualSha = Convert.ToHexString(hashBytes).ToLowerInvariant();
+            }
+
+            if (!string.Equals(actualSha, expectedSha, StringComparison.Ordinal))
+            {
+                // Delete the corrupt file so a retry pulls it fresh
+                try { File.Delete(zipPath); } catch { }
+                throw new InvalidOperationException(
+                    $"Checksum mismatch — download is corrupted.\r\n" +
+                    $"Expected: {expectedSha}\r\n" +
+                    $"Got:      {actualSha}\r\n" +
+                    $"File has been deleted. Click 'Update' again to retry.");
+            }
+        }
 
         StatusChanged?.Invoke("Extracting update...");
 
@@ -400,6 +439,20 @@ public class UpdateChecker
             return name.StartsWith("VPNRouter-update-v", StringComparison.OrdinalIgnoreCase) &&
                    name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
         });
+    }
+
+    /// <summary>
+    /// Find the .sha256 companion file for a given ZIP asset. Naming convention
+    /// (set by build.ps1 in v2.15.8+): "{zipName}.sha256". Returns null if the
+    /// companion is missing — in that case we fall back to size-only validation.
+    /// </summary>
+    private static dynamic? FindChecksumAsset(dynamic[]? assets, dynamic? zipAsset)
+    {
+        if (assets == null || zipAsset == null) return null;
+        string zipName = zipAsset.name;
+        var target = $"{zipName}.sha256";
+        return ((IEnumerable<dynamic>)assets).FirstOrDefault(a =>
+            string.Equals((string)a.name, target, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

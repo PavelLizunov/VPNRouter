@@ -302,6 +302,14 @@ Write-Host ""
 Write-Host "=== Build complete ===" -ForegroundColor Green
 Write-Host "Install ZIP: $InstallZipPath ($([math]::Round($installSize, 1)) MB)" -ForegroundColor White
 Write-Host "Update ZIP:  $UpdateZipPath ($([math]::Round($updateSize, 1)) MB)" -ForegroundColor White
+
+# ── Generate SHA256 checksums for both ZIPs (uploaded alongside for verification) ──
+$InstallShaPath = "$InstallZipPath.sha256"
+$UpdateShaPath = "$UpdateZipPath.sha256"
+(Get-FileHash -Algorithm SHA256 $InstallZipPath).Hash.ToLower() | Set-Content $InstallShaPath -NoNewline
+(Get-FileHash -Algorithm SHA256 $UpdateZipPath).Hash.ToLower() | Set-Content $UpdateShaPath -NoNewline
+Write-Host "SHA256 (install): $(Get-Content $InstallShaPath)" -ForegroundColor Gray
+Write-Host "SHA256 (update):  $(Get-Content $UpdateShaPath)" -ForegroundColor Gray
 Write-Host ""
 
 Write-Host "Package contents:" -ForegroundColor Gray
@@ -320,7 +328,7 @@ if ($Upload) {
     } else {
         $tag = "v$Version"
 
-        gh release create $tag $InstallZipPath $UpdateZipPath `
+        gh release create $tag $InstallZipPath $UpdateZipPath $InstallShaPath $UpdateShaPath `
             --repo $GitHubRepo `
             --title "VPNRouter v$Version" `
             --notes "VPNRouter v$Version" `

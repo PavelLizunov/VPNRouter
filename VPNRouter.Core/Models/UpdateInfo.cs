@@ -17,4 +17,10 @@ public class UpdateInfo
     public long LiteSizeBytes { get; init; }
     /// <summary>True if a lite update package is available AND the current install supports it.</summary>
     public bool HasLiteUpdate { get; init; }
+
+    // ── Checksum verification (v2.15.8) ──
+    /// <summary>URL of the .sha256 file for the full install ZIP (null if not published).</summary>
+    public string? FullChecksumUrl { get; init; }
+    /// <summary>URL of the .sha256 file for the lite update ZIP (null if not published).</summary>
+    public string? LiteChecksumUrl { get; init; }
 }
