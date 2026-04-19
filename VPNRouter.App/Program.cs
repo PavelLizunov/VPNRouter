@@ -19,9 +19,13 @@ sealed class Program
         StartMinimized = args.Contains("--minimized");
 
 #if PLATFORM_WINDOWS
-        // Auto-elevate to admin (required for TUN + ETW + Firewall)
+        // Auto-elevate to admin (required for TUN + ETW + Firewall).
+        // If elevation fails (UAC declined, policy-blocked, etc.) write a
+        // crash-file and emit to stderr so the user can see WHY nothing
+        // happened — silent exit was the hardest v2.15.5 bug to diagnose.
         if (OperatingSystem.IsWindows() && !IsAdmin())
         {
+            Exception? elevationError = null;
             try
             {
                 var psi = new ProcessStartInfo
@@ -33,9 +37,27 @@ sealed class Program
                 };
                 Process.Start(psi);
             }
-            catch
+            catch (Exception ex)
             {
-                // User cancelled UAC, or failed to elevate
+                elevationError = ex;
+            }
+
+            if (elevationError != null)
+            {
+                var msg =
+                    "VPNRouter failed to elevate to administrator.\r\n" +
+                    $"Reason: {elevationError.GetType().Name}: {elevationError.Message}\r\n" +
+                    "Try: right-click VPNRouter.App.exe → Run as administrator.";
+                try
+                {
+                    var crashPath = System.IO.Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                        "VPNRouter", "logs", "vpnrouter-launch-error.log");
+                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(crashPath)!);
+                    System.IO.File.AppendAllText(crashPath, $"[{DateTime.Now:O}] {msg}\r\n");
+                }
+                catch { }
+                try { Console.Error.WriteLine(msg); } catch { }
             }
             return;
         }
