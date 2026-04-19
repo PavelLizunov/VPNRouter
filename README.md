@@ -32,6 +32,7 @@ Add-ons on top of the core router:
 - **Runtime status dashboard** (v2.15+) — three coloured badges in the header show live state of VPN / Zapret / TgProxy, updated every 2 s via process + port probing. Click any badge → jump to the tab that controls it.
 - **Resilient autostart** (v2.15+) — Windows Service declares boot dependencies on `Tcpip/Dnscache/Dhcp` and uses exponential backoff (5/10/20/40 s) when launching VPN / Zapret / TgProxy. Transient cold-boot failures no longer leave components stopped.
 - **Checksum-verified updates** (v2.15+) — auto-updater downloads each ZIP's `.sha256` companion and aborts on hash mismatch, so a truncated or corrupted download can't silently break the install.
+- **Arctic design system** (v2.16+) — semantic-token palette (surfaces, text, borders, state colors, spacing/radii on a 4 px / 11 px base grid), bespoke dark theme that auto-swaps via Avalonia `ThemeDictionaries`, and RGB-inverted penguin logo for dark mode. See `.claude/plans/vpnrouter-v2.16-arctic-theme.md`.
 - **DPI bypass (Zapret)** — integrated [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) for platforms blocked by DPI without needing a proxy.
 - **Telegram proxy** — embedded MTProto proxy ([Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy)) for Telegram-only bypass.
 - **Custom sing-box configs** — bring your own JSON (TUIC, Hysteria2, Shadowsocks), keep per-process routing.
@@ -86,12 +87,12 @@ Release build + packaging:
 
 ```powershell
 # Windows (PowerShell) — produces both full + update ZIPs plus their .sha256
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.15.8"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.16.7"
 ```
 
 ```bash
 # macOS DMG — runs on any Mac with .NET 8 SDK
-./build-mac.sh 2.15.8
+./build-mac.sh 2.16.7
 ```
 
 Both releases (Win ZIP + Mac DMG) are also built automatically via GitHub Actions on every `v*` tag push — see `.github/workflows/build-mac.yml` and `.github/workflows/build-free-pool.yml` (the latter publishes the rolling Free Configs pool).

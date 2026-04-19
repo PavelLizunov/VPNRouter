@@ -215,7 +215,31 @@ in technical terms, don't oversimplify.
 
 ---
 
-## Project status summary (as of v2.15.8 STABLE Latest)
+## Project status summary (as of v2.16.7 STABLE Latest)
+
+v2.16 Arctic theme migration promoted to stable on 2026-04-19 —
+superseded v2.15.8 as Latest. Nine releases (v2.16.0 – v2.16.7, motion
+polish v2.16.8 explicitly skipped as optional). See
+`.claude/plans/vpnrouter-v2.16-arctic-theme.md` for full history.
+
+Key v2.16 outcomes:
+- `Styles/Tokens.axaml` is the single source of truth for colors, type
+  scale, spacing, and radii. Light + Dark share the same keys via
+  Avalonia 11 `ThemeDictionaries`.
+- Dark theme is first-class (bespoke palette, not "Avalonia darkening").
+- Penguin logo RGB-inverts programmatically for dark mode; original
+  `penguin_logo.png` is untouched (explicit user decision).
+- Brand accent rebrand: indigo `#2563EB` → arctic cyan `#0EA5E9`
+  (`AccentSolidBrush`). Subtle shift by design — user reported they
+  couldn't tell the difference visually, which is expected for a
+  token-driven palette refresh rather than a mascot/layout rebrand.
+- Intentional purple hex retained in 3 places (Deep Verify buttons,
+  Zapret primary). Token `AccentAltSolid` can be added later if
+  dark-mode purple needs tuning.
+
+---
+
+## Previous: v2.15.8 stable pass
 
 v2.15 promoted to stable on 2026-04-19. Seven releases landed on top of
 v2.14.10 across four planned blocks plus three post-test hotfixes:
