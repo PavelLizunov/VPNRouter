@@ -77,6 +77,9 @@ public partial class MainWindowViewModel
         }
     }
 
+    /// <summary>Big hero-card title: "VPN is running" / "VPN is off".</summary>
+    public string SmpHeroTitle => IsConnected ? Strings.SmpConnectedTitle : Strings.SmpDisconnectedTitle;
+
     /// <summary>"Through: de-01 · 104.194.156.93" info line shown in Connected state.</summary>
     public string SmpActiveServerLine
     {

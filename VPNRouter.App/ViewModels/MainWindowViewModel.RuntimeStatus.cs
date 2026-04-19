@@ -202,21 +202,40 @@ public partial class MainWindowViewModel
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private void NavigateToVpn()
     {
+        // In Simple mode the VPN controls are already on screen (whole page
+        // IS the VPN controls), so the badge click is a no-op rather than
+        // a confusing tab-switch to a hidden layer.
+        if (IsSimpleMode) return;
         SelectedTabIndex = IsSubscribeMode ? 1 : 0;
     }
 
-    /// <summary>Zapret badge click: switch to Tools tab AND select Zapret sub-section.</summary>
+    /// <summary>Zapret badge click: switch to Tools tab AND select Zapret sub-section.
+    /// If the user is currently in Simple UI mode, also flip to Advanced so the
+    /// target tab is actually visible — Simple mode hides the whole tab strip.</summary>
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private void NavigateToZapret()
     {
+        if (IsSimpleMode)
+        {
+            IsSimpleMode = false;
+            _settings.App.UiMode = "advanced";
+            SaveSettings();
+        }
         SelectedTabIndex = 4;        // Tools tab
         SelectedToolIndex = 0;       // Zapret sub-section
     }
 
-    /// <summary>TgProxy badge click: switch to Tools tab AND select TgProxy sub-section.</summary>
+    /// <summary>TgProxy badge click: switch to Tools tab AND select TgProxy sub-section.
+    /// Same Simple→Advanced fallback as NavigateToZapret.</summary>
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private void NavigateToTgProxy()
     {
+        if (IsSimpleMode)
+        {
+            IsSimpleMode = false;
+            _settings.App.UiMode = "advanced";
+            SaveSettings();
+        }
         SelectedTabIndex = 4;        // Tools tab
         SelectedToolIndex = 1;       // TgProxy sub-section
     }

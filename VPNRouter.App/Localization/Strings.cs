@@ -599,6 +599,12 @@ public static class Strings
         ? "Включая игры и банки"
         : "Includes games and banking";
     public static string SmpAdvancedLink => Ru ? "Расширенные настройки ▸" : "Advanced settings ▸";
+    public static string SmpAdvancedHint => Ru
+        ? "Все вкладки: серверы, подписки, Zapret, Telegram-прокси, Free Configs и пр."
+        : "All tabs: servers, subscriptions, Zapret, Telegram proxy, Free Configs and more.";
+    public static string SmpChangeConfig => Ru ? "Сменить конфиг или режим ▾" : "Change config or mode ▾";
+    public static string SmpConnectedTitle => Ru ? "VPN работает" : "VPN is running";
+    public static string SmpDisconnectedTitle => Ru ? "VPN не запущен" : "VPN is off";
     public static string SmpTipSplit => Ru
         ? "Chrome, Firefox, Edge, Brave, Discord, Telegram, Slack, Zoom, VS Code и Cursor идут через VPN. Игры, Steam, банк — мимо."
         : "Chrome, Firefox, Edge, Brave, Discord, Telegram, Slack, Zoom, VS Code and Cursor go through the VPN. Games, Steam, banking — direct.";

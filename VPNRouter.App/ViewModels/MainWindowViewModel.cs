@@ -46,6 +46,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(SmpConnectButtonText))]
     [NotifyPropertyChangedFor(nameof(SmpConnectButtonBrush))]
     [NotifyPropertyChangedFor(nameof(SmpActiveServerLine))]
+    [NotifyPropertyChangedFor(nameof(SmpHeroTitle))]
     private bool _isConnected;
     [ObservableProperty] private bool _isConnecting;
     [ObservableProperty] private string _connectButtonText = Strings.StartVPN;
