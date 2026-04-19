@@ -235,6 +235,41 @@ public partial class MainWindowViewModel
         return true;
     }
 
+    // ── Split/Full toggle auto-apply (v2.17.6) ────────────────────────────
+    /// <summary>
+    /// Simple-mode expects an immediate effect from the tunnel mode radio,
+    /// unlike Advanced which has an explicit 'Apply' button. So the handler
+    /// here:
+    ///   - Always saves the new RoutingMode to YAML.
+    ///   - Marks HasPendingAppChanges so Advanced users (if they toggled via
+    ///     Simple → switched back) still see the amber Apply button.
+    ///   - In Simple mode: if currently connected, auto-calls
+    ///     ApplyPendingChangesAsync — which already handles
+    ///     IsServiceManagedVpn correctly (from v2.16.8) by saving + showing
+    ///     'Stop and Start VPN to apply' instead of fighting TUN ownership.
+    ///
+    /// This fixes the v2.17.5 bug where toggling Full↔Split while VPN ran
+    /// via the Windows Service silently did nothing.
+    /// </summary>
+    partial void OnIsSplitTunnelChanged(bool value)
+    {
+        if (_isLoadingUI) return;
+
+        _settings.App.RoutingMode = value ? "split" : "full";
+        if (value)
+            _settings.ActiveProfile = SimpleSplitProfile;
+        SaveSettings();
+
+        HasPendingAppChanges = IsConnected;
+
+        if (IsSimpleMode && IsConnected && !IsConnecting)
+        {
+            // Fire-and-forget — ApplyPendingChangesAsync is idempotent and
+            // handles service-managed mode with a clear status message.
+            _ = ApplyPendingChangesAsync();
+        }
+    }
+
     // ── Autostart wiring (v2.17.3) ────────────────────────────────────────
     /// <summary>
     /// When the Simple-mode 'Start with Windows' toggle changes, mirror

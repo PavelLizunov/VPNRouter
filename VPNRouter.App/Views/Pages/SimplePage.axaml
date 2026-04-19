@@ -6,9 +6,14 @@
              x:DataType="vm:MainWindowViewModel">
 
     <!--
-      v2.17.1 skeleton: final layout + all bindings, but the big Start button
-      is still a stub that writes to the log only. v2.17.2 wires it into the
-      existing Connect path with input parsing (vless:// vs https://).
+      v2.17.6 layout — simpler, no brand duplicate, TextWrapping everywhere,
+      all FontSize/CornerRadius/Padding on the design scale. Each section
+      is visually a single line of intent; radios carry a short hint below
+      the option instead of a wrapped single long line.
+
+      Bottom: a clear 'Advanced settings ▸' link for power users who want
+      the tabbed layout. Same ToggleUiMode command as the header button,
+      just more discoverable.
     -->
     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
@@ -16,18 +21,14 @@
         <Grid MaxWidth="440" HorizontalAlignment="Center">
             <StackPanel Spacing="16">
 
-                <!-- No brand lockup here — the main window header already shows
-                     the logo + title + version + status badges. Having it
-                     again would produce the 'window inside a window' effect
-                     the user reported in v2.17.4 feedback. -->
-
-                <!-- Input — VLESS URI or subscription URL -->
+                <!-- Input — compact: label is tiny caption, placeholder does
+                     the 'what to paste' job, hint sits below the field. -->
                 <StackPanel Spacing="4">
                     <TextBlock Text="{x:Static loc:Strings.SmpInputLabel}"
                                FontSize="11" FontWeight="SemiBold"/>
                     <TextBox Text="{Binding SmpInput}"
                              Watermark="{x:Static loc:Strings.SmpInputWatermark}"
-                             FontSize="11" Padding="10,8"
+                             FontSize="11" Padding="12,8"
                              AcceptsReturn="False"
                              CornerRadius="{StaticResource RadiusSm}"/>
                     <TextBlock Text="{x:Static loc:Strings.SmpInputHint}"
@@ -40,25 +41,38 @@
                                TextWrapping="Wrap"/>
                 </StackPanel>
 
-                <!-- Tunnel mode -->
-                <StackPanel Spacing="6">
+                <!-- Tunnel mode — rich radios with a sub-hint per option
+                     so user understands the trade-off without a tooltip. -->
+                <StackPanel Spacing="4">
                     <TextBlock Text="{x:Static loc:Strings.SmpTunnelModeLabel}"
                                FontSize="11" FontWeight="SemiBold"/>
-                    <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
+                    <Border Padding="12,10" CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource SurfaceSunkenBrush}"
                             BorderBrush="{DynamicResource BorderDefaultBrush}"
                             BorderThickness="1">
-                        <StackPanel Spacing="6">
-                            <RadioButton GroupName="SmpTunnel"
-                                         IsChecked="{Binding IsSplitTunnel}"
-                                         Content="{x:Static loc:Strings.SmpSplitOption}"
-                                         ToolTip.Tip="{x:Static loc:Strings.SmpTipSplit}"
-                                         FontSize="11"/>
-                            <RadioButton GroupName="SmpTunnel"
-                                         IsChecked="{Binding !IsSplitTunnel}"
-                                         Content="{x:Static loc:Strings.SmpFullOption}"
-                                         ToolTip.Tip="{x:Static loc:Strings.SmpTipFull}"
-                                         FontSize="11"/>
+                        <StackPanel Spacing="8">
+                            <StackPanel Spacing="1">
+                                <RadioButton GroupName="SmpTunnel"
+                                             IsChecked="{Binding IsSplitTunnel}"
+                                             Content="{x:Static loc:Strings.SmpSplitOption}"
+                                             FontSize="11" FontWeight="SemiBold"
+                                             MinHeight="0" Padding="4,0"/>
+                                <TextBlock Text="{x:Static loc:Strings.SmpSplitHint}"
+                                           FontSize="9" Opacity="0.6"
+                                           Margin="24,0,0,0"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <StackPanel Spacing="1">
+                                <RadioButton GroupName="SmpTunnel"
+                                             IsChecked="{Binding !IsSplitTunnel}"
+                                             Content="{x:Static loc:Strings.SmpFullOption}"
+                                             FontSize="11" FontWeight="SemiBold"
+                                             MinHeight="0" Padding="4,0"/>
+                                <TextBlock Text="{x:Static loc:Strings.SmpFullHint}"
+                                           FontSize="9" Opacity="0.6"
+                                           Margin="24,0,0,0"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -70,31 +84,42 @@
                           FontSize="11"
                           MinHeight="0" Padding="4,0"/>
 
-                <!-- Big Start/Stop button -->
+                <!-- Big Start/Stop button — FontSize 13 (Fs Lg), Padding 0,12
+                     (space scale 5). Previously 14 + 14 which were off-grid. -->
                 <Button Command="{Binding SmpToggleConnectCommand}"
                         Content="{Binding SmpConnectButtonText}"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
-                        Padding="0,14" FontSize="14" FontWeight="Bold"
+                        Padding="0,12" FontSize="13" FontWeight="Bold"
                         Background="{Binding SmpConnectButtonBrush}"
                         Foreground="{DynamicResource AccentOnSolidBrush}"
                         CornerRadius="{StaticResource RadiusMd}"/>
 
-                <!-- Status -->
+                <!-- Status panel -->
                 <Border Background="{DynamicResource SurfaceSunkenBrush}"
                         CornerRadius="{StaticResource RadiusSm}"
                         Padding="12,10">
                     <StackPanel Spacing="3">
                         <TextBlock Text="{Binding StatusText}"
                                    FontSize="11"
-                                   TextTrimming="CharacterEllipsis"
                                    TextWrapping="Wrap"/>
                         <TextBlock Text="{Binding SmpActiveServerLine}"
                                    FontSize="10" Opacity="0.7"
                                    IsVisible="{Binding IsConnected}"
-                                   TextTrimming="CharacterEllipsis"/>
+                                   TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
+
+                <!-- Advanced escape hatch: clearly visible but secondary.
+                     Rendered as a ghost link right-aligned at the bottom
+                     so it doesn't compete with the Start/Stop button. -->
+                <Button Content="{x:Static loc:Strings.SmpAdvancedLink}"
+                        Command="{Binding ToggleUiModeCommand}"
+                        HorizontalAlignment="Right"
+                        Padding="8,4" FontSize="10"
+                        Background="Transparent" BorderThickness="0"
+                        Foreground="{DynamicResource AccentFgBrush}"
+                        ToolTip.Tip="{Binding UiModeToggleTooltip}"/>
 
             </StackPanel>
         </Grid>

@@ -580,20 +580,25 @@ public static class Strings
         : "Switch to Advanced";
 
     // v2.17.1 skeleton — section labels + control captions
-    public static string SmpInputLabel => Ru
-        ? "Вставь VLESS-конфиг или ссылку на подписку"
-        : "Paste VLESS config or subscription URL";
+    public static string SmpInputLabel => Ru ? "Конфиг VPN" : "VPN config";
     public static string SmpInputWatermark => Ru
-        ? "vless://... или https://subscription..."
-        : "vless://... or https://subscription...";
+        ? "vless://... или https://..."
+        : "vless://... or https://...";
     public static string SmpInputHint => Ru
-        ? "Принимает vless:// одиночный сервер или https:// подписку."
-        : "Accepts a vless:// single server or an https:// subscription.";
-    public static string SmpTunnelModeLabel => Ru ? "Что направлять через VPN" : "What to route through VPN";
+        ? "Приму vless://-ссылку или URL подписки (http/https)."
+        : "Accepts a vless:// link or a subscription URL (http/https).";
+    public static string SmpTunnelModeLabel => Ru ? "Что идёт через VPN" : "Route through VPN";
     public static string SmpSplitOption => Ru
-        ? "Выбранные приложения (Discord, браузеры, рабочие)"
-        : "Selected apps only (Discord, browsers, work)";
+        ? "Выбранные приложения"
+        : "Selected apps";
+    public static string SmpSplitHint => Ru
+        ? "Discord, браузеры, мессенджеры, рабочие"
+        : "Discord, browsers, messengers, work apps";
     public static string SmpFullOption => Ru ? "Весь трафик" : "All traffic";
+    public static string SmpFullHint => Ru
+        ? "Включая игры и банки"
+        : "Includes games and banking";
+    public static string SmpAdvancedLink => Ru ? "Расширенные настройки ▸" : "Advanced settings ▸";
     public static string SmpTipSplit => Ru
         ? "Chrome, Firefox, Edge, Brave, Discord, Telegram, Slack, Zoom, VS Code и Cursor идут через VPN. Игры, Steam, банк — мимо."
         : "Chrome, Firefox, Edge, Brave, Discord, Telegram, Slack, Zoom, VS Code and Cursor go through the VPN. Games, Steam, banking — direct.";
