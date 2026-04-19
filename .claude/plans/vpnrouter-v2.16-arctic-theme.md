@@ -460,12 +460,12 @@ Total for a full v2.16 rollout: ~3-4 days of focused work.
 
 ## Status tracker
 
-- [ ] v2.16.0 — Tokens.axaml infrastructure
-- [ ] v2.16.1 — MainWindow migration
-- [ ] v2.16.2 — Servers + Subscribe migration
-- [ ] v2.16.3 — Network / Apps / Tools / DpiBypass / Telegram migration
-- [ ] v2.16.4 — FreeConfigsPage migration
-- [ ] v2.16.5 — Bespoke dark theme + inverted logo
+- [x] v2.16.0 — Tokens.axaml infrastructure (shipped 2026-04-19)
+- [x] v2.16.1 — MainWindow migration (shipped 2026-04-19)
+- [x] v2.16.2 — Servers + Subscribe migration (shipped 2026-04-19)
+- [x] v2.16.3 — Network / Apps / Tools / DpiBypass / Telegram migration (shipped 2026-04-19)
+- [x] v2.16.4 — FreeConfigsPage migration (shipped 2026-04-19) **Block 2 done**
+- [x] v2.16.5 — Bespoke dark theme + inverted logo (shipped 2026-04-19, **awaiting user test; Block 3 done**)
 - [ ] v2.16.6 — Typography scale pass
 - [ ] v2.16.7 — Spacing + radius pass
 - [ ] v2.16.8 — Motion + focus ring (optional)
