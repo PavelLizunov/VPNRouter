@@ -2369,6 +2369,7 @@ public partial class MainWindowViewModel : ViewModelBase
         if (_isLoadingUI || value == null || _isReconnecting) return;
         if (IsConnected && IsSubscribeMode && !IsConnecting)
         {
+            if (IsServiceManagedVpn) { WarnServiceManagedReconnect(value.DisplayName); return; }
             _ = ReconnectAsync(value.DisplayName);
         }
     }
@@ -2381,6 +2382,7 @@ public partial class MainWindowViewModel : ViewModelBase
         // If connected in VLESS mode → reconnect with newly selected server
         if (IsConnected && IsVlessMode && !IsConnecting)
         {
+            if (IsServiceManagedVpn) { WarnServiceManagedReconnect(value.DisplayName); return; }
             _ = ReconnectAsync(value.DisplayName);
         }
     }
@@ -2398,8 +2400,26 @@ public partial class MainWindowViewModel : ViewModelBase
         // If connected in custom mode → reconnect with new config
         if (IsConnected && !IsVlessMode && !IsConnecting)
         {
+            if (IsServiceManagedVpn) { WarnServiceManagedReconnect(value.Name); return; }
             _ = ReconnectAsync(value.Name);
         }
+    }
+
+    /// <summary>
+    /// Service-managed VPN can't be reconnected from the app — the local
+    /// engine doesn't own the sing-box process, so Stop() is a no-op and
+    /// StartAsync() would fight TUN ownership. We still save the new
+    /// selection to config.yaml so the next Stop+Start cycle picks it up,
+    /// and we surface a clear message so the user isn't confused about
+    /// why the connection didn't switch.
+    /// </summary>
+    private void WarnServiceManagedReconnect(string newServerName)
+    {
+        try { SaveSettings(); } catch { }
+        StatusText = IsRussian
+            ? $"Выбран {newServerName}. VPN управляется службой — остановите и запустите VPN, чтобы переключиться."
+            : $"Selected {newServerName}. VPN is managed by the service — Stop and Start VPN to switch.";
+        _logger.Information("[VM] Service-managed VPN: selection '{Name}' saved; user must Stop+Start to apply", newServerName);
     }
 
     private async Task ReconnectAsync(string configName)
