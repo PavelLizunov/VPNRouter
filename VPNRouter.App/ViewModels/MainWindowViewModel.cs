@@ -2501,7 +2501,53 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         IsRussian = !IsRussian;
         Strings.Lang = IsRussian ? "ru" : "en";
-        RefreshLocalization();
+        SaveSettings();          // persist language before we rebuild UI
+        RefreshLocalization();   // updates {Binding Lbl*} across the UI
+        ReloadMainWindowForLocalization();  // re-parses XAML so {x:Static} hits new Lang
+    }
+
+    /// <summary>
+    /// Workaround for Avalonia's <c>{x:Static loc:Strings.*}</c> bindings which
+    /// are evaluated ONCE at XAML parse time and never re-read — so a language
+    /// toggle doesn't update them (Free Configs page has ~100 such bindings).
+    /// We rebuild the window with the same DataContext so XAML re-parses and
+    /// picks up the new <see cref="Strings.Lang"/>, while all VM state
+    /// (Servers list, connection, Free Configs cache, etc.) is preserved
+    /// because the VM instance is shared.
+    /// </summary>
+    private void ReloadMainWindowForLocalization()
+    {
+        try
+        {
+            if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
+                return;
+
+            var oldWindow = desktop.MainWindow;
+            if (oldWindow == null) return;
+
+            // Remember geometry + state so the new window opens where the old one was
+            var pos    = oldWindow.Position;
+            var width  = oldWindow.Width;
+            var height = oldWindow.Height;
+            var state  = oldWindow.WindowState;
+
+            var newWindow = new Views.MainWindow
+            {
+                DataContext   = this,
+                Position      = pos,
+                Width         = width,
+                Height        = height,
+                WindowState   = state,
+            };
+
+            desktop.MainWindow = newWindow;
+            newWindow.Show();
+            oldWindow.Close();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[VM] ReloadMainWindowForLocalization failed (non-fatal)");
+        }
     }
 
     [RelayCommand]
