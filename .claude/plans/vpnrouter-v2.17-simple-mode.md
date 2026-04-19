@@ -557,12 +557,12 @@ Total: ~1.5-2 days focused work.
 
 ## Status tracker
 
-- [ ] v2.17.0 — UiMode + toggle
-- [ ] v2.17.1 — SimplePage skeleton
-- [ ] v2.17.2 — Input parsing + connect
-- [ ] v2.17.3 — Default profile + autostart
-- [ ] v2.17.4 — Connected state
-- [ ] v2.17.5 — Polish + first-run detection
+- [x] v2.17.0 — UiMode + toggle (shipped 2026-04-20)
+- [x] v2.17.1 — SimplePage skeleton (shipped 2026-04-20)
+- [x] v2.17.2 — Input parsing + connect (shipped 2026-04-20)
+- [x] v2.17.3 — Default profile + autostart (shipped 2026-04-20, **Block 1+2 done, MVP testable**)
+- [ ] v2.17.4 — Connected state (Change server ▸ expander)
+- [ ] v2.17.5 — Polish + first-run detection + default flip to Simple
 
 Update this checklist as each release ships so a context-compacted
 session picks up where we left off.
