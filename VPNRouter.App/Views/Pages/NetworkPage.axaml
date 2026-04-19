@@ -58,6 +58,7 @@
                     <StackPanel Spacing="2">
                         <CheckBox IsChecked="{Binding BypassRussianTraffic}"
                                   Content="{Binding BypassRuLabel}" FontWeight="SemiBold"
+                                  ToolTip.Tip="{x:Static loc:Strings.TipBypassRu}"
                                   MinHeight="0" Padding="4,0"/>
                         <TextBlock Text="{Binding BypassRuHint}"
                                    FontSize="9" Opacity="0.6" Margin="22,0,0,0"
@@ -76,12 +77,16 @@
                         BorderThickness="1">
                     <StackPanel Spacing="4">
                         <CheckBox IsChecked="{Binding StrictMode}" Content="{Binding StrictModeLabel}"
+                                  ToolTip.Tip="{x:Static loc:Strings.TipLeakStrictMode}"
                                   MinHeight="0" Padding="4,0"/>
                         <CheckBox IsChecked="{Binding ForceIpv4Only}" Content="{Binding ForceIpv4Label}"
+                                  ToolTip.Tip="{x:Static loc:Strings.TipLeakForceIpv4}"
                                   MinHeight="0" Padding="4,0"/>
                         <CheckBox IsChecked="{Binding FlushDnsOnStart}" Content="{Binding FlushDnsLabel}"
+                                  ToolTip.Tip="{x:Static loc:Strings.TipLeakFlushDns}"
                                   MinHeight="0" Padding="4,0"/>
                         <CheckBox IsChecked="{Binding StrictDns}" Content="{Binding StrictDnsLabel}"
+                                  ToolTip.Tip="{x:Static loc:Strings.TipLeakStrictDns}"
                                   MinHeight="0" Padding="4,0"/>
                     </StackPanel>
                 </Border>
@@ -98,6 +103,7 @@
                     <StackPanel Spacing="2">
                         <CheckBox IsChecked="{Binding BlockAds}"
                                   Content="{Binding BlockAdsLabel}" FontWeight="SemiBold"
+                                  ToolTip.Tip="{x:Static loc:Strings.TipBlockAds}"
                                   MinHeight="0" Padding="4,0"/>
                         <TextBlock Text="{Binding BlockAdsHint}"
                                    FontSize="9" Opacity="0.6" Margin="22,0,0,0"

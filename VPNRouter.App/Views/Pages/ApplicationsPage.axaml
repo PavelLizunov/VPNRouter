@@ -90,7 +90,7 @@
             </Border>
 
             <!-- Empty state -->
-            <TextBlock Grid.Row="2" Text="No apps in this group yet."
+            <TextBlock Grid.Row="2" Text="{x:Static loc:Strings.AppsGroupEmpty}"
                        HorizontalAlignment="Center" VerticalAlignment="Center"
                        FontSize="11" Opacity="0.5" FontStyle="Italic"
                        IsVisible="{Binding !Apps.Count}"/>
@@ -167,7 +167,7 @@
 
         <!-- Empty state when no group selected -->
         <TextBlock Grid.Column="1"
-                   Text="← Select a category"
+                   Text="{x:Static loc:Strings.SelectCategoryHint}"
                    HorizontalAlignment="Center" VerticalAlignment="Center"
                    FontSize="11" Opacity="0.5" FontStyle="Italic"
                    IsVisible="{Binding SelectedAppGroup, Converter={x:Static ObjectConverters.IsNull}}"/>

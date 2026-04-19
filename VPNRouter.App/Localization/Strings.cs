@@ -502,4 +502,58 @@ public static class Strings
     public static string ReinstallService => Ru ? "Переустановить" : "Reinstall";
     public static string InstallingService => Ru ? "Установка службы..." : "Installing service...";
     public static string RemovingService => Ru ? "Удаление службы..." : "Removing service...";
+
+    // ── v2.15.4 UI polish: hint texts + tooltips ──
+    public static string ServerListHint => Ru
+        ? "Левый клик — выбрать активный. Правый клик — редактировать."
+        : "Left click = select active. Right click = edit details.";
+    public static string ZapretHostsHint => Ru
+        ? "Записи Flowseal в hosts для доступа к YouTube/Discord и т.п."
+        : "Flowseal entries in the hosts file for YouTube/Discord/etc.";
+    public static string AppsGroupEmpty => Ru
+        ? "В этой группе пока нет приложений."
+        : "No apps in this group yet.";
+    public static string SelectCategoryHint => Ru
+        ? "← Выберите категорию"
+        : "← Select a category";
+
+    // Tooltips — Network tab
+    public static string TipBypassRu => Ru
+        ? "RU-диапазоны обходят VPN и идут напрямую через ISP"
+        : "RU IP ranges bypass the VPN and go direct via ISP";
+    public static string TipLeakBlockOnFail => Ru
+        ? "Если VPN упал — firewall блокирует выбранные приложения, чтобы трафик не утёк мимо туннеля"
+        : "If VPN drops, firewall blocks selected apps so traffic can't leak outside the tunnel";
+    public static string TipLeakStrictMode => Ru
+        ? "Жёсткий режим — нет fallback на direct при проблемах VPN"
+        : "Strict mode — no direct fallback when VPN has issues";
+    public static string TipLeakForceIpv4 => Ru
+        ? "Отключить IPv6 на маршруте VPN (избегает DNS-утечек через IPv6)"
+        : "Disable IPv6 on the VPN route (avoids DNS leaks via IPv6)";
+    public static string TipLeakStrictDns => Ru
+        ? "Перехватывать весь DNS, включая системный"
+        : "Hijack all DNS including system resolvers";
+    public static string TipLeakFlushDns => Ru
+        ? "Очищать кэш DNS при старте VPN"
+        : "Flush DNS cache when VPN starts";
+    public static string TipBlockAds => Ru
+        ? "Блокировать известные рекламные/трекинг домены на уровне VPN DNS"
+        : "Block known ad/tracker domains at the VPN DNS layer";
+
+    // Tooltips — Zapret / DPI
+    public static string TipZapretAutoUpdate => Ru
+        ? "Каждые 24 часа проверять обновление zapret от Flowseal"
+        : "Check for zapret updates from Flowseal every 24 hours";
+
+    // Tooltips — Free Configs controls
+    public static string TipFcFastScan => Ru
+        ? "Только TCP-проверка (без TLS) — быстрее, но больше ложных «Ok»"
+        : "TCP-only probe (skips TLS) — faster but more false 'Ok' hits";
+    public static string TipFcSmartRefresh => Ru
+        ? "Остановить скан, как только найдётся нужное число «быстрых» конфигов"
+        : "Stop scan as soon as enough 'fast' configs are found";
+    public static string TipFcSkipRu => Ru
+        ? "Пропускать сервера в RU при deep verify"
+        : "Skip servers located in RU during deep verify";
+    public static string TipFcDismissQuickstart => Ru ? "Закрыть подсказку" : "Dismiss quickstart";
 }

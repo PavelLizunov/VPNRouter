@@ -162,6 +162,7 @@
                             <StackPanel Spacing="4">
                                 <CheckBox Content="{x:Static loc:Strings.FcSmartRefreshLabel}"
                                           IsChecked="{Binding FreeConfigsVm.UseLatencyGoal}"
+                                          ToolTip.Tip="{x:Static loc:Strings.TipFcSmartRefresh}"
                                           FontSize="11" FontWeight="SemiBold"
                                           Foreground="#1E3A8A"
                                           MinHeight="0" Padding="4,0"/>
@@ -197,6 +198,7 @@
                             <StackPanel Spacing="2">
                                 <CheckBox Content="{x:Static loc:Strings.FcFastScanLabel}"
                                           IsChecked="{Binding FreeConfigsVm.FastScanMode}"
+                                          ToolTip.Tip="{x:Static loc:Strings.TipFcFastScan}"
                                           FontSize="11" FontWeight="SemiBold"
                                           Foreground="#78350F"
                                           MinHeight="0" Padding="4,0"/>
@@ -263,6 +265,7 @@
                                     </StackPanel>
                                     <CheckBox Content="{x:Static loc:Strings.FcDeepExcludeRu}"
                                               IsChecked="{Binding FreeConfigsVm.ExcludeRu}"
+                                              ToolTip.Tip="{x:Static loc:Strings.TipFcSkipRu}"
                                               FontSize="11" VerticalAlignment="Center"
                                               Foreground="#065F46"/>
                                 </StackPanel>
@@ -329,7 +332,8 @@
                                                 CommandParameter="{Binding}"
                                                 Padding="6,2" FontSize="10"
                                                 Background="#FEE2E2" Foreground="#991B1B"
-                                                CornerRadius="3"/>
+                                                CornerRadius="3"
+                                                ToolTip.Tip="{x:Static loc:Strings.Remove}"/>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
