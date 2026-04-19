@@ -47,8 +47,26 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(SmpConnectButtonBrush))]
     [NotifyPropertyChangedFor(nameof(SmpActiveServerLine))]
     [NotifyPropertyChangedFor(nameof(SmpHeroTitle))]
+    // v2.18.0 compact-design additions — status card / CTA / mini-badge
+    [NotifyPropertyChangedFor(nameof(SimpleStatusIsOn))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusIsOff))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusTitle))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusDescription))]
+    [NotifyPropertyChangedFor(nameof(SimpleCtaText))]
+    [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnected))]
+    [NotifyPropertyChangedFor(nameof(SimpleCtaIsDisconnected))]
     private bool _isConnected;
-    [ObservableProperty] private bool _isConnecting;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusIsOn))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusIsWarn))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusIsOff))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusTitle))]
+    [NotifyPropertyChangedFor(nameof(SimpleStatusDescription))]
+    [NotifyPropertyChangedFor(nameof(SimpleCtaText))]
+    [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnecting))]
+    [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnected))]
+    [NotifyPropertyChangedFor(nameof(SimpleCtaIsDisconnected))]
+    private bool _isConnecting;
     [ObservableProperty] private string _connectButtonText = Strings.StartVPN;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LogoSource))]
@@ -119,10 +137,12 @@ public partial class MainWindowViewModel : ViewModelBase
     public string UiModeToggleTooltip => Strings.SmpToggleTooltip;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServerListMode))]
+    [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
     private bool _isVlessMode = true;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServerListMode))]
+    [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
     private bool _isSubscribeMode = false;
 
     /// <summary>True when the server ListBox should be visible (Manual or Subscribe mode).</summary>
@@ -165,7 +185,9 @@ public partial class MainWindowViewModel : ViewModelBase
     public ObservableCollection<SubscriptionViewModel> Subscriptions { get; } = new();
     [ObservableProperty] private string _newSubName = string.Empty;
     [ObservableProperty] private string _newSubUrl = string.Empty;
-    [ObservableProperty] private bool _isSplitTunnel = true;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
+    private bool _isSplitTunnel = true;
     [ObservableProperty] private bool _bypassRussianTraffic = true;
     [ObservableProperty] private bool _strictMode = false;
     [ObservableProperty] private bool _forceIpv4Only = true;

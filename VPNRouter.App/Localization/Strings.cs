@@ -619,6 +619,49 @@ public static class Strings
     public static string SmpStopVpn => Ru ? "⏹  Остановить VPN" : "⏹  Stop VPN";
     public static string SmpActiveThrough => Ru ? "Через:" : "Through:";
 
+    // ── v2.18.0 compact Simple-mode redesign (Variant A · Calm) ──
+    // Status card titles (one word when possible)
+    public static string SmpStatusProtected    => Ru ? "Защищено"       : "Protected";
+    public static string SmpStatusConnecting   => Ru ? "Подключение…"   : "Connecting…";
+    public static string SmpStatusNotConnected => Ru ? "Не подключено"  : "Not connected";
+
+    // Status card descriptions (one line each)
+    public static string SmpStatusConnectedVia      => Ru ? "Через"  : "Connected via";
+    public static string SmpStatusConnectedNoDetails=> Ru ? "VPN-туннель активен." : "VPN tunnel is active.";
+    public static string SmpStatusConnectingHint    => Ru
+        ? "Рукопожатие с сервером — пара секунд."
+        : "Handshaking with the server — a moment.";
+    public static string SmpStatusDisconnectedHint  => Ru
+        ? "Трафик идёт напрямую — выбери конфиг и запусти туннель."
+        : "Traffic goes straight — pick a config and start the tunnel.";
+
+    // Config row — "Config · Mode" label + value parts ("subscribe · split")
+    public static string SmpConfigRowLabel => Ru ? "Конфиг · Режим" : "Config · Mode";
+    public static string SmpCfgSubscribe   => Ru ? "подписка"       : "subscribe";
+    public static string SmpCfgManual      => Ru ? "вручную"        : "manual";
+    public static string SmpCfgCustom      => Ru ? "custom"         : "custom";
+    public static string SmpCfgSplit       => Ru ? "сплит"          : "split";
+    public static string SmpCfgFull        => Ru ? "полный"         : "full";
+
+    // CTA captions — Connect / Disconnect / Cancel (not destructive; accent-solid, not red)
+    public static string SmpCtaConnect    => Ru ? "Подключить"   : "Connect";
+    public static string SmpCtaDisconnect => Ru ? "Отключить"    : "Disconnect";
+    public static string SmpCtaCancel     => Ru ? "Отменить"     : "Cancel";
+
+    // Advanced card — new wording listing the feature surface
+    public static string SmpAdvCardTitle    => Ru ? "Расширенные настройки" : "Advanced settings";
+    public static string SmpAdvCardSubtitle => Ru
+        ? "Серверы · Подписки · Zapret · Telegram-прокси · Free Configs"
+        : "Servers · Subscriptions · Zapret · Telegram proxy · Free configs";
+
+    // Mini-header menu items (⋯ flyout)
+    public static string SmpMenuTheme         => Ru ? "Тема"                   : "Theme";
+    public static string SmpMenuLanguage      => Ru ? "Язык"                   : "Language";
+    public static string SmpMenuOpenLogs      => Ru ? "Открыть логи"           : "Open logs";
+    public static string SmpMenuCheckLeaks    => Ru ? "Проверить утечку IP"    : "Check IP leak";
+    public static string SmpMenuCheckUpdates  => Ru ? "Проверить обновления"   : "Check for updates";
+    public static string SmpMenuSwitchToAdv   => Ru ? "Перейти в Advanced"     : "Switch to Advanced";
+
     // ── v2.15.5 Localization pass: remaining hardcoded strings ──
 
     // Tooltips — MainWindow header buttons

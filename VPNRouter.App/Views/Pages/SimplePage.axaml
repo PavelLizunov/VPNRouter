@@ -6,90 +6,218 @@
              x:Class="VPNRouter.App.Views.Pages.SimplePage"
              x:DataType="vm:MainWindowViewModel">
 
+    <!--
+      v2.18.0 — Compact Simple mode (Variant A · Calm).
+      Layout sourced from "VPNRouter Design System 2/handoff/SimpleMode.html".
+      The page owns its own mini-header (logo + brand + status chips + ⋯ menu),
+      so the big MainWindow header is hidden in Simple mode. Three states —
+      on / warn / off — each shown via IsVisible on mutually-exclusive VM
+      flags (SimpleStatusIsOn / IsWarn / IsOff, same for CTA).
+      Don't re-introduce a red destructive CTA for "Disconnect" — per design
+      it's a benign toggle, accent-solid.
+    -->
     <UserControl.Resources>
-        <!-- UserControl can't see MainWindow.Resources at parse time, so the
-             converter used by the hero status dot must be declared locally
-             (same pattern as DpiBypassPage / TelegramPage). Without this the
-             XAML throws 'resource not found' at runtime and the entire
-             window fails to construct — broken v2.17.7. -->
+        <!-- UserControl can't see MainWindow.Resources at parse time, so
+             the local converters used below must be declared here (same
+             pattern DpiBypassPage and TelegramPage follow). -->
         <conv:BoolToStatusColorConverter x:Key="StatusColorConverter"/>
+        <conv:BoolToLangConverter x:Key="LangConverter"/>
     </UserControl.Resources>
 
-    <!--
-      v2.17.7 redesign.
-      Hero state card on top ('VPN is running' / 'VPN is off') → visual
-      anchor for the page. The Start/Stop button sits right under, so the
-      connect action is the single most obvious thing when the page opens.
-      Everything else (input, mode, autostart) collapses into an expander
-      labeled 'Change config or mode' so a connected user doesn't see a
-      form they don't need to touch. Advanced settings link at the bottom
-      is now a framed button with a sub-hint — impossible to miss.
-    -->
     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
-                  Padding="20,20,20,16">
-        <Grid MaxWidth="460" HorizontalAlignment="Center">
-            <StackPanel Spacing="16">
+                  Padding="16,12,16,16">
+        <Grid MaxWidth="420" HorizontalAlignment="Center">
+            <StackPanel Spacing="14">
 
-                <!-- ═══ Hero state card ═══ -->
-                <Border Padding="20,16"
-                        CornerRadius="{StaticResource RadiusMd}"
-                        Background="{DynamicResource SurfaceBaseBrush}"
-                        BorderBrush="{DynamicResource BorderDefaultBrush}"
-                        BorderThickness="1">
-                    <StackPanel Spacing="12">
-                        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-                            <Ellipse Width="12" Height="12" VerticalAlignment="Center"
-                                     Fill="{Binding IsConnected, Converter={StaticResource StatusColorConverter}}"/>
-                            <TextBlock FontSize="15" FontWeight="Bold" VerticalAlignment="Center"
-                                       Text="{Binding SmpHeroTitle}"/>
+                <!-- ═══ Mini header (32px logo · brand + 3 mini badges · ⋯ menu) ═══ -->
+                <Grid ColumnDefinitions="32,*,Auto" ColumnSpacing="10" Margin="2,4,2,2">
+                    <Border Grid.Column="0" Width="32" Height="32"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Background="{DynamicResource AccentBgSubtleBrush}"
+                            ClipToBounds="True">
+                        <Image Source="{Binding LogoSource}"
+                               Width="28" Height="28" Stretch="Uniform"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                        <TextBlock Text="Virtual Penguin Network"
+                                   FontSize="12" FontWeight="Bold"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+                        <!-- Mini-badges: 3 tiny pill chips. Each shown only in the
+                             right component state. SuccessBgBrush / WarningBgBrush
+                             token auto-adapts to light + dark. -->
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <!-- VPN chip, 3 states -->
+                            <Border Padding="5,1" CornerRadius="{StaticResource RadiusPill}"
+                                    Background="{DynamicResource SuccessBgBrush}"
+                                    IsVisible="{Binding SimpleStatusIsOn}">
+                                <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                                    <Ellipse Width="4" Height="4" VerticalAlignment="Center"
+                                             Fill="{DynamicResource SuccessSolidBrush}"/>
+                                    <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource SuccessFgBrush}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Padding="5,1" CornerRadius="{StaticResource RadiusPill}"
+                                    Background="{DynamicResource WarningBgBrush}"
+                                    IsVisible="{Binding SimpleStatusIsWarn}">
+                                <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                                    <Ellipse Width="4" Height="4" VerticalAlignment="Center"
+                                             Fill="{DynamicResource WarningSolidBrush}"/>
+                                    <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource WarningFgBrush}"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Padding="5,1" CornerRadius="{StaticResource RadiusPill}"
+                                    Background="{DynamicResource SurfaceSunkenBrush}"
+                                    IsVisible="{Binding SimpleStatusIsOff}">
+                                <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                                    <Ellipse Width="4" Height="4" VerticalAlignment="Center"
+                                             Fill="{DynamicResource TextMutedBrush}"/>
+                                    <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextMutedBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Zapret chip — running/idle -->
+                            <Border Padding="5,1" CornerRadius="{StaticResource RadiusPill}"
+                                    Background="{Binding ZapretBadgeBrush}">
+                                <TextBlock Text="Zapret" FontSize="9" FontWeight="SemiBold"
+                                           Foreground="White"/>
+                            </Border>
+
+                            <!-- TgProxy chip — running/idle -->
+                            <Border Padding="5,1" CornerRadius="{StaticResource RadiusPill}"
+                                    Background="{Binding TgProxyBadgeBrush}">
+                                <TextBlock Text="TG" FontSize="9" FontWeight="SemiBold"
+                                           Foreground="White"/>
+                            </Border>
                         </StackPanel>
-                        <TextBlock HorizontalAlignment="Center" FontSize="10" Opacity="0.65"
-                                   TextWrapping="Wrap" TextAlignment="Center"
-                                   Text="{Binding StatusText}"/>
-                        <TextBlock HorizontalAlignment="Center" FontSize="10" Opacity="0.55"
-                                   TextWrapping="Wrap" TextAlignment="Center"
-                                   IsVisible="{Binding IsConnected}"
-                                   Text="{Binding SmpActiveServerLine}"/>
+                    </StackPanel>
 
-                        <!-- Big Start/Stop action -->
-                        <Button Command="{Binding SmpToggleConnectCommand}"
-                                Content="{Binding SmpConnectButtonText}"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Center"
-                                Padding="0,12" FontSize="13" FontWeight="Bold"
-                                Background="{Binding SmpConnectButtonBrush}"
-                                Foreground="{DynamicResource AccentOnSolidBrush}"
-                                CornerRadius="{StaticResource RadiusMd}"/>
+                    <!-- ⋯ menu: theme · language · logs · leaks · updates · switch -->
+                    <Button Grid.Column="2" Width="28" Height="28" Padding="0"
+                            FontSize="14" FontWeight="Bold"
+                            Background="Transparent" BorderThickness="0"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Foreground="{DynamicResource TextSecondaryBrush}"
+                            VerticalAlignment="Center"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            ToolTip.Tip="{x:Static loc:Strings.SmpMenuTheme}">
+                        <Button.Content>⋯</Button.Content>
+                        <Button.Flyout>
+                            <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                <MenuItem Header="{Binding ThemeToggleText}"
+                                          Command="{Binding ToggleThemeCommand}"/>
+                                <MenuItem Header="{Binding IsRussian, Converter={StaticResource LangConverter}}"
+                                          Command="{Binding ToggleLanguageCommand}"/>
+                                <Separator/>
+                                <MenuItem Header="{x:Static loc:Strings.SmpMenuOpenLogs}"
+                                          Command="{Binding OpenLogsCommand}"/>
+                                <MenuItem Header="{x:Static loc:Strings.SmpMenuCheckLeaks}"
+                                          Command="{Binding OpenLeakTestCommand}"/>
+                                <Separator/>
+                                <MenuItem Header="{x:Static loc:Strings.SmpMenuCheckUpdates}"
+                                          Command="{Binding UpdateVm.CheckManuallyCommand}"/>
+                                <Separator/>
+                                <MenuItem Header="{x:Static loc:Strings.SmpMenuSwitchToAdv}"
+                                          Command="{Binding ToggleUiModeCommand}"/>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                </Grid>
+
+                <!-- ═══ Status card — 3 variants via IsVisible on SimpleStatusIs* ═══ -->
+                <Border BorderThickness="1"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        Background="{DynamicResource SurfaceBaseBrush}"
+                        CornerRadius="{StaticResource RadiusMd}"
+                        Padding="14">
+                    <StackPanel Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <!-- Status dot — only one visible at a time -->
+                            <Ellipse Width="10" Height="10" VerticalAlignment="Center"
+                                     Fill="{DynamicResource SuccessSolidBrush}"
+                                     IsVisible="{Binding SimpleStatusIsOn}"/>
+                            <Ellipse Width="10" Height="10" VerticalAlignment="Center"
+                                     Fill="{DynamicResource WarningSolidBrush}"
+                                     IsVisible="{Binding SimpleStatusIsWarn}"/>
+                            <Ellipse Width="10" Height="10" VerticalAlignment="Center"
+                                     Fill="{DynamicResource TextMutedBrush}"
+                                     IsVisible="{Binding SimpleStatusIsOff}"/>
+                            <TextBlock Text="{Binding SimpleStatusTitle}"
+                                       FontSize="15" FontWeight="Bold"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding SimpleStatusDescription}"
+                                   FontSize="10"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   Margin="20,0,0,0"
+                                   LineHeight="15"/>
                     </StackPanel>
                 </Border>
 
-                <!-- ═══ Config / mode / autostart — shown inline when DISCONNECTED,
-                     collapsed into a small expander when CONNECTED so a happy user
-                     isn't staring at a form they don't need. ═══ -->
-                <!-- v2.17.9: bind to a dedicated SmpFormExpanded observable
-                     (TwoWay) instead of `{Binding !IsConnected}`. The `!`
-                     inverter compiled as TwoWay, so toggling the Expander
-                     wrote back through the negation and flipped IsConnected
-                     — the hero card would claim "VPN is off" while the
-                     engine was still running. -->
-                <Expander Header="{x:Static loc:Strings.SmpChangeConfig}"
-                          IsExpanded="{Binding SmpFormExpanded, Mode=TwoWay}"
-                          FontSize="11" FontWeight="SemiBold"
-                          Padding="0">
-                    <StackPanel Spacing="14" Margin="0,10,0,2">
+                <!-- ═══ Config row — tappable, opens the inline form ═══ -->
+                <Button Command="{Binding OpenConfigPickerCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="0"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                        Background="{DynamicResource SurfaceRaisedBrush}"
+                        CornerRadius="{StaticResource RadiusSm}">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="12,8">
+                        <!-- Flag-like icon -->
+                        <Border Grid.Column="0" Width="24" Height="24"
+                                CornerRadius="{StaticResource RadiusXs}"
+                                Background="{DynamicResource AccentBgSubtleBrush}"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="⚑" FontSize="12"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource AccentFgBrush}"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Static loc:Strings.SmpConfigRowLabel}"
+                                       FontSize="9" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextMutedBrush}"/>
+                            <TextBlock Text="{Binding SimpleConfigModeSummary}"
+                                       FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                       FontFamily="Consolas, 'Segoe UI Mono', monospace"/>
+                        </StackPanel>
+                        <TextBlock Grid.Column="2" Text="›" FontSize="13"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   VerticalAlignment="Center"/>
+                    </Grid>
+                </Button>
 
+                <!-- ═══ Collapsible detail form (input · mode · autostart).
+                     Bound to SmpFormExpanded. The config row above toggles it. ═══ -->
+                <Border IsVisible="{Binding SmpFormExpanded}"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                        Background="{DynamicResource SurfaceBaseBrush}"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        Padding="12">
+                    <StackPanel Spacing="14">
                         <!-- Input -->
                         <StackPanel Spacing="4">
                             <TextBlock Text="{x:Static loc:Strings.SmpInputLabel}"
-                                       FontSize="11" FontWeight="SemiBold"/>
+                                       FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
                             <TextBox Text="{Binding SmpInput}"
                                      Watermark="{x:Static loc:Strings.SmpInputWatermark}"
-                                     FontSize="11" Padding="12,8"
+                                     FontSize="11" Padding="10,7"
                                      AcceptsReturn="False"
-                                     CornerRadius="{StaticResource RadiusSm}"/>
+                                     CornerRadius="{StaticResource RadiusXs}"/>
                             <TextBlock Text="{x:Static loc:Strings.SmpInputHint}"
-                                       FontSize="9" Opacity="0.55"
+                                       FontSize="9"
+                                       Foreground="{DynamicResource TextMutedBrush}"
                                        TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding SmpErrorText}"
                                        FontSize="10"
@@ -101,36 +229,34 @@
                         <!-- Tunnel mode -->
                         <StackPanel Spacing="4">
                             <TextBlock Text="{x:Static loc:Strings.SmpTunnelModeLabel}"
-                                       FontSize="11" FontWeight="SemiBold"/>
-                            <Border Padding="12,10" CornerRadius="{StaticResource RadiusSm}"
-                                    Background="{DynamicResource SurfaceSunkenBrush}"
-                                    BorderBrush="{DynamicResource BorderDefaultBrush}"
-                                    BorderThickness="1">
-                                <StackPanel Spacing="8">
-                                    <StackPanel Spacing="1">
-                                        <RadioButton GroupName="SmpTunnel"
-                                                     IsChecked="{Binding IsSplitTunnel}"
-                                                     Content="{x:Static loc:Strings.SmpSplitOption}"
-                                                     FontSize="11" FontWeight="SemiBold"
-                                                     MinHeight="0" Padding="4,0"/>
-                                        <TextBlock Text="{x:Static loc:Strings.SmpSplitHint}"
-                                                   FontSize="9" Opacity="0.6"
-                                                   Margin="24,0,0,0"
-                                                   TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <StackPanel Spacing="1">
-                                        <RadioButton GroupName="SmpTunnel"
-                                                     IsChecked="{Binding !IsSplitTunnel}"
-                                                     Content="{x:Static loc:Strings.SmpFullOption}"
-                                                     FontSize="11" FontWeight="SemiBold"
-                                                     MinHeight="0" Padding="4,0"/>
-                                        <TextBlock Text="{x:Static loc:Strings.SmpFullHint}"
-                                                   FontSize="9" Opacity="0.6"
-                                                   Margin="24,0,0,0"
-                                                   TextWrapping="Wrap"/>
-                                    </StackPanel>
+                                       FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
+                            <StackPanel Spacing="8">
+                                <StackPanel Spacing="1">
+                                    <RadioButton GroupName="SmpTunnel"
+                                                 IsChecked="{Binding IsSplitTunnel}"
+                                                 Content="{x:Static loc:Strings.SmpSplitOption}"
+                                                 FontSize="11" FontWeight="SemiBold"
+                                                 MinHeight="0" Padding="4,0"/>
+                                    <TextBlock Text="{x:Static loc:Strings.SmpSplitHint}"
+                                               FontSize="9"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               Margin="24,0,0,0"
+                                               TextWrapping="Wrap"/>
                                 </StackPanel>
-                            </Border>
+                                <StackPanel Spacing="1">
+                                    <RadioButton GroupName="SmpTunnel"
+                                                 IsChecked="{Binding !IsSplitTunnel, Mode=OneWay}"
+                                                 Content="{x:Static loc:Strings.SmpFullOption}"
+                                                 FontSize="11" FontWeight="SemiBold"
+                                                 MinHeight="0" Padding="4,0"/>
+                                    <TextBlock Text="{x:Static loc:Strings.SmpFullHint}"
+                                               FontSize="9"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               Margin="24,0,0,0"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </StackPanel>
                         </StackPanel>
 
                         <!-- Autostart -->
@@ -140,35 +266,77 @@
                                   FontSize="11"
                                   MinHeight="0" Padding="4,0"/>
                     </StackPanel>
-                </Expander>
+                </Border>
 
-                <!-- ═══ Advanced escape hatch — framed, obvious ═══ -->
-                <Border Padding="14,12"
-                        CornerRadius="{StaticResource RadiusMd}"
-                        Background="{DynamicResource AccentBgSubtleBrush}"
+                <!-- ═══ CTA — three mutually-exclusive variants ═══ -->
+                <!-- ON: Disconnect — accent-solid, NOT red (per design) -->
+                <Button Command="{Binding SmpToggleConnectCommand}"
+                        Content="{Binding SimpleCtaText}"
+                        IsVisible="{Binding SimpleCtaIsConnected}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Padding="0,12" FontSize="12" FontWeight="Bold"
+                        Background="{DynamicResource AccentSolidBrush}"
+                        Foreground="{DynamicResource AccentOnSolidBrush}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource RadiusSm}"/>
+
+                <!-- WARN: Cancel — sunken, progress cursor -->
+                <Button Command="{Binding SmpToggleConnectCommand}"
+                        Content="{Binding SimpleCtaText}"
+                        IsVisible="{Binding SimpleCtaIsConnecting}"
+                        IsEnabled="False"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Padding="0,12" FontSize="12" FontWeight="Bold"
+                        Background="{DynamicResource SurfaceSunkenBrush}"
+                        Foreground="{DynamicResource TextSecondaryBrush}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource RadiusSm}"/>
+
+                <!-- OFF: Connect — outlined, accent fg -->
+                <Button Command="{Binding SmpToggleConnectCommand}"
+                        Content="{Binding SimpleCtaText}"
+                        IsVisible="{Binding SimpleCtaIsDisconnected}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Padding="0,12" FontSize="12" FontWeight="Bold"
+                        Background="{DynamicResource SurfaceBaseBrush}"
+                        Foreground="{DynamicResource AccentFgBrush}"
                         BorderBrush="{DynamicResource AccentBorderBrush}"
-                        BorderThickness="1">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                        <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
-                            <TextBlock Text="{x:Static loc:Strings.SmpAdvancedLink}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusSm}"/>
+
+                <!-- ═══ Advanced settings card ═══ -->
+                <Button Command="{Binding ToggleUiModeCommand}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="0"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        Background="{DynamicResource SurfaceBaseBrush}"
+                        CornerRadius="{StaticResource RadiusMd}"
+                        ToolTip.Tip="{Binding UiModeToggleTooltip}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="14,12">
+                        <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Static loc:Strings.SmpAdvCardTitle}"
                                        FontSize="12" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource AccentFgBrush}"/>
-                            <TextBlock Text="{x:Static loc:Strings.SmpAdvancedHint}"
-                                       FontSize="9" Opacity="0.7"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
+                            <TextBlock Text="{x:Static loc:Strings.SmpAdvCardSubtitle}"
+                                       FontSize="9"
+                                       Foreground="{DynamicResource TextMutedBrush}"
                                        TextWrapping="Wrap"/>
                         </StackPanel>
-                        <Button Grid.Column="1"
-                                Command="{Binding ToggleUiModeCommand}"
-                                Content="▸"
-                                FontSize="15" FontWeight="Bold"
-                                Padding="14,6"
-                                VerticalAlignment="Center"
-                                Background="{DynamicResource AccentSolidBrush}"
-                                Foreground="{DynamicResource AccentOnSolidBrush}"
+                        <Border Grid.Column="1" Width="28" Height="28"
                                 CornerRadius="{StaticResource RadiusSm}"
-                                ToolTip.Tip="{Binding UiModeToggleTooltip}"/>
+                                Background="{DynamicResource AccentBgSubtleBrush}"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="›" FontSize="14" FontWeight="Bold"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource AccentFgBrush}"/>
+                        </Border>
                     </Grid>
-                </Border>
+                </Button>
 
             </StackPanel>
         </Grid>

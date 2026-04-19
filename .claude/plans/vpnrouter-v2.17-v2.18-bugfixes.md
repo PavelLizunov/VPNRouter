@@ -439,13 +439,16 @@ Legend: S = 1-2 h, M = 3-5 h, L = 1-2 days.
   **fixed v2.17.9** (WindowStartupLocation.Manual on rebuilt MainWindow,
   bundled into v2.17.9 since fix is 1 line + log statements)
 - [ ] Bug C — 200 MB RAM, unknown cause
-- [ ] Design Q — Does Simple mode need the full header?
-  (user deferred to later — "к дизайну вернёмся позже")
+- [x] Design Q — Answered by the "VPNRouter Design System 2" handoff
+  (`SimpleMode.html` — Variant A · Calm). Implemented in v2.18.0.
 
 ### Release tracker
 - [x] v2.17.9  — Fix Bug A + Bug B (combined, both Simple-mode UX bugs)
 - [~] v2.17.10 — merged into v2.17.9
-- [ ] v2.18.0  — Simple header (DEFERRED until design pass)
+- [x] v2.18.0  — Compact Simple mode (mini-header + status card +
+  config row + 3-state CTA + Advanced card); big MainWindow header
+  hidden in Simple mode; Disconnect CTA is accent-solid (benign
+  toggle), NOT red/danger per design
 - [ ] v2.18.1  — Bug C investigation
 - [ ] v2.18.2  — Audit pass
 

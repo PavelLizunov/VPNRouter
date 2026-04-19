@@ -110,6 +110,103 @@ public partial class MainWindowViewModel
         }
     }
 
+    // ── v2.18.0 compact-design bindings ──────────────────────────────────
+    // Modelled after "VPNRouter Design System 2/handoff/SimpleMode.html".
+    // Three states — on / warn / off — each with its own status dot colour,
+    // title, description, and CTA visual. Bindings expose 3 mutually-exclusive
+    // bools per state so XAML can show/hide a .state-variant block cleanly.
+
+    /// <summary>True when VPN is up and no connect/disconnect is in-flight.</summary>
+    public bool SimpleStatusIsOn   => IsConnected && !IsConnecting;
+    /// <summary>True only during an active connect/disconnect transition.</summary>
+    public bool SimpleStatusIsWarn => IsConnecting;
+    /// <summary>True when idle and not currently transitioning.</summary>
+    public bool SimpleStatusIsOff  => !IsConnected && !IsConnecting;
+
+    /// <summary>
+    /// Status-card title — one word when possible. Mirrors the variant-A
+    /// "Protected / Connecting… / Not connected" wording.
+    /// </summary>
+    public string SimpleStatusTitle => IsConnecting
+        ? Strings.SmpStatusConnecting
+        : IsConnected
+            ? Strings.SmpStatusProtected
+            : Strings.SmpStatusNotConnected;
+
+    /// <summary>
+    /// Status-card description — single line, varies with state:
+    ///   on   → "Connected via de-01 · 104.194.156.93"
+    ///   warn → "Handshaking with the server…"
+    ///   off  → "Traffic goes straight — pick a config and start the tunnel."
+    /// </summary>
+    public string SimpleStatusDescription
+    {
+        get
+        {
+            if (IsConnecting) return Strings.SmpStatusConnectingHint;
+            if (IsConnected)
+            {
+                // Reuse the SmpActiveServerLine logic but strip the "Through:"
+                // prefix since the status card uses its own verb.
+                string? name = IsSubscribeMode
+                    ? (SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName
+                    : (SelectedServer ?? Servers.FirstOrDefault())?.DisplayName;
+                var ip = _engine?.ActiveServerAddress;
+                var via = Strings.SmpStatusConnectedVia;
+                if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(ip)) return $"{via} {name} · {ip}";
+                if (!string.IsNullOrEmpty(name)) return $"{via} {name}";
+                if (!string.IsNullOrEmpty(ip))   return $"{via} {ip}";
+                return Strings.SmpStatusConnectedNoDetails;
+            }
+            return Strings.SmpStatusDisconnectedHint;
+        }
+    }
+
+    /// <summary>
+    /// Config row value — "subscribe · split" / "manual · full" / etc. Shown
+    /// in the compact config row as the currently-active routing picture.
+    /// </summary>
+    public string SimpleConfigModeSummary
+    {
+        get
+        {
+            var configLabel = IsSubscribeMode ? Strings.SmpCfgSubscribe
+                             : IsVlessMode    ? Strings.SmpCfgManual
+                             :                  Strings.SmpCfgCustom;
+            var tunnelLabel = IsSplitTunnel ? Strings.SmpCfgSplit : Strings.SmpCfgFull;
+            return $"{configLabel} · {tunnelLabel}";
+        }
+    }
+
+    /// <summary>CTA button caption — "Connect" / "Disconnect" / "Cancel".</summary>
+    public string SimpleCtaText => IsConnecting
+        ? Strings.SmpCtaCancel
+        : IsConnected
+            ? Strings.SmpCtaDisconnect
+            : Strings.SmpCtaConnect;
+
+    /// <summary>
+    /// CTA visual-state flags (mutually exclusive). XAML shows one of three
+    /// Button variants based on which of these is true — avoids cramming
+    /// state switches into a style trigger. Matches .cta.on-state /
+    /// .cta.connecting-state / .cta.off-state in the HTML reference.
+    /// </summary>
+    public bool SimpleCtaIsConnected    => IsConnected && !IsConnecting;
+    public bool SimpleCtaIsConnecting   => IsConnecting;
+    public bool SimpleCtaIsDisconnected => !IsConnected && !IsConnecting;
+
+    /// <summary>
+    /// Config row click handler. In v2.18.0 this simply toggles the hidden
+    /// detail form (same SmpFormExpanded bool the v2.17.x Expander used)
+    /// so the user can still tweak input/mode inline without navigating to
+    /// Advanced. Future: open a bottom-sheet picker.
+    /// </summary>
+    [RelayCommand]
+    private void OpenConfigPicker()
+    {
+        SmpFormExpanded = !SmpFormExpanded;
+    }
+
     // ── Big Start/Stop command (real wiring in v2.17.2) ──────────────────
 
     /// <summary>

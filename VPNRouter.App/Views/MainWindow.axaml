@@ -27,8 +27,12 @@
     </Design.DataContext>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto">
-        <!-- ═══ Header ═══ -->
+        <!-- ═══ Header (hidden in Simple mode — SimplePage owns its own
+             compact mini-header since v2.18.0). Update banner in Row=1
+             stays visible in both modes so critical update info is never
+             hidden behind a UI-mode toggle. ═══ -->
         <Border Grid.Row="0" Padding="10,6" BorderThickness="0,0,0,1"
+                IsVisible="{Binding !IsSimpleMode}"
                 BorderBrush="{DynamicResource BorderDefaultBrush}"
                 Background="{DynamicResource SurfaceBaseBrush}">
             <Grid ColumnDefinitions="Auto,*,Auto">
