@@ -215,15 +215,24 @@ in technical terms, don't oversimplify.
 
 ---
 
-## Project status summary (as of v2.14.10 stable)
+## Project status summary (as of v2.15.5 prerelease)
 
-All Free Configs features from the v2.13.16 → v2.14.10 roadmap are complete.
-The `.claude/plans/free-configs-v2.14-roadmap.md` plan file is closed.
+All 4 blocks of the v2.15 roadmap shipped as prereleases:
+- v2.15.0/.1 — autostart retry + Windows Service deps + status dashboard
+- v2.15.2/.3 — TCP+TLS + Deep verify (sing-box spawn) for Servers/Subs
+- v2.15.4    — UI polish + tooltips
+- v2.15.5    — Localization pass (~30 hardcoded strings moved to Strings.cs)
 
-Pool aggregator (CI) is running every 6 hours, publishing to
-`free-pool-latest` GH release (15 MB JSON / 2 MB gzip, ~25k entries with GeoIP).
+See `.claude/plans/vpnrouter-v2.15-roadmap.md` for details.
+
+v2.14.10 is still the stable Latest — user tests each v2.15.x before promotion.
+
+Free Configs pool aggregator (CI) still runs every 6 hours, publishing to
+`free-pool-latest` GH release (~25k entries with GeoIP).
 
 Next potential work areas (user-driven, no plan yet):
-- tg-ws-proxy C# rewrite (see `memory/tg-ws-proxy-rewrite.md`)
-- Full localization pass (see `.claude/plans/wondrous-dreaming-clover.md` mentioned in memory)
 - Further Free Configs polish (user feedback-driven)
+- Consolidate `FreeConfigDeepVerifier` + `VlessDeepVerifier` (currently duplicate sing-box spawn + SOCKS probe logic; deferred from v2.15.3 for safety)
+
+**Explicitly OUT of scope:**
+- **tg-ws-proxy C# rewrite** — works like Zapret (`TgProxyUpdater` pulls release from GitHub on demand), no reason to rewrite. The `memory/tg-ws-proxy-rewrite.md` doc is obsolete.
