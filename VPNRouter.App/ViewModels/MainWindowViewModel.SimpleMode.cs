@@ -1,10 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using VPNRouter.App.Localization;
+using VPNRouter.Core;
+using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -79,20 +83,124 @@ public partial class MainWindowViewModel
         }
     }
 
-    // ── Big Start/Stop command (STUB in v2.17.1) ─────────────────────────
+    // ── Big Start/Stop command (real wiring in v2.17.2) ──────────────────
 
     /// <summary>
-    /// v2.17.1 stub. v2.17.2 replaces with real input parsing + connect.
+    /// Simple-mode connect flow. If already connected → just Stop (reuses
+    /// the existing ToggleConnection path). Otherwise parses the pasted
+    /// input, writes the minimum settings needed (single VLESS entry OR
+    /// a single-entry subscriptions list), and hands off to ToggleConnection
+    /// which runs the same Connect logic Advanced uses — including
+    /// service-managed detection and WarnServiceManagedReconnect.
     /// </summary>
     [RelayCommand]
-    private Task SmpToggleConnectAsync()
+    private async Task SmpToggleConnectAsync()
     {
         SmpErrorText = string.Empty;
-        StatusText = IsRussian
-            ? "Логика Start/Stop будет доступна в v2.17.2. Сейчас это заглушка."
-            : "Start/Stop logic lands in v2.17.2. This is currently a stub.";
-        _logger?.Information("[Simple] SmpToggleConnect stub triggered — input length={Len}, split={Split}", _smpInput.Length, IsSplitTunnel);
-        return Task.CompletedTask;
+
+        if (IsConnected)
+        {
+            await ToggleConnectionAsync();
+            return;
+        }
+
+        if (IsConnecting) return;
+
+        var kind = SimpleInputDetector.Classify(_smpInput);
+        switch (kind)
+        {
+            case SmpInputKind.Invalid:
+                SmpErrorText = IsRussian
+                    ? "Вставь vless://-ссылку или URL подписки (http:// / https://)."
+                    : "Paste a vless:// link or a subscription URL (http:// / https://).";
+                return;
+
+            case SmpInputKind.Vless:
+                if (!TryApplyVless(_smpInput.Trim())) return;
+                break;
+
+            case SmpInputKind.SubscriptionUrl:
+                if (!TryApplySubscriptionUrl(_smpInput.Trim())) return;
+                break;
+        }
+
+        // Tunnel mode (Split vs Full) — already bound to IsSplitTunnel via radio.
+        _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
+
+        SaveSettings();
+        _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+
+        // Subscription mode needs a fresh fetch BEFORE connect so we have
+        // servers to hand to the engine.
+        if (kind == SmpInputKind.SubscriptionUrl)
+        {
+            try
+            {
+                await RefreshAllSubscriptionsAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[Simple] Subscription refresh failed");
+                SmpErrorText = IsRussian
+                    ? $"Не удалось получить подписку: {ex.Message}"
+                    : $"Couldn't fetch the subscription: {ex.Message}";
+                return;
+            }
+        }
+
+        // Hand off to the shared Connect path — it already handles mode
+        // dispatch, TUN conflicts, service-managed warnings, etc.
+        await ToggleConnectionAsync();
+    }
+
+    /// <summary>
+    /// Parse a single <c>vless://</c> URI and write it as the only VLESS
+    /// server in settings. Returns false and sets SmpErrorText on failure.
+    /// </summary>
+    private bool TryApplyVless(string uri)
+    {
+        try
+        {
+            var entry = VlessUriParser.Parse(uri);
+            _settings.Vless.Servers = new List<VlessServerEntry> { entry };
+            _settings.Vless.ActiveServer = entry.Name ?? string.Empty;
+            _settings.App.ConfigMode = "generated";
+            _settings.App.ActiveSubscriptionServer = string.Empty;
+            IsSubscribeMode = false;
+            IsVlessMode = true;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[Simple] VLESS URI parse failed");
+            SmpErrorText = IsRussian
+                ? "Некорректная vless-ссылка. Проверь что начинается на 'vless://' и заканчивается '#имя'."
+                : "Invalid VLESS link. Make sure it starts with 'vless://' and ends with '#name'.";
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Replace the subscriptions list with a single enabled entry pointing
+    /// at the pasted URL. Returns false (currently unreachable — HTTP
+    /// validation happens later during RefreshAllSubscriptionsAsync).
+    /// </summary>
+    private bool TryApplySubscriptionUrl(string url)
+    {
+        _settings.App.Subscriptions = new List<SubscriptionEntry>
+        {
+            new()
+            {
+                Name = "simple",
+                Url = url,
+                Enabled = true,
+                Servers = new List<VlessServerEntry>(),
+            }
+        };
+        _settings.App.ConfigMode = "subscribe";
+        IsSubscribeMode = true;
+        IsVlessMode = false;
+        return true;
     }
 
     // ── Change-tracking hooks so the header button caption + colour refresh
