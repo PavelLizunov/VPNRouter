@@ -68,7 +68,7 @@
             <!-- Header with DisplayName + Delete button (custom only) -->
             <Grid Grid.Row="0" ColumnDefinitions="*,Auto"
                   Margin="14,10,14,6">
-                <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="14" FontWeight="Bold"
+                <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="13" FontWeight="Bold"
                            VerticalAlignment="Center"/>
                 <Button Grid.Column="1" Content="X"
                         IsVisible="{Binding IsCustomCategory}"
@@ -114,7 +114,7 @@
                                     <TextBlock Text="{Binding ProcessName}" FontSize="11"/>
                                     <Border Background="{DynamicResource TextMutedBrush}" CornerRadius="6" Padding="5,0"
                                             IsVisible="{Binding IsCustom}" VerticalAlignment="Center">
-                                        <TextBlock Text="{x:Static loc:Strings.LblCustomBadge}" FontSize="8" Foreground="White"/>
+                                        <TextBlock Text="{x:Static loc:Strings.LblCustomBadge}" FontSize="9" Foreground="White"/>
                                     </Border>
                                 </StackPanel>
                             </CheckBox>

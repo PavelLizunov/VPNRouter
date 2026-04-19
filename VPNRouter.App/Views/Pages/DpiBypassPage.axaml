@@ -46,7 +46,7 @@
 
                 <!-- ═══ Status ═══ -->
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretStatusSection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecStatus}" FontWeight="Bold" FontSize="14"/>
+                    <TextBlock Text="{x:Static loc:Strings.ZapretSecStatus}" FontWeight="Bold" FontSize="13"/>
                     <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.7"
                                Text="{Binding LblDpiDescription}"/>
                     <Border Padding="10,8" CornerRadius="4"
@@ -63,7 +63,7 @@
 
                 <!-- ═══ Strategy ═══ -->
                 <StackPanel Spacing="8" IsVisible="{Binding IsZapretStrategySection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecStrategy}" FontWeight="Bold" FontSize="14"/>
+                    <TextBlock Text="{x:Static loc:Strings.ZapretSecStrategy}" FontWeight="Bold" FontSize="13"/>
                     <TextBlock Text="{Binding LblDpiStrategy}" FontWeight="SemiBold" Opacity="0.7" FontSize="10"/>
                     <ComboBox ItemsSource="{Binding ZapretStrategies}"
                               SelectedIndex="{Binding ZapretStrategyIndex}"
@@ -88,7 +88,7 @@
 
                 <!-- ═══ Hosts ═══ -->
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretHostsSection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecHosts}" FontWeight="Bold" FontSize="14"/>
+                    <TextBlock Text="{x:Static loc:Strings.ZapretSecHosts}" FontWeight="Bold" FontSize="13"/>
 
                     <Border Padding="10,8" CornerRadius="4"
                             Background="{DynamicResource SurfaceSunkenBrush}">
@@ -119,7 +119,7 @@
 
                 <!-- ═══ Filters ═══ -->
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretFiltersSection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecFilters}" FontWeight="Bold" FontSize="14"/>
+                    <TextBlock Text="{x:Static loc:Strings.ZapretSecFilters}" FontWeight="Bold" FontSize="13"/>
 
                     <Border Padding="10,8" CornerRadius="4"
                             Background="{DynamicResource SurfaceSunkenBrush}">
@@ -151,7 +151,7 @@
 
                 <!-- ═══ Updates ═══ -->
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretUpdatesSection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecUpdates}" FontWeight="Bold" FontSize="14"/>
+                    <TextBlock Text="{x:Static loc:Strings.ZapretSecUpdates}" FontWeight="Bold" FontSize="13"/>
 
                     <Button Content="{x:Static loc:Strings.UpdateIpSet}"
                             Command="{Binding UpdateIpSetListCommand}"
@@ -168,7 +168,7 @@
 
                 <!-- ═══ Diagnostics ═══ -->
                 <StackPanel Spacing="8" IsVisible="{Binding IsZapretDiagnosticsSection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecDiagnostics}" FontWeight="Bold" FontSize="14"/>
+                    <TextBlock Text="{x:Static loc:Strings.ZapretSecDiagnostics}" FontWeight="Bold" FontSize="13"/>
 
                     <Button Content="{x:Static loc:Strings.RunDiagnostics}"
                             Command="{Binding RunZapretDiagnosticsCommand}"
@@ -204,7 +204,7 @@
 
                 <!-- ═══ Advanced ═══ -->
                 <StackPanel Spacing="6" IsVisible="{Binding IsZapretAdvancedSection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecAdvanced}" FontWeight="Bold" FontSize="14"/>
+                    <TextBlock Text="{x:Static loc:Strings.ZapretSecAdvanced}" FontWeight="Bold" FontSize="13"/>
 
                     <Button Content="{x:Static loc:Strings.ClearDiscordCache}"
                             Command="{Binding ClearDiscordCacheCommand}"

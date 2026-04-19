@@ -38,7 +38,7 @@
 
             <!-- Routing section -->
             <StackPanel Spacing="10" IsVisible="{Binding IsSettingsRoutingSelected}">
-                <TextBlock Text="{Binding LblSettingsRouting}" FontWeight="Bold" FontSize="14"/>
+                <TextBlock Text="{Binding LblSettingsRouting}" FontWeight="Bold" FontSize="13"/>
 
                 <StackPanel Spacing="4">
                     <TextBlock Text="{x:Static loc:Strings.LblRoutingMode}" FontWeight="SemiBold" Opacity="0.7"/>
@@ -69,7 +69,7 @@
 
             <!-- Leak Protection section -->
             <StackPanel Spacing="10" IsVisible="{Binding IsSettingsLeakSelected}">
-                <TextBlock Text="{Binding LblSettingsLeak}" FontWeight="Bold" FontSize="14"/>
+                <TextBlock Text="{Binding LblSettingsLeak}" FontWeight="Bold" FontSize="13"/>
 
                 <Border Padding="8,6" CornerRadius="4"
                         Background="{DynamicResource SurfaceSunkenBrush}"
@@ -94,7 +94,7 @@
 
             <!-- Content section -->
             <StackPanel Spacing="10" IsVisible="{Binding IsSettingsContentSelected}">
-                <TextBlock Text="{Binding LblSettingsContent}" FontWeight="Bold" FontSize="14"/>
+                <TextBlock Text="{Binding LblSettingsContent}" FontWeight="Bold" FontSize="13"/>
 
                 <Border Padding="8,6" CornerRadius="4"
                         Background="{DynamicResource SurfaceSunkenBrush}"
@@ -114,7 +114,7 @@
 
             <!-- Updates section -->
             <StackPanel Spacing="10" IsVisible="{Binding IsSettingsUpdatesSelected}">
-                <TextBlock Text="{Binding LblSettingsUpdates}" FontWeight="Bold" FontSize="14"/>
+                <TextBlock Text="{Binding LblSettingsUpdates}" FontWeight="Bold" FontSize="13"/>
 
                 <Border Padding="8,6" CornerRadius="4"
                         Background="{DynamicResource SurfaceSunkenBrush}"
@@ -131,7 +131,7 @@
 
             <!-- Autostart section -->
             <StackPanel Spacing="10" IsVisible="{Binding IsSettingsAutostartSelected}">
-                <TextBlock Text="{Binding LblAutostartSection}" FontWeight="Bold" FontSize="14"/>
+                <TextBlock Text="{Binding LblAutostartSection}" FontWeight="Bold" FontSize="13"/>
 
                 <Border Padding="8,6" CornerRadius="4"
                         Background="{DynamicResource SurfaceSunkenBrush}"

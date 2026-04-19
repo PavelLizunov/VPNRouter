@@ -140,7 +140,7 @@
                         <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
                             <TextBlock Grid.Column="0" Text="O" Foreground="{DynamicResource SuccessSolidBrush}"
                                        IsVisible="{Binding IsActive}"
-                                       VerticalAlignment="Center" Margin="0,0,6,0" FontSize="8"/>
+                                       VerticalAlignment="Center" Margin="0,0,6,0" FontSize="9"/>
                             <TextBlock Grid.Column="1" Text="{Binding Name}"
                                        FontWeight="{Binding IsActive, Converter={StaticResource ActiveFontConverter}}"
                                        VerticalAlignment="Center"/>

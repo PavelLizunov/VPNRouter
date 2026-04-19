@@ -128,7 +128,7 @@
 
                     <!-- ─── Scan section ─── -->
                     <StackPanel Spacing="6" IsVisible="{Binding IsFreeScanSection}">
-                        <TextBlock Text="{x:Static loc:Strings.FcSecScan}" FontWeight="Bold" FontSize="14"/>
+                        <TextBlock Text="{x:Static loc:Strings.FcSecScan}" FontWeight="Bold" FontSize="13"/>
 
                         <!-- Primary action buttons -->
                         <Grid ColumnDefinitions="*,*,Auto">
@@ -213,7 +213,7 @@
 
                     <!-- ─── Deep verify section ─── -->
                     <StackPanel Spacing="6" IsVisible="{Binding IsFreeDeepSection}">
-                        <TextBlock Text="{x:Static loc:Strings.FcSecDeep}" FontWeight="Bold" FontSize="14"/>
+                        <TextBlock Text="{x:Static loc:Strings.FcSecDeep}" FontWeight="Bold" FontSize="13"/>
                         <Border Padding="8,8,8,10" CornerRadius="6"
                                 BorderThickness="1" BorderBrush="{DynamicResource SuccessSolidBrush}" Background="{DynamicResource SuccessBgBrush}">
                             <StackPanel Spacing="6">
@@ -296,7 +296,7 @@
 
                     <!-- ─── Filters section ─── -->
                     <StackPanel Spacing="8" IsVisible="{Binding IsFreeFiltersSection}">
-                        <TextBlock Text="{x:Static loc:Strings.FcSecFilters}" FontWeight="Bold" FontSize="14"/>
+                        <TextBlock Text="{x:Static loc:Strings.FcSecFilters}" FontWeight="Bold" FontSize="13"/>
                         <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                             <TextBlock Text="{x:Static loc:Strings.FcCountryFilter}" FontSize="11" VerticalAlignment="Center"/>
                             <ComboBox ItemsSource="{Binding FreeConfigsVm.Countries}"
@@ -310,7 +310,7 @@
 
                     <!-- ─── My Sources section ─── -->
                     <StackPanel Spacing="6" IsVisible="{Binding IsFreeMySourcesSection}">
-                        <TextBlock Text="{x:Static loc:Strings.FcSecMySources}" FontWeight="Bold" FontSize="14"/>
+                        <TextBlock Text="{x:Static loc:Strings.FcSecMySources}" FontWeight="Bold" FontSize="13"/>
                         <TextBlock Text="{x:Static loc:Strings.FcUserSrcHint}"
                                    TextWrapping="Wrap" FontSize="10" Opacity="0.65"/>
                         <ItemsControl ItemsSource="{Binding FreeConfigsVm.UserSources}">
@@ -358,7 +358,7 @@
 
                     <!-- ─── Cleanup section ─── -->
                     <StackPanel Spacing="8" IsVisible="{Binding IsFreeCleanupSection}">
-                        <TextBlock Text="{x:Static loc:Strings.FcSecCleanup}" FontWeight="Bold" FontSize="14"/>
+                        <TextBlock Text="{x:Static loc:Strings.FcSecCleanup}" FontWeight="Bold" FontSize="13"/>
                         <Button Content="{x:Static loc:Strings.FcOpenLogs}"
                                 Command="{Binding FreeConfigsVm.OpenLogsCommand}"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
