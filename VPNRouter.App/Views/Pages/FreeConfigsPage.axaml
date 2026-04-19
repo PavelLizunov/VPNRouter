@@ -44,6 +44,38 @@
 
                     <!-- ─── Overview section ─── -->
                     <StackPanel Spacing="8" IsVisible="{Binding IsFreeOverviewSection}">
+                        <!-- v2.16.8: busy-state banner so the user can always
+                             cancel the running operation without navigating
+                             to Scan or Deep verify sections. Shown only when
+                             IsBusy; mirrors the Scan section's Cancel button. -->
+                        <Border IsVisible="{Binding FreeConfigsVm.IsBusy}"
+                                Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
+                                Background="{DynamicResource WarningBgBrush}"
+                                BorderBrush="{DynamicResource WarningBorderBrush}"
+                                BorderThickness="1">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding FreeConfigsVm.StatusText}"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource WarningFgBrush}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <ProgressBar Margin="0,3,0,0" Height="3"
+                                                 Minimum="0"
+                                                 Maximum="{Binding FreeConfigsVm.ProgressTotal}"
+                                                 Value="{Binding FreeConfigsVm.ProgressDone}"
+                                                 Foreground="{DynamicResource WarningSolidBrush}"/>
+                                </StackPanel>
+                                <Button Grid.Column="1"
+                                        Content="{x:Static loc:Strings.FcCancel}"
+                                        Command="{Binding FreeConfigsVm.CancelCommand}"
+                                        Padding="14,6" FontSize="11"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Background="{DynamicResource DangerSolidBrush}"
+                                        Foreground="White"
+                                        VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+
                         <!-- Quickstart banner (dismissible) -->
                         <Border IsVisible="{Binding FreeConfigsVm.ShowQuickstart}"
                                 Padding="12,8" CornerRadius="{StaticResource RadiusSm}"

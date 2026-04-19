@@ -449,9 +449,27 @@ public partial class FreeConfigsPageViewModel : ObservableObject
                 _                             => 7,
             };
 
-            var candidates = _allConfigs
+            // v2.16.8 fix: pre-filter dead candidates. Timeout/Unreachable mean the
+            // endpoint never even accepted a TCP connection during Refresh — no
+            // point wasting 6-12 s of sing-box spawn on them. Keep:
+            //   Verified / Ok / Slow    — most likely to succeed
+            //   Implausible              — might be local-intercept false positive
+            //   TlsFailed                — Reality endpoints can present a mismatched
+            //                              cert to the front SNI; Deep Verify tunnels
+            //                              through the proxy so it may still work
+            //   Unknown                  — never tested, give it a shot
+            // If the filter leaves an empty pool, fall back to everything non-RU.
+            var promising = _allConfigs
                 .Where(c => !ExcludeRu ||
                             !string.Equals(c.CountryCode, "RU", StringComparison.OrdinalIgnoreCase))
+                .Where(c => c.Status != FreeConfigStatus.Timeout
+                         && c.Status != FreeConfigStatus.Unreachable
+                         && c.Status != FreeConfigStatus.ParseError)
+                .ToList();
+
+            var candidates = (promising.Count > 0 ? promising : _allConfigs
+                    .Where(c => !ExcludeRu ||
+                                !string.Equals(c.CountryCode, "RU", StringComparison.OrdinalIgnoreCase)))
                 .OrderBy(c => Priority(c.Status))
                 .ThenBy(c => c.LatencyMs > 0 ? c.LatencyMs : int.MaxValue)
                 .ToList();

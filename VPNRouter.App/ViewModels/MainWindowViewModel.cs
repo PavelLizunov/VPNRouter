@@ -607,7 +607,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
             IsConnected = true;
             ConnectButtonText = Strings.StopVPN;
-            var mode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "manual" : "custom";
+            var configLabel = IsSubscribeMode ? "subscribe" : IsVlessMode ? "manual" : "custom";
+            var tunnelLabel = IsSplitTunnel ? "split" : "full";
+            var mode = $"{configLabel}/{tunnelLabel}";
             StatusText = IsRussian
                 ? $"Подключено через службу [{mode}]"
                 : $"Connected via service [{mode}]";
@@ -950,6 +952,14 @@ public partial class MainWindowViewModel : ViewModelBase
             HasPendingAppChanges = IsConnected;
     }
 
+    /// <summary>
+    /// True when sing-box is running but NOT started by this App instance —
+    /// i.e. the Windows Service owns the tunnel. Used by Apply to avoid a
+    /// silent-fail call into <see cref="VpnEngine.ApplyAsync"/> (which would
+    /// bail immediately because our local engine has no sing-box process).
+    /// </summary>
+    private bool IsServiceManagedVpn => IsConnected && !(_engine?.IsRunning ?? false);
+
     [RelayCommand]
     private async Task ApplyPendingChangesAsync()
     {
@@ -959,6 +969,19 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             SaveSettings();
             _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+
+            if (IsServiceManagedVpn)
+            {
+                // Can't reload via local engine — the sing-box process is owned
+                // by the Windows Service. Settings YAML is saved; surface a
+                // clear message so the user knows to Stop+Start VPN to apply.
+                HasPendingAppChanges = false;
+                StatusText = IsRussian
+                    ? "Настройки сохранены. Остановите и запустите VPN, чтобы они применились (служба перечитает config.yaml при старте)."
+                    : "Settings saved. Stop and Start VPN to apply — the service re-reads config.yaml on start.";
+                return;
+            }
+
             var ok = await Task.Run(() => _engine.ApplyAsync(_settings));
             if (ok)
             {
@@ -978,7 +1001,7 @@ public partial class MainWindowViewModel : ViewModelBase
         finally { IsApplying = false; }
     }
 
-    /// <summary>Rebuild the "Connected [mode] → server (ip)" status line after Apply.</summary>
+    /// <summary>Rebuild the "Connected [mode · tunnel] → server (ip)" status line after Apply.</summary>
     private void RestoreConnectedStatus()
     {
         if (!IsConnected) return;
@@ -988,7 +1011,11 @@ public partial class MainWindowViewModel : ViewModelBase
             serverName = (SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName;
         else
             serverName = (SelectedServer ?? Servers.FirstOrDefault())?.DisplayName;
-        var modeLabel = IsSubscribeMode ? "subscribe" : IsVlessMode ? "split" : "custom";
+
+        var configLabel = IsSubscribeMode ? "subscribe" : IsVlessMode ? "manual" : "custom";
+        var tunnelLabel = IsSplitTunnel ? "split" : "full";
+        var modeLabel = $"{configLabel}/{tunnelLabel}";
+
         StatusText = Strings.Connected(modeLabel, serverName, serverIp);
     }
 
