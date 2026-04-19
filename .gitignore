@@ -32,12 +32,15 @@ tools/
 # Misc
 *.jpg
 
-# Release artifacts
+# Release artifacts (narrow patterns — "VPNRouter-v*" used to match
+# plan filenames like vpnrouter-v2.16-*.md as well; restrict to archives)
 *.dmg
 *.zip
-VPNRouter-v*
-VPNRouter-install-*
-VPNRouter-update-*
+VPNRouter-v*.zip
+VPNRouter-v*.dmg
+VPNRouter-v*.sha256
+VPNRouter-install-*.zip
+VPNRouter-update-*.zip
 b_icon.png
 w_icon.png
 publish/
