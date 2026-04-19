@@ -28,12 +28,17 @@ Routes **selected applications** through a VLESS+Reality proxy (via [sing-box](h
 Add-ons on top of the core router:
 
 - **Free Configs tab** — aggregates **25 000+ public VLESS configs** from 14 open sources, TCP+TLS-validates each server, and verifies real connectivity through a temporary sing-box with an HTTP round-trip. Server-side aggregator (GitHub Actions cron) pre-computes GeoIP every 6 hours. Includes presets (Gaming / Streaming / Chat / Best effort) with latency + bandwidth goals, skip-RU option, per-user subscription sources, and a security-warning dialog on first connect.
+- **Servers & Subscriptions testing** (v2.15+) — same TCP+TLS probe and deep verification (spawn temporary sing-box, HTTP trace via SOCKS, 5 MB bandwidth test) now available on your own VLESS servers and subscription pool — not only on the Free Configs tab.
+- **Runtime status dashboard** (v2.15+) — three coloured badges in the header show live state of VPN / Zapret / TgProxy, updated every 2 s via process + port probing. Click any badge → jump to the tab that controls it.
+- **Resilient autostart** (v2.15+) — Windows Service declares boot dependencies on `Tcpip/Dnscache/Dhcp` and uses exponential backoff (5/10/20/40 s) when launching VPN / Zapret / TgProxy. Transient cold-boot failures no longer leave components stopped.
+- **Checksum-verified updates** (v2.15+) — auto-updater downloads each ZIP's `.sha256` companion and aborts on hash mismatch, so a truncated or corrupted download can't silently break the install.
 - **DPI bypass (Zapret)** — integrated [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) for platforms blocked by DPI without needing a proxy.
 - **Telegram proxy** — embedded MTProto proxy ([Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy)) for Telegram-only bypass.
 - **Custom sing-box configs** — bring your own JSON (TUIC, Hysteria2, Shadowsocks), keep per-process routing.
 - **Subscriptions** — multiple VLESS subscription URLs with auto-refresh, unified server pool.
 - **Windows Service mode** — runs at boot, survives user logoff.
 - **macOS support** — full Avalonia UI + sing-box TUN on Apple Silicon. Automated DMG builds via GitHub Actions.
+- **Bilingual UI** — full RU/EN translation, switchable at runtime.
 
 ## Screenshots
 
@@ -49,6 +54,7 @@ Grab the latest build from [Releases](https://github.com/PavelLizunov/VPNRouter/
 |---|---|---|
 | `VPNRouter-v{version}-win.zip` | 🪟 Windows | Full installer (first install) |
 | `VPNRouter-update-v{version}-win.zip` | 🪟 Windows | DLL-only update (if you're already on a recent version) |
+| `VPNRouter-*-win.zip.sha256` | 🪟 Windows | SHA256 companion file — auto-updater verifies the download against this before extracting (v2.15.8+) |
 | `VPNRouter-v{version}-mac.dmg` | 🍎 macOS | Drag-install DMG (Apple Silicon) with `InstallGuide.html` for one-time sudoers setup |
 | `VPNRouter-v{version}-mac.zip` | 🍎 macOS | Raw `.app` bundle (for manual install) |
 
@@ -79,13 +85,13 @@ dotnet run --project VPNRouter.App
 Release build + packaging:
 
 ```powershell
-# Windows (PowerShell)
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.14.10"
+# Windows (PowerShell) — produces both full + update ZIPs plus their .sha256
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.15.8"
 ```
 
 ```bash
 # macOS DMG — runs on any Mac with .NET 8 SDK
-./build-mac.sh 2.14.10
+./build-mac.sh 2.15.8
 ```
 
 Both releases (Win ZIP + Mac DMG) are also built automatically via GitHub Actions on every `v*` tag push — see `.github/workflows/build-mac.yml` and `.github/workflows/build-free-pool.yml` (the latter publishes the rolling Free Configs pool).
