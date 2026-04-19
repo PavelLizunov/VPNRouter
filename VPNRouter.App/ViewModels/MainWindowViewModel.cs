@@ -42,7 +42,11 @@ public partial class MainWindowViewModel : ViewModelBase
     // ── Observable state ──
 
     [ObservableProperty] private string _statusText = Strings.NotConnected;
-    [ObservableProperty] private bool _isConnected;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SmpConnectButtonText))]
+    [NotifyPropertyChangedFor(nameof(SmpConnectButtonBrush))]
+    [NotifyPropertyChangedFor(nameof(SmpActiveServerLine))]
+    private bool _isConnected;
     [ObservableProperty] private bool _isConnecting;
     [ObservableProperty] private string _connectButtonText = Strings.StartVPN;
     [ObservableProperty]

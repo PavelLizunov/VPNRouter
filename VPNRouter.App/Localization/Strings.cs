@@ -579,6 +579,35 @@ public static class Strings
         ? "Переключить на Advanced"
         : "Switch to Advanced";
 
+    // v2.17.1 skeleton — section labels + control captions
+    public static string SmpInputLabel => Ru
+        ? "Вставь VLESS-конфиг или ссылку на подписку"
+        : "Paste VLESS config or subscription URL";
+    public static string SmpInputWatermark => Ru
+        ? "vless://... или https://subscription..."
+        : "vless://... or https://subscription...";
+    public static string SmpInputHint => Ru
+        ? "Принимает vless:// одиночный сервер или https:// подписку."
+        : "Accepts a vless:// single server or an https:// subscription.";
+    public static string SmpTunnelModeLabel => Ru ? "Что направлять через VPN" : "What to route through VPN";
+    public static string SmpSplitOption => Ru
+        ? "Выбранные приложения (Discord, браузеры, рабочие)"
+        : "Selected apps only (Discord, browsers, work)";
+    public static string SmpFullOption => Ru ? "Весь трафик" : "All traffic";
+    public static string SmpTipSplit => Ru
+        ? "Chrome, Firefox, Edge, Brave, Discord, Telegram, Slack, Zoom, VS Code и Cursor идут через VPN. Игры, Steam, банк — мимо."
+        : "Chrome, Firefox, Edge, Brave, Discord, Telegram, Slack, Zoom, VS Code and Cursor go through the VPN. Games, Steam, banking — direct.";
+    public static string SmpTipFull => Ru
+        ? "Весь трафик компьютера идёт через VPN. Включая игры и банки."
+        : "All traffic on this computer goes through the VPN — including games and banking.";
+    public static string SmpAutostartLabel => Ru ? "Запускать вместе с Windows" : "Start with Windows";
+    public static string SmpTipAutostart => Ru
+        ? "Установит VPNRouter как службу Windows — VPN поднимется при старте системы, до входа пользователя."
+        : "Installs VPNRouter as a Windows Service so the VPN comes up at boot, before you log in.";
+    public static string SmpStartVpn => Ru ? "▶  Запустить VPN" : "▶  Start VPN";
+    public static string SmpStopVpn => Ru ? "⏹  Остановить VPN" : "⏹  Stop VPN";
+    public static string SmpActiveThrough => Ru ? "Через:" : "Through:";
+
     // ── v2.15.5 Localization pass: remaining hardcoded strings ──
 
     // Tooltips — MainWindow header buttons
