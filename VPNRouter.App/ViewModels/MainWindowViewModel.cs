@@ -514,6 +514,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Background update check (fire-and-forget, silent fail)
         _ = UpdateVm.CheckOnStartupAsync();
+
+        // Status dashboard (v2.15.0): poll VPN/Zapret/TgProxy every 2s
+        StartRuntimeStatusPolling();
     }
 
     /// <summary>

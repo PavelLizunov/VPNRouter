@@ -13,6 +13,18 @@ public static class ServiceInstaller
     public const string DisplayName = "VPN Process Router";
     public const string Description = "Routes selected application traffic through VPN using sing-box TUN mode.";
 
+    /// <summary>
+    /// Dependencies required before VPNRouter starts at boot. These services
+    /// form the base of the TCP/IP stack — without them sing-box cannot create
+    /// the TUN adapter or resolve DNS. Declared via 'sc create depend=' so
+    /// Windows doesn't race us against network initialization on cold boot.
+    ///     Tcpip     — TCP/IP protocol driver (NetBT depends on this, etc)
+    ///     Dnscache  — DNS client resolver
+    ///     Dhcp      — DHCP client (needed to pick up LAN config on boot)
+    /// Order is irrelevant — Windows treats this as a set.
+    /// </summary>
+    private const string ServiceDependencies = "Tcpip/Dnscache/Dhcp";
+
     // ─── Install ──────────────────────────────────────────────────────────────
 
     public static InstallResult Install(string? exePath = null)
@@ -29,12 +41,15 @@ public static class ServiceInstaller
         if (IsInstalled())
             return InstallResult.Fail($"Service '{ServiceName}' is already installed. Run uninstall first.");
 
-        // Create service: auto-start, runs as LocalSystem (needed for TUN + firewall)
+        // Create service: auto-start, runs as LocalSystem (needed for TUN + firewall).
+        // depend= ensures we start AFTER network stack is ready, preventing race
+        // conditions where sing-box fails to create TUN adapter on cold boot.
         var (code, output) = RunSc(
             $"create {ServiceName} " +
             $"binPath= \"{exePath} --service\" " +
             $"start= auto " +
             $"obj= LocalSystem " +
+            $"depend= {ServiceDependencies} " +
             $"DisplayName= \"{DisplayName}\"");
 
         if (code != 0)
@@ -50,6 +65,41 @@ public static class ServiceInstaller
         // delayed-auto adds ~2 min delay which leaves traffic unprotected.
 
         return InstallResult.Ok($"Service '{ServiceName}' installed successfully.\nPath: {exePath}");
+    }
+
+    /// <summary>
+    /// Update an already-installed service to pick up current dependency set
+    /// without full uninstall/reinstall. Used after upgrades that add new
+    /// 'depend=' values — e.g. v2.14.12 introduced Tcpip/Dnscache/Dhcp deps.
+    /// No-op if service is not installed (returns error InstallResult).
+    /// </summary>
+    public static InstallResult UpdateDependencies()
+    {
+        if (!IsInstalled())
+            return InstallResult.Fail($"Service '{ServiceName}' is not installed.");
+
+        var (code, output) = RunSc($"config {ServiceName} depend= {ServiceDependencies}");
+
+        return code == 0
+            ? InstallResult.Ok($"Dependencies updated: {ServiceDependencies.Replace('/', ',')}")
+            : InstallResult.Fail($"sc config failed (exit {code}): {output}");
+    }
+
+    /// <summary>
+    /// Read current dependency list from SCM. Returns null if service not installed
+    /// or dependencies can't be read. Used by UI to show migration prompts.
+    /// </summary>
+    public static string[]? GetDependencies()
+    {
+        try
+        {
+            using var sc = new ServiceController(ServiceName);
+            return sc.ServicesDependedOn.Select(s => s.ServiceName).ToArray();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     // ─── Uninstall ────────────────────────────────────────────────────────────

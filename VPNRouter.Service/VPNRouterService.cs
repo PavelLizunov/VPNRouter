@@ -39,6 +39,9 @@ public class VPNRouterService : BackgroundService
             var settings = SettingsLoader.Load();
             _logger.LogInformation("[Service] Config loaded, mode: {Mode}", settings.App.ConfigMode);
 
+            // ── Step 0: Self-migrate pre-v2.14.12 installs (add boot dependencies) ──
+            TryMigrateDependencies();
+
             // ── Step 1: Wait for network (cold boot — NIC may not be up yet) ──
             await WaitForNetworkAsync(stoppingToken, TimeSpan.FromSeconds(30));
 
@@ -56,13 +59,13 @@ public class VPNRouterService : BackgroundService
             // ── Step 3: Auto-start Zapret (independent, parallel) ──
             if (settings.App.AutostartZapret)
             {
-                _ = Task.Run(() => AutostartZapret(settings), stoppingToken);
+                _ = AutostartZapretAsync(settings, stoppingToken);
             }
 
             // ── Step 4: Auto-start TgProxy (independent, parallel) ──
             if (settings.App.AutostartTgProxy)
             {
-                _ = Task.Run(() => AutostartTgProxy(settings), stoppingToken);
+                _ = AutostartTgProxyAsync(settings, stoppingToken);
             }
 
             // Keep service alive until stop is requested
@@ -81,6 +84,40 @@ public class VPNRouterService : BackgroundService
         finally
         {
             _startupComplete.TrySetResult();
+        }
+    }
+
+    /// <summary>
+    /// Upgrade path: if service was installed by a pre-v2.14.12 binary, it
+    /// lacks Tcpip/Dnscache/Dhcp dependencies. Add them now so next reboot
+    /// uses the proper start order. Running as LocalSystem, so sc config
+    /// succeeds without UAC prompt.
+    /// </summary>
+    private void TryMigrateDependencies()
+    {
+        try
+        {
+            var current = ServiceInstaller.GetDependencies();
+            if (current != null &&
+                current.Any(d => string.Equals(d, "Tcpip", StringComparison.OrdinalIgnoreCase)))
+            {
+                return;  // Already migrated
+            }
+
+            _logger.LogInformation("[Service] Migrating: adding Tcpip/Dnscache/Dhcp dependencies");
+            var result = ServiceInstaller.UpdateDependencies();
+            _logger.LogInformation("[Service] Migration result: {Message}", result.Message);
+            if (result.Success)
+            {
+                WriteEventLog(
+                    "Added boot dependencies (Tcpip/Dnscache/Dhcp). Takes effect on next reboot.",
+                    EventLogEntryType.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Non-fatal: continue boot even if self-migration fails
+            _logger.LogWarning(ex, "[Service] Dependency migration failed (non-fatal)");
         }
     }
 
@@ -173,8 +210,11 @@ public class VPNRouterService : BackgroundService
             }
         }
 
-        // Start VPN with retry loop (defer to UI if running)
-        while (true)
+        // Start VPN with retry logic:
+        //   Outer loop handles "wait for UI/TUN to free up" (long waits, 30s)
+        //   ResilientStarter handles transient failures (5/10/20/40s backoff)
+        var vpnStarted = false;
+        while (!vpnStarted)
         {
             var uiRunning = Process.GetProcessesByName("VPNRouter.App").Length > 0;
             if (uiRunning)
@@ -187,8 +227,22 @@ public class VPNRouterService : BackgroundService
 
             try
             {
-                await _engine.StartAsync(settings, ct);
-                break;
+                vpnStarted = await ResilientStarter.StartWithBackoffAsync(
+                    componentName: "VPN",
+                    startFn: innerCt => _engine.StartAsync(settings, innerCt),
+                    logger: Serilog.Log.Logger,
+                    ct: ct);
+
+                if (!vpnStarted)
+                {
+                    _logger.LogError(
+                        "[Service] VPN autostart failed after retries. Not retrying further — " +
+                        "Zapret/TgProxy will still attempt to start.");
+                    WriteEventLog(
+                        "VPN autostart failed after retries",
+                        EventLogEntryType.Error);
+                    break;
+                }
             }
             catch (TunOwnershipException)
             {
@@ -200,13 +254,16 @@ public class VPNRouterService : BackgroundService
 
         _startupComplete.TrySetResult();
 
-        WriteEventLog(
-            $"VPN started — profile: {_engine.ActiveProfileName}, PID: {_engine.SingBoxPid}",
-            EventLogEntryType.Information);
+        if (vpnStarted)
+        {
+            WriteEventLog(
+                $"VPN started — profile: {_engine.ActiveProfileName}, PID: {_engine.SingBoxPid}",
+                EventLogEntryType.Information);
+        }
     }
 
     /// <summary>Start Zapret DPI bypass (independent of VPN).</summary>
-    private void AutostartZapret(AppSettings settings)
+    private async Task AutostartZapretAsync(AppSettings settings, CancellationToken ct)
     {
         try
         {
@@ -235,10 +292,30 @@ public class VPNRouterService : BackgroundService
             }
 
             _zapret = new ZapretManager(Serilog.Log.Logger);
-            _zapret.Start(args);
-            _logger.LogInformation("[Service] Zapret started [{Strategy}] (PID {Pid})",
-                strategyName, _zapret.Pid);
-            WriteEventLog($"Zapret started: {strategyName}", EventLogEntryType.Information);
+
+            var started = await ResilientStarter.StartWithBackoffAsync(
+                componentName: "Zapret",
+                startFn: () => _zapret.Start(args),
+                logger: Serilog.Log.Logger,
+                ct: ct);
+
+            if (started)
+            {
+                _logger.LogInformation("[Service] Zapret started [{Strategy}] (PID {Pid})",
+                    strategyName, _zapret.Pid);
+                WriteEventLog($"Zapret started: {strategyName}", EventLogEntryType.Information);
+            }
+            else
+            {
+                _logger.LogError("[Service] Zapret autostart failed after retries");
+                WriteEventLog(
+                    $"Zapret autostart failed after retries ({strategyName})",
+                    EventLogEntryType.Error);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Service stopping — swallow
         }
         catch (Exception ex)
         {
@@ -247,7 +324,7 @@ public class VPNRouterService : BackgroundService
     }
 
     /// <summary>Start TgProxy Telegram proxy (independent of VPN).</summary>
-    private void AutostartTgProxy(AppSettings settings)
+    private async Task AutostartTgProxyAsync(AppSettings settings, CancellationToken ct)
     {
         try
         {
@@ -267,10 +344,30 @@ public class VPNRouterService : BackgroundService
             }
 
             _tgProxy = new TgProxyManager(Serilog.Log.Logger);
-            _tgProxy.Start(port, secret);
-            _logger.LogInformation("[Service] TgProxy started on port {Port} (PID {Pid})",
-                port, _tgProxy.Pid);
-            WriteEventLog($"TgProxy started on port {port}", EventLogEntryType.Information);
+
+            var started = await ResilientStarter.StartWithBackoffAsync(
+                componentName: "TgProxy",
+                startFn: () => _tgProxy.Start(port, secret),
+                logger: Serilog.Log.Logger,
+                ct: ct);
+
+            if (started)
+            {
+                _logger.LogInformation("[Service] TgProxy started on port {Port} (PID {Pid})",
+                    port, _tgProxy.Pid);
+                WriteEventLog($"TgProxy started on port {port}", EventLogEntryType.Information);
+            }
+            else
+            {
+                _logger.LogError("[Service] TgProxy autostart failed after retries");
+                WriteEventLog(
+                    $"TgProxy autostart failed after retries (port {port})",
+                    EventLogEntryType.Error);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Service stopping — swallow
         }
         catch (Exception ex)
         {
