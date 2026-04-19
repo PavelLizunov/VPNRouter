@@ -28,15 +28,15 @@
     <Grid RowDefinitions="Auto,Auto,*,Auto">
         <!-- ═══ Header ═══ -->
         <Border Grid.Row="0" Padding="10,6" BorderThickness="0,0,0,1"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                Background="{DynamicResource SystemAltHighColor}">
+                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                Background="{DynamicResource SurfaceBaseBrush}">
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <Image Grid.Column="0" Source="{Binding LogoSource}"
                        Height="44" Width="44" Stretch="Uniform"
                        Margin="0,0,10,0"/>
                 <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                     <TextBlock Text="Virtual Penguin Network" FontSize="13" FontWeight="Bold"
-                               Foreground="#2563EB"/>
+                               Foreground="{DynamicResource AccentFgBrush}"/>
                     <TextBlock Text="{Binding VersionText}" FontSize="9" Opacity="0.5"/>
 
                     <!-- ═══ Runtime status dashboard (v2.15.0) ═══ -->
@@ -115,8 +115,8 @@
         <!-- ═══ Update Notification ═══ -->
         <Border Grid.Row="1"
                 IsVisible="{Binding UpdateVm.IsVisible}"
-                Background="#FEF3C7"
-                BorderBrush="#F59E0B"
+                Background="{DynamicResource WarningBgBrush}"
+                BorderBrush="{DynamicResource WarningBorderBrush}"
                 BorderThickness="0,0,0,1"
                 Padding="16,10">
             <DockPanel>
@@ -124,7 +124,7 @@
                         Content="↓ Update"
                         Command="{Binding UpdateVm.DownloadAndApplyCommand}"
                         IsVisible="{Binding !UpdateVm.IsDownloading}"
-                        Background="#F59E0B" Foreground="White"
+                        Background="{DynamicResource WarningSolidBrush}" Foreground="White"
                         FontWeight="Bold" Padding="14,6" CornerRadius="4"/>
                 <ProgressBar DockPanel.Dock="Right"
                              Value="{Binding UpdateVm.DownloadProgress}"
@@ -134,7 +134,7 @@
                              IsVisible="{Binding UpdateVm.IsDownloading}"/>
                 <TextBlock Text="{Binding UpdateVm.Message}"
                            VerticalAlignment="Center"
-                           Foreground="#92400E"
+                           Foreground="{DynamicResource WarningFgBrush}"
                            FontWeight="Bold"
                            TextTrimming="CharacterEllipsis"/>
             </DockPanel>
@@ -147,7 +147,7 @@
                      SelectedIndex="{Binding SelectedTabIndex}"
                      Background="Transparent"
                      BorderThickness="0,0,0,1"
-                     BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                     BorderBrush="{DynamicResource BorderDefaultBrush}"
                      Padding="6,2">
                 <ListBox.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -175,7 +175,7 @@
 
         <!-- ═══ Footer: service / connect / status ═══ -->
         <Border Grid.Row="3" Padding="12,8" BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+                BorderBrush="{DynamicResource BorderDefaultBrush}">
             <StackPanel Spacing="6">
                 <StackPanel Orientation="Horizontal" Spacing="6"
                             IsVisible="{Binding ServiceVm.IsAvailable}">
@@ -202,7 +202,8 @@
                         Padding="0,8"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
-                        Background="#2563EB" Foreground="White"
+                        Background="{DynamicResource AccentSolidBrush}"
+                        Foreground="{DynamicResource AccentOnSolidBrush}"
                         CornerRadius="5"/>
 
                 <StackPanel Orientation="Horizontal" Spacing="6">

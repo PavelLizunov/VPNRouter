@@ -151,12 +151,33 @@ public partial class MainWindowViewModel
         return $"{icon} {name}";
     }
 
-    private static IBrush BadgeBrush(ComponentRuntimeStatus status) => status switch
+    private static IBrush BadgeBrush(ComponentRuntimeStatus status)
     {
-        ComponentRuntimeStatus.Running => new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81)), // emerald
-        ComponentRuntimeStatus.Failed  => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)), // red
-        _                              => new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80))  // gray
-    };
+        // Look up from the token dictionary (Tokens.axaml) so the badge
+        // automatically adapts to theme variant. Fallback to a hardcoded
+        // brush if the resource isn't found (unit tests, design-time, etc).
+        var key = status switch
+        {
+            ComponentRuntimeStatus.Running => "SuccessSolidBrush",
+            ComponentRuntimeStatus.Failed  => "DangerSolidBrush",
+            _                              => "TextMutedBrush"
+        };
+
+        if (Avalonia.Application.Current != null &&
+            Avalonia.Application.Current.Resources.TryGetResource(
+                key, Avalonia.Application.Current.ActualThemeVariant, out var res) &&
+            res is IBrush brush)
+        {
+            return brush;
+        }
+
+        return status switch
+        {
+            ComponentRuntimeStatus.Running => new SolidColorBrush(Color.FromRgb(0x16, 0xA3, 0x4A)),
+            ComponentRuntimeStatus.Failed  => new SolidColorBrush(Color.FromRgb(0xDC, 0x26, 0x26)),
+            _                              => new SolidColorBrush(Color.FromRgb(0x94, 0xA0, 0xB2))
+        };
+    }
 
     private string FormatTooltip(string componentName, ComponentRuntimeStatus status)
     {
