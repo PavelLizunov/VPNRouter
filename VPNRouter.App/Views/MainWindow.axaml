@@ -183,8 +183,10 @@
         <!-- ═══ SIMPLE: one-page onboarding (v2.17+) ═══ -->
         <pages:SimplePage Grid.Row="2" IsVisible="{Binding IsSimpleMode}"/>
 
-        <!-- ═══ Footer: service / connect / status ═══ -->
+        <!-- ═══ Footer: service / connect / status (Advanced only;
+             Simple has its own inline Start/Stop and autostart) ═══ -->
         <Border Grid.Row="3" Padding="12,8" BorderThickness="0,1,0,0"
+                IsVisible="{Binding !IsSimpleMode}"
                 BorderBrush="{DynamicResource BorderDefaultBrush}">
             <StackPanel Spacing="6">
                 <StackPanel Orientation="Horizontal" Spacing="6"

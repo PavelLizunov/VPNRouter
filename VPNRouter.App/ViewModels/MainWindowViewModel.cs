@@ -662,6 +662,17 @@ public partial class MainWindowViewModel : ViewModelBase
         // ServiceVm.Install.
         SmpAutostartChecked = _settings.App.AutostartVpn;
 
+        // Pre-fill Simple-mode input from existing settings so a user who
+        // already has a config doesn't stare at an empty 'Paste VLESS...'
+        // field. For subscriptions we show the first enabled URL; for
+        // single-VLESS we can't reconstruct the original URI, so leave
+        // empty — SmpToggleConnectAsync treats empty-input + existing
+        // Vless.Servers as 'just connect with what we have'.
+        var firstEnabledSub = _settings.App.Subscriptions?
+            .FirstOrDefault(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
+        if (firstEnabledSub != null)
+            SmpInput = firstEnabledSub.Url;
+
         // Config mode (three-way: generated / custom / subscribe)
         // Mode is determined by which tab is active. On load, select the
         // correct tab based on saved config_mode.

@@ -118,21 +118,37 @@ public partial class MainWindowViewModel
         if (IsConnecting) return;
 
         var kind = SimpleInputDetector.Classify(_smpInput);
-        switch (kind)
+
+        // Empty / garbage input is OK if the user already has a working
+        // config in settings — we just connect with what's there. This is
+        // the common case when Simple is opened on an install that was
+        // already configured (upgrader, Advanced → Simple toggle, or
+        // service-autostarted VPN that's currently running).
+        var hasExistingConfig =
+            (_settings.Vless.Servers?.Count > 0) ||
+            (_settings.App.Subscriptions?.Any(s => s.Enabled && s.Servers.Count > 0) == true);
+
+        if (kind == SmpInputKind.Invalid)
         {
-            case SmpInputKind.Invalid:
+            if (hasExistingConfig)
+            {
+                // No-op: skip parsing, fall through to RoutingMode + connect.
+            }
+            else
+            {
                 SmpErrorText = IsRussian
                     ? "Вставь vless://-ссылку или URL подписки (http:// / https://)."
                     : "Paste a vless:// link or a subscription URL (http:// / https://).";
                 return;
-
-            case SmpInputKind.Vless:
-                if (!TryApplyVless(_smpInput.Trim())) return;
-                break;
-
-            case SmpInputKind.SubscriptionUrl:
-                if (!TryApplySubscriptionUrl(_smpInput.Trim())) return;
-                break;
+            }
+        }
+        else if (kind == SmpInputKind.Vless)
+        {
+            if (!TryApplyVless(_smpInput.Trim())) return;
+        }
+        else if (kind == SmpInputKind.SubscriptionUrl)
+        {
+            if (!TryApplySubscriptionUrl(_smpInput.Trim())) return;
         }
 
         // Tunnel mode (Split vs Full) — already bound to IsSplitTunnel via radio.
