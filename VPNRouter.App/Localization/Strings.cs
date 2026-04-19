@@ -556,4 +556,69 @@ public static class Strings
         ? "Пропускать сервера в RU при deep verify"
         : "Skip servers located in RU during deep verify";
     public static string TipFcDismissQuickstart => Ru ? "Закрыть подсказку" : "Dismiss quickstart";
+
+    // ── v2.15.5 Localization pass: remaining hardcoded strings ──
+
+    // Tooltips — MainWindow header buttons
+    public static string TipOpenLogs => Ru ? "Открыть папку логов" : "Open logs folder";
+    public static string TipIpLeak   => Ru ? "ipleak.net — проверка утечки" : "ipleak.net — leak test";
+
+    // Tooltips — Applications page
+    public static string TipRemoveCategory => Ru ? "Удалить категорию" : "Remove category";
+    public static string TipRemoveApp      => Ru ? "Удалить приложение" : "Remove app";
+
+    // Tooltips — Free Configs cleanup
+    public static string TipOpenFreeConfigLogs => Ru
+        ? "Открыть папку логов VPNRouter"
+        : "Open VPNRouter logs folder";
+    public static string TipClearFailed => Ru
+        ? "Удалить записи Timeout/Unreachable/TlsFailed/Implausible"
+        : "Remove Timeout / Unreachable / TlsFailed / Implausible entries";
+    public static string TipKeepVerifiedOnly => Ru
+        ? "Оставить только Verified, всё остальное удалить"
+        : "Drop everything except Verified entries";
+    public static string TipClearAllCache => Ru
+        ? "Стереть весь кэш Free Configs"
+        : "Wipe the entire Free Configs cache";
+
+    // Tooltips — Servers / Subscriptions testing
+    public static string TipTcpTlsPing       => Ru ? "Пинг через TCP + TLS" : "TCP + TLS ping";
+    public static string TipTestTcpTls       => Ru ? "Проверить TCP + TLS" : "Test TCP + TLS";
+    public static string TipCloseServerDetail => Ru ? "Закрыть" : "Close";
+    public static string TipTestAllServers   => Ru
+        ? "TCP + TLS проверка всех серверов"
+        : "TCP + TLS probe to all servers";
+    public static string TipDeepVerifyServers => Ru
+        ? "Spawn sing-box + HTTP trace + 5MB download"
+        : "Spawn sing-box + HTTP trace + 5MB download";
+    public static string TipRefreshSubscription => Ru ? "Обновить подписку" : "Refresh subscription";
+    public static string TipRemoveSubscription  => Ru ? "Удалить подписку" : "Remove subscription";
+
+    // Form field labels (Server detail editor)
+    public static string LblName      => Ru ? "Имя:"     : "Name:";
+    public static string LblServer    => Ru ? "Сервер:"  : "Server:";
+    public static string LblPort      => Ru ? "Порт:"    : "Port:";
+    public static string LblUuid      => Ru ? "UUID:"    : "UUID:";
+    public static string LblPublicKey => Ru ? "Pub Key:" : "Pub Key:";
+    public static string LblShortId   => Ru ? "Short ID:" : "Short ID:";
+
+    // Descriptive labels
+    public static string LblRoutingMode          => Ru ? "Режим маршрутизации" : "Routing mode";
+    public static string LblNoServers            => Ru ? "Серверов нет" : "No servers";
+    public static string LblAddSubscriptionHint  => Ru
+        ? "Добавьте подписку ниже"
+        : "Add a subscription below";
+
+    // Badge
+    public static string LblCustomBadge => Ru ? "custom" : "custom";
+
+    // Watermarks
+    public static string WmZapretCustomArgs => "--wf-tcp=443 --dpi-desync=…";
+    public static string WmVlessUri         => "vless://uuid@server:443?…#name";
+    public static string WmTgProxyPort      => "1443";
+    public static string WmTgProxySecret    => Ru ? "автоген" : "auto-generated";
+
+    // Status init values
+    public static string StatusStopped => Ru ? "Остановлен" : "Stopped";
+    public static string StatusRunning => Ru ? "Работает"   : "Running";
 }

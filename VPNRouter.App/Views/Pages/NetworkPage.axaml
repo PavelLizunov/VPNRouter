@@ -41,7 +41,7 @@
                 <TextBlock Text="{Binding LblSettingsRouting}" FontWeight="Bold" FontSize="14"/>
 
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Routing mode" FontWeight="SemiBold" Opacity="0.7"/>
+                    <TextBlock Text="{x:Static loc:Strings.LblRoutingMode}" FontWeight="SemiBold" Opacity="0.7"/>
                     <StackPanel Orientation="Horizontal" Spacing="16">
                         <RadioButton Content="{Binding LblSplitTunnel}"
                                      IsChecked="{Binding IsSplitTunnel}"

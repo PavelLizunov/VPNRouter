@@ -364,28 +364,28 @@
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                 Padding="8,5" FontSize="11" CornerRadius="4"
                                 Background="#EDE9FE" Foreground="#5B21B6"
-                                ToolTip.Tip="Open %ProgramData%\VPNRouter\logs"/>
+                                ToolTip.Tip="{x:Static loc:Strings.TipOpenFreeConfigLogs}"/>
                         <Button Content="{x:Static loc:Strings.FcClearFailed}"
                                 Command="{Binding FreeConfigsVm.ClearFailedCommand}"
                                 IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                 Padding="8,5" FontSize="11" CornerRadius="4"
                                 Background="#FEF3C7" Foreground="#92400E"
-                                ToolTip.Tip="Remove Timeout/Unreachable/TlsFailed/Implausible entries."/>
+                                ToolTip.Tip="{x:Static loc:Strings.TipClearFailed}"/>
                         <Button Content="{x:Static loc:Strings.FcKeepVerified}"
                                 Command="{Binding FreeConfigsVm.KeepVerifiedOnlyCommand}"
                                 IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                 Padding="8,5" FontSize="11" CornerRadius="4"
                                 Background="#DCFCE7" Foreground="#166534"
-                                ToolTip.Tip="Drop everything except Verified entries."/>
+                                ToolTip.Tip="{x:Static loc:Strings.TipKeepVerifiedOnly}"/>
                         <Button Content="{x:Static loc:Strings.FcClearAll}"
                                 Command="{Binding FreeConfigsVm.ClearAllCommand}"
                                 IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                                 HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                 Padding="8,5" FontSize="11" CornerRadius="4"
                                 Background="#FEE2E2" Foreground="#991B1B"
-                                ToolTip.Tip="Wipe the entire cache."/>
+                                ToolTip.Tip="{x:Static loc:Strings.TipClearAllCache}"/>
                     </StackPanel>
 
                 </StackPanel>

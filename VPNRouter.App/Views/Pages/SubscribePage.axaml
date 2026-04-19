@@ -44,7 +44,7 @@
                         <TextBlock Grid.Column="4" Text="{Binding PingDisplay}"
                                    Opacity="0.8" FontSize="10" TextAlignment="Right"
                                    VerticalAlignment="Center" Margin="0,0,6,0"
-                                   ToolTip.Tip="TCP+TLS ping"/>
+                                   ToolTip.Tip="{x:Static loc:Strings.TipTcpTlsPing}"/>
                         <TextBlock Grid.Column="5" Text="{Binding DeepDisplay}"
                                    Opacity="0.9" FontSize="10" TextAlignment="Right"
                                    VerticalAlignment="Center" Margin="0,0,6,0"
@@ -59,7 +59,7 @@
                                 IsEnabled="{Binding !IsTesting}"
                                 FontSize="10" Padding="6,1" MinHeight="0"
                                 Background="Transparent" BorderThickness="0"
-                                ToolTip.Tip="Test TCP + TLS"/>
+                                ToolTip.Tip="{x:Static loc:Strings.TipTestTcpTls}"/>
                     </Grid>
                 </DataTemplate>
             </ListBox.ItemTemplate>
@@ -70,10 +70,10 @@
                     IsVisible="{Binding !SubscriptionServers.Count}"
                     HorizontalAlignment="Center" VerticalAlignment="Center"
                     Spacing="6">
-            <TextBlock Text="No servers"
+            <TextBlock Text="{x:Static loc:Strings.LblNoServers}"
                        FontSize="13" FontWeight="SemiBold" Opacity="0.6"
                        HorizontalAlignment="Center"/>
-            <TextBlock Text="Add a subscription below"
+            <TextBlock Text="{x:Static loc:Strings.LblAddSubscriptionHint}"
                        FontSize="11" Opacity="0.4"
                        HorizontalAlignment="Center"/>
         </StackPanel>
@@ -91,13 +91,13 @@
                                 Padding="10,4" CornerRadius="4"
                                 FontSize="10"
                                 Background="#059669" Foreground="White"
-                                ToolTip.Tip="TCP + TLS probe"/>
+                                ToolTip.Tip="{x:Static loc:Strings.TipTestAllServers}"/>
                         <Button Content="{Binding ServerDeepButtonText}"
                                 Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
                                 Padding="10,4" CornerRadius="4"
                                 FontSize="10"
                                 Background="#7C3AED" Foreground="White"
-                                ToolTip.Tip="Spawn sing-box + HTTP trace + 5MB download"/>
+                                ToolTip.Tip="{x:Static loc:Strings.TipDeepVerifyServers}"/>
                         <TextBlock Text="{Binding ServerTestProgressText}"
                                    VerticalAlignment="Center"
                                    FontSize="10" Opacity="0.7"/>
@@ -155,14 +155,14 @@
                                 IsEnabled="{Binding !IsRefreshing}"
                                 FontSize="10" Padding="4,1" MinHeight="0" CornerRadius="3"
                                 Background="Transparent" BorderThickness="0"
-                                ToolTip.Tip="Refresh"/>
+                                ToolTip.Tip="{x:Static loc:Strings.TipRefreshSubscription}"/>
                         <Button Grid.Column="5" Content="✕"
                                 Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveSubscriptionCommand}"
                                 CommandParameter="{Binding}"
                                 FontSize="10" Padding="4,1" MinHeight="0" CornerRadius="3"
                                 Background="Transparent" BorderThickness="0"
                                 Opacity="0.55"
-                                ToolTip.Tip="Remove"/>
+                                ToolTip.Tip="{x:Static loc:Strings.TipRemoveSubscription}"/>
                     </Grid>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>

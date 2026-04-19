@@ -77,7 +77,7 @@
                         Background="Transparent" BorderThickness="0"
                         Padding="8,2" MinHeight="0" FontSize="11"
                         Opacity="0.6"
-                        ToolTip.Tip="Remove category"/>
+                        ToolTip.Tip="{x:Static loc:Strings.TipRemoveCategory}"/>
             </Grid>
 
             <!-- Master enable toggle -->
@@ -114,7 +114,7 @@
                                     <TextBlock Text="{Binding ProcessName}" FontSize="11"/>
                                     <Border Background="#94A3B8" CornerRadius="6" Padding="5,0"
                                             IsVisible="{Binding IsCustom}" VerticalAlignment="Center">
-                                        <TextBlock Text="custom" FontSize="8" Foreground="White"/>
+                                        <TextBlock Text="{x:Static loc:Strings.LblCustomBadge}" FontSize="8" Foreground="White"/>
                                     </Border>
                                 </StackPanel>
                             </CheckBox>
@@ -125,7 +125,7 @@
                                     Background="Transparent" BorderThickness="0"
                                     Padding="8,2" MinHeight="0" FontSize="11"
                                     Opacity="0.5"
-                                    ToolTip.Tip="Remove"/>
+                                    ToolTip.Tip="{x:Static loc:Strings.TipRemoveApp}"/>
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>

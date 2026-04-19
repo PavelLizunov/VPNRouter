@@ -28,7 +28,7 @@
                 <StackPanel Spacing="2">
                     <TextBlock Text="{x:Static loc:Strings.TgProxyPort}" FontWeight="SemiBold" Opacity="0.7"/>
                     <TextBox Text="{Binding TgProxyPort}"
-                             Watermark="1443"
+                             Watermark="{x:Static loc:Strings.WmTgProxyPort}"
                              FontSize="11" Padding="6,4"
                              MaxWidth="120" HorizontalAlignment="Left"/>
                 </StackPanel>
@@ -38,7 +38,7 @@
                     <TextBlock Text="{x:Static loc:Strings.TgProxySecret}" FontWeight="SemiBold" Opacity="0.7"/>
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <TextBox Text="{Binding TgProxySecret}"
-                                 Watermark="auto-generated"
+                                 Watermark="{x:Static loc:Strings.WmTgProxySecret}"
                                  FontSize="10" Padding="6,4"
                                  FontFamily="Consolas,Courier New,monospace"
                                  MinWidth="260" IsReadOnly="True"/>

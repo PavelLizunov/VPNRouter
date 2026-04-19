@@ -86,12 +86,12 @@
                                 Command="{Binding OpenLogsCommand}"
                                 Padding="6,3" FontSize="10"
                                 Background="Transparent" BorderThickness="0"
-                                ToolTip.Tip="Open logs folder"/>
+                                ToolTip.Tip="{x:Static loc:Strings.TipOpenLogs}"/>
                         <Button Content="{Binding CheckLeaksLabel}"
                                 Command="{Binding OpenLeakTestCommand}"
                                 Padding="6,3" FontSize="10"
                                 Background="Transparent" BorderThickness="0"
-                                ToolTip.Tip="ipleak.net"/>
+                                ToolTip.Tip="{x:Static loc:Strings.TipIpLeak}"/>
                         <Button Content="{Binding ThemeToggleText}"
                                 Command="{Binding ToggleThemeCommand}"
                                 Padding="6,3" FontSize="10"

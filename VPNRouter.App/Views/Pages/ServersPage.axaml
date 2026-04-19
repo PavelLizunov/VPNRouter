@@ -63,7 +63,7 @@
                             <TextBlock Grid.Column="4" Text="{Binding PingDisplay}"
                                        Opacity="0.8" FontSize="10" TextAlignment="Right"
                                        VerticalAlignment="Center" Margin="0,0,6,0"
-                                       ToolTip.Tip="TCP+TLS ping"/>
+                                       ToolTip.Tip="{x:Static loc:Strings.TipTcpTlsPing}"/>
                             <TextBlock Grid.Column="5" Text="{Binding DeepDisplay}"
                                        Opacity="0.9" FontSize="10" TextAlignment="Right"
                                        VerticalAlignment="Center" Margin="0,0,6,0"
@@ -78,7 +78,7 @@
                                     IsEnabled="{Binding !IsTesting}"
                                     FontSize="10" Padding="6,1" MinHeight="0"
                                     Background="Transparent" BorderThickness="0"
-                                    ToolTip.Tip="Test TCP + TLS"/>
+                                    ToolTip.Tip="{x:Static loc:Strings.TipTestTcpTls}"/>
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
@@ -103,22 +103,22 @@
                             Command="{Binding CloseServerDetailCommand}"
                             Background="Transparent" BorderThickness="0"
                             Padding="6,0" MinHeight="0" FontSize="11" Opacity="0.6"
-                            ToolTip.Tip="Close"/>
+                            ToolTip.Tip="{x:Static loc:Strings.TipCloseServerDetail}"/>
                 <Grid ColumnDefinitions="80,*"
                       RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
                       DataContext="{Binding DetailServer}"
                       x:DataType="vm:ServerViewModel">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Name:"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Static loc:Strings.LblName}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
                     <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Server:"    VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{x:Static loc:Strings.LblServer}"    VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
                     <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Server}"    FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Port:"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{x:Static loc:Strings.LblPort}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
                     <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Port}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-                    <TextBlock Grid.Row="3" Grid.Column="0" Text="UUID:"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="{x:Static loc:Strings.LblUuid}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
                     <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding Uuid}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Pub Key:"   VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="{x:Static loc:Strings.LblPublicKey}" VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
                     <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding PublicKey}" FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Short ID:"  VerticalAlignment="Center" FontSize="10"/>
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="{x:Static loc:Strings.LblShortId}"   VerticalAlignment="Center" FontSize="10"/>
                     <TextBox   Grid.Row="5" Grid.Column="1" Text="{Binding ShortId}"   FontSize="10" Padding="4,2"/>
                 </Grid>
                 </DockPanel>
@@ -169,13 +169,13 @@
                                 Padding="10,4" CornerRadius="4"
                                 FontSize="10"
                                 Background="#059669" Foreground="White"
-                                ToolTip.Tip="TCP + TLS probe to all servers"/>
+                                ToolTip.Tip="{x:Static loc:Strings.TipTestAllServers}"/>
                         <Button Content="{Binding ServerDeepButtonText}"
                                 Command="{Binding DeepVerifyAllServersCommand}"
                                 Padding="10,4" CornerRadius="4"
                                 FontSize="10"
                                 Background="#7C3AED" Foreground="White"
-                                ToolTip.Tip="Spawn sing-box + HTTP trace + 5MB download"/>
+                                ToolTip.Tip="{x:Static loc:Strings.TipDeepVerifyServers}"/>
                         <TextBlock Text="{Binding ServerTestProgressText}"
                                    VerticalAlignment="Center"
                                    FontSize="10" Opacity="0.7"/>
@@ -197,7 +197,7 @@
                             Margin="6,0,0,0"
                             Padding="14,5" CornerRadius="4"/>
                     <TextBox Text="{Binding VlessUri}"
-                             Watermark="vless://uuid@server:443?...#name"
+                             Watermark="{x:Static loc:Strings.WmVlessUri}"
                              FontSize="10" Padding="6,4"
                              AcceptsReturn="False"/>
                 </DockPanel>
