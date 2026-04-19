@@ -215,17 +215,27 @@ in technical terms, don't oversimplify.
 
 ---
 
-## Project status summary (as of v2.15.5 prerelease)
+## Project status summary (as of v2.15.8 STABLE Latest)
 
-All 4 blocks of the v2.15 roadmap shipped as prereleases:
+v2.15 promoted to stable on 2026-04-19. Seven releases landed on top of
+v2.14.10 across four planned blocks plus three post-test hotfixes:
+
 - v2.15.0/.1 — autostart retry + Windows Service deps + status dashboard
 - v2.15.2/.3 — TCP+TLS + Deep verify (sing-box spawn) for Servers/Subs
 - v2.15.4    — UI polish + tooltips
 - v2.15.5    — Localization pass (~30 hardcoded strings moved to Strings.cs)
+- v2.15.6    — HOTFIX: ToggleLanguage rebuilds MainWindow so
+               `{x:Static loc:Strings.*}` bindings re-evaluate (Avalonia
+               x:Static is frozen at parse time, so previous
+               `OnPropertyChanged(string.Empty)` did nothing for them)
+- v2.15.7    — HOTFIX: surface elevation failures instead of silent exit
+               — writes reason to `%ProgramData%\VPNRouter\logs\
+               vpnrouter-launch-error.log` + stderr
+- v2.15.8    — HOTFIX: SHA256 checksum verification in auto-updater
+               (build.ps1 emits `.sha256`, UpdateChecker verifies after
+               download, deletes corrupted file on mismatch)
 
 See `.claude/plans/vpnrouter-v2.15-roadmap.md` for details.
-
-v2.14.10 is still the stable Latest — user tests each v2.15.x before promotion.
 
 Free Configs pool aggregator (CI) still runs every 6 hours, publishing to
 `free-pool-latest` GH release (~25k entries with GeoIP).
