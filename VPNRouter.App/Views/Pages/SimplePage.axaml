@@ -1,0 +1,57 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:VPNRouter.App.ViewModels"
+             xmlns:loc="using:VPNRouter.App.Localization"
+             x:Class="VPNRouter.App.Views.Pages.SimplePage"
+             x:DataType="vm:MainWindowViewModel">
+
+    <!--
+      v2.17.0 placeholder. Real content lands in v2.17.1 (skeleton: input,
+      radios, autostart, start button, status). For now this is an escape
+      hatch so a user who toggles to Simple can always get back out.
+      The big "Advanced mode" button is the only interactive element.
+    -->
+    <Grid Margin="40,32" MaxWidth="440" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel Spacing="18" HorizontalAlignment="Center">
+
+            <!-- Brand -->
+            <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
+                <Image Source="{Binding LogoSource}" Width="56" Height="56"/>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Virtual Penguin Network"
+                               FontSize="18" FontWeight="Bold"
+                               Foreground="{DynamicResource AccentFgBrush}"/>
+                    <TextBlock Text="{Binding VersionText}"
+                               FontSize="10" Opacity="0.5"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Placeholder card -->
+            <Border Padding="20,16"
+                    CornerRadius="{StaticResource RadiusMd}"
+                    Background="{DynamicResource SurfaceSunkenBrush}"
+                    BorderBrush="{DynamicResource BorderDefaultBrush}"
+                    BorderThickness="1">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="{x:Static loc:Strings.SmpPlaceholderTitle}"
+                               FontSize="13" FontWeight="SemiBold"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="{x:Static loc:Strings.SmpPlaceholderBody}"
+                               FontSize="11" Opacity="0.7"
+                               TextWrapping="Wrap"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"/>
+                    <Button Content="{x:Static loc:Strings.SmpPlaceholderSwitchToAdvanced}"
+                            Command="{Binding ToggleUiModeCommand}"
+                            HorizontalAlignment="Center"
+                            Padding="14,8"
+                            FontSize="12" FontWeight="SemiBold"
+                            Background="{DynamicResource AccentSolidBrush}"
+                            Foreground="{DynamicResource AccentOnSolidBrush}"
+                            CornerRadius="{StaticResource RadiusSm}"/>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </Grid>
+</UserControl>

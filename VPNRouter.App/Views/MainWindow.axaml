@@ -101,6 +101,11 @@
                                 Command="{Binding ToggleLanguageCommand}"
                                 Padding="6,3" FontSize="10"
                                 Background="Transparent" BorderThickness="0"/>
+                        <Button Content="{Binding UiModeToggleText}"
+                                Command="{Binding ToggleUiModeCommand}"
+                                Padding="6,3" FontSize="10"
+                                Background="Transparent" BorderThickness="0"
+                                ToolTip.Tip="{Binding UiModeToggleTooltip}"/>
                     </StackPanel>
                     <Button Content="{Binding UpdateVm.CheckLinkText}"
                             Command="{Binding UpdateVm.CheckManuallyCommand}"
@@ -141,8 +146,9 @@
             </DockPanel>
         </Border>
 
-        <!-- ═══ Tab strip + page area (no TabControl — direct Grid layout) ═══ -->
-        <Grid Grid.Row="2" RowDefinitions="Auto,*">
+        <!-- ═══ ADVANCED: Tab strip + page area (no TabControl — direct Grid layout) ═══ -->
+        <Grid Grid.Row="2" RowDefinitions="Auto,*"
+              IsVisible="{Binding !IsSimpleMode}">
             <!-- Tab buttons -->
             <ListBox Grid.Row="0"
                      SelectedIndex="{Binding SelectedTabIndex}"
@@ -173,6 +179,9 @@
                 <pages:FreeConfigsPage  IsVisible="{Binding IsFreeConfigsTabSelected}"/>
             </Grid>
         </Grid>
+
+        <!-- ═══ SIMPLE: one-page onboarding (v2.17+) ═══ -->
+        <pages:SimplePage Grid.Row="2" IsVisible="{Binding IsSimpleMode}"/>
 
         <!-- ═══ Footer: service / connect / status ═══ -->
         <Border Grid.Row="3" Padding="12,8" BorderThickness="0,1,0,0"

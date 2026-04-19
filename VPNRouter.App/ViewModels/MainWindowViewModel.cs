@@ -100,6 +100,18 @@ public partial class MainWindowViewModel : ViewModelBase
     }
     [ObservableProperty] private string _themeToggleText = Strings.ThemeDark;
     [ObservableProperty] private bool _isRussian;
+
+    /// <summary>
+    /// True when the window should render the one-page SimplePage instead of
+    /// the full tabbed Advanced layout. Persisted via AppSettings.App.UiMode.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UiModeToggleText))]
+    [NotifyPropertyChangedFor(nameof(UiModeToggleTooltip))]
+    private bool _isSimpleMode;
+
+    public string UiModeToggleText   => IsSimpleMode ? Strings.SmpToggleToAdvanced : Strings.SmpToggleToSimple;
+    public string UiModeToggleTooltip => Strings.SmpToggleTooltip;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServerListMode))]
     private bool _isVlessMode = true;
@@ -637,6 +649,10 @@ public partial class MainWindowViewModel : ViewModelBase
         IsDarkTheme = (_settings.App.Theme ?? "light").Equals("dark", StringComparison.OrdinalIgnoreCase);
         ApplyTheme();
 
+        // UI complexity mode (v2.17+). Default "advanced" until v2.17.5 promotes
+        // SimplePage to a first-class landing page for fresh installs.
+        IsSimpleMode = (_settings.App.UiMode ?? "advanced").Equals("simple", StringComparison.OrdinalIgnoreCase);
+
         // Config mode (three-way: generated / custom / subscribe)
         // Mode is determined by which tab is active. On load, select the
         // correct tab based on saved config_mode.
@@ -1156,6 +1172,7 @@ public partial class MainWindowViewModel : ViewModelBase
         // Theme & language
         _settings.App.Theme = IsDarkTheme ? "dark" : "light";
         _settings.App.Language = IsRussian ? "ru" : "en";
+        _settings.App.UiMode = IsSimpleMode ? "simple" : "advanced";
 
         // Servers — save all + mark which one is active
         _settings.Vless.Servers = Servers.Select(s => s.ToEntry()).ToList();
@@ -2597,6 +2614,20 @@ public partial class MainWindowViewModel : ViewModelBase
         SaveSettings();          // persist language before we rebuild UI
         RefreshLocalization();   // updates {Binding Lbl*} across the UI
         ReloadMainWindowForLocalization();  // re-parses XAML so {x:Static} hits new Lang
+    }
+
+    /// <summary>
+    /// Flip the UI between the minimalist SimplePage and the full tabbed
+    /// Advanced layout. Both views share the same ViewModel instance; the
+    /// window only swaps which pane is visible, so VM state (servers,
+    /// connection, Free Configs cache, etc.) survives the toggle.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleUiMode()
+    {
+        IsSimpleMode = !IsSimpleMode;
+        _settings.App.UiMode = IsSimpleMode ? "simple" : "advanced";
+        SaveSettings();
     }
 
     /// <summary>

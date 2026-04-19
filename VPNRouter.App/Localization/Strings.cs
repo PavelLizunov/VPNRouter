@@ -557,6 +557,28 @@ public static class Strings
         : "Skip servers located in RU during deep verify";
     public static string TipFcDismissQuickstart => Ru ? "Закрыть подсказку" : "Dismiss quickstart";
 
+    // ── Simple mode (v2.17+) ──
+
+    /// <summary>Header toggle button: Simple → Advanced.</summary>
+    public static string SmpToggleToAdvanced => Ru ? "Advanced ▸" : "Advanced ▸";
+    /// <summary>Header toggle button: Advanced → Simple.</summary>
+    public static string SmpToggleToSimple   => Ru ? "◂ Simple"   : "◂ Simple";
+    /// <summary>Tooltip for the header toggle button.</summary>
+    public static string SmpToggleTooltip => Ru
+        ? "Переключить между упрощённым и полным интерфейсом"
+        : "Switch between Simple and Advanced UI";
+
+    // v2.17.0 placeholder copy — replaced by the real skeleton in v2.17.1.
+    public static string SmpPlaceholderTitle => Ru
+        ? "Упрощённый интерфейс скоро появится"
+        : "Simple mode is on the way";
+    public static string SmpPlaceholderBody => Ru
+        ? "В v2.17 будет одностраничный онбординг: вставил конфиг или ссылку, нажал Start — готово. А пока переключайся в полный интерфейс."
+        : "v2.17 will bring a one-page onboarding: paste a config or subscription URL, hit Start, done. Switch to the full Advanced UI for now.";
+    public static string SmpPlaceholderSwitchToAdvanced => Ru
+        ? "Переключить на Advanced"
+        : "Switch to Advanced";
+
     // ── v2.15.5 Localization pass: remaining hardcoded strings ──
 
     // Tooltips — MainWindow header buttons

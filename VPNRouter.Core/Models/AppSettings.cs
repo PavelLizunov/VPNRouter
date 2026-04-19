@@ -75,6 +75,21 @@ public class AppConfig
     public string Language { get; set; } = "en";
 
     /// <summary>
+    /// UI complexity mode. "simple" = one-page onboarding for non-technical
+    /// users (v2.17+); "advanced" = the full tabbed layout we shipped in
+    /// v2.15/v2.16.
+    ///
+    /// Default is "advanced" until v2.17.5 when SimplePage is fully wired.
+    /// v2.17.5 flips the default to "simple" AND promotes existing users
+    /// with non-empty Subscriptions / Vless.Servers / CustomConfigs to
+    /// "advanced" automatically (so nobody's workflow regresses).
+    /// Until then, only users who explicitly click the Advanced↔Simple
+    /// toggle see the SimplePage scaffolding.
+    /// </summary>
+    [YamlMember(Alias = "ui_mode")]
+    public string UiMode { get; set; } = "advanced";
+
+    /// <summary>
     /// Config generation mode:
     /// "generated" — build sing-box config from VLESS settings + profiles (default).
     /// "custom" — use a user-provided sing-box JSON config, inject process routing only.
