@@ -2622,6 +2622,9 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void ToggleTheme()
     {
+        // v2.17.10: log entry so bug reports about the window teleporting
+        // can be traced to the exact toggle that fired.
+        _logger.Information("[VM] ToggleTheme → {Theme}", IsDarkTheme ? "Light" : "Dark");
         IsDarkTheme = !IsDarkTheme;
         ApplyTheme();
         RefreshLocalization();
@@ -2630,6 +2633,10 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void ToggleLanguage()
     {
+        // v2.17.10: log entry — language toggle is the one that rebuilds the
+        // entire MainWindow (see ReloadMainWindowForLocalization below) so
+        // we want this clearly traceable in app logs.
+        _logger.Information("[VM] ToggleLanguage → {Lang}", IsRussian ? "en" : "ru");
         IsRussian = !IsRussian;
         Strings.Lang = IsRussian ? "ru" : "en";
         SaveSettings();          // persist language before we rebuild UI
@@ -2683,6 +2690,12 @@ public partial class MainWindowViewModel : ViewModelBase
                 Width         = width,
                 Height        = height,
                 WindowState   = state,
+                // v2.17.10 fix: MainWindow.axaml declares
+                // WindowStartupLocation="CenterScreen" which, on the rebuilt
+                // instance, would re-centre the window at Show() time and
+                // discard the Position we just copied from the old window.
+                // Set Manual to tell Avalonia "trust the Position property".
+                WindowStartupLocation = WindowStartupLocation.Manual,
             };
 
             desktop.MainWindow = newWindow;

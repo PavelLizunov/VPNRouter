@@ -433,16 +433,19 @@ Legend: S = 1-2 h, M = 3-5 h, L = 1-2 days.
 ## Status tracker
 
 ### Known bugs (as of 2026-04-20)
-- [ ] Bug A — Expander collapses `IsConnected` via `{Binding !IsConnected}`
-  two-way write-back
-- [ ] Bug B — Window teleports to centre on theme/language toggle
+- [x] Bug A — Expander collapses `IsConnected` via `{Binding !IsConnected}`
+  two-way write-back — **fixed v2.17.9** (dedicated `SmpFormExpanded` observable)
+- [x] Bug B — Window teleports to centre on theme/language toggle —
+  **fixed v2.17.9** (WindowStartupLocation.Manual on rebuilt MainWindow,
+  bundled into v2.17.9 since fix is 1 line + log statements)
 - [ ] Bug C — 200 MB RAM, unknown cause
 - [ ] Design Q — Does Simple mode need the full header?
+  (user deferred to later — "к дизайну вернёмся позже")
 
 ### Release tracker
-- [ ] v2.17.9  — Fix Bug A
-- [ ] v2.17.10 — Fix Bug B
-- [ ] v2.18.0  — Simple header (answer Design Q via implementation)
+- [x] v2.17.9  — Fix Bug A + Bug B (combined, both Simple-mode UX bugs)
+- [~] v2.17.10 — merged into v2.17.9
+- [ ] v2.18.0  — Simple header (DEFERRED until design pass)
 - [ ] v2.18.1  — Bug C investigation
 - [ ] v2.18.2  — Audit pass
 

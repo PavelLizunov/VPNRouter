@@ -36,6 +36,19 @@ public partial class MainWindowViewModel
     /// <summary>Inline error message shown below the input (empty = no error).</summary>
     [ObservableProperty] private string _smpErrorText = string.Empty;
 
+    /// <summary>
+    /// Controls the "Change config or mode" Expander on SimplePage.
+    /// v2.17.9 fix: previously the Expander bound `IsExpanded="{Binding !IsConnected}"`
+    /// which Avalonia compiled as TwoWay — toggling the Expander wrote back
+    /// through the `!` inverter and flipped <see cref="IsConnected"/>, making
+    /// the hero card claim "VPN is off" while the engine was still running.
+    /// A dedicated observable with explicit TwoWay binding avoids the trap and
+    /// lets the user open/close the form without any side effect on engine state.
+    /// Defaults to true so a freshly-opened Simple page (typically disconnected)
+    /// shows the form without a click.
+    /// </summary>
+    [ObservableProperty] private bool _smpFormExpanded = true;
+
     // ── Autostart toggle ─────────────────────────────────────────────────
     /// <summary>
     /// Simple-mode 'Start with Windows' checkbox. Encapsulates two things
