@@ -27,7 +27,7 @@
                  ScrollViewer.VerticalScrollBarVisibility="Auto">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:ServerViewModel">
-                    <Grid ColumnDefinitions="Auto,Auto,*,*,60,45,Auto">
+                    <Grid ColumnDefinitions="Auto,Auto,*,*,55,55,40,Auto">
                         <TextBlock Grid.Column="0" Text="●" Foreground="#22C55E"
                                    IsVisible="{Binding IsActive}" FontSize="9"
                                    VerticalAlignment="Center" Margin="0,0,4,0"/>
@@ -43,10 +43,16 @@
                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                         <TextBlock Grid.Column="4" Text="{Binding PingDisplay}"
                                    Opacity="0.8" FontSize="10" TextAlignment="Right"
-                                   VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <TextBlock Grid.Column="5" Text="{Binding Port}" Opacity="0.5"
+                                   VerticalAlignment="Center" Margin="0,0,6,0"
+                                   ToolTip.Tip="TCP+TLS ping"/>
+                        <TextBlock Grid.Column="5" Text="{Binding DeepDisplay}"
+                                   Opacity="0.9" FontSize="10" TextAlignment="Right"
+                                   VerticalAlignment="Center" Margin="0,0,6,0"
+                                   ToolTip.Tip="{Binding DeepError}"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Grid.Column="6" Text="{Binding Port}" Opacity="0.5"
                                    TextAlignment="Center" FontSize="10" VerticalAlignment="Center"/>
-                        <Button Grid.Column="6"
+                        <Button Grid.Column="7"
                                 Content="⟳"
                                 Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
                                 CommandParameter="{Binding}"
@@ -77,20 +83,29 @@
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
             <StackPanel Spacing="4">
-                <!-- Test all + progress row -->
-                <Grid ColumnDefinitions="Auto,*,Auto">
-                    <Button Grid.Column="0"
-                            Content="{Binding ServerTestButtonText}"
-                            Command="{Binding TestAllSubscriptionServersCommand}"
-                            Padding="10,4" CornerRadius="4"
-                            FontSize="10"
-                            Background="#059669" Foreground="White"/>
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding ServerTestProgressText}"
-                               VerticalAlignment="Center"
-                               Margin="10,0,0,0"
-                               FontSize="10" Opacity="0.7"/>
-                </Grid>
+                <!-- Test all + Deep verify + progress row -->
+                <StackPanel Spacing="2">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Content="{Binding ServerTestButtonText}"
+                                Command="{Binding TestAllSubscriptionServersCommand}"
+                                Padding="10,4" CornerRadius="4"
+                                FontSize="10"
+                                Background="#059669" Foreground="White"
+                                ToolTip.Tip="TCP + TLS probe"/>
+                        <Button Content="{Binding ServerDeepButtonText}"
+                                Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
+                                Padding="10,4" CornerRadius="4"
+                                FontSize="10"
+                                Background="#7C3AED" Foreground="White"
+                                ToolTip.Tip="Spawn sing-box + HTTP trace + 5MB download"/>
+                        <TextBlock Text="{Binding ServerTestProgressText}"
+                                   VerticalAlignment="Center"
+                                   FontSize="10" Opacity="0.7"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding ServerDeepProgressText}"
+                               FontSize="10" Opacity="0.7"
+                               IsVisible="{Binding ServerDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                </StackPanel>
                 <!-- Subscriptions label + Refresh all -->
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBlock Grid.Column="0"

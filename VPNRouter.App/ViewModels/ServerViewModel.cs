@@ -105,6 +105,77 @@ public partial class ServerViewModel : ViewModelBase
         TestError = result.Error;
     }
 
+    // ── Deep verify state (v2.15.3) ──────────────────────────────────────
+
+    /// <summary>True while a deep-verify (sing-box + HTTP) probe is running.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeepDisplay))]
+    private bool _isDeepTesting;
+
+    /// <summary>True if the last deep-verify pass completed successfully (HTTP trace through proxy).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeepDisplay))]
+    [NotifyPropertyChangedFor(nameof(HasDeepResult))]
+    private bool _isDeepVerified;
+
+    /// <summary>True if the last deep-verify failed. Mutually exclusive with IsDeepVerified.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeepDisplay))]
+    [NotifyPropertyChangedFor(nameof(HasDeepResult))]
+    private bool _isDeepFailed;
+
+    /// <summary>HTTP latency through the spawned sing-box SOCKS proxy (ms).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeepDisplay))]
+    private int _httpLatencyMs;
+
+    /// <summary>Measured download throughput through proxy (Mbps). 0 = not measured.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DeepDisplay))]
+    private int _bandwidthMbps;
+
+    /// <summary>Deep verify failure reason (null on success).</summary>
+    [ObservableProperty] private string? _deepError;
+
+    public bool HasDeepResult => IsDeepVerified || IsDeepFailed;
+
+    /// <summary>Compact one-line deep-verify summary for the list column.</summary>
+    public string DeepDisplay
+    {
+        get
+        {
+            if (IsDeepTesting) return "⏳";
+            if (IsDeepFailed) return "✗";
+            if (IsDeepVerified)
+            {
+                if (BandwidthMbps > 0) return $"✓ {BandwidthMbps}M";
+                if (HttpLatencyMs > 0) return $"✓ {HttpLatencyMs}ms";
+                return "✓";
+            }
+            return "—";
+        }
+    }
+
+    /// <summary>Apply a deep-verify outcome.</summary>
+    public void ApplyDeepResult(DeepVerifyResult result)
+    {
+        IsDeepTesting = false;
+        if (result.Ok)
+        {
+            IsDeepVerified = true;
+            IsDeepFailed = false;
+            HttpLatencyMs = result.HttpLatencyMs;
+            BandwidthMbps = result.BandwidthMbps.HasValue ? (int)Math.Round(result.BandwidthMbps.Value) : 0;
+            DeepError = null;
+        }
+        else
+        {
+            IsDeepVerified = false;
+            IsDeepFailed = true;
+            DeepError = result.Error;
+        }
+    }
+
     public ServerViewModel()
     {
         _originalEntry = new VlessServerEntry();
