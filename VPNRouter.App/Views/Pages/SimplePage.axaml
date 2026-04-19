@@ -1,9 +1,19 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
+             xmlns:conv="using:VPNRouter.App"
              xmlns:loc="using:VPNRouter.App.Localization"
              x:Class="VPNRouter.App.Views.Pages.SimplePage"
              x:DataType="vm:MainWindowViewModel">
+
+    <UserControl.Resources>
+        <!-- UserControl can't see MainWindow.Resources at parse time, so the
+             converter used by the hero status dot must be declared locally
+             (same pattern as DpiBypassPage / TelegramPage). Without this the
+             XAML throws 'resource not found' at runtime and the entire
+             window fails to construct — broken v2.17.7. -->
+        <conv:BoolToStatusColorConverter x:Key="StatusColorConverter"/>
+    </UserControl.Resources>
 
     <!--
       v2.17.7 redesign.
