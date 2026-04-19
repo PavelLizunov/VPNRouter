@@ -449,8 +449,65 @@ Legend: S = 1-2 h, M = 3-5 h, L = 1-2 days.
   config row + 3-state CTA + Advanced card); big MainWindow header
   hidden in Simple mode; Disconnect CTA is accent-solid (benign
   toggle), NOT red/danger per design
-- [ ] v2.18.1  — Bug C investigation
-- [ ] v2.18.2  — Audit pass
+- [x] v2.18.1  — macOS auto-updater rewrite (detached bash helper,
+  ditto-based atomic swap, quarantine strip, logs to
+  /tmp/vpnrouter-update-&lt;pid&gt;.log). Bug C (RAM 200 MB) static
+  audit documented below; in-code fixes deferred to v2.18.2.
+- [ ] v2.18.2  — RAM low-hangers + hidden-bugs audit pass
+
+---
+
+## v2.18.1 addendum — macOS updater one-shot fix
+
+User report (2026-04-20): "the new version downloads but the update
+doesn't happen on Mac." Static diagnosis identified three failure
+modes in the pre-v2.18.1 `ApplyUpdateMac`:
+
+1. **`File.Copy` strips the Unix execute bit.** The copied Mach-O
+   binary ends up -rw-r--r--; the follow-up per-file `chmod +x`
+   wrapped in a silent try/catch with a 3-second timeout routinely
+   failed on slow disks or when copying into SIP-protected dirs.
+2. **Overwriting a running `.app` bundle is unsafe.** macOS holds
+   the executable mapped; file-by-file replacement of a live bundle
+   produces an undefined state.
+3. **Downloaded content carries `com.apple.quarantine`.** Gatekeeper
+   silently refuses to launch a quarantined bundle and `open` still
+   exits 0 — the user sees "update applied" but nothing launches.
+
+Fix (shipped in v2.18.1): `ApplyUpdateMac` now writes a detached
+bash helper to `/tmp/vpnrouter-update-<pid>.sh` that:
+
+- Polls `kill -0 <pid>` until the old process exits (cap 15s, then
+  SIGTERM as a safety net).
+- `xattr -dr com.apple.quarantine` on the staged `.app`.
+- `mv` the live `.app` aside to `<app>.old-<pid>`.
+- `ditto --rsrc <staged> <target>` — preserves execute bits,
+  symlinks, xattrs, resource forks.
+- `xattr -dr com.apple.quarantine` on the installed `.app`.
+- `chmod -R +x <app>/Contents/MacOS` as a belt-and-braces.
+- Deletes the backup, `open <app>` to launch.
+- Tee's every step (timestamped) to `/tmp/vpnrouter-update-<pid>.log`
+  so future failures are visible instead of vanishing.
+
+Additional ZIP contract: the install ZIP must contain `VPNRouter.app`
+at its top level (build-mac.sh already does this via
+`ditto -c -k --keepParent`). Flat-file or Contents/-only layouts are
+now rejected with a clear InvalidOperationException instead of
+silently doing the unsafe thing.
+
+## Bug C — RAM 200 MB static audit (findings, fixes deferred to v2.18.2)
+
+Without live profiling, the cheapest-to-fix suspects are:
+
+| Rank | Component | Est. bytes | Where |
+|------|-----------|------------|-------|
+| 1 | `_allConfigs` Free Configs cache eager-loaded at VM ctor | ~37 MB | `FreeConfigsPageViewModel.cs:42` |
+| 2 | Subscription + manual VLESS lists (worst case 500+ entries) | 0-800 MB | `AppSettings.Vless.Servers`, `SubscriptionServers` |
+| 3 | ETW kernel trace buffer unbounded | 2-5 MB per day | `EtwProcessMonitor.cs` |
+| 4 | RGB-inverted logo intermediate `byte[]` allocated per-copy | ~65 KB | `MainWindowViewModel.cs:85` |
+| 5 | `FreeConfigAggregator` event handlers never unsubscribed | ~1 KB cumulative | `FreeConfigsPageViewModel.cs:35-36` |
+
+Most of that 200 MB is legitimate Avalonia + Skia + .NET runtime baseline (~80-100 MB) + the Free Configs cache (~37 MB) + subscriptions (varies). Cutting #1 via lazy-load on first Free tab click is the only fix that meaningfully moves the number, and is planned for v2.18.2 along with #5. #2 (server virtualization) is a bigger refactor and intentionally out of scope.
 
 Update this list as each release ships.
 

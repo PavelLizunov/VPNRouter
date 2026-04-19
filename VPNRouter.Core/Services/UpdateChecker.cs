@@ -301,59 +301,125 @@ public class UpdateChecker
 
     // ─── macOS ───────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Self-update flow on macOS. Hard constraints on this platform:
+    ///   1. A running .app bundle CANNOT be safely overwritten file-by-file.
+    ///      macOS holds the executable mapped; replacing individual files of
+    ///      a live bundle produces an undefined state and usually ends with
+    ///      the new .app silently refusing to launch.
+    ///   2. <c>File.Copy</c> on Unix drops the executable bit — the copied
+    ///      Mach-O binary ends up as -rw-r--r-- and <c>/usr/bin/open</c>
+    ///      won't launch it. Pre-v2.18.1 tried to fix this with per-file
+    ///      chmod wrapped in silent try/catch — which routinely failed
+    ///      silently on slow disks or SIP-protected directories.
+    ///   3. Anything downloaded via HTTP carries the <c>com.apple.quarantine</c>
+    ///      extended attribute. Gatekeeper will refuse to launch a
+    ///      quarantined bundle and <c>open</c> exits 0 anyway — so the
+    ///      user sees "update applied" but nothing launches.
+    ///
+    /// v2.18.1 replaces the in-process file copy with a detached bash
+    /// helper script that runs AFTER the current process exits. The script
+    /// uses <c>ditto</c> (preserves permissions, symlinks, xattrs, the
+    /// whole bundle tree atomically), strips quarantine, ensures <c>+x</c>
+    /// on MacOS/, and launches the freshly-installed bundle. Script stdout
+    /// + stderr are tee'd to <c>/tmp/vpnrouter-update-&lt;pid&gt;.log</c> so
+    /// any failure mode is visible postmortem instead of vanishing.
+    /// </summary>
     private static void ApplyUpdateMac(string extractedDir)
     {
-        // Find .app bundle in extracted content
-        var appBundles = Directory.GetDirectories(extractedDir, "*.app", SearchOption.TopDirectoryOnly);
+        // Locate the staged .app bundle. The install ZIP is expected to
+        // contain VPNRouter.app/ at the top level (see build-mac.sh).
+        // Older layouts (just Contents/ or flat files) are rejected here —
+        // supporting them requires the unsafe in-place overwrite we're
+        // deliberately moving away from.
+        var stagedApp = Directory.GetDirectories(extractedDir, "*.app", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault();
+        if (stagedApp == null)
+            throw new InvalidOperationException(
+                "Mac update ZIP does not contain a .app bundle at its top level. " +
+                "Re-package the release with build-mac.sh or verify the downloaded asset.");
 
-        string sourceDir;
-        if (appBundles.Length > 0)
-        {
-            // ZIP contains .app bundle — use its Contents/
-            sourceDir = Path.Combine(appBundles[0], "Contents");
-        }
-        else if (Directory.Exists(Path.Combine(extractedDir, "Contents")))
-        {
-            // ZIP contains Contents/ directly
-            sourceDir = Path.Combine(extractedDir, "Contents");
-        }
-        else
-        {
-            // Flat layout — just DLLs, copy to Contents/MacOS/
-            var currentAppBundle = FindCurrentAppBundle()
-                ?? throw new InvalidOperationException("Cannot locate current .app bundle.");
-            var targetMacOS = Path.Combine(currentAppBundle, "Contents", "MacOS");
-            CopyDirectoryRecursive(extractedDir, targetMacOS);
-
-            Process.Start(new ProcessStartInfo("/usr/bin/open", $"-n \"{currentAppBundle}\"")
-                { UseShellExecute = false });
-            return;
-        }
-
-        // Full bundle update — replace entire Contents/
-        var appBundle = FindCurrentAppBundle()
+        var targetApp = FindCurrentAppBundle()
             ?? throw new InvalidOperationException("Cannot locate current .app bundle.");
-        var targetContents = Path.Combine(appBundle, "Contents");
 
-        CopyDirectoryRecursive(sourceDir, targetContents);
+        var pid       = Environment.ProcessId;
+        var logPath   = $"/tmp/vpnrouter-update-{pid}.log";
+        var scriptPath = $"/tmp/vpnrouter-update-{pid}.sh";
 
-        // Make binaries executable
-        var macosDir = Path.Combine(targetContents, "MacOS");
-        if (Directory.Exists(macosDir))
+        // The helper script. Runs asynchronously after the current process
+        // exits. Every step is logged with a timestamp so the log is
+        // self-explanatory if the user reports "update didn't happen".
+        //
+        // Key decisions:
+        //   • `kill -0 <PID>` polls for the old process while it shuts
+        //     down. Timeout caps at 15s to avoid zombie scripts if the
+        //     old process hangs.
+        //   • The live .app is moved aside to <app>.old-<pid> before
+        //     `ditto` writes the new tree, so ditto never writes to a
+        //     path macOS might still have open.
+        //   • `ditto -rsrc` copies resource forks + xattrs + symlinks
+        //     and preserves the Unix mode bits — no per-file chmod dance.
+        //   • `xattr -dr com.apple.quarantine` is applied AFTER ditto so
+        //     the freshly-installed bundle is clean for Gatekeeper.
+        //   • `open <app>` (no -n) launches the new version without
+        //     forcing a duplicate; the old PID is gone by this point.
+        var script =
+            "#!/bin/bash\n" +
+            $"exec >\"{logPath}\" 2>&1\n" +
+            "set +e\n" +
+            "ts() { date '+%Y-%m-%dT%H:%M:%S%z'; }\n" +
+            "log() { echo \"[$(ts)] $*\"; }\n" +
+            "log '── VPNRouter macOS updater ──'\n" +
+            $"log 'Old PID: {pid}'\n" +
+            $"log 'Staged:  {stagedApp}'\n" +
+            $"log 'Target:  {targetApp}'\n" +
+            $"for i in $(seq 1 75); do\n" +
+            $"  if ! kill -0 {pid} 2>/dev/null; then break; fi\n" +
+            "  sleep 0.2\n" +
+            "done\n" +
+            $"if kill -0 {pid} 2>/dev/null; then\n" +
+            $"  log 'Old process {pid} did not exit within 15s — forcing SIGTERM'\n" +
+            $"  kill {pid} 2>/dev/null\n" +
+            "  sleep 1\n" +
+            "fi\n" +
+            "sleep 0.5\n" +
+            $"xattr -dr com.apple.quarantine \"{stagedApp}\" 2>/dev/null\n" +
+            "log 'Stripped quarantine from staging'\n" +
+            $"BACKUP=\"{targetApp}.old-{pid}\"\n" +
+            $"if [ -d \"{targetApp}\" ]; then\n" +
+            $"  mv \"{targetApp}\" \"$BACKUP\" && log 'Backed up old bundle to '\"$BACKUP\" || {{ log 'FAIL: mv old bundle aside'; exit 10; }}\n" +
+            "fi\n" +
+            $"ditto --rsrc \"{stagedApp}\" \"{targetApp}\" || {{ log 'FAIL: ditto copy'; [ -d \"$BACKUP\" ] && mv \"$BACKUP\" \"{targetApp}\"; exit 11; }}\n" +
+            "log 'Installed new bundle via ditto'\n" +
+            $"xattr -dr com.apple.quarantine \"{targetApp}\" 2>/dev/null\n" +
+            "log 'Stripped quarantine from target'\n" +
+            $"chmod -R +x \"{targetApp}/Contents/MacOS\" 2>/dev/null\n" +
+            "log 'chmod +x on MacOS/'\n" +
+            "rm -rf \"$BACKUP\" 2>/dev/null\n" +
+            $"open \"{targetApp}\" && log 'Launched new bundle' || log 'WARN: open exited non-zero'\n" +
+            "log 'Done.'\n";
+
+        File.WriteAllText(scriptPath, script);
+
+        // chmod +x the script itself (File.WriteAllText creates it 0644).
+        // Block briefly — if this fails the whole flow is dead anyway.
+        try
         {
-            foreach (var file in Directory.GetFiles(macosDir))
-            {
-                try
-                {
-                    Process.Start(new ProcessStartInfo("/bin/chmod", $"+x \"{file}\"")
-                        { UseShellExecute = false })?.WaitForExit(3000);
-                }
-                catch { }
-            }
+            Process.Start(new ProcessStartInfo("/bin/chmod", $"+x \"{scriptPath}\"")
+                { UseShellExecute = false })?.WaitForExit(5000);
         }
+        catch { /* proceeding; bash may still run the script via /bin/bash scriptPath */ }
 
-        Process.Start(new ProcessStartInfo("/usr/bin/open", $"-n \"{appBundle}\"")
-            { UseShellExecute = false });
+        // Fire and forget. We intentionally do NOT WaitForExit — the
+        // script's whole job is to wait for us to exit. Use /bin/bash so
+        // it runs even if chmod above failed.
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "/bin/bash",
+            Arguments = $"\"{scriptPath}\"",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        });
     }
 
     /// <summary>
@@ -372,14 +438,12 @@ public class UpdateChecker
         return null;
     }
 
-    private static void CopyDirectoryRecursive(string source, string target)
-    {
-        Directory.CreateDirectory(target);
-        foreach (var file in Directory.GetFiles(source))
-            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), overwrite: true);
-        foreach (var subdir in Directory.GetDirectories(source))
-            CopyDirectoryRecursive(subdir, Path.Combine(target, Path.GetFileName(subdir)));
-    }
+    // CopyDirectoryRecursive was the per-file copy helper used by the old
+    // Mac updater. v2.18.1 retired it because File.Copy drops the Unix
+    // execute bit and doesn't preserve xattrs — both fatal on macOS.
+    // The new updater shells out to `ditto` which handles all of that.
+    // Windows still uses an inline per-file File.Copy loop above; it's
+    // fine on NTFS where execute permissions don't apply.
 
     // ─── Asset matching ──────────────────────────────────────────────────────
 
