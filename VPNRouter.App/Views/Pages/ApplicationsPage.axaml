@@ -15,8 +15,8 @@
         <!-- ─── MASTER (left): category names only (like Settings) ─── -->
         <Border Grid.Column="0"
                 BorderThickness="0,0,1,0"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                Background="{DynamicResource SurfaceSunkenBrush}">
             <Grid RowDefinitions="*,Auto,Auto">
                 <ListBox Grid.Row="0"
                          ItemsSource="{Binding AppGroups}"
@@ -32,7 +32,7 @@
                                            FontSize="11" FontWeight="SemiBold"
                                            VerticalAlignment="Center" Margin="2,0"
                                            TextTrimming="CharacterEllipsis"/>
-                                <Border Grid.Column="1" Background="#2563EB" CornerRadius="8"
+                                <Border Grid.Column="1" Background="{DynamicResource AccentSolidBrush}" CornerRadius="8"
                                         Padding="5,0" Margin="4,0,2,0" VerticalAlignment="Center"
                                         IsVisible="{Binding Apps.Count}">
                                     <TextBlock Text="{Binding Apps.Count}" FontSize="9"
@@ -55,7 +55,7 @@
                         HorizontalContentAlignment="Center"
                         Margin="4,0,4,4" Padding="4,4"
                         FontSize="10" FontWeight="SemiBold" CornerRadius="4"
-                        Background="#2563EB" Foreground="White"/>
+                        Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"/>
             </Grid>
         </Border>
 
@@ -83,7 +83,7 @@
             <!-- Master enable toggle -->
             <Border Grid.Row="1" Padding="14,4,14,8"
                     BorderThickness="0,0,0,1"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+                    BorderBrush="{DynamicResource BorderDefaultBrush}">
                 <CheckBox IsChecked="{Binding IsChecked}"
                           Content="{x:Static loc:Strings.EnableWholeGroup}"
                           FontWeight="SemiBold" MinHeight="0" Padding="4,0"/>
@@ -112,7 +112,7 @@
                                       MinHeight="0" Padding="4,0">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <TextBlock Text="{Binding ProcessName}" FontSize="11"/>
-                                    <Border Background="#94A3B8" CornerRadius="6" Padding="5,0"
+                                    <Border Background="{DynamicResource TextMutedBrush}" CornerRadius="6" Padding="5,0"
                                             IsVisible="{Binding IsCustom}" VerticalAlignment="Center">
                                         <TextBlock Text="{x:Static loc:Strings.LblCustomBadge}" FontSize="8" Foreground="White"/>
                                     </Border>
@@ -135,8 +135,8 @@
             <Border Grid.Row="3"
                     Padding="14,8"
                     BorderThickness="0,1,0,0"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                    Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+                    BorderBrush="{DynamicResource BorderDefaultBrush}"
+                    Background="{DynamicResource SurfaceSunkenBrush}">
                 <StackPanel Spacing="6">
                     <!-- Amber Apply button — visible only when pending changes exist -->
                     <Button Content="{x:Static loc:Strings.ApplyChanges}"
@@ -145,7 +145,7 @@
                             IsEnabled="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsConnected}"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Center"
-                            Background="#F59E0B" Foreground="White"
+                            Background="{DynamicResource WarningSolidBrush}" Foreground="White"
                             FontSize="11" FontWeight="SemiBold"
                             Padding="0,6" CornerRadius="4"/>
                     <!-- Add app input -->
@@ -158,7 +158,7 @@
                                 CommandParameter="{Binding #CustomAppInput.Text}"
                                 Margin="6,0,0,0"
                                 Padding="14,5" FontSize="11" CornerRadius="4"
-                                Background="#2563EB" Foreground="White"
+                                Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                                 FontWeight="SemiBold"/>
                     </Grid>
                 </StackPanel>

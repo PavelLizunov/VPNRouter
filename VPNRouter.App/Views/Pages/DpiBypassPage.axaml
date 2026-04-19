@@ -21,8 +21,8 @@
             <!-- Master: section list -->
             <Border Grid.Column="0"
                     BorderThickness="0,0,1,0"
-                    BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                    Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+                    BorderBrush="{DynamicResource BorderDefaultBrush}"
+                    Background="{DynamicResource SurfaceSunkenBrush}">
                 <ListBox SelectedIndex="{Binding SelectedZapretSectionIndex}"
                          Background="Transparent" BorderThickness="0"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -50,7 +50,7 @@
                     <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.7"
                                Text="{Binding LblDpiDescription}"/>
                     <Border Padding="10,8" CornerRadius="4"
-                            Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+                            Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Ellipse Width="8" Height="8" VerticalAlignment="Center"
                                      Fill="{Binding ZapretEnabled, Converter={StaticResource StatusColorConverter}}"/>
@@ -91,7 +91,7 @@
                     <TextBlock Text="{x:Static loc:Strings.ZapretSecHosts}" FontWeight="Bold" FontSize="14"/>
 
                     <Border Padding="10,8" CornerRadius="4"
-                            Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+                            Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Spacing="4">
                             <Button Content="{Binding LblDiscordHosts}"
                                     Command="{Binding ToggleDiscordHostsCommand}"
@@ -104,7 +104,7 @@
                     </Border>
 
                     <Border Padding="10,8" CornerRadius="4"
-                            Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+                            Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Spacing="4">
                             <Button Content="{Binding LblFlowsealHosts}"
                                     Command="{Binding ToggleFlowsealHostsCommand}"
@@ -122,7 +122,7 @@
                     <TextBlock Text="{x:Static loc:Strings.ZapretSecFilters}" FontWeight="Bold" FontSize="14"/>
 
                     <Border Padding="10,8" CornerRadius="4"
-                            Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+                            Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Spacing="4">
                             <TextBlock Text="{x:Static loc:Strings.GameFilter}" FontWeight="SemiBold" FontSize="10"/>
                             <ComboBox SelectedIndex="{Binding GameFilterModeIndex}"
@@ -136,7 +136,7 @@
                     </Border>
 
                     <Border Padding="10,8" CornerRadius="4"
-                            Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+                            Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Spacing="4">
                             <TextBlock Text="{x:Static loc:Strings.IpSetFilter}" FontWeight="SemiBold" FontSize="10"/>
                             <ComboBox SelectedIndex="{Binding IpSetModeIndex}"
@@ -179,8 +179,8 @@
 
                     <Border IsVisible="{Binding ZapretActionOutput.Count}"
                             Padding="8" MaxHeight="260"
-                            Background="{DynamicResource SystemControlBackgroundListLowBrush}"
-                            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                            Background="{DynamicResource SurfaceSunkenBrush}"
+                            BorderBrush="{DynamicResource BorderDefaultBrush}"
                             BorderThickness="1" CornerRadius="4">
                         <StackPanel Spacing="2">
                             <TextBlock Text="{Binding ZapretActionTitle}"
@@ -244,7 +244,7 @@
         <!-- ═══ Bottom: Start/Stop toggle (always visible) ═══ -->
         <Border Grid.Row="1" Padding="10,8"
                 BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+                BorderBrush="{DynamicResource BorderDefaultBrush}">
             <Button Content="{Binding LblDpiToggle}"
                     Command="{Binding ToggleZapretCommand}"
                     FontSize="12" FontWeight="Bold"

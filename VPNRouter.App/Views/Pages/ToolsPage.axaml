@@ -15,7 +15,7 @@
                  SelectedIndex="{Binding SelectedToolIndex}"
                  Background="Transparent"
                  BorderThickness="0,0,0,1"
-                 BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                 BorderBrush="{DynamicResource BorderDefaultBrush}"
                  Padding="6,2">
             <ListBox.ItemsPanel>
                 <ItemsPanelTemplate>

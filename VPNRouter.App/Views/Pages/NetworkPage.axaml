@@ -14,8 +14,8 @@
         <!-- MASTER (left): section navigator -->
         <Border Grid.Row="0" Grid.Column="0"
                 BorderThickness="0,0,1,0"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                Background="{DynamicResource SurfaceSunkenBrush}">
             <ListBox SelectedIndex="{Binding SelectedSettingsIndex}"
                      Background="Transparent"
                      BorderThickness="0"
@@ -52,8 +52,8 @@
                 </StackPanel>
 
                 <Border Padding="8,6" CornerRadius="4"
-                        Background="{DynamicResource SystemControlBackgroundListLowBrush}"
-                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                        Background="{DynamicResource SurfaceSunkenBrush}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
                         BorderThickness="1">
                     <StackPanel Spacing="2">
                         <CheckBox IsChecked="{Binding BypassRussianTraffic}"
@@ -72,8 +72,8 @@
                 <TextBlock Text="{Binding LblSettingsLeak}" FontWeight="Bold" FontSize="14"/>
 
                 <Border Padding="8,6" CornerRadius="4"
-                        Background="{DynamicResource SystemControlBackgroundListLowBrush}"
-                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                        Background="{DynamicResource SurfaceSunkenBrush}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
                         BorderThickness="1">
                     <StackPanel Spacing="4">
                         <CheckBox IsChecked="{Binding StrictMode}" Content="{Binding StrictModeLabel}"
@@ -97,8 +97,8 @@
                 <TextBlock Text="{Binding LblSettingsContent}" FontWeight="Bold" FontSize="14"/>
 
                 <Border Padding="8,6" CornerRadius="4"
-                        Background="{DynamicResource SystemControlBackgroundListLowBrush}"
-                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                        Background="{DynamicResource SurfaceSunkenBrush}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
                         BorderThickness="1">
                     <StackPanel Spacing="2">
                         <CheckBox IsChecked="{Binding BlockAds}"
@@ -117,8 +117,8 @@
                 <TextBlock Text="{Binding LblSettingsUpdates}" FontWeight="Bold" FontSize="14"/>
 
                 <Border Padding="8,6" CornerRadius="4"
-                        Background="{DynamicResource SystemControlBackgroundListLowBrush}"
-                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                        Background="{DynamicResource SurfaceSunkenBrush}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
                         BorderThickness="1">
                     <StackPanel Spacing="3">
                         <TextBlock Text="{Binding UpdateChannelHeader}" FontWeight="SemiBold" Opacity="0.7"/>
@@ -134,8 +134,8 @@
                 <TextBlock Text="{Binding LblAutostartSection}" FontWeight="Bold" FontSize="14"/>
 
                 <Border Padding="8,6" CornerRadius="4"
-                        Background="{DynamicResource SystemControlBackgroundListLowBrush}"
-                        BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                        Background="{DynamicResource SurfaceSunkenBrush}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
                         BorderThickness="1">
                     <StackPanel Spacing="6">
                         <CheckBox IsChecked="{Binding AutostartVpn}"
@@ -161,20 +161,20 @@
         <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
                 Padding="14,8,14,10"
                 BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
-                Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                Background="{DynamicResource SurfaceSunkenBrush}">
             <Grid ColumnDefinitions="*,Auto">
                 <TextBlock Grid.Column="0"
                            Text="{x:Static loc:Strings.SettingsAutosaved}"
                            FontSize="10" FontWeight="SemiBold"
-                           Foreground="#059669"
+                           Foreground="{DynamicResource SuccessFgBrush}"
                            VerticalAlignment="Center"/>
                 <Button Grid.Column="1"
                         Content="{x:Static loc:Strings.ApplyNowReloadVpn}"
                         Command="{Binding ApplyPendingChangesCommand}"
                         IsEnabled="{Binding IsConnected}"
                         Padding="10,5" FontSize="10" FontWeight="SemiBold" CornerRadius="4"
-                        Background="#2563EB" Foreground="White"
+                        Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                         ToolTip.Tip="{x:Static loc:Strings.ApplyNowHint}"/>
             </Grid>
         </Border>

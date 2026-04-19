@@ -64,12 +64,12 @@
                                  IsIndeterminate="True"
                                  Height="4" Width="100" CornerRadius="2"
                                  VerticalAlignment="Center"
-                                 Foreground="#2563EB"/>
+                                 Foreground="{DynamicResource AccentSolidBrush}"/>
                 </StackPanel>
 
                 <!-- Status -->
                 <Border Padding="10,8" CornerRadius="4"
-                        Background="{DynamicResource SystemControlBackgroundListLowBrush}">
+                        Background="{DynamicResource SurfaceSunkenBrush}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Ellipse Width="8" Height="8" VerticalAlignment="Center"
                                  Fill="{Binding TgProxyEnabled, Converter={StaticResource StatusColorConverter}}"/>
@@ -96,7 +96,7 @@
                     <Button Content="{x:Static loc:Strings.OpenGitHub}"
                             Command="{Binding OpenTgProxyGitHubCommand}"
                             FontSize="10" Padding="8,4" CornerRadius="4"
-                            Foreground="#2563EB"/>
+                            Foreground="{DynamicResource AccentSolidBrush}"/>
                     <TextBlock Text="Flowseal/tg-ws-proxy" FontSize="9" Opacity="0.4"
                                VerticalAlignment="Center"/>
                 </StackPanel>
@@ -110,14 +110,14 @@
 
         <Border Grid.Row="1" Padding="10,8"
                 BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}">
+                BorderBrush="{DynamicResource BorderDefaultBrush}">
             <Button Content="{Binding LblTgProxyToggle}"
                     Command="{Binding ToggleTgProxyCommand}"
                     FontSize="12" FontWeight="Bold"
                     Padding="0,8"
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Center"
-                    Background="#2563EB" Foreground="White"
+                    Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                     CornerRadius="5"/>
         </Border>
     </Grid>
