@@ -38,10 +38,31 @@ jobs:
               echo "::error::APT_SIGNING_KEY secret is empty — configure it in repo settings"
               exit 1
           fi
-          # Import ASCII-armored private key. The block includes both the
-          # secret key and subkeys; gpg handles the whole bundle.
-          echo "$APT_SIGNING_KEY" | gpg --batch --yes --import
-          echo "Imported keys:"
+
+          # Write to file so gpg can parse reliably. echo | gpg had issues
+          # with some secret contents — write-then-import is robust.
+          KEYFILE=$(mktemp)
+          printf '%s\n' "$APT_SIGNING_KEY" > "$KEYFILE"
+          chmod 600 "$KEYFILE"
+
+          # Diagnostic: size + first/last line (safe to show — headers only)
+          echo "Key file size: $(wc -c < "$KEYFILE") bytes"
+          echo "First line: $(head -n 1 "$KEYFILE")"
+          echo "Last line:  $(tail -n 1 "$KEYFILE")"
+          if ! head -n 1 "$KEYFILE" | grep -q "BEGIN PGP PRIVATE KEY BLOCK"; then
+              echo "::error::APT_SIGNING_KEY does not start with '-----BEGIN PGP PRIVATE KEY BLOCK-----' — secret is malformed or truncated"
+              exit 1
+          fi
+          if ! tail -n 1 "$KEYFILE" | grep -q "END PGP PRIVATE KEY BLOCK"; then
+              echo "::error::APT_SIGNING_KEY does not end with '-----END PGP PRIVATE KEY BLOCK-----' — secret is truncated"
+              exit 1
+          fi
+
+          echo "--- importing ---"
+          gpg --batch --yes --import "$KEYFILE" 2>&1 | head -20
+          rm -f "$KEYFILE"
+
+          echo "--- secret keys now in keyring ---"
           gpg --list-secret-keys --keyid-format=long
           # Confirm the key ID we expect is actually present.
           if ! gpg --list-secret-keys "$APT_SIGNING_KEY_ID" > /dev/null 2>&1; then
