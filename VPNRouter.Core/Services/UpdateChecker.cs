@@ -46,7 +46,11 @@ public class UpdateChecker
         if (string.IsNullOrWhiteSpace(_settings.GitHubRepo))
             return null;
 
-        if (!Version.TryParse(_currentVersion, out var current))
+        // v2.21.10: parser now also understands rolling `-rN` candidate
+        // suffixes (e.g. "2.22.0-r1") per the strategy in
+        // plans/vpnrouter-release-strategy.md. Tags with suffixes that
+        // aren't -rN (e.g. "v1.0.0-mac") still return null and are skipped.
+        if (!TryParseSemVer(_currentVersion, out var current))
             return null;
 
         var url = $"https://api.github.com/repos/{_settings.GitHubRepo}/releases?per_page=30";
@@ -68,17 +72,16 @@ public class UpdateChecker
         if (releases == null || releases.Length == 0)
             return null;
 
-        // Skip platform-specific tags (e.g. v1.0.0-mac) — they don't parse as Version
         var newerReleases = releases
             .Where(r => !r.draft && (_settings.IsExperimental || !r.prerelease))
             .Select(r => new
             {
                 Release = r,
                 Tag = r.tag_name.TrimStart('v'),
-                Parsed = Version.TryParse(r.tag_name.TrimStart('v'), out var v) ? v : null
+                Parsed = TryParseSemVer(r.tag_name.TrimStart('v'), out var v) ? v : (SemVer?)null
             })
-            .Where(r => r.Parsed != null && r.Parsed > current)
-            .OrderByDescending(r => r.Parsed)
+            .Where(r => r.Parsed != null && r.Parsed.Value.CompareTo(current) > 0)
+            .OrderByDescending(r => r.Parsed!.Value)
             .ToList();
 
         if (newerReleases.Count == 0)
@@ -742,5 +745,80 @@ public class UpdateChecker
         if (OperatingSystem.IsMacOS()) return false;
         var appDir = AppContext.BaseDirectory;
         return File.Exists(Path.Combine(appDir, "hostfxr.dll"));
+    }
+
+    // ─── Versioning helpers ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Lightweight semver-ish version with optional rolling release candidate
+    /// number. Supports:
+    /// <list type="bullet">
+    ///   <item>"2.22.0"        → Core=2.22.0.0, Rc=null</item>
+    ///   <item>"2.22.0-r1"     → Core=2.22.0.0, Rc=1</item>
+    ///   <item>"2.22.0-r12"    → Core=2.22.0.0, Rc=12</item>
+    /// </list>
+    /// Comparison: Core first; if equal, Rc=null (stable) sorts above any Rc
+    /// value (a release candidate is "less than" its final stable), otherwise
+    /// numeric Rc comparison. So 2.22.0-r1 &lt; 2.22.0-r2 &lt; 2.22.0.
+    ///
+    /// Tags with suffixes that aren't plain `-rN` (e.g. "1.0.0-mac",
+    /// "2.0.0-beta.1") return false — they're not part of the rolling scheme
+    /// and would otherwise be picked up by UpdateChecker by accident.
+    /// </summary>
+    internal readonly struct SemVer : IComparable<SemVer>, IEquatable<SemVer>
+    {
+        public readonly Version Core;
+        public readonly int? Rc;
+
+        public SemVer(Version core, int? rc) { Core = core; Rc = rc; }
+
+        public int CompareTo(SemVer other)
+        {
+            var c = Core.CompareTo(other.Core);
+            if (c != 0) return c;
+            // null (stable) > any rN
+            if (!Rc.HasValue && !other.Rc.HasValue) return 0;
+            if (!Rc.HasValue) return 1;
+            if (!other.Rc.HasValue) return -1;
+            return Rc.Value.CompareTo(other.Rc.Value);
+        }
+
+        public bool Equals(SemVer other) => CompareTo(other) == 0;
+        public override bool Equals(object? obj) => obj is SemVer v && Equals(v);
+        public override int GetHashCode() => HashCode.Combine(Core, Rc);
+        public override string ToString() => Rc.HasValue ? $"{Core}-r{Rc.Value}" : Core.ToString();
+    }
+
+    internal static bool TryParseSemVer(string? tag, out SemVer result)
+    {
+        result = default;
+        if (string.IsNullOrWhiteSpace(tag)) return false;
+
+        // Strip any leading 'v' once more (defensive)
+        var s = tag.StartsWith('v') || tag.StartsWith('V') ? tag.Substring(1) : tag;
+
+        var dash = s.IndexOf('-');
+        string corePart = dash < 0 ? s : s.Substring(0, dash);
+        string? suffix  = dash < 0 ? null : s.Substring(dash + 1);
+
+        if (!Version.TryParse(corePart, out var core))
+            return false;
+
+        if (suffix is null)
+        {
+            result = new SemVer(core, null);
+            return true;
+        }
+
+        // Only accept -rN where N is a non-negative integer. Anything else
+        // (e.g. "-mac", "-beta.1") is intentionally rejected so platform-
+        // specific legacy tags don't poison the update flow.
+        if (suffix.Length < 2 || (suffix[0] != 'r' && suffix[0] != 'R'))
+            return false;
+        if (!int.TryParse(suffix.AsSpan(1), out var rc) || rc < 0)
+            return false;
+
+        result = new SemVer(core, rc);
+        return true;
     }
 }
