@@ -121,6 +121,17 @@ jobs:
 
       - name: Lay out apt repo skeleton
         run: |
+          # v2: wipe reprepro state on every run. Why? Earlier runs that
+          # failed AFTER writing to db/ (e.g. a passphrase issue that
+          # blocked signing but not the db write) left the repository in
+          # a state where reprepro thinks packages are included but pool/
+          # and dists/ are empty. The db entry then makes subsequent
+          # includedeb calls no-op ("already present"). Wiping db/pool/
+          # dists and re-including from scratch is safe because the
+          # source of truth is the .deb artifacts on GitHub Releases
+          # anyway.
+          rm -rf gh-pages-dir/apt/db gh-pages-dir/apt/pool gh-pages-dir/apt/dists
+
           mkdir -p gh-pages-dir/apt/conf
           cp packaging/apt-repo/distributions gh-pages-dir/apt/conf/distributions
           # Also serve the public key directly so users can curl it.
