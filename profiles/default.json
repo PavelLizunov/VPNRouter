@@ -2,7 +2,7 @@
   "profiles": [
     {
       "name": "Discord_Privacy",
-      "description": "Полная приватность для Discord",
+      "description": "Discord voice & chat",
       "processes": [
         {
           "name": "Discord.exe",
@@ -19,31 +19,54 @@
       "block_on_vpn_fail": true
     },
     {
-      "name": "Work_Suite",
-      "description": "Рабочие приложения",
+      "name": "Messengers",
+      "description": "Telegram, Signal, WhatsApp",
       "processes": [
-        {
-          "name": "ChatGPT.exe",
-          "include_children": true,
-          "scan_patterns": ["ChatGPT*.exe"]
-        },
-        {
-          "name": "claude.exe",
-          "include_children": true,
-          "scan_patterns": ["claude*.exe", "Claude*.exe"]
-        },
         {
           "name": "Telegram.exe",
           "include_children": true,
           "scan_patterns": ["Telegram*.exe"]
+        },
+        {
+          "name": "Signal.exe",
+          "include_children": true,
+          "scan_patterns": ["Signal*.exe"]
+        },
+        {
+          "name": "WhatsApp.exe",
+          "include_children": true,
+          "scan_patterns": ["WhatsApp*.exe"]
         }
       ],
       "dns_mode": "vpn_only",
       "block_on_vpn_fail": true
     },
     {
+      "name": "AI_Tools",
+      "description": "Claude, ChatGPT, Cursor",
+      "processes": [
+        {
+          "name": "claude.exe",
+          "include_children": true,
+          "scan_patterns": ["claude*.exe", "Claude*.exe"]
+        },
+        {
+          "name": "ChatGPT.exe",
+          "include_children": true,
+          "scan_patterns": ["ChatGPT*.exe"]
+        },
+        {
+          "name": "Cursor.exe",
+          "include_children": true,
+          "scan_patterns": ["Cursor*.exe", "cursor*.exe"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
       "name": "Browsers",
-      "description": "Все браузеры",
+      "description": "All browsers",
       "processes": [
         {
           "name": "chrome.exe",
@@ -165,13 +188,112 @@
       "block_on_vpn_fail": false
     },
     {
-      "name": "Terminal",
-      "description": "Windows Terminal и консольные приложения",
+      "name": "Work_Suite",
+      "description": "Slack, Zoom, Teams, VS Code, Notion",
+      "processes": [
+        {
+          "name": "slack.exe",
+          "include_children": true,
+          "scan_patterns": ["slack*.exe", "Slack*.exe"]
+        },
+        {
+          "name": "Zoom.exe",
+          "include_children": true,
+          "scan_patterns": ["Zoom*.exe", "zoom*.exe"]
+        },
+        {
+          "name": "Teams.exe",
+          "include_children": true,
+          "scan_patterns": ["Teams*.exe", "ms-teams*.exe"]
+        },
+        {
+          "name": "Code.exe",
+          "include_children": true,
+          "scan_patterns": ["Code*.exe", "code*.exe"]
+        },
+        {
+          "name": "Notion.exe",
+          "include_children": true,
+          "scan_patterns": ["Notion*.exe"]
+        },
+        {
+          "name": "Obsidian.exe",
+          "include_children": true,
+          "scan_patterns": ["Obsidian*.exe"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Streaming",
+      "description": "Spotify, VLC, media players",
+      "processes": [
+        {
+          "name": "Spotify.exe",
+          "include_children": true,
+          "scan_patterns": ["Spotify*.exe"]
+        },
+        {
+          "name": "vlc.exe",
+          "include_children": true,
+          "scan_patterns": ["vlc*.exe"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Gaming",
+      "description": "Steam, Epic, game launchers",
+      "processes": [
+        {
+          "name": "steam.exe",
+          "include_children": true,
+          "scan_patterns": ["steam*.exe"]
+        },
+        {
+          "name": "EpicGamesLauncher.exe",
+          "include_children": true,
+          "scan_patterns": ["EpicGames*.exe"]
+        },
+        {
+          "name": "Battle.net.exe",
+          "include_children": true,
+          "scan_patterns": ["Battle.net*.exe", "Agent.exe"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Privacy_Shell",
+      "description": "Terminal, shell & dev tools",
       "processes": [
         {
           "name": "WindowsTerminal.exe",
-          "include_children": false,
+          "include_children": true,
           "scan_patterns": ["WindowsTerminal*.exe", "wt.exe"]
+        },
+        {
+          "name": "pwsh.exe",
+          "include_children": true,
+          "scan_patterns": ["pwsh*.exe", "powershell*.exe"]
+        },
+        {
+          "name": "git.exe",
+          "include_children": true,
+          "scan_patterns": ["git*.exe"]
+        },
+        {
+          "name": "node.exe",
+          "include_children": true,
+          "scan_patterns": ["node*.exe"]
+        },
+        {
+          "name": "python.exe",
+          "include_children": true,
+          "scan_patterns": ["python*.exe"]
         }
       ],
       "dns_mode": "direct",

@@ -70,6 +70,68 @@ public class ProfileManager
     }
 
     /// <summary>
+    /// Returns the named profile or null if it doesn't exist. Never throws.
+    /// Use this when the caller wants to log-and-skip missing names rather
+    /// than abort the whole operation.
+    /// </summary>
+    public Profile? TryGetProfile(string name)
+    {
+        if (_cache == null || string.IsNullOrWhiteSpace(name))
+            return null;
+
+        return _cache.Profiles.FirstOrDefault(p =>
+            string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Tolerant variant of <see cref="MergeProfiles"/>. Resolves each name;
+    /// unknown names are logged and returned via <paramref name="missing"/>
+    /// but do not throw. Returns null if ALL names were missing.
+    /// </summary>
+    public Profile? MergeProfilesTolerant(IEnumerable<string> names, out List<string> missing)
+    {
+        missing = new List<string>();
+        var resolved = new List<Profile>();
+        foreach (var n in names)
+        {
+            if (string.IsNullOrWhiteSpace(n)) continue;
+            var p = TryGetProfile(n);
+            if (p != null)
+                resolved.Add(p);
+            else
+                missing.Add(n);
+        }
+
+        if (missing.Count > 0)
+        {
+            _logger.Warning(
+                "[ProfileManager] {Count} profile(s) not found — skipping: {Missing}. Available: {Available}",
+                missing.Count,
+                string.Join(", ", missing),
+                string.Join(", ", _cache?.Profiles.Select(p => p.Name) ?? Enumerable.Empty<string>()));
+        }
+
+        if (resolved.Count == 0)
+            return null;
+
+        if (resolved.Count == 1)
+            return resolved[0];
+
+        var merged = new Profile
+        {
+            Name = string.Join("+", resolved.Select(p => p.Name)),
+            Description = $"Merged: {string.Join(", ", resolved.Select(p => p.Name))}",
+            Processes = resolved.SelectMany(p => p.Processes).ToList(),
+            DnsMode = ResolveDnsMode(resolved.Select(p => p.DnsMode)),
+            BlockOnVpnFail = resolved.Any(p => p.BlockOnVpnFail)
+        };
+        _logger.Information(
+            "[ProfileManager] Merged {Count} profiles (tolerant) → '{Name}' with {Proc} process rules",
+            resolved.Count, merged.Name, merged.Processes.Count);
+        return merged;
+    }
+
+    /// <summary>
     /// Merges multiple profiles into one. Conflict resolution:
     /// - processes: union of all
     /// - dns_mode: strictest wins (vpn_only > smart > direct)

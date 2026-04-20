@@ -202,11 +202,16 @@ public class VpnEngine : IDisposable
             }
         }
 
-        _logger?.Information("[VpnEngine] Loaded {Count} profiles", collection.Profiles.Count);
+        // v2.22.0-r1: dump catalogue at boot so we can eyeball from logs
+        // whether a Linux build loaded the Linux variant, etc.
+        _logger?.Information(
+            "[VpnEngine] Loaded profile catalogue ({Count}): {Names}",
+            collection.Profiles.Count,
+            string.Join(", ", collection.Profiles.Select(p => p.Name)));
 
         ct.ThrowIfCancellationRequested();
 
-        // 3. Resolve active profile
+        // 3. Resolve active profile — tolerant path
         var isFullTunnel = (settings.App.RoutingMode ?? "split")
             .Equals("full", StringComparison.OrdinalIgnoreCase);
         var profileName = settings.ActiveProfile;
@@ -217,9 +222,46 @@ public class VpnEngine : IDisposable
         if (!string.IsNullOrEmpty(profileName))
         {
             var names = profileName.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            _activeProfile = names.Length == 1
-                ? manager.GetProfile(names[0])
-                : manager.MergeProfiles(names);
+            // v2.22.0-r1: tolerant merge — log+skip unknown names, fall back
+            // to remaining resolved ones. Previously a single missing name
+            // threw "Profile 'Foo' not found" and killed the whole start.
+            // That surfaced as "Messengers not found" on Linux when user's
+            // yaml still referenced a renamed/absent group.
+            var merged = manager.MergeProfilesTolerant(names, out var missing);
+            if (merged == null)
+            {
+                // Everything missed — genuine broken config, keep the hard error
+                throw new InvalidOperationException(
+                    $"None of the requested profiles exist: {string.Join(", ", names)}. " +
+                    $"Available: {string.Join(", ", collection.Profiles.Select(p => p.Name))}");
+            }
+            _activeProfile = merged;
+
+            if (missing.Count > 0)
+            {
+                var msg = $"Skipped unknown profile(s): {string.Join(", ", missing)}";
+                Warning?.Invoke(msg);
+                // Rewrite ActiveProfile to drop missing names so this self-heals
+                // on the next launch. Uses currently-resolved name(s).
+                var sanitized = string.Join(",",
+                    names.Where(n => !missing.Contains(n, StringComparer.OrdinalIgnoreCase)));
+                if (!string.Equals(sanitized, profileName, StringComparison.Ordinal))
+                {
+                    settings.ActiveProfile = sanitized;
+                    try
+                    {
+                        SettingsLoader.Save(settings);
+                        _logger?.Information(
+                            "[VpnEngine] ActiveProfile migrated: '{Old}' → '{New}'",
+                            profileName, sanitized);
+                    }
+                    catch (Exception saveEx)
+                    {
+                        _logger?.Warning(saveEx,
+                            "[VpnEngine] Failed to persist ActiveProfile migration");
+                    }
+                }
+            }
         }
         else if (isCustomConfig)
         {
@@ -542,7 +584,7 @@ public class VpnEngine : IDisposable
                 }
             }
 
-            // Resolve active profile
+            // Resolve active profile (tolerant — v2.22.0-r1)
             var profileName = settings.ActiveProfile;
             var isFullTunnel = (settings.App.RoutingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase);
             var isCustomConfig = settings.App.ConfigMode?.Equals("custom", StringComparison.OrdinalIgnoreCase) == true;
@@ -550,7 +592,19 @@ public class VpnEngine : IDisposable
             if (!string.IsNullOrEmpty(profileName))
             {
                 var names = profileName.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-                _activeProfile = names.Length == 1 ? manager.GetProfile(names[0]) : manager.MergeProfiles(names);
+                var merged = manager.MergeProfilesTolerant(names, out var missing);
+                if (merged == null)
+                {
+                    _logger?.Warning(
+                        "[VpnEngine] Apply: none of {Names} exist in catalogue — skipping apply",
+                        profileName);
+                    return false;
+                }
+                _activeProfile = merged;
+                if (missing.Count > 0)
+                {
+                    Warning?.Invoke($"Skipped unknown profile(s): {string.Join(", ", missing)}");
+                }
             }
             else if (isCustomConfig)
                 _activeProfile = new Profile { Name = "CustomConfig", DnsMode = "vpn_only" };

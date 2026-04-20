@@ -1,7 +1,7 @@
 {
   "profiles": [
     {
-      "name": "Discord",
+      "name": "Discord_Privacy",
       "description": "Discord voice & chat",
       "processes": [
         {
@@ -159,7 +159,45 @@
       "block_on_vpn_fail": false
     },
     {
-      "name": "System",
+      "name": "Work_Suite",
+      "description": "Slack, Zoom, Teams, VS Code, Notion, Obsidian",
+      "processes": [
+        {
+          "name": "Slack",
+          "include_children": true,
+          "scan_patterns": ["Slack*"]
+        },
+        {
+          "name": "zoom.us",
+          "include_children": true,
+          "scan_patterns": ["zoom.us", "Zoom*"]
+        },
+        {
+          "name": "Microsoft Teams",
+          "include_children": true,
+          "scan_patterns": ["Microsoft Teams*", "Teams*"]
+        },
+        {
+          "name": "Code",
+          "include_children": true,
+          "scan_patterns": ["Code", "Code Helper*"]
+        },
+        {
+          "name": "Notion",
+          "include_children": true,
+          "scan_patterns": ["Notion*"]
+        },
+        {
+          "name": "Obsidian",
+          "include_children": true,
+          "scan_patterns": ["Obsidian*"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
+      "name": "Privacy_Shell",
       "description": "Terminal, shells, system tools",
       "processes": [
         {
