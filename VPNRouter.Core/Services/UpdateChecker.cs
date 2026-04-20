@@ -140,7 +140,18 @@ public class UpdateChecker
             Directory.Delete(_stagingDir, true);
         Directory.CreateDirectory(_stagingDir);
 
-        var zipPath = Path.Combine(_stagingDir, $"VPNRouter-v{info.LatestVersion}.zip");
+        // v2.22.2: derive extension from the download URL, NOT hardcode .zip.
+        // Linux releases ship as .tar.gz. If we save the tarball as .zip,
+        // the extraction branch picks ZipFile.ExtractToDirectory (PKZIP
+        // only) and hangs forever on a gzip-tar magic number. The tar-
+        // extraction fix in v2.22.1 was never reached because the filename
+        // suffix didn't match. This was the ACTUAL root cause of the
+        // "Extracting update..." forever-hang users saw on Linux.
+        string downloadExt =
+            downloadUrl.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ? ".tar.gz"
+            : downloadUrl.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase)  ? ".tgz"
+            : ".zip";
+        var zipPath = Path.Combine(_stagingDir, $"VPNRouter-v{info.LatestVersion}{downloadExt}");
 
         using var response = await _http.GetAsync(downloadUrl,
             HttpCompletionOption.ResponseHeadersRead, ct);
