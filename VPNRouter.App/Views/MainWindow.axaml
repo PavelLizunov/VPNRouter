@@ -9,7 +9,7 @@
         mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="680"
         x:Class="VPNRouter.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="Virtual Penguin Network"
+        Title=""
         Icon="avares://VPNRouter.App/Assets/penguin_logo.ico"
         Width="520" Height="640"
         MinWidth="360" MinHeight="360"
@@ -43,20 +43,16 @@
         <Border Grid.Row="0" Padding="12,8" BorderThickness="0,0,0,1"
                 BorderBrush="{DynamicResource BorderDefaultBrush}"
                 Background="{DynamicResource SurfaceBaseBrush}">
-            <!-- v2.19.1 layout tweaks per user feedback:
-                   • Logo 40→56 (container) / 36→52 (image) — reads as
-                     the brand anchor instead of a chip.
-                   • "Virtual Penguin Network" title + version subtitle
-                     removed from the in-window header: the OS title
-                     bar already shows the app name + icon, repeating
-                     it here was pure duplication. Version moved into
-                     the ⋯ menu as a disabled info item at the bottom.
-                   • Added a visible "◂ Simple" pill-button that only
-                     shows when !IsSimpleMode, so the return-home
-                     action is a one-click affordance instead of being
-                     buried in the ⋯ flyout. In Simple mode the same
-                     jump is already prominent via the big Advanced
-                     settings card at the bottom of the page. -->
+            <!-- v2.19.2 layout:
+                   • Logo 56 px container / 52 px image (v2.19.1 kept).
+                   • Brand title + version subtitle KEPT inside the in-window
+                     header (app subheader). v2.19.1 removed them by mistake
+                     — user meant "clean the OS title bar (header)", not the
+                     subheader. OS title bar now has Title="" on the Window
+                     so the app name doesn't appear twice (once in chrome,
+                     once in-window).
+                   • Visible "◂ Simple" pill-button on the right, shown only
+                     in Advanced, v2.19.1 behaviour preserved. -->
             <Grid ColumnDefinitions="56,*,Auto,Auto" ColumnSpacing="10">
                 <Border Grid.Column="0" Width="56" Height="56"
                         CornerRadius="{StaticResource RadiusSm}"
@@ -67,13 +63,15 @@
                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
 
-                <!-- Chips row — with the brand title + subtitle gone this is
-                     the only thing in col 1, so the outer StackPanel wrapper
-                     with its Spacing is no longer needed. Chips collapse up
-                     against the logo, visually balanced by the ⋯ + Simple
-                     button on the right. -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4"
-                            VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                    <TextBlock Text="Virtual Penguin Network"
+                               FontSize="13" FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                    <TextBlock Text="{Binding VersionText}"
+                               FontSize="9"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               TextTrimming="CharacterEllipsis"/>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
                         <!-- VPN pill-chip — 3 states via IsVisible.
                              Same Simple v2.18.3 style; NavigateToVpnCommand
                              already no-ops in Simple mode and switches to
@@ -145,6 +143,7 @@
                             <TextBlock Text="TG" FontSize="9" FontWeight="SemiBold"
                                        Foreground="White"/>
                         </Button>
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- v2.19.1: visible "◂ Simple" pill-button, shown only in
@@ -170,10 +169,7 @@
 
                 <!-- ⋯ flyout — theme · lang · logs · leaks · updates · mode toggle.
                      Absorbs all the ex-header buttons. UiModeToggleText auto-flips
-                     "Advanced ▸" / "◂ Simple" based on the current mode.
-                     v2.19.1: VersionText moved here as a disabled info item at
-                     the bottom — brand title + subtitle were removed from the
-                     in-window header to stop duplicating the OS title bar. -->
+                     "Advanced ▸" / "◂ Simple" based on the current mode. -->
                 <Button Grid.Column="3" Width="28" Height="28" Padding="0"
                         FontSize="15" FontWeight="Bold"
                         Background="Transparent" BorderThickness="0"
@@ -200,12 +196,6 @@
                             <Separator/>
                             <MenuItem Header="{Binding UiModeToggleText}"
                                       Command="{Binding ToggleUiModeCommand}"/>
-                            <Separator/>
-                            <!-- Disabled info item — shows "by NiniTux · vX · sing-box Y.Y.Y"
-                                 so the version affordance the old Advanced header had as
-                                 prominent subtitle is still reachable, just out of the way. -->
-                            <MenuItem Header="{Binding VersionText}"
-                                      IsEnabled="False"/>
                         </MenuFlyout>
                     </Button.Flyout>
                 </Button>
