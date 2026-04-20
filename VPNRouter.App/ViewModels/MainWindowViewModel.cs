@@ -1226,13 +1226,19 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Strip .exe suffix — only on macOS (sing-box uses bare names there).
-    /// On Windows .exe MUST be preserved or sing-box won't match the process.
+    /// Strip .exe suffix on Unix platforms (macOS, Linux). sing-box matches
+    /// by exact process name on Windows (Discord.exe) while on Unix the
+    /// process name is bare (Discord, chrome, firefox). The profile JSON
+    /// ships with Windows-style .exe names, and MacProcessScanner
+    /// normalises at scan time, but the UI would still surface those .exe
+    /// names to the user. Stripping in the UI + settings path keeps the
+    /// Applications tab readable on Linux.
+    /// v2.21.1: Linux added to the strip set (was macOS-only).
     /// </summary>
     private static string StripExe(string name)
     {
         name = name.Trim();
-        if (OperatingSystem.IsMacOS())
+        if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
         {
             if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                 name = name[..^4];
@@ -2990,13 +2996,22 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         }
 
-        // Deploy sing-box binary (bundled in .app)
-        if (OperatingSystem.IsMacOS())
+        // Deploy sing-box binary on Unix platforms.
+        // macOS: bundled inside the .app (build-mac.sh copies it into
+        //        Contents/MacOS/ during packaging).
+        // Linux: bundled inside the AppImage / .deb / tar.gz payload by the
+        //        build-linux.yml GitHub Actions workflow, which curl-downloads
+        //        sing-box-linux-amd64 from SagerNet/sing-box releases and
+        //        drops it next to VPNRouter.App. Either way, we copy it
+        //        from AppContext.BaseDirectory to ~/.config/vpnrouter/bin/
+        //        on first launch so the user doesn't have to do anything.
+        if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
         {
             var destSingBox = AppPaths.SingBoxExePath;
             var bundledSingBox = Path.Combine(AppContext.BaseDirectory, "sing-box");
             if (File.Exists(bundledSingBox) && !File.Exists(destSingBox))
             {
+                Directory.CreateDirectory(Path.GetDirectoryName(destSingBox)!);
                 File.Copy(bundledSingBox, destSingBox);
                 File.SetUnixFileMode(destSingBox,
                     UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |

@@ -65,6 +65,22 @@ jobs:
             -c Release -r linux-x64 --self-contained true \
             -o publish/linux-x64
 
+      # Bundle sing-box-linux-amd64 next to VPNRouter.App so the first-run
+      # Deploy step (in MainWindowViewModel.cs) can copy it into
+      # ~/.config/vpnrouter/bin/ and chmod +x it. Same pattern macOS uses.
+      # Pinned to a known-good sing-box 1.13.x build with the tags we rely
+      # on (with_utls, with_clash_api, with_quic).
+      - name: Bundle sing-box-linux-amd64
+        run: |
+          set -euo pipefail
+          SINGBOX_VER="1.13.3"
+          curl -sSL -o /tmp/singbox.tar.gz \
+            "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
+          tar -xzf /tmp/singbox.tar.gz -C /tmp
+          cp "/tmp/sing-box-${SINGBOX_VER}-linux-amd64/sing-box" publish/linux-x64/sing-box
+          chmod +x publish/linux-x64/sing-box
+          ls -lh publish/linux-x64/sing-box
+
       # ── AppImage ────────────────────────────────────────────────────────
       # AppImage layout:
       #   VPNRouter.AppDir/
