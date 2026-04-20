@@ -247,9 +247,13 @@ Issues #4 and #5 are the same root cause, both fixed by v2.18.4.
 Issues #1-#3 solved together by v2.19.0 header unification.
 
 ### Release tracker
-- [ ] v2.18.4 — auto-restart service on mode change (fixes #4 + #5)
-- [ ] v2.19.0 — unified compact header (fixes #1 + #2 + #3)
-- [ ] v2.19.1 — placeholder for post-v2.19.0 feedback
+- [x] v2.18.4 — auto-restart service on mode change (fixes #4 + #5)
+- [x] v2.19.0 — unified compact header (fixes #1 + #2 + #3)
+- [x] v2.19.1 — post-v2.19.0 feedback: logo 40→56, removed duplicate
+  brand title + version subtitle from in-window header (OS title bar
+  already shows the name; version moved into ⋯ menu as a disabled
+  info item at the bottom), added a visible "◂ Simple" pill-button
+  in Advanced mode as an obvious return-home affordance.
 
 ---
 
