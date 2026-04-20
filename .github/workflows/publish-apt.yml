@@ -134,8 +134,16 @@ jobs:
 
           mkdir -p gh-pages-dir/apt/conf
           cp packaging/apt-repo/distributions gh-pages-dir/apt/conf/distributions
-          # Also serve the public key directly so users can curl it.
-          cp packaging/apt-repo/vpnrouter-apt-public.asc gh-pages-dir/apt/key.gpg
+          # Serve the public key in BOTH formats:
+          #  - key.gpg  : binary (dearmored) — what apt wants when users do
+          #               `curl ... | sudo tee /etc/apt/keyrings/vpnrouter.gpg`.
+          #               Previous version shipped armored here and apt
+          #               complained `NO_PUBKEY ...` during `apt update`.
+          #  - vpnrouter.asc : ASCII-armored — human-readable, useful for
+          #                    inspection with `gpg --show-keys`.
+          gpg --dearmor \
+              < packaging/apt-repo/vpnrouter-apt-public.asc \
+              > gh-pages-dir/apt/key.gpg
           cp packaging/apt-repo/vpnrouter-apt-public.asc gh-pages-dir/apt/vpnrouter.asc
           # Simple landing page for the apt URL
           cat > gh-pages-dir/apt/index.html <<'HTML'
@@ -242,6 +250,8 @@ jobs:
               | sudo tee /etc/apt/keyrings/vpnrouter.gpg > /dev/null
           echo "deb [signed-by=/etc/apt/keyrings/vpnrouter.gpg] https://pavellizunov.github.io/VPNRouter/apt stable main" \
               | sudo tee /etc/apt/sources.list.d/vpnrouter.list
+          # NB: key.gpg is served in binary (dearmored) form, so plain
+          # `tee` into the keyring works — no `gpg --dearmor` step needed.
           sudo apt update && sudo apt install vpnrouter
 
           ====================================================================

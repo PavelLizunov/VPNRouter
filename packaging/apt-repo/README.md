@@ -14,7 +14,8 @@ workflow.
 ### For users: add the repo once
 
 ```bash
-# 1. Fetch the signing key and store it in the trusted keyring dir.
+# 1. Fetch the signing key (served in binary/dearmored form).
+sudo mkdir -p /etc/apt/keyrings
 curl -fsSL https://pavellizunov.github.io/VPNRouter/apt/key.gpg \
     | sudo tee /etc/apt/keyrings/vpnrouter.gpg > /dev/null
 
@@ -26,6 +27,10 @@ echo "deb [signed-by=/etc/apt/keyrings/vpnrouter.gpg] https://pavellizunov.githu
 sudo apt update
 sudo apt install vpnrouter
 ```
+
+If you previously fetched `key.gpg` in armored form and got
+`NO_PUBKEY D7D4CD7C2AFC8FF0`, re-run step 1 above — the keyring
+file will be overwritten with the correct binary key.
 
 After this, `sudo apt upgrade` keeps VPNRouter current along with
 the rest of your system.
