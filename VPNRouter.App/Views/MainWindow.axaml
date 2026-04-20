@@ -27,98 +27,149 @@
     </Design.DataContext>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto">
-        <!-- ═══ Header (hidden in Simple mode — SimplePage owns its own
-             compact mini-header since v2.18.0). Update banner in Row=1
-             stays visible in both modes so critical update info is never
-             hidden behind a UI-mode toggle. ═══ -->
-        <Border Grid.Row="0" Padding="10,6" BorderThickness="0,0,0,1"
-                IsVisible="{Binding !IsSimpleMode}"
+        <!-- ═══ Unified compact header (v2.19.0) ═══
+             One header for both Simple and Advanced modes. Before v2.19.0
+             Simple mode had its own 40 px compact mini-header inside
+             SimplePage, and Advanced had a taller (~90 px) two-row header
+             with separate button strips. User reported the height mismatch
+             was jarring when flipping modes, and preferred the compact
+             layout — so the Simple mini-header is now the canonical header
+             and SimplePage lost its local copy. Affordances that used to
+             live as inline buttons (Logs, Check leaks, Theme, Language,
+             Check for updates, Simple↔Advanced toggle) all collapse into
+             the ⋯ flyout. VPN / Zapret / TG state is shown as pill-chips
+             (matching the Simple v2.18.3 style) instead of the old large
+             status badges — same commands, tighter visual weight. -->
+        <Border Grid.Row="0" Padding="12,8" BorderThickness="0,0,0,1"
                 BorderBrush="{DynamicResource BorderDefaultBrush}"
                 Background="{DynamicResource SurfaceBaseBrush}">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-                <Image Grid.Column="0" Source="{Binding LogoSource}"
-                       Height="44" Width="44" Stretch="Uniform"
-                       Margin="0,0,10,0"/>
-                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                    <TextBlock Text="Virtual Penguin Network" FontSize="13" FontWeight="Bold"
-                               Foreground="{DynamicResource AccentFgBrush}"/>
-                    <TextBlock Text="{Binding VersionText}" FontSize="9" Opacity="0.5"/>
+            <Grid ColumnDefinitions="40,*,Auto" ColumnSpacing="10">
+                <Border Grid.Column="0" Width="40" Height="40"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        Background="{DynamicResource AccentBgSubtleBrush}"
+                        ClipToBounds="True">
+                    <Image Source="{Binding LogoSource}"
+                           Width="36" Height="36" Stretch="Uniform"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
 
-                    <!-- ═══ Runtime status dashboard (v2.15.0) ═══ -->
-                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,3,0,0">
+                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                    <TextBlock Text="Virtual Penguin Network"
+                               FontSize="12" FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                    <!-- Subtitle preserves the "by NiniTux · vX · sing-box N.N.N"
+                         affordance the old Advanced header had prominently. -->
+                    <TextBlock Text="{Binding VersionText}"
+                               FontSize="9"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               TextTrimming="CharacterEllipsis"/>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <!-- VPN pill-chip — 3 states via IsVisible.
+                             Same Simple v2.18.3 style; NavigateToVpnCommand
+                             already no-ops in Simple mode and switches to
+                             Manual/Subscribe tab in Advanced. -->
                         <Button Command="{Binding NavigateToVpnCommand}"
-                                Background="{Binding VpnBadgeBrush}"
-                                BorderThickness="0"
-                                CornerRadius="{StaticResource RadiusLg}"
-                                Padding="8,2"
-                                MinHeight="0"
                                 ToolTip.Tip="{Binding VpnBadgeTooltip}"
-                                Cursor="Hand">
-                            <TextBlock Text="{Binding VpnBadgeText}"
-                                       FontSize="10" FontWeight="SemiBold"
-                                       Foreground="White"/>
+                                Padding="5,1" MinHeight="0"
+                                Background="{DynamicResource SuccessBgBrush}"
+                                BorderThickness="0"
+                                CornerRadius="{StaticResource RadiusPill}"
+                                Cursor="Hand"
+                                IsVisible="{Binding SimpleStatusIsOn}">
+                            <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                                <Ellipse Width="4" Height="4" VerticalAlignment="Center"
+                                         Fill="{DynamicResource SuccessSolidBrush}"/>
+                                <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource SuccessFgBrush}"/>
+                            </StackPanel>
                         </Button>
+                        <Button Command="{Binding NavigateToVpnCommand}"
+                                ToolTip.Tip="{Binding VpnBadgeTooltip}"
+                                Padding="5,1" MinHeight="0"
+                                Background="{DynamicResource WarningBgBrush}"
+                                BorderThickness="0"
+                                CornerRadius="{StaticResource RadiusPill}"
+                                Cursor="Hand"
+                                IsVisible="{Binding SimpleStatusIsWarn}">
+                            <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                                <Ellipse Width="4" Height="4" VerticalAlignment="Center"
+                                         Fill="{DynamicResource WarningSolidBrush}"/>
+                                <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource WarningFgBrush}"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{Binding NavigateToVpnCommand}"
+                                ToolTip.Tip="{Binding VpnBadgeTooltip}"
+                                Padding="5,1" MinHeight="0"
+                                Background="{DynamicResource SurfaceSunkenBrush}"
+                                BorderThickness="0"
+                                CornerRadius="{StaticResource RadiusPill}"
+                                Cursor="Hand"
+                                IsVisible="{Binding SimpleStatusIsOff}">
+                            <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
+                                <Ellipse Width="4" Height="4" VerticalAlignment="Center"
+                                         Fill="{DynamicResource TextMutedBrush}"/>
+                                <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextMutedBrush}"/>
+                            </StackPanel>
+                        </Button>
+
                         <Button Command="{Binding NavigateToZapretCommand}"
+                                ToolTip.Tip="{Binding ZapretBadgeTooltip}"
+                                Padding="5,1" MinHeight="0"
                                 Background="{Binding ZapretBadgeBrush}"
                                 BorderThickness="0"
-                                CornerRadius="{StaticResource RadiusLg}"
-                                Padding="8,2"
-                                MinHeight="0"
-                                ToolTip.Tip="{Binding ZapretBadgeTooltip}"
+                                CornerRadius="{StaticResource RadiusPill}"
                                 Cursor="Hand">
-                            <TextBlock Text="{Binding ZapretBadgeText}"
-                                       FontSize="10" FontWeight="SemiBold"
+                            <TextBlock Text="Zapret" FontSize="9" FontWeight="SemiBold"
                                        Foreground="White"/>
                         </Button>
+
                         <Button Command="{Binding NavigateToTgProxyCommand}"
+                                ToolTip.Tip="{Binding TgProxyBadgeTooltip}"
+                                Padding="5,1" MinHeight="0"
                                 Background="{Binding TgProxyBadgeBrush}"
                                 BorderThickness="0"
-                                CornerRadius="{StaticResource RadiusLg}"
-                                Padding="8,2"
-                                MinHeight="0"
-                                ToolTip.Tip="{Binding TgProxyBadgeTooltip}"
+                                CornerRadius="{StaticResource RadiusPill}"
                                 Cursor="Hand">
-                            <TextBlock Text="{Binding TgProxyBadgeText}"
-                                       FontSize="10" FontWeight="SemiBold"
+                            <TextBlock Text="TG" FontSize="9" FontWeight="SemiBold"
                                        Foreground="White"/>
                         </Button>
                     </StackPanel>
                 </StackPanel>
-                <StackPanel Grid.Column="2" Spacing="2"
-                            VerticalAlignment="Center" HorizontalAlignment="Right">
-                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right">
-                        <Button Content="{Binding ShowLogsLabel}"
-                                Command="{Binding OpenLogsCommand}"
-                                Padding="6,3" FontSize="10"
-                                Background="Transparent" BorderThickness="0"
-                                ToolTip.Tip="{x:Static loc:Strings.TipOpenLogs}"/>
-                        <Button Content="{Binding CheckLeaksLabel}"
-                                Command="{Binding OpenLeakTestCommand}"
-                                Padding="6,3" FontSize="10"
-                                Background="Transparent" BorderThickness="0"
-                                ToolTip.Tip="{x:Static loc:Strings.TipIpLeak}"/>
-                        <Button Content="{Binding ThemeToggleText}"
-                                Command="{Binding ToggleThemeCommand}"
-                                Padding="6,3" FontSize="10"
-                                Background="Transparent" BorderThickness="0"/>
-                        <Button Content="{Binding IsRussian, Converter={StaticResource LangConverter}}"
-                                Command="{Binding ToggleLanguageCommand}"
-                                Padding="6,3" FontSize="10"
-                                Background="Transparent" BorderThickness="0"/>
-                        <Button Content="{Binding UiModeToggleText}"
-                                Command="{Binding ToggleUiModeCommand}"
-                                Padding="6,3" FontSize="10"
-                                Background="Transparent" BorderThickness="0"
-                                ToolTip.Tip="{Binding UiModeToggleTooltip}"/>
-                    </StackPanel>
-                    <Button Content="{Binding UpdateVm.CheckLinkText}"
-                            Command="{Binding UpdateVm.CheckManuallyCommand}"
-                            IsEnabled="{Binding !UpdateVm.IsChecking}"
-                            Padding="6,1" FontSize="9"
-                            Background="Transparent" BorderThickness="0"
-                            HorizontalAlignment="Right"
-                            Opacity="0.6"/>
-                </StackPanel>
+
+                <!-- ⋯ flyout — theme · lang · logs · leaks · updates · mode toggle.
+                     Absorbs all the ex-header buttons. UiModeToggleText auto-flips
+                     "Advanced ▸" / "◂ Simple" based on the current mode. -->
+                <Button Grid.Column="2" Width="28" Height="28" Padding="0"
+                        FontSize="15" FontWeight="Bold"
+                        Background="Transparent" BorderThickness="0"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        Foreground="{DynamicResource TextSecondaryBrush}"
+                        VerticalAlignment="Center"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center">
+                    <Button.Content>⋯</Button.Content>
+                    <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuItem Header="{Binding ThemeToggleText}"
+                                      Command="{Binding ToggleThemeCommand}"/>
+                            <MenuItem Header="{Binding IsRussian, Converter={StaticResource LangConverter}}"
+                                      Command="{Binding ToggleLanguageCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="{x:Static loc:Strings.SmpMenuOpenLogs}"
+                                      Command="{Binding OpenLogsCommand}"/>
+                            <MenuItem Header="{x:Static loc:Strings.SmpMenuCheckLeaks}"
+                                      Command="{Binding OpenLeakTestCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="{x:Static loc:Strings.SmpMenuCheckUpdates}"
+                                      Command="{Binding UpdateVm.CheckManuallyCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="{Binding UiModeToggleText}"
+                                      Command="{Binding ToggleUiModeCommand}"/>
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
             </Grid>
         </Border>
 
