@@ -1,0 +1,9 @@
+Origin: VPNRouter
+Label: VPNRouter APT Repository
+Codename: stable
+Suite: stable
+Version: 2.22
+Architectures: amd64
+Components: main
+Description: VPNRouter Debian repository for Debian / Ubuntu / Linux Mint
+SignWith: 6ED816C8E249EE03

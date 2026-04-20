@@ -1,0 +1,207 @@
+name: Publish APT Repository
+
+# Runs when a release is published (every `gh release create` / GitHub UI
+# publish). Can also be triggered manually via `gh workflow run publish-apt`
+# to re-sync the apt repo with the current state of GitHub Releases.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v2.22.2-r10). Leave blank to republish current state."
+        required: false
+        default: ""
+
+# Pushing to gh-pages needs write permission on the default token.
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout main (for packaging/apt-repo config)
+        uses: actions/checkout@v4
+
+      - name: Install reprepro + dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends reprepro gnupg
+
+      - name: Import signing key
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+          APT_SIGNING_KEY_ID: ${{ secrets.APT_SIGNING_KEY_ID }}
+        run: |
+          if [ -z "$APT_SIGNING_KEY" ]; then
+              echo "::error::APT_SIGNING_KEY secret is empty — configure it in repo settings"
+              exit 1
+          fi
+          # Import ASCII-armored private key. The block includes both the
+          # secret key and subkeys; gpg handles the whole bundle.
+          echo "$APT_SIGNING_KEY" | gpg --batch --yes --import
+          echo "Imported keys:"
+          gpg --list-secret-keys --keyid-format=long
+          # Confirm the key ID we expect is actually present.
+          if ! gpg --list-secret-keys "$APT_SIGNING_KEY_ID" > /dev/null 2>&1; then
+              echo "::error::Key $APT_SIGNING_KEY_ID not found after import"
+              exit 1
+          fi
+
+      - name: Configure non-interactive GPG for reprepro
+        run: |
+          # reprepro calls gpg internally; we want zero prompting for a
+          # passphrase or trust agent dialog on a headless runner.
+          mkdir -p ~/.gnupg
+          chmod 700 ~/.gnupg
+          {
+            echo "pinentry-mode loopback"
+            echo "use-agent"
+          } >> ~/.gnupg/gpg.conf
+          {
+            echo "allow-loopback-pinentry"
+            echo "default-cache-ttl 21600"
+            echo "max-cache-ttl 21600"
+          } >> ~/.gnupg/gpg-agent.conf
+          gpgconf --kill gpg-agent || true
+          # Mark our key as ultimately trusted so reprepro doesn't choke
+          # on "no trust path" warnings.
+          echo "${{ secrets.APT_SIGNING_KEY_ID }}:6:" | gpg --import-ownertrust
+
+      - name: Checkout or create gh-pages worktree
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git ls-remote --exit-code origin gh-pages > /dev/null 2>&1; then
+              echo "gh-pages branch exists — fetching"
+              git fetch origin gh-pages
+              git worktree add gh-pages-dir gh-pages
+          else
+              echo "gh-pages branch missing — creating orphan"
+              git worktree add --detach gh-pages-dir
+              cd gh-pages-dir
+              git checkout --orphan gh-pages
+              git rm -rf . || true
+              touch .nojekyll   # disable Jekyll so files starting with _ are served
+              echo "# VPNRouter APT Repository" > index.md
+              cd ..
+          fi
+
+      - name: Lay out apt repo skeleton
+        run: |
+          mkdir -p gh-pages-dir/apt/conf
+          cp packaging/apt-repo/distributions gh-pages-dir/apt/conf/distributions
+          # Also serve the public key directly so users can curl it.
+          cp packaging/apt-repo/vpnrouter-apt-public.asc gh-pages-dir/apt/key.gpg
+          cp packaging/apt-repo/vpnrouter-apt-public.asc gh-pages-dir/apt/vpnrouter.asc
+          # Simple landing page for the apt URL
+          cat > gh-pages-dir/apt/index.html <<'HTML'
+          <!DOCTYPE html>
+          <meta charset="utf-8">
+          <title>VPNRouter APT Repository</title>
+          <style>body{font:14px/1.5 system-ui,sans-serif;max-width:720px;margin:3em auto;padding:0 1em;color:#222}code,pre{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:13px}pre{padding:12px;overflow:auto}h1{font-size:1.6em}</style>
+          <h1>VPNRouter APT Repository</h1>
+          <p>Add this repository to Debian/Ubuntu/Mint and install via <code>apt</code>:</p>
+          <pre>curl -fsSL https://pavellizunov.github.io/VPNRouter/apt/key.gpg \
+            | sudo tee /etc/apt/keyrings/vpnrouter.gpg > /dev/null
+          echo "deb [signed-by=/etc/apt/keyrings/vpnrouter.gpg] https://pavellizunov.github.io/VPNRouter/apt stable main" \
+            | sudo tee /etc/apt/sources.list.d/vpnrouter.list
+          sudo apt update
+          sudo apt install vpnrouter</pre>
+          <p>After that, <code>sudo apt upgrade</code> keeps VPNRouter up to date.</p>
+          <p><a href="https://github.com/PavelLizunov/VPNRouter">&larr; GitHub</a></p>
+          HTML
+
+      - name: Download .deb artifacts from release(s)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          mkdir -p .apt-debs
+
+          if [ -n "$EVENT_TAG" ]; then
+              TAG="$EVENT_TAG"
+              echo "Triggered by release.published for tag: $TAG"
+          elif [ -n "$INPUT_TAG" ]; then
+              TAG="$INPUT_TAG"
+              echo "workflow_dispatch with explicit tag: $TAG"
+          else
+              TAG=""
+              echo "workflow_dispatch without tag — will download ALL available .deb artifacts from current releases"
+          fi
+
+          if [ -n "$TAG" ]; then
+              gh release download "$TAG" \
+                  --repo "${{ github.repository }}" \
+                  --pattern "*-linux-amd64.deb" \
+                  --dir .apt-debs \
+                  --clobber
+          else
+              # Get last N releases and download each deb
+              gh release list --repo "${{ github.repository }}" --limit 30 --json tagName --jq '.[] | .tagName' | while read -r t; do
+                  echo "-- downloading deb for $t (if any) --"
+                  gh release download "$t" \
+                      --repo "${{ github.repository }}" \
+                      --pattern "*-linux-amd64.deb" \
+                      --dir .apt-debs \
+                      --clobber 2>/dev/null || echo "  (no .deb asset for $t)"
+              done
+          fi
+
+          echo "Collected debs:"
+          ls -lh .apt-debs || true
+
+      - name: Add .deb(s) to apt repo
+        run: |
+          if ! ls .apt-debs/*.deb > /dev/null 2>&1; then
+              echo "::warning::No .deb files downloaded — skipping reprepro include step"
+              exit 0
+          fi
+
+          cd gh-pages-dir/apt
+          for deb in ../../.apt-debs/*.deb; do
+              name=$(basename "$deb")
+              echo "Including $name"
+              # --ignore=extension in case filename has -r1 etc.; --component main
+              # -S net sets section in the generated index
+              reprepro -Vb . includedeb stable "$deb" || {
+                  echo "::warning::reprepro failed on $name (maybe already present)"
+              }
+          done
+
+          echo "Repository layout:"
+          find . -maxdepth 4 -type f | sort | head -40
+
+      - name: Commit and push gh-pages
+        run: |
+          cd gh-pages-dir
+          git add -A
+          if git diff --cached --quiet; then
+              echo "Nothing to commit — apt repo already up to date"
+              exit 0
+          fi
+          MSG="Publish $( [ -n "${{ github.event.release.tag_name }}" ] && echo "${{ github.event.release.tag_name }}" || echo "apt repo sync" )"
+          git commit -m "$MSG"
+          git push origin gh-pages
+          echo "Pushed to gh-pages branch"
+
+      - name: Print installation snippet
+        run: |
+          cat <<EOF
+          ====================================================================
+          Published to https://pavellizunov.github.io/VPNRouter/apt/
+          ====================================================================
+
+          To install VPNRouter on a Debian/Ubuntu/Mint machine:
+
+          curl -fsSL https://pavellizunov.github.io/VPNRouter/apt/key.gpg \
+              | sudo tee /etc/apt/keyrings/vpnrouter.gpg > /dev/null
+          echo "deb [signed-by=/etc/apt/keyrings/vpnrouter.gpg] https://pavellizunov.github.io/VPNRouter/apt stable main" \
+              | sudo tee /etc/apt/sources.list.d/vpnrouter.list
+          sudo apt update && sudo apt install vpnrouter
+
+          ====================================================================
+          EOF
