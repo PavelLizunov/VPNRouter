@@ -10,10 +10,15 @@
     <AssemblyName>VPNRouter.App</AssemblyName>
   </PropertyGroup>
 
-  <!-- Windows-specific: define PLATFORM_WINDOWS, set window icon, reference Service for ServiceInstaller -->
+  <!-- Windows-specific: define PLATFORM_WINDOWS, reference Service for ServiceInstaller.
+       v2.20.3: ApplicationIcon removed. MSBuild used to embed penguin_logo.ico
+       as the .exe's Win32 icon resource, which Windows displays in the OS
+       title bar regardless of Avalonia's Window.Icon attribute. User asked
+       for the OS chrome to NOT show our icon; setting Window.Icon="" alone
+       couldn't override the embedded resource. With no ApplicationIcon the
+       .exe has no custom icon and Windows renders its generic app icon. -->
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <DefineConstants>$(DefineConstants);PLATFORM_WINDOWS</DefineConstants>
-    <ApplicationIcon>Assets\penguin_logo.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
