@@ -888,6 +888,25 @@ public class UpdateChecker
                 "Invalid update package: no .app bundle or VPNRouter.Mac.dll found.");
         }
 
+        if (OperatingSystem.IsLinux())
+        {
+            // v2.22.2: Linux tarball extracts to a "VPNRouter/" top-level dir
+            // (set by build-linux during the tar -czf stage) or occasionally
+            // CLI-stripped flat layout if repacked. Check both. The binary
+            // on Linux is "VPNRouter.App" (no .exe suffix) — validating the
+            // Windows name here produced the "VPNRouter.GUI.exe/dll not
+            // found" error users saw in v2.22.2-r4.
+            var linuxSubDir = Path.Combine(extractDir, "VPNRouter");
+            if (File.Exists(Path.Combine(linuxSubDir, "VPNRouter.App")) ||
+                File.Exists(Path.Combine(linuxSubDir, "VPNRouter.App.dll")))
+                return;
+            if (File.Exists(Path.Combine(extractDir, "VPNRouter.App")) ||
+                File.Exists(Path.Combine(extractDir, "VPNRouter.App.dll")))
+                return;
+            throw new InvalidOperationException(
+                "Invalid update package: VPNRouter.App not found in extracted tarball.");
+        }
+
         // Windows: support flat and app/ layout
         var checkDir = extractDir;
         var appSubDir = Path.Combine(extractDir, "app");
