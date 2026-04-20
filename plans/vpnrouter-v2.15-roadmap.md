@@ -411,7 +411,7 @@ private async Task TestAll() { ... }
 **Goal**: собрать полный список проблемных мест UI для систематического фикса.
 
 ## Deliverable
-Markdown-файл `.claude/plans/v2.15-ui-audit.md` со списком:
+Markdown-файл `plans/v2.15-ui-audit.md` со списком:
 ```markdown
 ## Servers page
 - [ ] "Add server" button обрезается при width < 800px
@@ -497,7 +497,7 @@ grep -rn '"[А-Яа-я][^"]\{5,\}"' VPNRouter.App/ VPNRouter.Core/ \
 ```
 
 ## Deliverable
-`.claude/plans/v2.15-localization-audit.md`:
+`plans/v2.15-localization-audit.md`:
 ```markdown
 ## FreeConfigsPage.axaml
 - Line 123: `Text="Проверка..."` — hardcoded, нужно Strings.FcTesting

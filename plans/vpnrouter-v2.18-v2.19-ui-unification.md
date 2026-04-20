@@ -254,9 +254,9 @@ Issues #1-#3 solved together by v2.19.0 header unification.
 ---
 
 ## References
-- `.claude/plans/vpnrouter-v2.17-v2.18-bugfixes.md` — v2.17.9 → v2.18.2
+- `plans/vpnrouter-v2.17-v2.18-bugfixes.md` — v2.17.9 → v2.18.2
   roadmap (all shipped)
-- `.claude/plans/vpnrouter-v2.17-simple-mode.md` — v2.17 roadmap
+- `plans/vpnrouter-v2.17-simple-mode.md` — v2.17 roadmap
 - `.claude/workflow.md` — git remotes, release policy
 - `VPNRouter Design System 2/handoff/SimpleMode.html` — compact header
   reference (the layout we're propagating to Advanced)

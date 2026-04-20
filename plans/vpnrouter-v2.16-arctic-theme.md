@@ -315,7 +315,7 @@ FluentTheme variant for controls we don't style).
   text on darker tinted backgrounds
 - Logo swaps without flicker
 - Return to Light → everything reverts crisply
-- Screen capture both modes to `.claude/plans/v2.16-dark-before-after.png`
+- Screen capture both modes to `plans/v2.16-dark-before-after.png`
   for regression comparison
 
 ## Acceptance
@@ -482,7 +482,7 @@ context-compacted sessions pick up where we left off.
   Technical / Friendly — we implement Technical as default)
 - Component specs: `VPNRouter Design System/system/components.html`
 - Brand voice + principles: `VPNRouter Design System/system/brand.html`
-- Previous v2.15 roadmap (for structure): `.claude/plans/vpnrouter-v2.15-roadmap.md`
+- Previous v2.15 roadmap (for structure): `plans/vpnrouter-v2.15-roadmap.md`
 - Workflow policies (git remotes, release flow, etc.): `.claude/workflow.md`
 
 ## Explicit user decisions recorded here

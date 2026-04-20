@@ -385,7 +385,7 @@ Add to `VPNRouter.Tests`:
 ## Acceptance
 - [ ] All 6 grep checks produce only intentional results
 - [ ] Visual audit covers 8 pages × 2 modes × 2 themes × 2 languages =
-  64 screenshots stored in `.claude/plans/v2.18-audit-screenshots/`
+  64 screenshots stored in `plans/v2.18-audit-screenshots/`
 - [ ] At least 3 unit tests added for the just-fixed bug classes
 - [ ] Every surfaced bug that can't be fixed in v2.18.2 filed as a
   new release in this roadmap with its own acceptance block
@@ -579,7 +579,7 @@ Update this list as each release ships.
 - Safety-net audit (Block 4) is explicitly requested.
 
 ## References
-- `.claude/plans/vpnrouter-v2.17-simple-mode.md` — v2.17 roadmap
-- `.claude/plans/vpnrouter-v2.16-arctic-theme.md` — design system
-- `.claude/plans/vpnrouter-v2.15-roadmap.md` — v2.15 roadmap
+- `plans/vpnrouter-v2.17-simple-mode.md` — v2.17 roadmap
+- `plans/vpnrouter-v2.16-arctic-theme.md` — design system
+- `plans/vpnrouter-v2.15-roadmap.md` — v2.15 roadmap
 - `.claude/workflow.md` — git remotes, release policy, hotfix flow

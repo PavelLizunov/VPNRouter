@@ -583,6 +583,6 @@ session picks up where we left off.
    configs switch to Advanced.
 
 ## References
-- `.claude/plans/vpnrouter-v2.16-arctic-theme.md` — previous roadmap
-- `.claude/plans/vpnrouter-v2.15-roadmap.md` — v2.15 series
+- `plans/vpnrouter-v2.16-arctic-theme.md` — previous roadmap
+- `plans/vpnrouter-v2.15-roadmap.md` — v2.15 series
 - `.claude/workflow.md` — git remotes, release policy, hotfix flow
