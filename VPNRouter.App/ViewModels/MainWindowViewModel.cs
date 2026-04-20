@@ -729,9 +729,15 @@ public partial class MainWindowViewModel : ViewModelBase
         IsDarkTheme = (_settings.App.Theme ?? "light").Equals("dark", StringComparison.OrdinalIgnoreCase);
         ApplyTheme();
 
-        // UI complexity mode (v2.17+). Default "advanced" until v2.17.5 promotes
-        // SimplePage to a first-class landing page for fresh installs.
-        IsSimpleMode = (_settings.App.UiMode ?? "advanced").Equals("simple", StringComparison.OrdinalIgnoreCase);
+        // UI complexity mode. v2.21.7: always start in Simple on launch —
+        // even if the user was in Advanced when they last quit. They can
+        // still flip to Advanced via the header pill; this just makes the
+        // landing screen predictably the compact one every time the app
+        // opens. Toggling via ToggleUiModeCommand still persists UiMode
+        // to settings for internal bookkeeping (FreeConfigsVm lazy-load,
+        // etc), it's only the ctor-side load that now ignores the
+        // persisted value.
+        IsSimpleMode = true;
 
         // Simple-mode 'Start with Windows' checkbox — mirror of AutostartVpn.
         // Setter is a no-op during _isLoadingUI so this doesn't re-trigger
