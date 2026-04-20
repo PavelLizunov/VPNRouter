@@ -96,8 +96,17 @@ public static class SettingsLoader
             new()
             {
                 Type = "local",
+                // v2.21.6: Linux gets its own profile (default-linux.json)
+                // with bare Unix process names + wildcards (firefox*,
+                // chromium-browser, telegram-desktop, etc). Before this the
+                // Linux path loaded default.json with Windows-style .exe
+                // names — MacProcessScanner stripped the .exe so it mostly
+                // worked, but distro-specific names (firefox-bin,
+                // firefox-esr) wouldn't match anything.
                 Path = Path.Combine(AppPaths.ProfilesDir,
-                    OperatingSystem.IsMacOS() ? "default-macos.json" : "default.json")
+                    OperatingSystem.IsMacOS() ? "default-macos.json"
+                    : OperatingSystem.IsLinux() ? "default-linux.json"
+                    : "default.json")
             }
         },
         ActiveProfile = "Gaming_Full",

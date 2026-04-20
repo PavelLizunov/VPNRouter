@@ -432,10 +432,13 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         try
         {
-            var exePath = OperatingSystem.IsWindows()
-                ? Environment.ExpandEnvironmentVariables(@"%ProgramData%\VPNRouter\bin\sing-box.exe")
-                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    "Library/Application Support/VPNRouter/bin/sing-box");
+            // v2.21.6: was hardcoded Windows %ProgramData% / macOS
+            // ~/Library/Application Support path. Linux fell through to the
+            // macOS branch and hit a non-existent path → subtitle showed
+            // "sing-box ?" on Linux. AppPaths.SingBoxExePath already
+            // resolves to the right location on all three platforms
+            // (uses ~/.config/vpnrouter/bin/sing-box on Linux).
+            var exePath = AppPaths.SingBoxExePath;
             if (!File.Exists(exePath)) return "?";
 
             var psi = new System.Diagnostics.ProcessStartInfo
@@ -907,12 +910,17 @@ public partial class MainWindowViewModel : ViewModelBase
         var activeProfiles = activeProfileStr
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
-        // Load from profiles (macOS uses default-macos.json)
-        var profileFile = OperatingSystem.IsMacOS() ? "default-macos.json" : "default.json";
+        // Load from profiles. Per-platform variants:
+        //   macOS → default-macos.json
+        //   Linux → default-linux.json (v2.21.6)
+        //   Windows + fallback → default.json
+        var profileFile = OperatingSystem.IsMacOS() ? "default-macos.json"
+                        : OperatingSystem.IsLinux() ? "default-linux.json"
+                        : "default.json";
         var profilePath = Path.Combine(AppContext.BaseDirectory, "profiles", profileFile);
         if (!File.Exists(profilePath))
             profilePath = Path.Combine(AppPaths.ProfilesDir, profileFile);
-        // Fallback to default.json if macOS variant doesn't exist
+        // Fallback to default.json if the platform-specific variant is missing.
         if (!File.Exists(profilePath))
             profilePath = Path.Combine(AppPaths.ProfilesDir, "default.json");
 
@@ -2980,9 +2988,11 @@ public partial class MainWindowViewModel : ViewModelBase
     /// </summary>
     private void DeployBundledProfiles()
     {
-        // Deploy profiles
-        string[] profileFiles = OperatingSystem.IsMacOS()
-            ? new[] { "default-macos.json", "default.json" }
+        // Deploy profiles. Ship the platform-specific variant first + the
+        // generic default.json as fallback so any code still resolving
+        // "default.json" keeps working on first launch.
+        string[] profileFiles = OperatingSystem.IsMacOS() ? new[] { "default-macos.json", "default.json" }
+            : OperatingSystem.IsLinux() ? new[] { "default-linux.json", "default.json" }
             : new[] { "default.json" };
 
         foreach (var file in profileFiles)
