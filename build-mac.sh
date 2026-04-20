@@ -87,8 +87,26 @@ echo "    Contents:"
 ls -la "$STAGE"
 
 echo "[5/5] Creating DMG + zip..."
-hdiutil create -volname "VPNRouter ${VERSION}" -srcfolder "$STAGE" \
-    -ov -format UDZO "$DMG" 2>&1 | tail -2
+# hdiutil create occasionally fails with "Resource busy" on GitHub
+# Actions macOS runners (shared storage contention). Retry up to 3x
+# with a sync between attempts so the VFS catches up.
+HDIUTIL_OK=0
+for attempt in 1 2 3; do
+    if hdiutil create -volname "VPNRouter ${VERSION}" -srcfolder "$STAGE" \
+        -ov -format UDZO "$DMG" 2>&1 | tail -2; then
+        HDIUTIL_OK=1
+        break
+    fi
+    echo "hdiutil attempt ${attempt} failed; retrying after sync..."
+    sync
+    sleep 3
+    # Detach anything stale that might be holding the path
+    hdiutil detach "/Volumes/VPNRouter ${VERSION}" 2>/dev/null || true
+done
+if [ "$HDIUTIL_OK" != "1" ]; then
+    echo "ERROR: hdiutil create failed after 3 attempts"
+    exit 1
+fi
 ditto -c -k --keepParent "$APP" "$ZIP"
 
 echo
