@@ -612,48 +612,60 @@ public class UpdateChecker
         // we can surface that in the UI / app log.
         TryWriteInstallReceipt(logPath, Log);
 
-        // Launch the new version with stdout/stderr captured briefly so we
-        // can detect immediate startup failures. If the new process dies
-        // within 2s (exit code != null), throw and KEEP the old VPNRouter
-        // running — better to show "update launch failed" than to fall
-        // into the void.
+        // Launch the new version. v2.22.2-r7: wrap in `setsid --fork` so the
+        // new process gets its own session and process group, fully detached
+        // from our current one. Without this, Environment.Exit(0) on the
+        // parent took out the child too (user reported: "updated but had to
+        // launch manually afterwards"). setsid --fork is POSIX-standard and
+        // present on every systemd distro; also survives SIGHUP from the
+        // terminal if we were launched from one.
+        //
+        // The setsid process itself exits almost immediately (as soon as it
+        // forks the child off). So we can't use its PID to verify the real
+        // app started — just verify setsid's exit code. For deeper
+        // verification we'd need to parse `pgrep VPNRouter.App` but that
+        // adds flakiness. The install receipt handles post-mortem
+        // "update didn't land" detection instead.
         var newAppPath = Path.Combine(installDir, "VPNRouter.App");
-        Log($"Launching new binary: {newAppPath}");
-        Process? child = null;
+        Log($"Launching new binary via setsid --fork: {newAppPath}");
         try
         {
-            child = Process.Start(new ProcessStartInfo(newAppPath)
+            var psi = new ProcessStartInfo("/usr/bin/setsid",
+                $"--fork \"{newAppPath}\"")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
-            });
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = installDir,
+            };
+            using var setsidProc = Process.Start(psi);
+            if (setsidProc == null)
+            {
+                Log("FATAL: setsid Process.Start returned null");
+                throw new InvalidOperationException(
+                    $"Failed to launch new VPNRouter.App via setsid. See {logPath}.");
+            }
+            // setsid --fork exits immediately after forking. Short wait so
+            // we catch "setsid binary missing" or similar fatal errors.
+            var setsidExited = setsidProc.WaitForExit(3000);
+            if (setsidExited && setsidProc.ExitCode != 0)
+            {
+                var err = setsidProc.StandardError.ReadToEnd();
+                Log($"FATAL: setsid exit {setsidProc.ExitCode}: {Truncate(err, 200)}");
+                throw new InvalidOperationException(
+                    $"setsid failed (exit {setsidProc.ExitCode}): {Truncate(err, 200)}. " +
+                    $"See {logPath}.");
+            }
+            Log($"setsid returned exit={setsidProc.ExitCode} — new app launched in its own session");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not InvalidOperationException)
         {
-            Log($"FATAL: Process.Start failed: {ex.Message}");
+            Log($"FATAL: setsid launch threw: {ex.Message}");
             throw new InvalidOperationException(
-                $"Failed to launch new VPNRouter.App: {ex.Message}. " +
-                $"See {logPath} for details.");
+                $"Failed to launch new VPNRouter.App: {ex.Message}. See {logPath}.");
         }
-
-        if (child == null)
-        {
-            Log("FATAL: Process.Start returned null");
-            throw new InvalidOperationException(
-                $"Failed to launch new VPNRouter.App (null handle). See {logPath}.");
-        }
-
-        Log($"New process started, pid={child.Id}. Waiting 2s to verify...");
-        var alive = !child.WaitForExit(2000);
-        if (!alive)
-        {
-            var earlyExit = child.ExitCode;
-            Log($"FATAL: new binary died within 2s, exit code {earlyExit}");
-            throw new InvalidOperationException(
-                $"New VPNRouter.App exited immediately with code {earlyExit}. " +
-                $"See {logPath} for details. Old version still running.");
-        }
-        Log($"New process alive after 2s — update successful, exiting old instance");
+        Log("Update successful, old instance exiting");
     }
 
     /// <summary>
