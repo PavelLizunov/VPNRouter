@@ -173,8 +173,11 @@ jobs:
           # would be ignored.
           mkdir -p "$PKG/usr/libexec"
           mkdir -p "$PKG/usr/share/polkit-1/actions"
-          cp packaging/linux/vpnrouter-update-helper       "$PKG/usr/libexec/vpnrouter-update-helper"
-          cp packaging/linux/com.vpnrouter.update.policy   "$PKG/usr/share/polkit-1/actions/com.vpnrouter.update.policy"
+          # Defensive CRLF strip — .gitattributes handles this for fresh
+          # clones, but an old working copy committed before the attrs
+          # change could still carry CR bytes.
+          sed 's/\r$//' packaging/linux/vpnrouter-update-helper > "$PKG/usr/libexec/vpnrouter-update-helper"
+          sed 's/\r$//' packaging/linux/com.vpnrouter.update.policy > "$PKG/usr/share/polkit-1/actions/com.vpnrouter.update.policy"
           chmod 755 "$PKG/usr/libexec/vpnrouter-update-helper"
           chmod 644 "$PKG/usr/share/polkit-1/actions/com.vpnrouter.update.policy"
 
