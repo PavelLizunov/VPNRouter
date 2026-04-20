@@ -1,0 +1,55 @@
+#!/bin/bash
+# VPNRouter update helper — runs as root via pkexec per polkit policy
+# at /usr/share/polkit-1/actions/com.vpnrouter.update.policy. Installed
+# with the .deb to /usr/libexec/vpnrouter-update-helper.
+#
+# Usage: vpnrouter-update-helper <staging-dir> <install-dir>
+#
+# Validates both paths, kills sing-box, copies staging to install dir,
+# sets +x on the two binaries. Keeping all privileged work in one
+# helper means polkit has to authorize only ONE action per update
+# instead of three (cp + chmod + pkill) — and the annotated exec.path
+# lets the policy grant allow_active=yes (no password for logged-in
+# user) without opening up cp/chmod/pkill globally.
+set -e
+
+SRC="$1"
+DST="$2"
+
+if [ -z "$SRC" ] || [ -z "$DST" ]; then
+    echo "usage: $0 <source-dir> <install-dir>" >&2
+    exit 2
+fi
+
+# Defence-in-depth: refuse arbitrary destinations. Only known VPNRouter
+# install locations are acceptable.
+case "$DST" in
+    /opt/vpnrouter|/opt/vpnrouter/|/usr/local/vpnrouter|/usr/local/vpnrouter/) ;;
+    *)
+        echo "Refusing to write outside /opt/vpnrouter or /usr/local/vpnrouter: $DST" >&2
+        exit 3
+        ;;
+esac
+
+if [ ! -d "$SRC" ]; then
+    echo "Source is not a directory: $SRC" >&2
+    exit 4
+fi
+
+if [ ! -f "$SRC/VPNRouter.App" ] && [ ! -f "$SRC/VPNRouter.App.dll" ]; then
+    echo "Source does not contain a VPNRouter.App binary: $SRC" >&2
+    exit 5
+fi
+
+# Stop sing-box first (ignore failure if not running)
+pkill -f sing-box 2>/dev/null || true
+
+# Copy contents into installation dir (-T treats DST as the target, not
+# parent), preserving modes from the tarball extraction.
+cp -rfT "$SRC" "$DST"
+
+# Belt-and-braces chmod on the two executables that matter
+[ -f "$DST/VPNRouter.App" ] && chmod +x "$DST/VPNRouter.App"
+[ -f "$DST/sing-box" ]       && chmod +x "$DST/sing-box"
+
+exit 0

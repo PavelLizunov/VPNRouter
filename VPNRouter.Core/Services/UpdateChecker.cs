@@ -554,57 +554,55 @@ public class UpdateChecker
                         installDir.StartsWith("/usr/", StringComparison.OrdinalIgnoreCase);
         Log($"Needs root (pkexec): {needsRoot}");
 
-        // Stop sing-box first so the updater doesn't collide with a running
-        // root process that keeps open file descriptors on the binary.
-        // Ignore failures — if sing-box isn't running, pkill returns 1.
-        try
+        if (needsRoot)
         {
-            var (_, ksout, kserr) = needsRoot
-                ? RunWithCapture("/usr/bin/pkexec", "pkill -f sing-box", 5000)
-                : RunWithCapture("/usr/bin/pkill",  "-f sing-box",       5000);
-            Log($"pkill sing-box: stdout={Truncate(ksout)} stderr={Truncate(kserr)}");
-        }
-        catch (Exception ex) { Log($"pkill sing-box threw: {ex.Message}"); }
-
-        // Synchronous copy. -rfT (recursive, force, treat dest as regular
-        // dir) — the T flag makes cp copy source's CONTENTS into dest
-        // instead of creating dest/source. Requires GNU coreutils' cp.
-        {
-            var cpCmd  = needsRoot ? "/usr/bin/pkexec" : "/bin/cp";
-            var cpArgs = needsRoot
-                ? $"cp -rfT \"{sourceDir}\" \"{installDir}\""
-                : $"-rfT \"{sourceDir}\" \"{installDir}\"";
-            Log($"cp cmd: {cpCmd} {cpArgs}");
-            var (cpExit, cpOut, cpErr) = RunWithCapture(cpCmd, cpArgs, timeoutMs: 120_000);
-            Log($"cp exit={cpExit} stdout={Truncate(cpOut)} stderr={Truncate(cpErr)}");
-            if (cpExit != 0)
+            // v2.22.2-r8: all three privileged steps (pkill sing-box, cp,
+            // chmod) are now collapsed into a single invocation of our
+            // update-helper shipped with the .deb at
+            // /usr/libexec/vpnrouter-update-helper. That helper is
+            // whitelisted in /usr/share/polkit-1/actions/com.vpnrouter.update.policy
+            // with allow_active=yes — so a locally-logged-in user doesn't
+            // get the polkit password prompt at all. Falls back to admin
+            // auth if the policy file is missing (e.g. tar.gz install
+            // that skipped the .deb postinst).
+            const string helper = "/usr/libexec/vpnrouter-update-helper";
+            var helperExists = File.Exists(helper);
+            if (!helperExists)
             {
-                var hint = cpExit switch
+                Log($"WARNING: {helper} missing — falling back to inline cp/chmod (will prompt for password each time)");
+                RunLegacyPrivilegedSteps(sourceDir, installDir, Log, logPath);
+            }
+            else
+            {
+                Log($"Invoking update helper via pkexec: {helper}");
+                var (hExit, hOut, hErr) = RunWithCapture(
+                    "/usr/bin/pkexec",
+                    $"{helper} \"{sourceDir}\" \"{installDir}\"",
+                    timeoutMs: 120_000);
+                Log($"helper exit={hExit} stdout={Truncate(hOut)} stderr={Truncate(hErr)}");
+                if (hExit != 0)
                 {
-                    126 => " (authentication dialog was dismissed)",
-                    127 => " (pkexec / polkit agent not available — install policykit-1 and try again)",
-                    _   => ""
-                };
-                throw new InvalidOperationException(
-                    $"Update copy failed (exit {cpExit}){hint}: {Truncate(cpErr, 200)}".Trim());
+                    var hint = hExit switch
+                    {
+                        126 => " (authentication dialog was dismissed)",
+                        127 => " (pkexec / polkit agent not available — install policykit-1 and try again)",
+                        2   => " (helper: bad arguments)",
+                        3   => " (helper: refused destination for safety)",
+                        4   => " (helper: staging dir missing or not a directory)",
+                        5   => " (helper: source missing VPNRouter.App)",
+                        _   => ""
+                    };
+                    throw new InvalidOperationException(
+                        $"Update helper failed (exit {hExit}){hint}: {Truncate(hErr, 200)}".Trim());
+                }
             }
         }
-
-        // chmod +x on the newly-written binaries. File.Copy / cp normally
-        // preserves the mode bits on Linux, but tar extraction quirks and
-        // weird umasks mean a belt-and-braces chmod is cheap insurance.
-        try
+        else
         {
-            var chmodCmd  = needsRoot ? "/usr/bin/pkexec" : "/bin/chmod";
-            var chmodArgs = needsRoot
-                ? $"chmod +x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\""
-                : $"+x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\"";
-            var (chExit, _, chErr) = RunWithCapture(chmodCmd, chmodArgs, 10_000);
-            Log($"chmod exit={chExit} stderr={Truncate(chErr)}");
-            if (chExit != 0 && chExit != 126 && chExit != 127)
-                Log($"WARNING: chmod non-zero exit {chExit} — launch may fail");
+            // User-writable install (tar.gz extracted to $HOME etc): do the
+            // cp + chmod + pkill inline. No privilege escalation needed.
+            RunLegacyPrivilegedSteps(sourceDir, installDir, Log, logPath);
         }
-        catch (Exception ex) { Log($"chmod threw: {ex.Message}"); }
 
         // Drop an install receipt BEFORE attempting launch. Next boot, if
         // ReadInstallReceipt() returns a version newer than AppVersion,
@@ -709,6 +707,65 @@ public class UpdateChecker
         catch { return null; }
 
         static void TryDelete(string p) { try { File.Delete(p); } catch { } }
+    }
+
+    /// <summary>
+    /// Fallback path for when the privileged update helper isn't installed
+    /// (e.g. user is running a tar.gz install instead of the .deb, or the
+    /// .deb postinst didn't run). Runs pkill + cp + chmod inline. Each
+    /// step still goes through pkexec if needsRoot, so users get 3
+    /// password prompts — the whole point of the helper + polkit policy
+    /// is to avoid this, but we keep the code so pre-policy environments
+    /// still work.
+    /// </summary>
+    private void RunLegacyPrivilegedSteps(string sourceDir, string installDir,
+        Action<string> log, string logPath)
+    {
+        var needsRoot = installDir.StartsWith("/opt/", StringComparison.OrdinalIgnoreCase) ||
+                        installDir.StartsWith("/usr/", StringComparison.OrdinalIgnoreCase);
+
+        // 1. Stop sing-box (ignore failure if not running)
+        try
+        {
+            var (_, _, kserr) = needsRoot
+                ? RunWithCapture("/usr/bin/pkexec", "pkill -f sing-box", 5000)
+                : RunWithCapture("/usr/bin/pkill",  "-f sing-box",       5000);
+            log($"pkill sing-box: stderr={Truncate(kserr)}");
+        }
+        catch (Exception ex) { log($"pkill sing-box threw: {ex.Message}"); }
+
+        // 2. cp -rfT
+        {
+            var cpCmd  = needsRoot ? "/usr/bin/pkexec" : "/bin/cp";
+            var cpArgs = needsRoot
+                ? $"cp -rfT \"{sourceDir}\" \"{installDir}\""
+                : $"-rfT \"{sourceDir}\" \"{installDir}\"";
+            var (cpExit, _, cpErr) = RunWithCapture(cpCmd, cpArgs, 120_000);
+            log($"cp exit={cpExit} stderr={Truncate(cpErr)}");
+            if (cpExit != 0)
+            {
+                var hint = cpExit switch
+                {
+                    126 => " (authentication dismissed)",
+                    127 => " (pkexec / polkit agent not available)",
+                    _   => ""
+                };
+                throw new InvalidOperationException(
+                    $"Update copy failed (exit {cpExit}){hint}: {Truncate(cpErr, 200)}".Trim());
+            }
+        }
+
+        // 3. chmod +x (best effort)
+        try
+        {
+            var chmodCmd  = needsRoot ? "/usr/bin/pkexec" : "/bin/chmod";
+            var chmodArgs = needsRoot
+                ? $"chmod +x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\""
+                : $"+x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\"";
+            var (chExit, _, chErr) = RunWithCapture(chmodCmd, chmodArgs, 10_000);
+            log($"chmod exit={chExit} stderr={Truncate(chErr)}");
+        }
+        catch (Exception ex) { log($"chmod threw: {ex.Message}"); }
     }
 
     // ─── Update log + install receipt helpers ────────────────────────────────

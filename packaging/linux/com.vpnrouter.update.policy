@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  VPNRouter update policy.
+
+  Installed to /usr/share/polkit-1/actions/com.vpnrouter.update.policy
+  by the .deb post-install step. The annotated exec.path locks this
+  action to the VPNRouter update helper specifically — granting
+  allow_active=yes here doesn't let arbitrary scripts run as root, it
+  only lets the logged-in user run /usr/libexec/vpnrouter-update-helper.
+
+  allow_active=yes: user in an active local session (i.e. physically
+  at the machine) can run the helper without re-typing their password.
+  SSH / inactive sessions still need admin auth.
+-->
+<policyconfig>
+    <vendor>VPNRouter</vendor>
+    <vendor_url>https://github.com/PavelLizunov/VPNRouter</vendor_url>
+
+    <action id="com.vpnrouter.update">
+        <description>Install VPNRouter update</description>
+        <description xml:lang="ru">Установить обновление VPNRouter</description>
+        <message>Authentication is required to update VPNRouter.</message>
+        <message xml:lang="ru">Для обновления VPNRouter требуется авторизация.</message>
+        <defaults>
+            <allow_any>auth_admin</allow_any>
+            <allow_inactive>auth_admin</allow_inactive>
+            <allow_active>yes</allow_active>
+        </defaults>
+        <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/vpnrouter-update-helper</annotate>
+        <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+    </action>
+</policyconfig>

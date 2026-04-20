@@ -165,6 +165,19 @@ jobs:
           WRAP
           chmod +x "$PKG/usr/bin/vpnrouter"
 
+          # v2.22.2-r8: polkit-based passwordless update.
+          # The helper script does the privileged cp+chmod+pkill in one
+          # atomic unit. The .policy file references the helper's path
+          # and grants allow_active=yes so local users don't get a
+          # password prompt. Without the annotate exec.path, allow_active
+          # would be ignored.
+          mkdir -p "$PKG/usr/libexec"
+          mkdir -p "$PKG/usr/share/polkit-1/actions"
+          cp packaging/linux/vpnrouter-update-helper       "$PKG/usr/libexec/vpnrouter-update-helper"
+          cp packaging/linux/com.vpnrouter.update.policy   "$PKG/usr/share/polkit-1/actions/com.vpnrouter.update.policy"
+          chmod 755 "$PKG/usr/libexec/vpnrouter-update-helper"
+          chmod 644 "$PKG/usr/share/polkit-1/actions/com.vpnrouter.update.policy"
+
           # .desktop + icon
           cp packaging/linux/vpnrouter.desktop "$PKG/usr/share/applications/vpnrouter.desktop"
           sed -i 's|^Exec=.*|Exec=/usr/bin/vpnrouter|' "$PKG/usr/share/applications/vpnrouter.desktop"
