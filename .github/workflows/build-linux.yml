@@ -1,0 +1,244 @@
+name: Build Linux AppImage + .deb
+
+# Triggered by:
+#  - pushing a v* tag (automatic on release)
+#  - manual dispatch (re-run on existing releases for missing assets)
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (without 'v' prefix, e.g. 2.21.1)"
+        required: true
+        type: string
+      upload_to_release:
+        description: "Upload built AppImage + .deb to the matching GitHub release"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write  # needed to upload release assets
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04  # pin to 22.04 for glibc compatibility with older distros
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Resolve version from tag or input
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building version: $VERSION"
+
+      # ── .NET publish ────────────────────────────────────────────────────
+      # Self-contained so end users don't need dotnet installed.
+      # --runtime linux-x64 handles ~99 % of desktop Linux (x86_64 Intel/AMD).
+      # ARM64 (Raspberry Pi, Asahi Linux) would need a second job; deferred.
+      - name: dotnet publish (linux-x64, self-contained)
+        run: |
+          dotnet publish VPNRouter.App/VPNRouter.App.csproj \
+            -c Release -r linux-x64 --self-contained true \
+            -o publish/linux-x64
+          dotnet publish VPNRouter.CLI/VPNRouter.CLI.csproj \
+            -c Release -r linux-x64 --self-contained true \
+            -o publish/linux-x64
+
+      # ── AppImage ────────────────────────────────────────────────────────
+      # AppImage layout:
+      #   VPNRouter.AppDir/
+      #     AppRun                      (entrypoint script chosen by AppImage runtime)
+      #     vpnrouter.desktop           (menu metadata, required at root)
+      #     vpnrouter.png               (icon, required at root, must match .desktop Icon=)
+      #     usr/bin/VPNRouter.App       (the actual binary)
+      #     usr/bin/*.dll, *.so         (runtime deps)
+      #     usr/share/icons/.../vpnrouter.png  (conventional icon location)
+      - name: Assemble AppDir
+        run: |
+          set -euo pipefail
+          APPDIR="VPNRouter.AppDir"
+          mkdir -p "$APPDIR/usr/bin"
+          mkdir -p "$APPDIR/usr/share/applications"
+          mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
+
+          # Payload
+          cp -R publish/linux-x64/. "$APPDIR/usr/bin/"
+          chmod +x "$APPDIR/usr/bin/VPNRouter.App" "$APPDIR/usr/bin/VPNRouter.CLI" || true
+
+          # Icon
+          cp VPNRouter.App/Assets/penguin_mascot.png "$APPDIR/vpnrouter.png"
+          cp VPNRouter.App/Assets/penguin_mascot.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/vpnrouter.png"
+
+          # .desktop
+          cp packaging/linux/vpnrouter.desktop "$APPDIR/vpnrouter.desktop"
+          cp packaging/linux/vpnrouter.desktop "$APPDIR/usr/share/applications/vpnrouter.desktop"
+          # AppImage convention: Exec= must point to the real binary name
+          # inside usr/bin/, not the launcher shim.
+          sed -i 's|^Exec=.*|Exec=VPNRouter.App|' "$APPDIR/vpnrouter.desktop"
+          sed -i 's|^Exec=.*|Exec=VPNRouter.App|' "$APPDIR/usr/share/applications/vpnrouter.desktop"
+
+          # AppRun — AppImage entrypoint. Sets LD_LIBRARY_PATH so the bundled
+          # Avalonia native libs (libHarfBuzzSharp, libSkiaSharp) are picked
+          # over any stale system copies, then execs the real binary.
+          cat > "$APPDIR/AppRun" <<'APPRUN'
+          #!/usr/bin/env bash
+          HERE="$(dirname "$(readlink -f "$0")")"
+          export LD_LIBRARY_PATH="$HERE/usr/bin:${LD_LIBRARY_PATH:-}"
+          exec "$HERE/usr/bin/VPNRouter.App" "$@"
+          APPRUN
+          chmod +x "$APPDIR/AppRun"
+
+          echo "AppDir laid out:"
+          find "$APPDIR" -maxdepth 2 -type f | head -20
+
+      - name: Build AppImage
+        run: |
+          set -euo pipefail
+          # appimagetool is a single-file ELF; grab latest release asset.
+          wget -q -O appimagetool "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool
+          # --appimage-extract-and-run avoids needing FUSE on the runner.
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run \
+            VPNRouter.AppDir \
+            "VPNRouter-v${{ steps.version.outputs.version }}-linux-x86_64.AppImage"
+          ls -lh "VPNRouter-v${{ steps.version.outputs.version }}-linux-x86_64.AppImage"
+
+      # ── .deb (Debian/Ubuntu/Mint) ──────────────────────────────────────
+      # Classic dpkg-deb layout. Installs to /opt/vpnrouter with /usr/bin/
+      # wrapper + .desktop launcher for menu integration.
+      - name: Build .deb
+        run: |
+          set -euo pipefail
+          VER="${{ steps.version.outputs.version }}"
+          PKG="vpnrouter_${VER}_amd64"
+          mkdir -p "$PKG/DEBIAN"
+          mkdir -p "$PKG/opt/vpnrouter"
+          mkdir -p "$PKG/usr/bin"
+          mkdir -p "$PKG/usr/share/applications"
+          mkdir -p "$PKG/usr/share/icons/hicolor/256x256/apps"
+
+          # Payload → /opt/vpnrouter
+          cp -R publish/linux-x64/. "$PKG/opt/vpnrouter/"
+          chmod +x "$PKG/opt/vpnrouter/VPNRouter.App" "$PKG/opt/vpnrouter/VPNRouter.CLI" || true
+
+          # Wrapper on PATH
+          cat > "$PKG/usr/bin/vpnrouter" <<'WRAP'
+          #!/usr/bin/env bash
+          exec /opt/vpnrouter/VPNRouter.App "$@"
+          WRAP
+          chmod +x "$PKG/usr/bin/vpnrouter"
+
+          # .desktop + icon
+          cp packaging/linux/vpnrouter.desktop "$PKG/usr/share/applications/vpnrouter.desktop"
+          sed -i 's|^Exec=.*|Exec=/usr/bin/vpnrouter|' "$PKG/usr/share/applications/vpnrouter.desktop"
+          cp VPNRouter.App/Assets/penguin_mascot.png "$PKG/usr/share/icons/hicolor/256x256/apps/vpnrouter.png"
+
+          # control metadata
+          SIZE_KB=$(du -sk "$PKG" | cut -f1)
+          cat > "$PKG/DEBIAN/control" <<CTRL
+          Package: vpnrouter
+          Version: ${VER}
+          Section: net
+          Priority: optional
+          Architecture: amd64
+          Depends: libx11-6, libice6, libsm6, libfontconfig1, libicu70 | libicu71 | libicu72 | libicu74, policykit-1 | polkitd
+          Recommends: libayatana-appindicator3-1
+          Maintainer: NiniTux <noreply@example.invalid>
+          Installed-Size: ${SIZE_KB}
+          Homepage: https://github.com/${GITHUB_REPOSITORY}
+          Description: Virtual Penguin Network — process-based split-tunnel VPN
+           Routes selected applications through a VLESS+Reality proxy via sing-box
+           TUN mode; everything else goes direct. Includes free-config aggregator,
+           deep-verify, and multiple subscriptions.
+          CTRL
+
+          # Build .deb
+          dpkg-deb --build --root-owner-group "$PKG"
+          mv "${PKG}.deb" "VPNRouter-v${VER}-linux-amd64.deb"
+          ls -lh "VPNRouter-v${VER}-linux-amd64.deb"
+
+      # ── tar.gz (unchanged, for advanced users / non-Debian distros) ──
+      - name: Build tar.gz
+        run: |
+          set -euo pipefail
+          VER="${{ steps.version.outputs.version }}"
+          STAGE="stage/VPNRouter"
+          mkdir -p "$STAGE"
+          cp -R publish/linux-x64/. "$STAGE/"
+          cp packaging/linux/VPNRouter.sh "$STAGE/VPNRouter.sh"
+          cp packaging/linux/vpnrouter.desktop "$STAGE/vpnrouter.desktop"
+          cp VPNRouter.App/Assets/penguin_mascot.png "$STAGE/icon.png"
+          sed -e "s|{VERSION}|${VER}|g" -e "s|{REPO}|${GITHUB_REPOSITORY}|g" \
+              packaging/linux/README.txt > "$STAGE/README.txt"
+          chmod +x "$STAGE/VPNRouter.sh" "$STAGE/VPNRouter.App" "$STAGE/VPNRouter.CLI" || true
+          ( cd stage && tar -czf "../VPNRouter-v${VER}-linux.tar.gz" VPNRouter )
+          ls -lh "VPNRouter-v${VER}-linux.tar.gz"
+
+      # ── sha256 sidecars ────────────────────────────────────────────────
+      - name: Compute SHA256 checksums
+        run: |
+          set -euo pipefail
+          VER="${{ steps.version.outputs.version }}"
+          for f in \
+            "VPNRouter-v${VER}-linux-x86_64.AppImage" \
+            "VPNRouter-v${VER}-linux-amd64.deb" \
+            "VPNRouter-v${VER}-linux.tar.gz"; do
+            sha256sum "$f" | awk '{print $1"  "$2}' > "${f}.sha256"
+            echo "→ $(cat "${f}.sha256")"
+          done
+
+      - name: Upload as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build-v${{ steps.version.outputs.version }}
+          path: |
+            VPNRouter-v*-linux-x86_64.AppImage
+            VPNRouter-v*-linux-x86_64.AppImage.sha256
+            VPNRouter-v*-linux-amd64.deb
+            VPNRouter-v*-linux-amd64.deb.sha256
+            VPNRouter-v*-linux.tar.gz
+            VPNRouter-v*-linux.tar.gz.sha256
+          retention-days: 30
+
+      - name: Upload to GitHub Release
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.upload_to_release)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          VER="${{ steps.version.outputs.version }}"
+
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::warning::Release $TAG does not exist yet — skipping upload. Create the release first, then re-run this workflow."
+            exit 0
+          fi
+
+          echo "Uploading to release $TAG..."
+          gh release upload "$TAG" \
+            "VPNRouter-v${VER}-linux-x86_64.AppImage" \
+            "VPNRouter-v${VER}-linux-x86_64.AppImage.sha256" \
+            "VPNRouter-v${VER}-linux-amd64.deb" \
+            "VPNRouter-v${VER}-linux-amd64.deb.sha256" \
+            "VPNRouter-v${VER}-linux.tar.gz" \
+            "VPNRouter-v${VER}-linux.tar.gz.sha256" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+          echo "✓ Uploaded AppImage + .deb + tar.gz to $TAG"
