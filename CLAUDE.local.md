@@ -44,9 +44,26 @@ and avoid 30-prerelease bursts we had in v2.17 → v2.21 cycle.
    gh release delete "vX.Y.Z-rN" --yes --repo PavelLizunov/VPNRouter
    ```
 
-**Only one in-flight prerelease visible at any time.** Stable releases
-persist forever. Full strategy + rationale + hotfix emergency path in
-`plans/vpnrouter-release-strategy.md`.
+**Only one in-flight prerelease visible at any time.** Full strategy +
+rationale + hotfix emergency path in `plans/vpnrouter-release-strategy.md`.
+
+## GitHub Release Retention Policy
+
+Cap: **~30 releases max** on the Releases page. Composition:
+
+1. **Последние 20 релизов по времени** (независимо от prerelease/stable
+   статуса). Сохраняются автоматически — это текущий активный цикл.
+2. **10 исторически значимых milestone-релизов**, которые держим вечно:
+   - последний stable каждой минорной серии (`v2.1X.(last)`)
+   - стартовые точки крупных переработок (Arctic theme, Avalonia migrate,
+     Free Configs feature и т.д.) — отмечены явно
+   - oldest kept release (текущий = `v2.10.0`, Avalonia baseline)
+
+Git-теги **не удаляем** — они остаются в истории репо, только release
+page подчищаем. Если надо восстановить старый build — `git checkout tag`.
+
+**Когда чистить**: каждый раз когда общее число релизов выходит за 30
+(обычно после серии -rN итераций внутри одного минорного цикла).
 
 Never promote to stable until the user confirms it works.
 
