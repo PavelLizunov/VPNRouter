@@ -17,6 +17,13 @@ public partial class MainWindowViewModel
 {
     private DispatcherTimer? _runtimeStatusTimer;
 
+    /// <summary>
+    /// Wall-clock of the last Skia cache purge. We purge at most every
+    /// ~60 seconds (on top of the 2 s poll cadence) so the cost of
+    /// regenerating font atlases doesn't show up as a visible render stall.
+    /// </summary>
+    private DateTime _lastSkiaPurgeAt = DateTime.MinValue;
+
     // ── Raw status (polled) ───────────────────────────────────────────────
 
     [ObservableProperty]
@@ -102,6 +109,19 @@ public partial class MainWindowViewModel
             // missed it if the race was the other way. Also covers external
             // stop of sing-box (e.g. user killed it from Task Manager).
             SyncConnectedWithVpnRuntime(vpnRunning);
+
+            // v2.20.5: periodic Skia cache purge. Piggy-backs on the existing
+            // 2 s status poll; runs at most once per minute so the cost of
+            // regenerating font atlases is amortised. An Avalonia user
+            // reported ~40 MB working set drop from a single PurgeAllCaches
+            // call in a long-lived app — documented in
+            // plans/vpnrouter-memory-research.md.
+            if ((DateTime.UtcNow - _lastSkiaPurgeAt).TotalSeconds >= 60)
+            {
+                _lastSkiaPurgeAt = DateTime.UtcNow;
+                try { SkiaSharp.SKGraphics.PurgeAllCaches(); }
+                catch { /* native-side failures are not fatal */ }
+            }
         }
         catch
         {

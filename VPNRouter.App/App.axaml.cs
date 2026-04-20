@@ -23,6 +23,21 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // v2.20.5: cap Skia's internal font cache so it doesn't grow
+            // unbounded during a long session. Default behaviour keeps every
+            // (typeface × pointSize × matrix) combination ever rendered,
+            // which can swell the process by 10-30 MB over hours of use.
+            // 4 MB bytes + 64 entries is plenty for our UI (Inter + mono +
+            // a handful of sizes). When the limit is hit Skia evicts the
+            // least-recent entry, re-upload happens lazily on next draw.
+            // Based on research in plans/vpnrouter-memory-research.md.
+            try
+            {
+                SkiaSharp.SKGraphics.SetFontCacheLimit(4 * 1024 * 1024);
+                SkiaSharp.SKGraphics.SetFontCacheCountLimit(64);
+            }
+            catch { /* SkiaSharp native load failures aren't fatal; UI still renders */ }
+
             // Remove Avalonia data annotation validation
             var toRemove = BindingPlugins.DataValidators
                 .OfType<DataAnnotationsValidationPlugin>().ToArray();

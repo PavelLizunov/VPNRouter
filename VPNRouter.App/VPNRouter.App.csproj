@@ -32,6 +32,10 @@
     <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
+    <!-- v2.20.5: direct SkiaSharp reference (it's already pulled transitively
+         via Avalonia.Skia 2.88.9) so we can call SKGraphics.SetFontCacheLimit
+         and SKGraphics.PurgeAllCaches from MainWindowViewModel. -->
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
     <PackageReference Include="Avalonia.Diagnostics" Version="11.3.12">
       <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>

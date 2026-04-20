@@ -15,7 +15,12 @@
 
     <Grid RowDefinitions="*,Auto,Auto,Auto">
 
-        <!-- Aggregated server pool (from all enabled subscriptions) -->
+        <!-- Aggregated server pool (from all enabled subscriptions).
+             v2.20.5: explicit VirtualizingStackPanel — same rationale as in
+             ServersPage. Users with a few large subscriptions can easily hit
+             1000+ aggregated servers; without virtualisation that's 1000
+             ServerViewModel × item container resident in memory even if
+             only 12 are visible. -->
         <ListBox Grid.Row="0"
                  x:Name="SubList"
                  ItemsSource="{Binding SubscriptionServers}"
@@ -25,6 +30,11 @@
                  Padding="10,8,10,6"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                  ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel/>
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:ServerViewModel">
                     <Grid ColumnDefinitions="Auto,Auto,*,*,55,55,40,Auto">

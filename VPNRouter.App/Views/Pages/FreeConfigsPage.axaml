@@ -498,6 +498,10 @@
                                        FontWeight="SemiBold" FontSize="9" Opacity="0.65"
                                        VerticalAlignment="Center" HorizontalAlignment="Center"/>
                         </Grid>
+                        <!-- v2.20.5: explicit VirtualizingStackPanel. The
+                             DisplayedConfigs collection can hold 1000+
+                             FreeConfigItemViewModel entries after a big
+                             aggregator refresh. -->
                         <ListBox Grid.Row="1"
                                  x:Name="ConfigsList"
                                  ItemsSource="{Binding FreeConfigsVm.DisplayedConfigs}"
@@ -506,6 +510,11 @@
                                  BorderThickness="0"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto">
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel/>
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
                             <ListBox.ItemTemplate>
                                 <DataTemplate DataType="fcvm:FreeConfigItemViewModel">
                                     <Grid ColumnDefinitions="44,*,88,70,72" Height="22">

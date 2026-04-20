@@ -36,7 +36,13 @@
               RowDefinitions="*,Auto,Auto"
               Margin="10,8,10,4">
 
-            <!-- Server list -->
+            <!-- Server list. v2.20.5: explicit VirtualizingStackPanel.
+                 Default for ListBox in Avalonia 11.3 is already virtualising,
+                 but declaring it inline locks in the intent and catches any
+                 future regression if someone swaps the panel to a plain
+                 StackPanel. Important for users with 500+ subscription
+                 servers — without virtualisation that's 500 ServerViewModel
+                 × control template instances resident in the visual tree. -->
             <ListBox Grid.Row="0"
                      x:Name="ServerList"
                      ItemsSource="{Binding Servers}"
@@ -44,6 +50,11 @@
                      ContextRequested="ServerList_ContextRequested"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:ServerViewModel">
                         <Grid ColumnDefinitions="Auto,Auto,*,*,55,55,40,Auto">
@@ -135,6 +146,11 @@
                      SelectedItem="{Binding SelectedCustomConfig}"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel/>
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:CustomConfigViewModel">
                         <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
