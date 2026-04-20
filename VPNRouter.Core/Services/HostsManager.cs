@@ -240,7 +240,11 @@ public static class HostsManager
                 UseShellExecute = false,
                 RedirectStandardOutput = true
             };
-            var proc = System.Diagnostics.Process.Start(psi);
+            // v2.20.2: wrap in using — without it, if WaitForExit times out
+            // (5 s) the native Process handle leaks. Over a long-running
+            // session (especially on Windows where ipconfig is called on
+            // every hosts mutation) the handle table grows unbounded.
+            using var proc = System.Diagnostics.Process.Start(psi);
             proc?.WaitForExit(5000);
             logger?.Debug("[Hosts] DNS cache flushed");
         }

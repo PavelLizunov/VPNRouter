@@ -165,13 +165,18 @@ Acceptance:
 ## Status tracker
 
 ### Issues
-- [ ] Issue 1 — OS title bar icon
-- [ ] Issue 2 — subheader logo blur
-- [ ] Issue 3 — Telegram Stop incomplete
-- [ ] Issue 4 — Simple pill design
-- [ ] Issue 5 — macOS subscription bounces
-- [ ] Issue 6 — Memory 200-240 MB
+- [x] Issue 1 — OS title bar icon (shipped v2.20.0)
+- [x] Issue 2 — subheader logo blur (shipped v2.20.0)
+- [x] Issue 3 — Telegram Stop incomplete (shipped v2.20.0 + logging polish v2.20.2)
+- [x] Issue 4 — Simple pill design (shipped v2.20.0)
+- [x] Issue 5 — macOS subscription bounces (shipped v2.20.0)
+- [x] Issue 6 — Memory: FreeConfigs lazy-load (shipped v2.20.1)
 
 ### Releases
-- [ ] v2.20.0 — fixes 1–5
-- [ ] v2.20.1 — fix 6
+- [x] v2.20.0 — fixes 1–5
+- [x] v2.20.1 — fix 6
+- [x] v2.20.2 — bug-sweep polish: KillByPort outer catches now log via
+  Serilog instead of silently eating the failure; HostsManager ipconfig
+  Process wrapped in `using` to prevent handle-leak on WaitForExit
+  timeout; OpenHostsEditHelpers guarded by `OperatingSystem.IsWindows()`
+  so the notepad/explorer launch is noop-safe on non-Windows.

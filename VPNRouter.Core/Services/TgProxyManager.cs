@@ -255,7 +255,16 @@ public class TgProxyManager : IDisposable
                     pids.Add(pid);
             }
         }
-        catch { return; }
+        catch (Exception ex)
+        {
+            // v2.20.2: surface netstat failures instead of swallowing.
+            // If netstat can't run (unusual — it's a Windows built-in) the
+            // whole kill-by-port path is dead; we want the log to explain
+            // why the Stop button failed rather than leaving the proxy
+            // alive with no breadcrumbs.
+            Log.Warning(ex, "[TgProxy] KillByPortWindows: netstat invocation failed (port {Port})", port);
+            return;
+        }
 
         foreach (var pid in pids)
         {
@@ -294,10 +303,19 @@ public class TgProxyManager : IDisposable
                     p.Kill(entireProcessTree: true);
                     p.WaitForExit(3000);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Log.Debug(ex, "[TgProxy] KillByPortUnix: kill PID {Pid} failed", pid);
+                }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // v2.20.2: log the outer failure so "Stop did nothing" on Unix
+            // has a breadcrumb. Most likely cause: `lsof` not on PATH
+            // (unusual on macOS, possible on minimal Linux containers).
+            Log.Warning(ex, "[TgProxy] KillByPortUnix: lsof invocation failed (port {Port})", port);
+        }
     }
 
     public void Dispose()

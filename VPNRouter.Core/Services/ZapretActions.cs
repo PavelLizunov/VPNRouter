@@ -232,6 +232,15 @@ public static class ZapretActions
 
     private static void OpenHostsEditHelpers(string tempPath, string hostsPath)
     {
+        // v2.20.2: notepad / explorer.exe are Windows-only. On Linux / macOS
+        // they don't exist and Process.Start would throw into the silent
+        // catch, leaving the user with no feedback. Zapret is Windows-only
+        // anyway (it ships winws.exe), so in practice this helper should
+        // never be reached on other platforms — but guarding the call keeps
+        // the fallback noiseless instead of pretending it worked.
+        if (!OperatingSystem.IsWindows())
+            return;
+
         try
         {
             Process.Start(new ProcessStartInfo("notepad", tempPath) { UseShellExecute = true });
