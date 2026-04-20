@@ -497,17 +497,36 @@ public class UpdateChecker
     /// </summary>
     private void ApplyUpdateLinux(string extractedDir)
     {
+        // v2.22.0-r1: top-to-bottom overhaul — everything gets written to
+        // ~/.config/vpnrouter/logs/update.log with exit codes + stderr,
+        // new PID is verified before we exit, and an install-receipt is
+        // dropped so next launch can detect "tried to update but running
+        // an older version" and surface it in the UI.
+        var logPath = Path.Combine(AppPaths.LogsDir, "update.log");
+        using var updateLog = OpenUpdateLog(logPath);
+        void Log(string msg)
+        {
+            var line = $"[{DateTime.UtcNow:HH:mm:ss}] {msg}";
+            try { updateLog.WriteLine(line); updateLog.Flush(); } catch { }
+        }
+
+        Log($"=== Linux update started (pid {Environment.ProcessId}) ===");
+        Log($"Source: {extractedDir}");
+
         var sourceDir = Path.Combine(extractedDir, "VPNRouter");
         if (!Directory.Exists(sourceDir))
             sourceDir = extractedDir; // legacy / CLI-stripped layout
+        Log($"Effective source: {sourceDir}");
 
         var installDir = AppContext.BaseDirectory.TrimEnd('/');
+        Log($"Install dir: {installDir}");
 
         // AppImage: BaseDirectory lives on a FUSE mount under /tmp/.mount_*
         // Writing there while the AppImage is running is not safe.
         if (installDir.Contains("/.mount_", StringComparison.OrdinalIgnoreCase) ||
             installDir.StartsWith("/tmp/", StringComparison.OrdinalIgnoreCase))
         {
+            Log("ABORT: install dir is an AppImage mount — auto-update not supported");
             throw new InvalidOperationException(
                 "AppImage auto-update is not yet supported. " +
                 "Please download the new VPNRouter-linux-x86_64.AppImage " +
@@ -519,87 +538,221 @@ public class UpdateChecker
         // copy; tar.gz / user-extracted installs don't need it.
         var needsRoot = installDir.StartsWith("/opt/", StringComparison.OrdinalIgnoreCase) ||
                         installDir.StartsWith("/usr/", StringComparison.OrdinalIgnoreCase);
+        Log($"Needs root (pkexec): {needsRoot}");
 
         // Stop sing-box first so the updater doesn't collide with a running
         // root process that keeps open file descriptors on the binary.
         // Ignore failures — if sing-box isn't running, pkill returns 1.
         try
         {
-            var elevator = needsRoot ? "/usr/bin/pkexec" : null;
-            var killPsi = elevator != null
-                ? new ProcessStartInfo(elevator, "pkill -f sing-box")
-                : new ProcessStartInfo("/usr/bin/pkill", "-f sing-box");
-            killPsi.UseShellExecute = false;
-            killPsi.CreateNoWindow = true;
-            killPsi.RedirectStandardOutput = true;
-            killPsi.RedirectStandardError = true;
-            using var killProc = Process.Start(killPsi);
-            killProc?.WaitForExit(5000);
+            var (_, ksout, kserr) = needsRoot
+                ? RunWithCapture("/usr/bin/pkexec", "pkill -f sing-box", 5000)
+                : RunWithCapture("/usr/bin/pkill",  "-f sing-box",       5000);
+            Log($"pkill sing-box: stdout={Truncate(ksout)} stderr={Truncate(kserr)}");
         }
-        catch { /* sing-box may not be running; proceed */ }
+        catch (Exception ex) { Log($"pkill sing-box threw: {ex.Message}"); }
 
         // Synchronous copy. -rfT (recursive, force, treat dest as regular
         // dir) — the T flag makes cp copy source's CONTENTS into dest
-        // instead of creating dest/source. Requires GNU coreutils' cp;
-        // BSD cp on Alpine might need a different invocation but Ubuntu /
-        // Debian / Fedora / Arch all ship GNU cp.
+        // instead of creating dest/source. Requires GNU coreutils' cp.
         {
+            var cpCmd  = needsRoot ? "/usr/bin/pkexec" : "/bin/cp";
             var cpArgs = needsRoot
                 ? $"cp -rfT \"{sourceDir}\" \"{installDir}\""
                 : $"-rfT \"{sourceDir}\" \"{installDir}\"";
-            var cpPsi = needsRoot
-                ? new ProcessStartInfo("/usr/bin/pkexec", cpArgs)
-                : new ProcessStartInfo("/bin/cp",         cpArgs);
-            cpPsi.UseShellExecute = false;
-            cpPsi.CreateNoWindow = true;
-            cpPsi.RedirectStandardOutput = true;
-            cpPsi.RedirectStandardError = true;
-            using var cpProc = Process.Start(cpPsi)
-                ?? throw new InvalidOperationException("Failed to start cp process");
-            cpProc.WaitForExit();
-            if (cpProc.ExitCode != 0)
+            Log($"cp cmd: {cpCmd} {cpArgs}");
+            var (cpExit, cpOut, cpErr) = RunWithCapture(cpCmd, cpArgs, timeoutMs: 120_000);
+            Log($"cp exit={cpExit} stdout={Truncate(cpOut)} stderr={Truncate(cpErr)}");
+            if (cpExit != 0)
             {
-                var err = cpProc.StandardError.ReadToEnd();
-                // pkexec exit codes: 126 = auth dialog dismissed, 127 = no agent
-                var hint = cpProc.ExitCode switch
+                var hint = cpExit switch
                 {
-                    126 => " (authentication was dismissed)",
-                    127 => " (pkexec / polkit agent not available)",
+                    126 => " (authentication dialog was dismissed)",
+                    127 => " (pkexec / polkit agent not available — install policykit-1 and try again)",
                     _   => ""
                 };
                 throw new InvalidOperationException(
-                    $"Update copy failed (exit {cpProc.ExitCode}){hint}: {err}".Trim());
+                    $"Update copy failed (exit {cpExit}){hint}: {Truncate(cpErr, 200)}".Trim());
             }
         }
 
         // chmod +x on the newly-written binaries. File.Copy / cp normally
-        // preserves the mode bits on Linux (unlike File.Copy on NTFS →
-        // macOS which drops the exec bit), but tar extraction quirks and
+        // preserves the mode bits on Linux, but tar extraction quirks and
         // weird umasks mean a belt-and-braces chmod is cheap insurance.
         try
         {
+            var chmodCmd  = needsRoot ? "/usr/bin/pkexec" : "/bin/chmod";
             var chmodArgs = needsRoot
                 ? $"chmod +x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\""
                 : $"+x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\"";
-            var chmodPsi = needsRoot
-                ? new ProcessStartInfo("/usr/bin/pkexec", chmodArgs)
-                : new ProcessStartInfo("/bin/chmod",      chmodArgs);
-            chmodPsi.UseShellExecute = false;
-            chmodPsi.CreateNoWindow = true;
-            using var chmodProc = Process.Start(chmodPsi);
-            chmodProc?.WaitForExit(5000);
+            var (chExit, _, chErr) = RunWithCapture(chmodCmd, chmodArgs, 10_000);
+            Log($"chmod exit={chExit} stderr={Truncate(chErr)}");
+            if (chExit != 0 && chExit != 126 && chExit != 127)
+                Log($"WARNING: chmod non-zero exit {chExit} — launch may fail");
         }
-        catch { /* bits are probably fine from cp; if not, the relaunch fails
-                   loudly which is better than failing silently */ }
+        catch (Exception ex) { Log($"chmod threw: {ex.Message}"); }
 
-        // Launch the new version. Fire and forget — UpdateNotificationVm
-        // will Environment.Exit(0) us a moment later. The new process is
-        // parented to init/systemd once we exit.
-        Process.Start(new ProcessStartInfo(Path.Combine(installDir, "VPNRouter.App"))
+        // Drop an install receipt BEFORE attempting launch. Next boot, if
+        // ReadInstallReceipt() returns a version newer than AppVersion,
+        // we know the update tried but the new binary didn't come up, and
+        // we can surface that in the UI / app log.
+        TryWriteInstallReceipt(logPath, Log);
+
+        // Launch the new version with stdout/stderr captured briefly so we
+        // can detect immediate startup failures. If the new process dies
+        // within 2s (exit code != null), throw and KEEP the old VPNRouter
+        // running — better to show "update launch failed" than to fall
+        // into the void.
+        var newAppPath = Path.Combine(installDir, "VPNRouter.App");
+        Log($"Launching new binary: {newAppPath}");
+        Process? child = null;
+        try
+        {
+            child = Process.Start(new ProcessStartInfo(newAppPath)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Log($"FATAL: Process.Start failed: {ex.Message}");
+            throw new InvalidOperationException(
+                $"Failed to launch new VPNRouter.App: {ex.Message}. " +
+                $"See {logPath} for details.");
+        }
+
+        if (child == null)
+        {
+            Log("FATAL: Process.Start returned null");
+            throw new InvalidOperationException(
+                $"Failed to launch new VPNRouter.App (null handle). See {logPath}.");
+        }
+
+        Log($"New process started, pid={child.Id}. Waiting 2s to verify...");
+        var alive = !child.WaitForExit(2000);
+        if (!alive)
+        {
+            var earlyExit = child.ExitCode;
+            Log($"FATAL: new binary died within 2s, exit code {earlyExit}");
+            throw new InvalidOperationException(
+                $"New VPNRouter.App exited immediately with code {earlyExit}. " +
+                $"See {logPath} for details. Old version still running.");
+        }
+        Log($"New process alive after 2s — update successful, exiting old instance");
+    }
+
+    /// <summary>
+    /// Called once at app startup. If a previous update wrote a receipt
+    /// and the currently-running version is older than (or equal to) what
+    /// the receipt recorded, the update didn't land properly. Returns a
+    /// short human-readable warning string, or null if everything's fine.
+    /// The receipt is consumed (deleted) on successful matching.
+    /// </summary>
+    public static string? CheckInstallReceipt(string currentVersion)
+    {
+        try
+        {
+            var receiptPath = Path.Combine(AppPaths.DataDir, ".update-installed-version");
+            if (!File.Exists(receiptPath))
+                return null;
+
+            var lines = File.ReadAllLines(receiptPath);
+            if (lines.Length < 2) { TryDelete(receiptPath); return null; }
+            var previousVersion = lines[1].Trim();
+
+            if (!TryParseSemVer(previousVersion, out var prev) ||
+                !TryParseSemVer(currentVersion, out var cur))
+            {
+                TryDelete(receiptPath);
+                return null;
+            }
+
+            // If running version is STRICTLY NEWER, the update landed.
+            if (cur.CompareTo(prev) > 0)
+            {
+                TryDelete(receiptPath);
+                return null;
+            }
+
+            // Running same-or-older than the pre-update marker → update failed
+            var updateLogPath = Path.Combine(AppPaths.LogsDir, "update.log");
+            return $"Last update attempt did not take effect. Still running {currentVersion}. " +
+                   $"See {updateLogPath} for details.";
+        }
+        catch { return null; }
+
+        static void TryDelete(string p) { try { File.Delete(p); } catch { } }
+    }
+
+    // ─── Update log + install receipt helpers ────────────────────────────────
+
+    private static StreamWriter OpenUpdateLog(string path)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            return new StreamWriter(path, append: true);
+        }
+        catch
+        {
+            // Fallback: throwaway in-memory writer so Log() calls don't throw
+            var ms = new MemoryStream();
+            return new StreamWriter(ms);
+        }
+    }
+
+    private void TryWriteInstallReceipt(string logPath, Action<string> log)
+    {
+        try
+        {
+            var receiptPath = Path.Combine(AppPaths.DataDir, ".update-installed-version");
+            File.WriteAllText(receiptPath, $"{DateTime.UtcNow:o}\n{_currentVersion}\n");
+            log($"Receipt written: {receiptPath}");
+        }
+        catch (Exception ex)
+        {
+            log($"Receipt write failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Start a process, wait for exit (with timeout), capture stdout + stderr.
+    /// Returns (exitCode, stdout, stderr). On timeout, kills the process and
+    /// returns exitCode = -1.
+    /// </summary>
+    private static (int exit, string stdout, string stderr) RunWithCapture(
+        string fileName, string args, int timeoutMs)
+    {
+        var psi = new ProcessStartInfo(fileName, args)
         {
             UseShellExecute = false,
             CreateNoWindow = true,
-        });
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        using var proc = Process.Start(psi)
+            ?? throw new InvalidOperationException($"Failed to start {fileName}");
+        var outTask = proc.StandardOutput.ReadToEndAsync();
+        var errTask = proc.StandardError.ReadToEndAsync();
+        if (!proc.WaitForExit(timeoutMs))
+        {
+            try { proc.Kill(entireProcessTree: true); } catch { }
+            return (-1, "", "timeout");
+        }
+        // Ensure async reads complete
+        try { outTask.Wait(500); } catch { }
+        try { errTask.Wait(500); } catch { }
+        return (proc.ExitCode,
+                outTask.IsCompletedSuccessfully ? outTask.Result : "",
+                errTask.IsCompletedSuccessfully ? errTask.Result : "");
+    }
+
+    private static string Truncate(string s, int max = 120)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        s = s.Replace('\n', ' ').Replace('\r', ' ').Trim();
+        return s.Length <= max ? s : s.Substring(0, max) + "…";
     }
 
     /// <summary>

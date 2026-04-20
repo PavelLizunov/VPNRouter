@@ -44,6 +44,17 @@ public partial class App : Application
             foreach (var plugin in toRemove)
                 BindingPlugins.DataValidators.Remove(plugin);
 
+            // v2.22.0-r1: detect "update attempted but didn't land".
+            // Logs a warning to the app log; UI banner wiring can follow.
+            try
+            {
+                var receiptWarn = VPNRouter.Core.Services.UpdateChecker
+                    .CheckInstallReceipt(VPNRouter.Core.AppVersion.Version);
+                if (!string.IsNullOrEmpty(receiptWarn))
+                    Serilog.Log.Warning("[Startup] {Warning}", receiptWarn);
+            }
+            catch { /* non-fatal */ }
+
             _viewModel = new MainWindowViewModel();
             var mainWindow = new MainWindow { DataContext = _viewModel };
 

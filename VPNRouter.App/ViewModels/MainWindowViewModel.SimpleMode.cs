@@ -66,7 +66,12 @@ public partial class MainWindowViewModel
     /// the 'Discord + Browsers + Work apps' default approved with the user
     /// on 2026-04-20.
     /// </summary>
-    public const string SimpleSplitProfile = "Browsers,Discord_Privacy,Work_Suite";
+    // v2.22.0-r1: include all 8 standard groups so default Split routes
+    // Discord + Messengers + AI tools + Gaming etc. through VPN out of the
+    // box. Tolerant resolver skips anything the platform's catalogue
+    // doesn't have, so a missing group on one OS doesn't break anything.
+    public const string SimpleSplitProfile =
+        "Discord_Privacy,Messengers,AI_Tools,Browsers,Work_Suite,Streaming,Gaming,Privacy_Shell";
 
     // ── Derived button state ─────────────────────────────────────────────
     /// <summary>Big Start/Stop button caption — flips with <see cref="IsConnected"/>.</summary>
