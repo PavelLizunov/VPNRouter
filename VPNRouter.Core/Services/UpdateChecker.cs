@@ -435,31 +435,26 @@ public class UpdateChecker
     // ─── Linux ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Self-update flow on Linux. The approach mirrors macOS: write a
-    /// detached bash helper to /tmp that waits for the current process to
-    /// exit, swaps the install dir, and relaunches.
+    /// Self-update flow on Linux.
     ///
     /// <para>
-    /// The install dir is inferred from <see cref="AppContext.BaseDirectory"/>:
+    /// v2.21.5 rewrite: the previous version spawned a detached bash
+    /// helper in /tmp that waited for our PID to exit, then ran
+    /// <c>cp -rfT</c> (optionally under pkexec for /opt/vpnrouter). That
+    /// worked in principle but any failure — pkexec dialog dismissed,
+    /// path resolution wrong, cp exit != 0 — vanished into a log file
+    /// the user never knew existed. Net effect: "downloaded the update
+    /// but nothing happened."
     /// </para>
-    /// <list type="bullet">
-    /// <item>tar.gz layout: files live next to the .NET host, e.g.
-    ///   <c>~/VPNRouter/</c> or <c>/opt/vpnrouter/</c>. We overwrite those
-    ///   in place using <c>cp -rf</c> after the old process exits.</item>
-    /// <item>.deb install: files live in <c>/opt/vpnrouter/</c> (root-owned).
-    ///   Direct file-copy from a user-owned process fails with EPERM. We
-    ///   re-exec the helper under <c>pkexec</c> so polkit pops an auth
-    ///   dialog, then the privileged helper does the copy.</item>
-    /// <item>AppImage: <see cref="AppContext.BaseDirectory"/> resolves
-    ///   under <c>/tmp/.mount_XXXXXX/usr/bin/</c> (FUSE mount). Auto-
-    ///   replacing a mounted AppImage while it runs is a separate flow
-    ///   (appimageupdate / zsync). We detect this case and surface a clear
-    ///   "download new AppImage manually" status instead of trying and
-    ///   corrupting the mount.</item>
-    /// </list>
-    ///
-    /// The extracted tar.gz always has a top-level <c>VPNRouter/</c> folder
-    /// (see <c>build-linux.yml</c>); we source from there.
+    /// <para>
+    /// This version does the copy synchronously BEFORE returning.
+    /// Exceptions propagate back to <see cref="UpdateNotificationViewModel"/>
+    /// which already catches and displays them, so a failed pkexec or
+    /// cp surfaces as a visible error in the update banner instead of
+    /// being swallowed. Once the copy succeeds, we spawn the new
+    /// VPNRouter.App detached and let the caller (UpdateNotificationVm)
+    /// do <c>Environment.Exit(0)</c>.
+    /// </para>
     /// </summary>
     private void ApplyUpdateLinux(string extractedDir)
     {
@@ -474,11 +469,10 @@ public class UpdateChecker
         if (installDir.Contains("/.mount_", StringComparison.OrdinalIgnoreCase) ||
             installDir.StartsWith("/tmp/", StringComparison.OrdinalIgnoreCase))
         {
-            StatusChanged?.Invoke(
+            throw new InvalidOperationException(
                 "AppImage auto-update is not yet supported. " +
                 "Please download the new VPNRouter-linux-x86_64.AppImage " +
                 "manually from the Releases page.");
-            return;
         }
 
         // .deb installs live under /opt/vpnrouter, owned by root. Plain
@@ -487,69 +481,83 @@ public class UpdateChecker
         var needsRoot = installDir.StartsWith("/opt/", StringComparison.OrdinalIgnoreCase) ||
                         installDir.StartsWith("/usr/", StringComparison.OrdinalIgnoreCase);
 
-        var pid = Environment.ProcessId;
-        var logPath = $"/tmp/vpnrouter-update-{pid}.log";
-        var scriptPath = $"/tmp/vpnrouter-update-{pid}.sh";
-
-        // Helper script:
-        //   1. tee stdout+stderr to a timestamped log for postmortem.
-        //   2. Poll kill -0 on the old PID until it exits (cap 15 s, then
-        //      SIGTERM as a safety net — same pattern as Mac helper).
-        //   3. cp -rf the source/* over the install dir. Trailing slash on
-        //      source matters (copies contents, not the "VPNRouter" folder
-        //      itself).
-        //   4. chmod +x on the launched binary + sing-box, in case tar
-        //      lost the bit (shouldn't, but cheap belt-and-braces).
-        //   5. Relaunch via the same entrypoint the user started from
-        //      (/opt/vpnrouter/VPNRouter.App for .deb, or BaseDir/VPNRouter.App
-        //      for tar.gz).
-        var escapedInstallDir = installDir.Replace("\"", "\\\"");
-        var escapedSourceDir  = sourceDir.Replace("\"", "\\\"");
-        var copyCmd = needsRoot ? "pkexec cp" : "cp";
-
-        var script =
-            "#!/bin/bash\n" +
-            $"exec >\"{logPath}\" 2>&1\n" +
-            "set +e\n" +
-            "ts() { date '+%Y-%m-%dT%H:%M:%S%z'; }\n" +
-            "log() { echo \"[$(ts)] $*\"; }\n" +
-            "log '── VPNRouter Linux updater ──'\n" +
-            $"log 'Old PID:  {pid}'\n" +
-            $"log 'Source:   {escapedSourceDir}'\n" +
-            $"log 'Target:   {escapedInstallDir}'\n" +
-            $"log 'NeedsRoot: {needsRoot}'\n" +
-            $"for i in $(seq 1 75); do\n" +
-            $"  if ! kill -0 {pid} 2>/dev/null; then break; fi\n" +
-            "  sleep 0.2\n" +
-            "done\n" +
-            $"if kill -0 {pid} 2>/dev/null; then\n" +
-            $"  log 'Old process {pid} did not exit in 15 s — SIGTERM'\n" +
-            $"  kill {pid} 2>/dev/null\n" +
-            "  sleep 1\n" +
-            "fi\n" +
-            "sleep 0.5\n" +
-            $"{copyCmd} -rfT \"{escapedSourceDir}\" \"{escapedInstallDir}\" || {{ log 'FAIL: cp'; exit 10; }}\n" +
-            "log 'Copied new files'\n" +
-            $"chmod +x \"{escapedInstallDir}/VPNRouter.App\" 2>/dev/null || true\n" +
-            $"chmod +x \"{escapedInstallDir}/sing-box\"     2>/dev/null || true\n" +
-            $"log 'chmod +x on main binaries'\n" +
-            $"\"{escapedInstallDir}/VPNRouter.App\" &\n" +
-            "log 'Relaunched. Done.'\n";
-
-        File.WriteAllText(scriptPath, script);
-
+        // Stop sing-box first so the updater doesn't collide with a running
+        // root process that keeps open file descriptors on the binary.
+        // Ignore failures — if sing-box isn't running, pkill returns 1.
         try
         {
-            Process.Start(new ProcessStartInfo("/bin/chmod", $"+x \"{scriptPath}\"")
-                { UseShellExecute = false })?.WaitForExit(5000);
+            var elevator = needsRoot ? "/usr/bin/pkexec" : null;
+            var killPsi = elevator != null
+                ? new ProcessStartInfo(elevator, "pkill -f sing-box")
+                : new ProcessStartInfo("/usr/bin/pkill", "-f sing-box");
+            killPsi.UseShellExecute = false;
+            killPsi.CreateNoWindow = true;
+            killPsi.RedirectStandardOutput = true;
+            killPsi.RedirectStandardError = true;
+            using var killProc = Process.Start(killPsi);
+            killProc?.WaitForExit(5000);
         }
-        catch { }
+        catch { /* sing-box may not be running; proceed */ }
 
-        // Fire and forget: the script's job is to wait for us to exit.
-        Process.Start(new ProcessStartInfo
+        // Synchronous copy. -rfT (recursive, force, treat dest as regular
+        // dir) — the T flag makes cp copy source's CONTENTS into dest
+        // instead of creating dest/source. Requires GNU coreutils' cp;
+        // BSD cp on Alpine might need a different invocation but Ubuntu /
+        // Debian / Fedora / Arch all ship GNU cp.
         {
-            FileName = "/bin/bash",
-            Arguments = $"\"{scriptPath}\"",
+            var cpArgs = needsRoot
+                ? $"cp -rfT \"{sourceDir}\" \"{installDir}\""
+                : $"-rfT \"{sourceDir}\" \"{installDir}\"";
+            var cpPsi = needsRoot
+                ? new ProcessStartInfo("/usr/bin/pkexec", cpArgs)
+                : new ProcessStartInfo("/bin/cp",         cpArgs);
+            cpPsi.UseShellExecute = false;
+            cpPsi.CreateNoWindow = true;
+            cpPsi.RedirectStandardOutput = true;
+            cpPsi.RedirectStandardError = true;
+            using var cpProc = Process.Start(cpPsi)
+                ?? throw new InvalidOperationException("Failed to start cp process");
+            cpProc.WaitForExit();
+            if (cpProc.ExitCode != 0)
+            {
+                var err = cpProc.StandardError.ReadToEnd();
+                // pkexec exit codes: 126 = auth dialog dismissed, 127 = no agent
+                var hint = cpProc.ExitCode switch
+                {
+                    126 => " (authentication was dismissed)",
+                    127 => " (pkexec / polkit agent not available)",
+                    _   => ""
+                };
+                throw new InvalidOperationException(
+                    $"Update copy failed (exit {cpProc.ExitCode}){hint}: {err}".Trim());
+            }
+        }
+
+        // chmod +x on the newly-written binaries. File.Copy / cp normally
+        // preserves the mode bits on Linux (unlike File.Copy on NTFS →
+        // macOS which drops the exec bit), but tar extraction quirks and
+        // weird umasks mean a belt-and-braces chmod is cheap insurance.
+        try
+        {
+            var chmodArgs = needsRoot
+                ? $"chmod +x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\""
+                : $"+x \"{installDir}/VPNRouter.App\" \"{installDir}/sing-box\"";
+            var chmodPsi = needsRoot
+                ? new ProcessStartInfo("/usr/bin/pkexec", chmodArgs)
+                : new ProcessStartInfo("/bin/chmod",      chmodArgs);
+            chmodPsi.UseShellExecute = false;
+            chmodPsi.CreateNoWindow = true;
+            using var chmodProc = Process.Start(chmodPsi);
+            chmodProc?.WaitForExit(5000);
+        }
+        catch { /* bits are probably fine from cp; if not, the relaunch fails
+                   loudly which is better than failing silently */ }
+
+        // Launch the new version. Fire and forget — UpdateNotificationVm
+        // will Environment.Exit(0) us a moment later. The new process is
+        // parented to init/systemd once we exit.
+        Process.Start(new ProcessStartInfo(Path.Combine(installDir, "VPNRouter.App"))
+        {
             UseShellExecute = false,
             CreateNoWindow = true,
         });
