@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Net.NetworkInformation;
+using System.Linq;
+using System.Collections.Generic;
 using Serilog;
 
 namespace VPNRouter.Core.Services;
@@ -161,9 +163,29 @@ public class TgProxyManager : IDisposable
         catch { return false; }
     }
 
-    /// <summary>Kill ALL tg-ws-proxy processes system-wide.</summary>
-    public static void KillAll()
+    /// <summary>
+    /// Kill ALL tg-ws-proxy processes system-wide.
+    ///
+    /// v2.20.0: the actual tg-ws-proxy runs as <c>python.exe -m
+    /// proxy.tg_ws_proxy …</c> (see <see cref="StartAsync"/>). Enumerating
+    /// <c>tg-ws-proxy</c> / <c>TgWsProxy_windows</c> by process name matched
+    /// NOTHING — those names don't exist. The page's Stop button was calling
+    /// this helper expecting processes to die, but nothing happened unless
+    /// the current app instance still held <see cref="_process"/> (i.e. had
+    /// launched the proxy in this session). If tg-ws-proxy was started by
+    /// the Windows Service or a previous session, Stop was effectively a
+    /// no-op and the proxy kept serving traffic.
+    ///
+    /// Fix: port-based kill. Whoever is listening on
+    /// <paramref name="port"/> gets its PID resolved and killed. Covers
+    /// every way the proxy could have been started.
+    /// </summary>
+    /// <param name="port">TgProxy port from settings. Pass the actual
+    /// configured port; otherwise this is a no-op.</param>
+    public static void KillAll(int port = 1443)
     {
+        // Legacy path: still sweep the old-style names in case some user
+        // has a really old build launching the proxy differently.
         foreach (var name in new[] { "tg-ws-proxy", "TgWsProxy_windows" })
         {
             foreach (var proc in Process.GetProcessesByName(name))
@@ -173,6 +195,109 @@ public class TgProxyManager : IDisposable
                 finally { proc.Dispose(); }
             }
         }
+
+        // Port-based kill — the canonical path.
+        KillByPort(port);
+    }
+
+    /// <summary>
+    /// Find the PID listening on <paramref name="port"/> and terminate it.
+    /// Cross-platform: netstat+taskkill on Windows, lsof+kill on Unix.
+    /// Silent on failure; caller checks <see cref="IsAnyRunning"/> after.
+    /// </summary>
+    public static void KillByPort(int port)
+    {
+        if (port <= 0) return;
+
+        try
+        {
+            // Quick guard — if nothing's listening, don't even spawn netstat.
+            var listeners = IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners();
+            if (!listeners.Any(l => l.Port == port)) return;
+        }
+        catch { /* fall through — still try to kill */ }
+
+        if (OperatingSystem.IsWindows())
+        {
+            KillByPortWindows(port);
+        }
+        else
+        {
+            KillByPortUnix(port);
+        }
+    }
+
+    private static void KillByPortWindows(int port)
+    {
+        // netstat -ano | findstr :PORT  → collect PIDs listening on that port
+        var pids = new HashSet<int>();
+        try
+        {
+            var psi = new ProcessStartInfo("netstat", "-ano")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true
+            };
+            using var proc = Process.Start(psi);
+            if (proc == null) return;
+            var stdout = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit(5000);
+
+            // Lines look like:
+            //   TCP    0.0.0.0:1443    0.0.0.0:0    LISTENING       12345
+            foreach (var line in stdout.Split('\n'))
+            {
+                if (!line.Contains("LISTENING")) continue;
+                if (!line.Contains($":{port} ")) continue;
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 5 && int.TryParse(parts[^1], out var pid))
+                    pids.Add(pid);
+            }
+        }
+        catch { return; }
+
+        foreach (var pid in pids)
+        {
+            try
+            {
+                using var p = Process.GetProcessById(pid);
+                p.Kill(entireProcessTree: true);
+                p.WaitForExit(3000);
+            }
+            catch { /* process may have exited already */ }
+        }
+    }
+
+    private static void KillByPortUnix(int port)
+    {
+        // lsof -iTCP:PORT -sTCP:LISTEN -t  → prints just the PID(s)
+        try
+        {
+            var psi = new ProcessStartInfo("lsof", $"-iTCP:{port} -sTCP:LISTEN -t")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true
+            };
+            using var proc = Process.Start(psi);
+            if (proc == null) return;
+            var stdout = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit(5000);
+
+            foreach (var line in stdout.Split('\n'))
+            {
+                if (!int.TryParse(line.Trim(), out var pid)) continue;
+                try
+                {
+                    using var p = Process.GetProcessById(pid);
+                    p.Kill(entireProcessTree: true);
+                    p.WaitForExit(3000);
+                }
+                catch { }
+            }
+        }
+        catch { }
     }
 
     public void Dispose()

@@ -67,12 +67,20 @@
                                  Foreground="{DynamicResource AccentSolidBrush}"/>
                 </StackPanel>
 
-                <!-- Status -->
+                <!-- Status.
+                     v2.20.0: dot reads TgProxyBadgeBrush — same polled
+                     ComponentRuntimeStatus that drives the header chip — so
+                     the page never contradicts the header. Previously the
+                     dot flipped to grey instantly on the local
+                     TgProxyEnabled flag even when the process failed to die
+                     (e.g. KillAll missed it because of the old
+                     process-name mismatch). Users saw "Stopped" dot + green
+                     header chip + working Telegram traffic. -->
                 <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                         Background="{DynamicResource SurfaceSunkenBrush}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                                 Fill="{Binding TgProxyEnabled, Converter={StaticResource StatusColorConverter}}"/>
+                                 Fill="{Binding TgProxyBadgeBrush}"/>
                         <TextBlock Text="{Binding TgProxyStatus}" FontSize="11"
                                    VerticalAlignment="Center"/>
                     </StackPanel>

@@ -10,7 +10,6 @@
         x:Class="VPNRouter.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title=""
-        Icon="avares://VPNRouter.App/Assets/penguin_logo.ico"
         Width="520" Height="640"
         MinWidth="360" MinHeight="360"
         FontSize="10"
@@ -152,26 +151,33 @@
                     </StackPanel>
                 </StackPanel>
 
-                <!-- v2.19.1: visible "◂ Simple" pill-button, shown only in
-                     Advanced. Gives the return-home action the same visual
-                     weight as a status chip — more obvious than the ⋯ menu
-                     item it used to be. In Simple mode the big Advanced
-                     settings card at the bottom of the page covers the
-                     opposite direction, so this slot is hidden there. -->
+                <!-- v2.20.0: "◂ Simple" ghost-button, shown only in Advanced.
+                     Previous accent-subtle + border version (v2.19.1) looked
+                     like a status chip and visually competed with VPN/Zapret/TG.
+                     Mode-switch is navigation, not status — render as a
+                     subtle accent-fg text control with transparent background
+                     so it sits quietly in the top-right corner until hovered.
+                     In Simple mode the big Advanced card on the page handles
+                     the opposite direction, so this slot stays hidden. -->
                 <Button Grid.Column="2"
                         Command="{Binding ToggleUiModeCommand}"
                         Content="{Binding UiModeToggleText}"
                         ToolTip.Tip="{Binding UiModeToggleTooltip}"
                         IsVisible="{Binding !IsSimpleMode}"
-                        Padding="10,4" MinHeight="0"
-                        FontSize="10" FontWeight="SemiBold"
-                        Background="{DynamicResource AccentBgSubtleBrush}"
-                        BorderBrush="{DynamicResource AccentBorderBrush}"
-                        BorderThickness="1"
+                        Padding="8,4" MinHeight="0"
+                        FontSize="11" FontWeight="SemiBold"
+                        Background="Transparent"
+                        BorderThickness="0"
                         Foreground="{DynamicResource AccentFgBrush}"
-                        CornerRadius="{StaticResource RadiusPill}"
+                        CornerRadius="{StaticResource RadiusSm}"
                         VerticalAlignment="Center"
-                        Cursor="Hand"/>
+                        Cursor="Hand">
+                    <Button.Styles>
+                        <Style Selector="Button:pointerover /template/ ContentPresenter">
+                            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+                        </Style>
+                    </Button.Styles>
+                </Button>
 
                 <!-- ⋯ flyout — theme · lang · logs · leaks · updates · mode toggle.
                      Absorbs all the ex-header buttons. UiModeToggleText auto-flips

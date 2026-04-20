@@ -39,6 +39,17 @@ public partial class MainWindowViewModel : ViewModelBase
     private CancellationTokenSource? _subRefreshCts;
     private const int SubRefreshIntervalMs = 3600_000; // 1 hour
 
+    /// <summary>
+    /// Timestamp of the last UI-confirmed successful connect. Used by
+    /// <see cref="SyncConnectedWithVpnRuntime"/> to suppress false demotes
+    /// immediately after connect — on macOS the process enumeration used
+    /// by <see cref="RuntimeStatusDetector.IsVpnRunning"/> occasionally
+    /// returns false for the first 1–2 poll ticks after sing-box starts
+    /// (sudo launch handoff), which was flipping IsConnected back to false.
+    /// DateTime.MinValue = no recent connect.
+    /// </summary>
+    private DateTime _lastSuccessfulConnectAt = DateTime.MinValue;
+
     // ── Observable state ──
 
     [ObservableProperty] private string _statusText = Strings.NotConnected;
@@ -72,55 +83,21 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(LogoSource))]
     private bool _isDarkTheme;
 
-    private static readonly Bitmap _logoLight = LoadAsset("avares://VPNRouter.App/Assets/penguin_logo.png");
-    private static readonly Bitmap _logoDark = TryBuildInvertedLogo(_logoLight) ?? _logoLight;
-    /// <summary>Logo bitmap — inverted RGB when IsDarkTheme is true.</summary>
+    // v2.20.0: logo assets switched from the RGB-inverted WriteableBitmap
+    // hack (640×640 RGB penguin_logo.png, CPU-inverted at startup for dark
+    // theme) to pre-rendered black/white PNG variants with full alpha.
+    // b_icon.png / w_icon.png are ~552×712 RGBA — edges anti-aliased in
+    // the source, no CPU-pass, no inversion artefacts. Gives crisp
+    // rendering at 36 px alongside Image's HighQuality interpolation.
+    private static readonly Bitmap _logoLight = LoadAsset("avares://VPNRouter.App/Assets/b_icon.png");
+    private static readonly Bitmap _logoDark  = LoadAsset("avares://VPNRouter.App/Assets/w_icon.png");
+    /// <summary>
+    /// Logo bitmap — black-on-transparent (b_icon) for light theme,
+    /// white-on-transparent (w_icon) for dark. The container Border in the
+    /// header supplies the arctic-subtle background tint; no RGB inversion.
+    /// </summary>
     public Bitmap LogoSource => IsDarkTheme ? _logoDark : _logoLight;
     private static Bitmap LoadAsset(string uri) => new(AssetLoader.Open(new System.Uri(uri)));
-
-    /// <summary>
-    /// Produce an RGB-inverted copy of the penguin logo for dark theme.
-    /// Uses WriteableBitmap in Unpremul format so invert is a straight
-    /// 255-channel operation without premultiplied-alpha correction. Returns
-    /// null on any failure (falls back to the original logo).
-    /// </summary>
-    private static Bitmap? TryBuildInvertedLogo(Bitmap source)
-    {
-        try
-        {
-            var size = source.PixelSize;
-            var wb = new Avalonia.Media.Imaging.WriteableBitmap(
-                size,
-                source.Dpi,
-                Avalonia.Platform.PixelFormat.Bgra8888,
-                Avalonia.Platform.AlphaFormat.Unpremul);
-
-            using (var fb = wb.Lock())
-            {
-                int byteCount = fb.RowBytes * size.Height;
-                source.CopyPixels(new Avalonia.PixelRect(size), fb.Address, byteCount, fb.RowBytes);
-
-                var bytes = new byte[byteCount];
-                System.Runtime.InteropServices.Marshal.Copy(fb.Address, bytes, 0, byteCount);
-
-                // BGRA: invert B, G, R; keep A.
-                for (int i = 0; i < bytes.Length; i += 4)
-                {
-                    bytes[i]     = (byte)(255 - bytes[i]);
-                    bytes[i + 1] = (byte)(255 - bytes[i + 1]);
-                    bytes[i + 2] = (byte)(255 - bytes[i + 2]);
-                }
-
-                System.Runtime.InteropServices.Marshal.Copy(bytes, 0, fb.Address, byteCount);
-            }
-
-            return wb;
-        }
-        catch
-        {
-            return null;
-        }
-    }
     [ObservableProperty] private string _themeToggleText = Strings.ThemeDark;
     [ObservableProperty] private bool _isRussian;
 
@@ -1389,6 +1366,9 @@ public partial class MainWindowViewModel : ViewModelBase
                 IsConnecting = false;
                 ConnectButtonText = Strings.StartVPN;
                 StatusText = Strings.NotConnected;
+                // v2.20.0: clear the freshly-connected guard so a later poll
+                // can faithfully reflect whatever state sing-box ends up in.
+                _lastSuccessfulConnectAt = DateTime.MinValue;
             }
             return;
         }
@@ -1456,6 +1436,30 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                 await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
+
+                // v2.20.0: defensive state promotion after successful start.
+                // Previously we relied entirely on VpnEngine's StatusChanged
+                // event (→ OnEngineStatus) to flip IsConnected=true. That
+                // worked on Windows but broke on macOS: the event sometimes
+                // landed after the 2-second RuntimeStatus poll had fired
+                // and demoted IsConnected back to false — user saw the UI
+                // "connect and immediately disconnect" even though sing-box
+                // was running and the IP had actually changed.
+                //
+                // Check the engine's own IsRunning flag. If it's up, lock
+                // in Connected state here rather than hoping the event
+                // beats the poll. The StatusChanged callback is still
+                // wired and will refine StatusText with the "connected via
+                // [mode] → server (ip)" line once it fires.
+                if (_engine.IsRunning)
+                {
+                    IsConnected = true;
+                    IsConnecting = false;
+                    _lastSuccessfulConnectAt = DateTime.UtcNow;
+                    ConnectButtonText = Strings.StopVPN;
+                    StartSubRefreshTimer();
+                    RefreshActiveIndicator();
+                }
             }
             catch (TunOwnershipException)
             {
@@ -2100,7 +2104,7 @@ public partial class MainWindowViewModel : ViewModelBase
             if (TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort))
             {
                 _tgProxy?.Stop();
-                TgProxyManager.KillAll();
+                TgProxyManager.KillAll(TgProxyPort);
                 TgProxyEnabled = false;
             }
 
@@ -2135,9 +2139,21 @@ public partial class MainWindowViewModel : ViewModelBase
         if (TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort))
         {
             _tgProxy?.Stop();
-            TgProxyManager.KillAll();
+            // v2.20.0: pass the port so KillByPort hits the actual
+            // python.exe running the proxy (process-name match never
+            // worked — see TgProxyManager.KillAll).
+            TgProxyManager.KillAll(TgProxyPort);
+            // Re-check a beat later; if the port is still bound
+            // something couldn't be killed (permissions? zombie?).
+            // We surface the truth instead of lying that we stopped.
+            await Task.Delay(300);
+            TgProxyRuntimeStatus = TgProxyManager.IsAnyRunning(TgProxyPort)
+                ? ComponentRuntimeStatus.Failed
+                : ComponentRuntimeStatus.Idle;
             TgProxyEnabled = false;
-            TgProxyStatus = IsRussian ? "Остановлен" : "Stopped";
+            TgProxyStatus = TgProxyRuntimeStatus == ComponentRuntimeStatus.Failed
+                ? (IsRussian ? "Не удалось остановить (проверьте права)" : "Couldn't stop (check permissions)")
+                : (IsRussian ? "Остановлен" : "Stopped");
             TgProxyStats = "";
             SaveSettings();
             return;
@@ -2789,7 +2805,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Kill tg-ws-proxy on app exit
 #if PLATFORM_WINDOWS
-        try { _tgProxy?.Stop(); TgProxyManager.KillAll(); } catch { }
+        try { _tgProxy?.Stop(); TgProxyManager.KillAll(TgProxyPort); } catch { }
 #endif
 
         SaveSettings();

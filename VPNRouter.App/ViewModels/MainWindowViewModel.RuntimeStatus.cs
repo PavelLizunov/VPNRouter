@@ -133,6 +133,17 @@ public partial class MainWindowViewModel
         }
         else if (!vpnRunning && IsConnected)
         {
+            // v2.20.0: protect a freshly-connected session from premature
+            // demotion. On macOS, Process.GetProcessesByName("sing-box") can
+            // return an empty list for 1–2 seconds after `sudo sing-box …`
+            // spawns (sudo's privilege-drop + re-exec handoff makes the
+            // parent PID transient). If a poll lands in that window we'd
+            // flip IsConnected back to false even though the tunnel is up.
+            // Skip the demote for 8 s after a confirmed successful connect.
+            if (_lastSuccessfulConnectAt != DateTime.MinValue &&
+                (DateTime.UtcNow - _lastSuccessfulConnectAt).TotalSeconds < 8)
+                return;
+
             // sing-box disappeared without the app initiating a stop — reset UI
             IsConnected = false;
             ConnectButtonText = Strings.StartVPN;
