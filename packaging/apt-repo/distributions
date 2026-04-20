@@ -6,4 +6,4 @@ Version: 2.22
 Architectures: amd64
 Components: main
 Description: VPNRouter Debian repository for Debian / Ubuntu / Linux Mint
-SignWith: 6ED816C8E249EE03
+SignWith: D7D4CD7C2AFC8FF0
