@@ -723,16 +723,42 @@ public class VpnEngine : IDisposable
             priority += 10;
         }
 
-        // App directory profiles (bundled)
+        // v2.21.9: platform-aware bundled profiles. Previously BuildProfileSources
+        // always loaded default.json (Windows layout with .exe process names
+        // and group names like "Discord_Privacy" / "Work_Suite" / "Browsers" /
+        // "Terminal"). On Linux SettingsLoader + MainWindowViewModel already
+        // route to default-linux.json for UI load/display, but this engine
+        // path still pulled default.json at runtime — so Apply ran with the
+        // WRONG profile catalogue. User hit "Profile 'Messengers' not found"
+        // because the UI offered Linux-style profiles but the engine only
+        // knew Windows-style ones.
+        //
+        // Now we prefer the platform-specific variant if it exists, and
+        // fall back to default.json so Windows builds keep working.
         var appDir = AppContext.BaseDirectory;
+        var platformDefaultName = OperatingSystem.IsMacOS() ? "default-macos.json"
+                                : OperatingSystem.IsLinux() ? "default-linux.json"
+                                : "default.json";
+
+        var platformBundled = Path.Combine(appDir, "profiles", platformDefaultName);
+        if (File.Exists(platformBundled))
+            sources.Add(new LocalProfileSource(platformBundled, 80));
+
+        // Generic default.json always added as a fallback at slightly lower
+        // priority so profiles referenced by BOTH files (e.g. SimpleSplit's
+        // Browsers + Discord_Privacy + Work_Suite) resolve against the
+        // platform variant first.
         var defaultJson = Path.Combine(appDir, "profiles", "default.json");
         if (File.Exists(defaultJson))
-            sources.Add(new LocalProfileSource(defaultJson, 80));
+            sources.Add(new LocalProfileSource(defaultJson, 78));
 
-        // Platform-specific profiles directory
-        var platformProfiles = Path.Combine(AppPaths.ProfilesDir, "default.json");
+        // User profiles directory under AppPaths (where ProfilesDir lives)
+        var platformProfiles = Path.Combine(AppPaths.ProfilesDir, platformDefaultName);
         if (File.Exists(platformProfiles))
             sources.Add(new LocalProfileSource(platformProfiles, 85));
+        var userDefault = Path.Combine(AppPaths.ProfilesDir, "default.json");
+        if (File.Exists(userDefault) && !userDefault.Equals(platformProfiles, StringComparison.Ordinal))
+            sources.Add(new LocalProfileSource(userDefault, 83));
 
         // Built-in fallback
         sources.Add(new BuiltInProfileSource());

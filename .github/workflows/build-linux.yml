@@ -103,8 +103,8 @@ jobs:
           chmod +x "$APPDIR/usr/bin/VPNRouter.App" || true
 
           # Icon
-          cp VPNRouter.App/Assets/penguin_mascot.png "$APPDIR/vpnrouter.png"
-          cp VPNRouter.App/Assets/penguin_mascot.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/vpnrouter.png"
+          cp VPNRouter.App/Assets/penguin_mascot_tile.png "$APPDIR/vpnrouter.png"
+          cp VPNRouter.App/Assets/penguin_mascot_tile.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/vpnrouter.png"
 
           # .desktop
           cp packaging/linux/vpnrouter.desktop "$APPDIR/vpnrouter.desktop"
@@ -168,7 +168,7 @@ jobs:
           # .desktop + icon
           cp packaging/linux/vpnrouter.desktop "$PKG/usr/share/applications/vpnrouter.desktop"
           sed -i 's|^Exec=.*|Exec=/usr/bin/vpnrouter|' "$PKG/usr/share/applications/vpnrouter.desktop"
-          cp VPNRouter.App/Assets/penguin_mascot.png "$PKG/usr/share/icons/hicolor/256x256/apps/vpnrouter.png"
+          cp VPNRouter.App/Assets/penguin_mascot_tile.png "$PKG/usr/share/icons/hicolor/256x256/apps/vpnrouter.png"
 
           # control metadata
           SIZE_KB=$(du -sk "$PKG" | cut -f1)
@@ -204,7 +204,7 @@ jobs:
           cp -R publish/linux-x64/. "$STAGE/"
           cp packaging/linux/VPNRouter.sh "$STAGE/VPNRouter.sh"
           cp packaging/linux/vpnrouter.desktop "$STAGE/vpnrouter.desktop"
-          cp VPNRouter.App/Assets/penguin_mascot.png "$STAGE/icon.png"
+          cp VPNRouter.App/Assets/penguin_mascot_tile.png "$STAGE/icon.png"
           sed -e "s|{VERSION}|${VER}|g" -e "s|{REPO}|${GITHUB_REPOSITORY}|g" \
               packaging/linux/README.txt > "$STAGE/README.txt"
           chmod +x "$STAGE/VPNRouter.sh" "$STAGE/VPNRouter.App" || true

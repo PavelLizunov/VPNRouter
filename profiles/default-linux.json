@@ -1,7 +1,7 @@
 {
   "profiles": [
     {
-      "name": "Discord",
+      "name": "Discord_Privacy",
       "description": "Discord voice & chat",
       "processes": [
         {
