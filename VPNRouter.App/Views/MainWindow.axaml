@@ -127,8 +127,12 @@
                             </StackPanel>
                         </Button>
 
+                        <!-- v2.21.0: Zapret + TG chips hidden on Linux —
+                             both features are Windows-only (winws.exe via
+                             Cygwin, Python embeddable we ship only for Win). -->
                         <Button Command="{Binding NavigateToZapretCommand}"
                                 ToolTip.Tip="{Binding ZapretBadgeTooltip}"
+                                IsVisible="{Binding IsZapretAvailable}"
                                 Padding="5,1" MinHeight="0"
                                 Background="{Binding ZapretBadgeBrush}"
                                 BorderThickness="0"
@@ -140,6 +144,7 @@
 
                         <Button Command="{Binding NavigateToTgProxyCommand}"
                                 ToolTip.Tip="{Binding TgProxyBadgeTooltip}"
+                                IsVisible="{Binding IsTgProxyAvailable}"
                                 Padding="5,1" MinHeight="0"
                                 Background="{Binding TgProxyBadgeBrush}"
                                 BorderThickness="0"
@@ -261,7 +266,11 @@
                 <ListBoxItem Content="{Binding LblTabSubscribe}"   Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
                 <ListBoxItem Content="{Binding LblTabNetwork}"     Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
                 <ListBoxItem Content="{Binding LblTabApps}"        Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblTabTools}"       Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
+                <!-- v2.21.0: Tools tab hidden on Linux — its only sub-pages
+                     are Zapret and TgProxy, both Windows-only. The tab
+                     visibility uses IsZapretAvailable (same signal). -->
+                <ListBoxItem Content="{Binding LblTabTools}"       Padding="12,6" FontSize="12" FontWeight="SemiBold"
+                             IsVisible="{Binding IsZapretAvailable}"/>
                 <ListBoxItem Content="{Binding LblTabFreeConfigs}" Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
             </ListBox>
 

@@ -317,6 +317,30 @@ public class SingBoxManager : IDisposable
                 RedirectStandardError = true
             };
         }
+        else if (OperatingSystem.IsLinux())
+        {
+            // v2.21.0: Linux elevation via pkexec (PolicyKit).
+            // On standard desktop environments (GNOME / KDE / XFCE /
+            // Cinnamon) a polkit authentication agent runs in the session,
+            // so pkexec pops a native GUI password prompt and launches
+            // sing-box as root. Same UX model as macOS sudo, no terminal
+            // required.
+            //
+            // Fallback for headless or minimal distros (no polkit agent):
+            // user can `sudo setcap cap_net_admin,cap_net_bind_service=+eip
+            // <path/to/sing-box>` once, after which pkexec becomes a no-op
+            // — plain exec works without root.
+            // See plans/vpnrouter-linux-port-research.md.
+            psi = new ProcessStartInfo
+            {
+                FileName = "/usr/bin/pkexec",
+                Arguments = $"\"{exePath}\" run -c \"{_currentConfigPath}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+        }
         else
         {
             psi = new ProcessStartInfo

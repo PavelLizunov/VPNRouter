@@ -22,9 +22,12 @@ public class UpdateChecker
 
     // ── Platform-specific asset naming ──
     // v2.0+: VPNRouter-v2.0.0-win.zip / VPNRouter-v2.0.0-mac.zip
+    // v2.21.0+: VPNRouter-v2.21.0-linux.tar.gz (Linux build added)
     // Legacy: VPNRouter-install-v1.24.6.zip (old Windows naming, still supported)
     private static readonly string PlatformSuffix =
-        OperatingSystem.IsMacOS() ? "-mac" : "-win";
+        OperatingSystem.IsMacOS()   ? "-mac"
+        : OperatingSystem.IsLinux() ? "-linux"
+        :                              "-win";
 
     static UpdateChecker()
     {
@@ -450,18 +453,23 @@ public class UpdateChecker
     /// <summary>
     /// Find the full install asset for the current platform.
     /// v2.0+: VPNRouter-v2.0.0-win.zip / VPNRouter-v2.0.0-mac.zip
+    /// v2.21.0+: VPNRouter-v2.21.0-linux.tar.gz (Linux uses a tarball, not a zip)
     /// Legacy: VPNRouter-install-v*.zip (Windows only, no platform suffix)
     /// </summary>
     private static dynamic? FindFullAsset(dynamic[]? assets)
     {
         if (assets == null) return null;
 
-        // New naming: VPNRouter-v*-{platform}.zip (not containing "update")
+        // v2.21.0: Linux ships as .tar.gz instead of .zip to preserve Unix
+        // execute bits on extract and avoid chmod +x dance in ApplyUpdate.
+        var extension = OperatingSystem.IsLinux() ? ".tar.gz" : ".zip";
+
+        // New naming: VPNRouter-v*-{platform}{ext} (not containing "update")
         var newFormat = ((IEnumerable<dynamic>)assets).FirstOrDefault(a =>
         {
             string name = a.name;
             return name.StartsWith("VPNRouter-v", StringComparison.OrdinalIgnoreCase) &&
-                   name.EndsWith($"{PlatformSuffix}.zip", StringComparison.OrdinalIgnoreCase) &&
+                   name.EndsWith($"{PlatformSuffix}{extension}", StringComparison.OrdinalIgnoreCase) &&
                    !name.Contains("update", StringComparison.OrdinalIgnoreCase);
         });
         if (newFormat != null) return newFormat;

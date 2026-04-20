@@ -163,6 +163,17 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public string UiModeToggleText   => IsSimpleMode ? Strings.SmpToggleToAdvanced : Strings.SmpToggleToSimple;
     public string UiModeToggleTooltip => Strings.SmpToggleTooltip;
+
+    // v2.21.0: Linux-specific flags for UI. Zapret (winws.exe) and TgProxy
+    // (Python embeddable) are Windows-only; their sub-sections of the Tools
+    // tab + related buttons are hidden on Linux. Expose both IsLinux and
+    // IsWindows so XAML can bind IsVisible without a converter.
+    public bool IsLinuxPlatform   => OperatingSystem.IsLinux();
+    public bool IsWindowsPlatform => OperatingSystem.IsWindows();
+    /// <summary>True when Zapret DPI bypass is available on the current OS (Windows only).</summary>
+    public bool IsZapretAvailable => OperatingSystem.IsWindows();
+    /// <summary>True when bundled Telegram proxy is available on the current OS (Windows only).</summary>
+    public bool IsTgProxyAvailable => OperatingSystem.IsWindows();
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServerListMode))]
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
