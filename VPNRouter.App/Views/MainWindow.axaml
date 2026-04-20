@@ -43,23 +43,29 @@
         <Border Grid.Row="0" Padding="12,8" BorderThickness="0,0,0,1"
                 BorderBrush="{DynamicResource BorderDefaultBrush}"
                 Background="{DynamicResource SurfaceBaseBrush}">
-            <!-- v2.19.2 layout:
-                   • Logo 56 px container / 52 px image (v2.19.1 kept).
-                   • Brand title + version subtitle KEPT inside the in-window
-                     header (app subheader). v2.19.1 removed them by mistake
-                     — user meant "clean the OS title bar (header)", not the
-                     subheader. OS title bar now has Title="" on the Window
-                     so the app name doesn't appear twice (once in chrome,
-                     once in-window).
-                   • Visible "◂ Simple" pill-button on the right, shown only
-                     in Advanced, v2.19.1 behaviour preserved. -->
-            <Grid ColumnDefinitions="56,*,Auto,Auto" ColumnSpacing="10">
-                <Border Grid.Column="0" Width="56" Height="56"
+            <!-- v2.19.3 layout:
+                   • Logo size reverted to the design's 40 px container /
+                     36 px image. v2.19.1 bumped it to 56/52 to try to hide
+                     the jagged edges the user was seeing, but the real
+                     cause was Avalonia's default bitmap interpolation —
+                     `LowQuality`, which does nearest-neighbour downscale
+                     and produces visible staircase artefacts on a
+                     640×640 PNG rendered at 36 px. Setting
+                     RenderOptions.BitmapInterpolationMode="HighQuality"
+                     on the <Image> enables a smooth down-sample instead.
+                     No asset change — penguin_logo.png stays (640×640 is
+                     plenty of source resolution).
+                   • Brand title + version subtitle KEPT in subheader,
+                     OS title bar Title="" on the Window.
+                   • Visible "◂ Simple" pill-button, Advanced-only. -->
+            <Grid ColumnDefinitions="40,*,Auto,Auto" ColumnSpacing="10">
+                <Border Grid.Column="0" Width="40" Height="40"
                         CornerRadius="{StaticResource RadiusSm}"
                         Background="{DynamicResource AccentBgSubtleBrush}"
                         ClipToBounds="True">
                     <Image Source="{Binding LogoSource}"
-                           Width="52" Height="52" Stretch="Uniform"
+                           Width="36" Height="36" Stretch="Uniform"
+                           RenderOptions.BitmapInterpolationMode="HighQuality"
                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
 
