@@ -31,6 +31,14 @@ public partial class UpdateNotificationViewModel : ObservableObject
 
     private UpdateInfo? _pendingUpdate;
 
+    // v2.22.2-r2: race guard. StatusChanged posts to the UI thread async;
+    // if the download throws mid-flight, the catch-block's "Update failed"
+    // message can land BEFORE a pending "Extracting update..." Post runs
+    // — so the UI ends up stuck showing the old status forever while the
+    // real error is overwritten. Flipping this flag before setting the
+    // error message makes the status handler drop late-arriving posts.
+    private volatile bool _errorLocked;
+
     public UpdateNotificationViewModel(UpdateSettings settings, ILogger logger)
     {
         _settings = settings;
@@ -39,10 +47,10 @@ public partial class UpdateNotificationViewModel : ObservableObject
         _checkLinkText = Strings.CheckForUpdates;
 
         _updateChecker.DownloadProgress += progress =>
-            Dispatcher.UIThread.Post(() => DownloadProgress = progress);
+            Dispatcher.UIThread.Post(() => { if (!_errorLocked) DownloadProgress = progress; });
 
         _updateChecker.StatusChanged += status =>
-            Dispatcher.UIThread.Post(() => Message = status);
+            Dispatcher.UIThread.Post(() => { if (!_errorLocked) Message = status; });
     }
 
     /// <summary>
@@ -116,6 +124,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
     {
         if (_pendingUpdate == null) return;
 
+        _errorLocked = false; // reset for a fresh attempt
         IsDownloading = true;
         DownloadProgress = 0;
         Message = Strings.UpdateDownloading;
@@ -142,9 +151,18 @@ public partial class UpdateNotificationViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.Error(ex, "[UpdateVm] Update failed");
-            Message = string.Format(Strings.UpdateFailed, ex.Message);
-            IsDownloading = false;
-            DownloadProgress = 0;
+            // Lock out late StatusChanged/DownloadProgress posts, then apply
+            // the error state via the Dispatcher so it runs AFTER any already-
+            // queued UI updates. Without the flag-gate + Post ordering, users
+            // saw "Extracting update..." stuck forever while the real
+            // "Update failed: …" message was silently overwritten.
+            _errorLocked = true;
+            Dispatcher.UIThread.Post(() =>
+            {
+                Message = string.Format(Strings.UpdateFailed, ex.Message);
+                IsDownloading = false;
+                DownloadProgress = 0;
+            });
         }
     }
 
