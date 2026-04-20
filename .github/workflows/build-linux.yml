@@ -52,11 +52,16 @@ jobs:
       # --runtime linux-x64 handles ~99 % of desktop Linux (x86_64 Intel/AMD).
       # ARM64 (Raspberry Pi, Asahi Linux) would need a second job; deferred.
       - name: dotnet publish (linux-x64, self-contained)
+        # Only VPNRouter.App. VPNRouter.CLI and VPNRouter.Service target
+        # net8.0-windows specifically — CLI pulls Service which in turn
+        # uses ETW (Microsoft.Diagnostics.Tracing.TraceEvent) that's
+        # guarded by #if PLATFORM_WINDOWS in VPNRouter.Core. Building CLI
+        # on linux-x64 breaks because the ETW symbols aren't compiled
+        # in, Service can't find them, and the chain fails. Desktop
+        # Linux only needs the Avalonia app anyway; CLI / service
+        # management on Linux is a v2.22+ story (systemd user unit).
         run: |
           dotnet publish VPNRouter.App/VPNRouter.App.csproj \
-            -c Release -r linux-x64 --self-contained true \
-            -o publish/linux-x64
-          dotnet publish VPNRouter.CLI/VPNRouter.CLI.csproj \
             -c Release -r linux-x64 --self-contained true \
             -o publish/linux-x64
 
@@ -79,7 +84,7 @@ jobs:
 
           # Payload
           cp -R publish/linux-x64/. "$APPDIR/usr/bin/"
-          chmod +x "$APPDIR/usr/bin/VPNRouter.App" "$APPDIR/usr/bin/VPNRouter.CLI" || true
+          chmod +x "$APPDIR/usr/bin/VPNRouter.App" || true
 
           # Icon
           cp VPNRouter.App/Assets/penguin_mascot.png "$APPDIR/vpnrouter.png"
@@ -135,7 +140,7 @@ jobs:
 
           # Payload → /opt/vpnrouter
           cp -R publish/linux-x64/. "$PKG/opt/vpnrouter/"
-          chmod +x "$PKG/opt/vpnrouter/VPNRouter.App" "$PKG/opt/vpnrouter/VPNRouter.CLI" || true
+          chmod +x "$PKG/opt/vpnrouter/VPNRouter.App" || true
 
           # Wrapper on PATH
           cat > "$PKG/usr/bin/vpnrouter" <<'WRAP'
@@ -186,7 +191,7 @@ jobs:
           cp VPNRouter.App/Assets/penguin_mascot.png "$STAGE/icon.png"
           sed -e "s|{VERSION}|${VER}|g" -e "s|{REPO}|${GITHUB_REPOSITORY}|g" \
               packaging/linux/README.txt > "$STAGE/README.txt"
-          chmod +x "$STAGE/VPNRouter.sh" "$STAGE/VPNRouter.App" "$STAGE/VPNRouter.CLI" || true
+          chmod +x "$STAGE/VPNRouter.sh" "$STAGE/VPNRouter.App" || true
           ( cd stage && tar -czf "../VPNRouter-v${VER}-linux.tar.gz" VPNRouter )
           ls -lh "VPNRouter-v${VER}-linux.tar.gz"
 
