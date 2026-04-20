@@ -236,12 +236,19 @@ public class UpdateChecker
     /// <summary>
     /// Apply update. Platform-specific:
     /// - Windows: copy files, rename locked executables (.bak), relaunch .exe
-    /// - macOS: replace .app bundle contents, relaunch via open(1)
+    /// - macOS:   replace .app bundle contents via detached bash helper
+    /// - Linux:   same detached-bash-helper model, rsync/cp of the extracted
+    ///            tar.gz layout over the current install dir; AppImage users
+    ///            get a clear "not supported, download a new AppImage"
+    ///            message because replacing a FUSE-mounted AppImage while it
+    ///            runs is a separate (and risky) flow.
     /// </summary>
     public void ApplyUpdate(string extractedDir)
     {
         if (OperatingSystem.IsMacOS())
             ApplyUpdateMac(extractedDir);
+        else if (OperatingSystem.IsLinux())
+            ApplyUpdateLinux(extractedDir);
         else
             ApplyUpdateWindows(extractedDir);
     }
@@ -416,6 +423,129 @@ public class UpdateChecker
         // Fire and forget. We intentionally do NOT WaitForExit — the
         // script's whole job is to wait for us to exit. Use /bin/bash so
         // it runs even if chmod above failed.
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "/bin/bash",
+            Arguments = $"\"{scriptPath}\"",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        });
+    }
+
+    // ─── Linux ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Self-update flow on Linux. The approach mirrors macOS: write a
+    /// detached bash helper to /tmp that waits for the current process to
+    /// exit, swaps the install dir, and relaunches.
+    ///
+    /// <para>
+    /// The install dir is inferred from <see cref="AppContext.BaseDirectory"/>:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>tar.gz layout: files live next to the .NET host, e.g.
+    ///   <c>~/VPNRouter/</c> or <c>/opt/vpnrouter/</c>. We overwrite those
+    ///   in place using <c>cp -rf</c> after the old process exits.</item>
+    /// <item>.deb install: files live in <c>/opt/vpnrouter/</c> (root-owned).
+    ///   Direct file-copy from a user-owned process fails with EPERM. We
+    ///   re-exec the helper under <c>pkexec</c> so polkit pops an auth
+    ///   dialog, then the privileged helper does the copy.</item>
+    /// <item>AppImage: <see cref="AppContext.BaseDirectory"/> resolves
+    ///   under <c>/tmp/.mount_XXXXXX/usr/bin/</c> (FUSE mount). Auto-
+    ///   replacing a mounted AppImage while it runs is a separate flow
+    ///   (appimageupdate / zsync). We detect this case and surface a clear
+    ///   "download new AppImage manually" status instead of trying and
+    ///   corrupting the mount.</item>
+    /// </list>
+    ///
+    /// The extracted tar.gz always has a top-level <c>VPNRouter/</c> folder
+    /// (see <c>build-linux.yml</c>); we source from there.
+    /// </summary>
+    private void ApplyUpdateLinux(string extractedDir)
+    {
+        var sourceDir = Path.Combine(extractedDir, "VPNRouter");
+        if (!Directory.Exists(sourceDir))
+            sourceDir = extractedDir; // legacy / CLI-stripped layout
+
+        var installDir = AppContext.BaseDirectory.TrimEnd('/');
+
+        // AppImage: BaseDirectory lives on a FUSE mount under /tmp/.mount_*
+        // Writing there while the AppImage is running is not safe.
+        if (installDir.Contains("/.mount_", StringComparison.OrdinalIgnoreCase) ||
+            installDir.StartsWith("/tmp/", StringComparison.OrdinalIgnoreCase))
+        {
+            StatusChanged?.Invoke(
+                "AppImage auto-update is not yet supported. " +
+                "Please download the new VPNRouter-linux-x86_64.AppImage " +
+                "manually from the Releases page.");
+            return;
+        }
+
+        // .deb installs live under /opt/vpnrouter, owned by root. Plain
+        // user-owned cp fails with EPERM. Use pkexec for the privileged
+        // copy; tar.gz / user-extracted installs don't need it.
+        var needsRoot = installDir.StartsWith("/opt/", StringComparison.OrdinalIgnoreCase) ||
+                        installDir.StartsWith("/usr/", StringComparison.OrdinalIgnoreCase);
+
+        var pid = Environment.ProcessId;
+        var logPath = $"/tmp/vpnrouter-update-{pid}.log";
+        var scriptPath = $"/tmp/vpnrouter-update-{pid}.sh";
+
+        // Helper script:
+        //   1. tee stdout+stderr to a timestamped log for postmortem.
+        //   2. Poll kill -0 on the old PID until it exits (cap 15 s, then
+        //      SIGTERM as a safety net — same pattern as Mac helper).
+        //   3. cp -rf the source/* over the install dir. Trailing slash on
+        //      source matters (copies contents, not the "VPNRouter" folder
+        //      itself).
+        //   4. chmod +x on the launched binary + sing-box, in case tar
+        //      lost the bit (shouldn't, but cheap belt-and-braces).
+        //   5. Relaunch via the same entrypoint the user started from
+        //      (/opt/vpnrouter/VPNRouter.App for .deb, or BaseDir/VPNRouter.App
+        //      for tar.gz).
+        var escapedInstallDir = installDir.Replace("\"", "\\\"");
+        var escapedSourceDir  = sourceDir.Replace("\"", "\\\"");
+        var copyCmd = needsRoot ? "pkexec cp" : "cp";
+
+        var script =
+            "#!/bin/bash\n" +
+            $"exec >\"{logPath}\" 2>&1\n" +
+            "set +e\n" +
+            "ts() { date '+%Y-%m-%dT%H:%M:%S%z'; }\n" +
+            "log() { echo \"[$(ts)] $*\"; }\n" +
+            "log '── VPNRouter Linux updater ──'\n" +
+            $"log 'Old PID:  {pid}'\n" +
+            $"log 'Source:   {escapedSourceDir}'\n" +
+            $"log 'Target:   {escapedInstallDir}'\n" +
+            $"log 'NeedsRoot: {needsRoot}'\n" +
+            $"for i in $(seq 1 75); do\n" +
+            $"  if ! kill -0 {pid} 2>/dev/null; then break; fi\n" +
+            "  sleep 0.2\n" +
+            "done\n" +
+            $"if kill -0 {pid} 2>/dev/null; then\n" +
+            $"  log 'Old process {pid} did not exit in 15 s — SIGTERM'\n" +
+            $"  kill {pid} 2>/dev/null\n" +
+            "  sleep 1\n" +
+            "fi\n" +
+            "sleep 0.5\n" +
+            $"{copyCmd} -rfT \"{escapedSourceDir}\" \"{escapedInstallDir}\" || {{ log 'FAIL: cp'; exit 10; }}\n" +
+            "log 'Copied new files'\n" +
+            $"chmod +x \"{escapedInstallDir}/VPNRouter.App\" 2>/dev/null || true\n" +
+            $"chmod +x \"{escapedInstallDir}/sing-box\"     2>/dev/null || true\n" +
+            $"log 'chmod +x on main binaries'\n" +
+            $"\"{escapedInstallDir}/VPNRouter.App\" &\n" +
+            "log 'Relaunched. Done.'\n";
+
+        File.WriteAllText(scriptPath, script);
+
+        try
+        {
+            Process.Start(new ProcessStartInfo("/bin/chmod", $"+x \"{scriptPath}\"")
+                { UseShellExecute = false })?.WaitForExit(5000);
+        }
+        catch { }
+
+        // Fire and forget: the script's job is to wait for us to exit.
         Process.Start(new ProcessStartInfo
         {
             FileName = "/bin/bash",
