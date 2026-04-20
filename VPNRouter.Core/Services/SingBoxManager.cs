@@ -92,14 +92,25 @@ public class SingBoxManager : IDisposable
     {
         _logger.Information("[SingBoxManager] Stopping sing-box (PID {Pid})", Pid);
 
-        if (OperatingSystem.IsMacOS())
+        if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
         {
-            // sing-box runs as root via sudo — kill with sudo (NOPASSWD from sudoers)
+            // sing-box runs as root — killed via privilege-escalation tool.
+            // macOS: sudo (NOPASSWD from sudoers, set up at first Connect).
+            // Linux: pkexec (polkit GUI prompt — same path used to start it).
+            //
+            // v2.21.3: Linux was previously falling through to the Windows
+            // path below. That path checks _process?.HasExited and returns
+            // early when true — which it always is on Linux, because our
+            // _process reference is the short-lived pkexec wrapper that
+            // exits immediately after spawning the root sing-box child.
+            // Result: Stop was a no-op and sing-box kept running. Same
+            // bug macOS would have had before we routed it here.
+            var elevator = OperatingSystem.IsLinux() ? "/usr/bin/pkexec" : "/usr/bin/sudo";
             try
             {
                 if (_process != null) _process.EnableRaisingEvents = false;
 
-                var psi = new ProcessStartInfo("/usr/bin/sudo", "pkill -f sing-box")
+                var psi = new ProcessStartInfo(elevator, "pkill -f sing-box")
                 {
                     UseShellExecute = false, CreateNoWindow = true,
                     RedirectStandardOutput = true, RedirectStandardError = true

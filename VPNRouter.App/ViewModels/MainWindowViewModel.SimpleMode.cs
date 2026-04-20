@@ -327,21 +327,34 @@ public partial class MainWindowViewModel
 
     /// <summary>
     /// Replace the subscriptions list with a single enabled entry pointing
-    /// at the pasted URL. Returns false (currently unreachable — HTTP
-    /// validation happens later during RefreshAllSubscriptionsAsync).
+    /// at the pasted URL.
+    ///
+    /// <para>
+    /// v2.21.3 bug fix: we must update BOTH <c>_settings.App.Subscriptions</c>
+    /// AND the VM's observable <see cref="Subscriptions"/> collection.
+    /// <see cref="SaveSettings"/> rebuilds <c>_settings.App.Subscriptions</c>
+    /// from the VM collection right before the YAML write, so mutating
+    /// only the settings side was immediately undone — the pasted URL
+    /// would vanish after Save, and users had to add the subscription
+    /// through Advanced mode instead. Clear + add a fresh
+    /// SubscriptionViewModel to keep both sides in sync.
+    /// </para>
     /// </summary>
     private bool TryApplySubscriptionUrl(string url)
     {
-        _settings.App.Subscriptions = new List<SubscriptionEntry>
+        var entry = new SubscriptionEntry
         {
-            new()
-            {
-                Name = "simple",
-                Url = url,
-                Enabled = true,
-                Servers = new List<VlessServerEntry>(),
-            }
+            Name = "simple",
+            Url = url,
+            Enabled = true,
+            Servers = new List<VlessServerEntry>(),
         };
+        _settings.App.Subscriptions = new List<SubscriptionEntry> { entry };
+
+        // Keep VM side in sync — SaveSettings() reads from here.
+        Subscriptions.Clear();
+        Subscriptions.Add(new SubscriptionViewModel(entry));
+
         _settings.App.ConfigMode = "subscribe";
         IsSubscribeMode = true;
         IsVlessMode = false;
