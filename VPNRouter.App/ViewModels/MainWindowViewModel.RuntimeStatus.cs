@@ -164,6 +164,25 @@ public partial class MainWindowViewModel
                 (DateTime.UtcNow - _lastSuccessfulConnectAt).TotalSeconds < 8)
                 return;
 
+            // v2.21.4: beyond the 8 s grace window, double-check the engine
+            // directly before demoting. On macOS both the reported user
+            // symptom ("status flips to not-connected while VPN is clearly
+            // still running") and Linux (pkexec-owned root child) can make
+            // Process.GetProcessesByName("sing-box") return 0 even when
+            // sing-box is alive — process enumeration via sysctl/procfs
+            // occasionally misses root-owned children depending on kernel
+            // state. _engine.IsRunning is authoritative: it pings the
+            // Clash API over HTTP, which only responds if sing-box is
+            // actually serving traffic. If the API says alive, don't
+            // demote — wait for a subsequent tick where both signals
+            // agree the tunnel is gone.
+            try
+            {
+                if (_engine?.IsRunning == true)
+                    return;
+            }
+            catch { /* IsRunning failures fall through to demote */ }
+
             // sing-box disappeared without the app initiating a stop — reset UI
             IsConnected = false;
             ConnectButtonText = Strings.StartVPN;
