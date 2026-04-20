@@ -167,19 +167,44 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT_TAG: ${{ github.event.release.tag_name }}
+          EVENT_IS_PRERELEASE: ${{ github.event.release.prerelease }}
           INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           mkdir -p .apt-debs
 
+          # apt repo ships STABLE releases only. Prereleases (rolling
+          # -rN candidates, any release with prerelease=true on GitHub)
+          # are not suitable for `sudo apt upgrade` — they'd auto-update
+          # every user to experimental builds. Users who want prereleases
+          # download the .deb manually from GitHub Releases page.
+          is_stable_tag() {
+              local tag="$1"
+              # Reject tags that parse as non-stable by naming: -r1 / -r2 /
+              # -beta / -rc / -alpha etc. Plain "vX.Y.Z" only.
+              case "$tag" in
+                  *-r[0-9]*|*-rc*|*-beta*|*-alpha*|*-pre*) return 1 ;;
+              esac
+              # Also reject anything GitHub flagged as prerelease.
+              gh release view "$tag" --repo "${{ github.repository }}" \
+                  --json isPrerelease --jq '.isPrerelease' 2>/dev/null | grep -q false
+          }
+
           if [ -n "$EVENT_TAG" ]; then
               TAG="$EVENT_TAG"
-              echo "Triggered by release.published for tag: $TAG"
+              echo "Triggered by release.published for tag: $TAG (prerelease=$EVENT_IS_PRERELEASE)"
+              if [ "$EVENT_IS_PRERELEASE" = "true" ]; then
+                  echo "::notice::Skipping apt publish — $TAG is a prerelease"
+                  exit 0
+              fi
           elif [ -n "$INPUT_TAG" ]; then
               TAG="$INPUT_TAG"
               echo "workflow_dispatch with explicit tag: $TAG"
+              if ! is_stable_tag "$TAG"; then
+                  echo "::warning::$TAG looks like a prerelease but was requested explicitly — honouring the request anyway"
+              fi
           else
               TAG=""
-              echo "workflow_dispatch without tag — will download ALL available .deb artifacts from current releases"
+              echo "workflow_dispatch without tag — will re-index ALL STABLE releases from the last 30"
           fi
 
           if [ -n "$TAG" ]; then
@@ -189,14 +214,17 @@ jobs:
                   --dir .apt-debs \
                   --clobber
           else
-              # Get last N releases and download each deb
               gh release list --repo "${{ github.repository }}" --limit 30 --json tagName --jq '.[] | .tagName' | while read -r t; do
-                  echo "-- downloading deb for $t (if any) --"
-                  gh release download "$t" \
-                      --repo "${{ github.repository }}" \
-                      --pattern "*-linux-amd64.deb" \
-                      --dir .apt-debs \
-                      --clobber 2>/dev/null || echo "  (no .deb asset for $t)"
+                  if is_stable_tag "$t"; then
+                      echo "-- downloading deb for stable release $t --"
+                      gh release download "$t" \
+                          --repo "${{ github.repository }}" \
+                          --pattern "*-linux-amd64.deb" \
+                          --dir .apt-debs \
+                          --clobber 2>/dev/null || echo "  (no .deb asset for $t)"
+                  else
+                      echo "-- skipping $t (prerelease) --"
+                  fi
               done
           fi
 
