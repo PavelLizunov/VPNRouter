@@ -154,7 +154,18 @@ public partial class MainWindowViewModel : ViewModelBase
             IsSubscribeMode = true;
             IsVlessMode = false;
         }
-        // Tab 2 (Network), Tab 3 (Applications) — don't change mode
+        else if (value == 5) // FreeConfigs tab
+        {
+            // v2.20.1: lazy-load the FreeConfigs snapshot on first visit.
+            // Users who never open this tab save ~6-7 MB of JSON
+            // deserialization + retained list. Subsequent visits are no-ops.
+            try { FreeConfigsVm?.EnsureCacheLoaded(); }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[VM] FreeConfigs lazy-load failed");
+            }
+        }
+        // Tab 2 (Network), Tab 3 (Applications), Tab 4 (Tools) — no action
     }
     [ObservableProperty] private string _subscriptionUrl = string.Empty;
 

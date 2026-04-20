@@ -12,7 +12,7 @@ namespace VPNRouter.App.ViewModels.FreeConfigs;
 /// ViewModel for the "Free Configs" page.
 /// Owns the aggregator, the displayed list, filters, and the Apply command.
 /// </summary>
-public partial class FreeConfigsPageViewModel : ObservableObject
+public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 {
     private readonly FreeConfigAggregator _aggregator;
     private readonly FreeConfigDeepVerifier _deepVerifier;
@@ -22,6 +22,19 @@ public partial class FreeConfigsPageViewModel : ObservableObject
 
     private List<FreeConfigEntry> _allConfigs = new();
     private CancellationTokenSource? _refreshCts;
+    private bool _disposed;
+
+    /// <summary>
+    /// v2.20.1 lazy-load flag. The FreeConfigs cache can hold ~25k entries
+    /// (~6-7 MB heap) once the user runs the aggregator. Before v2.20.1 we
+    /// deserialized that cache inside the VM ctor — and since the VM is
+    /// constructed at app startup, users who never even open the FreeConfigs
+    /// tab were paying the memory cost anyway. Now we defer until
+    /// <see cref="EnsureCacheLoaded"/> is called from
+    /// MainWindowViewModel.OnSelectedTabIndexChanged the first time the
+    /// user navigates to the tab.
+    /// </summary>
+    private bool _cacheLoaded;
 
     public FreeConfigsPageViewModel(
         ILogger logger,
@@ -37,20 +50,65 @@ public partial class FreeConfigsPageViewModel : ObservableObject
         _deepVerifier = new FreeConfigDeepVerifier(logger);
         ReloadUserSources(); // v2.14.4
 
-        // Load cached snapshot if exists.
-        var file = _aggregator.Cache.Load();
-        _allConfigs = file.Configs;
-        ApplyFiltersAndStats();
+        // v2.20.1: cache load deferred to EnsureCacheLoaded. Ctor stays
+        // cheap — no 6-7 MB JSON deserialization unless the user opens
+        // the FreeConfigs tab.
+        StatusText = Strings.FcStatusEmpty;
+    }
 
-        if (file.LastAggregatedAt == DateTime.MinValue)
+    /// <summary>
+    /// Load the FreeConfigs cache snapshot from disk on first access.
+    /// Called from MainWindowViewModel when the FreeConfigs tab becomes
+    /// selected. Idempotent — subsequent calls are no-ops.
+    /// </summary>
+    public void EnsureCacheLoaded()
+    {
+        if (_cacheLoaded || _disposed) return;
+        _cacheLoaded = true;
+
+        try
         {
-            StatusText = Strings.FcStatusEmpty;
+            var file = _aggregator.Cache.Load();
+            _allConfigs = file.Configs;
+            ApplyFiltersAndStats();
+
+            if (file.LastAggregatedAt == DateTime.MinValue)
+            {
+                StatusText = Strings.FcStatusEmpty;
+            }
+            else
+            {
+                var age = DateTime.UtcNow - file.LastAggregatedAt;
+                StatusText = Strings.FcStatusCacheAge(FormatAge(age));
+            }
         }
-        else
+        catch (Exception ex)
         {
-            var age = DateTime.UtcNow - file.LastAggregatedAt;
-            StatusText = Strings.FcStatusCacheAge(FormatAge(age));
+            _logger.Warning(ex, "[FreeConfigs] EnsureCacheLoaded failed");
+            // Leave _allConfigs empty; user can still Refresh from scratch.
         }
+    }
+
+    /// <summary>
+    /// v2.20.1: unsubscribe the aggregator handlers this VM owns.
+    /// The aggregator instance lives at the VM scope too, so this is mostly
+    /// belt-and-braces — but if the main VM is ever recreated (e.g.
+    /// ReloadMainWindowForLocalization), the old VM's closures stop
+    /// retaining references to the old aggregator.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        try
+        {
+            _aggregator.OnStageChanged -= OnAggregatorStage;
+            _aggregator.OnTestProgress  -= OnAggregatorProgress;
+        }
+        catch { /* aggregator may already be torn down */ }
+
+        try { _refreshCts?.Cancel(); _refreshCts?.Dispose(); }
+        catch { }
     }
 
     [ObservableProperty] private ObservableCollection<FreeConfigItemViewModel> _displayedConfigs = new();
