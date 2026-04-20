@@ -99,12 +99,25 @@ public partial class App : Application
         menu.Items.Add(new NativeMenuItemSeparator());
         menu.Items.Add(quitItem);
 
+        // Tray icon asset selection:
+        //   • macOS + Windows → penguin_mascot.ico (black lineart on
+        //     transparent) — renders fine on both light chrome title bars
+        //     and the dark-ish macOS menu bar thanks to the platforms'
+        //     subtle icon treatment.
+        //   • Linux → penguin_mascot_white.ico (white lineart). Most
+        //     distros default to a dark system panel (Mint Cinnamon, KDE
+        //     Breeze Dark, GNOME with extensions, XFCE Arc-Dark). A black
+        //     lineart on a dark panel is invisible — user reports confirmed.
+        //     White shows up cleanly on dark AND stays legible (if soft)
+        //     on light panels. A theme-aware icon would be nicer but
+        //     StatusNotifierItem doesn't report panel brightness back.
+        // v2.21.8.
+        var trayIconUri = System.OperatingSystem.IsLinux()
+            ? "avares://VPNRouter.App/Assets/penguin_mascot_white.ico"
+            : "avares://VPNRouter.App/Assets/penguin_mascot.ico";
         _trayIcon = new TrayIcon
         {
-            // v2.20.4: tray icon uses the new transparent mascot .ico
-            // generated from penguin_mascot.png. Old penguin_logo.ico was
-            // a low-res pre-Arctic-theme drawing.
-            Icon = new WindowIcon(AssetLoader.Open(new System.Uri("avares://VPNRouter.App/Assets/penguin_mascot.ico"))),
+            Icon = new WindowIcon(AssetLoader.Open(new System.Uri(trayIconUri))),
             ToolTipText = "VPNRouter",
             Menu = menu,
             IsVisible = true

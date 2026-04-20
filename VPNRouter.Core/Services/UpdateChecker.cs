@@ -205,7 +205,43 @@ public class UpdateChecker
         StatusChanged?.Invoke("Extracting update...");
 
         var extractDir = Path.Combine(_stagingDir, "extracted");
-        ZipFile.ExtractToDirectory(zipPath, extractDir);
+        // v2.21.8: on Linux we ship the update as .tar.gz (to preserve Unix
+        // execute bits). ZipFile.ExtractToDirectory doesn't understand
+        // gzip-tar — it only reads PKZIP format, so calling it on a
+        // tarball threw silently (depending on the leading bytes it would
+        // either throw "Not a ZIP archive" or hang trying to read a
+        // non-existent central directory). Previously this surfaced as
+        // a stuck "Extracting update..." banner with no way forward.
+        // Route by extension: .tar.gz → shell out to tar; everything
+        // else (Windows .zip, macOS .zip) → ZipFile as before.
+        if (zipPath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
+            zipPath.EndsWith(".tgz",    StringComparison.OrdinalIgnoreCase))
+        {
+            Directory.CreateDirectory(extractDir);
+            // tar -xzf <archive> -C <dir> — preserves file modes
+            // including the +x on VPNRouter.App / sing-box binaries.
+            var tarPsi = new ProcessStartInfo("tar",
+                $"-xzf \"{zipPath}\" -C \"{extractDir}\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            using var tarProc = Process.Start(tarPsi)
+                ?? throw new InvalidOperationException("Failed to start tar");
+            tarProc.WaitForExit();
+            if (tarProc.ExitCode != 0)
+            {
+                var err = tarProc.StandardError.ReadToEnd();
+                throw new InvalidOperationException(
+                    $"tar extraction failed (exit {tarProc.ExitCode}): {err}".Trim());
+            }
+        }
+        else
+        {
+            ZipFile.ExtractToDirectory(zipPath, extractDir);
+        }
 
         ValidateExtractedContent(extractDir);
 

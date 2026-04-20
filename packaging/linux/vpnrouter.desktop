@@ -7,3 +7,7 @@ Icon=vpnrouter
 Terminal=false
 Categories=Network;
 StartupNotify=true
+# Avalonia sets X11 WM_CLASS to the binary name. Without this hint the
+# window-manager's taskbar can't link the running window to this .desktop
+# entry, which falls back to a generic cogwheel icon.
+StartupWMClass=VPNRouter.App
