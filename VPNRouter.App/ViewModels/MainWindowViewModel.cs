@@ -1031,9 +1031,36 @@ public partial class MainWindowViewModel : ViewModelBase
 
             if (IsServiceManagedVpn)
             {
-                // Can't reload via local engine — the sing-box process is owned
-                // by the Windows Service. Settings YAML is saved; surface a
-                // clear message so the user knows to Stop+Start VPN to apply.
+                // v2.18.4: the sing-box process is owned by the Windows
+                // Service, so hot-reload via our local engine isn't an
+                // option — it has no sing-box to talk to. Pre-v2.18.4 we
+                // punted here with a "Stop and Start VPN to apply" hint,
+                // which forced the user to click Disconnect + Connect
+                // after every Split/Full or server change. Terrible UX.
+                //
+                // New behaviour: invoke the already-existing
+                // ServiceVm.RestartServiceCommand (stop → start cycle).
+                // The service re-reads config.yaml via SettingsLoader.Load
+                // on boot and spawns sing-box with the freshly-saved
+                // RoutingMode / ActiveProfile / subscription picks.
+                //
+                // Fallback to the old "please restart manually" text only
+                // if service isn't available at all (shouldn't happen when
+                // IsServiceManagedVpn is true, but belt-and-braces).
+                if (ServiceVm.IsAvailable)
+                {
+                    StatusText = IsRussian
+                        ? "Перезапускаю службу с новыми настройками..."
+                        : "Restarting service with new settings...";
+                    await ServiceVm.RestartServiceCommand.ExecuteAsync(null);
+                    HasPendingAppChanges = false;
+                    // The 2-second SyncConnectedWithVpnRuntime poll in
+                    // RuntimeStatus will pick up the new service state and
+                    // refresh StatusText to the "connected via service
+                    // [mode]" line. No extra plumbing needed here.
+                    return;
+                }
+
                 HasPendingAppChanges = false;
                 StatusText = IsRussian
                     ? "Настройки сохранены. Остановите и запустите VPN, чтобы они применились (служба перечитает config.yaml при старте)."
