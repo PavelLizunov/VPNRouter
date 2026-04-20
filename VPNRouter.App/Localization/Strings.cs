@@ -620,14 +620,19 @@ public static class Strings
     public static string SmpActiveThrough => Ru ? "Через:" : "Through:";
 
     // ── v2.18.0 compact Simple-mode redesign (Variant A · Calm) ──
-    // Status card titles (one word when possible)
-    public static string SmpStatusProtected    => Ru ? "Защищено"       : "Protected";
+    // Status card titles (one word when possible).
+    // v2.18.3: "Protected" → "Connected" — RU audience uses VPN for access
+    // (bypassing blocks), not for security posture, so "Защищено" implied
+    // the wrong mental model.
+    public static string SmpStatusProtected    => Ru ? "Подключено"     : "Connected";
     public static string SmpStatusConnecting   => Ru ? "Подключение…"   : "Connecting…";
     public static string SmpStatusNotConnected => Ru ? "Не подключено"  : "Not connected";
 
-    // Status card descriptions (one line each)
-    public static string SmpStatusConnectedVia      => Ru ? "Через"  : "Connected via";
-    public static string SmpStatusConnectedNoDetails=> Ru ? "VPN-туннель активен." : "VPN tunnel is active.";
+    // Status card descriptions. v2.18.3: shortened the "via" prefix so the
+    // full line reads "Connected" (title) + "via de-01 · 104.194.156.93"
+    // (desc) instead of repeating "Connected" twice.
+    public static string SmpStatusConnectedVia      => Ru ? "через" : "via";
+    public static string SmpStatusConnectedNoDetails=> Ru ? "Туннель активен." : "Tunnel is active.";
     public static string SmpStatusConnectingHint    => Ru
         ? "Рукопожатие с сервером — пара секунд."
         : "Handshaking with the server — a moment.";
