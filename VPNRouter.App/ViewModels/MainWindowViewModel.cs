@@ -1059,7 +1059,15 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool IsServiceManagedVpn => IsConnected && !(_engine?.IsRunning ?? false);
 
     [RelayCommand]
-    private async Task ApplyPendingChangesAsync()
+    private Task ApplyPendingChangesAsync() => ApplyPendingChangesInternalAsync(forceRestart: false);
+
+    /// <summary>
+    /// v2.20.4: shared Apply pipeline with a <c>forceRestart</c> switch.
+    /// Callers changing RoutingMode (split ↔ full) or other structural
+    /// sing-box config should pass true — hot-reload doesn't re-do the
+    /// TUN routing table, so the user sees no effect if we rely on it.
+    /// </summary>
+    private async Task ApplyPendingChangesInternalAsync(bool forceRestart)
     {
         if (IsApplying || !IsConnected) return;
         IsApplying = true;
@@ -1107,7 +1115,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 return;
             }
 
-            var ok = await Task.Run(() => _engine.ApplyAsync(_settings));
+            var ok = await Task.Run(() => _engine.ApplyAsync(_settings, CancellationToken.None, forceRestart));
             if (ok)
             {
                 HasPendingAppChanges = false;
@@ -1499,20 +1507,28 @@ public partial class MainWindowViewModel : ViewModelBase
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                 await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
 
-                // v2.20.0: defensive state promotion after successful start.
-                // Previously we relied entirely on VpnEngine's StatusChanged
-                // event (→ OnEngineStatus) to flip IsConnected=true. That
-                // worked on Windows but broke on macOS: the event sometimes
-                // landed after the 2-second RuntimeStatus poll had fired
-                // and demoted IsConnected back to false — user saw the UI
-                // "connect and immediately disconnect" even though sing-box
-                // was running and the IP had actually changed.
+                // v2.20.4: poll _engine.IsRunning for up to 5 seconds before
+                // giving up on the defensive promotion.
                 //
-                // Check the engine's own IsRunning flag. If it's up, lock
-                // in Connected state here rather than hoping the event
-                // beats the poll. The StatusChanged callback is still
-                // wired and will refine StatusText with the "connected via
-                // [mode] → server (ip)" line once it fires.
+                // Background: on macOS SingBoxManager.IsRunning checks the
+                // Clash API over HTTP (sing-box runs under sudo as a root
+                // process that we can't introspect via Process.HasExited).
+                // The API needs a second or two to bind its port after
+                // LaunchProcess returns. v2.20.0 checked IsRunning ONCE
+                // immediately after StartAsync, which on macOS routinely
+                // returned false (API not up yet) → promotion skipped →
+                // IsConnecting stayed true → user saw "not connected" in
+                // UI even though sing-box was running. Poll in 250 ms
+                // increments until the API answers or we time out.
+                //
+                // On Windows IsRunning is O(1) (Process.HasExited check),
+                // so the loop exits on the first iteration.
+                var pollUntil = DateTime.UtcNow.AddSeconds(5);
+                while (DateTime.UtcNow < pollUntil && !_engine.IsRunning)
+                {
+                    await Task.Delay(250, cts.Token);
+                }
+
                 if (_engine.IsRunning)
                 {
                     IsConnected = true;
@@ -1521,6 +1537,15 @@ public partial class MainWindowViewModel : ViewModelBase
                     ConnectButtonText = Strings.StopVPN;
                     StartSubRefreshTimer();
                     RefreshActiveIndicator();
+                }
+                else
+                {
+                    // StartAsync returned without exception but IsRunning
+                    // is still false after 5 s. Likely sing-box crashed at
+                    // startup or the Clash API never came up. Leave the
+                    // OnEngineStatus handler to surface the error — don't
+                    // promote to Connected.
+                    _logger.Warning("[VM] StartAsync returned, but engine not ready after 5 s");
                 }
             }
             catch (TunOwnershipException)

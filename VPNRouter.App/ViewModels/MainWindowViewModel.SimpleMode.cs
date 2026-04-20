@@ -377,9 +377,13 @@ public partial class MainWindowViewModel
 
         if (IsSimpleMode && IsConnected && !IsConnecting)
         {
-            // Fire-and-forget — ApplyPendingChangesAsync is idempotent and
-            // handles service-managed mode with a clear status message.
-            _ = ApplyPendingChangesAsync();
+            // v2.20.4: force a full restart instead of hot-reload.
+            // sing-box's Clash API PUT /configs accepts split↔full config
+            // changes but DOES NOT rebuild the TUN routing table, so users
+            // saw the toggle do nothing on both Windows and macOS. Calling
+            // the internal entry point with forceRestart=true stops the
+            // process and relaunches it with the new config.
+            _ = ApplyPendingChangesInternalAsync(forceRestart: true);
         }
     }
 

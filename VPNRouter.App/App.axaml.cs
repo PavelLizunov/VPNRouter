@@ -86,7 +86,10 @@ public partial class App : Application
 
         _trayIcon = new TrayIcon
         {
-            Icon = new WindowIcon(AssetLoader.Open(new System.Uri("avares://VPNRouter.App/Assets/penguin_logo.ico"))),
+            // v2.20.4: tray icon uses the new transparent mascot .ico
+            // generated from penguin_mascot.png. Old penguin_logo.ico was
+            // a low-res pre-Arctic-theme drawing.
+            Icon = new WindowIcon(AssetLoader.Open(new System.Uri("avares://VPNRouter.App/Assets/penguin_mascot.ico"))),
             ToolTipText = "VPNRouter",
             Menu = menu,
             IsVisible = true

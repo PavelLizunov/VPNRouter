@@ -469,8 +469,20 @@ public class VpnEngine : IDisposable
     /// Re-resolves profile, re-scans processes, regenerates sing-box config,
     /// then tries Clash API hot-reload. Falls back to full restart on failure.
     /// Returns true on success (either hot-reload or restart).
+    ///
+    /// <para>
+    /// v2.20.4: <paramref name="forceRestart"/> bypasses the hot-reload
+    /// attempt and goes straight to stop+launch. Callers changing
+    /// structural things — especially <see cref="AppSettings.AppConfig.RoutingMode"/>
+    /// (split ↔ full) — must pass true. sing-box's Clash API <c>PUT /configs</c>
+    /// accepts the new config and reports success, but the TUN route table
+    /// and DNS rules from the previous config remain active for already-
+    /// established connections. Users saw "toggle does nothing" because
+    /// the API returned 200 and we returned success. A full process restart
+    /// is the only way to guarantee the new routing mode takes effect.
+    /// </para>
     /// </summary>
-    public async Task<bool> ApplyAsync(AppSettings settings, CancellationToken ct = default)
+    public async Task<bool> ApplyAsync(AppSettings settings, CancellationToken ct = default, bool forceRestart = false)
     {
         if (_singBox == null || !_singBox.IsRunning())
         {
@@ -581,16 +593,23 @@ public class VpnEngine : IDisposable
                 configJson = ConfigGenerator.Serialize(sbConfig);
             }
 
-            // Try hot-reload first (no process restart)
-            if (_singBox.TryReloadConfigJson(configJson))
+            // Try hot-reload first, UNLESS the caller explicitly asked for
+            // a full restart (v2.20.4). Structural changes like split↔full
+            // tunnel mode need a process restart — hot-reload accepts the
+            // new config but leaves existing TUN routes in place, so the
+            // user sees no effect.
+            if (!forceRestart && _singBox.TryReloadConfigJson(configJson))
             {
                 OnStatus($"Applied (hot-reload, PID {_singBox.Pid})");
                 _logger?.Information("[VpnEngine] Applied via hot-reload");
                 return true;
             }
 
-            // Fallback: full reload (stop + start via ReloadConfigJson — it handles both)
-            _logger?.Warning("[VpnEngine] Hot-reload failed, falling back to full restart");
+            if (forceRestart)
+                _logger?.Information("[VpnEngine] Forced full restart (structural change)");
+            else
+                _logger?.Warning("[VpnEngine] Hot-reload failed, falling back to full restart");
+
             _singBox.ReloadConfigJson(configJson);
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
             return true;
