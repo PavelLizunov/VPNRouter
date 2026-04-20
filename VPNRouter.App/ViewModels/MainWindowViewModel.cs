@@ -1507,29 +1507,40 @@ public partial class MainWindowViewModel : ViewModelBase
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                 await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
 
-                // v2.20.4: poll _engine.IsRunning for up to 5 seconds before
-                // giving up on the defensive promotion.
+                // v2.20.6: poll _engine.IsRunning up to 10 seconds, on a
+                // thread-pool thread, WITHOUT the 30 s StartAsync CTS.
                 //
-                // Background: on macOS SingBoxManager.IsRunning checks the
-                // Clash API over HTTP (sing-box runs under sudo as a root
-                // process that we can't introspect via Process.HasExited).
-                // The API needs a second or two to bind its port after
-                // LaunchProcess returns. v2.20.0 checked IsRunning ONCE
-                // immediately after StartAsync, which on macOS routinely
-                // returned false (API not up yet) → promotion skipped →
-                // IsConnecting stayed true → user saw "not connected" in
-                // UI even though sing-box was running. Poll in 250 ms
-                // increments until the API answers or we time out.
+                // v2.20.4 ran the poll on the UI thread inside a `while`
+                // and used `await Task.Delay(250, cts.Token)`. Two bugs:
                 //
-                // On Windows IsRunning is O(1) (Process.HasExited check),
-                // so the loop exits on the first iteration.
-                var pollUntil = DateTime.UtcNow.AddSeconds(5);
-                while (DateTime.UtcNow < pollUntil && !_engine.IsRunning)
+                //   1. `_engine.IsRunning` on macOS calls IsClashApiAlive
+                //      (synchronous HTTP GET with 3-second timeout). That
+                //      was blocking the UI thread up to 3 s per iteration.
+                //   2. Passing cts.Token to Task.Delay meant that if
+                //      StartAsync had consumed 25+ s on macOS (sudo +
+                //      sing-box warmup + healthmonitor setup), the CTS
+                //      tripped DURING our poll → OperationCanceledException
+                //      → catch block → _engine.Stop() → OnEngineStatus
+                //      emits "Stopped" → UI demotes to "not connected"
+                //      even though sing-box is actually running.
+                //
+                // Fix: poll runs on a thread-pool thread (no UI block),
+                // uses Thread.Sleep locally (no token, no exception), and
+                // gets a fresh 10 s window that starts AFTER StartAsync
+                // returns. Windows IsRunning is O(1) (Process.HasExited),
+                // so the loop exits on the first iteration there.
+                var ready = await Task.Run(() =>
                 {
-                    await Task.Delay(250, cts.Token);
-                }
+                    var until = DateTime.UtcNow.AddSeconds(10);
+                    while (DateTime.UtcNow < until)
+                    {
+                        if (_engine.IsRunning) return true;
+                        System.Threading.Thread.Sleep(250);
+                    }
+                    return false;
+                });
 
-                if (_engine.IsRunning)
+                if (ready)
                 {
                     IsConnected = true;
                     IsConnecting = false;
@@ -1540,12 +1551,15 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
                 else
                 {
-                    // StartAsync returned without exception but IsRunning
-                    // is still false after 5 s. Likely sing-box crashed at
-                    // startup or the Clash API never came up. Leave the
-                    // OnEngineStatus handler to surface the error — don't
-                    // promote to Connected.
-                    _logger.Warning("[VM] StartAsync returned, but engine not ready after 5 s");
+                    // StartAsync returned without exception but the
+                    // engine still reports not-running after 10 s. Don't
+                    // demote — VpnEngine's own warmup task emits
+                    // "Connected" after up to 15 s (see VpnEngine.cs
+                    // line ~403/413), and OnEngineStatus will flip
+                    // IsConnected=true when that event arrives. Explicit
+                    // Stop() call would kill a tunnel that's actually
+                    // working.
+                    _logger.Warning("[VM] Engine not ready after 10 s — leaving state to OnEngineStatus");
                 }
             }
             catch (TunOwnershipException)
