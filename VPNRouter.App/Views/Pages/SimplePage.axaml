@@ -99,7 +99,7 @@
 
                     <!-- ⋯ menu: theme · language · logs · leaks · updates · switch -->
                     <Button Grid.Column="2" Width="28" Height="28" Padding="0"
-                            FontSize="14" FontWeight="Bold"
+                            FontSize="15" FontWeight="Bold"
                             Background="Transparent" BorderThickness="0"
                             CornerRadius="{StaticResource RadiusSm}"
                             Foreground="{DynamicResource TextSecondaryBrush}"
@@ -331,7 +331,7 @@
                                 CornerRadius="{StaticResource RadiusSm}"
                                 Background="{DynamicResource AccentBgSubtleBrush}"
                                 VerticalAlignment="Center">
-                            <TextBlock Text="›" FontSize="14" FontWeight="Bold"
+                            <TextBlock Text="›" FontSize="15" FontWeight="Bold"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Foreground="{DynamicResource AccentFgBrush}"/>
                         </Border>

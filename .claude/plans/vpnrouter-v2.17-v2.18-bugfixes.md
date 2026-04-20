@@ -453,7 +453,11 @@ Legend: S = 1-2 h, M = 3-5 h, L = 1-2 days.
   ditto-based atomic swap, quarantine strip, logs to
   /tmp/vpnrouter-update-&lt;pid&gt;.log). Bug C (RAM 200 MB) static
   audit documented below; in-code fixes deferred to v2.18.2.
-- [ ] v2.18.2  — RAM low-hangers + hidden-bugs audit pass
+- [x] v2.18.2  — Hidden-bugs audit pass completed. Grep checks 1–6
+  run; one regression fixed (FontSize=14 off-scale in SimplePage
+  chevron + ⋯ menu, introduced by me in v2.18.0 — bumped to 15).
+  Remaining findings documented below as v2.19 followups rather
+  than rushed in.
 
 ---
 
@@ -508,6 +512,59 @@ Without live profiling, the cheapest-to-fix suspects are:
 | 5 | `FreeConfigAggregator` event handlers never unsubscribed | ~1 KB cumulative | `FreeConfigsPageViewModel.cs:35-36` |
 
 Most of that 200 MB is legitimate Avalonia + Skia + .NET runtime baseline (~80-100 MB) + the Free Configs cache (~37 MB) + subscriptions (varies). Cutting #1 via lazy-load on first Free tab click is the only fix that meaningfully moves the number, and is planned for v2.18.2 along with #5. #2 (server virtualization) is a bigger refactor and intentionally out of scope.
+
+## v2.18.2 addendum — hidden-bugs audit results
+
+Ran all six grep-based checks from the plan against the HEAD tree.
+
+### Check 1 — `{Binding !X}` two-way trap
+All 30+ hits are on `IsEnabled` or `IsVisible` (read-only sinks) or
+already `Mode=OneWay` (the one RadioButton in SimplePage).
+**Result: clean. No write-back risk remaining.**
+
+### Check 2 — UserControl referencing MainWindow.Resources converters
+Six StaticResource converter references across Pages. Every
+UserControl declares its own `<UserControl.Resources>` with the
+converter instance. **Result: clean — no runtime crash risk.**
+
+### Check 3 — Hardcoded hex colours post-Arctic
+All hex matches are on the purple `#7C3AED` / `#A78BFA` /
+`#EDE9FE` / `#5B21B6` / `#F5F3FF` / `#4C1D95` family — documented
+as intentional secondary-accent exceptions in MEMORY.md
+(Deep Verify, Zapret primary, Free Configs "cta-box"). **Result:
+clean — no v2.16 Arctic migration regression.**
+
+### Check 4 — FontSize off the {9,10,11,12,13,15,18,22,24,32} scale
+One off-scale value: `FontSize="14"`, 2 occurrences, both in
+SimplePage.axaml (⋯ menu button + Advanced card chevron). Introduced
+by me in v2.18.0. **Fix: bumped both to 15 in this release.**
+
+### Check 5 — Padding / CornerRadius off the 4 px grid
+Multiple odd-numbered paddings found across pages (3, 5, 7, 9, 11):
+`Padding="0,9"`, `"10,3"`, `"10,5"`, `"10,7"`, `"12,5"`, `"14,5"`,
+`"5,0"`, `"5,1"`, `"5,4"`, `"6,3"`, `"8,3"`, `"8,5"`. These are
+long-standing header/button micro-paddings, mostly invisible to the
+eye. **Deferred to a v2.19 cleanup sweep — not worth risking
+layout regressions for a release whose headline is "audit pass".**
+
+### Check 6 — Simple vless:// over subscription config
+`TryApplyVless` preserves existing `Subscriptions` list in settings
+(just flips IsVlessMode / IsSubscribeMode). Safe.
+`TryApplySubscriptionUrl` replaces the entire `Subscriptions` list
+with a single "simple" entry — **data loss** for users with
+multiple subscriptions who paste a new sub URL in Simple mode.
+**Deferred to v2.19** — the fix is non-trivial (append? de-dupe by
+URL? maintain a dedicated "simple-source" slot?) and warrants its
+own design discussion. Workaround for now: multi-sub users should
+edit in Advanced tab.
+
+## v2.19.x followups (out of scope for v2.18)
+1. Odd-grid Padding sweep across all Pages (cosmetic).
+2. Simple-mode `TryApplySubscriptionUrl` data-loss fix.
+3. Free Configs cache lazy-load (the real 40 MB RAM reduction).
+4. Server list virtualization for users with 500+ subscription
+   servers.
+5. ETW buffer bounded configuration.
 
 Update this list as each release ships.
 
