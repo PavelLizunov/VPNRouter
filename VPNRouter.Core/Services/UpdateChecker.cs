@@ -221,24 +221,27 @@ public class UpdateChecker
             zipPath.EndsWith(".tgz",    StringComparison.OrdinalIgnoreCase))
         {
             Directory.CreateDirectory(extractDir);
-            // tar -xzf <archive> -C <dir> — preserves file modes
-            // including the +x on VPNRouter.App / sing-box binaries.
-            var tarPsi = new ProcessStartInfo("tar",
-                $"-xzf \"{zipPath}\" -C \"{extractDir}\"")
+            // tar -xzf <archive> -C <dir> — preserves file modes.
+            //
+            // v2.22.1: BUG FIX for "Extracting update..." hanging forever.
+            // The original code set RedirectStandardOutput/Error = true and
+            // then called WaitForExit() without reading the streams. tar
+            // eventually fills the OS pipe buffer (~64 KB on Linux) with
+            // any warning it emits (e.g. "ignoring unknown extended header
+            // keyword 'SCHILY.*'" when extracting GNU-produced tarballs
+            // on some distros), blocks on write, and we block on exit.
+            // Classic deadlock. Fix: use RunWithCapture which reads both
+            // streams async, plus a 120 s timeout.
+            var tarCmd = $"-xzf \"{zipPath}\" -C \"{extractDir}\"";
+            var (tarExit, tarOut, tarErr) = RunWithCapture("tar", tarCmd, 120_000);
+            if (tarExit != 0)
             {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            using var tarProc = Process.Start(tarPsi)
-                ?? throw new InvalidOperationException("Failed to start tar");
-            tarProc.WaitForExit();
-            if (tarProc.ExitCode != 0)
-            {
-                var err = tarProc.StandardError.ReadToEnd();
+                if (tarExit == -1)
+                    throw new InvalidOperationException(
+                        "tar extraction timed out after 120 s — archive may be corrupt. " +
+                        $"Source: {zipPath}");
                 throw new InvalidOperationException(
-                    $"tar extraction failed (exit {tarProc.ExitCode}): {err}".Trim());
+                    $"tar extraction failed (exit {tarExit}): {Truncate(tarErr, 200)}".Trim());
             }
         }
         else
