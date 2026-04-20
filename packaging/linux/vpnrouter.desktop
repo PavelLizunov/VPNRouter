@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=VPNRouter
+Comment=Virtual Penguin Network — process-based split-tunnel VPN
+Exec=VPNRouter.sh %U
+Icon=vpnrouter
+Terminal=false
+Categories=Network;
+StartupNotify=true
