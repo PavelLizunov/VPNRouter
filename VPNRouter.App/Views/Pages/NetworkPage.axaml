@@ -124,13 +124,19 @@
             </Grid>
           </Border>
 
-          <!-- Full Tunnel card. RadioButton has no IsChecked binding —
-               when user clicks it GroupName auto-unchecks Split Tunnel
-               which flips IsSplitTunnel to false via two-way binding.
-               Classes.active inverts so it lights up when !IsSplitTunnel. -->
-          <Border Classes="radio-card" Classes.active="{Binding !IsSplitTunnel}">
+          <!-- Full Tunnel card.
+               v2.25.10 fix: explicit IsChecked binding to IsFullTunnel
+               (new in VM). Before this the Full RadioButton had no
+               binding and relied on GroupName exclusivity to flip Split
+               — which broke after ReloadMainWindowForLocalization kept
+               old + new windows alive briefly with the same GroupName,
+               causing the group manager to cross-wire. With a proper
+               two-way binding the radio state always mirrors the VM
+               regardless of how many window instances live at once. -->
+          <Border Classes="radio-card" Classes.active="{Binding IsFullTunnel}">
             <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
               <RadioButton Grid.Column="0"
+                           IsChecked="{Binding IsFullTunnel}"
                            GroupName="RoutingMode"
                            VerticalAlignment="Top"
                            MinWidth="0" MinHeight="0"

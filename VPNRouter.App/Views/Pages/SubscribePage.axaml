@@ -249,13 +249,13 @@
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="vm:SubscriptionViewModel">
             <Border Classes="srv-row">
-              <Grid ColumnDefinitions="14,*,Auto,Auto,Auto" ColumnSpacing="8"
+              <Grid ColumnDefinitions="24,*,Auto,Auto,Auto" ColumnSpacing="8"
                     VerticalAlignment="Center">
 
-                <!-- Enabled marker: filled-arctic circle when enabled.
-                     Two-way CheckBox binding preserved via a wrapper so
-                     the user can still toggle via keyboard/accessibility,
-                     but visually it reads as a filled indicator. -->
+                <!-- v2.25.10 fix: column widened 14 → 24 px, CheckBox got
+                     MinWidth=0/MinHeight=0/Padding=0 so Avalonia's default
+                     control sizing doesn't clip the check indicator (same
+                     root cause as the Settings → Routing radios). -->
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding Enabled}"
                           MinHeight="0" MinWidth="0" Padding="0"

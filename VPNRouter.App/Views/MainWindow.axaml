@@ -132,6 +132,21 @@
             <Setter Property="Margin" Value="4,4"/>
         </Style>
 
+        <!-- v2.25.10 fix: strip the default FlyoutPresenter chrome that
+             Avalonia wraps around any Flyout content. Without this the
+             popover shows: our custom Border with SurfaceBase + rounded
+             corners inside a SurfaceSunken rectangle from FlyoutPresenter's
+             default theme — reads as an ugly grey frame around the menu.
+             FlyoutPresenterClasses="naked" targets this selector so only
+             the ⋯ menu popover is affected (Flyouts from other controls
+             elsewhere in the app still use the default chrome). -->
+        <Style Selector="FlyoutPresenter.naked">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="CornerRadius" Value="0"/>
+        </Style>
+
         <!-- v2.25.8 Phase 8 polish: pulse for the warn-state VPN badge
              dot. Matches the Claude-Design handoff CSS (pulse 1.2s ease-
              out infinite, opacity 1 → 0.55 → 1). Applied via Ellipse.pulse
@@ -351,7 +366,9 @@
                         VerticalContentAlignment="Center">
                     <Button.Content>⋯</Button.Content>
                     <Button.Flyout>
-                        <Flyout Placement="BottomEdgeAlignedRight" ShowMode="TransientWithDismissOnPointerMoveAway">
+                        <Flyout Placement="BottomEdgeAlignedRight"
+                                ShowMode="TransientWithDismissOnPointerMoveAway"
+                                FlyoutPresenterClasses="naked">
                             <Border Width="232"
                                     Background="{DynamicResource SurfaceBaseBrush}"
                                     BorderBrush="{DynamicResource BorderDefaultBrush}"

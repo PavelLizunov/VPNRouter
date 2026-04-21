@@ -237,7 +237,32 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _newSubUrl = string.Empty;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
+    [NotifyPropertyChangedFor(nameof(IsFullTunnel))]
     private bool _isSplitTunnel = true;
+
+    /// <summary>
+    /// v2.25.10 fix: exposes the inverse of <see cref="IsSplitTunnel"/> as a
+    /// two-way bindable bool so the Full Tunnel RadioButton in Settings →
+    /// Routing can drive IsSplitTunnel directly (setting IsFullTunnel=true
+    /// sets IsSplitTunnel=false). Needed because RadioButton with
+    /// <c>{Binding !IsSplitTunnel}</c> is one-way only and cannot flip the
+    /// bool back on user click. Previously the Full RadioButton relied on
+    /// GroupName exclusivity to uncheck Split — that worked inside one
+    /// window but broke after ReloadMainWindowForLocalization briefly kept
+    /// both the old and new window's RadioButtons alive with the same
+    /// GroupName, letting the group manager cross-wire them. User symptom:
+    /// "VPN seemed to flip to Full by itself after language toggle and
+    /// Split would no longer apply".
+    /// </summary>
+    public bool IsFullTunnel
+    {
+        get => !IsSplitTunnel;
+        set
+        {
+            if (IsSplitTunnel != !value)
+                IsSplitTunnel = !value;
+        }
+    }
     [ObservableProperty] private bool _bypassRussianTraffic = true;
     [ObservableProperty] private bool _strictMode = false;
     [ObservableProperty] private bool _forceIpv4Only = true;
