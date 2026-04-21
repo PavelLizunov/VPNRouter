@@ -116,16 +116,25 @@
             </StackPanel>
         </ScrollViewer>
 
+        <!-- v2.25.6 Phase 6: TgProxy toggle демотирован до secondary
+             (surface-base bg + border + text-primary). Причина дизайн
+             handoff: "Остановить Telegram Proxy" не должен кричать как
+             primary — в окне уже есть один primary (Start/Stop VPN в
+             footer). Secondary-стиль делает его явным действием но не
+             бьётся за внимание с главным. -->
         <Border Grid.Row="1" Padding="10,8"
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource BorderDefaultBrush}">
             <Button Content="{Binding LblTgProxyToggle}"
                     Command="{Binding ToggleTgProxyCommand}"
-                    FontSize="12" FontWeight="Bold"
-                    Padding="0,8"
-                    HorizontalAlignment="Stretch"
+                    FontSize="11" FontWeight="SemiBold"
+                    Padding="14,7"
+                    HorizontalAlignment="Right"
                     HorizontalContentAlignment="Center"
-                    Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                    Background="{DynamicResource SurfaceBaseBrush}"
+                    Foreground="{DynamicResource TextPrimaryBrush}"
+                    BorderBrush="{DynamicResource BorderDefaultBrush}"
+                    BorderThickness="1"
                     CornerRadius="{StaticResource RadiusSm}"/>
         </Border>
     </Grid>

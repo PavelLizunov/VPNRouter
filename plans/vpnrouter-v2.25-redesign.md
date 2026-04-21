@@ -258,9 +258,9 @@ Side-nav (Обзор · Скан · Deep verify · Фильтры · Мои ис
 - [x] App rows chip-style — 2026-04-21 (`Border.app-row` = SurfaceSunken + RadiusSm padding вместо плоской ListBox-строки)
 
 ### v2.25.6 — Tools (Zapret + TgProxy)
-- [ ] Sub-tabs
-- [ ] Zapret side-nav + arctic primary
-- [ ] TgProxy compact layout + secondary Stop
+- [x] Sub-tabs — 2026-04-21 (ToolsPage уже был готов — ListBox-стрип Zapret/TgProxy)
+- [x] Zapret side-nav + arctic primary — 2026-04-21 (side-nav уже был, `Запустить обход DPI` button violet → arctic, progress bar violet → arctic, GitHub link violet → AccentFg, warning banner вместо italic muted text, active side-nav item → Surface-base bg + arctic fg)
+- [x] TgProxy compact layout + secondary Stop — 2026-04-21 (primary arctic → secondary SurfaceBase+border+TextPrimary, right-aligned, compact padding)
 
 ### v2.25.7 — Free Configs
 - [ ] Side-nav
