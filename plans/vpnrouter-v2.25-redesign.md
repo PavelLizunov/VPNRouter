@@ -229,11 +229,11 @@ Side-nav (Обзор · Скан · Deep verify · Фильтры · Мои ис
 - [ ] Convert hardcoded hex in axaml files
 
 ### v2.25.2 — Menu ⋯ popover
-- [ ] Light/Dark + RU/EN segments
-- [ ] Divider + Diagnostics section
-- [ ] Troubleshooting section (Health Check / Safe Mode / Reset)
-- [ ] About menu item
-- [ ] Advanced CTA bottom
+- [x] Light/Dark + RU/EN segments — 2026-04-21 (SetTheme{Light,Dark} + SetLanguage{Russian,English} commands, `Classes.active="{Binding !IsDarkTheme}"`-driven highlight)
+- [x] Divider + Diagnostics section — 2026-04-21 (section-label TextBlock + menu-divider Border)
+- [x] Troubleshooting section (Health Check / Safe Mode / Reset) — 2026-04-21 (new section between Diagnostics and About)
+- [x] About menu item — 2026-04-21 (with AppVersionShortText pill on the right)
+- [x] Advanced CTA bottom — 2026-04-21 (`Classes="primary-cta"` arctic-subtle bg at the end of the popover)
 
 ### v2.25.3 — Servers + Subscribe
 - [ ] srv-head column labels

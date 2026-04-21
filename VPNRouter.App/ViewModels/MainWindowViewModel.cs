@@ -428,6 +428,12 @@ public partial class MainWindowViewModel : ViewModelBase
     // ── Version ──
     public string VersionText => $"by NiniTux  \u00b7  v{AppVersion.Version}  \u00b7  sing-box {GetSingBoxVersion()}";
 
+    // v2.25.2 — short "v2.25.1-r2" string for the redesigned ⋯ menu About
+    // row. Rendered as a muted mono pill on the right side of the item.
+    // Kept separate from VersionText (which still carries by-line + sing-box
+    // for the About dialog) — the menu only has room for the version tag.
+    public string AppVersionShortText => $"v{AppVersion.Version}";
+
     private static string GetSingBoxVersion()
     {
         try
@@ -3021,6 +3027,40 @@ public partial class MainWindowViewModel : ViewModelBase
         SaveSettings();          // persist language before we rebuild UI
         RefreshLocalization();   // updates {Binding Lbl*} across the UI
         ReloadMainWindowForLocalization();  // re-parses XAML so {x:Static} hits new Lang
+    }
+
+    // v2.25.2 — explicit segment commands for the redesigned ⋯ menu popover
+    // (Phase 1). The popover shows Theme as a Light|Dark segmented control
+    // and Language as RU|EN — clicking an already-active segment must be a
+    // no-op, whereas ToggleTheme/ToggleLanguage always flip. These wrappers
+    // let the XAML bind each segment button to its own command without
+    // having to compute "should I fire?" in the binding layer.
+    [RelayCommand]
+    private void SetThemeLight()
+    {
+        if (!IsDarkTheme) return;
+        ToggleTheme();
+    }
+
+    [RelayCommand]
+    private void SetThemeDark()
+    {
+        if (IsDarkTheme) return;
+        ToggleTheme();
+    }
+
+    [RelayCommand]
+    private void SetLanguageRussian()
+    {
+        if (IsRussian) return;
+        ToggleLanguage();
+    }
+
+    [RelayCommand]
+    private void SetLanguageEnglish()
+    {
+        if (!IsRussian) return;
+        ToggleLanguage();
     }
 
     /// <summary>

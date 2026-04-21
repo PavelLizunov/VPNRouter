@@ -21,6 +21,111 @@
         <conv:BoolToLangConverter x:Key="LangConverter"/>
     </Window.Resources>
 
+    <!-- v2.25.2 — styling primitives for the redesigned ⋯ popover menu.
+         These are MainWindow-local so they don't leak into page content
+         that happens to use the same class names. Kept inline (rather
+         than promoted to Tokens.axaml or a dedicated Styles/Menu.axaml)
+         because they only render inside the popover Flyout and revealing
+         them to other pages would invite accidental reuse with the
+         wrong visual context. -->
+    <Window.Styles>
+
+        <!-- Section label — small caps-style header above each group -->
+        <Style Selector="TextBlock.section-label">
+            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="Margin" Value="8,6,8,4"/>
+        </Style>
+
+        <!-- Segment container — the rounded grey track -->
+        <Style Selector="Border.segment-container">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}"/>
+            <Setter Property="Padding" Value="2"/>
+            <Setter Property="Margin" Value="6,0,6,4"/>
+        </Style>
+
+        <!-- Base segment button — inactive state. Uses a transparent
+             background; active state (below) applies SurfaceBase + shadow. -->
+        <Style Selector="Button.segment">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="4,4"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.segment:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+        </Style>
+        <!-- Active segment: SurfaceBase background to contrast against the
+             SurfaceSunken track. BoxShadow sits on the ContentPresenter (not
+             the Button itself — Button doesn't carry the BoxShadow property
+             directly in Avalonia). -->
+        <Style Selector="Button.segment.active">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+        <Style Selector="Button.segment.active /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+            <Setter Property="BoxShadow" Value="{DynamicResource ShadowXs}"/>
+        </Style>
+
+        <!-- Regular menu item -->
+        <Style Selector="Button.menu-item">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.menu-item:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+        </Style>
+
+        <!-- Mono version pill on the right side of the About row -->
+        <Style Selector="TextBlock.version-hint">
+            <Setter Property="FontSize" Value="9"/>
+            <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+
+        <!-- Primary CTA — Advanced / Simple toggle at the bottom of the
+             popover. Arctic accent, full-width, slightly taller padding. -->
+        <Style Selector="Button.primary-cta">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="10,9"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.primary-cta:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgMutedBrush}"/>
+        </Style>
+
+        <!-- 1-px separator between menu sections -->
+        <Style Selector="Border.menu-divider">
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Background" Value="{DynamicResource BorderSubtleBrush}"/>
+            <Setter Property="Margin" Value="4,4"/>
+        </Style>
+
+    </Window.Styles>
+
     <Design.DataContext>
         <vm:MainWindowViewModel/>
     </Design.DataContext>
@@ -171,9 +276,35 @@
                     </Button.Styles>
                 </Button>
 
-                <!-- ⋯ flyout — theme · lang · logs · leaks · updates · mode toggle.
-                     Absorbs all the ex-header buttons. UiModeToggleText auto-flips
-                     "Advanced ▸" / "◂ Simple" based on the current mode. -->
+                <!-- ⋯ flyout — redesigned in v2.25.2 per Claude Design handoff
+                     (AdvancedMode.html section 1). Layout top-down:
+                       • "Вид" label
+                       • Light | Dark   segmented control
+                       • RU | EN         segmented control
+                       • Divider
+                       • "Диагностика"  label
+                       • Открыть логи / Проверить утечку IP / Проверить обновления
+                       • Divider
+                       • "Устранение неполадок" label
+                       • Run Health Check / Safe Mode / Reset config
+                       • Divider
+                       • О приложении (with version pill)
+                       • Advanced / Simple toggle (primary arctic CTA)
+
+                     Implementation notes:
+                       • Swapped MenuFlyout → regular Flyout, because MenuFlyout
+                         doesn't support non-MenuItem children (section labels
+                         or segmented controls). The content is a fully
+                         custom StackPanel styled with inline Classes.
+                       • Segment buttons bind to SetTheme{Light,Dark} /
+                         SetLanguage{Russian,English} (new in v2.25.2)
+                         rather than toggle commands — clicking the already-
+                         active segment is a no-op.
+                       • Classes.active="{Binding !IsDarkTheme}" is the
+                         idiomatic way to attach a style class conditionally.
+                       • Flyout Placement defaults to Bottom; we anchor to
+                         the right edge so the popover doesn't overflow off
+                         the left side of the narrow (520 px) window. -->
                 <Button Grid.Column="3" Width="28" Height="28" Padding="0"
                         FontSize="15" FontWeight="Bold"
                         Background="Transparent" BorderThickness="0"
@@ -184,39 +315,112 @@
                         VerticalContentAlignment="Center">
                     <Button.Content>⋯</Button.Content>
                     <Button.Flyout>
-                        <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <MenuItem Header="{Binding ThemeToggleText}"
-                                      Command="{Binding ToggleThemeCommand}"/>
-                            <MenuItem Header="{Binding IsRussian, Converter={StaticResource LangConverter}}"
-                                      Command="{Binding ToggleLanguageCommand}"/>
-                            <Separator/>
-                            <MenuItem Header="{x:Static loc:Strings.SmpMenuOpenLogs}"
-                                      Command="{Binding OpenLogsCommand}"/>
-                            <MenuItem Header="{x:Static loc:Strings.SmpMenuCheckLeaks}"
-                                      Command="{Binding OpenLeakTestCommand}"/>
-                            <Separator/>
-                            <MenuItem Header="{x:Static loc:Strings.SmpMenuCheckUpdates}"
-                                      Command="{Binding UpdateVm.CheckManuallyCommand}"/>
-                            <Separator/>
-                            <!-- v2.23.1 troubleshooting actions (command-backed twin of CLI flags). -->
-                            <MenuItem Header="{x:Static loc:Strings.SmpMenuHealthCheck}"
-                                      Command="{Binding RunHealthCheckCommand}"
-                                      ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuHealthCheck}"/>
-                            <MenuItem Header="{x:Static loc:Strings.SmpMenuSafeMode}"
-                                      Command="{Binding RestartInSafeModeCommand}"
-                                      ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuSafeMode}"/>
-                            <MenuItem Header="{Binding ResetConfigMenuHeader}"
-                                      Command="{Binding ResetConfigCommand}"
-                                      ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuResetConfig}"/>
-                            <Separator/>
-                            <!-- v2.25.0 — "About" absorbs the meta block that
-                                 used to render in the header subtitle. -->
-                            <MenuItem Header="{x:Static loc:Strings.SmpMenuAbout}"
-                                      Command="{Binding OpenAboutCommand}"
-                                      ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuAbout}"/>
-                            <MenuItem Header="{Binding UiModeToggleText}"
-                                      Command="{Binding ToggleUiModeCommand}"/>
-                        </MenuFlyout>
+                        <Flyout Placement="BottomEdgeAlignedRight" ShowMode="TransientWithDismissOnPointerMoveAway">
+                            <Border Width="232"
+                                    Background="{DynamicResource SurfaceBaseBrush}"
+                                    BorderBrush="{DynamicResource BorderDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusMd}"
+                                    Padding="6">
+                                <StackPanel Spacing="1">
+
+                                    <!-- Section: Вид -->
+                                    <TextBlock Classes="section-label"
+                                               Text="{x:Static loc:Strings.SmpMenuViewSection}"/>
+
+                                    <!-- Theme segmented: Light | Dark -->
+                                    <Border Classes="segment-container">
+                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="2">
+                                            <Button Grid.Column="0"
+                                                    Classes="segment"
+                                                    Classes.active="{Binding !IsDarkTheme}"
+                                                    Command="{Binding SetThemeLightCommand}"
+                                                    Content="{x:Static loc:Strings.SmpSegLight}"/>
+                                            <Button Grid.Column="1"
+                                                    Classes="segment"
+                                                    Classes.active="{Binding IsDarkTheme}"
+                                                    Command="{Binding SetThemeDarkCommand}"
+                                                    Content="{x:Static loc:Strings.SmpSegDark}"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Language segmented: RU | EN -->
+                                    <Border Classes="segment-container">
+                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="2">
+                                            <Button Grid.Column="0"
+                                                    Classes="segment"
+                                                    Classes.active="{Binding IsRussian}"
+                                                    Command="{Binding SetLanguageRussianCommand}"
+                                                    Content="{x:Static loc:Strings.SmpSegRu}"/>
+                                            <Button Grid.Column="1"
+                                                    Classes="segment"
+                                                    Classes.active="{Binding !IsRussian}"
+                                                    Command="{Binding SetLanguageEnglishCommand}"
+                                                    Content="{x:Static loc:Strings.SmpSegEn}"/>
+                                        </Grid>
+                                    </Border>
+
+                                    <Border Classes="menu-divider"/>
+
+                                    <!-- Section: Диагностика -->
+                                    <TextBlock Classes="section-label"
+                                               Text="{x:Static loc:Strings.SmpMenuDiagnosticsSection}"/>
+
+                                    <Button Classes="menu-item"
+                                            Command="{Binding OpenLogsCommand}"
+                                            Content="{x:Static loc:Strings.SmpMenuOpenLogs}"
+                                            ToolTip.Tip="{x:Static loc:Strings.TipOpenLogs}"/>
+                                    <Button Classes="menu-item"
+                                            Command="{Binding OpenLeakTestCommand}"
+                                            Content="{x:Static loc:Strings.SmpMenuCheckLeaks}"
+                                            ToolTip.Tip="{x:Static loc:Strings.TipIpLeak}"/>
+                                    <Button Classes="menu-item"
+                                            Command="{Binding UpdateVm.CheckManuallyCommand}"
+                                            Content="{x:Static loc:Strings.SmpMenuCheckUpdates}"/>
+
+                                    <Border Classes="menu-divider"/>
+
+                                    <!-- Section: Устранение неполадок -->
+                                    <TextBlock Classes="section-label"
+                                               Text="{x:Static loc:Strings.SmpMenuTroubleshootingSection}"/>
+
+                                    <Button Classes="menu-item"
+                                            Command="{Binding RunHealthCheckCommand}"
+                                            Content="{x:Static loc:Strings.SmpMenuHealthCheck}"
+                                            ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuHealthCheck}"/>
+                                    <Button Classes="menu-item"
+                                            Command="{Binding RestartInSafeModeCommand}"
+                                            Content="{x:Static loc:Strings.SmpMenuSafeMode}"
+                                            ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuSafeMode}"/>
+                                    <Button Classes="menu-item"
+                                            Command="{Binding ResetConfigCommand}"
+                                            Content="{Binding ResetConfigMenuHeader}"
+                                            ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuResetConfig}"/>
+
+                                    <Border Classes="menu-divider"/>
+
+                                    <!-- About (with version pill on the right) -->
+                                    <Button Classes="menu-item"
+                                            Command="{Binding OpenAboutCommand}"
+                                            ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuAbout}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{x:Static loc:Strings.SmpMenuAbout}"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Classes="version-hint"
+                                                       Text="{Binding AppVersionShortText}"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Button>
+
+                                    <!-- Advanced / Simple toggle — arctic primary CTA -->
+                                    <Button Classes="primary-cta"
+                                            Command="{Binding ToggleUiModeCommand}"
+                                            Content="{Binding UiModeToggleText}"/>
+                                </StackPanel>
+                            </Border>
+                        </Flyout>
                     </Button.Flyout>
                 </Button>
             </Grid>

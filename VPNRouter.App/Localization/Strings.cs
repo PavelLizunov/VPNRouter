@@ -688,6 +688,16 @@ public static class Strings
         ? "Автозапуск пока поддерживается только на Windows. Поддержка Linux (systemd) и macOS (launchd) появится в будущих версиях."
         : "Autostart is currently available on Windows only. Linux (systemd) and macOS (launchd) support is planned for future releases.";
 
+    // v2.25.2 — section labels inside the redesigned ⋯ popover menu.
+    // Matches the Claude-Design handoff AdvancedMode.html section 1 layout.
+    public static string SmpMenuViewSection           => Ru ? "Вид"                : "View";
+    public static string SmpMenuDiagnosticsSection    => Ru ? "Диагностика"        : "Diagnostics";
+    public static string SmpMenuTroubleshootingSection => Ru ? "Устранение неполадок" : "Troubleshooting";
+    public static string SmpSegLight                  => Ru ? "Светлая"            : "Light";
+    public static string SmpSegDark                   => Ru ? "Тёмная"             : "Dark";
+    public static string SmpSegRu                     => "RU";
+    public static string SmpSegEn                     => "EN";
+
     // v2.25.0 — "About" dialog (version / build info moved out of header).
     public static string SmpMenuAbout        => Ru ? "О приложении"              : "About";
     public static string TipSmpMenuAbout     => Ru
