@@ -55,6 +55,31 @@ public partial class App : Application
             }
             catch { /* non-fatal */ }
 
+            // v2.23.0: if launched with --safe, log it prominently so
+            // a support request screenshot of the log makes the mode
+            // obvious. UI banner binding uses MainWindowViewModel's
+            // SafeModeBanner / IsSafeModeBanner properties.
+            if (Program.SafeMode)
+                Serilog.Log.Warning(
+                    "[Startup] SAFE MODE active — user overrides disabled, forcing Full tunnel, " +
+                    "using bundled catalogue only");
+
+            // v2.23.0 crash detection: if the previous run left a stale
+            // lock file, log it so the banner / support can pick it up.
+            // Consumes the file regardless (deleted inside the helper).
+            try
+            {
+                VPNRouter.Core.AppPaths.EnsureDirectories();
+                var crashNotice = VPNRouter.Core.Services.LockFile
+                    .DetectPreviousCrash(Serilog.Log.Logger);
+                if (!string.IsNullOrEmpty(crashNotice))
+                    Serilog.Log.Warning("[Startup] {Notice}", crashNotice);
+
+                // Write our own lock so the NEXT run can detect if WE crash.
+                VPNRouter.Core.Services.LockFile.Acquire(Serilog.Log.Logger);
+            }
+            catch { /* non-fatal */ }
+
             _viewModel = new MainWindowViewModel();
             var mainWindow = new MainWindow { DataContext = _viewModel };
 
@@ -72,6 +97,9 @@ public partial class App : Application
             desktop.ShutdownRequested += (_, _) =>
             {
                 _viewModel?.QuitCommand.Execute(null);
+                // v2.23.0: drop the crash-detection lock on clean exit so
+                // the next run won't falsely think we crashed.
+                try { VPNRouter.Core.Services.LockFile.Release(Serilog.Log.Logger); } catch { }
             };
 
             // Setup tray icon

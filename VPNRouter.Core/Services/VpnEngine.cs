@@ -150,17 +150,33 @@ public class VpnEngine : IDisposable
         // v2.22.4 self-healing step: detect + quarantine a stale
         // user-level catalogue at %ProgramData%\VPNRouter\profiles\default.json
         // (or ~/.config/vpnrouter/profiles/default.json on Unix) BEFORE
-        // building the sources list. If it's unreadable or missing the
-        // v2.22 group names, rename it aside so the bundled fallback
-        // wins. User kept the legacy path from older versions; corrupt
-        // entries there were freezing ProcessScanner.
+        // building the sources list.
         QuarantineStaleUserCatalogue(_logger);
-        var sources = BuildProfileSources(settings);
+
+        // v2.23.0: safe-mode forces bundled-only catalogue. Even if
+        // the quarantine heuristic kept a user catalogue it's skipped
+        // when --safe is set. Purpose: let users recover when ANY
+        // user-facing override is wrong, not just stale schema.
+        var sources = SafeMode.Enabled
+            ? BuildBundledOnlyProfileSources()
+            : BuildProfileSources(settings);
+        if (SafeMode.Enabled)
+            _logger?.Warning("[VpnEngine] Safe mode — using bundled profiles only, ignoring user overrides");
         var manager = new ProfileManager(sources, _logger);
         var collection = await manager.LoadAsync(ct);
 
+        // v2.23.0: safe mode skips all user-level customization below.
+        // Custom apps / custom categories / user-group additions are
+        // exactly the kind of things that can contain malformed data
+        // and break startup — the whole point of safe mode is to let
+        // the user get to a working app.
+        if (SafeMode.Enabled)
+        {
+            _logger?.Warning("[VpnEngine] Safe mode — skipping custom apps / categories / group-apps merge");
+        }
+
         // 2a. Merge user-added apps into default groups (custom_group_apps)
-        if (settings.CustomGroupApps?.Count > 0)
+        if (!SafeMode.Enabled && settings.CustomGroupApps?.Count > 0)
         {
             foreach (var (groupName, extras) in settings.CustomGroupApps)
             {
@@ -182,7 +198,7 @@ public class VpnEngine : IDisposable
         }
 
         // 2b. Inject user-created categories (custom_categories) as profiles
-        if (settings.CustomCategories?.Count > 0)
+        if (!SafeMode.Enabled && settings.CustomCategories?.Count > 0)
         {
             foreach (var cat in settings.CustomCategories)
             {
@@ -226,6 +242,16 @@ public class VpnEngine : IDisposable
 
         if (string.IsNullOrEmpty(profileName) && !isFullTunnel && !isCustomConfig)
             throw new InvalidOperationException("No active profile specified in config.");
+
+        // v2.23.0: safe mode forces full-tunnel regardless of user setting.
+        // If the user's split-mode catalogue is what's breaking startup,
+        // we still want the app to come up — and full tunnel is the
+        // always-works fallback.
+        if (SafeMode.Enabled)
+        {
+            _logger?.Warning("[VpnEngine] Safe mode — forcing full-tunnel routing");
+            isFullTunnel = true;
+        }
 
         // v2.22.3: in full-tunnel mode all traffic goes through the proxy
         // regardless of process. Resolving ActiveProfile + scanning its
@@ -873,6 +899,30 @@ public class VpnEngine : IDisposable
             sources.Add(new LocalProfileSource(userDefault, 83));
 
         // Built-in fallback
+        sources.Add(new BuiltInProfileSource());
+        return sources;
+    }
+
+    /// <summary>
+    /// Safe-mode variant: only the bundled catalogue next to the exe,
+    /// then hard-coded BuiltInProfiles. No user-level file, no yaml
+    /// ProfileSources. Guarantees we never touch a potentially broken
+    /// user override when the user has chosen --safe.
+    /// </summary>
+    private static List<IProfileSource> BuildBundledOnlyProfileSources()
+    {
+        var sources = new List<IProfileSource>();
+        var appDir = AppContext.BaseDirectory;
+        var platformDefaultName = OperatingSystem.IsMacOS() ? "default-macos.json"
+                                : OperatingSystem.IsLinux() ? "default-linux.json"
+                                : "default.json";
+
+        var platformBundled = Path.Combine(appDir, "profiles", platformDefaultName);
+        if (File.Exists(platformBundled))
+            sources.Add(new LocalProfileSource(platformBundled, 80));
+        var defaultJson = Path.Combine(appDir, "profiles", "default.json");
+        if (File.Exists(defaultJson))
+            sources.Add(new LocalProfileSource(defaultJson, 78));
         sources.Add(new BuiltInProfileSource());
         return sources;
     }

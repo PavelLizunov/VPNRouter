@@ -12,6 +12,13 @@ public static class SettingsLoader
     {
         var configPath = path ?? DefaultConfigPath;
 
+        // v2.23.0 self-healing: --safe flag skips parsing user yaml
+        // and returns the pure defaults. Settings on disk stay intact
+        // (so next normal launch picks them up), but the current
+        // process sees a clean slate.
+        if (SafeMode.Enabled)
+            return CreateDefaults();
+
         if (!File.Exists(configPath))
         {
             // Write example config and return defaults
@@ -80,6 +87,30 @@ public static class SettingsLoader
             .Build();
 
         File.WriteAllText(configPath, serializer.Serialize(settings));
+    }
+
+    /// <summary>
+    /// v2.23.0 self-healing: reset user configuration to factory defaults.
+    /// Current yaml is backed up (timestamped) before being overwritten,
+    /// so the user can recover custom values if the reset turns out to
+    /// be overkill.
+    /// </summary>
+    /// <returns>Path of the backup file that was created, or null if no
+    /// prior config existed to back up.</returns>
+    public static string? ResetToDefaults(string? path = null)
+    {
+        var configPath = path ?? DefaultConfigPath;
+        string? backup = null;
+
+        if (File.Exists(configPath))
+        {
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            backup = $"{configPath}.backup-{stamp}";
+            File.Copy(configPath, backup, overwrite: false);
+        }
+
+        Save(CreateDefaults(), configPath);
+        return backup;
     }
 
     // ─── Defaults / Example ───────────────────────────────────────────────────

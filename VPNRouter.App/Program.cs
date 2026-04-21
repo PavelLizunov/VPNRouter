@@ -13,10 +13,49 @@ sealed class Program
     /// <summary>True when launched with --minimized (autostart, starts hidden in tray).</summary>
     public static bool StartMinimized { get; private set; }
 
+    /// <summary>
+    /// True when launched with --safe. Bypasses user overrides entirely:
+    /// yaml ProfileSources, CustomCategories, CustomGroupApps, CustomApps,
+    /// ActiveProfile are all ignored. VPN starts in Full tunnel mode with
+    /// bundled-only catalogue. Last-resort recovery path when a corrupt
+    /// user config is preventing the UI from starting normally.
+    /// </summary>
+    public static bool SafeMode { get; private set; }
+
     [STAThread]
     public static void Main(string[] args)
     {
         StartMinimized = args.Contains("--minimized");
+        SafeMode = args.Contains("--safe");
+
+        // Flip the Core-level flag so services below the App layer
+        // (SettingsLoader, VpnEngine) see it without having to thread
+        // parameters through every call site.
+        VPNRouter.Core.Services.SafeMode.Enabled = SafeMode;
+
+        // v2.23.0: --reset wipes user config to factory defaults and
+        // exits BEFORE any Avalonia startup. The next normal launch
+        // will hit the "no config file" path and create a fresh one.
+        // A timestamped backup is dropped next to the original. This
+        // is the last-resort recovery path when even --safe can't get
+        // the app running (e.g. config triggered a crash before UI).
+        if (args.Contains("--reset"))
+        {
+            try
+            {
+                var backup = VPNRouter.Core.Services.SettingsLoader.ResetToDefaults();
+                var msg = backup == null
+                    ? "VPNRouter config reset: no prior config existed, defaults written."
+                    : $"VPNRouter config reset complete.\r\nPrevious config backed up to: {backup}";
+                Console.WriteLine(msg);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"VPNRouter --reset failed: {ex.Message}");
+                Environment.Exit(1);
+            }
+            Environment.Exit(0);
+        }
 
 #if PLATFORM_WINDOWS
         // Auto-elevate to admin (required for TUN + ETW + Firewall).
