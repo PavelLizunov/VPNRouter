@@ -94,6 +94,16 @@ public static class SettingsLoader
 
     public static void Save(AppSettings settings, string? path = null)
     {
+        // v2.24.2 HOTFIX: Safe Mode must be strictly read-only. Previously
+        // Load() returned CreateDefaults() but some two-way binding in
+        // the ViewModel caused Save() to fire with those defaults, which
+        // overwrote the user's VLESS / subscriptions / CustomConfigs on
+        // disk. Blocking Save() at the Core layer is the only reliable
+        // way — we can't reliably audit every property binding that
+        // might trigger persistence.
+        if (SafeMode.Enabled)
+            return;
+
         var configPath = path ?? DefaultConfigPath;
         Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
 

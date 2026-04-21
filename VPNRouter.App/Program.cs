@@ -39,6 +39,27 @@ sealed class Program
         // parameters through every call site.
         VPNRouter.Core.Services.SafeMode.Enabled = SafeMode;
 
+        // v2.24.2 defensive backup: entering Safe Mode, snapshot the
+        // current config.yaml as config.yaml.backup-before-safemode-<stamp>
+        // BEFORE anything could touch it. The Save() no-op from the
+        // SafeMode.Enabled check should prevent overwrites, but a
+        // second layer of defence doesn't hurt. Skipped in normal mode.
+        if (SafeMode)
+        {
+            try
+            {
+                var cfg = VPNRouter.Core.AppPaths.ConfigYamlPath;
+                if (System.IO.File.Exists(cfg))
+                {
+                    var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                    var backup = $"{cfg}.backup-before-safemode-{stamp}";
+                    if (!System.IO.File.Exists(backup))
+                        System.IO.File.Copy(cfg, backup);
+                }
+            }
+            catch { /* non-fatal */ }
+        }
+
         // v2.23.0: --reset wipes user config to factory defaults and
         // exits BEFORE any Avalonia startup. The next normal launch
         // will hit the "no config file" path and create a fresh one.
