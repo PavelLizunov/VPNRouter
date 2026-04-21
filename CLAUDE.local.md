@@ -70,6 +70,12 @@ Never promote to stable until the user confirms it works.
 ### Build / push steps (unchanged)
 
 1. Обновить версию в `VPNRouter.Core/AppVersion.cs`.
+   **CRITICAL:** строка Version должна СОВПАДАТЬ с release tag **включая `-rN`**.
+   Например для тега `v2.25.1-r1` ставим `Version = "2.25.1-r1"`, не `"2.25.1"`.
+   Иначе update-check не различит `-r1` и `-r2` (обе скомпилятся с одинаковым
+   AppVersion, и клиент на r1 при проверке r2 увидит «2.25.0-r2 OLDER чем
+   2.25.0 stable» из-за semver-правила «stable > prerelease same-core» →
+   «Up to date», обновление не подтянется.
 2. `dotnet build VPNRouter.sln` — 0 errors.
 3. Коммит + `git push origin main && git push github main`.
 4. Push tag `git push --tags` (triggers mac + linux CI workflows).
@@ -78,6 +84,15 @@ Never promote to stable until the user confirms it works.
    ```bash
    gh release edit "vX.Y.Z-rN" --prerelease --notes "..."
    ```
+
+### Урок от v2.25.0-r1 → r2 (не повторять)
+
+v2.25.0-r1 релизили с `AppVersion.Version = "2.25.0"` (без суффикса).
+v2.25.0-r2 ШЛИ с тем же `Version = "2.25.0"`. На тестовой машине бинарь
+видел себя как "2.25.0" stable, r2 как "2.25.0-r2" prerelease, и по
+semver-правилу r2 < stable → update-check молча возвращал null.
+Пришлось бампать до v2.25.1-r1 чтобы Core изменилось и Check нашёл
+обновление.
 
 ## Forgejo Access
 
