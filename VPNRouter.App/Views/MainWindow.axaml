@@ -212,6 +212,9 @@
                                       Command="{Binding UpdateVm.CheckManuallyCommand}"/>
                             <Separator/>
                             <!-- v2.23.1 troubleshooting actions (command-backed twin of CLI flags). -->
+                            <MenuItem Header="Run Health Check"
+                                      Command="{Binding RunHealthCheckCommand}"
+                                      ToolTip.Tip="Run diagnostic checks, save results to a text file and open it. Safe to run at any time."/>
                             <MenuItem Header="Restart in Safe Mode"
                                       Command="{Binding RestartInSafeModeCommand}"
                                       ToolTip.Tip="Restart ignoring user config overrides. Forces Full tunnel, uses bundled catalogue only."/>

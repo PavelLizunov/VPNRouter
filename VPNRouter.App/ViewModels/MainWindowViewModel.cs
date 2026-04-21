@@ -571,6 +571,51 @@ public partial class MainWindowViewModel : ViewModelBase
         catch { /* best-effort */ }
     }
 
+    // ── Troubleshooting: health check (v2.24.1) ──
+    [RelayCommand]
+    private void RunHealthCheck()
+    {
+        try
+        {
+            var results = VPNRouter.Core.Services.HealthCheck.RunAll();
+            var report  = VPNRouter.Core.Services.HealthCheck.FormatReport(results);
+
+            var reportPath = Path.Combine(AppPaths.DataDir, "last-health-check.txt");
+            Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);
+            File.WriteAllText(reportPath, report);
+
+            // Open in system default text viewer.
+            ProcessStartInfo psi;
+            if (OperatingSystem.IsWindows())
+            {
+                psi = new ProcessStartInfo
+                {
+                    FileName = "notepad.exe",
+                    Arguments = $"\"{reportPath}\"",
+                    UseShellExecute = true
+                };
+            }
+            else
+            {
+                // xdg-open on Linux, /usr/bin/open on macOS.
+                var opener = OperatingSystem.IsMacOS()
+                    ? "/usr/bin/open"
+                    : "/usr/bin/xdg-open";
+                psi = new ProcessStartInfo
+                {
+                    FileName = opener,
+                    Arguments = $"\"{reportPath}\"",
+                    UseShellExecute = false
+                };
+            }
+            System.Diagnostics.Process.Start(psi);
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error(ex, "[ViewModel] Health check failed");
+        }
+    }
+
     // ── Troubleshooting: safe mode + reset (v2.23.1) ──
     // Menu header flips between "Reset config" and "Click again to
     // reset" so user has to double-click (cheap confirmation without
