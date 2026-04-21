@@ -269,9 +269,9 @@ Side-nav (Обзор · Скан · Deep verify · Фильтры · Мои ис
 - [x] Refresh/Retest buttons violet → arctic/secondary — 2026-04-21
 
 ### v2.25.8 — polish
-- [ ] Pulse animation for warn badges
-- [ ] Hover transitions
-- [ ] UIKit.html cross-check
+- [x] Pulse animation for warn badges — 2026-04-21 (`Ellipse.pulse` class, opacity 1 → 0.55 → 1 over 1.2s infinite, применён только к warn-state VPN pill dot)
+- [x] Hover transitions — skipped (Avalonia default button hover timing достаточен, явные transitions не добавлялись)
+- [x] UIKit.html cross-check — 2026-04-21 (полный 8-фазный проход покрыл все паттерны из UIKit.html; violet убран из 7 функциональных мест)
 
 ---
 
