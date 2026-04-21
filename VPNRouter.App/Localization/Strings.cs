@@ -681,6 +681,22 @@ public static class Strings
         ? "Сохранить резервную копию конфига и перезапустить с заводскими настройками. Нажмите дважды для подтверждения."
         : "Backup current config and restart with factory defaults. Click twice to confirm.";
 
+    // v2.25.0 — "About" dialog (version / build info moved out of header).
+    public static string SmpMenuAbout        => Ru ? "О приложении"              : "About";
+    public static string TipSmpMenuAbout     => Ru
+        ? "Информация о версии, билде и авторе."
+        : "Version, build, and author information.";
+    public static string AboutTitle          => Ru ? "О приложении"              : "About";
+    public static string AboutBrandName      => "Virtual Penguin Network";
+    public static string AboutTagline        => Ru
+        ? "Процесс-VPN роутер с поддержкой обхода DPI."
+        : "Process-based VPN router with DPI bypass support.";
+    public static string AboutVersionLabel   => Ru ? "Версия"                    : "Version";
+    public static string AboutSingBoxLabel   => Ru ? "sing-box"                  : "sing-box";
+    public static string AboutCreatorLabel   => Ru ? "Автор"                     : "Author";
+    public static string AboutRepoLabel      => Ru ? "Репозиторий"               : "Repository";
+    public static string AboutCloseBtn       => Ru ? "Закрыть"                   : "Close";
+
     // ── v2.15.5 Localization pass: remaining hardcoded strings ──
 
     // Tooltips — MainWindow header buttons

@@ -26,55 +26,42 @@
     </Design.DataContext>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto">
-        <!-- ═══ Unified compact header (v2.19.0) ═══
-             One header for both Simple and Advanced modes. Before v2.19.0
-             Simple mode had its own 40 px compact mini-header inside
-             SimplePage, and Advanced had a taller (~90 px) two-row header
-             with separate button strips. User reported the height mismatch
-             was jarring when flipping modes, and preferred the compact
-             layout — so the Simple mini-header is now the canonical header
-             and SimplePage lost its local copy. Affordances that used to
-             live as inline buttons (Logs, Check leaks, Theme, Language,
-             Check for updates, Simple↔Advanced toggle) all collapse into
-             the ⋯ flyout. VPN / Zapret / TG state is shown as pill-chips
-             (matching the Simple v2.18.3 style) instead of the old large
-             status badges — same commands, tighter visual weight. -->
+        <!-- ═══ Compact header (v2.25.0 redesign) ═══
+             One-row header, tight grid:
+                 [28 px logo] [brand name + status badges] [◂ Simple] [⋯]
+
+             Before v2.25.0 the header carried a 3-line block — brand name,
+             "by NiniTux · v2.x.y · sing-box 1.13.x", and the badge row. The
+             by-line + version moved into a dedicated About dialog (⋯ menu →
+             О приложении) so the header stays a single row even when the
+             window is narrow. VPN/Zapret/TG badges continue to act both as
+             status indicators and as navigation shortcuts — identical
+             command bindings to v2.24.4. Changes:
+               • logo container 40 → 28 px (matches design handoff)
+               • VersionText subtitle removed from header
+               • brand name drops a font weight (13 bold → 12 bold) so the
+                 badge row reads as the primary visual anchor
+               • "О приложении" menu item added, opens AboutWindow dialog
+             -->
         <Border Grid.Row="0" Padding="12,8" BorderThickness="0,0,0,1"
                 BorderBrush="{DynamicResource BorderDefaultBrush}"
                 Background="{DynamicResource SurfaceBaseBrush}">
-            <!-- v2.19.3 layout:
-                   • Logo size reverted to the design's 40 px container /
-                     36 px image. v2.19.1 bumped it to 56/52 to try to hide
-                     the jagged edges the user was seeing, but the real
-                     cause was Avalonia's default bitmap interpolation —
-                     `LowQuality`, which does nearest-neighbour downscale
-                     and produces visible staircase artefacts on a
-                     640×640 PNG rendered at 36 px. Setting
-                     RenderOptions.BitmapInterpolationMode="HighQuality"
-                     on the <Image> enables a smooth down-sample instead.
-                     No asset change — penguin_logo.png stays (640×640 is
-                     plenty of source resolution).
-                   • Brand title + version subtitle KEPT in subheader,
-                     OS title bar Title="" on the Window.
-                   • Visible "◂ Simple" pill-button, Advanced-only. -->
-            <Grid ColumnDefinitions="40,*,Auto,Auto" ColumnSpacing="10">
-                <Border Grid.Column="0" Width="40" Height="40"
+            <Grid ColumnDefinitions="28,*,Auto,Auto" ColumnSpacing="10">
+                <Border Grid.Column="0" Width="28" Height="28"
                         CornerRadius="{StaticResource RadiusSm}"
                         Background="{DynamicResource AccentBgSubtleBrush}"
-                        ClipToBounds="True">
+                        ClipToBounds="True"
+                        VerticalAlignment="Center">
                     <Image Source="{Binding LogoSource}"
-                           Width="36" Height="36" Stretch="Uniform"
+                           Width="26" Height="26" Stretch="Uniform"
                            RenderOptions.BitmapInterpolationMode="HighQuality"
                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
 
-                <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                     <TextBlock Text="Virtual Penguin Network"
-                               FontSize="13" FontWeight="Bold"
-                               Foreground="{DynamicResource TextPrimaryBrush}"/>
-                    <TextBlock Text="{Binding VersionText}"
-                               FontSize="9"
-                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="12" FontWeight="Bold"
+                               Foreground="{DynamicResource TextPrimaryBrush}"
                                TextTrimming="CharacterEllipsis"/>
                     <StackPanel Orientation="Horizontal" Spacing="4">
                         <!-- VPN pill-chip — 3 states via IsVisible.
@@ -222,6 +209,11 @@
                                       Command="{Binding ResetConfigCommand}"
                                       ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuResetConfig}"/>
                             <Separator/>
+                            <!-- v2.25.0 — "About" absorbs the meta block that
+                                 used to render in the header subtitle. -->
+                            <MenuItem Header="{x:Static loc:Strings.SmpMenuAbout}"
+                                      Command="{Binding OpenAboutCommand}"
+                                      ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuAbout}"/>
                             <MenuItem Header="{Binding UiModeToggleText}"
                                       Command="{Binding ToggleUiModeCommand}"/>
                         </MenuFlyout>
@@ -261,29 +253,45 @@
         <!-- ═══ ADVANCED: Tab strip + page area (no TabControl — direct Grid layout) ═══ -->
         <Grid Grid.Row="2" RowDefinitions="Auto,*"
               IsVisible="{Binding !IsSimpleMode}">
-            <!-- Tab buttons -->
-            <ListBox Grid.Row="0"
-                     SelectedIndex="{Binding SelectedTabIndex}"
-                     Background="Transparent"
-                     BorderThickness="0,0,0,1"
-                     BorderBrush="{DynamicResource BorderDefaultBrush}"
-                     Padding="6,2">
-                <ListBox.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" Spacing="4"/>
-                    </ItemsPanelTemplate>
-                </ListBox.ItemsPanel>
-                <ListBoxItem Content="{Binding LblTabManual}"      Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblTabSubscribe}"   Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblTabNetwork}"     Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblTabApps}"        Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
-                <!-- v2.21.0: Tools tab hidden on Linux — its only sub-pages
-                     are Zapret and TgProxy, both Windows-only. The tab
-                     visibility uses IsZapretAvailable (same signal). -->
-                <ListBoxItem Content="{Binding LblTabTools}"       Padding="12,6" FontSize="12" FontWeight="SemiBold"
-                             IsVisible="{Binding IsZapretAvailable}"/>
-                <ListBoxItem Content="{Binding LblTabFreeConfigs}" Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
-            </ListBox>
+            <!-- v2.25.0 — tabbar wrapped in a horizontal ScrollViewer.
+                 At 520 px window width the six tabs fit comfortably, but
+                 longer localised labels (e.g. EN "Applications" vs RU
+                 "Приложения" vs "Free Configs") have historically clipped
+                 the rightmost "Free" on narrower viewports. Hidden
+                 scrollbar + horizontal overflow means the UI degrades by
+                 letting the user flick instead of losing discoverability.
+                 HorizontalAlignment="Left" keeps the tabs left-aligned
+                 even when the ScrollViewer's content is narrower than the
+                 viewport (prevents the tabs from centring which would
+                 leave empty space to the left). -->
+            <ScrollViewer Grid.Row="0"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Disabled"
+                          HorizontalAlignment="Stretch"
+                          BorderThickness="0,0,0,1"
+                          BorderBrush="{DynamicResource BorderDefaultBrush}">
+                <ListBox SelectedIndex="{Binding SelectedTabIndex}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         HorizontalAlignment="Left"
+                         Padding="6,2">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="4"/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBoxItem Content="{Binding LblTabManual}"      Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding LblTabSubscribe}"   Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding LblTabNetwork}"     Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding LblTabApps}"        Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
+                    <!-- v2.21.0: Tools tab hidden on Linux — its only sub-pages
+                         are Zapret and TgProxy, both Windows-only. The tab
+                         visibility uses IsZapretAvailable (same signal). -->
+                    <ListBoxItem Content="{Binding LblTabTools}"       Padding="12,6" FontSize="12" FontWeight="SemiBold"
+                                 IsVisible="{Binding IsZapretAvailable}"/>
+                    <ListBoxItem Content="{Binding LblTabFreeConfigs}" Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
+                </ListBox>
+            </ScrollViewer>
 
             <!-- Pages: all six live in same Grid cell, only selected one visible. -->
             <Grid Grid.Row="1">
@@ -299,50 +307,57 @@
         <!-- ═══ SIMPLE: one-page onboarding (v2.17+) ═══ -->
         <pages:SimplePage Grid.Row="2" IsVisible="{Binding IsSimpleMode}"/>
 
-        <!-- ═══ Footer: service / connect / status (Advanced only;
-             Simple has its own inline Start/Stop and autostart) ═══ -->
-        <Border Grid.Row="3" Padding="12,8" BorderThickness="0,1,0,0"
+        <!-- ═══ Footer (v2.25.0 unified) ═══
+             Single-row status bar + inline compact connect button. Replaces
+             the triple-stacked footer (service row · big full-width Start/Stop
+             · separate status line) that existed through v2.24.x.
+
+             Layout: `[● status-dot] [mode / server / ip …]      [▶ Start | ■ Stop]`
+
+             Rationale for the consolidation:
+               • `Autostart with Windows` checkbox lived twice in the UI
+                 (footer + Settings → Autostart). Settings is the canonical
+                 home; footer copy is gone.
+               • ServiceVm Restart / Reinstall buttons are admin-tier and
+                 rarely needed. They'll migrate into Settings → Autostart in
+                 v2.25.4. For v2.25.0 they're not reachable from the footer.
+               • Full-width Start/Stop button was visually overwhelming; the
+                 compact version matches the Arctic design language and
+                 leaves more vertical room for page content. -->
+        <Border Grid.Row="3" Padding="12,7" BorderThickness="0,1,0,0"
                 IsVisible="{Binding !IsSimpleMode}"
-                BorderBrush="{DynamicResource BorderDefaultBrush}">
-            <StackPanel Spacing="6">
-                <StackPanel Orientation="Horizontal" Spacing="6"
-                            IsVisible="{Binding ServiceVm.IsAvailable}">
-                    <CheckBox Content="{x:Static loc:Strings.AutostartWithWindows}"
-                              IsChecked="{Binding ServiceVm.AutostartChecked}"
-                              IsEnabled="{Binding !ServiceVm.IsBusy}"
-                              FontSize="11" VerticalAlignment="Center"/>
-                    <Button Content="{x:Static loc:Strings.RestartService}"
-                            Command="{Binding ServiceVm.RestartServiceCommand}"
-                            IsVisible="{Binding ServiceVm.IsRunning}"
-                            IsEnabled="{Binding !ServiceVm.IsBusy}"
-                            Padding="6,3" FontSize="10"/>
-                    <Button Content="{x:Static loc:Strings.ReinstallService}"
-                            Command="{Binding ServiceVm.ReinstallServiceCommand}"
-                            IsVisible="{Binding ServiceVm.IsInstalled}"
-                            IsEnabled="{Binding !ServiceVm.IsBusy}"
-                            Padding="6,3" FontSize="10"/>
-                </StackPanel>
-
-                <Button Content="{Binding ConnectButtonText}"
-                        Command="{Binding ToggleConnectionCommand}"
-                        IsEnabled="{Binding !IsConnecting}"
-                        FontSize="12" FontWeight="Bold"
-                        Padding="0,8"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Background="{DynamicResource AccentSolidBrush}"
-                        Foreground="{DynamicResource AccentOnSolidBrush}"
-                        CornerRadius="{StaticResource RadiusSm}"/>
-
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                Background="{DynamicResource SurfaceRaisedBrush}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                <!-- Left: status dot + text; whole block is `min-width:0`
+                     (Grid * with TextTrimming) so long status lines ellide
+                     instead of pushing the Stop button off-screen. -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="7"
+                            VerticalAlignment="Center">
                     <Ellipse Width="8" Height="8"
                              Fill="{Binding IsConnected, Converter={StaticResource StatusColorConverter}}"
                              VerticalAlignment="Center"/>
                     <TextBlock Text="{Binding StatusText}" FontSize="11"
-                               Opacity="0.7" TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center"/>
                 </StackPanel>
-            </StackPanel>
+
+                <!-- Right: inline Start/Stop. Text toggles via ConnectButtonText
+                     (Start / Stop / Starting / Stopping). Same command as the
+                     big button v2.24.4 exposed; only styling is reduced. -->
+                <Button Grid.Column="1"
+                        Content="{Binding ConnectButtonText}"
+                        Command="{Binding ToggleConnectionCommand}"
+                        IsEnabled="{Binding !IsConnecting}"
+                        FontSize="11" FontWeight="Bold"
+                        Padding="14,5" MinHeight="0"
+                        HorizontalContentAlignment="Center"
+                        Background="{DynamicResource AccentSolidBrush}"
+                        Foreground="{DynamicResource AccentOnSolidBrush}"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource RadiusSm}"/>
+            </Grid>
         </Border>
     </Grid>
 </Window>

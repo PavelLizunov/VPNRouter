@@ -215,12 +215,13 @@ Side-nav (Обзор · Скан · Deep verify · Фильтры · Мои ис
 ## Status tracker
 
 ### v2.25.0 — глобальный header/footer/tabbar
-- [ ] Header compact (logo 28px + brand + Simple + ⋯)
-- [ ] Mini-badges VPN/Zapret/TG (status + click-nav)
-- [ ] Footer unified (status + compact Stop)
-- [ ] Scrollable tabbar (no Free clipping)
-- [ ] About dialog с версией / by / sing-box version
-- [ ] Автозапуск перенесён в Settings (если ещё не)
+- [x] Header compact (logo 28px + brand + Simple + ⋯) — 2026-04-21
+- [x] Mini-badges VPN/Zapret/TG (status + click-nav) — уже были в v2.24.x, перенесены как есть
+- [x] Footer unified (status + compact Stop) — 2026-04-21
+- [x] Scrollable tabbar (no Free clipping) — 2026-04-21 (ScrollViewer wrap)
+- [x] About dialog с версией / by / sing-box version — 2026-04-21 (AboutWindow.axaml + OpenAboutCommand)
+- [x] Автозапуск перенесён в Settings (если ещё не) — уже в NetworkPage → Autostart section
+- [ ] Service Restart/Reinstall кнопки перенести в Settings → Autostart (отложено в v2.25.4 — см. NetworkPage redesign)
 
 ### v2.25.1 — tokens reconciliation
 - [ ] Diff tokens.css vs Tokens.axaml

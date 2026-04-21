@@ -616,6 +616,37 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    // ── About dialog (v2.25.0) ──
+    // Before v2.25.0 the version/build/by-line lived inline in the compact
+    // header. The redesign gives the header back to badges + mode-toggle,
+    // so the meta block moved into a dedicated About dialog accessible from
+    // the ⋯ flyout. Command lives here rather than in code-behind so the
+    // menu binding is declarative.
+    [RelayCommand]
+    private void OpenAbout()
+    {
+        try
+        {
+            var dlg = new VPNRouter.App.Views.AboutWindow();
+
+            // Give the dialog the main window as owner so it centres on top
+            // and blocks input to the main window until closed (modal feel
+            // without actually needing ShowDialog — plain Show() is fine here
+            // because About is information-only, no return value).
+            var app = Avalonia.Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+            var owner = app?.MainWindow;
+            if (owner != null)
+                dlg.ShowDialog(owner);
+            else
+                dlg.Show();
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error(ex, "[ViewModel] Failed to open About dialog");
+        }
+    }
+
     // ── Troubleshooting: safe mode + reset (v2.23.1) ──
     // Menu header flips between "Reset config" and "Click again to
     // reset" so user has to double-click (cheap confirmation without

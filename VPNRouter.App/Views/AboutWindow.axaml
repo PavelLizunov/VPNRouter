@@ -1,0 +1,117 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:VPNRouter.App.Localization"
+        x:Class="VPNRouter.App.Views.AboutWindow"
+        Title="{x:Static loc:Strings.AboutTitle}"
+        Width="360" Height="420"
+        MinWidth="320" MinHeight="380"
+        SizeToContent="Manual"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBaseBrush}">
+
+  <Border Padding="24,22" BorderThickness="0">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="14">
+
+      <!-- v2.25.0 — About dialog. Replaces the by-line + version that
+           used to live in the compact header. Keep it centred, simple,
+           and aligned to the Arctic design system. -->
+
+      <!-- Logo -->
+      <Border Grid.Row="0"
+              Width="76" Height="76" HorizontalAlignment="Center"
+              CornerRadius="{StaticResource RadiusLg}"
+              Background="{DynamicResource AccentBgSubtleBrush}"
+              ClipToBounds="True">
+        <Image x:Name="LogoImage"
+               Width="66" Height="66" Stretch="Uniform"
+               RenderOptions.BitmapInterpolationMode="HighQuality"
+               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+      </Border>
+
+      <!-- Brand name + tagline -->
+      <StackPanel Grid.Row="1" Spacing="4" HorizontalAlignment="Center">
+        <TextBlock Text="{x:Static loc:Strings.AboutBrandName}"
+                   FontSize="18" FontWeight="Bold"
+                   HorizontalAlignment="Center"
+                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+        <TextBlock Text="{x:Static loc:Strings.AboutTagline}"
+                   FontSize="11"
+                   HorizontalAlignment="Center"
+                   TextAlignment="Center"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+      </StackPanel>
+
+      <!-- Key-value info block -->
+      <Border Grid.Row="2" Padding="14,10"
+              CornerRadius="{StaticResource RadiusSm}"
+              Background="{DynamicResource SurfaceSunkenBrush}"
+              BorderBrush="{DynamicResource BorderSubtleBrush}"
+              BorderThickness="1">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="5">
+          <TextBlock Grid.Row="0" Grid.Column="0"
+                     Text="{x:Static loc:Strings.AboutVersionLabel}"
+                     FontSize="10" FontWeight="SemiBold"
+                     Foreground="{DynamicResource TextMutedBrush}"
+                     Margin="0,0,16,0"/>
+          <TextBlock Grid.Row="0" Grid.Column="1"
+                     x:Name="VersionTextBlock"
+                     FontSize="11" FontWeight="SemiBold"
+                     Foreground="{DynamicResource TextPrimaryBrush}"/>
+
+          <TextBlock Grid.Row="1" Grid.Column="0"
+                     Text="{x:Static loc:Strings.AboutSingBoxLabel}"
+                     FontSize="10" FontWeight="SemiBold"
+                     Foreground="{DynamicResource TextMutedBrush}"
+                     Margin="0,0,16,0"/>
+          <TextBlock Grid.Row="1" Grid.Column="1"
+                     x:Name="SingBoxTextBlock"
+                     FontSize="11"
+                     Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+          <TextBlock Grid.Row="2" Grid.Column="0"
+                     Text="{x:Static loc:Strings.AboutCreatorLabel}"
+                     FontSize="10" FontWeight="SemiBold"
+                     Foreground="{DynamicResource TextMutedBrush}"
+                     Margin="0,0,16,0"/>
+          <TextBlock Grid.Row="2" Grid.Column="1"
+                     Text="NiniTux"
+                     FontSize="11"
+                     Foreground="{DynamicResource TextSecondaryBrush}"/>
+        </Grid>
+      </Border>
+
+      <!-- Repo link -->
+      <Button Grid.Row="3"
+              Click="OnOpenRepoClick"
+              VerticalAlignment="Top"
+              HorizontalAlignment="Center"
+              Background="Transparent"
+              BorderThickness="0"
+              Cursor="Hand"
+              Padding="8,4"
+              CornerRadius="{StaticResource RadiusSm}"
+              Foreground="{DynamicResource AccentFgBrush}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock Text="{x:Static loc:Strings.AboutRepoLabel}" FontSize="11" FontWeight="SemiBold"/>
+          <TextBlock Text="github.com/PavelLizunov/VPNRouter"
+                     FontSize="11" FontFamily="Consolas, 'SF Mono', monospace"/>
+        </StackPanel>
+      </Button>
+
+      <!-- Footer — Close button -->
+      <Button Grid.Row="4"
+              Content="{x:Static loc:Strings.AboutCloseBtn}"
+              Click="OnCloseClick"
+              HorizontalAlignment="Center"
+              Padding="22,6"
+              FontSize="11" FontWeight="SemiBold"
+              Background="{DynamicResource AccentSolidBrush}"
+              Foreground="{DynamicResource AccentOnSolidBrush}"
+              BorderThickness="0"
+              CornerRadius="{StaticResource RadiusSm}"/>
+    </Grid>
+  </Border>
+</Window>
