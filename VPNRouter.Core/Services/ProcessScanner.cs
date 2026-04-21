@@ -70,18 +70,41 @@ public class ProcessScanner : IProcessScanner
                     }
                 }
 
-                // 4. If include_children, find currently running children via WMI
-                if (rule.IncludeChildren)
-                {
-                    var mainProcs = allProcesses
-                        .Where(p => string.Equals(p.ProcessName + ".exe", rule.Name, StringComparison.OrdinalIgnoreCase));
+                // 4. include_children handled in batch after the per-rule
+                //    loop — see below. Each per-rule WMI query used to fire
+                //    N recursive calls and could take 20-60 s for a split
+                //    profile with 20 browsers running. Now all of
+                //    include_children is one WMI snapshot + in-memory
+                //    tree walk.
+            }
 
-                    foreach (var proc in mainProcs)
+            // 5. Batch include_children: one WMI snapshot of the whole
+            //    process table, then walk the parent→children tree in
+            //    memory. v2.22.4 self-healing — replaces the per-rule
+            //    recursive GetChildProcessNamesWmi which blocked
+            //    ProcessScanner for minutes on overloaded systems.
+            var childRules = profile.Processes
+                .Where(r => r.IncludeChildren)
+                .ToList();
+
+            if (childRules.Count > 0)
+            {
+                var rootPids = new HashSet<int>();
+                foreach (var rule in childRules)
+                {
+                    var ruleName = rule.Name;
+                    foreach (var p in allProcesses)
                     {
-                        var children = GetChildProcessNames(proc.Id);
-                        foreach (var child in children)
-                            found.Add(NormalizeName(child));
+                        if (string.Equals(p.ProcessName + ".exe", ruleName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            try { rootPids.Add(p.Id); } catch { /* process exited */ }
+                        }
                     }
+                }
+                if (rootPids.Count > 0)
+                {
+                    foreach (var childName in CollectDescendantNames(rootPids))
+                        found.Add(NormalizeName(childName));
                 }
             }
         }
@@ -119,45 +142,81 @@ public class ProcessScanner : IProcessScanner
 
     // ─── Private ──────────────────────────────────────────────────────────────
 
-    private List<string> GetChildProcessNames(int parentId)
+    /// <summary>
+    /// Given a set of root PIDs, return all descendant process names
+    /// (direct and transitive children). One WMI snapshot of the whole
+    /// process table, then tree walk in memory — O(1) WMI queries per
+    /// scan regardless of how many rules or how deep the tree.
+    /// </summary>
+    private IEnumerable<string> CollectDescendantNames(HashSet<int> rootPids)
     {
 #if PLATFORM_WINDOWS
-        return GetChildProcessNamesWmi(parentId);
-#else
-        // Non-Windows: child process detection not implemented yet (TODO: macOS ps/sysctl)
-        return new List<string>();
-#endif
-    }
+        // Snapshot (pid → name) and (parentPid → list of child pids)
+        var nameByPid = new Dictionary<int, string>();
+        var childrenByParent = new Dictionary<int, List<int>>();
 
-#if PLATFORM_WINDOWS
-    private List<string> GetChildProcessNamesWmi(int parentId)
-    {
-        var names = new List<string>();
         try
         {
-            var query = $"SELECT ProcessId, Name FROM Win32_Process WHERE ParentProcessId = {parentId}";
-            using var searcher = new ManagementObjectSearcher(query);
-
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT ProcessId, ParentProcessId, Name FROM Win32_Process");
             foreach (ManagementObject obj in searcher.Get())
             {
-                var childId = Convert.ToInt32(obj["ProcessId"]);
-                var childName = obj["Name"]?.ToString() ?? string.Empty;
-
-                if (!string.IsNullOrEmpty(childName))
+                int pid, parent;
+                string name;
+                try
                 {
-                    names.Add(childName);
-                    names.AddRange(GetChildProcessNamesWmi(childId));
+                    pid = Convert.ToInt32(obj["ProcessId"]);
+                    parent = Convert.ToInt32(obj["ParentProcessId"]);
+                    name = obj["Name"]?.ToString() ?? string.Empty;
                 }
+                catch { continue; }
+
+                if (pid <= 0) continue;
+                nameByPid[pid] = name;
+                if (!childrenByParent.TryGetValue(parent, out var list))
+                {
+                    list = new List<int>();
+                    childrenByParent[parent] = list;
+                }
+                list.Add(pid);
             }
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "[ProcessScanner] WMI query failed for parent PID {Id}", parentId);
+            _logger.Warning(ex, "[ProcessScanner] WMI snapshot failed — returning empty descendant list");
+            yield break;
         }
 
-        return names;
-    }
+        // BFS from each root, emitting process names. visited set caps
+        // runtime for any pathological tree (shouldn't happen, but cheap
+        // insurance against cycles if WMI returns inconsistent data).
+        var visited = new HashSet<int>();
+        var queue = new Queue<int>();
+        foreach (var root in rootPids)
+            if (visited.Add(root))
+                queue.Enqueue(root);
+
+        while (queue.Count > 0)
+        {
+            var pid = queue.Dequeue();
+            if (childrenByParent.TryGetValue(pid, out var kids))
+            {
+                foreach (var k in kids)
+                {
+                    if (!visited.Add(k)) continue;
+                    if (nameByPid.TryGetValue(k, out var kname) && !string.IsNullOrEmpty(kname))
+                        yield return kname;
+                    queue.Enqueue(k);
+                }
+            }
+        }
+#else
+        // Non-Windows: child process detection not implemented yet
+        // (TODO: macOS ps/sysctl). Return empty — Linux scanner uses
+        // pattern-based matching which is enough for typical cases.
+        yield break;
 #endif
+    }
 
     private static Regex BuildPatternRegex(string pattern)
     {

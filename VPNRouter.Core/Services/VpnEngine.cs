@@ -147,6 +147,14 @@ public class VpnEngine : IDisposable
 
         // 2. Load profiles
         OnStatus("Loading profiles...");
+        // v2.22.4 self-healing step: detect + quarantine a stale
+        // user-level catalogue at %ProgramData%\VPNRouter\profiles\default.json
+        // (or ~/.config/vpnrouter/profiles/default.json on Unix) BEFORE
+        // building the sources list. If it's unreadable or missing the
+        // v2.22 group names, rename it aside so the bundled fallback
+        // wins. User kept the legacy path from older versions; corrupt
+        // entries there were freezing ProcessScanner.
+        QuarantineStaleUserCatalogue(_logger);
         var sources = BuildProfileSources(settings);
         var manager = new ProfileManager(sources, _logger);
         var collection = await manager.LoadAsync(ct);
@@ -309,9 +317,38 @@ public class VpnEngine : IDisposable
         OnStatus($"Profile: {_activeProfile.Name} ({_activeProfile.Processes.Count} rules)");
         ct.ThrowIfCancellationRequested();
 
-        // 4. Scan processes (synchronous — can take 1-3s, check token after)
+        // 4. Scan processes. v2.22.4 self-healing: wrap in a 30s timeout.
+        // WMI child-lookup on a corrupt catalogue or an overloaded WMI
+        // subsystem used to hang forever, freezing startup. If the scan
+        // doesn't return, continue with an empty list — VPN still starts,
+        // split mode just routes nothing (user sees a warning and can
+        // toggle Full mode or clean up the catalogue).
         OnStatus("Scanning processes...");
-        _scanResult = _scanner.ScanForProfile(_activeProfile);
+        _scanResult = null;
+        try
+        {
+            var scanTask = Task.Run(() => _scanner.ScanForProfile(_activeProfile), ct);
+            if (scanTask.Wait(TimeSpan.FromSeconds(30), ct))
+            {
+                _scanResult = scanTask.Result;
+            }
+            else
+            {
+                _logger?.Warning(
+                    "[VpnEngine] Process scan timed out after 30s — continuing with empty list. " +
+                    "Check %ProgramData%\\VPNRouter\\profiles\\ for corrupt entries, or switch to Full tunnel mode.");
+                Warning?.Invoke(
+                    "Process scan timed out — split mode may not route correctly. " +
+                    "Switch to Full mode or reset your catalogue.");
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _logger?.Error(ex, "[VpnEngine] Process scan failed — continuing with empty list");
+            Warning?.Invoke($"Process scan error: {ex.Message}");
+        }
+        _scanResult ??= new ScanResult { ProcessNames = new List<string>(), ScannedAt = DateTime.Now };
         _logger?.Information("[VpnEngine] Resolved {Count} process names", _scanResult.ProcessNames.Count);
 
         ct.ThrowIfCancellationRequested();
@@ -838,5 +875,79 @@ public class VpnEngine : IDisposable
         // Built-in fallback
         sources.Add(new BuiltInProfileSource());
         return sources;
+    }
+
+    // ─── v2.22.4 self-healing: stale user-catalogue quarantine ──────────
+
+    private static readonly string[] ExpectedV222Groups =
+    {
+        "Discord_Privacy", "Messengers", "AI_Tools", "Browsers",
+        "Work_Suite", "Streaming", "Gaming", "Privacy_Shell"
+    };
+
+    /// <summary>
+    /// Rename a user-level <c>profiles/default.json</c> that doesn't match
+    /// the v2.22 group schema. Triggered at start of every StartAsync so
+    /// stale catalogues from older installs can't deadlock ProcessScanner.
+    /// Errors are swallowed — never fatal.
+    /// </summary>
+    private static void QuarantineStaleUserCatalogue(ILogger? logger)
+    {
+        try
+        {
+            var userPath = Path.Combine(AppPaths.ProfilesDir, "default.json");
+            if (!File.Exists(userPath)) return;
+
+            bool shouldQuarantine = false;
+            string reason = "";
+
+            try
+            {
+                var json = File.ReadAllText(userPath);
+                var collection = Newtonsoft.Json.JsonConvert
+                    .DeserializeObject<ProfileCollection>(json);
+                if (collection == null || collection.Profiles == null || collection.Profiles.Count == 0)
+                {
+                    shouldQuarantine = true;
+                    reason = "empty or unparseable";
+                }
+                else
+                {
+                    var present = new HashSet<string>(
+                        collection.Profiles.Select(p => p.Name),
+                        StringComparer.OrdinalIgnoreCase);
+                    var missing = ExpectedV222Groups.Count(g => !present.Contains(g));
+                    // Heuristic: if ≥3 of 8 standard v2.22 groups absent,
+                    // this is an older-schema catalogue. Just one or two
+                    // missing — could be legitimate user customization.
+                    if (missing >= 3)
+                    {
+                        shouldQuarantine = true;
+                        reason = $"{missing} of {ExpectedV222Groups.Length} standard groups missing";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                shouldQuarantine = true;
+                reason = $"parse error: {ex.Message}";
+            }
+
+            if (!shouldQuarantine) return;
+
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var backup = $"{userPath}.migrated-{stamp}";
+            File.Move(userPath, backup);
+            logger?.Warning(
+                "[VpnEngine] Quarantined stale user catalogue {Path} ({Reason}) → {Backup}. Using bundled defaults.",
+                userPath, reason, backup);
+        }
+        catch (Exception ex)
+        {
+            // Quarantine is best-effort. If we can't even rename it,
+            // let it through — the catalogue load will either succeed or
+            // skip to fallback sources naturally.
+            logger?.Warning(ex, "[VpnEngine] Could not quarantine stale user catalogue");
+        }
     }
 }
