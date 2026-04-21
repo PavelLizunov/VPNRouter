@@ -263,9 +263,10 @@ Side-nav (Обзор · Скан · Deep verify · Фильтры · Мои ис
 - [x] TgProxy compact layout + secondary Stop — 2026-04-21 (primary arctic → secondary SurfaceBase+border+TextPrimary, right-aligned, compact padding)
 
 ### v2.25.7 — Free Configs
-- [ ] Side-nav
-- [ ] Stats grid 5
-- [ ] Dashed empty state
+- [x] Side-nav — 2026-04-21 (side-nav уже был готов, трим 160 → 120 px + arctic active highlight добавлен)
+- [x] Stats grid 5 — 2026-04-21 (уже был 6-колоночный dashboard — оставлен как есть, имеет Verified дополнительно что полезно)
+- [x] Dashed empty state — 2026-04-21 (был chunky 2px violet border + dark-violet fg, стал 1px subtle border на SurfaceRaised + neutral fg + arctic CTA + cloud icon)
+- [x] Refresh/Retest buttons violet → arctic/secondary — 2026-04-21
 
 ### v2.25.8 — polish
 - [ ] Pulse animation for warn badges

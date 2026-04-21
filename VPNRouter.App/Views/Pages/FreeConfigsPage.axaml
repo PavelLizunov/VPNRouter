@@ -9,8 +9,22 @@
              x:Class="VPNRouter.App.Views.Pages.FreeConfigsPage"
              x:DataType="vm:MainWindowViewModel">
 
-    <!-- ═══ v2.14.8: master-detail layout (matches NetworkPage/DpiBypassPage) ═══ -->
-    <Grid RowDefinitions="*,Auto" ColumnDefinitions="160,*">
+    <!-- ═══ v2.14.8: master-detail layout (matches NetworkPage/DpiBypassPage)
+         v2.25.7 Phase 7: left nav 160 → 120 (matches design handoff), plus
+         arctic highlight for active side-nav item (consistent with other
+         pages), violet → arctic sweep (Refresh / Retest / Empty-state CTA),
+         empty-state dashed-feel border + neutral fg (was chunky 2 px violet
+         border + dark-violet text — too loud for an empty state). ═══ -->
+    <UserControl.Styles>
+        <Style Selector="ListBox ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+        </Style>
+        <Style Selector="ListBox ListBoxItem:selected">
+            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="*,Auto" ColumnDefinitions="120,*">
 
         <!-- MASTER (left): section navigator -->
         <Border Grid.Row="0" Grid.Column="0"
@@ -164,13 +178,19 @@
 
                         <!-- Primary action buttons -->
                         <Grid ColumnDefinitions="*,*,Auto">
+                            <!-- v2.25.7: violet primaries → arctic + neutral.
+                                 "Обновить" — the main action, arctic.
+                                 "Перепроверить" — secondary (neutral surface
+                                 + border), so two bright buttons don't
+                                 compete for attention. -->
                             <Button Grid.Column="0" Margin="0,0,3,0"
                                     Content="{x:Static loc:Strings.FcRefreshSources}"
                                     Command="{Binding FreeConfigsVm.RefreshCommand}"
                                     IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                                     Padding="0,8" FontSize="12" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                    Background="#7C3AED" Foreground="White"
+                                    Background="{DynamicResource AccentSolidBrush}"
+                                    Foreground="{DynamicResource AccentOnSolidBrush}"
                                     ToolTip.Tip="{x:Static loc:Strings.FcRefreshTooltip}"/>
                             <Button Grid.Column="1" Margin="3,0,0,0"
                                     Content="{x:Static loc:Strings.FcRetestAll}"
@@ -178,7 +198,10 @@
                                     IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                                     Padding="0,8" FontSize="12" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                                    Background="#A78BFA" Foreground="White"
+                                    Background="{DynamicResource SurfaceBaseBrush}"
+                                    Foreground="{DynamicResource TextPrimaryBrush}"
+                                    BorderBrush="{DynamicResource BorderDefaultBrush}"
+                                    BorderThickness="1"
                                     ToolTip.Tip="{x:Static loc:Strings.FcRetestTooltip}"/>
                             <Button Grid.Column="2" Margin="6,0,0,0"
                                     Content="{x:Static loc:Strings.FcCancel}"
@@ -439,26 +462,37 @@
 
                 <!-- Empty / filtered-empty / populated states go in Row 1 -->
                 <Grid Grid.Row="1">
-                <!-- Empty state -->
+                <!-- v2.25.7 Phase 7: empty state per design handoff — neutral
+                     dashed-feel border on SurfaceRaised, smaller cloud icon,
+                     arctic primary CTA. Was chunky 2px violet border with
+                     dark-violet title/sub, too aggressive for a "nothing
+                     loaded yet" state. -->
                 <Border IsVisible="{Binding FreeConfigsVm.IsEmpty}"
-                        BorderThickness="2" CornerRadius="{StaticResource RadiusSm}"
-                        BorderBrush="#7C3AED" Background="#F5F3FF"
-                        Padding="20">
-                    <StackPanel Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Center">
-                        <TextBlock Text="⚡" FontSize="32" HorizontalAlignment="Center"/>
+                        BorderThickness="1" CornerRadius="{StaticResource RadiusMd}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        Background="{DynamicResource SurfaceRaisedBrush}"
+                        Padding="24,22"
+                        HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <TextBlock Text="☁" FontSize="22" Opacity="0.6"
+                                   HorizontalAlignment="Center"/>
                         <TextBlock Text="{x:Static loc:Strings.FcEmptyCtaTitle}"
-                                   FontSize="13" FontWeight="Bold"
-                                   HorizontalAlignment="Center" Foreground="#4C1D95"/>
+                                   FontSize="12" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource TextPrimaryBrush}"/>
                         <TextBlock Text="{x:Static loc:Strings.FcEmptyCtaSubtitle}"
-                                   TextWrapping="Wrap" FontSize="10" Opacity="0.75"
+                                   TextWrapping="Wrap" FontSize="11"
                                    HorizontalAlignment="Center" TextAlignment="Center"
-                                   MaxWidth="360" Foreground="#4C1D95"/>
+                                   MaxWidth="280"
+                                   Foreground="{DynamicResource TextMutedBrush}"/>
                         <Button Content="{x:Static loc:Strings.FcEmptyCtaButton}"
                                 Command="{Binding FreeConfigsVm.RefreshCommand}"
                                 IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
-                                FontSize="12" FontWeight="Bold"
-                                Padding="14,8" CornerRadius="{StaticResource RadiusSm}"
-                                Background="#7C3AED" Foreground="White"
+                                FontSize="11" FontWeight="SemiBold"
+                                Padding="14,6" CornerRadius="{StaticResource RadiusSm}"
+                                Margin="0,4,0,0"
+                                Background="{DynamicResource AccentSolidBrush}"
+                                Foreground="{DynamicResource AccentOnSolidBrush}"
                                 HorizontalAlignment="Center"/>
                     </StackPanel>
                 </Border>
