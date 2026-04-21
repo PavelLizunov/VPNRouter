@@ -47,16 +47,24 @@
         </Style>
 
         <!-- Base segment button — inactive state. Uses a transparent
-             background; active state (below) applies SurfaceBase + shadow. -->
+             background; active state (below) applies SurfaceBase + shadow.
+             v2.25.9 fix: Avalonia Button has large default MinWidth +
+             MinHeight which left random-looking gaps between segments
+             and inside each pill. Zero both so the Padding + Grid *|*
+             column measurements are the only thing sizing the button. -->
         <Style Selector="Button.segment">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Padding" Value="4,4"/>
+            <Setter Property="Padding" Value="6,5"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="0"/>
             <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
         <Style Selector="Button.segment:pointerover /template/ ContentPresenter">
@@ -427,11 +435,16 @@
 
                                     <Border Classes="menu-divider"/>
 
-                                    <!-- About (with version pill on the right) -->
+                                    <!-- About (with version pill on the right).
+                                         v2.25.9 fix: ColumnSpacing="16" so the
+                                         version tag has breathing room from the
+                                         "О приложении" text. Before there was no
+                                         spacing and on narrow popups the two were
+                                         almost touching. -->
                                     <Button Classes="menu-item"
                                             Command="{Binding OpenAboutCommand}"
                                             ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuAbout}">
-                                        <Grid ColumnDefinitions="*,Auto">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                                             <TextBlock Grid.Column="0"
                                                        Text="{x:Static loc:Strings.SmpMenuAbout}"
                                                        VerticalAlignment="Center"/>

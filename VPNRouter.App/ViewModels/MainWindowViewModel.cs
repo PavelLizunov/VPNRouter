@@ -3117,9 +3117,21 @@ public partial class MainWindowViewModel : ViewModelBase
                 WindowStartupLocation = WindowStartupLocation.Manual,
             };
 
+            // v2.25.9 fix: wait for the new window to be fully opened
+            // (XAML parsed + first render done) BEFORE closing the old
+            // one. Previously we called newWindow.Show() then
+            // oldWindow.Close() synchronously — Avalonia would briefly
+            // show an empty desktop patch where the old window lived
+            // before the new one caught up, causing the visible "flash"
+            // users reported. Listening to Opened lets us overlap the
+            // two windows perfectly.
             desktop.MainWindow = newWindow;
+            newWindow.Opened += (_, _) =>
+            {
+                try { oldWindow.Close(); }
+                catch { /* old window already gone, ignore */ }
+            };
             newWindow.Show();
-            oldWindow.Close();
         }
         catch (Exception ex)
         {

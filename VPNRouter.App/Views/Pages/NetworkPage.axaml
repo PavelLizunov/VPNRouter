@@ -108,11 +108,12 @@
 
           <!-- Split Tunnel card -->
           <Border Classes="radio-card" Classes.active="{Binding IsSplitTunnel}">
-            <Grid ColumnDefinitions="18,*" ColumnSpacing="10">
+            <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
               <RadioButton Grid.Column="0"
                            IsChecked="{Binding IsSplitTunnel}"
                            GroupName="RoutingMode"
                            VerticalAlignment="Top"
+                           MinWidth="0" MinHeight="0"
                            Margin="0,1,0,0"/>
               <StackPanel Grid.Column="1" Spacing="2">
                 <TextBlock Classes="card-title"
@@ -128,10 +129,11 @@
                which flips IsSplitTunnel to false via two-way binding.
                Classes.active inverts so it lights up when !IsSplitTunnel. -->
           <Border Classes="radio-card" Classes.active="{Binding !IsSplitTunnel}">
-            <Grid ColumnDefinitions="18,*" ColumnSpacing="10">
+            <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
               <RadioButton Grid.Column="0"
                            GroupName="RoutingMode"
                            VerticalAlignment="Top"
+                           MinWidth="0" MinHeight="0"
                            Margin="0,1,0,0"/>
               <StackPanel Grid.Column="1" Spacing="2">
                 <TextBlock Classes="card-title"
@@ -144,11 +146,11 @@
 
           <!-- .ru bypass checkbox card — filled when active -->
           <Border Classes="checkbox-card" Classes.active="{Binding BypassRussianTraffic}">
-            <Grid ColumnDefinitions="18,*" ColumnSpacing="10">
+            <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
               <CheckBox Grid.Column="0"
                         IsChecked="{Binding BypassRussianTraffic}"
                         VerticalAlignment="Top"
-                        MinHeight="0" Padding="0"
+                        MinWidth="0" MinHeight="0" Padding="0"
                         Margin="0,1,0,0"/>
               <StackPanel Grid.Column="1" Spacing="2">
                 <TextBlock Classes="card-title"
@@ -190,11 +192,11 @@
           <TextBlock Text="{Binding LblSettingsContent}" FontWeight="Bold" FontSize="13"/>
 
           <Border Classes="checkbox-card" Classes.active="{Binding BlockAds}">
-            <Grid ColumnDefinitions="18,*" ColumnSpacing="10">
+            <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
               <CheckBox Grid.Column="0"
                         IsChecked="{Binding BlockAds}"
                         VerticalAlignment="Top"
-                        MinHeight="0" Padding="0"
+                        MinWidth="0" MinHeight="0" Padding="0"
                         Margin="0,1,0,0"/>
               <StackPanel Grid.Column="1" Spacing="2">
                 <TextBlock Classes="card-title" Text="{Binding BlockAdsLabel}"/>
