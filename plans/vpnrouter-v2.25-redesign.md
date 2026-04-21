@@ -244,10 +244,11 @@ Side-nav (Обзор · Скан · Deep verify · Фильтры · Мои ис
 - [x] ServerViewModel.HostSubtitle — NEW, builds `tcp + reality` string for the design's subtitle line
 
 ### v2.25.4 — Settings side-nav
-- [ ] Split layout
-- [ ] Radio cards для routing
-- [ ] `.ru` bypass checkbox card
-- [ ] Apply compact button
+- [x] Split layout — 2026-04-21 (160 → 140 px left nav, matches design)
+- [x] Radio cards для routing — 2026-04-21 (Split / Full Tunnel как full-width radio-cards с title + subtitle, active → arctic border + arctic-bg-subtle fill)
+- [x] `.ru` bypass checkbox card — 2026-04-21 (`Border.checkbox-card.active` тот же arctic highlight; Block ads card тоже получил новый стиль)
+- [x] Apply compact button — 2026-04-21 (right-aligned 10,5 padding, left = ✓ Autosave hint)
+- [x] Service Restart/Reinstall кнопки перенесены в Settings → Autostart — 2026-04-21 (закрывает перенос из v2.25.0 footer, с status-pill Running/Stopped)
 
 ### v2.25.5 — Applications
 - [ ] Split 120 + 1fr

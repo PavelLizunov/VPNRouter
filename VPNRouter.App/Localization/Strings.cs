@@ -80,6 +80,29 @@ public static class Strings
     public static string ColIp => "IP";
     public static string ColPing => "Ping";
 
+    // v2.25.4 — Settings/Routing radio-card descriptions (Phase 4 redesign).
+    // Each tunnel mode gets a one-line subtitle under the title so the user
+    // understands the choice without hovering for a tooltip.
+    public static string RoutingDescription => Ru
+        ? "Определяет, какой трафик пойдёт через VPN."
+        : "Determines which traffic goes through the VPN.";
+    public static string SplitTunnelTitle => Ru ? "Split Tunnel" : "Split Tunnel";
+    public static string SplitTunnelSubtitle => Ru
+        ? "Только выбранные приложения. Остальное идёт напрямую."
+        : "Only selected apps. Everything else goes direct.";
+    public static string FullTunnelTitle => Ru ? "Full Tunnel" : "Full Tunnel";
+    public static string FullTunnelSubtitle => Ru
+        ? "Весь трафик ОС через VPN, включая игры и банки."
+        : "All OS traffic through VPN — games and banks included.";
+
+    // Service actions in Settings → Autostart (moved here from the footer
+    // when MainWindow compacted its footer in v2.25.0).
+    public static string ServiceStatusLabel => Ru ? "Служба VPN" : "VPN Service";
+    public static string ServiceRunningText => Ru ? "Работает" : "Running";
+    public static string ServiceStoppedText => Ru ? "Не запущена" : "Not running";
+    public static string ServiceInstalledText => Ru ? "Установлена" : "Installed";
+    public static string ServiceNotInstalledText => Ru ? "Не установлена" : "Not installed";
+
     // ── Dialogs ──
     public static string FailedStartVpn => Ru ? "Не удалось запустить VPN:" : "Failed to start VPN:";
     public static string AddServerFirst => Ru

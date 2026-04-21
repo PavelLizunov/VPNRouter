@@ -8,196 +8,334 @@
              x:Class="VPNRouter.App.Views.Pages.NetworkPage"
              x:DataType="vm:MainWindowViewModel">
 
-    <!-- Master-detail: section list left, controls right + bottom confirmation bar -->
-    <Grid RowDefinitions="*,Auto" ColumnDefinitions="160,*">
+  <!-- v2.25.4 — Settings page redesign per Claude Design handoff section 4.
+       Shape stays the same master-detail split (left nav + right pane)
+       but the Routing section becomes the showcase:
+         • Full-width radio-CARDS (not inline RadioButtons) — title + sub
+           line inside a bordered block; active card gets arctic border
+           and arctic-bg-subtle fill.
+         • .ru bypass upgraded to a filled-arctic checkbox card with
+           explanation paragraph inside.
+         • Left split trimmed 160 → 140 (matches design handoff).
+         • Autostart section — Windows users now also get Service
+           Restart / Reinstall buttons directly in the panel (they lived
+           in the footer through v2.24.4 and had no home after the
+           v2.25.0 footer compact until now).
+         • Apply button moved to right-aligned compact with an
+           "Autosave is on" left hint (design wants the Apply row tight,
+           not a full-width button bar). -->
 
-        <!-- MASTER (left): section navigator -->
-        <Border Grid.Row="0" Grid.Column="0"
-                BorderThickness="0,0,1,0"
-                BorderBrush="{DynamicResource BorderDefaultBrush}"
-                Background="{DynamicResource SurfaceSunkenBrush}">
-            <ListBox SelectedIndex="{Binding SelectedSettingsIndex}"
-                     Background="Transparent"
-                     BorderThickness="0"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto">
-                <ListBoxItem Content="{Binding LblSettingsRouting}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblSettingsLeak}"       Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblSettingsContent}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblSettingsUpdates}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                <ListBoxItem Content="{Binding LblAutostartSection}"   Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-            </ListBox>
-        </Border>
+  <UserControl.Styles>
 
-        <!-- DETAIL (right): selected section -->
-        <ScrollViewer Grid.Row="0" Grid.Column="1"
-                      HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Auto"
-                      Padding="14,10,14,12">
-          <StackPanel>
+    <!-- Radio card: full-width clickable block with title + sub -->
+    <Style Selector="Border.radio-card">
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+      <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+      <Setter Property="Padding" Value="10,10"/>
+    </Style>
+    <Style Selector="Border.radio-card.active">
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentSolidBrush}"/>
+      <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+    </Style>
 
-            <!-- Routing section -->
-            <StackPanel Spacing="10" IsVisible="{Binding IsSettingsRoutingSelected}">
-                <TextBlock Text="{Binding LblSettingsRouting}" FontWeight="Bold" FontSize="13"/>
+    <Style Selector="TextBlock.card-title">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.card-sub">
+      <Setter Property="FontSize" Value="9"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
 
-                <StackPanel Spacing="4">
-                    <TextBlock Text="{x:Static loc:Strings.LblRoutingMode}" FontWeight="SemiBold" Opacity="0.7"/>
-                    <StackPanel Orientation="Horizontal" Spacing="16">
-                        <RadioButton Content="{Binding LblSplitTunnel}"
-                                     IsChecked="{Binding IsSplitTunnel}"
-                                     GroupName="RoutingMode"/>
-                        <RadioButton Content="{Binding LblFullTunnel}"
-                                     GroupName="RoutingMode"/>
-                    </StackPanel>
-                </StackPanel>
+    <!-- Checkbox card (for .ru bypass + future toggles) -->
+    <Style Selector="Border.checkbox-card">
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
+      <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+      <Setter Property="Padding" Value="10,10"/>
+    </Style>
+    <Style Selector="Border.checkbox-card.active">
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentSolidBrush}"/>
+      <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+    </Style>
 
-                <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource SurfaceSunkenBrush}"
-                        BorderBrush="{DynamicResource BorderDefaultBrush}"
-                        BorderThickness="1">
-                    <StackPanel Spacing="2">
-                        <CheckBox IsChecked="{Binding BypassRussianTraffic}"
-                                  Content="{Binding BypassRuLabel}" FontWeight="SemiBold"
-                                  ToolTip.Tip="{x:Static loc:Strings.TipBypassRu}"
-                                  MinHeight="0" Padding="4,0"/>
-                        <TextBlock Text="{Binding BypassRuHint}"
-                                   FontSize="9" Opacity="0.6" Margin="22,0,0,0"
-                                   TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
+    <!-- Service pill — small status chip next to "VPN Service" label -->
+    <Style Selector="Border.service-pill">
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusPill}"/>
+      <Setter Property="Padding" Value="8,2"/>
+    </Style>
+  </UserControl.Styles>
 
-            <!-- Leak Protection section -->
-            <StackPanel Spacing="10" IsVisible="{Binding IsSettingsLeakSelected}">
-                <TextBlock Text="{Binding LblSettingsLeak}" FontWeight="Bold" FontSize="13"/>
+  <!-- Master-detail: nav list left, pane right + bottom apply bar -->
+  <Grid RowDefinitions="*,Auto" ColumnDefinitions="140,*">
 
-                <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource SurfaceSunkenBrush}"
-                        BorderBrush="{DynamicResource BorderDefaultBrush}"
-                        BorderThickness="1">
-                    <StackPanel Spacing="4">
-                        <CheckBox IsChecked="{Binding StrictMode}" Content="{Binding StrictModeLabel}"
-                                  ToolTip.Tip="{x:Static loc:Strings.TipLeakStrictMode}"
-                                  MinHeight="0" Padding="4,0"/>
-                        <CheckBox IsChecked="{Binding ForceIpv4Only}" Content="{Binding ForceIpv4Label}"
-                                  ToolTip.Tip="{x:Static loc:Strings.TipLeakForceIpv4}"
-                                  MinHeight="0" Padding="4,0"/>
-                        <CheckBox IsChecked="{Binding FlushDnsOnStart}" Content="{Binding FlushDnsLabel}"
-                                  ToolTip.Tip="{x:Static loc:Strings.TipLeakFlushDns}"
-                                  MinHeight="0" Padding="4,0"/>
-                        <CheckBox IsChecked="{Binding StrictDns}" Content="{Binding StrictDnsLabel}"
-                                  ToolTip.Tip="{x:Static loc:Strings.TipLeakStrictDns}"
-                                  MinHeight="0" Padding="4,0"/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
+    <!-- MASTER (left): section navigator -->
+    <Border Grid.Row="0" Grid.Column="0"
+            BorderThickness="0,0,1,0"
+            BorderBrush="{DynamicResource BorderDefaultBrush}"
+            Background="{DynamicResource SurfaceSunkenBrush}">
+      <ListBox SelectedIndex="{Binding SelectedSettingsIndex}"
+               Background="Transparent"
+               BorderThickness="0"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+               ScrollViewer.VerticalScrollBarVisibility="Auto">
+        <ListBoxItem Content="{Binding LblSettingsRouting}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Content="{Binding LblSettingsLeak}"       Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Content="{Binding LblSettingsContent}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Content="{Binding LblSettingsUpdates}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <ListBoxItem Content="{Binding LblAutostartSection}"   Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+      </ListBox>
+    </Border>
 
-            <!-- Content section -->
-            <StackPanel Spacing="10" IsVisible="{Binding IsSettingsContentSelected}">
-                <TextBlock Text="{Binding LblSettingsContent}" FontWeight="Bold" FontSize="13"/>
+    <!-- DETAIL (right): selected section -->
+    <ScrollViewer Grid.Row="0" Grid.Column="1"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto"
+                  Padding="14,10,14,12">
+      <StackPanel>
 
-                <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource SurfaceSunkenBrush}"
-                        BorderBrush="{DynamicResource BorderDefaultBrush}"
-                        BorderThickness="1">
-                    <StackPanel Spacing="2">
-                        <CheckBox IsChecked="{Binding BlockAds}"
-                                  Content="{Binding BlockAdsLabel}" FontWeight="SemiBold"
-                                  ToolTip.Tip="{x:Static loc:Strings.TipBlockAds}"
-                                  MinHeight="0" Padding="4,0"/>
-                        <TextBlock Text="{Binding BlockAdsHint}"
-                                   FontSize="9" Opacity="0.6" Margin="22,0,0,0"
-                                   TextWrapping="Wrap"/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
+        <!-- ═══ Routing (Phase 4 showcase) ═══ -->
+        <StackPanel Spacing="10" IsVisible="{Binding IsSettingsRoutingSelected}">
+          <TextBlock Text="{Binding LblSettingsRouting}" FontWeight="Bold" FontSize="13"/>
+          <TextBlock Text="{x:Static loc:Strings.RoutingDescription}"
+                     FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
+                     TextWrapping="Wrap"/>
 
-            <!-- Updates section -->
-            <StackPanel Spacing="10" IsVisible="{Binding IsSettingsUpdatesSelected}">
-                <TextBlock Text="{Binding LblSettingsUpdates}" FontWeight="Bold" FontSize="13"/>
-
-                <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource SurfaceSunkenBrush}"
-                        BorderBrush="{DynamicResource BorderDefaultBrush}"
-                        BorderThickness="1">
-                    <StackPanel Spacing="3">
-                        <TextBlock Text="{Binding UpdateChannelHeader}" FontWeight="SemiBold" Opacity="0.7"/>
-                        <CheckBox IsChecked="{Binding ReceivePrereleases}"
-                                  Content="{Binding ReceivePrereleasesLabel}"
-                                  MinHeight="0" Padding="4,0"/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-
-            <!-- Autostart section.
-                 v2.25.0-r2: the four sub-flags (Vpn/Zapret/TgProxy/Ui) are
-                 all Windows-only — Zapret + TgProxy features don't exist on
-                 Linux/macOS at all, VPN autostart is driven by the Windows
-                 Service (absent elsewhere), and UI autostart goes through
-                 HKCU\Run registry. On non-Windows the whole control panel
-                 was showing four disabled-looking but still-clickable
-                 checkboxes that did nothing on click — replace with a clear
-                 "not yet" banner. -->
-            <StackPanel Spacing="10" IsVisible="{Binding IsSettingsAutostartSelected}">
-                <TextBlock Text="{Binding LblAutostartSection}" FontWeight="Bold" FontSize="13"/>
-
-                <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource SurfaceSunkenBrush}"
-                        BorderBrush="{DynamicResource BorderDefaultBrush}"
-                        BorderThickness="1"
-                        IsVisible="{Binding IsWindowsPlatform}">
-                    <StackPanel Spacing="6">
-                        <CheckBox IsChecked="{Binding AutostartVpn}"
-                                  Content="{Binding LblAutostartVpn}"
-                                  MinHeight="0" Padding="4,0"/>
-                        <CheckBox IsChecked="{Binding AutostartZapret}"
-                                  Content="{Binding LblAutostartZapret}"
-                                  MinHeight="0" Padding="4,0"/>
-                        <CheckBox IsChecked="{Binding AutostartTgProxy}"
-                                  Content="{Binding LblAutostartTgProxy}"
-                                  MinHeight="0" Padding="4,0"/>
-                        <CheckBox IsChecked="{Binding AutostartUi}"
-                                  Content="{Binding LblAutostartUi}"
-                                  MinHeight="0" Padding="4,0"/>
-                    </StackPanel>
-                </Border>
-
-                <!-- Non-Windows notice: replaces the non-functional checkboxes. -->
-                <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource InfoBgBrush}"
-                        BorderBrush="{DynamicResource InfoBorderBrush}"
-                        BorderThickness="1"
-                        IsVisible="{Binding !IsWindowsPlatform}">
-                    <TextBlock Text="{x:Static loc:Strings.AutostartPlatformNotice}"
-                               FontSize="11"
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource InfoFgBrush}"/>
-                </Border>
-            </StackPanel>
-
-          </StackPanel>
-        </ScrollViewer>
-
-        <!-- Bottom bar: auto-save confirmation + explicit Apply button -->
-        <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                Padding="14,8,14,10"
-                BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource BorderDefaultBrush}"
-                Background="{DynamicResource SurfaceSunkenBrush}">
-            <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Grid.Column="0"
-                           Text="{x:Static loc:Strings.SettingsAutosaved}"
-                           FontSize="10" FontWeight="SemiBold"
-                           Foreground="{DynamicResource SuccessFgBrush}"
-                           VerticalAlignment="Center"/>
-                <Button Grid.Column="1"
-                        Content="{x:Static loc:Strings.ApplyNowReloadVpn}"
-                        Command="{Binding ApplyPendingChangesCommand}"
-                        IsEnabled="{Binding IsConnected}"
-                        Padding="10,5" FontSize="10" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                        ToolTip.Tip="{x:Static loc:Strings.ApplyNowHint}"/>
+          <!-- Split Tunnel card -->
+          <Border Classes="radio-card" Classes.active="{Binding IsSplitTunnel}">
+            <Grid ColumnDefinitions="18,*" ColumnSpacing="10">
+              <RadioButton Grid.Column="0"
+                           IsChecked="{Binding IsSplitTunnel}"
+                           GroupName="RoutingMode"
+                           VerticalAlignment="Top"
+                           Margin="0,1,0,0"/>
+              <StackPanel Grid.Column="1" Spacing="2">
+                <TextBlock Classes="card-title"
+                           Text="{x:Static loc:Strings.SplitTunnelTitle}"/>
+                <TextBlock Classes="card-sub"
+                           Text="{x:Static loc:Strings.SplitTunnelSubtitle}"/>
+              </StackPanel>
             </Grid>
-        </Border>
-    </Grid>
+          </Border>
+
+          <!-- Full Tunnel card. RadioButton has no IsChecked binding —
+               when user clicks it GroupName auto-unchecks Split Tunnel
+               which flips IsSplitTunnel to false via two-way binding.
+               Classes.active inverts so it lights up when !IsSplitTunnel. -->
+          <Border Classes="radio-card" Classes.active="{Binding !IsSplitTunnel}">
+            <Grid ColumnDefinitions="18,*" ColumnSpacing="10">
+              <RadioButton Grid.Column="0"
+                           GroupName="RoutingMode"
+                           VerticalAlignment="Top"
+                           Margin="0,1,0,0"/>
+              <StackPanel Grid.Column="1" Spacing="2">
+                <TextBlock Classes="card-title"
+                           Text="{x:Static loc:Strings.FullTunnelTitle}"/>
+                <TextBlock Classes="card-sub"
+                           Text="{x:Static loc:Strings.FullTunnelSubtitle}"/>
+              </StackPanel>
+            </Grid>
+          </Border>
+
+          <!-- .ru bypass checkbox card — filled when active -->
+          <Border Classes="checkbox-card" Classes.active="{Binding BypassRussianTraffic}">
+            <Grid ColumnDefinitions="18,*" ColumnSpacing="10">
+              <CheckBox Grid.Column="0"
+                        IsChecked="{Binding BypassRussianTraffic}"
+                        VerticalAlignment="Top"
+                        MinHeight="0" Padding="0"
+                        Margin="0,1,0,0"/>
+              <StackPanel Grid.Column="1" Spacing="2">
+                <TextBlock Classes="card-title"
+                           Text="{Binding BypassRuLabel}"/>
+                <TextBlock Classes="card-sub"
+                           Text="{Binding BypassRuHint}"/>
+              </StackPanel>
+            </Grid>
+          </Border>
+        </StackPanel>
+
+        <!-- ═══ Leak Protection ═══ -->
+        <StackPanel Spacing="10" IsVisible="{Binding IsSettingsLeakSelected}">
+          <TextBlock Text="{Binding LblSettingsLeak}" FontWeight="Bold" FontSize="13"/>
+
+          <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource SurfaceSunkenBrush}"
+                  BorderBrush="{DynamicResource BorderDefaultBrush}"
+                  BorderThickness="1">
+            <StackPanel Spacing="4">
+              <CheckBox IsChecked="{Binding StrictMode}" Content="{Binding StrictModeLabel}"
+                        ToolTip.Tip="{x:Static loc:Strings.TipLeakStrictMode}"
+                        MinHeight="0" Padding="4,0"/>
+              <CheckBox IsChecked="{Binding ForceIpv4Only}" Content="{Binding ForceIpv4Label}"
+                        ToolTip.Tip="{x:Static loc:Strings.TipLeakForceIpv4}"
+                        MinHeight="0" Padding="4,0"/>
+              <CheckBox IsChecked="{Binding FlushDnsOnStart}" Content="{Binding FlushDnsLabel}"
+                        ToolTip.Tip="{x:Static loc:Strings.TipLeakFlushDns}"
+                        MinHeight="0" Padding="4,0"/>
+              <CheckBox IsChecked="{Binding StrictDns}" Content="{Binding StrictDnsLabel}"
+                        ToolTip.Tip="{x:Static loc:Strings.TipLeakStrictDns}"
+                        MinHeight="0" Padding="4,0"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- ═══ Content ═══ -->
+        <StackPanel Spacing="10" IsVisible="{Binding IsSettingsContentSelected}">
+          <TextBlock Text="{Binding LblSettingsContent}" FontWeight="Bold" FontSize="13"/>
+
+          <Border Classes="checkbox-card" Classes.active="{Binding BlockAds}">
+            <Grid ColumnDefinitions="18,*" ColumnSpacing="10">
+              <CheckBox Grid.Column="0"
+                        IsChecked="{Binding BlockAds}"
+                        VerticalAlignment="Top"
+                        MinHeight="0" Padding="0"
+                        Margin="0,1,0,0"/>
+              <StackPanel Grid.Column="1" Spacing="2">
+                <TextBlock Classes="card-title" Text="{Binding BlockAdsLabel}"/>
+                <TextBlock Classes="card-sub" Text="{Binding BlockAdsHint}"/>
+              </StackPanel>
+            </Grid>
+          </Border>
+        </StackPanel>
+
+        <!-- ═══ Updates ═══ -->
+        <StackPanel Spacing="10" IsVisible="{Binding IsSettingsUpdatesSelected}">
+          <TextBlock Text="{Binding LblSettingsUpdates}" FontWeight="Bold" FontSize="13"/>
+
+          <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource SurfaceSunkenBrush}"
+                  BorderBrush="{DynamicResource BorderDefaultBrush}"
+                  BorderThickness="1">
+            <StackPanel Spacing="3">
+              <TextBlock Text="{Binding UpdateChannelHeader}" FontWeight="SemiBold" Opacity="0.7"/>
+              <CheckBox IsChecked="{Binding ReceivePrereleases}"
+                        Content="{Binding ReceivePrereleasesLabel}"
+                        MinHeight="0" Padding="4,0"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- ═══ Autostart ═══
+             Windows: 4 autostart checkboxes + Service status row with
+             Restart / Reinstall buttons (moved from old footer).
+             Linux/macOS: info-banner only (autostart subsystem not yet
+             implemented outside Windows — v2.25.0-r2 policy). -->
+        <StackPanel Spacing="10" IsVisible="{Binding IsSettingsAutostartSelected}">
+          <TextBlock Text="{Binding LblAutostartSection}" FontWeight="Bold" FontSize="13"/>
+
+          <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource SurfaceSunkenBrush}"
+                  BorderBrush="{DynamicResource BorderDefaultBrush}"
+                  BorderThickness="1"
+                  IsVisible="{Binding IsWindowsPlatform}">
+            <StackPanel Spacing="6">
+              <CheckBox IsChecked="{Binding AutostartVpn}"
+                        Content="{Binding LblAutostartVpn}"
+                        MinHeight="0" Padding="4,0"/>
+              <CheckBox IsChecked="{Binding AutostartZapret}"
+                        Content="{Binding LblAutostartZapret}"
+                        MinHeight="0" Padding="4,0"/>
+              <CheckBox IsChecked="{Binding AutostartTgProxy}"
+                        Content="{Binding LblAutostartTgProxy}"
+                        MinHeight="0" Padding="4,0"/>
+              <CheckBox IsChecked="{Binding AutostartUi}"
+                        Content="{Binding LblAutostartUi}"
+                        MinHeight="0" Padding="4,0"/>
+            </StackPanel>
+          </Border>
+
+          <!-- Service status + actions — only shown on Windows and only
+               when the service VM surface is available (not applicable
+               when CLI mode is detected). Restart is visible when the
+               service is running, Reinstall whenever it's installed. -->
+          <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource SurfaceSunkenBrush}"
+                  BorderBrush="{DynamicResource BorderDefaultBrush}"
+                  BorderThickness="1"
+                  IsVisible="{Binding ServiceVm.IsAvailable}">
+            <StackPanel Spacing="6">
+              <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                  <TextBlock Text="{x:Static loc:Strings.ServiceStatusLabel}"
+                             FontWeight="SemiBold" FontSize="11"
+                             VerticalAlignment="Center"/>
+                  <Border Classes="service-pill"
+                          IsVisible="{Binding ServiceVm.IsRunning}"
+                          Background="{DynamicResource SuccessBgBrush}">
+                    <TextBlock Text="{x:Static loc:Strings.ServiceRunningText}"
+                               FontSize="9" FontWeight="SemiBold"
+                               Foreground="{DynamicResource SuccessFgBrush}"/>
+                  </Border>
+                  <Border Classes="service-pill"
+                          IsVisible="{Binding !ServiceVm.IsRunning}"
+                          Background="{DynamicResource SurfaceBaseBrush}">
+                    <TextBlock Text="{x:Static loc:Strings.ServiceStoppedText}"
+                               FontSize="9" FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextMutedBrush}"/>
+                  </Border>
+                </StackPanel>
+              </Grid>
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Button Content="{x:Static loc:Strings.RestartService}"
+                        Command="{Binding ServiceVm.RestartServiceCommand}"
+                        IsVisible="{Binding ServiceVm.IsRunning}"
+                        IsEnabled="{Binding !ServiceVm.IsBusy}"
+                        Padding="10,4" FontSize="10" CornerRadius="{StaticResource RadiusSm}"/>
+                <Button Content="{x:Static loc:Strings.ReinstallService}"
+                        Command="{Binding ServiceVm.ReinstallServiceCommand}"
+                        IsVisible="{Binding ServiceVm.IsInstalled}"
+                        IsEnabled="{Binding !ServiceVm.IsBusy}"
+                        Padding="10,4" FontSize="10" CornerRadius="{StaticResource RadiusSm}"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <!-- Non-Windows notice: replaces the non-functional checkboxes. -->
+          <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource InfoBgBrush}"
+                  BorderBrush="{DynamicResource InfoBorderBrush}"
+                  BorderThickness="1"
+                  IsVisible="{Binding !IsWindowsPlatform}">
+            <TextBlock Text="{x:Static loc:Strings.AutostartPlatformNotice}"
+                       FontSize="11"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource InfoFgBrush}"/>
+          </Border>
+        </StackPanel>
+
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- Apply bar: "Autosave is on" left hint + compact Apply right. -->
+    <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+            Padding="14,7,14,8"
+            BorderThickness="0,1,0,0"
+            BorderBrush="{DynamicResource BorderDefaultBrush}"
+            Background="{DynamicResource SurfaceSunkenBrush}">
+      <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+          <TextBlock Text="✓" FontSize="11"
+                     Foreground="{DynamicResource SuccessSolidBrush}"
+                     VerticalAlignment="Center"/>
+          <TextBlock Text="{x:Static loc:Strings.SettingsAutosaved}"
+                     FontSize="10" FontWeight="SemiBold"
+                     Foreground="{DynamicResource SuccessFgBrush}"
+                     VerticalAlignment="Center"/>
+        </StackPanel>
+        <Button Grid.Column="1"
+                Content="{x:Static loc:Strings.ApplyNowReloadVpn}"
+                Command="{Binding ApplyPendingChangesCommand}"
+                IsEnabled="{Binding IsConnected}"
+                Padding="10,5" FontSize="10" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
+                Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                ToolTip.Tip="{x:Static loc:Strings.ApplyNowHint}"/>
+      </Grid>
+    </Border>
+  </Grid>
 </UserControl>
