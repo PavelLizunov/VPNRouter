@@ -623,7 +623,9 @@ public partial class MainWindowViewModel : ViewModelBase
     // for on every platform).
     [ObservableProperty] private bool _resetConfigArmed;
     public string ResetConfigMenuHeader =>
-        ResetConfigArmed ? "Click again to confirm reset" : "Reset config to defaults";
+        ResetConfigArmed
+            ? VPNRouter.App.Localization.Strings.SmpMenuResetConfirm
+            : VPNRouter.App.Localization.Strings.SmpMenuResetConfig;
 
     partial void OnResetConfigArmedChanged(bool value)
         => OnPropertyChanged(nameof(ResetConfigMenuHeader));
@@ -858,8 +860,20 @@ public partial class MainWindowViewModel : ViewModelBase
         _isLoadingUI = true;
         try
         {
-        // Language
-        IsRussian = (_settings.App.Language ?? "en").Equals("ru", StringComparison.OrdinalIgnoreCase);
+        // Language — v2.24.4: auto-detect from OS on first launch.
+        // Empty string in config means "never chose a language yet" →
+        // sniff the current UI culture and persist the choice so the
+        // menu toggle still works predictably. Russian locale → ru,
+        // everything else → en.
+        var storedLang = _settings.App.Language ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(storedLang))
+        {
+            var osLang = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+            storedLang = string.Equals(osLang, "ru", StringComparison.OrdinalIgnoreCase) ? "ru" : "en";
+            _settings.App.Language = storedLang;
+            try { VPNRouter.Core.Services.SettingsLoader.Save(_settings); } catch { }
+        }
+        IsRussian = storedLang.Equals("ru", StringComparison.OrdinalIgnoreCase);
         Strings.Lang = IsRussian ? "ru" : "en";
 
         // Theme

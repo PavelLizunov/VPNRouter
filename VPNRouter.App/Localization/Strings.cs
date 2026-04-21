@@ -666,6 +666,20 @@ public static class Strings
     public static string SmpMenuCheckLeaks    => Ru ? "Проверить утечку IP"    : "Check IP leak";
     public static string SmpMenuCheckUpdates  => Ru ? "Проверить обновления"   : "Check for updates";
     public static string SmpMenuSwitchToAdv   => Ru ? "Перейти в Advanced"     : "Switch to Advanced";
+    // v2.24.4 troubleshooting items (Level 2/3 self-healing)
+    public static string SmpMenuHealthCheck   => Ru ? "Проверить состояние"    : "Run Health Check";
+    public static string SmpMenuSafeMode      => Ru ? "Перезапустить в Safe Mode" : "Restart in Safe Mode";
+    public static string SmpMenuResetConfig   => Ru ? "Сбросить настройки"     : "Reset config to defaults";
+    public static string SmpMenuResetConfirm  => Ru ? "Нажмите ещё раз для сброса" : "Click again to confirm reset";
+    public static string TipSmpMenuHealthCheck => Ru
+        ? "Запустить диагностику и сохранить отчёт в текстовый файл."
+        : "Run diagnostic checks, save results to a text file and open it. Safe to run at any time.";
+    public static string TipSmpMenuSafeMode => Ru
+        ? "Перезапустить без пользовательских настроек. Force Full tunnel, bundled каталог."
+        : "Restart ignoring user config overrides. Forces Full tunnel, uses bundled catalogue only.";
+    public static string TipSmpMenuResetConfig => Ru
+        ? "Сохранить резервную копию конфига и перезапустить с заводскими настройками. Нажмите дважды для подтверждения."
+        : "Backup current config and restart with factory defaults. Click twice to confirm.";
 
     // ── v2.15.5 Localization pass: remaining hardcoded strings ──
 

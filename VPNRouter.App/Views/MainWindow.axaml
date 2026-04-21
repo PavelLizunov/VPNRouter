@@ -212,15 +212,15 @@
                                       Command="{Binding UpdateVm.CheckManuallyCommand}"/>
                             <Separator/>
                             <!-- v2.23.1 troubleshooting actions (command-backed twin of CLI flags). -->
-                            <MenuItem Header="Run Health Check"
+                            <MenuItem Header="{x:Static loc:Strings.SmpMenuHealthCheck}"
                                       Command="{Binding RunHealthCheckCommand}"
-                                      ToolTip.Tip="Run diagnostic checks, save results to a text file and open it. Safe to run at any time."/>
-                            <MenuItem Header="Restart in Safe Mode"
+                                      ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuHealthCheck}"/>
+                            <MenuItem Header="{x:Static loc:Strings.SmpMenuSafeMode}"
                                       Command="{Binding RestartInSafeModeCommand}"
-                                      ToolTip.Tip="Restart ignoring user config overrides. Forces Full tunnel, uses bundled catalogue only."/>
+                                      ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuSafeMode}"/>
                             <MenuItem Header="{Binding ResetConfigMenuHeader}"
                                       Command="{Binding ResetConfigCommand}"
-                                      ToolTip.Tip="Backup current config and restart with factory defaults. Click twice to confirm."/>
+                                      ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuResetConfig}"/>
                             <Separator/>
                             <MenuItem Header="{Binding UiModeToggleText}"
                                       Command="{Binding ToggleUiModeCommand}"/>

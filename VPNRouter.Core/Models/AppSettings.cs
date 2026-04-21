@@ -82,9 +82,11 @@ public class AppConfig
     [YamlMember(Alias = "theme")]
     public string Theme { get; set; } = "light";
 
-    /// <summary>UI language: "en" or "ru".</summary>
+    /// <summary>UI language: "en" or "ru". Empty string means "never chose
+    /// one yet" → UI auto-detects from OS locale on first launch (v2.24.4)
+    /// and persists the result. User can still change via menu.</summary>
     [YamlMember(Alias = "language")]
-    public string Language { get; set; } = "en";
+    public string Language { get; set; } = string.Empty;
 
     /// <summary>
     /// UI complexity mode. "simple" = one-page onboarding for non-technical
