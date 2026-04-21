@@ -251,10 +251,11 @@ Side-nav (Обзор · Скан · Deep verify · Фильтры · Мои ис
 - [x] Service Restart/Reinstall кнопки перенесены в Settings → Autostart — 2026-04-21 (закрывает перенос из v2.25.0 footer, с status-pill Running/Stopped)
 
 ### v2.25.5 — Applications
-- [ ] Split 120 + 1fr
-- [ ] Mono counters
-- [ ] Arctic active
-- [ ] `+ Новая категория` inline
+- [x] Split 120 + 1fr — 2026-04-21 (160 → 120 px left nav, tighter per design)
+- [x] Mono counters — 2026-04-21 (pill-badge solid-arctic убрана, теперь plain mono muted число справа)
+- [x] Arctic active — 2026-04-21 (`ListBox.cat-list ListBoxItem:selected` → Surface-base bg + AccentFg name + bold)
+- [x] `+ Новая категория` inline — 2026-04-21 (было уже в нижней части левого nav — оставлен паттерн, только выправлены отступы)
+- [x] App rows chip-style — 2026-04-21 (`Border.app-row` = SurfaceSunken + RadiusSm padding вместо плоской ListBox-строки)
 
 ### v2.25.6 — Tools (Zapret + TgProxy)
 - [ ] Sub-tabs

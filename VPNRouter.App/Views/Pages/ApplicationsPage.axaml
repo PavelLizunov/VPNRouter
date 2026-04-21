@@ -9,167 +9,238 @@
              x:Class="VPNRouter.App.Views.Pages.ApplicationsPage"
              x:DataType="vm:MainWindowViewModel">
 
-    <Grid ColumnDefinitions="160,*"
-          IsEnabled="{Binding IsSplitTunnel}">
+  <!-- v2.25.5 — Applications page redesign per Claude Design handoff
+       section 5. Split trimmed 160 → 120. Category counter flipped from
+       pill-badge (solid arctic bg + white "23" inside) to plain mono
+       muted number — the badge visual was too much like a notification
+       count and pulled focus; the number is already enough signal of
+       "size of the group". Selected category row gets surface-base fg
+       highlight + arctic fg name. App rows on the right become soft
+       pill-like rounded blocks to make the checkbox grid read as a
+       stack of separate items rather than a raw list. -->
 
-        <!-- ─── MASTER (left): category names only (like Settings) ─── -->
-        <Border Grid.Column="0"
-                BorderThickness="0,0,1,0"
-                BorderBrush="{DynamicResource BorderDefaultBrush}"
-                Background="{DynamicResource SurfaceSunkenBrush}">
-            <Grid RowDefinitions="*,Auto,Auto">
-                <ListBox Grid.Row="0"
-                         ItemsSource="{Binding AppGroups}"
-                         SelectedItem="{Binding SelectedAppGroup}"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="vm:AppGroupViewModel">
-                            <Grid ColumnDefinitions="*,Auto" Margin="0,1">
-                                <TextBlock Grid.Column="0" Text="{Binding DisplayName}"
-                                           FontSize="11" FontWeight="SemiBold"
-                                           VerticalAlignment="Center" Margin="2,0"
-                                           TextTrimming="CharacterEllipsis"/>
-                                <Border Grid.Column="1" Background="{DynamicResource AccentSolidBrush}" CornerRadius="{StaticResource RadiusMd}"
-                                        Padding="5,0" Margin="4,0,2,0" VerticalAlignment="Center"
-                                        IsVisible="{Binding Apps.Count}">
-                                    <TextBlock Text="{Binding Apps.Count}" FontSize="9"
-                                               Foreground="White" FontWeight="Bold"/>
-                                </Border>
-                            </Grid>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+  <UserControl.Styles>
 
-                <!-- New category input -->
-                <TextBox Grid.Row="1" x:Name="NewCategoryInput"
-                         Text="{Binding NewCategoryName}"
-                         Watermark="{x:Static loc:Strings.CategoryNamePrompt}"
-                         FontSize="10" Padding="6,4" Margin="4,4,4,2"/>
-                <Button Grid.Row="2"
-                        Content="{x:Static loc:Strings.AddCategory}"
-                        Command="{Binding AddCategoryCommand}"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Margin="4,0,4,4" Padding="4,4"
-                        FontSize="10" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"/>
-            </Grid>
-        </Border>
+    <!-- Category row — title + mono counter -->
+    <Style Selector="TextBlock.cat-name">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+    </Style>
+    <Style Selector="TextBlock.cat-count">
+      <Setter Property="FontSize" Value="9"/>
+      <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="4,0,4,0"/>
+    </Style>
 
-        <!-- ─── DETAIL (right): header + master toggle + apps + add ─── -->
-        <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto"
-              DataContext="{Binding SelectedAppGroup}"
-              x:DataType="vm:AppGroupViewModel"
-              IsVisible="{Binding Converter={x:Static ObjectConverters.IsNotNull}}">
+    <!-- Active (selected) category — arctic fg + highlighted background -->
+    <Style Selector="ListBox.cat-list ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+    </Style>
+    <Style Selector="ListBox.cat-list ListBoxItem:selected TextBlock.cat-name">
+      <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+    <Style Selector="ListBox.cat-list ListBoxItem:selected TextBlock.cat-count">
+      <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+    </Style>
 
-            <!-- Header with DisplayName + Delete button (custom only) -->
-            <Grid Grid.Row="0" ColumnDefinitions="*,Auto"
-                  Margin="14,10,14,6">
-                <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="13" FontWeight="Bold"
-                           VerticalAlignment="Center"/>
-                <Button Grid.Column="1" Content="X"
-                        IsVisible="{Binding IsCustomCategory}"
-                        Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveCategoryCommand}"
+    <!-- Each app row = soft rounded block -->
+    <Style Selector="Border.app-row">
+      <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+      <Setter Property="Padding" Value="10,7"/>
+    </Style>
+    <Style Selector="Border.app-row TextBlock.app-name">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <!-- Custom-app badge — subtle mono pill, not loud -->
+    <Style Selector="Border.custom-badge">
+      <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}"/>
+      <Setter Property="Padding" Value="5,1"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style Selector="ListBox.cat-list ListBoxItem">
+      <Setter Property="Padding" Value="4,0"/>
+      <Setter Property="MinHeight" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.apps-list ListBoxItem">
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="Margin" Value="0,0,0,4"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Grid ColumnDefinitions="120,*"
+        IsEnabled="{Binding IsSplitTunnel}">
+
+    <!-- ─── MASTER (left): category list + inline add ─── -->
+    <Border Grid.Column="0"
+            BorderThickness="0,0,1,0"
+            BorderBrush="{DynamicResource BorderDefaultBrush}"
+            Background="{DynamicResource SurfaceSunkenBrush}">
+      <Grid RowDefinitions="*,Auto,Auto">
+        <ListBox Grid.Row="0"
+                 Classes="cat-list"
+                 ItemsSource="{Binding AppGroups}"
+                 SelectedItem="{Binding SelectedAppGroup}"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:AppGroupViewModel">
+              <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,4">
+                <TextBlock Grid.Column="0" Classes="cat-name"
+                           Text="{Binding DisplayName}"/>
+                <!-- v2.25.5: counter is now plain mono muted number,
+                     not a filled arctic pill. Hidden at 0 to keep the
+                     visual weight aligned with the single-line nav. -->
+                <TextBlock Grid.Column="1" Classes="cat-count"
+                           Text="{Binding Apps.Count}"
+                           IsVisible="{Binding Apps.Count}"/>
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- New category input -->
+        <TextBox Grid.Row="1" x:Name="NewCategoryInput"
+                 Text="{Binding NewCategoryName}"
+                 Watermark="{x:Static loc:Strings.CategoryNamePrompt}"
+                 FontSize="10" Padding="6,4" Margin="4,4,4,2"/>
+        <Button Grid.Row="2"
+                Content="{x:Static loc:Strings.AddCategory}"
+                Command="{Binding AddCategoryCommand}"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                Margin="4,0,4,4" Padding="4,4"
+                FontSize="10" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
+                Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"/>
+      </Grid>
+    </Border>
+
+    <!-- ─── DETAIL (right): header + master toggle + apps + add ─── -->
+    <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto"
+          DataContext="{Binding SelectedAppGroup}"
+          x:DataType="vm:AppGroupViewModel"
+          IsVisible="{Binding Converter={x:Static ObjectConverters.IsNotNull}}">
+
+      <!-- Header: DisplayName + Delete button (custom only) -->
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto"
+            Margin="14,10,14,6">
+        <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="13" FontWeight="Bold"
+                   VerticalAlignment="Center"/>
+        <Button Grid.Column="1" Content="✕"
+                IsVisible="{Binding IsCustomCategory}"
+                Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveCategoryCommand}"
+                CommandParameter="{Binding}"
+                Background="Transparent" BorderThickness="0"
+                Padding="8,2" MinHeight="0" FontSize="11"
+                Opacity="0.6"
+                ToolTip.Tip="{x:Static loc:Strings.TipRemoveCategory}"/>
+      </Grid>
+
+      <!-- Master enable toggle -->
+      <Border Grid.Row="1" Padding="14,4,14,8">
+        <CheckBox IsChecked="{Binding IsChecked}"
+                  Content="{x:Static loc:Strings.EnableWholeGroup}"
+                  FontWeight="SemiBold" FontSize="12"
+                  MinHeight="0" Padding="4,0"/>
+      </Border>
+
+      <!-- Empty state -->
+      <TextBlock Grid.Row="2" Text="{x:Static loc:Strings.AppsGroupEmpty}"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 FontSize="11" Opacity="0.5" FontStyle="Italic"
+                 IsVisible="{Binding !Apps.Count}"/>
+
+      <!-- Apps list — each row is a soft rounded block -->
+      <ListBox Grid.Row="2"
+               Classes="apps-list"
+               ItemsSource="{Binding Apps}"
+               Background="Transparent"
+               BorderThickness="0"
+               Padding="10,0,10,6"
+               SelectionMode="Single"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+               ScrollViewer.VerticalScrollBarVisibility="Auto"
+               IsVisible="{Binding Apps.Count}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:AppItemViewModel">
+            <Border Classes="app-row">
+              <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                <CheckBox Grid.Column="0"
+                          IsChecked="{Binding IsChecked}"
+                          MinHeight="0" Padding="0"
+                          VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1" Classes="app-name"
+                           Text="{Binding ProcessName}"/>
+                <Border Grid.Column="2" Classes="custom-badge"
+                        IsVisible="{Binding IsCustom}">
+                  <TextBlock Text="{x:Static loc:Strings.LblCustomBadge}"
+                             FontSize="9"
+                             Foreground="{DynamicResource TextMutedBrush}"/>
+                </Border>
+                <Button Grid.Column="3" Content="✕"
+                        IsVisible="{Binding IsCustom}"
+                        Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveCustomAppCommand}"
                         CommandParameter="{Binding}"
                         Background="Transparent" BorderThickness="0"
-                        Padding="8,2" MinHeight="0" FontSize="11"
-                        Opacity="0.6"
-                        ToolTip.Tip="{x:Static loc:Strings.TipRemoveCategory}"/>
-            </Grid>
-
-            <!-- Master enable toggle -->
-            <Border Grid.Row="1" Padding="14,4,14,8"
-                    BorderThickness="0,0,0,1"
-                    BorderBrush="{DynamicResource BorderDefaultBrush}">
-                <CheckBox IsChecked="{Binding IsChecked}"
-                          Content="{x:Static loc:Strings.EnableWholeGroup}"
-                          FontWeight="SemiBold" MinHeight="0" Padding="4,0"/>
+                        Padding="6,0" MinHeight="0" FontSize="11"
+                        Foreground="{DynamicResource TextMutedBrush}"
+                        ToolTip.Tip="{x:Static loc:Strings.TipRemoveApp}"/>
+              </Grid>
             </Border>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
 
-            <!-- Empty state -->
-            <TextBlock Grid.Row="2" Text="{x:Static loc:Strings.AppsGroupEmpty}"
-                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                       FontSize="11" Opacity="0.5" FontStyle="Italic"
-                       IsVisible="{Binding !Apps.Count}"/>
-
-            <!-- Apps list -->
-            <ListBox Grid.Row="2"
-                     ItemsSource="{Binding Apps}"
-                     Background="Transparent"
-                     BorderThickness="0"
-                     Padding="10,6,10,6"
-                     SelectionMode="Single"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     IsVisible="{Binding Apps.Count}">
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:AppItemViewModel">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}"
-                                      MinHeight="0" Padding="4,0">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="{Binding ProcessName}" FontSize="11"/>
-                                    <Border Background="{DynamicResource TextMutedBrush}" CornerRadius="{StaticResource RadiusSm}" Padding="5,0"
-                                            IsVisible="{Binding IsCustom}" VerticalAlignment="Center">
-                                        <TextBlock Text="{x:Static loc:Strings.LblCustomBadge}" FontSize="9" Foreground="White"/>
-                                    </Border>
-                                </StackPanel>
-                            </CheckBox>
-                            <Button Grid.Column="1" Content="X"
-                                    IsVisible="{Binding IsCustom}"
-                                    Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveCustomAppCommand}"
-                                    CommandParameter="{Binding}"
-                                    Background="Transparent" BorderThickness="0"
-                                    Padding="8,2" MinHeight="0" FontSize="11"
-                                    Opacity="0.5"
-                                    ToolTip.Tip="{x:Static loc:Strings.TipRemoveApp}"/>
-                        </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-
-            <!-- Add app input + Apply button -->
-            <Border Grid.Row="3"
-                    Padding="14,8"
-                    BorderThickness="0,1,0,0"
-                    BorderBrush="{DynamicResource BorderDefaultBrush}"
-                    Background="{DynamicResource SurfaceSunkenBrush}">
-                <StackPanel Spacing="6">
-                    <!-- Amber Apply button — visible only when pending changes exist -->
-                    <Button Content="{x:Static loc:Strings.ApplyChanges}"
-                            Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ApplyPendingChangesCommand}"
-                            IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HasPendingAppChanges}"
-                            IsEnabled="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsConnected}"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"
-                            Background="{DynamicResource WarningSolidBrush}" Foreground="White"
-                            FontSize="11" FontWeight="SemiBold"
-                            Padding="0,6" CornerRadius="{StaticResource RadiusSm}"/>
-                    <!-- Add app input -->
-                    <Grid ColumnDefinitions="*,Auto">
-                        <TextBox Grid.Column="0" x:Name="CustomAppInput"
-                                 Watermark="{x:Static loc:Strings.AddAppHint}"
-                                 FontSize="11" Padding="6,4"/>
-                        <Button Grid.Column="1" Content="+ Add"
-                                Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
-                                CommandParameter="{Binding #CustomAppInput.Text}"
-                                Margin="6,0,0,0"
-                                Padding="14,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
-                                Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                                FontWeight="SemiBold"/>
-                    </Grid>
-                </StackPanel>
-            </Border>
-        </Grid>
-
-        <!-- Empty state when no group selected -->
-        <TextBlock Grid.Column="1"
-                   Text="{x:Static loc:Strings.SelectCategoryHint}"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                   FontSize="11" Opacity="0.5" FontStyle="Italic"
-                   IsVisible="{Binding SelectedAppGroup, Converter={x:Static ObjectConverters.IsNull}}"/>
+      <!-- Add app input + Apply button -->
+      <Border Grid.Row="3"
+              Padding="14,8"
+              BorderThickness="0,1,0,0"
+              BorderBrush="{DynamicResource BorderDefaultBrush}"
+              Background="{DynamicResource SurfaceSunkenBrush}">
+        <StackPanel Spacing="6">
+          <Button Content="{x:Static loc:Strings.ApplyChanges}"
+                  Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).ApplyPendingChangesCommand}"
+                  IsVisible="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).HasPendingAppChanges}"
+                  IsEnabled="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).IsConnected}"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Center"
+                  Background="{DynamicResource WarningSolidBrush}" Foreground="White"
+                  FontSize="11" FontWeight="SemiBold"
+                  Padding="0,6" CornerRadius="{StaticResource RadiusSm}"/>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox Grid.Column="0" x:Name="CustomAppInput"
+                     Watermark="{x:Static loc:Strings.AddAppHint}"
+                     FontSize="11" Padding="6,4"/>
+            <Button Grid.Column="1" Content="+ Add"
+                    Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
+                    CommandParameter="{Binding #CustomAppInput.Text}"
+                    Margin="6,0,0,0"
+                    Padding="14,5" FontSize="11" CornerRadius="{StaticResource RadiusSm}"
+                    Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                    FontWeight="SemiBold"/>
+          </Grid>
+        </StackPanel>
+      </Border>
     </Grid>
+
+    <!-- Empty state when no group selected -->
+    <TextBlock Grid.Column="1"
+               Text="{x:Static loc:Strings.SelectCategoryHint}"
+               HorizontalAlignment="Center" VerticalAlignment="Center"
+               FontSize="11" Opacity="0.5" FontStyle="Italic"
+               IsVisible="{Binding SelectedAppGroup, Converter={x:Static ObjectConverters.IsNull}}"/>
+  </Grid>
 </UserControl>
