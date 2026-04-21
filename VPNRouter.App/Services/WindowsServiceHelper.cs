@@ -126,6 +126,86 @@ public static class WindowsServiceHelper
         return new ServiceResult(false, "Service did not stop within 15 seconds.");
     }
 
+    // ─── Config query + self-heal ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Query the currently-configured binary path from `sc qc VPNRouter`.
+    /// Returns null if the service isn't installed or the line couldn't be
+    /// parsed. The returned string includes arguments (e.g. `... --service`)
+    /// exactly as sc reported them, unwrapped from outer quotes.
+    /// </summary>
+    public static string? GetBinPath()
+    {
+        var (code, output) = RunSc($"qc {ServiceName}");
+        if (code != 0) return null;
+
+        // sc qc emits a line like:
+        //     BINARY_PATH_NAME   : "C:\...\VPNRouter.Service.exe --service"
+        // Find that line, strip the label+colon, then trim whitespace and
+        // surrounding quotes.
+        foreach (var line in output.Split('\n'))
+        {
+            var label = "BINARY_PATH_NAME";
+            var idx = line.IndexOf(label, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) continue;
+            var colon = line.IndexOf(':', idx);
+            if (colon < 0) continue;
+
+            var value = line[(colon + 1)..].Trim().Trim('"').Trim();
+            return value;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// v2.26.0 — service binPath self-heal. Same problem as the Run-key
+    /// ghost-path bug: if the user re-installs / moves the app, the
+    /// service's registered binPath still points to the previous location
+    /// and the service either starts the old binary (if it still exists)
+    /// or fails silently at boot.
+    ///
+    /// Called from Program.Main() on every Windows app startup. If the
+    /// service is installed AND the installed binPath doesn't match the
+    /// currently-discovered VPNRouter.Service.exe, run
+    /// `sc config VPNRouter binPath= "<new path> --service"`. The change
+    /// takes effect on the next service start — we don't auto-stop/start
+    /// here because:
+    ///   • doing so would interrupt any in-flight VPN session;
+    ///   • the common case is "user reinstalled while service was already
+    ///     installed with old path" and the user will reboot/login soon
+    ///     anyway.
+    ///
+    /// Idempotent — no-op when binPath already matches or the service
+    /// isn't installed.
+    /// </summary>
+    public static ServiceResult EnsureCurrentBinPath(string? currentServiceExePath = null)
+    {
+        if (!IsInstalled())
+            return new ServiceResult(true, "Service not installed; nothing to heal.");
+
+        currentServiceExePath ??= ResolveServiceExePath();
+        if (currentServiceExePath == null)
+            return new ServiceResult(false, "VPNRouter.Service.exe not found near current app — skipping binPath heal.");
+
+        var installed = GetBinPath();
+        if (installed == null)
+            return new ServiceResult(false, "Couldn't parse installed binPath from sc qc.");
+
+        var expected = $"{currentServiceExePath} --service";
+
+        // sc typically stores the path quoted but returns it unquoted after
+        // our Trim('"'). Compare case-insensitively so we don't churn on
+        // drive-letter casing differences (C:\ vs c:\).
+        if (string.Equals(installed, expected, StringComparison.OrdinalIgnoreCase))
+            return new ServiceResult(true, "binPath already correct, no-op.");
+
+        var (code, output) = RunSc($"config {ServiceName} binPath= \"{expected}\"");
+        if (code != 0)
+            return new ServiceResult(false, $"sc config binPath= failed (exit {code}): {output}");
+
+        return new ServiceResult(true, $"binPath updated: \"{installed}\" → \"{expected}\" (effective next service start).");
+    }
+
     // ─── Path resolution ──────────────────────────────────────────────────────
 
     /// <summary>

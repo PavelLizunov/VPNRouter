@@ -143,6 +143,100 @@ public static class SettingsLoader
         File.WriteAllText(configPath, serializer.Serialize(settings));
     }
 
+    // ── v2.26.0 — live reload on config.yaml change ──────────────────────
+    //
+    // Service processes (VPNRouter.Service.exe) previously read config.yaml
+    // once at startup and never again. If the user edited settings via the
+    // desktop UI while the service held sing-box, the service's in-memory
+    // settings went stale and any subsequent restart used old values.
+    //
+    // Watcher here solves that: FileSystemWatcher on the config.yaml
+    // directory + 2 s debounce (file writes arrive as multiple Changed
+    // events on Windows) + parse the file fresh each time and hand the
+    // result to a caller-supplied callback. Caller decides what to do:
+    // hot-reload via Clash API, restart sing-box, update a cached flag,
+    // etc.
+    //
+    // Desktop UI process doesn't use this because it's the source of truth
+    // for writes — watching one's own writes would just create a feedback
+    // loop (each Save fires Changed → re-parse → potentially re-Save).
+    //
+    // Thread-safe against repeated StartWatching calls: disposes the old
+    // watcher before creating a new one, so calling it twice doesn't leak
+    // handles.
+
+    private static FileSystemWatcher? _watcher;
+    private static System.Timers.Timer? _debounceTimer;
+    private static Action<AppSettings>? _reloadCallback;
+
+    /// <summary>
+    /// Begin watching the config file for external changes. Every write
+    /// that lands from outside this process triggers <paramref name="onReload"/>
+    /// with the freshly-parsed AppSettings. Safe to call multiple times —
+    /// the last call wins. The watcher is active until <see cref="StopWatching"/>
+    /// or until the process exits.
+    /// </summary>
+    public static void StartWatching(string? path = null, Action<AppSettings>? onReload = null)
+    {
+        StopWatching();
+
+        var configPath = path ?? DefaultConfigPath;
+        var dir = Path.GetDirectoryName(configPath);
+        var file = Path.GetFileName(configPath);
+
+        if (string.IsNullOrEmpty(dir) || string.IsNullOrEmpty(file)) return;
+        if (!Directory.Exists(dir)) return;
+
+        _reloadCallback = onReload;
+
+        try
+        {
+            _watcher = new FileSystemWatcher(dir, file)
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName,
+                EnableRaisingEvents = true
+            };
+            _watcher.Changed += (_, _) => ScheduleReload(configPath);
+            _watcher.Created += (_, _) => ScheduleReload(configPath);
+            _watcher.Renamed += (_, _) => ScheduleReload(configPath);
+        }
+        catch
+        {
+            // Watcher creation failed (permission denied, etc.) — non-fatal,
+            // we just lose the live-reload feature on this run.
+            _watcher = null;
+        }
+    }
+
+    public static void StopWatching()
+    {
+        try { _watcher?.Dispose(); } catch { }
+        _watcher = null;
+        try { _debounceTimer?.Stop(); _debounceTimer?.Dispose(); } catch { }
+        _debounceTimer = null;
+        _reloadCallback = null;
+    }
+
+    private static void ScheduleReload(string configPath)
+    {
+        try { _debounceTimer?.Stop(); _debounceTimer?.Dispose(); } catch { }
+
+        _debounceTimer = new System.Timers.Timer(2000) { AutoReset = false };
+        _debounceTimer.Elapsed += (_, _) =>
+        {
+            try
+            {
+                // Read-lock workaround: if the writer still holds an
+                // exclusive handle when we try to parse, give up — the
+                // next Changed event will re-schedule us.
+                var settings = Load(configPath);
+                _reloadCallback?.Invoke(settings);
+            }
+            catch { /* non-fatal: next change will retry */ }
+        };
+        _debounceTimer.Start();
+    }
+
     /// <summary>
     /// v2.23.0 self-healing: reset user configuration to factory defaults.
     /// Current yaml is backed up (timestamped) before being overwritten,

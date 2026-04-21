@@ -19,6 +19,13 @@ public class VPNRouterService : BackgroundService
     private ZapretManager? _zapret;
     private TgProxyManager? _tgProxy;
 
+    // v2.26.0 — current in-memory settings snapshot. Was a local in
+    // ExecuteAsync; promoted to a field so the SettingsLoader watcher
+    // callback can mutate it and any post-startup flow (crash-restart,
+    // hot-reload) uses up-to-date values instead of the stale copy we
+    // read once at service boot.
+    private AppSettings? _currentSettings;
+
     private readonly TaskCompletionSource _startupComplete = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private const string EventSourceName = "VPNRouter";
@@ -36,8 +43,17 @@ public class VPNRouterService : BackgroundService
 
         try
         {
-            var settings = SettingsLoader.Load();
+            _currentSettings = SettingsLoader.Load();
+            var settings = _currentSettings;
             _logger.LogInformation("[Service] Config loaded, mode: {Mode}", settings.App.ConfigMode);
+
+            // v2.26.0 — watch config.yaml for changes made by the desktop
+            // UI (or anyone else) and reconcile into in-memory state + a
+            // running sing-box if we own one. Closes the gap where a user
+            // changed routing_mode / subscription / apps in the UI but
+            // the service's cached settings stayed stale, so any
+            // subsequent crash-restart used outdated values.
+            SettingsLoader.StartWatching(onReload: OnConfigChanged);
 
             // ── Step 0: Self-migrate pre-v2.14.12 installs (add boot dependencies) ──
             TryMigrateDependencies();
@@ -375,10 +391,56 @@ public class VPNRouterService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// v2.26.0 — FileSystemWatcher callback triggered on every external
+    /// config.yaml write (with 2 s debounce built into SettingsLoader).
+    /// Desktop UI is the primary writer; this method delivers the new
+    /// settings to the live service without a service restart.
+    /// </summary>
+    private void OnConfigChanged(AppSettings newSettings)
+    {
+        try
+        {
+            _currentSettings = newSettings;
+            _logger.LogInformation("[Service] config.yaml changed → settings reconciled");
+
+            // If we're currently holding sing-box, hot-reload with the
+            // fresh settings. VpnEngine.ApplyAsync tries Clash API first
+            // (TUN stays up) and falls back to full restart only when the
+            // change requires it (routing_mode flip, bypass-ru toggle).
+            if (_engine != null && _engine.IsRunning)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var ok = await _engine.ApplyAsync(newSettings);
+                        _logger.LogInformation(
+                            "[Service] Hot-reload {Result} after config change",
+                            ok ? "succeeded" : "failed (kept previous config)");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "[Service] ApplyAsync raised");
+                    }
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Service] OnConfigChanged error (non-fatal)");
+        }
+    }
+
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("[Service] Stopping...");
         WriteEventLog("VPN Router service stopping", EventLogEntryType.Information);
+
+        // v2.26.0 — release the FileSystemWatcher before tearing everything
+        // else down, so a last-second config.yaml write during shutdown
+        // doesn't queue an ApplyAsync against a disposed _engine.
+        try { SettingsLoader.StopWatching(); } catch { }
 
         try
         {

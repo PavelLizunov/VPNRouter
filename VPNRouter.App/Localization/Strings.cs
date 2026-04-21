@@ -103,6 +103,30 @@ public static class Strings
     public static string ServiceInstalledText => Ru ? "Установлена" : "Installed";
     public static string ServiceNotInstalledText => Ru ? "Не установлена" : "Not installed";
 
+    // v2.26.0 — master service toggle + grouping labels for the refactored
+    // Autostart panel (single source of truth for the install state +
+    // clearly-named sub-groups for the two categories of autostart).
+    public static string ServiceMasterTitle => Ru
+        ? "Фоновая служба Windows"
+        : "Windows background service";
+    public static string ServiceMasterSubtitle => Ru
+        ? "Запускает VPN / Zapret / Telegram-прокси при загрузке ОС до входа в систему. Требует прав администратора."
+        : "Starts VPN / Zapret / Telegram proxy at OS boot before you log in. Requires administrator privileges.";
+    public static string ServiceEnableLabel => Ru
+        ? "Включить фоновую службу"
+        : "Enable background service";
+    public static string ServiceInstalling => Ru ? "Установка..." : "Installing...";
+    public static string ServiceRemoving => Ru ? "Удаление..." : "Removing...";
+    public static string ServiceComponentsHeader => Ru
+        ? "Запускать при старте службы"
+        : "Start automatically with the service";
+    public static string ServiceComponentsDisabledHint => Ru
+        ? "Флаги применятся после включения службы выше."
+        : "Flags take effect once the service above is enabled.";
+    public static string AutostartUiSessionHeader => Ru
+        ? "Пользовательский сеанс"
+        : "User session";
+
     // ── Dialogs ──
     public static string FailedStartVpn => Ru ? "Не удалось запустить VPN:" : "Failed to start VPN:";
     public static string AddServerFirst => Ru

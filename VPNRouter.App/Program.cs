@@ -148,6 +148,21 @@ sealed class Program
         }
         catch { /* never block app startup over a cosmetic registry fix */ }
 
+        // v2.26.0 — service binPath self-heal (Windows only). Analog of the
+        // Run-key fix above but for `sc config VPNRouter binPath=`. Non-
+        // disruptive: just reconfigures the service, change takes effect on
+        // next service start. No-op when service isn't installed.
+        try
+        {
+            var healResult = VPNRouter.App.Services.WindowsServiceHelper.EnsureCurrentBinPath();
+            if (healResult.Success && healResult.Message.StartsWith("binPath updated", StringComparison.OrdinalIgnoreCase))
+            {
+                try { Console.Error.WriteLine($"[service-heal] {healResult.Message}"); }
+                catch { }
+            }
+        }
+        catch { /* never block app startup over a cosmetic sc.exe fix */ }
+
         // Defensive cleanup: kill orphan sing-box / older VPNRouter instances
         // left behind by failed updates or v2.3.x→v2.4.x migration.
         try { OrphanCleanup.KillOrphans(); } catch { }

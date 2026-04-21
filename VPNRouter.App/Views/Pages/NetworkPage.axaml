@@ -229,50 +229,42 @@
           </Border>
         </StackPanel>
 
-        <!-- ═══ Autostart ═══
-             Windows: 4 autostart checkboxes + Service status row with
-             Restart / Reinstall buttons (moved from old footer).
-             Linux/macOS: info-banner only (autostart subsystem not yet
-             implemented outside Windows — v2.25.0-r2 policy). -->
+        <!-- ═══ Autostart (v2.26.0 refactor) ═══
+             Single source of truth for the Windows Service lifecycle: one
+             master checkbox (ServiceVm.AutostartChecked) toggling install
+             + start / stop + uninstall. Component flags live inside a
+             sub-card that's only interactive when the service is actually
+             installed — removes the old UX trap where user could set
+             AutostartVpn=true without ever installing the service and
+             wonder why nothing auto-started.
+             UI autostart (HKCU Run key, user-level) is a separate card
+             because it's mechanically unrelated to the Windows service —
+             grouping them together was misleading. -->
         <StackPanel Spacing="10" IsVisible="{Binding IsSettingsAutostartSelected}">
           <TextBlock Text="{Binding LblAutostartSection}" FontWeight="Bold" FontSize="13"/>
 
-          <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
-                  Background="{DynamicResource SurfaceSunkenBrush}"
-                  BorderBrush="{DynamicResource BorderDefaultBrush}"
-                  BorderThickness="1"
+          <!-- ── Windows service master card ── -->
+          <Border Classes="checkbox-card"
+                  Classes.active="{Binding ServiceVm.AutostartChecked}"
                   IsVisible="{Binding IsWindowsPlatform}">
-            <StackPanel Spacing="6">
-              <CheckBox IsChecked="{Binding AutostartVpn}"
-                        Content="{Binding LblAutostartVpn}"
-                        MinHeight="0" Padding="4,0"/>
-              <CheckBox IsChecked="{Binding AutostartZapret}"
-                        Content="{Binding LblAutostartZapret}"
-                        MinHeight="0" Padding="4,0"/>
-              <CheckBox IsChecked="{Binding AutostartTgProxy}"
-                        Content="{Binding LblAutostartTgProxy}"
-                        MinHeight="0" Padding="4,0"/>
-              <CheckBox IsChecked="{Binding AutostartUi}"
-                        Content="{Binding LblAutostartUi}"
-                        MinHeight="0" Padding="4,0"/>
-            </StackPanel>
-          </Border>
+            <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
+              <CheckBox Grid.Column="0"
+                        IsChecked="{Binding ServiceVm.AutostartChecked}"
+                        IsEnabled="{Binding !ServiceVm.IsBusy}"
+                        VerticalAlignment="Top"
+                        MinWidth="0" MinHeight="0" Padding="0"
+                        Margin="0,1,0,0"/>
+              <StackPanel Grid.Column="1" Spacing="4">
+                <TextBlock Classes="card-title"
+                           Text="{Binding L_ServiceMasterTitle}"/>
+                <TextBlock Classes="card-sub"
+                           Text="{Binding L_ServiceMasterSubtitle}"/>
 
-          <!-- Service status + actions — only shown on Windows and only
-               when the service VM surface is available (not applicable
-               when CLI mode is detected). Restart is visible when the
-               service is running, Reinstall whenever it's installed. -->
-          <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
-                  Background="{DynamicResource SurfaceSunkenBrush}"
-                  BorderBrush="{DynamicResource BorderDefaultBrush}"
-                  BorderThickness="1"
-                  IsVisible="{Binding ServiceVm.IsAvailable}">
-            <StackPanel Spacing="6">
-              <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding L_ServiceStatusLabel}"
-                             FontWeight="SemiBold" FontSize="11"
-                             VerticalAlignment="Center"/>
+                <!-- Status + action row — only visible when service is
+                     installed. Pill colour reflects running state. -->
+                <StackPanel Orientation="Horizontal" Spacing="6"
+                            Margin="0,4,0,0"
+                            IsVisible="{Binding ServiceVm.IsInstalled}">
                   <Border Classes="service-pill"
                           IsVisible="{Binding ServiceVm.IsRunning}"
                           Background="{DynamicResource SuccessBgBrush}">
@@ -287,24 +279,81 @@
                                FontSize="9" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextMutedBrush}"/>
                   </Border>
+                  <Button Content="{Binding L_RestartService}"
+                          Command="{Binding ServiceVm.RestartServiceCommand}"
+                          IsVisible="{Binding ServiceVm.IsRunning}"
+                          IsEnabled="{Binding !ServiceVm.IsBusy}"
+                          Padding="10,3" FontSize="10"
+                          CornerRadius="{StaticResource RadiusSm}"/>
+                  <Button Content="{Binding L_ReinstallService}"
+                          Command="{Binding ServiceVm.ReinstallServiceCommand}"
+                          IsEnabled="{Binding !ServiceVm.IsBusy}"
+                          Padding="10,3" FontSize="10"
+                          CornerRadius="{StaticResource RadiusSm}"/>
                 </StackPanel>
-              </Grid>
-              <StackPanel Orientation="Horizontal" Spacing="6">
-                <Button Content="{Binding L_RestartService}"
-                        Command="{Binding ServiceVm.RestartServiceCommand}"
-                        IsVisible="{Binding ServiceVm.IsRunning}"
-                        IsEnabled="{Binding !ServiceVm.IsBusy}"
-                        Padding="10,4" FontSize="10" CornerRadius="{StaticResource RadiusSm}"/>
-                <Button Content="{Binding L_ReinstallService}"
-                        Command="{Binding ServiceVm.ReinstallServiceCommand}"
-                        IsVisible="{Binding ServiceVm.IsInstalled}"
-                        IsEnabled="{Binding !ServiceVm.IsBusy}"
-                        Padding="10,4" FontSize="10" CornerRadius="{StaticResource RadiusSm}"/>
+
+                <!-- Busy indicator during install/uninstall -->
+                <TextBlock Text="{Binding ServiceVm.StatusMessage}"
+                           IsVisible="{Binding ServiceVm.IsBusy}"
+                           FontSize="10" FontStyle="Italic"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           Margin="0,4,0,0"/>
               </StackPanel>
+            </Grid>
+          </Border>
+
+          <!-- ── Components to auto-start with the service ──
+               Interactable only when the service is installed — flag
+               values are meaningless otherwise (nothing reads them on
+               boot). Hint banner renders when service isn't installed. -->
+          <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource SurfaceSunkenBrush}"
+                  BorderBrush="{DynamicResource BorderDefaultBrush}"
+                  BorderThickness="1"
+                  IsVisible="{Binding IsWindowsPlatform}">
+            <StackPanel Spacing="5">
+              <TextBlock Text="{Binding L_ServiceComponentsHeader}"
+                         FontSize="10" FontWeight="SemiBold"
+                         Foreground="{DynamicResource TextMutedBrush}"/>
+              <StackPanel Spacing="5"
+                          IsEnabled="{Binding ServiceVm.IsInstalled}">
+                <CheckBox IsChecked="{Binding AutostartVpn}"
+                          Content="{Binding LblAutostartVpn}"
+                          MinHeight="0" Padding="4,0"/>
+                <CheckBox IsChecked="{Binding AutostartZapret}"
+                          Content="{Binding LblAutostartZapret}"
+                          MinHeight="0" Padding="4,0"/>
+                <CheckBox IsChecked="{Binding AutostartTgProxy}"
+                          Content="{Binding LblAutostartTgProxy}"
+                          MinHeight="0" Padding="4,0"/>
+              </StackPanel>
+              <!-- "Turn on the service above first" hint when service
+                   not installed yet. -->
+              <TextBlock Text="{Binding L_ServiceComponentsDisabledHint}"
+                         IsVisible="{Binding !ServiceVm.IsInstalled}"
+                         FontSize="9" FontStyle="Italic"
+                         Foreground="{DynamicResource WarningFgBrush}"
+                         Margin="0,2,0,0"/>
             </StackPanel>
           </Border>
 
-          <!-- Non-Windows notice: replaces the non-functional checkboxes. -->
+          <!-- ── User-session autostart (HKCU Run key — independent) ── -->
+          <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource SurfaceSunkenBrush}"
+                  BorderBrush="{DynamicResource BorderDefaultBrush}"
+                  BorderThickness="1"
+                  IsVisible="{Binding IsWindowsPlatform}">
+            <StackPanel Spacing="5">
+              <TextBlock Text="{Binding L_AutostartUiSessionHeader}"
+                         FontSize="10" FontWeight="SemiBold"
+                         Foreground="{DynamicResource TextMutedBrush}"/>
+              <CheckBox IsChecked="{Binding AutostartUi}"
+                        Content="{Binding LblAutostartUi}"
+                        MinHeight="0" Padding="4,0"/>
+            </StackPanel>
+          </Border>
+
+          <!-- Non-Windows notice: replaces everything else. -->
           <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                   Background="{DynamicResource InfoBgBrush}"
                   BorderBrush="{DynamicResource InfoBorderBrush}"
