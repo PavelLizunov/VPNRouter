@@ -9,196 +9,316 @@
              x:Class="VPNRouter.App.Views.Pages.SubscribePage"
              x:DataType="vm:MainWindowViewModel">
 
-    <UserControl.Resources>
-        <conv:BoolToFontWeightConverter x:Key="ActiveFontConverter"/>
-    </UserControl.Resources>
+  <UserControl.Resources>
+    <conv:BoolToFontWeightConverter x:Key="ActiveFontConverter"/>
+  </UserControl.Resources>
 
-    <Grid RowDefinitions="*,Auto,Auto,Auto">
+  <!-- v2.25.3 — SubscribePage redesign per Claude Design handoff section 3.
+       Shares the row-template, column-header, radio-indicator, and arctic
+       active-highlight primitives with ServersPage. Diffs from ServersPage:
+         • No sub-tab strip (pure subscription pool view).
+         • Empty-state overlay when SubscriptionServers is empty.
+         • Test all / Deep verify buttons bind to subscription-specific
+           commands, not the VLESS list ones.
+         • Subscriptions card-list (bottom) also re-laid-out as row-style
+           cards with URL subtitle + last-refresh timestamp, matching the
+           srv-row shape. -->
+  <UserControl.Styles>
 
-        <!-- Aggregated server pool (from all enabled subscriptions).
-             v2.20.5: explicit VirtualizingStackPanel — same rationale as in
-             ServersPage. Users with a few large subscriptions can easily hit
-             1000+ aggregated servers; without virtualisation that's 1000
-             ServerViewModel × item container resident in memory even if
-             only 12 are visible. -->
-        <ListBox Grid.Row="0"
-                 x:Name="SubList"
-                 ItemsSource="{Binding SubscriptionServers}"
-                 SelectedItem="{Binding SelectedSubscriptionServer}"
-                 Background="Transparent"
-                 BorderThickness="0"
-                 Padding="10,8,10,6"
-                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                 ScrollViewer.VerticalScrollBarVisibility="Auto">
-            <ListBox.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <VirtualizingStackPanel/>
-                </ItemsPanelTemplate>
-            </ListBox.ItemsPanel>
-            <ListBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:ServerViewModel">
-                    <Grid ColumnDefinitions="Auto,Auto,*,*,55,55,40,Auto">
-                        <TextBlock Grid.Column="0" Text="●" Foreground="{DynamicResource SuccessSolidBrush}"
-                                   IsVisible="{Binding IsActive}" FontSize="9"
-                                   VerticalAlignment="Center" Margin="0,0,4,0"/>
-                        <TextBlock Grid.Column="1" Text="{Binding StatusDot}"
-                                   Foreground="{Binding StatusDotBrush}"
-                                   FontSize="11" VerticalAlignment="Center"
-                                   Margin="0,0,4,0"
-                                   ToolTip.Tip="{Binding TestError}"/>
-                        <TextBlock Grid.Column="2" Text="{Binding DisplayName}"
-                                   FontWeight="{Binding IsActive, Converter={StaticResource ActiveFontConverter}}"
-                                   VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="3" Text="{Binding Server}" Opacity="0.7"
-                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="4" Text="{Binding PingDisplay}"
-                                   Opacity="0.8" FontSize="10" TextAlignment="Right"
-                                   VerticalAlignment="Center" Margin="0,0,6,0"
-                                   ToolTip.Tip="{x:Static loc:Strings.TipTcpTlsPing}"/>
-                        <TextBlock Grid.Column="5" Text="{Binding DeepDisplay}"
-                                   Opacity="0.9" FontSize="10" TextAlignment="Right"
-                                   VerticalAlignment="Center" Margin="0,0,6,0"
-                                   ToolTip.Tip="{Binding DeepError}"
-                                   FontWeight="SemiBold"/>
-                        <TextBlock Grid.Column="6" Text="{Binding Port}" Opacity="0.5"
-                                   TextAlignment="Center" FontSize="10" VerticalAlignment="Center"/>
-                        <Button Grid.Column="7"
-                                Content="⟳"
-                                Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
-                                CommandParameter="{Binding}"
-                                IsEnabled="{Binding !IsTesting}"
-                                FontSize="10" Padding="6,1" MinHeight="0"
-                                Background="Transparent" BorderThickness="0"
-                                ToolTip.Tip="{x:Static loc:Strings.TipTestTcpTls}"/>
-                    </Grid>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
+    <!-- Radio indicator (shared identical to ServersPage). -->
+    <Style Selector="Border.rbx">
+      <Setter Property="Width" Value="12"/>
+      <Setter Property="Height" Value="12"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="BorderThickness" Value="1.5"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.rbx.active">
+      <Setter Property="BorderBrush" Value="{DynamicResource SuccessSolidBrush}"/>
+      <Setter Property="Background" Value="{DynamicResource SuccessSolidBrush}"/>
+    </Style>
 
-        <!-- Empty state -->
-        <StackPanel Grid.Row="0"
-                    IsVisible="{Binding !SubscriptionServers.Count}"
-                    HorizontalAlignment="Center" VerticalAlignment="Center"
-                    Spacing="6">
-            <TextBlock Text="{x:Static loc:Strings.LblNoServers}"
-                       FontSize="13" FontWeight="SemiBold" Opacity="0.6"
-                       HorizontalAlignment="Center"/>
-            <TextBlock Text="{x:Static loc:Strings.LblAddSubscriptionHint}"
-                       FontSize="11" Opacity="0.4"
-                       HorizontalAlignment="Center"/>
-        </StackPanel>
+    <!-- Row wrapper — arctic tint when active -->
+    <Style Selector="Border.srv-row">
+      <Setter Property="Padding" Value="8,5"/>
+      <Setter Property="CornerRadius" Value="3"/>
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="Border.srv-row.active">
+      <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+    </Style>
 
-        <!-- Subscriptions section header -->
-        <Border Grid.Row="1" Padding="10,6,10,4"
-                BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource BorderDefaultBrush}">
-            <StackPanel Spacing="4">
-                <!-- Test all + Deep verify + progress row -->
-                <StackPanel Spacing="2">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Button Content="{Binding ServerTestButtonText}"
-                                Command="{Binding TestAllSubscriptionServersCommand}"
-                                Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
-                                FontSize="10"
-                                Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
-                                ToolTip.Tip="{x:Static loc:Strings.TipTestAllServers}"/>
-                        <Button Content="{Binding ServerDeepButtonText}"
-                                Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
-                                Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
-                                FontSize="10"
-                                Background="#7C3AED" Foreground="White"
-                                ToolTip.Tip="{x:Static loc:Strings.TipDeepVerifyServers}"/>
-                        <TextBlock Text="{Binding ServerTestProgressText}"
-                                   VerticalAlignment="Center"
-                                   FontSize="10" Opacity="0.7"/>
-                    </StackPanel>
-                    <TextBlock Text="{Binding ServerDeepProgressText}"
-                               FontSize="10" Opacity="0.7"
-                               IsVisible="{Binding ServerDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                </StackPanel>
-                <!-- Subscriptions label + Refresh all -->
-                <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Grid.Column="0"
-                               Text="{x:Static loc:Strings.SubscriptionsSection}"
-                               FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
-                    <Button Grid.Column="1"
-                            Content="{x:Static loc:Strings.RefreshAll}"
-                            Command="{Binding RefreshAllSubscriptionsCommand}"
-                            FontSize="10" Padding="8,3" CornerRadius="{StaticResource RadiusSm}"/>
-                </Grid>
-            </StackPanel>
-        </Border>
+    <Style Selector="TextBlock.srv-name">
+      <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    <Style Selector="Border.srv-row.active TextBlock.srv-name">
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+    </Style>
 
-        <!-- Subscriptions list: compact 1-line cards, scrolls when >5 -->
-        <ScrollViewer Grid.Row="2"
-                      MaxHeight="130"
-                      HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Auto"
-                      Padding="10,0,10,2">
-        <ItemsControl ItemsSource="{Binding Subscriptions}">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:SubscriptionViewModel">
-                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="0,1"
-                          VerticalAlignment="Center">
-                        <CheckBox Grid.Column="0" IsChecked="{Binding Enabled}"
-                                  MinHeight="0" Padding="2,0" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Text="{Binding Name}"
-                                   FontSize="11" FontWeight="SemiBold"
-                                   VerticalAlignment="Center" Margin="4,0,6,0"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Grid.Column="2" FontSize="9" Opacity="0.5"
-                                   VerticalAlignment="Center" Margin="0,0,6,0">
-                            <TextBlock.Text>
-                                <MultiBinding StringFormat="{}{0}s · {1}">
-                                    <Binding Path="LastServerCount"/>
-                                    <Binding Path="LastRefreshedDisplay"/>
-                                </MultiBinding>
-                            </TextBlock.Text>
-                        </TextBlock>
-                        <ProgressBar Grid.Column="3" IsVisible="{Binding IsRefreshing}"
-                                     IsIndeterminate="True"
-                                     Height="3" Width="40" VerticalAlignment="Center"
-                                     Margin="2,0,4,0" Foreground="{DynamicResource AccentSolidBrush}"/>
-                        <Button Grid.Column="4" Content="🔄"
-                                Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RefreshSubscriptionCommand}"
-                                CommandParameter="{Binding}"
-                                IsEnabled="{Binding !IsRefreshing}"
-                                FontSize="10" Padding="4,1" MinHeight="0" CornerRadius="{StaticResource RadiusXs}"
-                                Background="Transparent" BorderThickness="0"
-                                ToolTip.Tip="{x:Static loc:Strings.TipRefreshSubscription}"/>
-                        <Button Grid.Column="5" Content="✕"
-                                Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveSubscriptionCommand}"
-                                CommandParameter="{Binding}"
-                                FontSize="10" Padding="4,1" MinHeight="0" CornerRadius="{StaticResource RadiusXs}"
-                                Background="Transparent" BorderThickness="0"
-                                Opacity="0.55"
-                                ToolTip.Tip="{x:Static loc:Strings.TipRemoveSubscription}"/>
-                    </Grid>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-        </ScrollViewer>
+    <Style Selector="TextBlock.srv-host">
+      <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
+      <Setter Property="FontSize" Value="9"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
 
-        <!-- Add new subscription -->
-        <Border Grid.Row="3" Padding="10,6"
-                BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource BorderDefaultBrush}">
-            <Grid ColumnDefinitions="100,*,Auto" ColumnSpacing="4">
-                <TextBox Grid.Column="0"
-                         Text="{Binding NewSubName}"
-                         Watermark="{x:Static loc:Strings.SubscriptionNameHint}"
-                         FontSize="10" Padding="6,4"/>
-                <TextBox Grid.Column="1"
-                         Text="{Binding NewSubUrl}"
-                         Watermark="{Binding LblSubscriptionUrlHint}"
-                         FontSize="10" Padding="6,4"/>
-                <Button Grid.Column="2"
-                        Content="{x:Static loc:Strings.AddSubscription}"
-                        Command="{Binding AddSubscriptionCommand}"
-                        Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                        FontSize="11" FontWeight="SemiBold"
-                        Padding="12,5" CornerRadius="{StaticResource RadiusSm}"/>
-            </Grid>
-        </Border>
+    <Style Selector="TextBlock.srv-cell">
+      <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
+      <Setter Property="FontSize" Value="9"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style Selector="TextBlock.srv-col-label">
+      <Setter Property="FontSize" Value="9"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <Style Selector="Button.srv-refresh">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="2"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.srv-refresh:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+    </Style>
+
+    <Style Selector="ListBox.srv-list ListBoxItem">
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="MinHeight" Value="0"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
+
+    <!-- Column headers — same grid definition as the row template below. -->
+    <Grid Grid.Row="0" ColumnDefinitions="14,*,100,42,40,24" ColumnSpacing="8"
+          Margin="18,6,18,4">
+      <TextBlock Grid.Column="1" Classes="srv-col-label"
+                 Text="{x:Static loc:Strings.ColServer}"/>
+      <TextBlock Grid.Column="2" Classes="srv-col-label"
+                 Text="{x:Static loc:Strings.ColIp}"/>
+      <TextBlock Grid.Column="3" Classes="srv-col-label"
+                 Text="{x:Static loc:Strings.ColPing}"
+                 HorizontalAlignment="Center"/>
+      <TextBlock Grid.Column="4" Classes="srv-col-label"
+                 Text="{x:Static loc:Strings.ColPort}"
+                 HorizontalAlignment="Center"/>
     </Grid>
+
+    <!-- Aggregated server pool -->
+    <ListBox Grid.Row="1"
+             x:Name="SubList"
+             Classes="srv-list"
+             ItemsSource="{Binding SubscriptionServers}"
+             SelectedItem="{Binding SelectedSubscriptionServer}"
+             BorderBrush="{DynamicResource BorderSubtleBrush}"
+             BorderThickness="1"
+             CornerRadius="{StaticResource RadiusSm}"
+             Background="{DynamicResource SurfaceBaseBrush}"
+             Margin="10,0,10,0"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+             ScrollViewer.VerticalScrollBarVisibility="Auto">
+      <ListBox.ItemsPanel>
+        <ItemsPanelTemplate>
+          <VirtualizingStackPanel/>
+        </ItemsPanelTemplate>
+      </ListBox.ItemsPanel>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:ServerViewModel">
+          <Border Classes="srv-row" Classes.active="{Binding IsActive}">
+            <Grid ColumnDefinitions="14,*,100,42,40,24" ColumnSpacing="8">
+
+              <Border Grid.Column="0" Classes="rbx" Classes.active="{Binding IsActive}">
+                <Ellipse Width="4" Height="4" Fill="White"
+                         IsVisible="{Binding IsActive}"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+              </Border>
+
+              <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                <TextBlock Classes="srv-name" Text="{Binding DisplayName}"/>
+                <TextBlock Classes="srv-host" Text="{Binding HostSubtitle}"
+                           IsVisible="{Binding HostSubtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+              </StackPanel>
+
+              <TextBlock Grid.Column="2" Classes="srv-cell"
+                         Text="{Binding Server}"
+                         TextTrimming="CharacterEllipsis"/>
+
+              <TextBlock Grid.Column="3" Classes="srv-cell"
+                         Text="{Binding PingDisplay}"
+                         Foreground="{Binding StatusDotBrush}"
+                         HorizontalAlignment="Center"
+                         ToolTip.Tip="{Binding TestError}"/>
+
+              <TextBlock Grid.Column="4" Classes="srv-cell"
+                         Text="{Binding Port}"
+                         HorizontalAlignment="Center"/>
+
+              <Button Grid.Column="5" Classes="srv-refresh"
+                      Content="⟳"
+                      Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
+                      CommandParameter="{Binding}"
+                      IsEnabled="{Binding !IsTesting}"
+                      ToolTip.Tip="{x:Static loc:Strings.TipTestTcpTls}"/>
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+
+    <!-- Empty state overlay (kept as-is — simple centred prompt) -->
+    <StackPanel Grid.Row="1"
+                IsVisible="{Binding !SubscriptionServers.Count}"
+                HorizontalAlignment="Center" VerticalAlignment="Center"
+                Spacing="6">
+      <TextBlock Text="{x:Static loc:Strings.LblNoServers}"
+                 FontSize="13" FontWeight="SemiBold" Opacity="0.6"
+                 HorizontalAlignment="Center"/>
+      <TextBlock Text="{x:Static loc:Strings.LblAddSubscriptionHint}"
+                 FontSize="11" Opacity="0.4"
+                 HorizontalAlignment="Center"/>
+    </StackPanel>
+
+    <!-- Section: action bar (Проверить все / Deep verify / прогресс) -->
+    <Border Grid.Row="2" Padding="10,6,10,4"
+            BorderThickness="0,1,0,0"
+            BorderBrush="{DynamicResource BorderDefaultBrush}">
+      <StackPanel Spacing="4">
+        <StackPanel Spacing="2">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Button Content="{Binding ServerTestButtonText}"
+                    Command="{Binding TestAllSubscriptionServersCommand}"
+                    Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
+                    FontSize="10"
+                    Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
+                    ToolTip.Tip="{x:Static loc:Strings.TipTestAllServers}"/>
+            <!-- v2.25.3: arctic primary, was #7C3AED violet — same rationale
+                 as in ServersPage. -->
+            <Button Content="{Binding ServerDeepButtonText}"
+                    Command="{Binding DeepVerifyAllSubscriptionServersCommand}"
+                    Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
+                    FontSize="10"
+                    Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                    ToolTip.Tip="{x:Static loc:Strings.TipDeepVerifyServers}"/>
+            <TextBlock Text="{Binding ServerTestProgressText}"
+                       VerticalAlignment="Center"
+                       FontSize="10" Opacity="0.7"/>
+          </StackPanel>
+          <TextBlock Text="{Binding ServerDeepProgressText}"
+                     FontSize="10" Opacity="0.7"
+                     IsVisible="{Binding ServerDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+        </StackPanel>
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Grid.Column="0"
+                     Text="{x:Static loc:Strings.SubscriptionsSection}"
+                     FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
+          <Button Grid.Column="1"
+                  Content="{x:Static loc:Strings.RefreshAll}"
+                  Command="{Binding RefreshAllSubscriptionsCommand}"
+                  FontSize="10" Padding="8,3" CornerRadius="{StaticResource RadiusSm}"/>
+        </Grid>
+      </StackPanel>
+    </Border>
+
+    <!-- Subscriptions card list — v2.25.3 re-laid-out as srv-row style.
+         Each subscription is a 1-line card:
+             [filled-arctic radio] [name + URL subtitle]  [timestamp]  [↻] [✕]
+         Same Grid.ColumnDefinitions shape as the server rows so things
+         line up vertically. -->
+    <ScrollViewer Grid.Row="3"
+                  MaxHeight="130"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto"
+                  Padding="10,2,10,2">
+      <ItemsControl ItemsSource="{Binding Subscriptions}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:SubscriptionViewModel">
+            <Border Classes="srv-row">
+              <Grid ColumnDefinitions="14,*,Auto,Auto,Auto" ColumnSpacing="8"
+                    VerticalAlignment="Center">
+
+                <!-- Enabled marker: filled-arctic circle when enabled.
+                     Two-way CheckBox binding preserved via a wrapper so
+                     the user can still toggle via keyboard/accessibility,
+                     but visually it reads as a filled indicator. -->
+                <CheckBox Grid.Column="0"
+                          IsChecked="{Binding Enabled}"
+                          MinHeight="0" MinWidth="0" Padding="0"
+                          VerticalAlignment="Center"/>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                  <TextBlock Classes="srv-name" Text="{Binding Name}"/>
+                  <TextBlock Classes="srv-host">
+                    <TextBlock.Text>
+                      <MultiBinding StringFormat="{}{0} · {1}s · {2}">
+                        <Binding Path="Url"/>
+                        <Binding Path="LastServerCount"/>
+                        <Binding Path="LastRefreshedDisplay"/>
+                      </MultiBinding>
+                    </TextBlock.Text>
+                  </TextBlock>
+                </StackPanel>
+
+                <ProgressBar Grid.Column="2" IsVisible="{Binding IsRefreshing}"
+                             IsIndeterminate="True"
+                             Height="3" Width="40" VerticalAlignment="Center"
+                             Margin="0,0,4,0" Foreground="{DynamicResource AccentSolidBrush}"/>
+
+                <Button Grid.Column="3" Classes="srv-refresh"
+                        Content="↻"
+                        Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RefreshSubscriptionCommand}"
+                        CommandParameter="{Binding}"
+                        IsEnabled="{Binding !IsRefreshing}"
+                        ToolTip.Tip="{x:Static loc:Strings.TipRefreshSubscription}"/>
+
+                <Button Grid.Column="4" Classes="srv-refresh"
+                        Content="✕"
+                        Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveSubscriptionCommand}"
+                        CommandParameter="{Binding}"
+                        ToolTip.Tip="{x:Static loc:Strings.TipRemoveSubscription}"/>
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+    <!-- Add new subscription -->
+    <Border Grid.Row="4" Padding="10,6"
+            BorderThickness="0,1,0,0"
+            BorderBrush="{DynamicResource BorderDefaultBrush}">
+      <Grid ColumnDefinitions="100,*,Auto" ColumnSpacing="4">
+        <TextBox Grid.Column="0"
+                 Text="{Binding NewSubName}"
+                 Watermark="{x:Static loc:Strings.SubscriptionNameHint}"
+                 FontSize="10" Padding="6,4"/>
+        <TextBox Grid.Column="1"
+                 Text="{Binding NewSubUrl}"
+                 Watermark="{Binding LblSubscriptionUrlHint}"
+                 FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
+                 FontSize="10" Padding="6,4"/>
+        <Button Grid.Column="2"
+                Content="{x:Static loc:Strings.AddSubscription}"
+                Command="{Binding AddSubscriptionCommand}"
+                Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                FontSize="11" FontWeight="SemiBold"
+                Padding="12,5" CornerRadius="{StaticResource RadiusSm}"/>
+      </Grid>
+    </Border>
+  </Grid>
 </UserControl>

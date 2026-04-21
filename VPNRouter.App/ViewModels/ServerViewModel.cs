@@ -278,4 +278,26 @@ public partial class ServerViewModel : ViewModelBase
     }
 
     public string DisplayName => string.IsNullOrEmpty(Name) ? Server : Name;
+
+    /// <summary>
+    /// v2.25.3 — compact protocol/security subtitle shown in the Servers /
+    /// Subscribe list design ("tcp + reality"). Helps distinguish entries
+    /// with similar names (e.g. same host on multiple ports with different
+    /// transports). Returns empty string for legacy entries without these
+    /// fields so the XAML can hide the subtitle row when irrelevant.
+    /// </summary>
+    public string HostSubtitle
+    {
+        get
+        {
+            var transport = _originalEntry?.Transport?.Type;
+            var parts = new System.Collections.Generic.List<string>();
+            if (!string.IsNullOrWhiteSpace(transport))
+                parts.Add(transport!.ToLowerInvariant());
+            if (!string.IsNullOrWhiteSpace(Security) &&
+                !Security.Equals("none", System.StringComparison.OrdinalIgnoreCase))
+                parts.Add(Security.ToLowerInvariant());
+            return string.Join(" + ", parts);
+        }
+    }
 }

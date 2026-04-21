@@ -236,11 +236,12 @@ Side-nav (Обзор · Скан · Deep verify · Фильтры · Мои ис
 - [x] Advanced CTA bottom — 2026-04-21 (`Classes="primary-cta"` arctic-subtle bg at the end of the popover)
 
 ### v2.25.3 — Servers + Subscribe
-- [ ] srv-head column labels
-- [ ] Mono font для host/name
-- [ ] Active arctic tint
-- [ ] Deep verify / Проверить все buttons
-- [ ] Subscribe page как список + карточка подписки
+- [x] srv-head column labels — 2026-04-21 (Сервер | IP | Ping | Port каmargin outside list)
+- [x] Mono font для host/name — 2026-04-21 (`Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono'` stack)
+- [x] Active arctic tint — 2026-04-21 (`Border.srv-row.active → AccentBgSubtle`, name → bold arctic fg)
+- [x] Deep verify / Проверить все buttons — 2026-04-21 (Deep verify: #7C3AED → AccentSolid arctic, Test all stays Success green)
+- [x] Subscribe page как список + карточка подписки — 2026-04-21 (same srv-row template for both server pool AND subscriptions card list)
+- [x] ServerViewModel.HostSubtitle — NEW, builds `tcp + reality` string for the design's subtitle line
 
 ### v2.25.4 — Settings side-nav
 - [ ] Split layout

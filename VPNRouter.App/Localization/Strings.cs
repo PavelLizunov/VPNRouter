@@ -76,6 +76,9 @@ public static class Strings
     public static string ColServer => Ru ? "Сервер" : "Server";
     public static string ColPort => Ru ? "Порт" : "Port";
     public static string ColSecurity => Ru ? "Защита" : "Security";
+    // v2.25.3 — extra column labels for the redesigned Servers / Subscribe rows
+    public static string ColIp => "IP";
+    public static string ColPing => "Ping";
 
     // ── Dialogs ──
     public static string FailedStartVpn => Ru ? "Не удалось запустить VPN:" : "Failed to start VPN:";

@@ -8,227 +8,359 @@
              mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
              x:Class="VPNRouter.App.Views.Pages.ServersPage"
              x:DataType="vm:MainWindowViewModel">
-    <UserControl.Resources>
-        <conv:BoolToFontWeightConverter x:Key="ActiveFontConverter"/>
-    </UserControl.Resources>
+  <UserControl.Resources>
+    <conv:BoolToFontWeightConverter x:Key="ActiveFontConverter"/>
+  </UserControl.Resources>
 
-    <Grid RowDefinitions="Auto,*,Auto">
+  <!-- v2.25.3 — ServersPage redesign per Claude Design handoff section 2.
+       Key differences from the previous layout:
+         • Column-header row above the list (Сервер | IP | Ping | Port)
+         • Radio-style indicator replaces the two separate dots (connected
+           marker + test-status marker) — cleaner single-indicator pattern.
+         • Mono font for name, host subtitle, IP, ping, port (aligns
+           with the table-like feel of the design).
+         • Name + protocol/security subtitle stack inside a single col.
+         • Active row gets arctic tint background + bold+arctic name.
+         • Deep verify button: was violet (#7C3AED, outside the Arctic
+           palette), now arctic primary to match the design-system rule
+           "primary CTAs in arctic, state colours for state only".
+         • `tcp + reality` subtitle sourced from ServerViewModel.HostSubtitle
+           (new in v2.25.3). -->
+  <UserControl.Styles>
 
-        <!-- Sub-tab strip: VLESS Servers / Custom Config -->
-        <ListBox Grid.Row="0"
-                 SelectedIndex="{Binding SelectedServerModeIndex}"
-                 Background="Transparent"
-                 BorderThickness="0,0,0,1"
-                 BorderBrush="{DynamicResource BorderDefaultBrush}"
-                 Padding="6,2">
-            <ListBox.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" Spacing="4"/>
-                </ItemsPanelTemplate>
-            </ListBox.ItemsPanel>
-            <ListBoxItem Content="{Binding LblServerModeVless}"  Padding="10,4" FontSize="11"/>
-            <ListBoxItem Content="{Binding LblServerModeCustom}" Padding="10,4" FontSize="11"/>
-        </ListBox>
+    <!-- Radio indicator (unchecked = outlined, checked = filled+dot) -->
+    <Style Selector="Border.rbx">
+      <Setter Property="Width" Value="12"/>
+      <Setter Property="Height" Value="12"/>
+      <Setter Property="CornerRadius" Value="6"/>
+      <Setter Property="BorderThickness" Value="1.5"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.rbx.active">
+      <Setter Property="BorderBrush" Value="{DynamicResource SuccessSolidBrush}"/>
+      <Setter Property="Background" Value="{DynamicResource SuccessSolidBrush}"/>
+    </Style>
 
-        <!-- ═══ VLESS Panel ═══ -->
-        <Grid Grid.Row="1"
-              IsVisible="{Binding IsVlessMode}"
-              RowDefinitions="*,Auto,Auto"
-              Margin="10,8,10,4">
+    <!-- Row wrapper — gets the arctic tint when active -->
+    <Style Selector="Border.srv-row">
+      <Setter Property="Padding" Value="8,5"/>
+      <Setter Property="CornerRadius" Value="3"/>
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="Border.srv-row.active">
+      <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+    </Style>
 
-            <!-- Server list. v2.20.5: explicit VirtualizingStackPanel.
-                 Default for ListBox in Avalonia 11.3 is already virtualising,
-                 but declaring it inline locks in the intent and catches any
-                 future regression if someone swaps the panel to a plain
-                 StackPanel. Important for users with 500+ subscription
-                 servers — without virtualisation that's 500 ServerViewModel
-                 × control template instances resident in the visual tree. -->
-            <ListBox Grid.Row="0"
-                     x:Name="ServerList"
-                     ItemsSource="{Binding Servers}"
-                     SelectedItem="{Binding SelectedServer}"
-                     ContextRequested="ServerList_ContextRequested"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto">
-                <ListBox.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <VirtualizingStackPanel/>
-                    </ItemsPanelTemplate>
-                </ListBox.ItemsPanel>
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:ServerViewModel">
-                        <Grid ColumnDefinitions="Auto,Auto,*,*,55,55,40,Auto">
-                            <TextBlock Grid.Column="0" Text="●" Foreground="{DynamicResource SuccessSolidBrush}"
-                                       IsVisible="{Binding IsActive}" FontSize="9"
-                                       VerticalAlignment="Center" Margin="0,0,4,0"/>
-                            <TextBlock Grid.Column="1" Text="{Binding StatusDot}"
-                                       Foreground="{Binding StatusDotBrush}"
-                                       FontSize="11" VerticalAlignment="Center"
-                                       Margin="0,0,4,0"
-                                       ToolTip.Tip="{Binding TestError}"/>
-                            <TextBlock Grid.Column="2" Text="{Binding DisplayName}"
-                                       FontWeight="{Binding IsActive, Converter={StaticResource ActiveFontConverter}}"
-                                       VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="3" Text="{Binding Server}" Opacity="0.7"
-                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Grid.Column="4" Text="{Binding PingDisplay}"
-                                       Opacity="0.8" FontSize="10" TextAlignment="Right"
-                                       VerticalAlignment="Center" Margin="0,0,6,0"
-                                       ToolTip.Tip="{x:Static loc:Strings.TipTcpTlsPing}"/>
-                            <TextBlock Grid.Column="5" Text="{Binding DeepDisplay}"
-                                       Opacity="0.9" FontSize="10" TextAlignment="Right"
-                                       VerticalAlignment="Center" Margin="0,0,6,0"
-                                       ToolTip.Tip="{Binding DeepError}"
-                                       FontWeight="SemiBold"/>
-                            <TextBlock Grid.Column="6" Text="{Binding Port}" Opacity="0.5"
-                                       TextAlignment="Center" FontSize="10" VerticalAlignment="Center"/>
-                            <Button Grid.Column="7"
-                                    Content="⟳"
-                                    Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
-                                    CommandParameter="{Binding}"
-                                    IsEnabled="{Binding !IsTesting}"
-                                    FontSize="10" Padding="6,1" MinHeight="0"
-                                    Background="Transparent" BorderThickness="0"
-                                    ToolTip.Tip="{x:Static loc:Strings.TipTestTcpTls}"/>
-                        </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+    <!-- Name cell: mono semibold. Active name reads as arctic fg + bold. -->
+    <Style Selector="TextBlock.srv-name">
+      <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    <Style Selector="Border.srv-row.active TextBlock.srv-name">
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
+    </Style>
 
-            <!-- Hints -->
-            <StackPanel Grid.Row="1" Spacing="2" Margin="0,4,0,0">
-                <TextBlock Text="{x:Static loc:Strings.ServerListHint}"
-                           FontSize="10" Opacity="0.5"
-                           TextWrapping="Wrap"/>
-                <TextBlock Text="{Binding LblTcpUdpHint}"
-                           FontSize="10" Opacity="0.6" TextWrapping="Wrap"/>
-            </StackPanel>
+    <!-- Host subtitle — tiny mono muted -->
+    <Style Selector="TextBlock.srv-host">
+      <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
+      <Setter Property="FontSize" Value="9"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
 
-            <!-- Server detail editor (opened via right-click) -->
-            <Border Grid.Row="2"
-                    IsVisible="{Binding DetailServer, Converter={x:Static ObjectConverters.IsNotNull}}"
-                    BorderBrush="{DynamicResource BorderDefaultBrush}"
-                    BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="10,8" Margin="0,6,0,0">
-                <DockPanel>
-                    <Button DockPanel.Dock="Top" HorizontalAlignment="Right" Content="X"
-                            Command="{Binding CloseServerDetailCommand}"
-                            Background="Transparent" BorderThickness="0"
-                            Padding="6,0" MinHeight="0" FontSize="11" Opacity="0.6"
-                            ToolTip.Tip="{x:Static loc:Strings.TipCloseServerDetail}"/>
-                <Grid ColumnDefinitions="80,*"
-                      RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
-                      DataContext="{Binding DetailServer}"
-                      x:DataType="vm:ServerViewModel">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Static loc:Strings.LblName}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
-                    <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{x:Static loc:Strings.LblServer}"    VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
-                    <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Server}"    FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{x:Static loc:Strings.LblPort}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
-                    <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Port}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-                    <TextBlock Grid.Row="3" Grid.Column="0" Text="{x:Static loc:Strings.LblUuid}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
-                    <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding Uuid}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="{x:Static loc:Strings.LblPublicKey}" VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
-                    <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding PublicKey}" FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-                    <TextBlock Grid.Row="5" Grid.Column="0" Text="{x:Static loc:Strings.LblShortId}"   VerticalAlignment="Center" FontSize="10"/>
-                    <TextBox   Grid.Row="5" Grid.Column="1" Text="{Binding ShortId}"   FontSize="10" Padding="4,2"/>
-                </Grid>
-                </DockPanel>
+    <!-- Numeric cells (IP / Ping / Port) — mono muted, tiny -->
+    <Style Selector="TextBlock.srv-cell">
+      <Setter Property="FontFamily" Value="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"/>
+      <Setter Property="FontSize" Value="9"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <!-- Column header row — caps, tiny, muted -->
+    <Style Selector="TextBlock.srv-col-label">
+      <Setter Property="FontSize" Value="9"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <!-- Compact refresh button at the end of a row -->
+    <Style Selector="Button.srv-refresh">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="2"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.srv-refresh:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+    </Style>
+
+    <!-- Remove default ListBoxItem padding so our Border.srv-row controls it -->
+    <Style Selector="ListBox.srv-list ListBoxItem">
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="MinHeight" Value="0"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*,Auto">
+
+    <!-- Sub-tab strip: VLESS Servers / Custom Config -->
+    <ListBox Grid.Row="0"
+             SelectedIndex="{Binding SelectedServerModeIndex}"
+             Background="Transparent"
+             BorderThickness="0,0,0,1"
+             BorderBrush="{DynamicResource BorderDefaultBrush}"
+             Padding="6,2">
+      <ListBox.ItemsPanel>
+        <ItemsPanelTemplate>
+          <StackPanel Orientation="Horizontal" Spacing="4"/>
+        </ItemsPanelTemplate>
+      </ListBox.ItemsPanel>
+      <ListBoxItem Content="{Binding LblServerModeVless}"  Padding="10,4" FontSize="11"/>
+      <ListBoxItem Content="{Binding LblServerModeCustom}" Padding="10,4" FontSize="11"/>
+    </ListBox>
+
+    <!-- ═══ VLESS Panel ═══ -->
+    <Grid Grid.Row="1"
+          IsVisible="{Binding IsVlessMode}"
+          RowDefinitions="Auto,*,Auto,Auto"
+          Margin="10,8,10,4">
+
+      <!-- Column headers — tiny caps labels matching the row grid. -->
+      <Grid Grid.Row="0" ColumnDefinitions="14,*,100,42,40,24" ColumnSpacing="8"
+            Margin="8,2,8,4">
+        <TextBlock Grid.Column="1" Classes="srv-col-label"
+                   Text="{x:Static loc:Strings.ColServer}"/>
+        <TextBlock Grid.Column="2" Classes="srv-col-label"
+                   Text="{x:Static loc:Strings.ColIp}"/>
+        <TextBlock Grid.Column="3" Classes="srv-col-label"
+                   Text="{x:Static loc:Strings.ColPing}"
+                   HorizontalAlignment="Center"/>
+        <TextBlock Grid.Column="4" Classes="srv-col-label"
+                   Text="{x:Static loc:Strings.ColPort}"
+                   HorizontalAlignment="Center"/>
+      </Grid>
+
+      <!-- Server list.
+           v2.20.5 VirtualizingStackPanel kept from prior versions —
+           1000+ rows scenario (bulk paste) still matters even after the
+           redesign. -->
+      <ListBox Grid.Row="1"
+               x:Name="ServerList"
+               Classes="srv-list"
+               ItemsSource="{Binding Servers}"
+               SelectedItem="{Binding SelectedServer}"
+               ContextRequested="ServerList_ContextRequested"
+               BorderBrush="{DynamicResource BorderSubtleBrush}"
+               BorderThickness="1"
+               CornerRadius="{StaticResource RadiusSm}"
+               Background="{DynamicResource SurfaceBaseBrush}"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+               ScrollViewer.VerticalScrollBarVisibility="Auto">
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate>
+            <VirtualizingStackPanel/>
+          </ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ServerViewModel">
+            <Border Classes="srv-row" Classes.active="{Binding IsActive}">
+              <Grid ColumnDefinitions="14,*,100,42,40,24" ColumnSpacing="8">
+
+                <!-- Radio -->
+                <Border Grid.Column="0" Classes="rbx" Classes.active="{Binding IsActive}">
+                  <Ellipse Width="4" Height="4" Fill="White"
+                           IsVisible="{Binding IsActive}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+
+                <!-- Name + host subtitle -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                  <TextBlock Classes="srv-name" Text="{Binding DisplayName}"/>
+                  <TextBlock Classes="srv-host" Text="{Binding HostSubtitle}"
+                             IsVisible="{Binding HostSubtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                </StackPanel>
+
+                <!-- IP -->
+                <TextBlock Grid.Column="2" Classes="srv-cell"
+                           Text="{Binding Server}"
+                           TextTrimming="CharacterEllipsis"/>
+
+                <!-- Ping (coloured by status) -->
+                <TextBlock Grid.Column="3" Classes="srv-cell"
+                           Text="{Binding PingDisplay}"
+                           Foreground="{Binding StatusDotBrush}"
+                           HorizontalAlignment="Center"
+                           ToolTip.Tip="{Binding TestError}"/>
+
+                <!-- Port -->
+                <TextBlock Grid.Column="4" Classes="srv-cell"
+                           Text="{Binding Port}"
+                           HorizontalAlignment="Center"/>
+
+                <!-- Refresh -->
+                <Button Grid.Column="5" Classes="srv-refresh"
+                        Content="⟳"
+                        Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
+                        CommandParameter="{Binding}"
+                        IsEnabled="{Binding !IsTesting}"
+                        ToolTip.Tip="{x:Static loc:Strings.TipTestTcpTls}"/>
+              </Grid>
             </Border>
-        </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
 
-        <!-- ═══ Custom Config Panel ═══ -->
-        <Grid Grid.Row="1"
-              IsVisible="{Binding !IsVlessMode}"
-              RowDefinitions="*,Auto"
-              Margin="10,8,10,4">
-            <ListBox Grid.Row="0"
-                     ItemsSource="{Binding CustomConfigs}"
-                     SelectedItem="{Binding SelectedCustomConfig}"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto">
-                <ListBox.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <VirtualizingStackPanel/>
-                    </ItemsPanelTemplate>
-                </ListBox.ItemsPanel>
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:CustomConfigViewModel">
-                        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
-                            <TextBlock Grid.Column="0" Text="O" Foreground="{DynamicResource SuccessSolidBrush}"
-                                       IsVisible="{Binding IsActive}"
-                                       VerticalAlignment="Center" Margin="0,0,6,0" FontSize="9"/>
-                            <TextBlock Grid.Column="1" Text="{Binding Name}"
-                                       FontWeight="{Binding IsActive, Converter={StaticResource ActiveFontConverter}}"
-                                       VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="3" Text="{Binding Protocols}"
-                                       Opacity="0.6" Margin="8,0" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="4" Text="{Binding Server}"
-                                       Opacity="0.4" VerticalAlignment="Center"/>
-                        </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-            <TextBlock Grid.Row="1" Text="{Binding LblClickToActivateConfig}"
-                       FontSize="10" Opacity="0.5" Margin="0,4,0,0"/>
-        </Grid>
+      <!-- Hints — compact, muted.
+           v2.25.3: dropped the "ServerListHint" two-line block. Main hint
+           now lives as a tooltip on the radio column (right-click =
+           edit). TcpUdpHint stays as a single line. -->
+      <TextBlock Grid.Row="2"
+                 Text="{Binding LblTcpUdpHint}"
+                 FontSize="10" Opacity="0.55" TextWrapping="Wrap"
+                 Margin="4,6,0,0"/>
 
-        <!-- ═══ Bottom action bar ═══ -->
-        <Border Grid.Row="2" Padding="10,6"
-                BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource BorderDefaultBrush}">
-            <StackPanel Spacing="6">
-                <!-- Test all + Deep verify + progress row -->
-                <StackPanel Spacing="2" IsVisible="{Binding IsVlessMode}">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Button Content="{Binding ServerTestButtonText}"
-                                Command="{Binding TestAllServersCommand}"
-                                Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
-                                FontSize="10"
-                                Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
-                                ToolTip.Tip="{x:Static loc:Strings.TipTestAllServers}"/>
-                        <Button Content="{Binding ServerDeepButtonText}"
-                                Command="{Binding DeepVerifyAllServersCommand}"
-                                Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
-                                FontSize="10"
-                                Background="#7C3AED" Foreground="White"
-                                ToolTip.Tip="{x:Static loc:Strings.TipDeepVerifyServers}"/>
-                        <TextBlock Text="{Binding ServerTestProgressText}"
-                                   VerticalAlignment="Center"
-                                   FontSize="10" Opacity="0.7"/>
-                    </StackPanel>
-                    <TextBlock Text="{Binding ServerDeepProgressText}"
-                               FontSize="10" Opacity="0.7"
-                               IsVisible="{Binding ServerDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                </StackPanel>
-
-                <!-- VLESS: URI input + Add/Remove -->
-                <DockPanel IsVisible="{Binding IsVlessMode}" LastChildFill="True">
-                    <Button DockPanel.Dock="Right" Content="{Binding LblAddServers}"
-                            Command="{Binding AddServerCommand}"
-                            Margin="6,0,0,0"
-                            Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                            Padding="14,5" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"/>
-                    <Button DockPanel.Dock="Right" Content="{Binding LblRemove}"
-                            Command="{Binding RemoveServerCommand}"
-                            Margin="6,0,0,0"
-                            Padding="14,5" CornerRadius="{StaticResource RadiusSm}"/>
-                    <TextBox Text="{Binding VlessUri}"
-                             Watermark="{x:Static loc:Strings.WmVlessUri}"
-                             FontSize="10" Padding="6,4"
-                             AcceptsReturn="False"/>
-                </DockPanel>
-                <!-- Custom Config buttons -->
-                <StackPanel Orientation="Horizontal" Spacing="8"
-                            IsVisible="{Binding !IsVlessMode}">
-                    <Button Content="{Binding LblAddConfig}"
-                            Command="{Binding AddCustomConfigCommand}"
-                            Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                            Padding="14,5" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"/>
-                    <Button Content="{Binding LblRemove}"
-                            Command="{Binding RemoveCustomConfigCommand}"
-                            Padding="14,5" CornerRadius="{StaticResource RadiusSm}"/>
-                </StackPanel>
-            </StackPanel>
-        </Border>
+      <!-- Server detail editor (opened via right-click) -->
+      <Border Grid.Row="3"
+              IsVisible="{Binding DetailServer, Converter={x:Static ObjectConverters.IsNotNull}}"
+              BorderBrush="{DynamicResource BorderDefaultBrush}"
+              BorderThickness="1" CornerRadius="{StaticResource RadiusSm}" Padding="10,8" Margin="0,6,0,0">
+        <DockPanel>
+          <Button DockPanel.Dock="Top" HorizontalAlignment="Right" Content="X"
+                  Command="{Binding CloseServerDetailCommand}"
+                  Background="Transparent" BorderThickness="0"
+                  Padding="6,0" MinHeight="0" FontSize="11" Opacity="0.6"
+                  ToolTip.Tip="{x:Static loc:Strings.TipCloseServerDetail}"/>
+          <Grid ColumnDefinitions="80,*"
+                RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
+                DataContext="{Binding DetailServer}"
+                x:DataType="vm:ServerViewModel">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Static loc:Strings.LblName}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+            <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="{x:Static loc:Strings.LblServer}"    VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+            <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Server}"    FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="{x:Static loc:Strings.LblPort}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+            <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Port}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="{x:Static loc:Strings.LblUuid}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+            <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding Uuid}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="{x:Static loc:Strings.LblPublicKey}" VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+            <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding PublicKey}" FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="{x:Static loc:Strings.LblShortId}"   VerticalAlignment="Center" FontSize="10"/>
+            <TextBox   Grid.Row="5" Grid.Column="1" Text="{Binding ShortId}"   FontSize="10" Padding="4,2"/>
+          </Grid>
+        </DockPanel>
+      </Border>
     </Grid>
+
+    <!-- ═══ Custom Config Panel (unchanged in Phase 3) ═══ -->
+    <Grid Grid.Row="1"
+          IsVisible="{Binding !IsVlessMode}"
+          RowDefinitions="*,Auto"
+          Margin="10,8,10,4">
+      <ListBox Grid.Row="0"
+               ItemsSource="{Binding CustomConfigs}"
+               SelectedItem="{Binding SelectedCustomConfig}"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+               ScrollViewer.VerticalScrollBarVisibility="Auto">
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate>
+            <VirtualizingStackPanel/>
+          </ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:CustomConfigViewModel">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+              <TextBlock Grid.Column="0" Text="●" Foreground="{DynamicResource SuccessSolidBrush}"
+                         IsVisible="{Binding IsActive}"
+                         VerticalAlignment="Center" Margin="0,0,6,0" FontSize="9"/>
+              <TextBlock Grid.Column="1" Text="{Binding Name}"
+                         FontWeight="{Binding IsActive, Converter={StaticResource ActiveFontConverter}}"
+                         VerticalAlignment="Center"/>
+              <TextBlock Grid.Column="3" Text="{Binding Protocols}"
+                         Opacity="0.6" Margin="8,0" VerticalAlignment="Center"/>
+              <TextBlock Grid.Column="4" Text="{Binding Server}"
+                         Opacity="0.4" VerticalAlignment="Center"/>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <TextBlock Grid.Row="1" Text="{Binding LblClickToActivateConfig}"
+                 FontSize="10" Opacity="0.5" Margin="0,4,0,0"/>
+    </Grid>
+
+    <!-- ═══ Bottom action bar ═══ -->
+    <Border Grid.Row="2" Padding="10,6"
+            BorderThickness="0,1,0,0"
+            BorderBrush="{DynamicResource BorderDefaultBrush}">
+      <StackPanel Spacing="6">
+        <!-- Test all + Deep verify + progress row -->
+        <StackPanel Spacing="2" IsVisible="{Binding IsVlessMode}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Button Content="{Binding ServerTestButtonText}"
+                    Command="{Binding TestAllServersCommand}"
+                    Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
+                    FontSize="10"
+                    Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
+                    ToolTip.Tip="{x:Static loc:Strings.TipTestAllServers}"/>
+            <!-- v2.25.3: Deep verify was #7C3AED (violet, outside Arctic
+                 palette). Now arctic primary to match the design-system
+                 rule "primary CTAs in arctic; state colours for state".
+                 Violet stays intentionally only in 3 semantic places
+                 (not here). -->
+            <Button Content="{Binding ServerDeepButtonText}"
+                    Command="{Binding DeepVerifyAllServersCommand}"
+                    Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
+                    FontSize="10"
+                    Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                    ToolTip.Tip="{x:Static loc:Strings.TipDeepVerifyServers}"/>
+            <TextBlock Text="{Binding ServerTestProgressText}"
+                       VerticalAlignment="Center"
+                       FontSize="10" Opacity="0.7"/>
+          </StackPanel>
+          <TextBlock Text="{Binding ServerDeepProgressText}"
+                     FontSize="10" Opacity="0.7"
+                     IsVisible="{Binding ServerDeepProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+        </StackPanel>
+
+        <!-- VLESS: URI input + Add/Remove -->
+        <DockPanel IsVisible="{Binding IsVlessMode}" LastChildFill="True">
+          <Button DockPanel.Dock="Right" Content="{Binding LblAddServers}"
+                  Command="{Binding AddServerCommand}"
+                  Margin="6,0,0,0"
+                  Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"/>
+          <Button DockPanel.Dock="Right" Content="{Binding LblRemove}"
+                  Command="{Binding RemoveServerCommand}"
+                  Margin="6,0,0,0"
+                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}"/>
+          <TextBox Text="{Binding VlessUri}"
+                   Watermark="{x:Static loc:Strings.WmVlessUri}"
+                   FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
+                   FontSize="10" Padding="6,4"
+                   AcceptsReturn="False"/>
+        </DockPanel>
+        <!-- Custom Config buttons -->
+        <StackPanel Orientation="Horizontal" Spacing="8"
+                    IsVisible="{Binding !IsVlessMode}">
+          <Button Content="{Binding LblAddConfig}"
+                  Command="{Binding AddCustomConfigCommand}"
+                  Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
+                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"/>
+          <Button Content="{Binding LblRemove}"
+                  Command="{Binding RemoveCustomConfigCommand}"
+                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}"/>
+        </StackPanel>
+      </StackPanel>
+    </Border>
+  </Grid>
 </UserControl>
