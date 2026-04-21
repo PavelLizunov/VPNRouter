@@ -208,11 +208,27 @@ jobs:
           fi
 
           if [ -n "$TAG" ]; then
-              gh release download "$TAG" \
-                  --repo "${{ github.repository }}" \
-                  --pattern "*-linux-amd64.deb" \
-                  --dir .apt-debs \
-                  --clobber
+              # v2.22.4: retry — release.published fires the moment the
+              # release is created, but the Linux CI upload of the .deb
+              # may still be in flight. Wait up to ~3 minutes for the
+              # asset to show up before giving up.
+              download_ok=0
+              for attempt in 1 2 3 4 5 6; do
+                  if gh release download "$TAG" \
+                      --repo "${{ github.repository }}" \
+                      --pattern "*-linux-amd64.deb" \
+                      --dir .apt-debs \
+                      --clobber 2>&1; then
+                      download_ok=1
+                      break
+                  fi
+                  echo "Attempt $attempt: .deb not available yet for $TAG, waiting 30s..."
+                  sleep 30
+              done
+              if [ "$download_ok" = "0" ]; then
+                  echo "::error::No linux-amd64.deb asset on release $TAG after 6 attempts (~3 min). Aborting."
+                  exit 1
+              fi
           else
               gh release list --repo "${{ github.repository }}" --limit 30 --json tagName --jq '.[] | .tagName' | while read -r t; do
                   if is_stable_tag "$t"; then
