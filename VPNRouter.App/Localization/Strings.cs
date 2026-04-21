@@ -724,6 +724,14 @@ public static class Strings
     public static string SmpSegRu                     => "RU";
     public static string SmpSegEn                     => "EN";
 
+    // v2.25.11 — shown briefly in the footer while the window rebuild
+    // triggered by a language toggle is in flight, so the user can see
+    // that their click was received (without this the flyout closes and
+    // then the UI freezes for ~200-500 ms with no visible acknowledgement).
+    public static string LanguageSwitching            => Ru
+        ? "Переключение языка…"
+        : "Switching language…";
+
     // v2.25.0 — "About" dialog (version / build info moved out of header).
     public static string SmpMenuAbout        => Ru ? "О приложении"              : "About";
     public static string TipSmpMenuAbout     => Ru

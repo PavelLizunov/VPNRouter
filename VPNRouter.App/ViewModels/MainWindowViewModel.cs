@@ -3051,7 +3051,40 @@ public partial class MainWindowViewModel : ViewModelBase
         Strings.Lang = IsRussian ? "ru" : "en";
         SaveSettings();          // persist language before we rebuild UI
         RefreshLocalization();   // updates {Binding Lbl*} across the UI
-        ReloadMainWindowForLocalization();  // re-parses XAML so {x:Static} hits new Lang
+
+        // v2.25.11 — defer the expensive window rebuild (full XAML re-parse
+        // ~200-500 ms on a moderate page tree) to the next UI idle cycle.
+        // Before: the Command returned only after the rebuild completed, so
+        // the flyout couldn't dismiss, no paint happened, and the app
+        // looked frozen. Now:
+        //   1. Command body returns immediately — UI thread is free.
+        //   2. The flyout's own dismiss animation runs + paints.
+        //   3. Status text flips to "Switching language…" and paints.
+        //   4. Background-priority Post delivers ReloadMainWindow once the
+        //      dispatcher idle queue is empty.
+        // Net effect: same wall-clock freeze inside the rebuild, but the
+        // user sees their click acknowledged (flyout close, status change)
+        // and the rebuild feels like "briefly redrawing" rather than
+        // "hung app". The structural freeze itself requires converting all
+        // `{x:Static loc:Strings.*}` references to PropertyChanged-aware
+        // bindings to fully eliminate — tracked as a separate follow-up.
+        var prevStatus = StatusText;
+        StatusText = Strings.LanguageSwitching;
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                ReloadMainWindowForLocalization();
+            }
+            finally
+            {
+                // Only restore if the rebuild didn't overwrite StatusText
+                // with something more recent (e.g. a VPN reconnect
+                // notification firing between Post and execution).
+                if (StatusText == Strings.LanguageSwitching)
+                    StatusText = prevStatus;
+            }
+        }, DispatcherPriority.Background);
     }
 
     // v2.25.2 — explicit segment commands for the redesigned ⋯ menu popover
