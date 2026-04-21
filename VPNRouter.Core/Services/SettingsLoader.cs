@@ -165,21 +165,35 @@ public static class SettingsLoader
                     : "default.json")
             }
         },
-        ActiveProfile = "Gaming_Full",
+        // v2.24.3: ActiveProfile defaults to empty; SimpleMode populates
+        // it with the standard 8-group SimpleSplitProfile string on first
+        // Start. Referencing an old 'Gaming_Full' group that doesn't
+        // exist in the catalogue anymore forced the tolerant resolver to
+        // kick in every fresh install.
+        ActiveProfile = string.Empty,
+
+        // v2.24.3: no placeholder VLESS fields. Previously CreateDefaults
+        // wrote a fake "your.server.com" entry to the config, which
+        // confused users after Safe Mode / reset flows ("where did my
+        // server go and who is your.server.com?"). Now defaults are
+        // blank — the user subscribes via URL in Simple mode or adds
+        // a server manually in Servers tab. Engine already filters out
+        // empty / your.server.com entries so both old and new configs
+        // behave the same at runtime.
         Vless = new VlessConfig
         {
-            Server = "your.server.com",
+            Server = string.Empty,
             Port = 443,
-            Uuid = "your-uuid-here",
+            Uuid = string.Empty,
             Flow = "xtls-rprx-vision",
             Security = "reality",
             Reality = new VlessRealityConfig
             {
                 Enabled = true,
-                ServerName = "yahoo.com",
+                ServerName = string.Empty,
                 Fingerprint = "firefox",
-                PublicKey = "your-public-key-here",
-                ShortId = "your-short-id"
+                PublicKey = string.Empty,
+                ShortId = string.Empty
             },
             Transport = new VlessTransportConfig
             {
