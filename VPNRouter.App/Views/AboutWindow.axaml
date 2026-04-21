@@ -1,8 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="using:VPNRouter.App.Localization"
+        xmlns:vm="using:VPNRouter.App.ViewModels"
         x:Class="VPNRouter.App.Views.AboutWindow"
-        Title="{x:Static loc:Strings.AboutTitle}"
+        x:DataType="vm:MainWindowViewModel"
+        Title="{Binding L_AboutTitle}"
         Width="360" Height="420"
         MinWidth="320" MinHeight="380"
         SizeToContent="Manual"
@@ -32,11 +34,11 @@
 
       <!-- Brand name + tagline -->
       <StackPanel Grid.Row="1" Spacing="4" HorizontalAlignment="Center">
-        <TextBlock Text="{x:Static loc:Strings.AboutBrandName}"
+        <TextBlock Text="{Binding L_AboutBrandName}"
                    FontSize="18" FontWeight="Bold"
                    HorizontalAlignment="Center"
                    Foreground="{DynamicResource TextPrimaryBrush}"/>
-        <TextBlock Text="{x:Static loc:Strings.AboutTagline}"
+        <TextBlock Text="{Binding L_AboutTagline}"
                    FontSize="11"
                    HorizontalAlignment="Center"
                    TextAlignment="Center"
@@ -52,7 +54,7 @@
               BorderThickness="1">
         <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="5">
           <TextBlock Grid.Row="0" Grid.Column="0"
-                     Text="{x:Static loc:Strings.AboutVersionLabel}"
+                     Text="{Binding L_AboutVersionLabel}"
                      FontSize="10" FontWeight="SemiBold"
                      Foreground="{DynamicResource TextMutedBrush}"
                      Margin="0,0,16,0"/>
@@ -62,7 +64,7 @@
                      Foreground="{DynamicResource TextPrimaryBrush}"/>
 
           <TextBlock Grid.Row="1" Grid.Column="0"
-                     Text="{x:Static loc:Strings.AboutSingBoxLabel}"
+                     Text="{Binding L_AboutSingBoxLabel}"
                      FontSize="10" FontWeight="SemiBold"
                      Foreground="{DynamicResource TextMutedBrush}"
                      Margin="0,0,16,0"/>
@@ -72,7 +74,7 @@
                      Foreground="{DynamicResource TextSecondaryBrush}"/>
 
           <TextBlock Grid.Row="2" Grid.Column="0"
-                     Text="{x:Static loc:Strings.AboutCreatorLabel}"
+                     Text="{Binding L_AboutCreatorLabel}"
                      FontSize="10" FontWeight="SemiBold"
                      Foreground="{DynamicResource TextMutedBrush}"
                      Margin="0,0,16,0"/>
@@ -95,7 +97,7 @@
               CornerRadius="{StaticResource RadiusSm}"
               Foreground="{DynamicResource AccentFgBrush}">
         <StackPanel Orientation="Horizontal" Spacing="6">
-          <TextBlock Text="{x:Static loc:Strings.AboutRepoLabel}" FontSize="11" FontWeight="SemiBold"/>
+          <TextBlock Text="{Binding L_AboutRepoLabel}" FontSize="11" FontWeight="SemiBold"/>
           <TextBlock Text="github.com/PavelLizunov/VPNRouter"
                      FontSize="11" FontFamily="Consolas, 'SF Mono', monospace"/>
         </StackPanel>
@@ -103,7 +105,7 @@
 
       <!-- Footer — Close button -->
       <Button Grid.Row="4"
-              Content="{x:Static loc:Strings.AboutCloseBtn}"
+              Content="{Binding L_AboutCloseBtn}"
               Click="OnCloseClick"
               HorizontalAlignment="Center"
               Padding="22,6"

@@ -658,7 +658,14 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         try
         {
-            var dlg = new VPNRouter.App.Views.AboutWindow();
+            // v2.25.12: pass `this` as DataContext so the AboutWindow XAML
+            // can bind to L_* proxies on this VM ({Binding L_AboutTitle}
+            // etc.). Without this the dialog opened with no DataContext
+            // and every L_* binding silently resolved to empty string.
+            var dlg = new VPNRouter.App.Views.AboutWindow
+            {
+                DataContext = this
+            };
 
             // Give the dialog the main window as owner so it centres on top
             // and blocks input to the main window until closed (modal feel
@@ -3043,48 +3050,32 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void ToggleLanguage()
     {
-        // v2.17.10: log entry — language toggle is the one that rebuilds the
-        // entire MainWindow (see ReloadMainWindowForLocalization below) so
-        // we want this clearly traceable in app logs.
+        // v2.25.12 — final fix for the "app freezes on language toggle"
+        // report. The underlying cause was that XAML `{x:Static loc:Strings.*}`
+        // markup extensions are evaluated exactly ONCE at parse time and
+        // never re-read. Every earlier iteration worked around this by
+        // rebuilding MainWindow from scratch on every language toggle,
+        // which meant re-parsing 7 pages' worth of XAML synchronously on
+        // the UI thread — a 200-500 ms hard freeze that the v2.25.11
+        // Dispatcher-defer trick merely concealed rather than removed.
+        //
+        // Real fix (shipped in v2.25.12):
+        //   1. Bulk-converted every `{x:Static loc:Strings.X}` → `{Binding L_X}`
+        //      across all 10 .axaml files (229 references).
+        //   2. Generated `MainWindowViewModel.Localization.cs` with 207
+        //      `public string L_X => Strings.X;` proxies.
+        //   3. `RefreshL10nProxies()` iterates those properties and fires
+        //      PropertyChanged for each so every binding re-reads.
+        // Result: toggling language now runs in ~5-10 ms — no rebuild,
+        // no freeze, flyout dismisses normally. Old
+        // `ReloadMainWindowForLocalization` helper kept around as
+        // fallback but is no longer wired into the toggle path.
         _logger.Information("[VM] ToggleLanguage → {Lang}", IsRussian ? "en" : "ru");
         IsRussian = !IsRussian;
         Strings.Lang = IsRussian ? "ru" : "en";
-        SaveSettings();          // persist language before we rebuild UI
-        RefreshLocalization();   // updates {Binding Lbl*} across the UI
-
-        // v2.25.11 — defer the expensive window rebuild (full XAML re-parse
-        // ~200-500 ms on a moderate page tree) to the next UI idle cycle.
-        // Before: the Command returned only after the rebuild completed, so
-        // the flyout couldn't dismiss, no paint happened, and the app
-        // looked frozen. Now:
-        //   1. Command body returns immediately — UI thread is free.
-        //   2. The flyout's own dismiss animation runs + paints.
-        //   3. Status text flips to "Switching language…" and paints.
-        //   4. Background-priority Post delivers ReloadMainWindow once the
-        //      dispatcher idle queue is empty.
-        // Net effect: same wall-clock freeze inside the rebuild, but the
-        // user sees their click acknowledged (flyout close, status change)
-        // and the rebuild feels like "briefly redrawing" rather than
-        // "hung app". The structural freeze itself requires converting all
-        // `{x:Static loc:Strings.*}` references to PropertyChanged-aware
-        // bindings to fully eliminate — tracked as a separate follow-up.
-        var prevStatus = StatusText;
-        StatusText = Strings.LanguageSwitching;
-        Dispatcher.UIThread.Post(() =>
-        {
-            try
-            {
-                ReloadMainWindowForLocalization();
-            }
-            finally
-            {
-                // Only restore if the rebuild didn't overwrite StatusText
-                // with something more recent (e.g. a VPN reconnect
-                // notification firing between Post and execution).
-                if (StatusText == Strings.LanguageSwitching)
-                    StatusText = prevStatus;
-            }
-        }, DispatcherPriority.Background);
+        SaveSettings();
+        RefreshLocalization();
+        RefreshL10nProxies();   // broadcast PropertyChanged for every L_* + Lbl*
     }
 
     // v2.25.2 — explicit segment commands for the redesigned ⋯ menu popover

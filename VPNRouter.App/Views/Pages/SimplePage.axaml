@@ -85,7 +85,7 @@
                                        Foreground="{DynamicResource AccentFgBrush}"/>
                         </Border>
                         <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
-                            <TextBlock Text="{x:Static loc:Strings.SmpConfigRowLabel}"
+                            <TextBlock Text="{Binding L_SmpConfigRowLabel}"
                                        FontSize="9" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextMutedBrush}"/>
                             <TextBlock Text="{Binding SimpleConfigModeSummary}"
@@ -110,15 +110,15 @@
                     <StackPanel Spacing="14">
                         <!-- Input -->
                         <StackPanel Spacing="4">
-                            <TextBlock Text="{x:Static loc:Strings.SmpInputLabel}"
+                            <TextBlock Text="{Binding L_SmpInputLabel}"
                                        FontSize="11" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimaryBrush}"/>
                             <TextBox Text="{Binding SmpInput}"
-                                     Watermark="{x:Static loc:Strings.SmpInputWatermark}"
+                                     Watermark="{Binding L_SmpInputWatermark}"
                                      FontSize="11" Padding="10,7"
                                      AcceptsReturn="False"
                                      CornerRadius="{StaticResource RadiusXs}"/>
-                            <TextBlock Text="{x:Static loc:Strings.SmpInputHint}"
+                            <TextBlock Text="{Binding L_SmpInputHint}"
                                        FontSize="9"
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        TextWrapping="Wrap"/>
@@ -131,17 +131,17 @@
 
                         <!-- Tunnel mode -->
                         <StackPanel Spacing="4">
-                            <TextBlock Text="{x:Static loc:Strings.SmpTunnelModeLabel}"
+                            <TextBlock Text="{Binding L_SmpTunnelModeLabel}"
                                        FontSize="11" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimaryBrush}"/>
                             <StackPanel Spacing="8">
                                 <StackPanel Spacing="1">
                                     <RadioButton GroupName="SmpTunnel"
                                                  IsChecked="{Binding IsSplitTunnel}"
-                                                 Content="{x:Static loc:Strings.SmpSplitOption}"
+                                                 Content="{Binding L_SmpSplitOption}"
                                                  FontSize="11" FontWeight="SemiBold"
                                                  MinHeight="0" Padding="4,0"/>
-                                    <TextBlock Text="{x:Static loc:Strings.SmpSplitHint}"
+                                    <TextBlock Text="{Binding L_SmpSplitHint}"
                                                FontSize="9"
                                                Foreground="{DynamicResource TextMutedBrush}"
                                                Margin="24,0,0,0"
@@ -150,10 +150,10 @@
                                 <StackPanel Spacing="1">
                                     <RadioButton GroupName="SmpTunnel"
                                                  IsChecked="{Binding !IsSplitTunnel, Mode=OneWay}"
-                                                 Content="{x:Static loc:Strings.SmpFullOption}"
+                                                 Content="{Binding L_SmpFullOption}"
                                                  FontSize="11" FontWeight="SemiBold"
                                                  MinHeight="0" Padding="4,0"/>
-                                    <TextBlock Text="{x:Static loc:Strings.SmpFullHint}"
+                                    <TextBlock Text="{Binding L_SmpFullHint}"
                                                FontSize="9"
                                                Foreground="{DynamicResource TextMutedBrush}"
                                                Margin="24,0,0,0"
@@ -164,8 +164,8 @@
 
                         <!-- Autostart -->
                         <CheckBox IsChecked="{Binding SmpAutostartChecked}"
-                                  Content="{x:Static loc:Strings.SmpAutostartLabel}"
-                                  ToolTip.Tip="{x:Static loc:Strings.SmpTipAutostart}"
+                                  Content="{Binding L_SmpAutostartLabel}"
+                                  ToolTip.Tip="{Binding L_SmpTipAutostart}"
                                   FontSize="11"
                                   MinHeight="0" Padding="4,0"/>
                     </StackPanel>
@@ -222,10 +222,10 @@
                         ToolTip.Tip="{Binding UiModeToggleTooltip}">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="14,12">
                         <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
-                            <TextBlock Text="{x:Static loc:Strings.SmpAdvCardTitle}"
+                            <TextBlock Text="{Binding L_SmpAdvCardTitle}"
                                        FontSize="12" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            <TextBlock Text="{x:Static loc:Strings.SmpAdvCardSubtitle}"
+                            <TextBlock Text="{Binding L_SmpAdvCardSubtitle}"
                                        FontSize="9"
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        TextWrapping="Wrap"/>

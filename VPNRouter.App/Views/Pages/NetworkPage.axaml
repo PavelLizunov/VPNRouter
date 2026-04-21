@@ -102,7 +102,7 @@
         <!-- ═══ Routing (Phase 4 showcase) ═══ -->
         <StackPanel Spacing="10" IsVisible="{Binding IsSettingsRoutingSelected}">
           <TextBlock Text="{Binding LblSettingsRouting}" FontWeight="Bold" FontSize="13"/>
-          <TextBlock Text="{x:Static loc:Strings.RoutingDescription}"
+          <TextBlock Text="{Binding L_RoutingDescription}"
                      FontSize="11" Foreground="{DynamicResource TextSecondaryBrush}"
                      TextWrapping="Wrap"/>
 
@@ -117,9 +117,9 @@
                            Margin="0,1,0,0"/>
               <StackPanel Grid.Column="1" Spacing="2">
                 <TextBlock Classes="card-title"
-                           Text="{x:Static loc:Strings.SplitTunnelTitle}"/>
+                           Text="{Binding L_SplitTunnelTitle}"/>
                 <TextBlock Classes="card-sub"
-                           Text="{x:Static loc:Strings.SplitTunnelSubtitle}"/>
+                           Text="{Binding L_SplitTunnelSubtitle}"/>
               </StackPanel>
             </Grid>
           </Border>
@@ -143,9 +143,9 @@
                            Margin="0,1,0,0"/>
               <StackPanel Grid.Column="1" Spacing="2">
                 <TextBlock Classes="card-title"
-                           Text="{x:Static loc:Strings.FullTunnelTitle}"/>
+                           Text="{Binding L_FullTunnelTitle}"/>
                 <TextBlock Classes="card-sub"
-                           Text="{x:Static loc:Strings.FullTunnelSubtitle}"/>
+                           Text="{Binding L_FullTunnelSubtitle}"/>
               </StackPanel>
             </Grid>
           </Border>
@@ -178,16 +178,16 @@
                   BorderThickness="1">
             <StackPanel Spacing="4">
               <CheckBox IsChecked="{Binding StrictMode}" Content="{Binding StrictModeLabel}"
-                        ToolTip.Tip="{x:Static loc:Strings.TipLeakStrictMode}"
+                        ToolTip.Tip="{Binding L_TipLeakStrictMode}"
                         MinHeight="0" Padding="4,0"/>
               <CheckBox IsChecked="{Binding ForceIpv4Only}" Content="{Binding ForceIpv4Label}"
-                        ToolTip.Tip="{x:Static loc:Strings.TipLeakForceIpv4}"
+                        ToolTip.Tip="{Binding L_TipLeakForceIpv4}"
                         MinHeight="0" Padding="4,0"/>
               <CheckBox IsChecked="{Binding FlushDnsOnStart}" Content="{Binding FlushDnsLabel}"
-                        ToolTip.Tip="{x:Static loc:Strings.TipLeakFlushDns}"
+                        ToolTip.Tip="{Binding L_TipLeakFlushDns}"
                         MinHeight="0" Padding="4,0"/>
               <CheckBox IsChecked="{Binding StrictDns}" Content="{Binding StrictDnsLabel}"
-                        ToolTip.Tip="{x:Static loc:Strings.TipLeakStrictDns}"
+                        ToolTip.Tip="{Binding L_TipLeakStrictDns}"
                         MinHeight="0" Padding="4,0"/>
             </StackPanel>
           </Border>
@@ -270,32 +270,32 @@
             <StackPanel Spacing="6">
               <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                  <TextBlock Text="{x:Static loc:Strings.ServiceStatusLabel}"
+                  <TextBlock Text="{Binding L_ServiceStatusLabel}"
                              FontWeight="SemiBold" FontSize="11"
                              VerticalAlignment="Center"/>
                   <Border Classes="service-pill"
                           IsVisible="{Binding ServiceVm.IsRunning}"
                           Background="{DynamicResource SuccessBgBrush}">
-                    <TextBlock Text="{x:Static loc:Strings.ServiceRunningText}"
+                    <TextBlock Text="{Binding L_ServiceRunningText}"
                                FontSize="9" FontWeight="SemiBold"
                                Foreground="{DynamicResource SuccessFgBrush}"/>
                   </Border>
                   <Border Classes="service-pill"
                           IsVisible="{Binding !ServiceVm.IsRunning}"
                           Background="{DynamicResource SurfaceBaseBrush}">
-                    <TextBlock Text="{x:Static loc:Strings.ServiceStoppedText}"
+                    <TextBlock Text="{Binding L_ServiceStoppedText}"
                                FontSize="9" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextMutedBrush}"/>
                   </Border>
                 </StackPanel>
               </Grid>
               <StackPanel Orientation="Horizontal" Spacing="6">
-                <Button Content="{x:Static loc:Strings.RestartService}"
+                <Button Content="{Binding L_RestartService}"
                         Command="{Binding ServiceVm.RestartServiceCommand}"
                         IsVisible="{Binding ServiceVm.IsRunning}"
                         IsEnabled="{Binding !ServiceVm.IsBusy}"
                         Padding="10,4" FontSize="10" CornerRadius="{StaticResource RadiusSm}"/>
-                <Button Content="{x:Static loc:Strings.ReinstallService}"
+                <Button Content="{Binding L_ReinstallService}"
                         Command="{Binding ServiceVm.ReinstallServiceCommand}"
                         IsVisible="{Binding ServiceVm.IsInstalled}"
                         IsEnabled="{Binding !ServiceVm.IsBusy}"
@@ -310,7 +310,7 @@
                   BorderBrush="{DynamicResource InfoBorderBrush}"
                   BorderThickness="1"
                   IsVisible="{Binding !IsWindowsPlatform}">
-            <TextBlock Text="{x:Static loc:Strings.AutostartPlatformNotice}"
+            <TextBlock Text="{Binding L_AutostartPlatformNotice}"
                        FontSize="11"
                        TextWrapping="Wrap"
                        Foreground="{DynamicResource InfoFgBrush}"/>
@@ -331,18 +331,18 @@
           <TextBlock Text="✓" FontSize="11"
                      Foreground="{DynamicResource SuccessSolidBrush}"
                      VerticalAlignment="Center"/>
-          <TextBlock Text="{x:Static loc:Strings.SettingsAutosaved}"
+          <TextBlock Text="{Binding L_SettingsAutosaved}"
                      FontSize="10" FontWeight="SemiBold"
                      Foreground="{DynamicResource SuccessFgBrush}"
                      VerticalAlignment="Center"/>
         </StackPanel>
         <Button Grid.Column="1"
-                Content="{x:Static loc:Strings.ApplyNowReloadVpn}"
+                Content="{Binding L_ApplyNowReloadVpn}"
                 Command="{Binding ApplyPendingChangesCommand}"
                 IsEnabled="{Binding IsConnected}"
                 Padding="10,5" FontSize="10" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
                 Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                ToolTip.Tip="{x:Static loc:Strings.ApplyNowHint}"/>
+                ToolTip.Tip="{Binding L_ApplyNowHint}"/>
       </Grid>
     </Border>
   </Grid>

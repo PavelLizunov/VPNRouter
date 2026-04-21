@@ -379,7 +379,7 @@
 
                                     <!-- Section: Вид -->
                                     <TextBlock Classes="section-label"
-                                               Text="{x:Static loc:Strings.SmpMenuViewSection}"/>
+                                               Text="{Binding L_SmpMenuViewSection}"/>
 
                                     <!-- Theme segmented: Light | Dark -->
                                     <Border Classes="segment-container">
@@ -388,12 +388,12 @@
                                                     Classes="segment"
                                                     Classes.active="{Binding !IsDarkTheme}"
                                                     Command="{Binding SetThemeLightCommand}"
-                                                    Content="{x:Static loc:Strings.SmpSegLight}"/>
+                                                    Content="{Binding L_SmpSegLight}"/>
                                             <Button Grid.Column="1"
                                                     Classes="segment"
                                                     Classes.active="{Binding IsDarkTheme}"
                                                     Command="{Binding SetThemeDarkCommand}"
-                                                    Content="{x:Static loc:Strings.SmpSegDark}"/>
+                                                    Content="{Binding L_SmpSegDark}"/>
                                         </Grid>
                                     </Border>
 
@@ -404,12 +404,12 @@
                                                     Classes="segment"
                                                     Classes.active="{Binding IsRussian}"
                                                     Command="{Binding SetLanguageRussianCommand}"
-                                                    Content="{x:Static loc:Strings.SmpSegRu}"/>
+                                                    Content="{Binding L_SmpSegRu}"/>
                                             <Button Grid.Column="1"
                                                     Classes="segment"
                                                     Classes.active="{Binding !IsRussian}"
                                                     Command="{Binding SetLanguageEnglishCommand}"
-                                                    Content="{x:Static loc:Strings.SmpSegEn}"/>
+                                                    Content="{Binding L_SmpSegEn}"/>
                                         </Grid>
                                     </Border>
 
@@ -417,38 +417,38 @@
 
                                     <!-- Section: Диагностика -->
                                     <TextBlock Classes="section-label"
-                                               Text="{x:Static loc:Strings.SmpMenuDiagnosticsSection}"/>
+                                               Text="{Binding L_SmpMenuDiagnosticsSection}"/>
 
                                     <Button Classes="menu-item"
                                             Command="{Binding OpenLogsCommand}"
-                                            Content="{x:Static loc:Strings.SmpMenuOpenLogs}"
-                                            ToolTip.Tip="{x:Static loc:Strings.TipOpenLogs}"/>
+                                            Content="{Binding L_SmpMenuOpenLogs}"
+                                            ToolTip.Tip="{Binding L_TipOpenLogs}"/>
                                     <Button Classes="menu-item"
                                             Command="{Binding OpenLeakTestCommand}"
-                                            Content="{x:Static loc:Strings.SmpMenuCheckLeaks}"
-                                            ToolTip.Tip="{x:Static loc:Strings.TipIpLeak}"/>
+                                            Content="{Binding L_SmpMenuCheckLeaks}"
+                                            ToolTip.Tip="{Binding L_TipIpLeak}"/>
                                     <Button Classes="menu-item"
                                             Command="{Binding UpdateVm.CheckManuallyCommand}"
-                                            Content="{x:Static loc:Strings.SmpMenuCheckUpdates}"/>
+                                            Content="{Binding L_SmpMenuCheckUpdates}"/>
 
                                     <Border Classes="menu-divider"/>
 
                                     <!-- Section: Устранение неполадок -->
                                     <TextBlock Classes="section-label"
-                                               Text="{x:Static loc:Strings.SmpMenuTroubleshootingSection}"/>
+                                               Text="{Binding L_SmpMenuTroubleshootingSection}"/>
 
                                     <Button Classes="menu-item"
                                             Command="{Binding RunHealthCheckCommand}"
-                                            Content="{x:Static loc:Strings.SmpMenuHealthCheck}"
-                                            ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuHealthCheck}"/>
+                                            Content="{Binding L_SmpMenuHealthCheck}"
+                                            ToolTip.Tip="{Binding L_TipSmpMenuHealthCheck}"/>
                                     <Button Classes="menu-item"
                                             Command="{Binding RestartInSafeModeCommand}"
-                                            Content="{x:Static loc:Strings.SmpMenuSafeMode}"
-                                            ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuSafeMode}"/>
+                                            Content="{Binding L_SmpMenuSafeMode}"
+                                            ToolTip.Tip="{Binding L_TipSmpMenuSafeMode}"/>
                                     <Button Classes="menu-item"
                                             Command="{Binding ResetConfigCommand}"
                                             Content="{Binding ResetConfigMenuHeader}"
-                                            ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuResetConfig}"/>
+                                            ToolTip.Tip="{Binding L_TipSmpMenuResetConfig}"/>
 
                                     <Border Classes="menu-divider"/>
 
@@ -460,10 +460,10 @@
                                          almost touching. -->
                                     <Button Classes="menu-item"
                                             Command="{Binding OpenAboutCommand}"
-                                            ToolTip.Tip="{x:Static loc:Strings.TipSmpMenuAbout}">
+                                            ToolTip.Tip="{Binding L_TipSmpMenuAbout}">
                                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                                             <TextBlock Grid.Column="0"
-                                                       Text="{x:Static loc:Strings.SmpMenuAbout}"
+                                                       Text="{Binding L_SmpMenuAbout}"
                                                        VerticalAlignment="Center"/>
                                             <TextBlock Grid.Column="1"
                                                        Classes="version-hint"

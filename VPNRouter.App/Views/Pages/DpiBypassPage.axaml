@@ -39,13 +39,13 @@
                          Background="Transparent" BorderThickness="0"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          ScrollViewer.VerticalScrollBarVisibility="Auto">
-                    <ListBoxItem Content="{x:Static loc:Strings.ZapretSecStatus}"      Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{x:Static loc:Strings.ZapretSecStrategy}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{x:Static loc:Strings.ZapretSecHosts}"       Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{x:Static loc:Strings.ZapretSecFilters}"     Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{x:Static loc:Strings.ZapretSecUpdates}"     Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{x:Static loc:Strings.ZapretSecDiagnostics}" Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{x:Static loc:Strings.ZapretSecAdvanced}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding L_ZapretSecStatus}"      Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding L_ZapretSecStrategy}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding L_ZapretSecHosts}"       Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding L_ZapretSecFilters}"     Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding L_ZapretSecUpdates}"     Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding L_ZapretSecDiagnostics}" Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding L_ZapretSecAdvanced}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
                 </ListBox>
             </Border>
 
@@ -58,7 +58,7 @@
 
                 <!-- ═══ Status ═══ -->
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretStatusSection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecStatus}" FontWeight="Bold" FontSize="13"/>
+                    <TextBlock Text="{Binding L_ZapretSecStatus}" FontWeight="Bold" FontSize="13"/>
                     <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.7"
                                Text="{Binding LblDpiDescription}"/>
                     <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
@@ -90,7 +90,7 @@
 
                 <!-- ═══ Strategy ═══ -->
                 <StackPanel Spacing="8" IsVisible="{Binding IsZapretStrategySection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecStrategy}" FontWeight="Bold" FontSize="13"/>
+                    <TextBlock Text="{Binding L_ZapretSecStrategy}" FontWeight="Bold" FontSize="13"/>
                     <TextBlock Text="{Binding LblDpiStrategy}" FontWeight="SemiBold" Opacity="0.7" FontSize="10"/>
                     <ComboBox ItemsSource="{Binding ZapretStrategies}"
                               SelectedIndex="{Binding ZapretStrategyIndex}"
@@ -108,14 +108,14 @@
                     </StackPanel>
                     <TextBox Text="{Binding ZapretCustomArgs}"
                              IsVisible="{Binding IsCustomStrategy}"
-                             Watermark="{x:Static loc:Strings.WmZapretCustomArgs}"
+                             Watermark="{Binding L_WmZapretCustomArgs}"
                              FontSize="10" Padding="6,4"
                              AcceptsReturn="True" MinHeight="50" MaxHeight="80"/>
                 </StackPanel>
 
                 <!-- ═══ Hosts ═══ -->
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretHostsSection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecHosts}" FontWeight="Bold" FontSize="13"/>
+                    <TextBlock Text="{Binding L_ZapretSecHosts}" FontWeight="Bold" FontSize="13"/>
 
                     <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource SurfaceSunkenBrush}">
@@ -139,25 +139,25 @@
                                     HorizontalContentAlignment="Left"
                                     FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
                             <TextBlock TextWrapping="Wrap" FontSize="9" Opacity="0.6"
-                                       Text="{x:Static loc:Strings.ZapretHostsHint}"/>
+                                       Text="{Binding L_ZapretHostsHint}"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
 
                 <!-- ═══ Filters ═══ -->
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretFiltersSection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecFilters}" FontWeight="Bold" FontSize="13"/>
+                    <TextBlock Text="{Binding L_ZapretSecFilters}" FontWeight="Bold" FontSize="13"/>
 
                     <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Spacing="4">
-                            <TextBlock Text="{x:Static loc:Strings.GameFilter}" FontWeight="SemiBold" FontSize="10"/>
+                            <TextBlock Text="{Binding L_GameFilter}" FontWeight="SemiBold" FontSize="10"/>
                             <ComboBox SelectedIndex="{Binding GameFilterModeIndex}"
                                       MinWidth="200" Padding="6,3" FontSize="10">
-                                <ComboBoxItem Content="{x:Static loc:Strings.GameFilterOff}"/>
-                                <ComboBoxItem Content="{x:Static loc:Strings.GameFilterAll}"/>
-                                <ComboBoxItem Content="{x:Static loc:Strings.GameFilterTcp}"/>
-                                <ComboBoxItem Content="{x:Static loc:Strings.GameFilterUdp}"/>
+                                <ComboBoxItem Content="{Binding L_GameFilterOff}"/>
+                                <ComboBoxItem Content="{Binding L_GameFilterAll}"/>
+                                <ComboBoxItem Content="{Binding L_GameFilterTcp}"/>
+                                <ComboBoxItem Content="{Binding L_GameFilterUdp}"/>
                             </ComboBox>
                         </StackPanel>
                     </Border>
@@ -165,12 +165,12 @@
                     <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Spacing="4">
-                            <TextBlock Text="{x:Static loc:Strings.IpSetFilter}" FontWeight="SemiBold" FontSize="10"/>
+                            <TextBlock Text="{Binding L_IpSetFilter}" FontWeight="SemiBold" FontSize="10"/>
                             <ComboBox SelectedIndex="{Binding IpSetModeIndex}"
                                       MinWidth="200" Padding="6,3" FontSize="10">
-                                <ComboBoxItem Content="{x:Static loc:Strings.IpSetAny}"/>
-                                <ComboBoxItem Content="{x:Static loc:Strings.IpSetLoaded}"/>
-                                <ComboBoxItem Content="{x:Static loc:Strings.IpSetNone}"/>
+                                <ComboBoxItem Content="{Binding L_IpSetAny}"/>
+                                <ComboBoxItem Content="{Binding L_IpSetLoaded}"/>
+                                <ComboBoxItem Content="{Binding L_IpSetNone}"/>
                             </ComboBox>
                         </StackPanel>
                     </Border>
@@ -178,9 +178,9 @@
 
                 <!-- ═══ Updates ═══ -->
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretUpdatesSection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecUpdates}" FontWeight="Bold" FontSize="13"/>
+                    <TextBlock Text="{Binding L_ZapretSecUpdates}" FontWeight="Bold" FontSize="13"/>
 
-                    <Button Content="{x:Static loc:Strings.UpdateIpSet}"
+                    <Button Content="{Binding L_UpdateIpSet}"
                             Command="{Binding UpdateIpSetListCommand}"
                             IsEnabled="{Binding !IsZapretActionRunning}"
                             HorizontalAlignment="Stretch"
@@ -188,16 +188,16 @@
                             FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
 
                     <CheckBox IsChecked="{Binding ZapretAutoUpdateCheck}"
-                              Content="{x:Static loc:Strings.AutoUpdateCheckLabel}"
-                              ToolTip.Tip="{x:Static loc:Strings.TipZapretAutoUpdate}"
+                              Content="{Binding L_AutoUpdateCheckLabel}"
+                              ToolTip.Tip="{Binding L_TipZapretAutoUpdate}"
                               FontSize="10" MinHeight="0" Padding="4,0"/>
                 </StackPanel>
 
                 <!-- ═══ Diagnostics ═══ -->
                 <StackPanel Spacing="8" IsVisible="{Binding IsZapretDiagnosticsSection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecDiagnostics}" FontWeight="Bold" FontSize="13"/>
+                    <TextBlock Text="{Binding L_ZapretSecDiagnostics}" FontWeight="Bold" FontSize="13"/>
 
-                    <Button Content="{x:Static loc:Strings.RunDiagnostics}"
+                    <Button Content="{Binding L_RunDiagnostics}"
                             Command="{Binding RunZapretDiagnosticsCommand}"
                             IsEnabled="{Binding !IsZapretActionRunning}"
                             HorizontalAlignment="Stretch"
@@ -231,31 +231,31 @@
 
                 <!-- ═══ Advanced ═══ -->
                 <StackPanel Spacing="6" IsVisible="{Binding IsZapretAdvancedSection}">
-                    <TextBlock Text="{x:Static loc:Strings.ZapretSecAdvanced}" FontWeight="Bold" FontSize="13"/>
+                    <TextBlock Text="{Binding L_ZapretSecAdvanced}" FontWeight="Bold" FontSize="13"/>
 
-                    <Button Content="{x:Static loc:Strings.ClearDiscordCache}"
+                    <Button Content="{Binding L_ClearDiscordCache}"
                             Command="{Binding ClearDiscordCacheCommand}"
                             IsEnabled="{Binding !IsZapretActionRunning}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                             FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
-                    <Button Content="{x:Static loc:Strings.RunTestsLabel}"
+                    <Button Content="{Binding L_RunTestsLabel}"
                             Command="{Binding RunZapretTestsCommand}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                             FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
-                    <Button Content="{x:Static loc:Strings.RemoveServiceLabel}"
+                    <Button Content="{Binding L_RemoveServiceLabel}"
                             Command="{Binding RemoveZapretServiceCommand}"
                             IsEnabled="{Binding !IsZapretActionRunning}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                             FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
-                    <Button Content="{x:Static loc:Strings.OpenServiceMenu}"
+                    <Button Content="{Binding L_OpenServiceMenu}"
                             Command="{Binding OpenZapretServiceMenuCommand}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                             FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
                     <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
-                        <Button Content="{x:Static loc:Strings.OpenFolder}"
+                        <Button Content="{Binding L_OpenFolder}"
                                 Command="{Binding OpenZapretFolderCommand}"
                                 FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
-                        <Button Content="{x:Static loc:Strings.OpenGitHub}"
+                        <Button Content="{Binding L_OpenGitHub}"
                                 Command="{Binding OpenZapretGitHubCommand}"
                                 FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"
                                 Foreground="{DynamicResource AccentFgBrush}"/>

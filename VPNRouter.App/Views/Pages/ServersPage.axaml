@@ -140,14 +140,14 @@
       <Grid Grid.Row="0" ColumnDefinitions="14,*,100,42,40,24" ColumnSpacing="8"
             Margin="8,2,8,4">
         <TextBlock Grid.Column="1" Classes="srv-col-label"
-                   Text="{x:Static loc:Strings.ColServer}"/>
+                   Text="{Binding L_ColServer}"/>
         <TextBlock Grid.Column="2" Classes="srv-col-label"
-                   Text="{x:Static loc:Strings.ColIp}"/>
+                   Text="{Binding L_ColIp}"/>
         <TextBlock Grid.Column="3" Classes="srv-col-label"
-                   Text="{x:Static loc:Strings.ColPing}"
+                   Text="{Binding L_ColPing}"
                    HorizontalAlignment="Center"/>
         <TextBlock Grid.Column="4" Classes="srv-col-label"
-                   Text="{x:Static loc:Strings.ColPort}"
+                   Text="{Binding L_ColPort}"
                    HorizontalAlignment="Center"/>
       </Grid>
 
@@ -214,7 +214,7 @@
                         Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
                         CommandParameter="{Binding}"
                         IsEnabled="{Binding !IsTesting}"
-                        ToolTip.Tip="{x:Static loc:Strings.TipTestTcpTls}"/>
+                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}"/>
               </Grid>
             </Border>
           </DataTemplate>
@@ -240,22 +240,22 @@
                   Command="{Binding CloseServerDetailCommand}"
                   Background="Transparent" BorderThickness="0"
                   Padding="6,0" MinHeight="0" FontSize="11" Opacity="0.6"
-                  ToolTip.Tip="{x:Static loc:Strings.TipCloseServerDetail}"/>
+                  ToolTip.Tip="{Binding L_TipCloseServerDetail}"/>
           <Grid ColumnDefinitions="80,*"
                 RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
                 DataContext="{Binding DetailServer}"
                 x:DataType="vm:ServerViewModel">
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Static loc:Strings.LblName}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblName}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
             <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="{x:Static loc:Strings.LblServer}"    VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblServer}"    VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
             <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Server}"    FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-            <TextBlock Grid.Row="2" Grid.Column="0" Text="{x:Static loc:Strings.LblPort}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblPort}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
             <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Port}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-            <TextBlock Grid.Row="3" Grid.Column="0" Text="{x:Static loc:Strings.LblUuid}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblUuid}"      VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
             <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding Uuid}"      FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-            <TextBlock Grid.Row="4" Grid.Column="0" Text="{x:Static loc:Strings.LblPublicKey}" VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblPublicKey}" VerticalAlignment="Center" FontSize="10" Margin="0,0,0,3"/>
             <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding PublicKey}" FontSize="10" Padding="4,2" Margin="0,0,0,3"/>
-            <TextBlock Grid.Row="5" Grid.Column="0" Text="{x:Static loc:Strings.LblShortId}"   VerticalAlignment="Center" FontSize="10"/>
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_LblShortId}"   VerticalAlignment="Center" FontSize="10"/>
             <TextBox   Grid.Row="5" Grid.Column="1" Text="{Binding ShortId}"   FontSize="10" Padding="4,2"/>
           </Grid>
         </DockPanel>
@@ -311,7 +311,7 @@
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
                     Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
-                    ToolTip.Tip="{x:Static loc:Strings.TipTestAllServers}"/>
+                    ToolTip.Tip="{Binding L_TipTestAllServers}"/>
             <!-- v2.25.3: Deep verify was #7C3AED (violet, outside Arctic
                  palette). Now arctic primary to match the design-system
                  rule "primary CTAs in arctic; state colours for state".
@@ -322,7 +322,7 @@
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
                     Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                    ToolTip.Tip="{x:Static loc:Strings.TipDeepVerifyServers}"/>
+                    ToolTip.Tip="{Binding L_TipDeepVerifyServers}"/>
             <TextBlock Text="{Binding ServerTestProgressText}"
                        VerticalAlignment="Center"
                        FontSize="10" Opacity="0.7"/>
@@ -344,7 +344,7 @@
                   Margin="6,0,0,0"
                   Padding="14,5" CornerRadius="{StaticResource RadiusSm}"/>
           <TextBox Text="{Binding VlessUri}"
-                   Watermark="{x:Static loc:Strings.WmVlessUri}"
+                   Watermark="{Binding L_WmVlessUri}"
                    FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
                    FontSize="10" Padding="6,4"
                    AcceptsReturn="False"/>

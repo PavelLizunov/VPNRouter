@@ -109,14 +109,14 @@
     <Grid Grid.Row="0" ColumnDefinitions="14,*,100,42,40,24" ColumnSpacing="8"
           Margin="18,6,18,4">
       <TextBlock Grid.Column="1" Classes="srv-col-label"
-                 Text="{x:Static loc:Strings.ColServer}"/>
+                 Text="{Binding L_ColServer}"/>
       <TextBlock Grid.Column="2" Classes="srv-col-label"
-                 Text="{x:Static loc:Strings.ColIp}"/>
+                 Text="{Binding L_ColIp}"/>
       <TextBlock Grid.Column="3" Classes="srv-col-label"
-                 Text="{x:Static loc:Strings.ColPing}"
+                 Text="{Binding L_ColPing}"
                  HorizontalAlignment="Center"/>
       <TextBlock Grid.Column="4" Classes="srv-col-label"
-                 Text="{x:Static loc:Strings.ColPort}"
+                 Text="{Binding L_ColPort}"
                  HorizontalAlignment="Center"/>
     </Grid>
 
@@ -174,7 +174,7 @@
                       Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).TestServerCommand}"
                       CommandParameter="{Binding}"
                       IsEnabled="{Binding !IsTesting}"
-                      ToolTip.Tip="{x:Static loc:Strings.TipTestTcpTls}"/>
+                      ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}"/>
             </Grid>
           </Border>
         </DataTemplate>
@@ -186,10 +186,10 @@
                 IsVisible="{Binding !SubscriptionServers.Count}"
                 HorizontalAlignment="Center" VerticalAlignment="Center"
                 Spacing="6">
-      <TextBlock Text="{x:Static loc:Strings.LblNoServers}"
+      <TextBlock Text="{Binding L_LblNoServers}"
                  FontSize="13" FontWeight="SemiBold" Opacity="0.6"
                  HorizontalAlignment="Center"/>
-      <TextBlock Text="{x:Static loc:Strings.LblAddSubscriptionHint}"
+      <TextBlock Text="{Binding L_LblAddSubscriptionHint}"
                  FontSize="11" Opacity="0.4"
                  HorizontalAlignment="Center"/>
     </StackPanel>
@@ -206,7 +206,7 @@
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
                     Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
-                    ToolTip.Tip="{x:Static loc:Strings.TipTestAllServers}"/>
+                    ToolTip.Tip="{Binding L_TipTestAllServers}"/>
             <!-- v2.25.3: arctic primary, was #7C3AED violet — same rationale
                  as in ServersPage. -->
             <Button Content="{Binding ServerDeepButtonText}"
@@ -214,7 +214,7 @@
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
                     Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                    ToolTip.Tip="{x:Static loc:Strings.TipDeepVerifyServers}"/>
+                    ToolTip.Tip="{Binding L_TipDeepVerifyServers}"/>
             <TextBlock Text="{Binding ServerTestProgressText}"
                        VerticalAlignment="Center"
                        FontSize="10" Opacity="0.7"/>
@@ -225,10 +225,10 @@
         </StackPanel>
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock Grid.Column="0"
-                     Text="{x:Static loc:Strings.SubscriptionsSection}"
+                     Text="{Binding L_SubscriptionsSection}"
                      FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
           <Button Grid.Column="1"
-                  Content="{x:Static loc:Strings.RefreshAll}"
+                  Content="{Binding L_RefreshAll}"
                   Command="{Binding RefreshAllSubscriptionsCommand}"
                   FontSize="10" Padding="8,3" CornerRadius="{StaticResource RadiusSm}"/>
         </Grid>
@@ -284,13 +284,13 @@
                         Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RefreshSubscriptionCommand}"
                         CommandParameter="{Binding}"
                         IsEnabled="{Binding !IsRefreshing}"
-                        ToolTip.Tip="{x:Static loc:Strings.TipRefreshSubscription}"/>
+                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRefreshSubscription}"/>
 
                 <Button Grid.Column="4" Classes="srv-refresh"
                         Content="✕"
                         Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveSubscriptionCommand}"
                         CommandParameter="{Binding}"
-                        ToolTip.Tip="{x:Static loc:Strings.TipRemoveSubscription}"/>
+                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipRemoveSubscription}"/>
               </Grid>
             </Border>
           </DataTemplate>
@@ -305,7 +305,7 @@
       <Grid ColumnDefinitions="100,*,Auto" ColumnSpacing="4">
         <TextBox Grid.Column="0"
                  Text="{Binding NewSubName}"
-                 Watermark="{x:Static loc:Strings.SubscriptionNameHint}"
+                 Watermark="{Binding L_SubscriptionNameHint}"
                  FontSize="10" Padding="6,4"/>
         <TextBox Grid.Column="1"
                  Text="{Binding NewSubUrl}"
@@ -313,7 +313,7 @@
                  FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
                  FontSize="10" Padding="6,4"/>
         <Button Grid.Column="2"
-                Content="{x:Static loc:Strings.AddSubscription}"
+                Content="{Binding L_AddSubscription}"
                 Command="{Binding AddSubscriptionCommand}"
                 Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                 FontSize="11" FontWeight="SemiBold"
