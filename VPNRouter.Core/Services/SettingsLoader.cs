@@ -60,6 +60,35 @@ public static class SettingsLoader
         settings.Vless.Transport ??= new VlessTransportConfig();
         settings.Vless.Servers ??= new List<VlessServerEntry>();
 
+        // v2.25.1-r2: strip legacy "your.server.com" / "your-uuid-here"
+        // placeholder values that older versions (pre-v2.24.3) wrote into
+        // the config on first launch. The reason this re-surfaces even
+        // after CreateDefaults stopped emitting placeholders: the
+        // ViewModel calls GetEffectiveServers() on load, which — when
+        // Vless.Servers is empty — builds a SYNTHETIC entry from the
+        // legacy root Vless.Server / Uuid scalars. That synthetic entry
+        // carries "your.server.com" into the UI's Servers collection,
+        // and the next SaveSettings writes it back as an explicit entry
+        // in Vless.Servers. After that the placeholder is "promoted"
+        // from a legacy fallback to a persisted list item, surviving
+        // forever. Idempotent cleanup below runs on every Parse — safe
+        // to call even when there's nothing to remove. Doesn't touch
+        // real servers or subscription.servers (different field).
+        if (string.Equals(settings.Vless.Server, "your.server.com", StringComparison.OrdinalIgnoreCase))
+        {
+            settings.Vless.Server = string.Empty;
+            settings.Vless.Uuid = string.Empty;
+            settings.Vless.Reality = new VlessRealityConfig();
+        }
+        if (string.Equals(settings.Vless.Uuid, "your-uuid-here", StringComparison.OrdinalIgnoreCase))
+        {
+            settings.Vless.Uuid = string.Empty;
+        }
+        settings.Vless.Servers.RemoveAll(s =>
+            string.Equals(s.Server, "your.server.com", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(s.Uuid,   "your-uuid-here",  StringComparison.OrdinalIgnoreCase) ||
+            (string.IsNullOrWhiteSpace(s.Server) && string.IsNullOrWhiteSpace(s.Uuid)));
+
         // Nested objects inside Tun
         settings.Tun.RouteExcludeAddress ??= new List<string>();
 
