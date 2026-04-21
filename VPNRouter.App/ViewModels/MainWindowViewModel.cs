@@ -571,6 +571,98 @@ public partial class MainWindowViewModel : ViewModelBase
         catch { /* best-effort */ }
     }
 
+    // ── Troubleshooting: safe mode + reset (v2.23.1) ──
+    // Menu header flips between "Reset config" and "Click again to
+    // reset" so user has to double-click (cheap confirmation without
+    // a separate dialog box that we'd need Avalonia.Controls.Dialog
+    // for on every platform).
+    [ObservableProperty] private bool _resetConfigArmed;
+    public string ResetConfigMenuHeader =>
+        ResetConfigArmed ? "Click again to confirm reset" : "Reset config to defaults";
+
+    partial void OnResetConfigArmedChanged(bool value)
+        => OnPropertyChanged(nameof(ResetConfigMenuHeader));
+
+    [RelayCommand]
+    private void RestartInSafeMode()
+    {
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exe)) return;
+            ProcessStartInfo psi;
+            if (OperatingSystem.IsLinux())
+            {
+                // Use setsid --fork so the new instance survives our exit
+                // (same trick the updater uses after applying an update).
+                psi = new ProcessStartInfo("/usr/bin/setsid",
+                    $"--fork \"{exe}\" --safe")
+                { UseShellExecute = false, CreateNoWindow = true };
+            }
+            else
+            {
+                psi = new ProcessStartInfo(exe, "--safe")
+                { UseShellExecute = false, CreateNoWindow = true };
+            }
+            System.Diagnostics.Process.Start(psi);
+            // Release lock so next run's crash detector doesn't flag us.
+            try { VPNRouter.Core.Services.LockFile.Release(); } catch { }
+            Environment.Exit(0);
+        }
+        catch { /* user can still launch with --safe from terminal */ }
+    }
+
+    [RelayCommand]
+    private void ResetConfig()
+    {
+        // First click: arm the confirmation.
+        if (!ResetConfigArmed)
+        {
+            ResetConfigArmed = true;
+            // Auto-disarm after 5 seconds so a stale armed state can't
+            // ambush a later click that was meant for something else.
+            _ = Task.Delay(5000).ContinueWith(_ =>
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    ResetConfigArmed = false));
+            return;
+        }
+        ResetConfigArmed = false;
+
+        try
+        {
+            var backup = VPNRouter.Core.Services.SettingsLoader.ResetToDefaults();
+            _logger?.Warning("[ViewModel] Config reset to defaults; backup at {Backup}", backup ?? "(none)");
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error(ex, "[ViewModel] Config reset failed");
+            return;
+        }
+
+        // Restart fresh — no --safe needed, defaults are clean.
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exe)) return;
+            ProcessStartInfo psi;
+            if (OperatingSystem.IsLinux())
+            {
+                psi = new ProcessStartInfo("/usr/bin/setsid",
+                    $"--fork \"{exe}\"")
+                { UseShellExecute = false, CreateNoWindow = true };
+            }
+            else
+            {
+                psi = new ProcessStartInfo(exe)
+                { UseShellExecute = false, CreateNoWindow = true };
+            }
+            System.Diagnostics.Process.Start(psi);
+            try { VPNRouter.Core.Services.LockFile.Release(); } catch { }
+            Environment.Exit(0);
+        }
+        catch { /* reset already happened on disk, user can relaunch manually */ }
+    }
+
     [RelayCommand]
     private void OpenLogs()
     {

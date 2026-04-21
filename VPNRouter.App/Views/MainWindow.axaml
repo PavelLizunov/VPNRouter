@@ -211,6 +211,14 @@
                             <MenuItem Header="{x:Static loc:Strings.SmpMenuCheckUpdates}"
                                       Command="{Binding UpdateVm.CheckManuallyCommand}"/>
                             <Separator/>
+                            <!-- v2.23.1 troubleshooting actions (command-backed twin of CLI flags). -->
+                            <MenuItem Header="Restart in Safe Mode"
+                                      Command="{Binding RestartInSafeModeCommand}"
+                                      ToolTip.Tip="Restart ignoring user config overrides. Forces Full tunnel, uses bundled catalogue only."/>
+                            <MenuItem Header="{Binding ResetConfigMenuHeader}"
+                                      Command="{Binding ResetConfigCommand}"
+                                      ToolTip.Tip="Backup current config and restart with factory defaults. Click twice to confirm."/>
+                            <Separator/>
                             <MenuItem Header="{Binding UiModeToggleText}"
                                       Command="{Binding ToggleUiModeCommand}"/>
                         </MenuFlyout>
