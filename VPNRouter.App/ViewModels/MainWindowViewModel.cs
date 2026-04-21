@@ -902,8 +902,29 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         try
         {
+            // v2.26.1 — two-signal detection:
+            //   1. sing-box process visible (old single check)
+            //   2. TUN ownership semaphore held by SOMEONE
+            // Both must be true. Signal #1 alone had a false-positive
+            // window on startup: a sing-box that just exited but whose
+            // process record Windows hadn't reaped yet would still show
+            // up in GetProcessesByName and we'd flip IsConnected=true
+            // only to demote it on the next poll. TUN-lock check gates
+            // that: once the owner releases (on Stop or death), the
+            // kernel releases the semaphore atomically so there's no
+            // stale window.
             var singboxRunning = Process.GetProcessesByName("sing-box").Length > 0;
             if (!singboxRunning) return;
+
+            var tunOwned = TunOwnershipLock.IsOwnedByAnyone();
+            if (!tunOwned)
+            {
+                // sing-box.exe present but nobody holds the TUN semaphore
+                // — orphan / zombie from a previous run, not a live
+                // service-managed tunnel. Let OrphanCleanup reap it on
+                // the next cycle; don't adopt.
+                return;
+            }
 
             IsConnected = true;
             ConnectButtonText = Strings.StopVPN;
@@ -914,7 +935,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 ? $"Подключено через службу [{mode}]"
                 : $"Connected via service [{mode}]";
             StartSubRefreshTimer();
-            _logger.Information("[VM] Detected VPN running via service (sing-box alive)");
+            _logger.Information("[VM] Detected VPN running via service (sing-box alive + TUN owned)");
         }
         catch (Exception ex)
         {

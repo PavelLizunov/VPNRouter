@@ -226,46 +226,64 @@ public class VPNRouterService : BackgroundService
             }
         }
 
-        // Start VPN with retry logic:
-        //   Outer loop handles "wait for UI/TUN to free up" (long waits, 30s)
-        //   ResilientStarter handles transient failures (5/10/20/40s backoff)
-        var vpnStarted = false;
-        while (!vpnStarted)
+        // v2.26.1 — Pre-flight: check the TUN ownership lock BEFORE trying
+        // to start sing-box. If some other VPNRouter process (desktop App,
+        // CLI session, leftover from a previous run) already owns it,
+        // transition to watcher mode immediately instead of entering a
+        // 30-second retry loop that burns CPU on every tick.
+        //
+        // Why TunLock beats the old `Process.GetProcessesByName("VPNRouter.App")`
+        // check:
+        //   1. Catches ALL sing-box owners — CLI and external instances
+        //      too, not just the GUI process name.
+        //   2. Atomic: the kernel releases the semaphore the instant the
+        //      holder dies, so we can't race a ghost process.
+        //   3. Free to poll — no Process enumeration overhead.
+        //
+        // Watcher mode: release startup completion, then park. The file-
+        // watcher on config.yaml is still active and can hot-reload, so
+        // the user's settings changes still land on the service even
+        // though the service isn't the one running sing-box.
+        if (TunOwnershipLock.IsOwnedByAnyone())
         {
-            var uiRunning = Process.GetProcessesByName("VPNRouter.App").Length > 0;
-            if (uiRunning)
-            {
-                _logger.LogInformation("[Service] Desktop UI is running — deferring, retry in 30s");
-                _startupComplete.TrySetResult();
-                await Task.Delay(TimeSpan.FromSeconds(30), ct);
-                continue;
-            }
+            _logger.LogInformation(
+                "[Service] TUN already owned by another VPNRouter process — " +
+                "entering watcher mode, will not contend for sing-box.");
+            _startupComplete.TrySetResult();
+            return;
+        }
 
-            try
-            {
-                vpnStarted = await ResilientStarter.StartWithBackoffAsync(
-                    componentName: "VPN",
-                    startFn: innerCt => _engine.StartAsync(settings, innerCt),
-                    logger: Serilog.Log.Logger,
-                    ct: ct);
+        // ResilientStarter handles transient failures (5/10/20/40s backoff).
+        // If TunOwnershipException bubbles up (someone grabbed the lock
+        // between our peek above and our start), we still catch it and
+        // transition to watcher mode rather than looping.
+        var vpnStarted = false;
+        try
+        {
+            vpnStarted = await ResilientStarter.StartWithBackoffAsync(
+                componentName: "VPN",
+                startFn: innerCt => _engine.StartAsync(settings, innerCt),
+                logger: Serilog.Log.Logger,
+                ct: ct);
 
-                if (!vpnStarted)
-                {
-                    _logger.LogError(
-                        "[Service] VPN autostart failed after retries. Not retrying further — " +
-                        "Zapret/TgProxy will still attempt to start.");
-                    WriteEventLog(
-                        "VPN autostart failed after retries",
-                        EventLogEntryType.Error);
-                    break;
-                }
-            }
-            catch (TunOwnershipException)
+            if (!vpnStarted)
             {
-                _logger.LogInformation("[Service] TUN adapter busy — retry in 30s");
-                _startupComplete.TrySetResult();
-                await Task.Delay(TimeSpan.FromSeconds(30), ct);
+                _logger.LogError(
+                    "[Service] VPN autostart failed after retries. Not retrying further — " +
+                    "Zapret/TgProxy will still attempt to start.");
+                WriteEventLog(
+                    "VPN autostart failed after retries",
+                    EventLogEntryType.Error);
             }
+        }
+        catch (TunOwnershipException)
+        {
+            // Race with another VPNRouter process between our IsOwnedByAnyone
+            // pre-check and sing-box startup. Accept the loss silently —
+            // they're serving the user just fine, we'll watch.
+            _logger.LogInformation(
+                "[Service] TUN adapter acquired by another process mid-start — " +
+                "entering watcher mode.");
         }
 
         _startupComplete.TrySetResult();

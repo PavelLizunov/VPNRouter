@@ -117,6 +117,45 @@ public sealed class TunOwnershipLock : IDisposable
         _semaphore?.Dispose();
         _semaphore = null;
     }
+
+    /// <summary>
+    /// v2.26.1 — peek whether ANY process currently owns the TUN semaphore
+    /// without disrupting them. Used by the Service's startup flow to
+    /// decide "should I try to start sing-box right now?" and by the App
+    /// to distinguish "sing-box running & I own it" from "sing-box running
+    /// but someone else owns it — adopt its state without racing".
+    ///
+    /// Unlike the process-name check it catches ALL sing-box owners
+    /// (Service, App, CLI, debugger) and it catches them atomically — no
+    /// polling race where the process is gone by the time we query it.
+    ///
+    /// Implementation: create the named Semaphore (count 1), try to
+    /// acquire with zero timeout. If we get it → nobody had it → release
+    /// immediately so we don't accidentally become the owner. If we
+    /// don't get it → someone else holds it → return true.
+    ///
+    /// Fail-safe: any exception returns false ("assume free"), matching
+    /// the fail-open posture of <see cref="TryAcquire"/>.
+    /// </summary>
+    public static bool IsOwnedByAnyone()
+    {
+        try
+        {
+            using var probe = new Semaphore(1, 1, MutexName, out _);
+            var gotIt = probe.WaitOne(0);
+            if (gotIt)
+            {
+                // Release immediately — we were just peeking, not acquiring.
+                try { probe.Release(); } catch { /* already released, fine */ }
+                return false;
+            }
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }
 
 /// <summary>
