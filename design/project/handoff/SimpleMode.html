@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>VPNRouter · Simple mode — Variant A (Calm)</title>
+<link rel="stylesheet" href="tokens.css"/>
+<style>
+  /* ═══════════════════════════════════════════════════════════════
+     Simple mode — Variant A · Calm
+     All layout/component CSS is local. Colour/type/spacing/shadow
+     tokens come from tokens.css. Never hard-code colours — use the
+     --accent-* / --surface-* / --text-* variables.
+     ═══════════════════════════════════════════════════════════════ */
+
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:var(--font-sans);
+    color:var(--text-primary);
+    background:var(--surface-sunken);
+    min-height:100vh;
+    display:grid;
+    place-items:center;
+    padding:32px 16px;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+
+  /* ─── Page header (for the showcase only; delete in the real app) ─ */
+  .showcase-head{position:fixed;top:0;left:0;right:0;padding:10px 20px;
+    display:flex;justify-content:space-between;align-items:center;
+    background:var(--surface-base);border-bottom:1px solid var(--border-subtle);z-index:20}
+  .showcase-head h1{margin:0;font-size:var(--fs-md);font-weight:var(--fw-bold)}
+  .showcase-head .switch{display:flex;gap:4px;background:var(--surface-sunken);padding:3px;border-radius:var(--radius-sm)}
+  .showcase-head .switch button{padding:5px 10px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);
+    border:0;background:transparent;color:var(--text-secondary);cursor:pointer;border-radius:var(--radius-xs);font-family:inherit}
+  .showcase-head .switch button.active{background:var(--surface-base);color:var(--text-primary);box-shadow:var(--shadow-xs)}
+  .showcase-head .theme-btn{background:var(--surface-sunken);border:0;padding:5px 10px;border-radius:var(--radius-sm);
+    font-size:var(--fs-xs);cursor:pointer;color:var(--text-secondary);font-weight:var(--fw-semibold)}
+
+  /* ─── Window shell ──────────────────────────────────────────── */
+  .win{width:420px;background:var(--surface-base);border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-lg);border:1px solid var(--border-default);overflow:hidden}
+
+  /* Native-like title bar. In the real Avalonia app this is window chrome;
+     it's here only for the HTML mock. */
+  .titlebar{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
+    padding:8px 12px;background:var(--surface-raised);border-bottom:1px solid var(--border-subtle)}
+  .titlebar .dots{display:flex;gap:6px}
+  .titlebar .dots span{width:11px;height:11px;border-radius:50%}
+  .titlebar .dots .r{background:#FF5F57} .titlebar .dots .y{background:#FEBC2E} .titlebar .dots .g{background:#28C840}
+  .titlebar .t{font-size:var(--fs-2xs);color:var(--text-muted);text-align:center;letter-spacing:.03em}
+
+  /* ─── Mini header (inside the window) ──────────────────────── */
+  .mini-head{padding:14px 16px 10px;display:grid;grid-template-columns:32px 1fr auto;gap:10px;align-items:center}
+  .mini-head .logo{width:32px;height:32px;border-radius:var(--radius-sm);background:var(--accent-bg-subtle);
+    display:grid;place-items:center;overflow:hidden}
+  .mini-head .logo img{width:28px;height:28px;object-fit:contain}
+  .mini-head .brand .n{font-size:var(--fs-md);font-weight:var(--fw-bold);line-height:1.2;letter-spacing:-.005em}
+  .mini-head .brand .mini-badges{display:flex;gap:4px;margin-top:4px}
+  .mini-head .brand .mb{font-size:9px;font-weight:var(--fw-semibold);padding:2px 7px;border-radius:var(--radius-pill);
+    letter-spacing:.06em;text-transform:uppercase;line-height:1.5;display:inline-flex;align-items:center;gap:4px;
+    cursor:pointer;border:1px solid transparent;background:var(--surface-sunken);color:var(--text-secondary);
+    transition:background var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out);
+    font-family:inherit;text-decoration:none}
+  .mini-head .brand .mb:hover{background:var(--accent-bg-subtle);color:var(--accent-fg);border-color:var(--accent-border)}
+  .mini-head .brand .mb .md{width:5px;height:5px;border-radius:50%;display:inline-block;background:var(--text-muted)}
+  .mini-head .brand .mb.on .md{background:var(--success-solid)}
+  .mini-head .brand .mb.warn .md{background:var(--warning-solid);animation:pulse 1.2s ease-out infinite}
+  .mini-head .brand .mb.off .md{background:var(--text-muted)}
+  .mini-head .menu{width:28px;height:28px;display:grid;place-items:center;border:0;background:transparent;
+    border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer;font-size:14px}
+  .mini-head .menu:hover{background:var(--surface-sunken);color:var(--text-primary)}
+
+  /* ─── Body ─────────────────────────────────────────────────── */
+  .body{padding:4px 16px 16px;display:flex;flex-direction:column;gap:14px}
+
+  /* ─── Status card ──────────────────────────────────────────── */
+  .status-card{border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--surface-base);
+    padding:14px;display:flex;flex-direction:column;gap:10px}
+  .sline{display:flex;align-items:center;gap:10px}
+  .sdot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .sdot.on{background:var(--success-solid);box-shadow:0 0 0 4px rgba(34,197,94,.18)}
+  .sdot.warn{background:var(--warning-solid);box-shadow:0 0 0 4px rgba(245,158,11,.22);animation:pulse 1.2s ease-out infinite}
+  .sdot.off{background:var(--text-muted)}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.45)}50%{box-shadow:0 0 0 6px rgba(245,158,11,.0)}}
+  .stitle{font-size:var(--fs-xl);font-weight:var(--fw-bold);letter-spacing:-.01em}
+  .stitle.muted{color:var(--text-secondary)}
+  .sdesc{font-size:var(--fs-xs);color:var(--text-secondary);line-height:1.5;padding-left:20px}
+  .sdesc b{color:var(--text-primary);font-weight:var(--fw-semibold)}
+  .sdesc code{font-family:var(--font-mono);color:var(--accent-fg);font-size:10px}
+
+  /* ─── Config row ───────────────────────────────────────────── */
+  .cfg{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 12px;
+    border:1px solid var(--border-subtle);border-radius:var(--radius-sm);background:var(--surface-raised);cursor:pointer;
+    transition:border-color var(--dur-base) var(--ease-out)}
+  .cfg:hover{border-color:var(--border-default)}
+  .cfg .k-ico{width:24px;height:24px;border-radius:var(--radius-xs);background:var(--accent-bg-subtle);color:var(--accent-fg);
+    display:grid;place-items:center;font-size:12px}
+  .cfg .k{font-size:9px;font-weight:var(--fw-semibold);color:var(--text-muted);text-transform:uppercase;letter-spacing:var(--tracking-caps)}
+  .cfg .v{font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--text-primary);font-family:var(--font-mono);margin-top:1px}
+  .cfg .chev{color:var(--text-muted);font-size:12px}
+
+  /* ─── CTA button ───────────────────────────────────────────── */
+  .cta{width:100%;padding:12px 16px;border:0;border-radius:var(--radius-sm);cursor:pointer;
+    font-size:var(--fs-md);font-weight:var(--fw-bold);letter-spacing:.01em;display:flex;align-items:center;justify-content:center;gap:8px;
+    transition:background var(--dur-base) var(--ease-out),box-shadow var(--dur-base) var(--ease-out);
+    font-family:inherit}
+  .cta svg{width:14px;height:14px}
+  .cta.on-state{background:var(--accent-solid);color:var(--accent-on-solid)}
+  .cta.on-state:hover{background:var(--accent-solid-hover)}
+  .cta.off-state{background:var(--surface-base);color:var(--accent-fg);border:1px solid var(--accent-border);
+    box-shadow:0 0 0 3px rgba(14,165,233,.10)}
+  .cta.off-state:hover{background:var(--accent-bg-subtle)}
+  .cta.connecting-state{background:var(--surface-sunken);color:var(--text-secondary);cursor:progress}
+  .cta.connecting-state .spinner{width:12px;height:12px;border:2px solid var(--border-strong);
+    border-top-color:var(--accent-solid);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ─── Advanced card ────────────────────────────────────────── */
+  .adv-card{padding:12px 14px;border:1px solid var(--border-default);border-radius:var(--radius-md);
+    background:var(--surface-base);display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;cursor:pointer;
+    transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out)}
+  .adv-card:hover{background:var(--surface-raised);border-color:var(--accent-border)}
+  .adv-card .h{font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--text-primary)}
+  .adv-card .s{font-size:var(--fs-2xs);color:var(--text-muted);margin-top:2px;line-height:1.4}
+  .adv-card .chev{width:28px;height:28px;border-radius:var(--radius-sm);display:grid;place-items:center;
+    background:var(--accent-bg-subtle);color:var(--accent-fg);font-size:14px}
+
+  /* ─── State-switch controls (showcase only) ──────────────── */
+  .state-switcher{display:flex;gap:4px;margin-bottom:16px;background:var(--surface-base);padding:4px;
+    border-radius:var(--radius-sm);border:1px solid var(--border-default);width:fit-content;margin-inline:auto}
+  .state-switcher button{padding:6px 14px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);border:0;
+    background:transparent;color:var(--text-secondary);cursor:pointer;border-radius:var(--radius-xs);font-family:inherit}
+  .state-switcher button.active{background:var(--accent-bg-subtle);color:var(--accent-fg)}
+
+  /* ─── State-specific toggling ──────────────────────────────── */
+  .state-variant{display:none}
+  .state-variant.active{display:block}
+</style>
+</head>
+<body>
+
+<!-- Showcase chrome — DELETE when embedding in the real app -->
+<div class="showcase-head">
+  <h1>VPNRouter · Simple mode — Variant A · Calm</h1>
+  <button class="theme-btn" id="themeBtn">◐  Toggle theme</button>
+</div>
+
+<div style="display:flex;flex-direction:column;align-items:center;padding-top:48px">
+
+  <div class="state-switcher" id="stateSwitcher">
+    <button data-s="on" class="active">Connected</button>
+    <button data-s="warn">Connecting…</button>
+    <button data-s="off">Disconnected</button>
+  </div>
+
+  <!-- ═════════════════════════════════════════════════════════
+       THE ACTUAL WINDOW — one markup tree, state-driven classes.
+       In the real app, bind the same data into the same slots.
+       ═════════════════════════════════════════════════════════ -->
+  <div class="win">
+    <div class="titlebar">
+      <div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <div class="t">Virtual Penguin Network · Simple</div>
+      <div></div>
+    </div>
+
+    <div class="mini-head">
+      <div class="logo"><img src="assets/logo.jpg" alt="VPNRouter mascot"/></div>
+      <div class="brand">
+        <div class="n">Virtual Penguin Network</div>
+        <div class="mini-badges" id="miniBadges" role="tablist" aria-label="Quick nav">
+          <button class="mb on" data-slot="vpn" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+          <button class="mb on" data-slot="zapret" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+          <button class="mb off" data-slot="tg" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+        </div>
+      </div>
+      <button class="menu" title="Menu (theme · language · about)">⋯</button>
+    </div>
+
+    <div class="body">
+
+      <!-- Status card (3 variants) -->
+      <div class="state-variant active" data-s="on">
+        <div class="status-card">
+          <div class="sline"><div class="sdot on"></div><div class="stitle">Protected</div></div>
+          <div class="sdesc">Connected via <b>de-01</b> · <code>104.194.156.93</code> · <b>12m 04s</b></div>
+        </div>
+      </div>
+      <div class="state-variant" data-s="warn">
+        <div class="status-card">
+          <div class="sline"><div class="sdot warn"></div><div class="stitle">Connecting…</div></div>
+          <div class="sdesc">Handshaking with <b>de-01</b> · <code>:443</code> · <b>TLS reality</b></div>
+        </div>
+      </div>
+      <div class="state-variant" data-s="off">
+        <div class="status-card">
+          <div class="sline"><div class="sdot off"></div><div class="stitle muted">Not connected</div></div>
+          <div class="sdesc">Traffic goes straight — pick a config and start the tunnel.</div>
+        </div>
+      </div>
+
+      <!-- Config row — same across states -->
+      <div class="cfg">
+        <div class="k-ico">⚑</div>
+        <div><div class="k">Config · Mode</div><div class="v">subscribe · split</div></div>
+        <div class="chev">›</div>
+      </div>
+
+      <!-- CTA (3 variants) -->
+      <div class="state-variant active" data-s="on">
+        <button class="cta on-state">
+          <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+          Disconnect
+        </button>
+      </div>
+      <div class="state-variant" data-s="warn">
+        <button class="cta connecting-state">
+          <div class="spinner"></div>
+          Cancel
+        </button>
+      </div>
+      <div class="state-variant" data-s="off">
+        <button class="cta off-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
+          </svg>
+          Connect
+        </button>
+      </div>
+
+      <!-- Advanced — same across states -->
+      <div class="adv-card">
+        <div><div class="h">Advanced settings</div><div class="s">Servers · Subscriptions · Zapret · Telegram proxy · Free configs</div></div>
+        <div class="chev">›</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // State switcher — flips which .state-variant is .active, updates top badges.
+  const badgeConfig = {
+    on:   { vpn:'on',   zapret:'on',  tg:'off' },
+    warn: { vpn:'warn', zapret:'off', tg:'off' },
+    off:  { vpn:'off',  zapret:'off', tg:'off' },
+  };
+  function setState(s){
+    document.querySelectorAll('.state-variant').forEach(n => n.classList.toggle('active', n.dataset.s === s));
+    document.querySelectorAll('#stateSwitcher button').forEach(b => b.classList.toggle('active', b.dataset.s === s));
+    const cfg = badgeConfig[s];
+    document.querySelectorAll('#miniBadges .mb').forEach(mb => {
+      const slot = mb.dataset.slot;
+      mb.classList.remove('on','warn','off');
+      mb.classList.add(cfg[slot]);
+    });
+  }
+  document.getElementById('stateSwitcher').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return; setState(b.dataset.s);
+  });
+
+  // Theme toggle
+  const root = document.documentElement;
+  document.getElementById('themeBtn').onclick = () => {
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  };
+</script>
+
+</body>
+</html>

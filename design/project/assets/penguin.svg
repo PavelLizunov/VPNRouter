@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="VPNRouter penguin mascot">
+  <defs>
+    <radialGradient id="ice" cx="50%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#CFFAFE"></stop>
+      <stop offset="60%" stop-color="#67E8F9"></stop>
+      <stop offset="100%" stop-color="#0EA5E9"></stop>
+    </radialGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1C2231"></stop>
+      <stop offset="100%" stop-color="#0F1320"></stop>
+    </linearGradient>
+  </defs>
+  
+  <circle cx="64" cy="64" r="60" fill="url(#ice)"></circle>
+  <circle cx="64" cy="64" r="60" fill="none" stroke="#0369A1" stroke-opacity=".35" stroke-width="1.5"></circle>
+  
+  <ellipse cx="64" cy="78" rx="32" ry="36" fill="url(#body)"></ellipse>
+  
+  <ellipse cx="64" cy="82" rx="20" ry="26" fill="#F5F7FA"></ellipse>
+  
+  <circle cx="54" cy="60" r="5" fill="#F5F7FA"></circle>
+  <circle cx="74" cy="60" r="5" fill="#F5F7FA"></circle>
+  <circle cx="55" cy="61" r="2.2" fill="#0F1320"></circle>
+  <circle cx="75" cy="61" r="2.2" fill="#0F1320"></circle>
+  
+  <path d="M60 68 L68 68 L64 74 Z" fill="#F59E0B"></path>
+  
+  <ellipse cx="52" cy="112" rx="8" ry="3.5" fill="#F59E0B"></ellipse>
+  <ellipse cx="76" cy="112" rx="8" ry="3.5" fill="#F59E0B"></ellipse>
+  
+  <circle cx="48" cy="70" r="3" fill="#38BDF8" fill-opacity=".35"></circle>
+  <circle cx="80" cy="70" r="3" fill="#38BDF8" fill-opacity=".35"></circle>
+</svg>

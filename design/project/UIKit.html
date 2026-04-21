@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>VPNRouter · Main window</title>
+<link rel="stylesheet" href="tokens.css"/>
+<style>
+  :root {
+    --surface-app:#F5F7FA;--surface-sunken:#EBEEF3;--surface-base:#FFFFFF;--surface-raised:#FBFCFD;--surface-overlay:#FFFFFF;
+    --text-primary:#0F1320;--text-secondary:#475067;--text-muted:#94A0B2;
+    --border-subtle:#EBEEF3;--border-default:#DCE1E9;
+    --accent-solid:#0EA5E9;--accent-solid-hover:#0284C7;--accent-on-solid:#FFFFFF;--accent-fg:#0369A1;--accent-bg-subtle:#ECFEFF;--accent-border:#67E8F9;
+    --success-bg:#DCFCE7;--success-border:#86EFAC;--success-fg:#15803D;--success-solid:#16A34A;
+    --warning-bg:#FEF3C7;--warning-border:#FCD34D;--warning-fg:#92400E;--warning-solid:#D97706;
+    --danger-bg:#FEE2E2;--danger-border:#FCA5A5;--danger-fg:#B91C1C;--danger-solid:#DC2626;
+    --info-bg:#E0F2FE;--info-border:#7DD3FC;--info-fg:#075985;
+    --radius-xs:3px;--radius-sm:6px;--radius-md:8px;--radius-lg:10px;--radius-pill:999px;
+    --shadow-xs:0 1px 1px rgba(15,19,32,.04);--shadow-sm:0 1px 2px rgba(15,19,32,.06);
+    --shadow-lg:0 12px 28px rgba(15,19,32,.10),0 2px 6px rgba(15,19,32,.05);
+    --fs-2xs:9px;--fs-xs:10px;--fs-sm:11px;--fs-md:12px;--fs-lg:13px;--fs-xl:15px;--fs-2xl:18px;
+    --fw-semibold:600;--fw-bold:700;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --tracking-wide:.02em;--tracking-caps:.06em;
+  }
+  :root[data-theme="dark"] {
+    --surface-app:#070A14;--surface-sunken:#0F1320;--surface-base:#1C2231;--surface-raised:#232A3B;--surface-overlay:#2B3347;
+    --text-primary:#EEF1F6;--text-secondary:#A6B0C2;--text-muted:#6C788F;
+    --border-subtle:rgba(255,255,255,.04);--border-default:rgba(255,255,255,.08);
+    --accent-solid:#38BDF8;--accent-fg:#67E8F9;--accent-bg-subtle:rgba(56,189,248,.08);--accent-on-solid:#070A14;
+    --success-bg:rgba(34,197,94,.14);--success-fg:#4ADE80;--success-solid:#22C55E;--success-border:rgba(34,197,94,.35);
+    --warning-bg:rgba(245,158,11,.14);--warning-fg:#FCD34D;--warning-solid:#F59E0B;--warning-border:rgba(245,158,11,.35);
+    --danger-bg:rgba(239,68,68,.14);--danger-fg:#FCA5A5;--danger-solid:#EF4444;--danger-border:rgba(239,68,68,.35);
+    --info-bg:rgba(14,165,233,.12);--info-fg:#7DD3FC;--info-border:rgba(14,165,233,.35);
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;padding:0;font-family:var(--font-sans);color:var(--text-primary)}
+  body{min-height:100vh;display:grid;place-items:center;background:var(--surface-sunken);padding:40px 16px}
+
+  .window{width:520px;height:640px;background:var(--surface-base);border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-lg);overflow:hidden;display:grid;grid-template-rows:auto auto auto 1fr auto;
+    border:1px solid var(--border-default)}
+
+  .titlebar{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;
+    padding:8px 12px;background:var(--surface-raised);border-bottom:1px solid var(--border-subtle)}
+  .dots{display:flex;gap:6px}
+  .dots span{width:11px;height:11px;border-radius:50%}
+  .dots .r{background:#FF5F57}.dots .y{background:#FEBC2E}.dots .g{background:#28C840}
+  .titlebar .title{font-size:var(--fs-xs);color:var(--text-muted);text-align:center;letter-spacing:var(--tracking-wide)}
+
+  .header{padding:12px 14px;display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;
+    border-bottom:1px solid var(--border-subtle)}
+  .logo{width:44px;height:44px;border-radius:var(--radius-md);overflow:hidden;background:var(--accent-bg-subtle);display:grid;place-items:center}
+  .brand .name{font-size:var(--fs-xl);font-weight:var(--fw-bold);letter-spacing:-0.01em;color:var(--text-primary)}
+  .brand .sub{font-size:var(--fs-2xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:var(--tracking-caps);margin-top:1px;font-family:var(--font-mono)}
+  .brand-badges{display:flex;gap:4px;margin-top:5px}
+
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--radius-pill);
+    font-size:var(--fs-2xs);font-weight:var(--fw-semibold);line-height:1.5;letter-spacing:.04em}
+  .badge .d{width:5px;height:5px;border-radius:50%}
+  .badge-success{background:var(--success-bg);color:var(--success-fg)}
+  .badge-success .d{background:var(--success-solid)}
+  .badge-danger{background:var(--danger-bg);color:var(--danger-fg)}
+  .badge-danger .d{background:var(--danger-solid)}
+  .badge-warning{background:var(--warning-bg);color:var(--warning-fg)}
+  .badge-warning .d{background:var(--warning-solid)}
+  .badge-neutral{background:var(--surface-sunken);color:var(--text-secondary)}
+  .badge-neutral .d{background:var(--text-muted)}
+
+  .header-actions{display:flex;gap:2px}
+  .icon-btn{width:28px;height:28px;display:grid;place-items:center;border-radius:var(--radius-sm);
+    background:transparent;border:0;cursor:pointer;color:var(--text-secondary);font-size:13px}
+  .icon-btn:hover{background:var(--surface-sunken);color:var(--text-primary)}
+
+  .tabbar{padding:6px 10px;display:flex;gap:2px;border-bottom:1px solid var(--border-subtle);background:var(--surface-app)}
+  .tab{flex:1;padding:6px 8px;border-radius:var(--radius-sm);font-size:var(--fs-md);font-weight:var(--fw-semibold);
+    color:var(--text-secondary);cursor:pointer;text-align:center}
+  .tab.active{background:var(--surface-base);color:var(--accent-fg);box-shadow:var(--shadow-xs)}
+  .tab:hover:not(.active){color:var(--text-primary)}
+
+  .content{overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+  .phead{display:flex;align-items:center;justify-content:space-between;padding:0 2px}
+  .phead .h{font-size:var(--fs-lg);font-weight:var(--fw-semibold)}
+  .phead .c{font-size:var(--fs-2xs);color:var(--text-muted)}
+
+  .list{border:1px solid var(--border-subtle);border-radius:var(--radius-md);background:var(--surface-base);overflow:hidden}
+  .srv{display:grid;grid-template-columns:10px 1fr 60px 44px 22px;align-items:center;gap:8px;
+    padding:8px 10px;border-bottom:1px solid var(--border-subtle);font-size:var(--fs-sm);cursor:pointer}
+  .srv:last-child{border-bottom:0}
+  .srv:hover{background:var(--surface-sunken)}
+  .srv.active{background:var(--accent-bg-subtle)}
+  .srv .dot-on{width:8px;height:8px;border-radius:50%;background:var(--success-solid)}
+  .srv .name{font-weight:var(--fw-semibold)}
+  .srv .meta{color:var(--text-muted);font-family:var(--font-mono);font-size:var(--fs-2xs);margin-top:1px}
+  .ping{padding:3px 6px;border-radius:var(--radius-xs);color:#fff;font-size:var(--fs-2xs);font-weight:var(--fw-semibold);text-align:center}
+  .ping.g{background:var(--success-solid)}.ping.o{background:var(--warning-solid)}.ping.b{background:var(--danger-solid)}
+  .srv .port{color:var(--text-muted);font-family:var(--font-mono);font-size:var(--fs-2xs);text-align:center}
+  .srv .refresh{background:transparent;border:0;color:var(--text-muted);cursor:pointer;font-size:12px}
+
+  .btnrow{display:flex;gap:6px;font-size:var(--fs-xs)}
+  .btnrow button{flex:1;padding:7px 8px;border:1px solid var(--border-default);background:var(--surface-base);
+    color:var(--text-primary);border-radius:var(--radius-sm);font-weight:var(--fw-semibold);cursor:pointer}
+  .btnrow button.accent{border:0;background:var(--accent-bg-subtle);color:var(--accent-fg)}
+
+  .banner{background:var(--info-bg);color:var(--info-fg);border:1px solid var(--info-border);
+    border-radius:var(--radius-sm);padding:8px 10px;font-size:var(--fs-xs);display:flex;gap:8px;align-items:flex-start}
+  .banner .i{font-style:italic;font-weight:700}
+
+  .footer{padding:10px 14px 12px;border-top:1px solid var(--border-subtle);background:var(--surface-raised);
+    display:flex;flex-direction:column;gap:8px}
+  .cta{width:100%;padding:10px;border-radius:var(--radius-sm);border:0;cursor:pointer;
+    font-size:var(--fs-md);font-weight:var(--fw-bold);letter-spacing:.01em;
+    display:flex;align-items:center;justify-content:center;gap:8px}
+  .cta.connect{background:var(--accent-solid);color:var(--accent-on-solid)}
+  .cta.connect:hover{background:var(--accent-solid-hover)}
+  .cta.disconnect{background:var(--danger-solid);color:#fff}
+  .cta svg{width:14px;height:14px}
+
+  .status{display:flex;align-items:center;gap:8px;font-size:var(--fs-xs);color:var(--text-secondary)}
+  .status .sdot{width:7px;height:7px;border-radius:50%;background:var(--success-solid);box-shadow:0 0 0 3px rgba(34,197,94,.18)}
+  .status.off .sdot{background:var(--text-muted);box-shadow:none}
+
+  .variant-friendly .srv{padding:10px 12px}
+  .variant-friendly .srv .meta{font-family:var(--font-sans)}
+  .variant-friendly .tab.active{background:var(--accent-bg-subtle);color:var(--accent-fg);box-shadow:none}
+  .variant-friendly .logo{transform:rotate(-4deg);box-shadow:var(--shadow-sm)}
+  .variant-friendly .cta.connect{box-shadow:0 6px 16px rgba(14,165,233,.35)}
+
+  .tweaks{position:fixed;right:20px;bottom:20px;width:260px;background:var(--surface-overlay);
+    border:1px solid var(--border-default);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);
+    padding:12px;font-size:var(--fs-sm);z-index:10;display:none}
+  .tweaks.open{display:block}
+  .tweaks h4{margin:0 0 8px;font-size:var(--fs-md);font-weight:var(--fw-semibold);display:flex;justify-content:space-between;align-items:center}
+  .tweaks .close{background:transparent;border:0;color:var(--text-muted);cursor:pointer;font-size:14px}
+  .tweaks .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;padding:5px 0}
+  .tweaks label{font-size:var(--fs-xs);color:var(--text-secondary)}
+  .tweaks select{padding:4px 6px;font-size:var(--fs-xs);border-radius:var(--radius-xs);border:1px solid var(--border-default);background:var(--surface-base);color:var(--text-primary)}
+  .tweaks .swatches{display:flex;gap:5px}
+  .tweaks .sw{width:20px;height:20px;border-radius:50%;border:2px solid transparent;cursor:pointer}
+  .tweaks .sw.active{border-color:var(--text-primary)}
+
+  /* clickable nav badges */
+  .brand-badges{display:flex;gap:4px;margin-top:5px}
+  .brand-badges .badge{cursor:pointer;border:1px solid transparent;font-family:inherit;
+    transition:background var(--dur-base,220ms) ease,border-color var(--dur-base,220ms) ease}
+  .brand-badges .badge:hover{border-color:var(--accent-border);filter:brightness(1.02)}
+</style>
+</head>
+<body data-screen-label="VPNRouter · Main Window">
+
+<div class="window variant-technical" id="win">
+
+  <div class="titlebar">
+    <div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+    <div class="title">VPNRouter — Virtual Penguin Network</div>
+    <div></div>
+  </div>
+
+  <div class="header">
+    <div class="logo"><img src="assets/penguin.svg" width="36" height="36" alt=""/></div>
+    <div class="brand">
+      <div class="name">VPNRouter</div>
+      <div class="sub">v2.15.8 · split-tunnel · sing-box</div>
+      <div class="brand-badges" role="tablist">
+        <button class="badge badge-success" id="b-vpn" data-route="servers" title="Servers"><span class="d"></span>VPN</button>
+        <button class="badge badge-warning" data-route="zapret" title="Zapret bypass"><span class="d"></span>ZAPRET</button>
+        <button class="badge badge-neutral" data-route="tgproxy" title="Telegram proxy"><span class="d"></span>TG PROXY</button>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" title="Theme" id="themeBtn">◐</button>
+      <button class="icon-btn" title="Language">EN</button>
+      <button class="icon-btn" title="Tweaks" onclick="document.getElementById('tweaks').classList.toggle('open')">⚙</button>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab active">Manual</div>
+    <div class="tab">Subscribe</div>
+    <div class="tab">Network</div>
+    <div class="tab">Apps</div>
+    <div class="tab">Tools</div>
+    <div class="tab">Free</div>
+  </div>
+
+  <div class="content">
+    <div class="phead"><div class="h">VLESS servers</div><div class="c">4 configured · 1 active</div></div>
+
+    <div class="list" id="srvList">
+      <div class="srv active">
+        <div class="dot-on"></div>
+        <div><div class="name">Asia-Tokyo-01</div><div class="meta">198.51.100.42 · tcp+reality</div></div>
+        <div class="ping g">48ms</div><div class="port">:443</div>
+        <button class="refresh">⟳</button>
+      </div>
+      <div class="srv">
+        <div></div>
+        <div><div class="name">EU-Amsterdam-03</div><div class="meta">203.0.113.17 · tcp+reality</div></div>
+        <div class="ping o">128ms</div><div class="port">:443</div>
+        <button class="refresh">⟳</button>
+      </div>
+      <div class="srv">
+        <div></div>
+        <div><div class="name">US-LosAngeles-02</div><div class="meta">192.0.2.88 · tcp+ws</div></div>
+        <div class="ping b">312ms</div><div class="port">:8443</div>
+        <button class="refresh">⟳</button>
+      </div>
+      <div class="srv">
+        <div></div>
+        <div><div class="name">EU-Frankfurt-07</div><div class="meta">198.51.100.201 · tcp+reality</div></div>
+        <div class="ping g">62ms</div><div class="port">:443</div>
+        <button class="refresh">⟳</button>
+      </div>
+    </div>
+
+    <div class="btnrow">
+      <button>⚡ Test all (TCP+TLS)</button>
+      <button class="accent">🔍 Deep verify</button>
+    </div>
+
+    <div class="banner">
+      <span class="i">i</span>
+      <div><b>Reality transport</b> — matches a real TLS server's fingerprint; harder to fingerprint than vanilla VLESS.</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="status" id="status"><div class="sdot"></div><span>Connected · Asia-Tokyo-01 · 48 ms · 12m 04s</span></div>
+    <button class="cta connect" id="connectBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>
+      <span id="ctaLabel">Disconnect</span>
+    </button>
+  </div>
+
+</div>
+
+<div class="tweaks" id="tweaks">
+  <h4>Tweaks <button class="close" onclick="document.getElementById('tweaks').classList.remove('open')">✕</button></h4>
+  <div class="row"><label>Theme</label>
+    <select id="tTheme"><option value="light">Light</option><option value="dark">Dark</option></select>
+  </div>
+  <div class="row"><label>Variant</label>
+    <select id="tVariant"><option value="technical">Technical</option><option value="friendly">Friendly</option></select>
+  </div>
+  <div class="row"><label>Connection</label>
+    <select id="tConn"><option value="on">Connected</option><option value="off">Disconnected</option></select>
+  </div>
+  <div class="row"><label>Accent</label>
+    <div class="swatches" id="tAccent">
+      <div class="sw active" data-c="#0EA5E9" style="background:#0EA5E9"></div>
+      <div class="sw" data-c="#38BDF8" style="background:#38BDF8"></div>
+      <div class="sw" data-c="#A78BFA" style="background:#A78BFA"></div>
+      <div class="sw" data-c="#22D3EE" style="background:#22D3EE"></div>
+      <div class="sw" data-c="#4ADE80" style="background:#4ADE80"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "variant": "technical",
+  "connection": "on",
+  "accent": "#A78BFA"
+}/*EDITMODE-END*/;
+
+const state = {...TWEAK_DEFAULTS};
+
+function applyState() {
+  document.documentElement.setAttribute('data-theme', state.theme);
+  const win = document.getElementById('win');
+  win.classList.toggle('variant-friendly', state.variant === 'friendly');
+  win.classList.toggle('variant-technical', state.variant === 'technical');
+
+  document.documentElement.style.setProperty('--accent-solid', state.accent);
+
+  const on = state.connection === 'on';
+  document.getElementById('ctaLabel').textContent = on ? 'Disconnect' : 'Connect';
+  const btn = document.getElementById('connectBtn');
+  btn.classList.toggle('connect', !on);
+  btn.classList.toggle('disconnect', on);
+  document.getElementById('status').classList.toggle('off', !on);
+  document.getElementById('status').querySelector('span').textContent =
+    on ? 'Connected · Asia-Tokyo-01 · 48 ms · 12m 04s' : 'Not connected — pick a server and hit Connect';
+  const bvpn = document.getElementById('b-vpn');
+  bvpn.className = 'badge ' + (on ? 'badge-success' : 'badge-danger');
+  bvpn.innerHTML = '<span class="d"></span>VPN';
+  document.querySelectorAll('#srvList .srv').forEach(s => s.classList.toggle('active', on && !!s.querySelector('.dot-on')));
+  document.querySelectorAll('#srvList .srv .dot-on').forEach(d => d.style.display = on ? 'block' : 'none');
+
+  document.getElementById('tTheme').value = state.theme;
+  document.getElementById('tVariant').value = state.variant;
+  document.getElementById('tConn').value = state.connection;
+  document.querySelectorAll('#tAccent .sw').forEach(sw => sw.classList.toggle('active', sw.dataset.c === state.accent));
+}
+
+document.getElementById('tTheme').onchange = e => { state.theme = e.target.value; applyState(); persist({theme: state.theme}); };
+document.getElementById('tVariant').onchange = e => { state.variant = e.target.value; applyState(); persist({variant: state.variant}); };
+document.getElementById('tConn').onchange = e => { state.connection = e.target.value; applyState(); persist({connection: state.connection}); };
+document.querySelectorAll('#tAccent .sw').forEach(sw => sw.onclick = () => { state.accent = sw.dataset.c; applyState(); persist({accent: state.accent}); });
+document.getElementById('themeBtn').onclick = () => { state.theme = state.theme === 'dark' ? 'light' : 'dark'; applyState(); persist({theme: state.theme}); };
+document.getElementById('connectBtn').onclick = () => { state.connection = state.connection === 'on' ? 'off' : 'on'; applyState(); persist({connection: state.connection}); };
+
+function persist(edits) { try { window.parent.postMessage({type: '__edit_mode_set_keys', edits}, '*'); } catch (_) {} }
+
+window.addEventListener('message', (e) => {
+  if (!e.data) return;
+  if (e.data.type === '__activate_edit_mode') document.getElementById('tweaks').classList.add('open');
+  if (e.data.type === '__deactivate_edit_mode') document.getElementById('tweaks').classList.remove('open');
+});
+try { window.parent.postMessage({type: '__edit_mode_available'}, '*'); } catch (_) {}
+
+
+// badge nav — same hook as the real app will use
+document.querySelectorAll('.brand-badges .badge[data-route]').forEach(b => {
+  b.addEventListener('click', e => { e.stopPropagation(); console.log('nav →', b.dataset.route); });
+});
+applyState();
+</script>
+
+</body>
+</html>

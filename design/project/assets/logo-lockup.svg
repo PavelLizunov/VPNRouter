@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 56" role="img" aria-label="VPNRouter logo lockup">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#67E8F9"></stop>
+      <stop offset="100%" stop-color="#0284C7"></stop>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="52" height="52" rx="12" fill="url(#g)"></rect>
+  <ellipse cx="28" cy="36" rx="13" ry="15" fill="#0F1320"></ellipse>
+  <ellipse cx="28" cy="38" rx="8" ry="11" fill="#F5F7FA"></ellipse>
+  <circle cx="24" cy="28" r="2.2" fill="#F5F7FA"></circle>
+  <circle cx="32" cy="28" r="2.2" fill="#F5F7FA"></circle>
+  <circle cx="24.5" cy="28.3" r="1" fill="#0F1320"></circle>
+  <circle cx="32.5" cy="28.3" r="1" fill="#0F1320"></circle>
+  <path d="M26 31 L30 31 L28 34 Z" fill="#F59E0B"></path>
+  <text x="68" y="28" font-family="-apple-system,system-ui,Segoe UI,sans-serif" font-size="18" font-weight="700" fill="#0F1320" letter-spacing="-0.2">VPNRouter</text>
+  <text x="68" y="44" font-family="-apple-system,system-ui,Segoe UI,sans-serif" font-size="10" font-weight="500" fill="#475067" letter-spacing="0.08em">VIRTUAL · PENGUIN · NETWORK</text>
+</svg>

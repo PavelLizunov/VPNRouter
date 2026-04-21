@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>VPNRouter · Simple mode</title>
+<style>
+  /* ═══ Design tokens (inlined — no external deps) ═══ */
+  :root{
+    --ref-arctic-50:#ECFEFF;--ref-arctic-100:#CFFAFE;--ref-arctic-200:#A5F3FC;--ref-arctic-300:#67E8F9;
+    --ref-arctic-400:#38BDF8;--ref-arctic-500:#0EA5E9;--ref-arctic-600:#0284C7;--ref-arctic-700:#0369A1;
+    --surface-app:#F5F7FA;--surface-sunken:#EBEEF3;--surface-base:#FFFFFF;--surface-raised:#FBFCFD;
+    --text-primary:#0F1320;--text-secondary:#475067;--text-muted:#94A0B2;
+    --border-subtle:#EBEEF3;--border-default:#DCE1E9;--border-strong:#C2C9D5;
+    --accent-solid:#0EA5E9;--accent-solid-hover:#0284C7;--accent-on-solid:#FFFFFF;
+    --accent-fg:#0369A1;--accent-bg-subtle:#ECFEFF;--accent-border:#67E8F9;
+    --success-bg:#DCFCE7;--success-border:#86EFAC;--success-fg:#15803D;--success-solid:#16A34A;
+    --warning-bg:#FEF3C7;--warning-border:#FCD34D;--warning-fg:#92400E;--warning-solid:#D97706;
+    --danger-bg:#FEE2E2;--danger-border:#FCA5A5;--danger-fg:#B91C1C;--danger-solid:#DC2626;
+    --info-bg:#E0F2FE;--info-border:#7DD3FC;--info-fg:#075985;
+    --radius-xs:3px;--radius-sm:6px;--radius-md:8px;--radius-lg:10px;--radius-xl:14px;--radius-pill:999px;
+    --shadow-xs:0 1px 1px rgba(15,19,32,.04);
+    --shadow-sm:0 1px 2px rgba(15,19,32,.06),0 1px 1px rgba(15,19,32,.04);
+    --shadow-md:0 4px 12px rgba(15,19,32,.07),0 1px 2px rgba(15,19,32,.04);
+    --shadow-lg:0 12px 28px rgba(15,19,32,.10),0 2px 6px rgba(15,19,32,.05);
+    --fs-2xs:9px;--fs-xs:10px;--fs-sm:11px;--fs-md:12px;--fs-lg:13px;--fs-xl:15px;--fs-2xl:18px;--fs-3xl:22px;--fs-4xl:28px;--fs-hero:40px;
+    --fw-regular:400;--fw-medium:500;--fw-semibold:600;--fw-bold:700;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --tracking-wide:.02em;--tracking-caps:.08em;
+    --dur-base:220ms;--ease-out:cubic-bezier(.2,.8,.2,1);
+  }
+  :root[data-theme="dark"]{
+    --surface-app:#070A14;--surface-sunken:#0F1320;--surface-base:#1C2231;--surface-raised:#232A3B;
+    --text-primary:#EEF1F6;--text-secondary:#A6B0C2;--text-muted:#6C788F;
+    --border-subtle:rgba(255,255,255,.04);--border-default:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.16);
+    --accent-solid:#38BDF8;--accent-fg:#67E8F9;--accent-bg-subtle:rgba(56,189,248,.10);--accent-on-solid:#070A14;--accent-border:rgba(56,189,248,.40);
+    --success-bg:rgba(34,197,94,.14);--success-fg:#4ADE80;--success-solid:#22C55E;--success-border:rgba(34,197,94,.35);
+    --warning-bg:rgba(245,158,11,.14);--warning-fg:#FCD34D;--warning-solid:#F59E0B;--warning-border:rgba(245,158,11,.35);
+    --danger-bg:rgba(239,68,68,.14);--danger-fg:#FCA5A5;--danger-solid:#EF4444;--danger-border:rgba(239,68,68,.35);
+    --info-bg:rgba(14,165,233,.12);--info-fg:#7DD3FC;--info-border:rgba(14,165,233,.35);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+    --shadow-md:0 4px 14px rgba(0,0,0,.55);
+    --shadow-lg:0 16px 32px rgba(0,0,0,.65);
+  }
+
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;padding:0;font-family:var(--font-sans);color:var(--text-primary)}
+  body{min-height:100vh;background:var(--surface-sunken);padding:32px 16px 80px;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+
+  /* ─── Page header ─── */
+  .page-head{max-width:1320px;margin:0 auto 24px;display:flex;justify-content:space-between;align-items:baseline;padding:0 8px}
+  .page-head h1{margin:0;font-size:var(--fs-2xl);font-weight:var(--fw-bold);letter-spacing:-.01em}
+  .page-head .lede{color:var(--text-secondary);font-size:var(--fs-md);margin-top:3px}
+  .page-head .right{display:flex;gap:10px;align-items:center;font-size:var(--fs-xs);color:var(--text-muted)}
+  .page-head .theme-btn{background:var(--surface-base);border:1px solid var(--border-default);color:var(--text-secondary);
+    padding:5px 10px;border-radius:var(--radius-sm);font-size:var(--fs-xs);cursor:pointer;font-weight:var(--fw-semibold)}
+
+  /* ─── Column grid ─── */
+  .grid{max-width:1320px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media (max-width:1100px){ .grid{grid-template-columns:1fr} }
+
+  .col{display:flex;flex-direction:column;gap:10px}
+  .col-head{display:flex;align-items:baseline;justify-content:space-between;padding:0 4px}
+  .col-head .name{font-size:var(--fs-md);font-weight:var(--fw-bold);letter-spacing:.01em}
+  .col-head .badge{font-size:var(--fs-2xs);font-weight:var(--fw-semibold);color:var(--accent-fg);background:var(--accent-bg-subtle);
+    padding:2px 7px;border-radius:var(--radius-pill);letter-spacing:var(--tracking-caps);text-transform:uppercase}
+  .col-sub{font-size:var(--fs-xs);color:var(--text-muted);padding:0 4px;line-height:1.4}
+
+  /* ─── State row (the 3 rendered states for each variant) ─── */
+  .states{display:flex;flex-direction:column;gap:16px;margin-top:4px}
+  .state-label{font-size:var(--fs-2xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:var(--tracking-caps);
+    font-weight:var(--fw-semibold);padding:0 4px 4px}
+
+  /* ─── The window frame (all variants share this) ─── */
+  .win{width:100%;max-width:420px;margin:0 auto;background:var(--surface-base);border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-md);border:1px solid var(--border-default);overflow:hidden;
+    display:grid;grid-template-rows:auto 1fr auto}
+  .win .titlebar{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
+    padding:7px 12px;background:var(--surface-raised);border-bottom:1px solid var(--border-subtle)}
+  .win .dots{display:flex;gap:5px}
+  .win .dots span{width:10px;height:10px;border-radius:50%}
+  .win .dots .r{background:#FF5F57}.win .dots .y{background:#FEBC2E}.win .dots .g{background:#28C840}
+  .win .titlebar .t{font-size:9px;color:var(--text-muted);text-align:center;letter-spacing:.03em}
+
+  /* ─── Shared: tiny minimal header ─── */
+  .mini-head{padding:14px 16px 10px;display:grid;grid-template-columns:32px 1fr auto;gap:10px;align-items:center}
+  .mini-head .logo{width:32px;height:32px;border-radius:var(--radius-sm);background:var(--accent-bg-subtle);
+    display:grid;place-items:center;overflow:hidden}
+  .mini-head .brand .n{font-size:var(--fs-md);font-weight:var(--fw-bold);line-height:1.2;letter-spacing:-.005em}
+  .mini-head .brand .mini-badges{display:flex;gap:4px;margin-top:4px}
+  .mini-head .brand .mb{font-size:9px;font-weight:var(--fw-semibold);padding:2px 7px;border-radius:var(--radius-pill);
+    letter-spacing:.06em;text-transform:uppercase;line-height:1.5;display:inline-flex;align-items:center;gap:4px;
+    cursor:pointer;border:1px solid transparent;background:var(--surface-sunken);color:var(--text-secondary);
+    transition:background var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out);
+    font-family:inherit}
+  .mini-head .brand .mb:hover{background:var(--accent-bg-subtle);color:var(--accent-fg);border-color:var(--accent-border)}
+  .mini-head .brand .mb .md{width:5px;height:5px;border-radius:50%;display:inline-block;background:var(--text-muted)}
+  .mini-head .brand .mb.on .md{background:var(--success-solid)}
+  .mini-head .brand .mb.warn .md{background:var(--warning-solid);animation:pulse 1.2s ease-out infinite}
+  .mini-head .brand .mb.off .md{background:var(--text-muted)}
+  .mini-head .menu{width:28px;height:28px;display:grid;place-items:center;border:0;background:transparent;
+    border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer;font-size:14px}
+  .mini-head .menu:hover{background:var(--surface-sunken);color:var(--text-primary)}
+
+  /* ─── Shared body block ─── */
+  .body{padding:4px 16px 16px;display:flex;flex-direction:column;gap:14px;min-height:320px}
+
+  /* ─── CTA button (shared base) ─── */
+  .cta{width:100%;padding:12px 16px;border:0;border-radius:var(--radius-sm);cursor:pointer;
+    font-size:var(--fs-md);font-weight:var(--fw-bold);letter-spacing:.01em;display:flex;align-items:center;justify-content:center;gap:8px;
+    transition:background var(--dur-base) var(--ease-out),box-shadow var(--dur-base) var(--ease-out)}
+  .cta svg{width:14px;height:14px}
+  .cta.on-state{background:var(--accent-solid);color:var(--accent-on-solid)}
+  .cta.on-state:hover{background:var(--accent-solid-hover)}
+  .cta.off-state{background:var(--surface-base);color:var(--accent-fg);border:1px solid var(--accent-border);box-shadow:0 0 0 3px rgba(14,165,233,.10)}
+  .cta.off-state:hover{background:var(--accent-bg-subtle)}
+  .cta.connecting-state{background:var(--surface-sunken);color:var(--text-secondary);cursor:progress}
+  .cta.connecting-state .spinner{width:12px;height:12px;border:2px solid var(--border-strong);border-top-color:var(--accent-solid);
+    border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ─── Shared Advanced card ─── */
+  .adv-card{padding:12px 14px;border:1px solid var(--border-default);border-radius:var(--radius-md);
+    background:var(--surface-base);display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;cursor:pointer;
+    transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out)}
+  .adv-card:hover{background:var(--surface-raised);border-color:var(--accent-border)}
+  .adv-card .h{font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--text-primary)}
+  .adv-card .s{font-size:var(--fs-2xs);color:var(--text-muted);margin-top:2px;line-height:1.4}
+  .adv-card .chev{width:28px;height:28px;border-radius:var(--radius-sm);display:grid;place-items:center;
+    background:var(--accent-bg-subtle);color:var(--accent-fg);font-size:14px}
+
+  /* ─── Config row (shared) ─── */
+  .cfg{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 12px;
+    border:1px solid var(--border-subtle);border-radius:var(--radius-sm);background:var(--surface-raised);cursor:pointer;
+    transition:border-color var(--dur-base) var(--ease-out)}
+  .cfg:hover{border-color:var(--border-default)}
+  .cfg .k{font-size:9px;font-weight:var(--fw-semibold);color:var(--text-muted);text-transform:uppercase;letter-spacing:var(--tracking-caps)}
+  .cfg .v{font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--text-primary);font-family:var(--font-mono);margin-top:1px}
+  .cfg .chev{color:var(--text-muted);font-size:12px}
+  .cfg .k-ico{width:24px;height:24px;border-radius:var(--radius-xs);background:var(--accent-bg-subtle);color:var(--accent-fg);
+    display:grid;place-items:center;font-size:12px}
+
+  /* ═══════════════════════════════════════════════════
+     VARIANT A · CALM DASHBOARD
+     ═══════════════════════════════════════════════════ */
+  .va .status-card{border:1px solid var(--border-default);border-radius:var(--radius-md);background:var(--surface-base);
+    padding:14px;display:flex;flex-direction:column;gap:12px}
+  .va .sline{display:flex;align-items:center;gap:10px}
+  .va .sdot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .va .sdot.on{background:var(--success-solid);box-shadow:0 0 0 4px rgba(34,197,94,.18)}
+  .va .sdot.warn{background:var(--warning-solid);box-shadow:0 0 0 4px rgba(245,158,11,.22);animation:pulse 1.2s ease-out infinite}
+  .va .sdot.off{background:var(--text-muted)}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.45)}50%{box-shadow:0 0 0 6px rgba(245,158,11,.0)}}
+  .va .stitle{font-size:var(--fs-xl);font-weight:var(--fw-bold);letter-spacing:-.01em}
+  .va .sdesc{font-size:var(--fs-xs);color:var(--text-secondary);line-height:1.5;padding-left:20px}
+  .va .sdesc b{color:var(--text-primary);font-weight:var(--fw-semibold)}
+  .va .sdesc code{font-family:var(--font-mono);color:var(--accent-fg);font-size:10px}
+
+  /* ═══════════════════════════════════════════════════
+     VARIANT B · ORB (penguin-inside-glacier metaphor)
+     ═══════════════════════════════════════════════════ */
+  .vb .orb-wrap{display:flex;flex-direction:column;align-items:center;padding:8px 0 4px;gap:10px}
+  .vb .orb{width:136px;height:136px;border-radius:50%;position:relative;display:grid;place-items:center;
+    transition:all var(--dur-base) var(--ease-out)}
+  .vb .orb.on{background:radial-gradient(circle at 30% 25%, #BAE6FD 0%, #38BDF8 55%, #0369A1 100%);
+    box-shadow:0 16px 40px rgba(14,165,233,.35),inset 0 -18px 36px rgba(3,105,161,.45),inset 0 12px 20px rgba(255,255,255,.35)}
+  .vb .orb.warn{background:radial-gradient(circle at 30% 25%, #FDE68A 0%, #F59E0B 55%, #92400E 100%);
+    box-shadow:0 14px 32px rgba(245,158,11,.35),inset 0 -14px 28px rgba(146,64,14,.45),inset 0 10px 16px rgba(255,255,255,.35);
+    animation:orbpulse 2.6s ease-in-out infinite}
+  @keyframes orbpulse{0%,100%{transform:scale(1)}50%{transform:scale(0.96)}}
+  .vb .orb.off{background:radial-gradient(circle at 30% 25%, #E5E7EB 0%, #94A0B2 55%, #475067 100%);
+    box-shadow:0 10px 26px rgba(71,80,103,.28),inset 0 -14px 24px rgba(47,55,73,.42),inset 0 10px 16px rgba(255,255,255,.20)}
+  .vb .orb .peng{width:64px;height:64px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.18));z-index:2}
+  .vb .orb::after{content:"";position:absolute;inset:4px;border-radius:50%;pointer-events:none;
+    background:radial-gradient(ellipse at 30% 18%, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 40%)}
+
+  .vb .status-title{font-size:var(--fs-xl);font-weight:var(--fw-bold);letter-spacing:-.01em;text-align:center;margin-top:4px}
+  .vb .status-sub{font-size:var(--fs-xs);color:var(--text-secondary);text-align:center;line-height:1.5;padding:0 8px}
+  .vb .status-sub code{font-family:var(--font-mono);color:var(--accent-fg);font-size:10px}
+
+  /* ═══════════════════════════════════════════════════
+     VARIANT C · HERO TYPE
+     ═══════════════════════════════════════════════════ */
+  .vc .hero{padding:12px 4px 4px;display:flex;flex-direction:column;gap:6px}
+  .vc .eyebrow{font-size:var(--fs-2xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:var(--tracking-caps);font-weight:var(--fw-semibold)}
+  .vc .hero-word{font-size:44px;font-weight:var(--fw-bold);letter-spacing:-.02em;line-height:.95;
+    background:linear-gradient(180deg,var(--text-primary) 0%,var(--text-primary) 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;display:inline-block}
+  .vc .hero-word.accent{background:linear-gradient(135deg,#0EA5E9 0%,#0369A1 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .vc .hero-word.warn{background:linear-gradient(135deg,#F59E0B 0%,#B45309 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .vc .hero-word.muted{color:var(--text-muted);-webkit-text-fill-color:currentColor;background:none}
+  .vc .hero-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-left:6px;vertical-align:middle;transform:translateY(-10px)}
+  .vc .hero-dot.on{background:var(--success-solid);box-shadow:0 0 0 4px rgba(34,197,94,.18)}
+  .vc .hero-dot.warn{background:var(--warning-solid);animation:pulse 1.2s ease-out infinite}
+  .vc .hero-dot.off{background:var(--text-muted)}
+
+  .vc .meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 0;border-top:1px solid var(--border-subtle);border-bottom:1px solid var(--border-subtle)}
+  .vc .meta-cell .k{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:var(--tracking-caps);font-weight:var(--fw-semibold)}
+  .vc .meta-cell .v{font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--text-primary);font-family:var(--font-mono);margin-top:2px}
+  .vc .meta-cell .v.muted{color:var(--text-muted)}
+
+  /* ─── Notes footer ─── */
+  .notes{max-width:1320px;margin:40px auto 0;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:0 4px}
+  @media (max-width:1100px){ .notes{grid-template-columns:1fr} }
+  .note{background:var(--surface-base);border:1px solid var(--border-default);border-radius:var(--radius-md);padding:12px 14px}
+  .note h4{margin:0 0 6px;font-size:var(--fs-md);font-weight:var(--fw-semibold)}
+  .note p{margin:0;font-size:var(--fs-xs);color:var(--text-secondary);line-height:1.55}
+  .note p + p{margin-top:5px}
+  .note code{font-family:var(--font-mono);color:var(--accent-fg);font-size:10px}
+
+  /* ─── Tweaks panel ─── */
+  .tweaks{position:fixed;right:16px;bottom:16px;width:240px;background:var(--surface-base);
+    border:1px solid var(--border-default);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);
+    padding:12px;font-size:var(--fs-sm);z-index:10;display:none}
+  .tweaks.open{display:block}
+  .tweaks h4{margin:0 0 8px;font-size:var(--fs-md);display:flex;justify-content:space-between;align-items:center;font-weight:var(--fw-semibold)}
+  .tweaks .close{background:transparent;border:0;color:var(--text-muted);cursor:pointer;font-size:14px}
+  .tweaks .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;padding:4px 0}
+  .tweaks label{font-size:var(--fs-xs);color:var(--text-secondary)}
+  .tweaks select{padding:4px 6px;font-size:var(--fs-xs);border-radius:var(--radius-xs);
+    border:1px solid var(--border-default);background:var(--surface-base);color:var(--text-primary)}
+</style>
+</head>
+<body data-screen-label="Simple Mode · 3 variants × 3 states">
+
+<div class="page-head">
+  <div>
+    <h1>Simple mode · 3 variants</h1>
+    <div class="lede">Three takes on the one-click dashboard — each shown in all three states (ON · Connecting · OFF).</div>
+  </div>
+  <div class="right">
+    <button class="theme-btn" id="themeBtn">◐  Toggle theme</button>
+  </div>
+</div>
+
+<div class="grid" id="grid">
+
+  <!-- ═════════ VARIANT A · CALM ═════════ -->
+  <div class="col">
+    <div class="col-head"><div class="name">A · Calm</div><div class="badge">Dashboard</div></div>
+    <div class="col-sub">Quiet status row with indicator dot, config below, CTA at the bottom. Zero noise, dense facts.</div>
+
+    <div class="states">
+      <!-- A · ON -->
+      <div>
+        <div class="state-label">Connected</div>
+        <div class="win va">
+          <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Simple</div><div></div></div>
+          <div>
+            <div class="mini-head">
+              <div class="logo"><img src="assets/penguin.svg" width="26" height="26" alt=""/></div>
+              <div class="brand">
+                <div class="n">Virtual Penguin Network</div>
+                <div class="mini-badges">
+                  <button class="mb on" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+                  <button class="mb on" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+                  <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+                </div>
+              </div>
+              <button class="menu" title="Menu">⋯</button>
+            </div>
+            <div class="body">
+              <div class="status-card">
+                <div class="sline"><div class="sdot on"></div><div class="stitle">Protected</div></div>
+                <div class="sdesc">Connected via <b>de-01</b> · <code>104.194.156.93</code> · <b>12m 04s</b></div>
+              </div>
+              <div class="cfg">
+                <div class="k-ico">⚑</div>
+                <div><div class="k">Config · Mode</div><div class="v">subscribe · split</div></div>
+                <div class="chev">›</div>
+              </div>
+              <button class="cta on-state"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>Disconnect</button>
+              <div class="adv-card">
+                <div><div class="h">Advanced settings</div><div class="s">Servers · Subscriptions · Zapret · Telegram proxy · Free configs</div></div>
+                <div class="chev">›</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- A · CONNECTING -->
+      <div>
+        <div class="state-label">Connecting</div>
+        <div class="win va">
+          <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Simple</div><div></div></div>
+          <div>
+            <div class="mini-head">
+              <div class="logo"><img src="assets/penguin.svg" width="26" height="26" alt=""/></div>
+              <div class="brand">
+                <div class="n">Virtual Penguin Network</div>
+                <div class="mini-badges">
+                  <button class="mb warn" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+                  <button class="mb off" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+                  <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+                </div>
+              </div>
+              <button class="menu" title="Menu">⋯</button>
+            </div>
+            <div class="body">
+              <div class="status-card">
+                <div class="sline"><div class="sdot warn"></div><div class="stitle">Connecting…</div></div>
+                <div class="sdesc">Handshaking with <b>de-01</b> · <code>:443</code> · <b>TLS reality</b></div>
+              </div>
+              <div class="cfg">
+                <div class="k-ico">⚑</div>
+                <div><div class="k">Config · Mode</div><div class="v">subscribe · split</div></div>
+                <div class="chev">›</div>
+              </div>
+              <button class="cta connecting-state"><div class="spinner"></div>Cancel</button>
+              <div class="adv-card">
+                <div><div class="h">Advanced settings</div><div class="s">Servers · Subscriptions · Zapret · Telegram proxy · Free configs</div></div>
+                <div class="chev">›</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- A · OFF -->
+      <div>
+        <div class="state-label">Disconnected</div>
+        <div class="win va">
+          <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Simple</div><div></div></div>
+          <div>
+            <div class="mini-head">
+              <div class="logo"><img src="assets/penguin.svg" width="26" height="26" alt=""/></div>
+              <div class="brand">
+                <div class="n">Virtual Penguin Network</div>
+                <div class="mini-badges">
+                  <button class="mb off" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+                  <button class="mb off" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+                  <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+                </div>
+              </div>
+              <button class="menu" title="Menu">⋯</button>
+            </div>
+            <div class="body">
+              <div class="status-card">
+                <div class="sline"><div class="sdot off"></div><div class="stitle" style="color:var(--text-secondary)">Not connected</div></div>
+                <div class="sdesc">Traffic goes straight — pick a config and start the tunnel.</div>
+              </div>
+              <div class="cfg">
+                <div class="k-ico">⚑</div>
+                <div><div class="k">Config · Mode</div><div class="v">subscribe · split</div></div>
+                <div class="chev">›</div>
+              </div>
+              <button class="cta off-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>Connect</button>
+              <div class="adv-card">
+                <div><div class="h">Advanced settings</div><div class="s">Servers · Subscriptions · Zapret · Telegram proxy · Free configs</div></div>
+                <div class="chev">›</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════ VARIANT B · ORB ═════════ -->
+  <div class="col">
+    <div class="col-head"><div class="name">B · Orb</div><div class="badge">Glacier</div></div>
+    <div class="col-sub">Status as a glowing orb — penguin inside a glacier. Emotional, but quiet. Color + glow carry the state.</div>
+
+    <div class="states">
+      <!-- B · ON -->
+      <div>
+        <div class="state-label">Connected</div>
+        <div class="win vb">
+          <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Simple</div><div></div></div>
+          <div>
+            <div class="mini-head">
+              <div class="logo"><img src="assets/penguin.svg" width="26" height="26" alt=""/></div>
+              <div class="brand">
+                <div class="n">Virtual Penguin Network</div>
+                <div class="mini-badges">
+                  <button class="mb on" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+                  <button class="mb on" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+                  <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+                </div>
+              </div>
+              <button class="menu" title="Menu">⋯</button>
+            </div>
+            <div class="body">
+              <div class="orb-wrap">
+                <div class="orb on"><img class="peng" src="assets/penguin.svg" alt=""/></div>
+                <div class="status-title">Protected</div>
+                <div class="status-sub">de-01 · <code>104.194.156.93</code> · 12m 04s</div>
+              </div>
+              <div class="cfg">
+                <div class="k-ico">⚑</div>
+                <div><div class="k">Config · Mode</div><div class="v">subscribe · split</div></div>
+                <div class="chev">›</div>
+              </div>
+              <button class="cta on-state"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>Disconnect</button>
+              <div class="adv-card">
+                <div><div class="h">Advanced settings</div><div class="s">Servers · Subscriptions · Zapret · Telegram proxy · Free configs</div></div>
+                <div class="chev">›</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- B · CONNECTING -->
+      <div>
+        <div class="state-label">Connecting</div>
+        <div class="win vb">
+          <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Simple</div><div></div></div>
+          <div>
+            <div class="mini-head">
+              <div class="logo"><img src="assets/penguin.svg" width="26" height="26" alt=""/></div>
+              <div class="brand">
+                <div class="n">Virtual Penguin Network</div>
+                <div class="mini-badges">
+                  <button class="mb warn" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+                  <button class="mb off" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+                  <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+                </div>
+              </div>
+              <button class="menu" title="Menu">⋯</button>
+            </div>
+            <div class="body">
+              <div class="orb-wrap">
+                <div class="orb warn"><img class="peng" src="assets/penguin.svg" alt=""/></div>
+                <div class="status-title">Connecting…</div>
+                <div class="status-sub">Handshaking with de-01 · <code>:443</code></div>
+              </div>
+              <div class="cfg">
+                <div class="k-ico">⚑</div>
+                <div><div class="k">Config · Mode</div><div class="v">subscribe · split</div></div>
+                <div class="chev">›</div>
+              </div>
+              <button class="cta connecting-state"><div class="spinner"></div>Cancel</button>
+              <div class="adv-card">
+                <div><div class="h">Advanced settings</div><div class="s">Servers · Subscriptions · Zapret · Telegram proxy · Free configs</div></div>
+                <div class="chev">›</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- B · OFF -->
+      <div>
+        <div class="state-label">Disconnected</div>
+        <div class="win vb">
+          <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Simple</div><div></div></div>
+          <div>
+            <div class="mini-head">
+              <div class="logo"><img src="assets/penguin.svg" width="26" height="26" alt=""/></div>
+              <div class="brand">
+                <div class="n">Virtual Penguin Network</div>
+                <div class="mini-badges">
+                  <button class="mb off" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+                  <button class="mb off" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+                  <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+                </div>
+              </div>
+              <button class="menu" title="Menu">⋯</button>
+            </div>
+            <div class="body">
+              <div class="orb-wrap">
+                <div class="orb off"><img class="peng" src="assets/penguin.svg" alt="" style="opacity:.75"/></div>
+                <div class="status-title" style="color:var(--text-secondary)">Sleeping</div>
+                <div class="status-sub">Tap Connect to start the tunnel.</div>
+              </div>
+              <div class="cfg">
+                <div class="k-ico">⚑</div>
+                <div><div class="k">Config · Mode</div><div class="v">subscribe · split</div></div>
+                <div class="chev">›</div>
+              </div>
+              <button class="cta off-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>Connect</button>
+              <div class="adv-card">
+                <div><div class="h">Advanced settings</div><div class="s">Servers · Subscriptions · Zapret · Telegram proxy · Free configs</div></div>
+                <div class="chev">›</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════ VARIANT C · HERO TYPE ═════════ -->
+  <div class="col">
+    <div class="col-head"><div class="name">C · Hero</div><div class="badge">Typographic</div></div>
+    <div class="col-sub">One word. The state IS the hero — 44px of it. Facts live underneath in a two-column mono grid.</div>
+
+    <div class="states">
+      <!-- C · ON -->
+      <div>
+        <div class="state-label">Connected</div>
+        <div class="win vc">
+          <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Simple</div><div></div></div>
+          <div>
+            <div class="mini-head">
+              <div class="logo"><img src="assets/penguin.svg" width="26" height="26" alt=""/></div>
+              <div class="brand">
+                <div class="n">Virtual Penguin Network</div>
+                <div class="mini-badges">
+                  <button class="mb on" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+                  <button class="mb on" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+                  <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+                </div>
+              </div>
+              <button class="menu" title="Menu">⋯</button>
+            </div>
+            <div class="body">
+              <div class="hero">
+                <div class="eyebrow">Status</div>
+                <div><span class="hero-word accent">Protected</span><span class="hero-dot on"></span></div>
+              </div>
+              <div class="meta-grid">
+                <div class="meta-cell"><div class="k">Server</div><div class="v">de-01 · 443</div></div>
+                <div class="meta-cell"><div class="k">Uptime</div><div class="v">12m 04s</div></div>
+                <div class="meta-cell"><div class="k">Egress IP</div><div class="v">104.194.156.93</div></div>
+                <div class="meta-cell"><div class="k">Config</div><div class="v">subscribe · split</div></div>
+              </div>
+              <button class="cta on-state"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>Disconnect</button>
+              <div class="adv-card">
+                <div><div class="h">Advanced settings</div><div class="s">Servers · Subscriptions · Zapret · Telegram proxy · Free configs</div></div>
+                <div class="chev">›</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- C · CONNECTING -->
+      <div>
+        <div class="state-label">Connecting</div>
+        <div class="win vc">
+          <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Simple</div><div></div></div>
+          <div>
+            <div class="mini-head">
+              <div class="logo"><img src="assets/penguin.svg" width="26" height="26" alt=""/></div>
+              <div class="brand">
+                <div class="n">Virtual Penguin Network</div>
+                <div class="mini-badges">
+                  <button class="mb warn" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+                  <button class="mb off" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+                  <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+                </div>
+              </div>
+              <button class="menu" title="Menu">⋯</button>
+            </div>
+            <div class="body">
+              <div class="hero">
+                <div class="eyebrow">Status</div>
+                <div><span class="hero-word warn">Connecting…</span><span class="hero-dot warn"></span></div>
+              </div>
+              <div class="meta-grid">
+                <div class="meta-cell"><div class="k">Target</div><div class="v">de-01 · 443</div></div>
+                <div class="meta-cell"><div class="k">Handshake</div><div class="v">TLS reality</div></div>
+                <div class="meta-cell"><div class="k">Egress IP</div><div class="v muted">resolving…</div></div>
+                <div class="meta-cell"><div class="k">Config</div><div class="v">subscribe · split</div></div>
+              </div>
+              <button class="cta connecting-state"><div class="spinner"></div>Cancel</button>
+              <div class="adv-card">
+                <div><div class="h">Advanced settings</div><div class="s">Servers · Subscriptions · Zapret · Telegram proxy · Free configs</div></div>
+                <div class="chev">›</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- C · OFF -->
+      <div>
+        <div class="state-label">Disconnected</div>
+        <div class="win vc">
+          <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Simple</div><div></div></div>
+          <div>
+            <div class="mini-head">
+              <div class="logo"><img src="assets/penguin.svg" width="26" height="26" alt=""/></div>
+              <div class="brand">
+                <div class="n">Virtual Penguin Network</div>
+                <div class="mini-badges">
+                  <button class="mb off" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+                  <button class="mb off" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+                  <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+                </div>
+              </div>
+              <button class="menu" title="Menu">⋯</button>
+            </div>
+            <div class="body">
+              <div class="hero">
+                <div class="eyebrow">Status</div>
+                <div><span class="hero-word muted">Off</span><span class="hero-dot off"></span></div>
+              </div>
+              <div class="meta-grid">
+                <div class="meta-cell"><div class="k">Server</div><div class="v muted">—</div></div>
+                <div class="meta-cell"><div class="k">Egress IP</div><div class="v muted">your ISP</div></div>
+                <div class="meta-cell"><div class="k">Last session</div><div class="v">2h 14m ago</div></div>
+                <div class="meta-cell"><div class="k">Config</div><div class="v">subscribe · split</div></div>
+              </div>
+              <button class="cta off-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>Connect</button>
+              <div class="adv-card">
+                <div><div class="h">Advanced settings</div><div class="s">Servers · Subscriptions · Zapret · Telegram proxy · Free configs</div></div>
+                <div class="chev">›</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="notes">
+  <div class="note">
+    <h4>Calm — what changed vs. the current Claude draft</h4>
+    <p>Red destructive CTA → <b>Arctic accent</b>. Small dot instead of a giant green circle — the card is the signal, not a billboard.</p>
+    <p>Config is now a <b>visible row</b> with key·value (was an empty dropdown placeholder).</p>
+    <p>Header shrunk to 32px logo + name + menu. Badges kept but shrunk to <code>8px</code> pill chips under the name.</p>
+  </div>
+  <div class="note">
+    <h4>Orb — the emotional one</h4>
+    <p>The glacier orb holds the penguin — colour + inner shadow = state. No text label needed to read the screen.</p>
+    <p>Connecting pulses softly (not a jittery spinner). Off looks cold-grey, alive but resting.</p>
+    <p>Works as a mascot without turning into a cartoon. Same CTA + config + advanced structure underneath.</p>
+  </div>
+  <div class="note">
+    <h4>Hero — for power users who skim</h4>
+    <p>One word carries the screen. Colour-gradient wordmark for "Protected", muted type for "Off".</p>
+    <p>A 2×2 mono grid below gives you the four facts that matter: server, IP, uptime, config. No fluff.</p>
+    <p>Most information-dense of the three, but still one-glance readable.</p>
+  </div>
+</div>
+
+<div class="tweaks" id="tweaks">
+  <h4>Tweaks <button class="close" onclick="document.getElementById('tweaks').classList.remove('open')">✕</button></h4>
+  <div class="row"><label>Theme</label>
+    <select id="tTheme"><option value="light">Light</option><option value="dark">Dark</option></select>
+  </div>
+  <div class="row"><label>Window width</label>
+    <select id="tWidth"><option value="420">420 px</option><option value="380">380 px</option><option value="460">460 px</option></select>
+  </div>
+</div>
+
+<script>
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "width": "420"
+}/*EDITMODE-END*/;
+const state = {...TWEAK_DEFAULTS};
+
+function apply(){
+  document.documentElement.setAttribute('data-theme', state.theme);
+  document.querySelectorAll('.win').forEach(w => w.style.maxWidth = state.width + 'px');
+  const sel = document.getElementById('tTheme'); if (sel) sel.value = state.theme;
+  const sw  = document.getElementById('tWidth'); if (sw)  sw.value  = state.width;
+}
+function persist(edits){ try{ window.parent.postMessage({type:'__edit_mode_set_keys',edits},'*'); }catch(_){}}
+
+document.getElementById('tTheme').onchange = e => { state.theme = e.target.value; 
+  // badge nav — clicking a top badge would navigate to its surface in the real app
+  document.querySelectorAll('.mini-head .mb[data-route]').forEach(b => {
+    b.addEventListener('click', e => { e.stopPropagation(); console.log('nav →', b.dataset.route); });
+  });
+
+  apply(); persist({theme:state.theme}); };
+document.getElementById('tWidth').onchange = e => { state.width = e.target.value; apply(); persist({width:state.width}); };
+document.getElementById('themeBtn').onclick = () => { state.theme = state.theme === 'dark' ? 'light' : 'dark'; apply(); persist({theme:state.theme}); };
+
+window.addEventListener('message', e => {
+  if (!e.data) return;
+  if (e.data.type === '__activate_edit_mode')   document.getElementById('tweaks').classList.add('open');
+  if (e.data.type === '__deactivate_edit_mode') document.getElementById('tweaks').classList.remove('open');
+});
+try{ window.parent.postMessage({type:'__edit_mode_available'},'*'); }catch(_){}
+
+apply();
+</script>
+
+</body>
+</html>

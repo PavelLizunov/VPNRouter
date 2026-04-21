@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<title>VPNRouter · Advanced (redesign)</title>
+<link rel="stylesheet" href="tokens.css"/>
+<style>
+  body{background:var(--surface-sunken);padding:24px 16px 80px;-webkit-font-smoothing:antialiased}
+  .page-head{max-width:1360px;margin:0 auto 16px;display:flex;justify-content:space-between;align-items:baseline;padding:0 4px}
+  .page-head h1{margin:0;font-size:var(--fs-2xl);font-weight:var(--fw-bold);letter-spacing:-.01em}
+  .page-head .lede{color:var(--text-secondary);font-size:var(--fs-md);margin-top:3px}
+  .theme-btn{background:var(--surface-base);border:1px solid var(--border-default);color:var(--text-secondary);
+    padding:5px 10px;border-radius:var(--radius-sm);font-size:var(--fs-xs);cursor:pointer;font-weight:var(--fw-semibold)}
+
+  .grid{max-width:1360px;margin:0 auto;display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+  @media(max-width:1100px){.grid{grid-template-columns:1fr}}
+  .cell{display:flex;flex-direction:column;gap:8px}
+  .cell-head{display:flex;align-items:baseline;justify-content:space-between;padding:0 4px}
+  .cell-head .n{font-size:var(--fs-md);font-weight:var(--fw-bold)}
+  .cell-head .t{font-size:var(--fs-2xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:var(--tracking-caps);font-weight:var(--fw-semibold)}
+  .cell-sub{font-size:var(--fs-xs);color:var(--text-muted);padding:0 4px;line-height:1.5}
+
+  /* ─── Window shell ─── */
+  .win{width:100%;max-width:520px;margin:0 auto;background:var(--surface-base);border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-md);border:1px solid var(--border-default);overflow:hidden;
+    display:grid;grid-template-rows:auto auto auto 1fr auto;height:640px}
+  .titlebar{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
+    padding:7px 12px;background:var(--surface-raised);border-bottom:1px solid var(--border-subtle)}
+  .dots{display:flex;gap:5px}
+  .dots span{width:10px;height:10px;border-radius:50%}
+  .dots .r{background:#FF5F57}.dots .y{background:#FEBC2E}.dots .g{background:#28C840}
+  .titlebar .t{font-size:9px;color:var(--text-muted);letter-spacing:.03em}
+
+  /* ─── FIXED HEADER (compact, one-row) ─── */
+  .hdr{padding:8px 14px;display:grid;grid-template-columns:28px 1fr auto auto;gap:10px;align-items:center;border-bottom:1px solid var(--border-subtle)}
+  .hdr .logo{width:28px;height:28px;border-radius:var(--radius-sm);background:var(--accent-bg-subtle);display:grid;place-items:center;overflow:hidden}
+  .hdr .logo img{width:100%;height:100%;object-fit:cover}
+  .hdr .brand{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .hdr .brand .n{font-size:var(--fs-md);font-weight:var(--fw-bold);letter-spacing:-.005em;line-height:1.2}
+  .hdr .brand .mini-badges{display:flex;gap:4px}
+  .hdr .brand .mb{font-size:9px;font-weight:var(--fw-semibold);padding:2px 7px;border-radius:var(--radius-pill);
+    letter-spacing:.06em;text-transform:uppercase;line-height:1.5;display:inline-flex;align-items:center;gap:4px;
+    cursor:pointer;border:1px solid transparent;background:var(--surface-sunken);color:var(--text-secondary);
+    transition:background var(--dur-base,220ms) var(--ease-out,ease),color var(--dur-base,220ms) var(--ease-out,ease),border-color var(--dur-base,220ms) var(--ease-out,ease);
+    font-family:inherit}
+  .hdr .brand .mb:hover{background:var(--accent-bg-subtle);color:var(--accent-fg);border-color:var(--accent-border)}
+  .hdr .brand .mb .md{width:5px;height:5px;border-radius:50%;display:inline-block;background:var(--text-muted)}
+  .hdr .brand .mb.on{background:var(--success-bg);color:var(--success-fg)}
+  .hdr .brand .mb.on .md{background:var(--success-solid)}
+  .hdr .brand .mb.warn{background:var(--warning-bg);color:var(--warning-fg)}
+  .hdr .brand .mb.warn .md{background:var(--warning-solid);animation:pulse 1.2s ease-out infinite}
+  .hdr .brand .mb.off{background:var(--surface-sunken);color:var(--text-muted)}
+  .hdr .brand .mb.off .md{background:var(--text-muted)}
+  .hdr .simple{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:var(--radius-sm);
+    background:transparent;border:0;color:var(--accent-fg);font-size:var(--fs-xs);font-weight:var(--fw-semibold);cursor:pointer}
+  .hdr .simple:hover{background:var(--accent-bg-subtle)}
+  .hdr .menu{width:26px;height:26px;display:grid;place-items:center;background:transparent;border:0;border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer;font-size:14px}
+  .hdr .menu:hover{background:var(--surface-sunken);color:var(--text-primary)}
+
+  /* ─── Tabbar (scrollable, no overflow) ─── */
+  .tabbar{padding:6px 10px;display:flex;gap:2px;border-bottom:1px solid var(--border-subtle);
+    background:var(--surface-app);overflow-x:auto;scrollbar-width:none}
+  .tabbar::-webkit-scrollbar{display:none}
+  .tab{padding:6px 10px;border-radius:var(--radius-sm);font-size:var(--fs-md);font-weight:var(--fw-semibold);
+    color:var(--text-secondary);cursor:pointer;white-space:nowrap;flex-shrink:0}
+  .tab.active{background:var(--surface-base);color:var(--accent-fg);box-shadow:var(--shadow-xs)}
+
+  /* ─── Page content ─── */
+  .content{overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+  .ph{display:flex;justify-content:space-between;align-items:baseline;padding:0 2px}
+  .ph .h{font-size:var(--fs-lg);font-weight:var(--fw-semibold)}
+  .ph .c{font-size:var(--fs-2xs);color:var(--text-muted)}
+
+  /* ─── UNIFIED FOOTER (replaces dual status + autostart + giant Stop) ─── */
+  .footer{padding:8px 12px;border-top:1px solid var(--border-subtle);background:var(--surface-raised);
+    display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+  .status-inline{display:flex;align-items:center;gap:7px;font-size:var(--fs-xs);color:var(--text-secondary);min-width:0}
+  .status-inline .d{width:7px;height:7px;border-radius:50%;background:var(--success-solid);box-shadow:0 0 0 3px rgba(34,197,94,.18);flex-shrink:0}
+  .status-inline .txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stop-btn{padding:6px 12px;border:0;border-radius:var(--radius-sm);background:var(--accent-solid);color:var(--accent-on-solid);
+    font-size:var(--fs-xs);font-weight:var(--fw-bold);cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .stop-btn:hover{background:var(--accent-solid-hover)}
+  .stop-btn svg{width:10px;height:10px}
+
+  /* ─── Common primitives ─── */
+  .btn{font-size:var(--fs-xs);font-weight:var(--fw-semibold);padding:6px 11px;border-radius:var(--radius-sm);
+    border:1px solid var(--border-default);background:var(--surface-base);color:var(--text-primary);cursor:pointer}
+  .btn:hover{background:var(--surface-sunken)}
+  .btn.primary{background:var(--accent-solid);color:var(--accent-on-solid);border-color:transparent}
+  .btn.primary:hover{background:var(--accent-solid-hover)}
+  .btn.success{background:var(--success-solid);color:#fff;border-color:transparent}
+  .btn.ghost{background:transparent;border-color:transparent;color:var(--text-secondary)}
+  .btn.ghost:hover{background:var(--surface-sunken);color:var(--text-primary)}
+
+  .input{width:100%;padding:6px 9px;font-size:var(--fs-xs);border:1px solid var(--border-default);
+    border-radius:var(--radius-sm);background:var(--surface-base);color:var(--text-primary);font-family:var(--font-mono);box-sizing:border-box}
+  .input:focus{outline:none;border-color:var(--accent-solid);box-shadow:0 0 0 3px rgba(14,165,233,.15)}
+
+  /* ─── Server rows (FIX selection color) ─── */
+  .srv-head{display:grid;grid-template-columns:14px 1fr 100px 40px 40px 24px;gap:8px;padding:6px 10px;
+    font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:var(--tracking-caps);font-weight:var(--fw-semibold);border-bottom:1px solid var(--border-subtle)}
+  .srv-list{border:1px solid var(--border-subtle);border-radius:var(--radius-md);background:var(--surface-base);overflow:hidden}
+  .srv{display:grid;grid-template-columns:14px 1fr 100px 40px 40px 24px;gap:8px;align-items:center;
+    padding:7px 10px;border-bottom:1px solid var(--border-subtle);font-size:var(--fs-xs);cursor:pointer}
+  .srv:last-child{border-bottom:0}
+  .srv:hover{background:var(--surface-sunken)}
+  .srv.active{background:var(--accent-bg-subtle)}                              /* ★ FIXED from teal */
+  .srv.active .name{color:var(--accent-fg);font-weight:var(--fw-bold)}
+  .srv .rbx{width:12px;height:12px;border:1.5px solid var(--border-strong);border-radius:50%;box-sizing:border-box;position:relative}
+  .srv.active .rbx{border-color:var(--success-solid);background:var(--success-solid)}
+  .srv.active .rbx::after{content:"";position:absolute;inset:3px;border-radius:50%;background:#fff}
+  .srv .name{font-weight:var(--fw-semibold);color:var(--text-primary);font-family:var(--font-mono);font-size:var(--fs-xs)}
+  .srv .host{color:var(--text-muted);font-family:var(--font-mono);font-size:9px}
+  .srv .p{text-align:center;font-family:var(--font-mono);color:var(--text-muted);font-size:9px}
+  .srv .ref{background:transparent;border:0;color:var(--text-muted);cursor:pointer;font-size:11px}
+
+  /* ─── Side-tabs (Settings, Zapret) ─── */
+  .split{display:grid;grid-template-columns:140px 1fr;gap:10px;min-height:0;flex:1}
+  .side{display:flex;flex-direction:column;gap:1px;padding:4px;background:var(--surface-sunken);border-radius:var(--radius-sm);font-size:var(--fs-xs)}
+  .side .s{padding:7px 10px;border-radius:var(--radius-xs);color:var(--text-secondary);cursor:pointer;font-weight:var(--fw-semibold);display:flex;justify-content:space-between;align-items:center}
+  .side .s:hover{background:var(--surface-base);color:var(--text-primary)}
+  .side .s.active{background:var(--surface-base);color:var(--accent-fg);box-shadow:var(--shadow-xs)}
+  .side .c{font-size:9px;color:var(--text-muted);background:transparent;padding:0}                 /* ★ counter not pill */
+  .pane{min-width:0;display:flex;flex-direction:column;gap:10px}
+  .pane h3{margin:0;font-size:var(--fs-lg);font-weight:var(--fw-semibold)}
+  .pane .desc{font-size:var(--fs-xs);color:var(--text-secondary);line-height:1.5}
+
+  /* ─── Radio-group (Settings → Routing) ─── */
+  .radio-grp{display:grid;grid-template-columns:1fr;gap:8px}
+  .radio{display:grid;grid-template-columns:18px 1fr;gap:10px;padding:10px 12px;border:1px solid var(--border-default);
+    border-radius:var(--radius-sm);cursor:pointer;background:var(--surface-base)}
+  .radio.on{border-color:var(--accent-solid);background:var(--accent-bg-subtle)}
+  .radio .r{width:14px;height:14px;border:1.5px solid var(--border-strong);border-radius:50%;box-sizing:border-box;position:relative;margin-top:1px}
+  .radio.on .r{border-color:var(--accent-solid)}
+  .radio.on .r::after{content:"";position:absolute;inset:2px;border-radius:50%;background:var(--accent-solid)}
+  .radio .ttl{font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--text-primary)}
+  .radio .sub{font-size:var(--fs-2xs);color:var(--text-muted);margin-top:2px;line-height:1.4}
+
+  /* ─── Apps categories ─── */
+  .apps-split{display:grid;grid-template-columns:120px 1fr;gap:10px;flex:1;min-height:0}
+  .cat-list{display:flex;flex-direction:column;gap:1px;padding:4px;background:var(--surface-sunken);border-radius:var(--radius-sm)}
+  .cat{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:7px 10px;border-radius:var(--radius-xs);
+    font-size:var(--fs-xs);color:var(--text-secondary);font-weight:var(--fw-semibold);cursor:pointer}
+  .cat:hover{background:var(--surface-base)}
+  .cat.active{background:var(--surface-base);color:var(--accent-fg);box-shadow:var(--shadow-xs)}
+  .cat .count{font-size:9px;color:var(--text-muted);font-family:var(--font-mono)}                  /* ★ text not pill */
+  .cat.active .count{color:var(--accent-fg)}
+
+  /* ─── Menu popover (⋯) ─── */
+  .menu-demo{display:flex;justify-content:center;padding:20px;background:var(--surface-sunken);border-radius:var(--radius-md);border:1px dashed var(--border-default)}
+  .popover{background:var(--surface-base);border:1px solid var(--border-default);border-radius:var(--radius-md);
+    box-shadow:var(--shadow-lg);padding:8px;width:220px;display:flex;flex-direction:column;gap:2px}
+  .popover .section-label{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:var(--tracking-caps);
+    font-weight:var(--fw-semibold);padding:6px 8px 4px}
+  .popover .seg{display:flex;gap:2px;padding:2px;background:var(--surface-sunken);border-radius:var(--radius-xs);margin:0 8px 4px}
+  .popover .seg .s{flex:1;text-align:center;padding:5px 6px;border-radius:3px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--text-secondary);cursor:pointer}
+  .popover .seg .s.active{background:var(--surface-base);color:var(--text-primary);box-shadow:var(--shadow-xs)}
+  .popover .divider{height:1px;background:var(--border-subtle);margin:4px 4px}
+  .popover .item{display:grid;grid-template-columns:16px 1fr auto;gap:8px;align-items:center;padding:7px 8px;border-radius:var(--radius-xs);
+    font-size:var(--fs-sm);color:var(--text-primary);cursor:pointer}
+  .popover .item:hover{background:var(--surface-sunken)}
+  .popover .item .ic{color:var(--text-muted);font-size:12px;text-align:center}
+  .popover .item .k{color:var(--text-muted);font-size:9px;font-family:var(--font-mono)}
+  .popover .adv{display:grid;grid-template-columns:16px 1fr 12px;gap:8px;align-items:center;padding:9px 8px;border-radius:var(--radius-xs);
+    font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--accent-fg);background:var(--accent-bg-subtle);cursor:pointer;margin-top:2px}
+
+  /* ─── Banner ─── */
+  .banner{display:grid;grid-template-columns:16px 1fr auto;gap:8px;align-items:center;padding:9px 11px;
+    background:var(--info-bg);color:var(--info-fg);border:1px solid var(--info-border);border-radius:var(--radius-sm);font-size:var(--fs-xs)}
+  .banner .ic{font-style:italic;font-weight:700}
+  .banner .x{background:transparent;border:0;color:inherit;cursor:pointer;opacity:.6;font-size:12px}
+
+  /* ─── Stat grid (Free Configs) ─── */
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+  .stat{border:1px solid var(--border-subtle);border-radius:var(--radius-sm);padding:6px 8px;background:var(--surface-base);text-align:center}
+  .stat.hl{background:var(--success-bg);border-color:var(--success-border);color:var(--success-fg)}
+  .stat .k{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:var(--tracking-caps);font-weight:var(--fw-semibold)}
+  .stat.hl .k{color:var(--success-fg)}
+  .stat .v{font-size:var(--fs-lg);font-weight:var(--fw-bold);margin-top:1px}
+
+  /* ─── Empty state ─── */
+  .empty{border:1px dashed var(--border-default);border-radius:var(--radius-md);padding:24px 20px;text-align:center;background:var(--surface-raised)}
+  .empty .i{font-size:22px;opacity:.6;margin-bottom:6px}
+  .empty .h{font-size:var(--fs-md);font-weight:var(--fw-semibold);margin-bottom:2px}
+  .empty .s{font-size:var(--fs-xs);color:var(--text-muted);line-height:1.5;max-width:280px;margin:0 auto 10px}
+
+  /* ─── Note card ─── */
+  .note{background:var(--surface-base);border:1px solid var(--border-default);border-radius:var(--radius-md);padding:10px 12px;font-size:var(--fs-xs);color:var(--text-secondary);line-height:1.55}
+  .note b{color:var(--text-primary)}
+  .note code{font-family:var(--font-mono);color:var(--accent-fg);font-size:10px}
+
+  .intro{max-width:1360px;margin:0 auto 20px;padding:14px 16px;background:var(--surface-base);border:1px solid var(--border-default);border-radius:var(--radius-md)}
+  .intro h3{margin:0 0 6px;font-size:var(--fs-md);font-weight:var(--fw-semibold)}
+  .intro ul{margin:0;padding-left:18px;font-size:var(--fs-xs);color:var(--text-secondary);line-height:1.6}
+  .intro code{font-family:var(--font-mono);color:var(--accent-fg);font-size:10px}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.82)}}
+</style>
+</head>
+<body data-screen-label="Advanced redesign · all screens">
+
+<div class="page-head">
+  <div>
+    <h1>Advanced mode · исправления по списку</h1>
+    <div class="lede">Все 7 Advanced-страниц + меню «⋯» переверстаны по дизайн-системе.</div>
+  </div>
+  <button class="theme-btn" onclick="document.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark')">◐  Toggle theme</button>
+</div>
+
+<div class="intro">
+  <h3>Что общее для всех экранов (применяется к каждой странице ниже)</h3>
+  <ul>
+    <li><b>Компактный header:</b> <code>[28px лого] [имя + бейджи] [◂ Simple] [⋯]</code>. Версия/билд/by — ушли в меню «О приложении». Бейджи <code>VPN·Zapret·TG</code> — одинаковые в обоих режимах: состояние + клик = навигация в соответствующий раздел. Статус также дублируется в footer для быстрого взгляда.</li>
+    <li><b>Единый footer:</b> один status-bar внизу (точка · описание · компактная кнопка Stop справа). Нет двойной «Остановить VPN» на всю ширину. Нет глобального «Автозапуск с Windows» — это настройка живёт в Настройках → Автозапуск.</li>
+    <li><b>Таб-бар скроллится</b> горизонтально вместо обрезки «Free».</li>
+    <li>Selection color во всех списках — <code>accent-bg-subtle</code> (светло-arctic), не бирюзово-зелёный.</li>
+    <li>Все primary action’ы — <code>--accent-solid</code> Arctic. Никаких фиолетовых/зелёных full-width CTA.</li>
+  </ul>
+</div>
+
+<div class="grid">
+
+  <!-- ═════════════ 1. МЕНЮ ⋯ ═════════════ -->
+  <div class="cell">
+    <div class="cell-head"><div class="n">1 · Меню ⋯</div><div class="t">Popover</div></div>
+    <div class="cell-sub">Переключатели темы и языка вынесены в сегменты. Действия — отдельной секцией. Advanced — явной CTA-строкой внизу.</div>
+    <div class="menu-demo">
+      <div class="popover">
+        <div class="section-label">Вид</div>
+        <div class="seg"><div class="s">Light</div><div class="s active">Dark</div></div>
+        <div class="seg"><div class="s">RU</div><div class="s active">EN</div></div>
+        <div class="divider"></div>
+        <div class="section-label">Диагностика</div>
+        <div class="item"><span class="ic">▤</span><span>Открыть логи</span><span class="k">⌘L</span></div>
+        <div class="item"><span class="ic">◉</span><span>Проверить утечку IP</span><span class="k"></span></div>
+        <div class="item"><span class="ic">↻</span><span>Проверить обновления</span><span class="k"></span></div>
+        <div class="divider"></div>
+        <div class="item"><span class="ic">ⓘ</span><span>О приложении</span><span class="k">v2.21.7</span></div>
+        <div class="adv"><span class="ic">▸</span><span>Перейти в Advanced</span><span>›</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════ 2. СЕРВЕРЫ ═════════════ -->
+  <div class="cell">
+    <div class="cell-head"><div class="n">2 · Серверы</div><div class="t">VLESS list</div></div>
+    <div class="cell-sub">Header-row для колонок, selection — arctic tint, подсказки ушли в tooltip. «Free» больше не обрезается.</div>
+    <div class="win">
+      <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Advanced</div><div></div></div>
+      <div class="hdr">
+        <div class="logo"><img src="assets/penguin.svg" alt=""/></div>
+        <div class="brand">
+          <div class="n">Virtual Penguin Network</div>
+          <div class="mini-badges">
+            <button class="mb on" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+            <button class="mb on" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+            <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+          </div>
+        </div>
+        <button class="simple">◂ Simple</button>
+        <button class="menu">⋯</button>
+      </div>
+      <div class="tabbar">
+        <div class="tab active">Серверы</div><div class="tab">Подписка</div><div class="tab">Настройки</div>
+        <div class="tab">Приложения</div><div class="tab">Инструменты</div><div class="tab">Free Configs</div>
+      </div>
+      <div class="content">
+        <div class="ph"><div class="h">VLESS серверы</div><div class="c">1 настроен · 0 активных  <span title="Левый клик — выбрать активным. Правый клик — редактировать." style="cursor:help;color:var(--accent-fg)">ⓘ</span></div></div>
+        <div class="srv-list">
+          <div class="srv-head"><span></span><span>Сервер</span><span>IP</span><span>Ping</span><span>Port</span><span></span></div>
+          <div class="srv">
+            <div class="rbx"></div>
+            <div><div class="name">tcp-brat</div><div class="host">tcp + reality</div></div>
+            <div class="p" style="color:var(--text-primary)">194.87.222.111</div>
+            <div class="p">—</div><div class="p">443</div>
+            <button class="ref">⟳</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px"><button class="btn success">⚡ Проверить все</button><button class="btn primary">🔍 Deep verify</button></div>
+        <div><input class="input" placeholder="vless://uuid@server:443?...#name"/></div>
+        <div style="display:flex;gap:6px"><button class="btn ghost" style="flex:1">Удалить</button><button class="btn primary" style="flex:1">+ Добавить сервер(ы)</button></div>
+      </div>
+      <div class="footer">
+        <div class="status-inline"><div class="d"></div><div class="txt">Подключено [subscribe/split] → de-01 · 104.194.156.93</div></div>
+        <button class="stop-btn"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>Stop</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════ 3. ПОДПИСКА ═════════════ -->
+  <div class="cell">
+    <div class="cell-head"><div class="n">3 · Подписка</div><div class="t">Servers from sub</div></div>
+    <div class="cell-sub">Header-row, «—» превращены в иконки недоступности. Подписка-карточка в стиле списка.</div>
+    <div class="win">
+      <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Advanced</div><div></div></div>
+      <div class="hdr">
+        <div class="logo"><img src="assets/penguin.svg" alt=""/></div>
+        <div class="brand">
+          <div class="n">Virtual Penguin Network</div>
+          <div class="mini-badges">
+            <button class="mb on" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+            <button class="mb on" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+            <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+          </div>
+        </div>
+        <button class="simple">◂ Simple</button>
+        <button class="menu">⋯</button>
+      </div>
+      <div class="tabbar">
+        <div class="tab">Серверы</div><div class="tab active">Подписка</div><div class="tab">Настройки</div>
+        <div class="tab">Приложения</div><div class="tab">Инструменты</div><div class="tab">Free Configs</div>
+      </div>
+      <div class="content">
+        <div class="srv-list">
+          <div class="srv-head"><span></span><span>Сервер</span><span>IP</span><span>Ping</span><span>Port</span><span></span></div>
+          <div class="srv active">
+            <div class="rbx"></div>
+            <div><div class="name">de-01 443 main-brat</div></div>
+            <div class="p">104.194.156.93</div>
+            <div class="p">48ms</div><div class="p">443</div>
+            <button class="ref">⟳</button>
+          </div>
+          <div class="srv">
+            <div class="rbx"></div>
+            <div><div class="name">de-01 2083 main-brat</div></div>
+            <div class="p">104.194.156.93</div>
+            <div class="p">52ms</div><div class="p">2083</div>
+            <button class="ref">⟳</button>
+          </div>
+          <div class="srv">
+            <div class="rbx"></div>
+            <div><div class="name">is-01 443 main-brat</div></div>
+            <div class="p">93.95.226.167</div>
+            <div class="p" style="color:var(--danger-fg)">—</div><div class="p">443</div>
+            <button class="ref">⟳</button>
+          </div>
+          <div class="srv">
+            <div class="rbx"></div>
+            <div><div class="name">nk-01 8443 main-brat</div></div>
+            <div class="p">194.87.222.111</div>
+            <div class="p">128ms</div><div class="p">8443</div>
+            <button class="ref">⟳</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px"><button class="btn success">⚡ Проверить все</button><button class="btn primary">🔍 Deep verify</button></div>
+
+        <div class="ph"><div class="h">Подписки</div><button class="btn ghost">↻ Обновить все</button></div>
+        <div class="srv-list">
+          <div class="srv" style="grid-template-columns:14px 1fr auto auto">
+            <div class="rbx" style="background:var(--accent-solid);border-color:var(--accent-solid)"></div>
+            <div><div class="name">simple</div><div class="host">URL подписки · обновлено 6s назад</div></div>
+            <div class="p" style="color:var(--text-muted)">2026-04-20 17:32</div>
+            <button class="ref">✕</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 2fr auto;gap:6px">
+          <input class="input" placeholder="Имя" style="font-family:var(--font-sans)"/>
+          <input class="input" placeholder="URL подписки"/>
+          <button class="btn primary">+ Добавить</button>
+        </div>
+      </div>
+      <div class="footer">
+        <div class="status-inline"><div class="d"></div><div class="txt">Подключено [subscribe/split] → de-01 · 104.194.156.93</div></div>
+        <button class="stop-btn"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>Stop</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════ 4. НАСТРОЙКИ → Маршрутизация ═════════════ -->
+  <div class="cell">
+    <div class="cell-head"><div class="n">4 · Настройки → Маршрутизация</div><div class="t">Side-nav</div></div>
+    <div class="cell-sub">Radio-группа вертикально (fix overflow). Checkboxed-карточка с объяснением. Apply — компактный, не full-width.</div>
+    <div class="win">
+      <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Advanced</div><div></div></div>
+      <div class="hdr">
+        <div class="logo"><img src="assets/penguin.svg" alt=""/></div>
+        <div class="brand">
+          <div class="n">Virtual Penguin Network</div>
+          <div class="mini-badges">
+            <button class="mb on" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+            <button class="mb on" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+            <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+          </div>
+        </div>
+        <button class="simple">◂ Simple</button>
+        <button class="menu">⋯</button>
+      </div>
+      <div class="tabbar">
+        <div class="tab">Серверы</div><div class="tab">Подписка</div><div class="tab active">Настройки</div>
+        <div class="tab">Приложения</div><div class="tab">Инструменты</div><div class="tab">Free Configs</div>
+      </div>
+      <div class="content">
+        <div class="split">
+          <div class="side">
+            <div class="s active">Маршрутизация</div>
+            <div class="s">Защита от утечек</div>
+            <div class="s">Контент</div>
+            <div class="s">Обновления</div>
+            <div class="s">Автозапуск</div>
+          </div>
+          <div class="pane">
+            <h3>Маршрутизация</h3>
+            <div class="desc">Определяет, какой трафик пойдёт через VPN.</div>
+            <div class="radio-grp">
+              <div class="radio on"><div class="r"></div><div><div class="ttl">Split Tunnel</div><div class="sub">Только выбранные приложения. Остальное идёт напрямую.</div></div></div>
+              <div class="radio"><div class="r"></div><div><div class="ttl">Full Tunnel</div><div class="sub">Весь трафик ОС через VPN, включая игры и банки.</div></div></div>
+            </div>
+            <div class="radio on" style="margin-top:4px">
+              <div class="r" style="background:var(--accent-solid);position:relative"><span style="position:absolute;inset:0;color:#fff;font-size:9px;display:grid;place-items:center;font-weight:700">✓</span></div>
+              <div><div class="ttl">Российский трафик через реальный IP</div><div class="sub">Сайты с .ru доменами/IP идут напрямую, минуя VPN. Защищает VPN-сервер от блокировок российскими сервисами.</div></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+              <div style="font-size:var(--fs-2xs);color:var(--text-muted);display:flex;align-items:center;gap:5px"><span style="color:var(--success-solid)">✓</span>Автосохранение включено</div>
+              <button class="btn primary">↻ Применить (перезапустить VPN)</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div class="status-inline"><div class="d"></div><div class="txt">Подключено [subscribe/split] → de-01 · 104.194.156.93</div></div>
+        <button class="stop-btn"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>Stop</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════ 5. ПРИЛОЖЕНИЯ ═════════════ -->
+  <div class="cell">
+    <div class="cell-head"><div class="n">5 · Приложения</div><div class="t">Split-tunnel groups</div></div>
+    <div class="cell-sub">Счётчики категорий теперь не pill-badges, а моно-числа справа — чтобы не читалось как notifications.</div>
+    <div class="win">
+      <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Advanced</div><div></div></div>
+      <div class="hdr">
+        <div class="logo"><img src="assets/penguin.svg" alt=""/></div>
+        <div class="brand">
+          <div class="n">Virtual Penguin Network</div>
+          <div class="mini-badges">
+            <button class="mb on" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+            <button class="mb on" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+            <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+          </div>
+        </div>
+        <button class="simple">◂ Simple</button>
+        <button class="menu">⋯</button>
+      </div>
+      <div class="tabbar">
+        <div class="tab">Серверы</div><div class="tab">Подписка</div><div class="tab">Настройки</div>
+        <div class="tab active">Приложения</div><div class="tab">Инструменты</div><div class="tab">Free Configs</div>
+      </div>
+      <div class="content">
+        <div class="apps-split">
+          <div class="cat-list">
+            <div class="cat"><span>Discord</span><span class="count">1</span></div>
+            <div class="cat active"><span>Работа</span><span class="count">3</span></div>
+            <div class="cat"><span>Браузеры</span><span class="count">23</span></div>
+            <div class="cat"><span>Терминал</span><span class="count">1</span></div>
+            <div class="cat"><span>Свои</span><span class="count">8</span></div>
+            <div class="cat"><span>GACHA</span><span class="count">2</span></div>
+            <div style="margin-top:8px;display:grid;gap:6px;padding:0 4px">
+              <input class="input" placeholder="Имя категории" style="font-family:var(--font-sans)"/>
+              <button class="btn primary" style="width:100%">+ Новая категория</button>
+            </div>
+          </div>
+          <div class="pane">
+            <div style="display:flex;justify-content:space-between;align-items:center"><h3>Работа</h3></div>
+            <label style="display:flex;gap:7px;align-items:center;font-size:var(--fs-sm);font-weight:var(--fw-semibold)"><input type="checkbox" checked style="accent-color:var(--accent-solid)"/>Включить всю группу</label>
+            <div style="display:flex;flex-direction:column;gap:5px">
+              <label style="display:flex;gap:7px;align-items:center;font-size:var(--fs-sm);padding:7px 10px;background:var(--surface-sunken);border-radius:var(--radius-sm)"><input type="checkbox" checked style="accent-color:var(--accent-solid)"/>ChatGPT.exe</label>
+              <label style="display:flex;gap:7px;align-items:center;font-size:var(--fs-sm);padding:7px 10px;background:var(--surface-sunken);border-radius:var(--radius-sm)"><input type="checkbox" checked style="accent-color:var(--accent-solid)"/>claude.exe</label>
+              <label style="display:flex;gap:7px;align-items:center;font-size:var(--fs-sm);padding:7px 10px;background:var(--surface-sunken);border-radius:var(--radius-sm)"><input type="checkbox" checked style="accent-color:var(--accent-solid)"/>Telegram.exe</label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:auto">
+              <input class="input" placeholder="имя процесса (например Discord.exe)" style="font-family:var(--font-sans)"/>
+              <button class="btn primary">+ Add</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div class="status-inline"><div class="d"></div><div class="txt">Подключено [subscribe/split] → de-01 · 104.194.156.93</div></div>
+        <button class="stop-btn"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>Stop</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════ 6. ИНСТРУМЕНТЫ → TgProxy ═════════════ -->
+  <div class="cell">
+    <div class="cell-head"><div class="n">6 · Инструменты → TgProxy</div><div class="t">Secondary CTA</div></div>
+    <div class="cell-sub">Кнопка «Остановить Telegram Proxy» — secondary (не ещё один огромный синий). Статус-строка компактная.</div>
+    <div class="win">
+      <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Advanced</div><div></div></div>
+      <div class="hdr">
+        <div class="logo"><img src="assets/penguin.svg" alt=""/></div>
+        <div class="brand">
+          <div class="n">Virtual Penguin Network</div>
+          <div class="mini-badges">
+            <button class="mb on" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+            <button class="mb on" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+            <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+          </div>
+        </div>
+        <button class="simple">◂ Simple</button>
+        <button class="menu">⋯</button>
+      </div>
+      <div class="tabbar">
+        <div class="tab">Серверы</div><div class="tab">Подписка</div><div class="tab">Настройки</div>
+        <div class="tab">Приложения</div><div class="tab active">Инструменты</div><div class="tab">Free Configs</div>
+      </div>
+      <div class="content">
+        <div style="display:flex;gap:2px;padding:4px;background:var(--surface-sunken);border-radius:var(--radius-sm);width:fit-content;font-size:var(--fs-xs)">
+          <div style="padding:5px 12px;border-radius:var(--radius-xs);color:var(--text-secondary);font-weight:var(--fw-semibold)">Zapret</div>
+          <div style="padding:5px 12px;border-radius:var(--radius-xs);background:var(--surface-base);box-shadow:var(--shadow-xs);color:var(--accent-fg);font-weight:var(--fw-semibold)">TgProxy</div>
+        </div>
+        <div class="desc" style="color:var(--text-secondary);font-size:var(--fs-xs);line-height:1.5">MTProto прокси для обхода блокировки Telegram. Работает локально, трафик идёт напрямую к серверам Telegram через WebSocket.</div>
+        <div style="display:grid;grid-template-columns:120px 1fr;gap:12px">
+          <div>
+            <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:var(--tracking-caps);font-weight:var(--fw-semibold);margin-bottom:3px">Порт</div>
+            <input class="input" value="1443" style="text-align:center"/>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:var(--tracking-caps);font-weight:var(--fw-semibold);margin-bottom:3px">Secret</div>
+            <div style="display:grid;grid-template-columns:1fr auto auto;gap:4px">
+              <input class="input" value="b9f1215a97463e440cd826cbaa8b980b"/>
+              <button class="btn">Копировать</button>
+              <button class="btn">Новый</button>
+            </div>
+          </div>
+        </div>
+        <div class="banner"><span class="ic">i</span><div>PID 18636 · v1.6.4 · работает локально на :1443</div><button class="btn ghost" style="padding:2px 8px">↻</button></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn primary">Открыть в Telegram</button>
+          <button class="btn">Открыть папку</button>
+          <button class="btn">GitHub</button>
+        </div>
+        <div class="note"><b>Настройка в Telegram:</b> Настройки → Продвинутые → Тип соединения → MTProto Proxy. Нажмите «Открыть в Telegram» один раз для настройки прокси. После этого просто Start/Stop.</div>
+        <button class="btn" style="margin-top:auto;align-self:flex-end;padding:6px 14px">◼ Остановить Telegram Proxy</button>
+      </div>
+      <div class="footer">
+        <div class="status-inline"><div class="d"></div><div class="txt">Подключено [subscribe/split] → de-01 · 104.194.156.93</div></div>
+        <button class="stop-btn"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>Stop</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════ 7. ИНСТРУМЕНТЫ → Zapret ═════════════ -->
+  <div class="cell">
+    <div class="cell-head"><div class="n">7 · Инструменты → Zapret</div><div class="t">Arctic (not violet)</div></div>
+    <div class="cell-sub">«Запустить обход DPI» теперь arctic, а не фиолетовый вне палитры. Счётчики категорий — моно-числа.</div>
+    <div class="win">
+      <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Advanced</div><div></div></div>
+      <div class="hdr">
+        <div class="logo"><img src="assets/penguin.svg" alt=""/></div>
+        <div class="brand">
+          <div class="n">Virtual Penguin Network</div>
+          <div class="mini-badges">
+            <button class="mb on" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+            <button class="mb on" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+            <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+          </div>
+        </div>
+        <button class="simple">◂ Simple</button>
+        <button class="menu">⋯</button>
+      </div>
+      <div class="tabbar">
+        <div class="tab">Серверы</div><div class="tab">Подписка</div><div class="tab">Настройки</div>
+        <div class="tab">Приложения</div><div class="tab active">Инструменты</div><div class="tab">Free Configs</div>
+      </div>
+      <div class="content">
+        <div style="display:flex;gap:2px;padding:4px;background:var(--surface-sunken);border-radius:var(--radius-sm);width:fit-content;font-size:var(--fs-xs)">
+          <div style="padding:5px 12px;border-radius:var(--radius-xs);background:var(--surface-base);box-shadow:var(--shadow-xs);color:var(--accent-fg);font-weight:var(--fw-semibold)">Zapret</div>
+          <div style="padding:5px 12px;border-radius:var(--radius-xs);color:var(--text-secondary);font-weight:var(--fw-semibold)">TgProxy</div>
+        </div>
+        <div class="split">
+          <div class="side">
+            <div class="s active">Статус</div>
+            <div class="s">Стратегия</div>
+            <div class="s">Hosts</div>
+            <div class="s">Фильтры</div>
+            <div class="s">Обновления</div>
+            <div class="s">Диагностика</div>
+            <div class="s">Дополнительно</div>
+          </div>
+          <div class="pane">
+            <h3>Статус</h3>
+            <div class="desc">Обход блокировок провайдера (zapret от Flowseal). Работает с Discord, YouTube, и другими заблокированными сервисами. Если стратегия не работает — пробуйте другую.</div>
+            <div style="padding:10px 12px;background:var(--surface-sunken);border-radius:var(--radius-sm);display:flex;align-items:center;gap:8px;font-size:var(--fs-sm)">
+              <div style="width:8px;height:8px;border-radius:50%;background:var(--text-muted)"></div>
+              <span style="color:var(--text-secondary)">Остановлен</span>
+            </div>
+            <div class="banner" style="background:var(--warning-bg);color:var(--warning-fg);border-color:var(--warning-border)">
+              <span class="ic">⚠</span><div>Только Windows. Можно использовать без VPN и вместе с VPN.</div><span></span>
+            </div>
+            <button class="btn primary" style="margin-top:auto;padding:9px 14px;font-size:var(--fs-sm)">▶ Запустить обход DPI</button>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div class="status-inline"><div class="d"></div><div class="txt">Подключено [subscribe/split] → de-01 · 104.194.156.93</div></div>
+        <button class="stop-btn"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>Stop</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════ 8. FREE CONFIGS ═════════════ -->
+  <div class="cell">
+    <div class="cell-head"><div class="n">8 · Free Configs</div><div class="t">Empty state fix</div></div>
+    <div class="cell-sub">Сломанный overlap переделан в чистую last-state: banner «Как начать» вверху, stats, пустой state в центре с CTA.</div>
+    <div class="win">
+      <div class="titlebar"><div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div><div class="t">VPNRouter · Advanced</div><div></div></div>
+      <div class="hdr">
+        <div class="logo"><img src="assets/penguin.svg" alt=""/></div>
+        <div class="brand">
+          <div class="n">Virtual Penguin Network</div>
+          <div class="mini-badges">
+            <button class="mb on" data-route="servers" title="Servers"><span class="md"></span>VPN</button>
+            <button class="mb on" data-route="zapret" title="Zapret bypass"><span class="md"></span>Zapret</button>
+            <button class="mb off" data-route="tgproxy" title="Telegram proxy"><span class="md"></span>TG</button>
+          </div>
+        </div>
+        <button class="simple">◂ Simple</button>
+        <button class="menu">⋯</button>
+      </div>
+      <div class="tabbar">
+        <div class="tab">Серверы</div><div class="tab">Подписка</div><div class="tab">Настройки</div>
+        <div class="tab">Приложения</div><div class="tab">Инструменты</div><div class="tab active">Free Configs</div>
+      </div>
+      <div class="content">
+        <div class="split" style="grid-template-columns:120px 1fr">
+          <div class="side">
+            <div class="s active">Обзор</div>
+            <div class="s">Скан</div>
+            <div class="s">Deep verify</div>
+            <div class="s">Фильтры</div>
+            <div class="s">Мои источники</div>
+            <div class="s">Очистка</div>
+          </div>
+          <div class="pane">
+            <div class="banner"><span class="ic">i</span>
+              <div><b>Как начать:</b> 1) Обновить список (14 источников, ~15 мин). 2) Deep verify — проверка через sing-box (~3 мин, находит ~5 из 30). 3) Выберите зелёную строку и нажмите Connect.</div>
+              <button class="x">✕</button>
+            </div>
+            <div class="stats">
+              <div class="stat"><div class="k">Всего</div><div class="v">0</div></div>
+              <div class="stat hl"><div class="k">Провер.</div><div class="v">0</div></div>
+              <div class="stat"><div class="k">Работ.</div><div class="v">0</div></div>
+              <div class="stat"><div class="k">Подозр.</div><div class="v">0</div></div>
+              <div class="stat"><div class="k">Недост.</div><div class="v">0</div></div>
+            </div>
+            <input class="input" placeholder="Фильтр по хосту / комментарию…" style="font-family:var(--font-sans)"/>
+            <div class="empty">
+              <div class="i">☁</div>
+              <div class="h">Нет загруженных конфигов</div>
+              <div class="s">Скачайте публичные VLESS-конфиги и узнайте, какие из них работают прямо сейчас.</div>
+              <button class="btn primary">↓ Обновить список</button>
+            </div>
+            <div style="font-size:9px;color:var(--text-muted);text-align:center;margin-top:auto">Обновлено 1d ago</div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div class="status-inline"><div class="d"></div><div class="txt">Подключено [subscribe/split] → de-01 · 104.194.156.93</div></div>
+        <button class="stop-btn"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>Stop</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // badge nav — three mini-badges in every header act as shortcuts to those surfaces.
+  // In the real Avalonia app, bind to the same router that handles the side-tabs.
+  document.querySelectorAll('.hdr .mb[data-route]').forEach(b => {
+    b.addEventListener('click', e => { e.stopPropagation(); console.log('nav →', b.dataset.route); });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Components · VPNRouter</title>
+<style data-inlined-tokens>
+/* ══════════════════════════════════════════════════════════════
+   VPNRouter · Design tokens
+   Arctic / Glacier system — friendly power-user tool.
+   Base = 11px, semantic tokens, light + dark in one sheet.
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: light;
+
+  /* ─── Reference palette (do NOT use directly in UI) ─── */
+  /* Arctic — signature accent, from glacier ice */
+  --ref-arctic-50:  #ECFEFF;
+  --ref-arctic-100: #CFFAFE;
+  --ref-arctic-200: #A5F3FC;
+  --ref-arctic-300: #67E8F9;
+  --ref-arctic-400: #38BDF8;   /* ★ brand accent */
+  --ref-arctic-500: #0EA5E9;
+  --ref-arctic-600: #0284C7;
+  --ref-arctic-700: #0369A1;
+  --ref-arctic-800: #075985;
+  --ref-arctic-900: #0C4A6E;
+
+  /* Slate — neutrals, cool-tinted to harmonize with arctic */
+  --ref-slate-0:   #FFFFFF;
+  --ref-slate-25:  #FBFCFD;
+  --ref-slate-50:  #F5F7FA;
+  --ref-slate-100: #EBEEF3;
+  --ref-slate-200: #DCE1E9;
+  --ref-slate-300: #C2C9D5;
+  --ref-slate-400: #94A0B2;
+  --ref-slate-500: #64708A;
+  --ref-slate-600: #475067;
+  --ref-slate-700: #2F3749;
+  --ref-slate-800: #1C2231;
+  --ref-slate-900: #0F1320;
+  --ref-slate-950: #070A14;
+
+  /* State families — deliberate, 3 stops each (bg / border / fg) */
+  --ref-success-bg:     #DCFCE7;
+  --ref-success-border: #86EFAC;
+  --ref-success-fg:     #15803D;
+  --ref-success-solid:  #16A34A;
+
+  --ref-warning-bg:     #FEF3C7;
+  --ref-warning-border: #FCD34D;
+  --ref-warning-fg:     #92400E;
+  --ref-warning-solid:  #D97706;
+
+  --ref-danger-bg:      #FEE2E2;
+  --ref-danger-border:  #FCA5A5;
+  --ref-danger-fg:      #B91C1C;
+  --ref-danger-solid:   #DC2626;
+
+  --ref-info-bg:        #E0F2FE;
+  --ref-info-border:    #7DD3FC;
+  --ref-info-fg:        #075985;
+  --ref-info-solid:     #0284C7;
+
+  /* ─── Semantic tokens · LIGHT (default) ─── */
+
+  /* Surfaces — 4 layers from app bg up to elevated card */
+  --surface-app:       var(--ref-slate-50);
+  --surface-sunken:    var(--ref-slate-100);
+  --surface-base:      var(--ref-slate-0);
+  --surface-raised:    var(--ref-slate-0);
+  --surface-overlay:   var(--ref-slate-0);
+
+  /* Text — 4 weights */
+  --text-primary:      var(--ref-slate-900);
+  --text-secondary:    var(--ref-slate-600);
+  --text-muted:        var(--ref-slate-400);
+  --text-inverse:      var(--ref-slate-0);
+  --text-accent:       var(--ref-arctic-700);
+
+  /* Borders */
+  --border-subtle:     var(--ref-slate-100);
+  --border-default:    var(--ref-slate-200);
+  --border-strong:     var(--ref-slate-300);
+  --border-accent:     var(--ref-arctic-400);
+
+  /* Accent — brand arctic, used for primary actions & focus */
+  --accent-bg-subtle:  var(--ref-arctic-50);
+  --accent-bg-muted:   var(--ref-arctic-100);
+  --accent-border:     var(--ref-arctic-300);
+  --accent-fg:         var(--ref-arctic-700);
+  --accent-solid:      var(--ref-arctic-500);
+  --accent-solid-hover:var(--ref-arctic-600);
+  --accent-on-solid:   var(--ref-slate-0);
+
+  /* States (semantic aliases) */
+  --success-bg:     var(--ref-success-bg);
+  --success-border: var(--ref-success-border);
+  --success-fg:     var(--ref-success-fg);
+  --success-solid:  var(--ref-success-solid);
+  --warning-bg:     var(--ref-warning-bg);
+  --warning-border: var(--ref-warning-border);
+  --warning-fg:     var(--ref-warning-fg);
+  --warning-solid:  var(--ref-warning-solid);
+  --danger-bg:      var(--ref-danger-bg);
+  --danger-border:  var(--ref-danger-border);
+  --danger-fg:      var(--ref-danger-fg);
+  --danger-solid:   var(--ref-danger-solid);
+  --info-bg:        var(--ref-info-bg);
+  --info-border:    var(--ref-info-border);
+  --info-fg:        var(--ref-info-fg);
+  --info-solid:     var(--ref-info-solid);
+
+  /* Focus ring */
+  --focus-ring: 0 0 0 3px rgba(56,189,248,0.35);
+
+  /* Shadows — soft, arctic-tinted */
+  --shadow-xs:  0 1px 1px   rgba(15,19,32,0.04);
+  --shadow-sm:  0 1px 2px   rgba(15,19,32,0.06), 0 1px 1px rgba(15,19,32,0.04);
+  --shadow-md:  0 4px 12px  rgba(15,19,32,0.07), 0 1px 2px rgba(15,19,32,0.04);
+  --shadow-lg:  0 12px 28px rgba(15,19,32,0.10), 0 2px 6px rgba(15,19,32,0.05);
+  --shadow-focus: var(--focus-ring);
+
+  /* ─── Typography — system stack, no webfonts ─── */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI",
+               system-ui, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Segoe UI Mono", "JetBrains Mono",
+               Menlo, Consolas, monospace;
+
+  /* Size scale — dense, 11px base */
+  --fs-2xs:  9px;   /* tiny meta, chip counters */
+  --fs-xs:  10px;   /* dense meta, table cell */
+  --fs-sm:  11px;   /* ★ body / base */
+  --fs-md:  12px;   /* emphasis, tab label */
+  --fs-lg:  13px;   /* section head */
+  --fs-xl:  15px;   /* page title */
+  --fs-2xl: 18px;   /* window title */
+  --fs-3xl: 22px;   /* marketing / empty state */
+
+  /* Weights */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+  /* Line heights */
+  --lh-tight:  1.15;
+  --lh-snug:   1.3;
+  --lh-normal: 1.45;
+
+  /* Letter spacing */
+  --tracking-wide: 0.02em;
+  --tracking-caps: 0.06em;
+
+  /* ─── Spacing — 4px grid ─── */
+  --space-0:  0;
+  --space-1:  2px;
+  --space-2:  4px;
+  --space-3:  6px;
+  --space-4:  8px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 20px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10:40px;
+
+  /* ─── Radii — moderate, 6–10 sweet spot ─── */
+  --radius-xs:  3px;  /* tiny chip */
+  --radius-sm:  6px;  /* button, input, card */
+  --radius-md:  8px;  /* panel */
+  --radius-lg: 10px;  /* window, elevated surface */
+  --radius-xl: 14px;  /* large card */
+  --radius-pill: 999px;
+
+  /* ─── Motion ─── */
+  --ease-out:   cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-instant: 80ms;
+  --dur-fast:   140ms;
+  --dur-base:   220ms;
+}
+
+/* ─── Semantic tokens · DARK ─── */
+:root[data-theme="dark"],
+:root.dark {
+  color-scheme: dark;
+
+  --surface-app:     var(--ref-slate-950);
+  --surface-sunken:  var(--ref-slate-900);
+  --surface-base:    var(--ref-slate-800);
+  --surface-raised:  #232A3B;
+  --surface-overlay: #2B3347;
+
+  --text-primary:    #EEF1F6;
+  --text-secondary:  #A6B0C2;
+  --text-muted:      #6C788F;
+  --text-inverse:    var(--ref-slate-900);
+  --text-accent:     var(--ref-arctic-300);
+
+  --border-subtle:   rgba(255,255,255,0.04);
+  --border-default:  rgba(255,255,255,0.08);
+  --border-strong:   rgba(255,255,255,0.16);
+  --border-accent:   var(--ref-arctic-400);
+
+  --accent-bg-subtle:  rgba(56,189,248,0.08);
+  --accent-bg-muted:   rgba(56,189,248,0.16);
+  --accent-border:     rgba(56,189,248,0.40);
+  --accent-fg:         var(--ref-arctic-300);
+  --accent-solid:      var(--ref-arctic-400);
+  --accent-solid-hover:var(--ref-arctic-300);
+  --accent-on-solid:   var(--ref-slate-950);
+
+  --success-bg:     rgba(34,197,94,0.12);
+  --success-border: rgba(34,197,94,0.35);
+  --success-fg:     #4ADE80;
+  --success-solid:  #22C55E;
+
+  --warning-bg:     rgba(245,158,11,0.12);
+  --warning-border: rgba(245,158,11,0.35);
+  --warning-fg:     #FCD34D;
+  --warning-solid:  #F59E0B;
+
+  --danger-bg:      rgba(239,68,68,0.12);
+  --danger-border:  rgba(239,68,68,0.35);
+  --danger-fg:      #FCA5A5;
+  --danger-solid:   #EF4444;
+
+  --info-bg:        rgba(14,165,233,0.12);
+  --info-border:    rgba(14,165,233,0.35);
+  --info-fg:        #7DD3FC;
+  --info-solid:     #0EA5E9;
+
+  --shadow-xs:  0 1px 1px   rgba(0,0,0,0.4);
+  --shadow-sm:  0 1px 2px   rgba(0,0,0,0.5), 0 1px 1px rgba(0,0,0,0.4);
+  --shadow-md:  0 4px 14px  rgba(0,0,0,0.55), 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-lg:  0 16px 32px rgba(0,0,0,0.65), 0 2px 6px rgba(0,0,0,0.5);
+}
+
+/* ─── Minimal element resets used across preview cards ─── */
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  color: var(--text-primary);
+  background: var(--surface-app);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+</style>
+<style>
+  body { padding: 24px 28px; }
+  h1 { font-size: var(--fs-2xl); margin: 0 0 4px; letter-spacing: -0.01em; }
+  .lede { color: var(--text-secondary); font-size: var(--fs-md); margin: 0 0 24px; max-width: 64ch; }
+  h2 { font-size: var(--fs-xs); font-weight: var(--fw-semibold); text-transform: uppercase; letter-spacing: var(--tracking-caps); color: var(--text-muted); margin: 28px 0 10px; }
+
+  .card { border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--surface-base); padding: 16px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+  /* Buttons */
+  .btn { font-family: var(--font-sans); font-size: var(--fs-sm); font-weight: var(--fw-semibold);
+         padding: 6px 12px; border-radius: var(--radius-sm); border: 1px solid transparent;
+         cursor: pointer; display: inline-flex; align-items: center; gap: 6px; line-height: 1; }
+  .btn-primary { background: var(--accent-solid); color: var(--accent-on-solid); }
+  .btn-primary:hover { background: var(--accent-solid-hover); }
+  .btn-secondary { background: var(--surface-base); color: var(--text-primary); border-color: var(--border-default); }
+  .btn-secondary:hover { background: var(--surface-sunken); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); }
+  .btn-ghost:hover { background: var(--surface-sunken); color: var(--text-primary); }
+  .btn-danger { background: var(--danger-solid); color: #fff; }
+  .btn-success { background: var(--success-solid); color: #fff; }
+  .btn-sm { padding: 4px 10px; font-size: var(--fs-xs); }
+  .btn-lg { padding: 10px 16px; font-size: var(--fs-md); }
+
+  /* Badges / chips */
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--radius-pill);
+           font-size: var(--fs-xs); font-weight: var(--fw-semibold); line-height: 1.3; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .badge-success { background: var(--success-bg); color: var(--success-fg); }
+  .badge-warning { background: var(--warning-bg); color: var(--warning-fg); }
+  .badge-danger  { background: var(--danger-bg);  color: var(--danger-fg); }
+  .badge-info    { background: var(--info-bg);    color: var(--info-fg); }
+  .badge-neutral { background: var(--surface-sunken); color: var(--text-secondary); }
+  .badge-solid-success { background: var(--success-solid); color: #fff; }
+  .badge-solid-danger  { background: var(--danger-solid);  color: #fff; }
+  .badge-solid-accent  { background: var(--accent-solid);  color: var(--accent-on-solid); }
+
+  /* Inputs */
+  .field { display: grid; gap: 4px; }
+  .field label { font-size: var(--fs-xs); font-weight: var(--fw-semibold); color: var(--text-secondary); }
+  .input, .select { width: 100%; padding: 6px 10px; font-size: var(--fs-sm);
+                    background: var(--surface-base); color: var(--text-primary);
+                    border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+                    font-family: var(--font-sans); box-sizing: border-box; }
+  .input:focus, .select:focus { outline: none; border-color: var(--accent-solid); box-shadow: var(--focus-ring); }
+  .input.mono { font-family: var(--font-mono); font-size: var(--fs-xs); }
+  .checkbox { display: inline-flex; gap: 8px; align-items: center; font-size: var(--fs-sm); cursor: pointer; }
+  .checkbox input { accent-color: var(--accent-solid); width: 14px; height: 14px; }
+  .toggle { position: relative; width: 32px; height: 18px; background: var(--border-strong); border-radius: var(--radius-pill); transition: background var(--dur-fast) var(--ease-out); }
+  .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left var(--dur-fast) var(--ease-out); box-shadow: var(--shadow-xs); }
+  .toggle.on { background: var(--accent-solid); }
+  .toggle.on::after { left: 16px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; padding: 4px; background: var(--surface-sunken); border-radius: var(--radius-sm); }
+  .tabs .tab { padding: 6px 12px; border-radius: 4px; font-size: var(--fs-md); font-weight: var(--fw-semibold); color: var(--text-secondary); cursor: pointer; }
+  .tabs .tab.active { background: var(--surface-base); color: var(--text-primary); box-shadow: var(--shadow-xs); }
+  .tabs-underline { display: flex; gap: 18px; border-bottom: 1px solid var(--border-default); }
+  .tabs-underline .tab { padding: 8px 2px; font-size: var(--fs-md); font-weight: var(--fw-semibold); color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs-underline .tab.active { color: var(--text-primary); border-bottom-color: var(--accent-solid); }
+
+  /* Banner */
+  .banner { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; align-items: center;
+            padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid; font-size: var(--fs-xs); }
+  .banner .icon { font-size: 13px; line-height: 1; }
+  .banner-info    { background: var(--info-bg);    color: var(--info-fg);    border-color: var(--info-border); }
+  .banner-warning { background: var(--warning-bg); color: var(--warning-fg); border-color: var(--warning-border); }
+  .banner-danger  { background: var(--danger-bg);  color: var(--danger-fg);  border-color: var(--danger-border); }
+  .banner-success { background: var(--success-bg); color: var(--success-fg); border-color: var(--success-border); }
+
+  /* Server row */
+  .server-row { display: grid; grid-template-columns: 14px 1fr 70px 60px 28px; align-items: center;
+                gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--border-subtle); font-size: var(--fs-xs); }
+  .server-row:last-child { border-bottom: 0; }
+  .server-row:hover { background: var(--surface-sunken); }
+  .server-row.active { background: var(--accent-bg-subtle); }
+  .server-row .name { font-weight: var(--fw-semibold); color: var(--text-primary); font-size: var(--fs-sm); }
+  .server-row .host { color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-2xs); margin-top: 1px; }
+  .ping-chip { padding: 2px 6px; border-radius: var(--radius-xs); color: #fff; font-size: var(--fs-2xs); font-weight: var(--fw-semibold); text-align: center; }
+  .ping-good { background: var(--success-solid); }
+  .ping-ok   { background: var(--warning-solid); }
+  .ping-bad  { background: var(--danger-solid); }
+
+  /* Stat chips (for dashboard) */
+  .stat { border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--surface-base); padding: 10px 12px; }
+  .stat .k { font-size: var(--fs-2xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: var(--tracking-caps); font-weight: var(--fw-semibold); }
+  .stat .v { font-size: var(--fs-xl); font-weight: var(--fw-bold); margin-top: 2px; letter-spacing: -0.01em; }
+  .stat.accent { background: var(--accent-bg-subtle); border-color: var(--accent-border); }
+  .stat.accent .v { color: var(--accent-fg); }
+  .stat.success { background: var(--success-bg); border-color: var(--success-border); }
+  .stat.success .v, .stat.success .k { color: var(--success-fg); }
+</style>
+</head>
+<body>
+
+<h1>Components</h1>
+<p class="lede">The kit. Every component is built on semantic tokens — swap <code style="font-family:var(--font-mono);color:var(--text-accent)">--accent-*</code> or flip dark mode and everything re-tunes itself.</p>
+
+<h2>Buttons</h2>
+<div class="card">
+  <div class="row" style="margin-bottom:10px">
+    <button class="btn btn-primary">Connect</button>
+    <button class="btn btn-secondary">Disconnect</button>
+    <button class="btn btn-ghost">Check logs</button>
+    <button class="btn btn-success">Apply changes</button>
+    <button class="btn btn-danger">Clear all</button>
+  </div>
+  <div class="row">
+    <button class="btn btn-primary btn-sm">Small</button>
+    <button class="btn btn-primary">Default</button>
+    <button class="btn btn-primary btn-lg">Large · primary CTA</button>
+    <button class="btn btn-primary" disabled style="opacity:.5; cursor:not-allowed">Disabled</button>
+  </div>
+</div>
+
+<h2>Status badges</h2>
+<div class="card">
+  <div class="row">
+    <span class="badge badge-success"><span class="dot" style="background:var(--success-solid)"></span>VPN ON</span>
+    <span class="badge badge-danger"><span class="dot" style="background:var(--danger-solid)"></span>VPN OFF</span>
+    <span class="badge badge-warning"><span class="dot" style="background:var(--warning-solid)"></span>ZAPRET STARTING</span>
+    <span class="badge badge-info"><span class="dot" style="background:var(--info-solid)"></span>TG PROXY</span>
+    <span class="badge badge-neutral"><span class="dot" style="background:var(--text-muted)"></span>Idle</span>
+    <span class="badge badge-solid-accent">Reality</span>
+    <span class="badge badge-solid-success">Verified</span>
+    <span class="badge badge-solid-danger">Unreachable</span>
+  </div>
+</div>
+
+<h2>Form controls</h2>
+<div class="card grid3" style="display:grid">
+  <div class="field"><label>Server name</label><input class="input" value="Asia-Tokyo-01"/></div>
+  <div class="field"><label>Port</label><input class="input mono" value="443"/></div>
+  <div class="field"><label>Preset</label>
+    <select class="select"><option>Gaming · low latency</option><option>Streaming · bandwidth</option><option>Chat · stable</option></select>
+  </div>
+  <div class="field" style="grid-column:1/-1"><label>VLESS URI</label><input class="input mono" value="vless://3a6c…@198.51.100.42:443?type=tcp&security=reality"/></div>
+  <label class="checkbox"><input type="checkbox" checked/>Bypass Russian traffic</label>
+  <label class="checkbox"><input type="checkbox"/>Force IPv4 only</label>
+  <div class="row" style="gap:10px"><span style="font-size:var(--fs-sm)">Autostart</span><div class="toggle on"></div><span style="font-size:var(--fs-sm);color:var(--text-muted)">· Leak strict</span><div class="toggle"></div></div>
+</div>
+
+<h2>Tabs — two variants</h2>
+<div class="grid2">
+  <div class="card">
+    <div class="tabs">
+      <div class="tab active">Manual</div>
+      <div class="tab">Subscribe</div>
+      <div class="tab">Network</div>
+      <div class="tab">Apps</div>
+    </div>
+    <div style="font-size:var(--fs-2xs); color:var(--text-muted); margin-top:6px">Segmented — primary nav, dense.</div>
+  </div>
+  <div class="card">
+    <div class="tabs-underline">
+      <div class="tab active">VLESS</div>
+      <div class="tab">Custom Config</div>
+    </div>
+    <div style="font-size:var(--fs-2xs); color:var(--text-muted); margin-top:8px">Underline — sub-tabs inside a page.</div>
+  </div>
+</div>
+
+<h2>Banners</h2>
+<div class="card" style="display:grid; gap:8px">
+  <div class="banner banner-info"><div class="icon">↻</div><div><b>Update available · v2.16.0.</b> Download the DLL-only ZIP (≈3 MB).</div><button class="btn btn-primary btn-sm">Update</button></div>
+  <div class="banner banner-warning"><div class="icon">⏳</div><div><b>Pending routing changes.</b> Apply to reload sing-box without disconnecting.</div><button class="btn btn-secondary btn-sm">Apply now</button></div>
+  <div class="banner banner-danger"><div class="icon">●</div><div><b>Leak detected.</b> Some processes bypassed the tunnel on reconnect.</div><button class="btn btn-ghost btn-sm">Details</button></div>
+  <div class="banner banner-success"><div class="icon">✓</div><div><b>Connected · Asia-Tokyo-01.</b> 48 ms round-trip via sing-box TUN.</div><button class="btn btn-ghost btn-sm">Logs</button></div>
+</div>
+
+<h2>Server row — list item</h2>
+<div class="card" style="padding:0">
+  <div class="server-row active">
+    <div style="width:8px; height:8px; border-radius:50%; background:var(--success-solid)"></div>
+    <div><div class="name">Asia-Tokyo-01</div><div class="host">198.51.100.42 · tcp+reality</div></div>
+    <div class="ping-chip ping-good">48ms</div>
+    <div style="color:var(--text-muted); font-family:var(--font-mono); text-align:center">:443</div>
+    <button class="btn btn-ghost btn-sm" style="padding:2px 6px">⟳</button>
+  </div>
+  <div class="server-row">
+    <div></div>
+    <div><div class="name">EU-Amsterdam-03</div><div class="host">203.0.113.17 · tcp+reality</div></div>
+    <div class="ping-chip ping-ok">128ms</div>
+    <div style="color:var(--text-muted); font-family:var(--font-mono); text-align:center">:443</div>
+    <button class="btn btn-ghost btn-sm" style="padding:2px 6px">⟳</button>
+  </div>
+  <div class="server-row">
+    <div></div>
+    <div><div class="name">US-LosAngeles-02</div><div class="host">192.0.2.88 · tcp+ws</div></div>
+    <div class="ping-chip ping-bad">312ms</div>
+    <div style="color:var(--text-muted); font-family:var(--font-mono); text-align:center">:8443</div>
+    <button class="btn btn-ghost btn-sm" style="padding:2px 6px">⟳</button>
+  </div>
+</div>
+
+<h2>Stats — for dashboards</h2>
+<div class="grid3">
+  <div class="stat accent"><div class="k">Total configs</div><div class="v">24,387</div></div>
+  <div class="stat success"><div class="k">Verified</div><div class="v">1,204</div></div>
+  <div class="stat"><div class="k">Countries</div><div class="v">47</div></div>
+</div>
+
+</body>
+</html>
