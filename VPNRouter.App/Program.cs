@@ -1,5 +1,6 @@
 using Avalonia;
 using System;
+using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
 #if PLATFORM_WINDOWS
 using System.Diagnostics;
@@ -127,6 +128,25 @@ sealed class Program
             }
             return;
         }
+
+        // v2.25.13 — autostart path self-heal. If user enabled
+        // "Start with Windows" at an earlier install location and later
+        // reinstalled / moved the binary, HKCU\...\Run still holds the
+        // stale ghost path — silent fail at next login. Every startup we
+        // verify the stored path matches the currently-running exe and
+        // rewrite if it doesn't. No-op when autostart is disabled.
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(exe) && AutostartHelper.EnsureCurrentPath(exe))
+            {
+                // Log via stderr so it's visible in any attached console
+                // without requiring the full Serilog stack to be wired up.
+                try { Console.Error.WriteLine($"[autostart] HKCU Run key rewritten → {exe}"); }
+                catch { }
+            }
+        }
+        catch { /* never block app startup over a cosmetic registry fix */ }
 
         // Defensive cleanup: kill orphan sing-box / older VPNRouter instances
         // left behind by failed updates or v2.3.x→v2.4.x migration.
