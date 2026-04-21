@@ -219,7 +219,21 @@ public class VpnEngine : IDisposable
         if (string.IsNullOrEmpty(profileName) && !isFullTunnel && !isCustomConfig)
             throw new InvalidOperationException("No active profile specified in config.");
 
-        if (!string.IsNullOrEmpty(profileName))
+        // v2.22.3: in full-tunnel mode all traffic goes through the proxy
+        // regardless of process. Resolving ActiveProfile + scanning its
+        // hundreds of processes just wastes time (and on Windows can hang
+        // for minutes if the profile catalogue has a pathological entry —
+        // user hit this when upgrading had left a stale default.json in
+        // %ProgramData%\VPNRouter\profiles\ that didn't match the new
+        // schema). Collapse to the empty FullTunnel profile unconditionally.
+        if (isFullTunnel)
+        {
+            _logger?.Information(
+                "[VpnEngine] Full-tunnel mode — ignoring ActiveProfile '{Profile}' and skipping process scan",
+                profileName ?? "(empty)");
+            _activeProfile = new Profile { Name = "FullTunnel", DnsMode = "vpn_only" };
+        }
+        else if (!string.IsNullOrEmpty(profileName))
         {
             var names = profileName.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
             // v2.22.0-r1: tolerant merge — log+skip unknown names, fall back
@@ -589,7 +603,14 @@ public class VpnEngine : IDisposable
             var isFullTunnel = (settings.App.RoutingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase);
             var isCustomConfig = settings.App.ConfigMode?.Equals("custom", StringComparison.OrdinalIgnoreCase) == true;
 
-            if (!string.IsNullOrEmpty(profileName))
+            // v2.22.3: same short-circuit as StartAsync — full tunnel ignores
+            // profile and its process scan entirely. Avoids re-scanning on
+            // every Apply when user toggles unrelated settings.
+            if (isFullTunnel)
+            {
+                _activeProfile = new Profile { Name = "FullTunnel", DnsMode = "vpn_only" };
+            }
+            else if (!string.IsNullOrEmpty(profileName))
             {
                 var names = profileName.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
                 var merged = manager.MergeProfilesTolerant(names, out var missing);
