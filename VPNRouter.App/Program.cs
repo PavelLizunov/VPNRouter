@@ -25,6 +25,12 @@ sealed class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // v2.24.0 self-healing: install crash reporter before anything
+        // else. Writes crash-<stamp>.txt into %DataDir%/crashes/ on any
+        // unhandled exception so the user has something to attach to a
+        // bug report without scouring the logs themselves.
+        VPNRouter.Core.Services.CrashReporter.Install();
+
         StartMinimized = args.Contains("--minimized");
         SafeMode = args.Contains("--safe");
 

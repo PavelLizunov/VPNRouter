@@ -74,6 +74,21 @@ public static class SettingsLoader
         if (string.IsNullOrWhiteSpace(settings.App.Theme))
             settings.App.Theme = "light";
 
+        // v2.24.0 schema migration: advance any older yaml to the current
+        // schema version, persisting the upgraded form so the next load
+        // starts clean. No-op for configs already at CurrentSchemaVersion.
+        if (settings.SchemaVersion < AppSettings.CurrentSchemaVersion)
+        {
+            var old = settings.SchemaVersion;
+            settings = SettingsMigrator.Migrate(
+                settings,
+                from: settings.SchemaVersion,
+                to: AppSettings.CurrentSchemaVersion);
+            // Persist upgraded form side-effectfully so we only migrate once.
+            try { Save(settings); }
+            catch { /* migration itself succeeded; re-save failure is non-fatal */ }
+        }
+
         return settings;
     }
 

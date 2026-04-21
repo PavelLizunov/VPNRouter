@@ -4,6 +4,18 @@ namespace VPNRouter.Core.Models;
 
 public class AppSettings
 {
+    /// <summary>
+    /// Schema version for forward-compatibility migrations. Bumped only
+    /// when the yaml layout changes in a breaking way (renamed field,
+    /// dropped section, etc.). Older configs get picked up by
+    /// <see cref="VPNRouter.Core.Services.SettingsMigrator"/> and
+    /// rewritten to the current schema on load.
+    /// </summary>
+    public const int CurrentSchemaVersion = 1;
+
+    [YamlMember(Alias = "schema_version")]
+    public int SchemaVersion { get; set; } = CurrentSchemaVersion;
+
     [YamlMember(Alias = "app")]
     public AppConfig App { get; set; } = new();
 

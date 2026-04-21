@@ -134,16 +134,16 @@ When an unhandled exception occurs:
 ## Status tracker
 
 ### Level 1 (v2.22.4)
-- [ ] 1.1 ProcessScanner timeout
-- [ ] 1.2 Auto-migrate stale profiles/default.json
-- [ ] 1.3 WMI child-lookup batching
+- [x] 1.1 ProcessScanner timeout
+- [x] 1.2 Auto-migrate stale profiles/default.json
+- [x] 1.3 WMI child-lookup batching
 
-### Level 2 (v2.23.0)
-- [ ] 2.1 Safe mode (--safe flag + banner)
-- [ ] 2.2 Reset to defaults button
-- [ ] 2.3 Lockfile + crash detection
+### Level 2 (v2.23.0 + v2.23.1)
+- [x] 2.1 Safe mode (--safe flag)
+- [x] 2.2 Reset to defaults (--reset flag + menu button)
+- [x] 2.3 Lockfile + crash detection (log warning; UI banner deferred)
 
 ### Level 3 (v2.24.0)
-- [ ] 3.1 Schema version + migrator
-- [ ] 3.2 vpnrouter doctor CLI
-- [ ] 3.3 Opt-in error reporting
+- [x] 3.1 Schema version + migrator (baseline schema_version=1, skeleton for future)
+- [x] 3.2 vpnrouter doctor CLI
+- [x] 3.3 Crash report writer (no upload; writes to %DataDir%/crashes/crash-<stamp>.txt)

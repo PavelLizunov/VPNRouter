@@ -43,6 +43,10 @@ app.Configure(config =>
     config.AddCommand<StatusCommand>("status")
         .WithDescription("Show current VPN router status");
 
+    // vpnrouter doctor (v2.24.0 self-healing)
+    config.AddCommand<DoctorCommand>("doctor")
+        .WithDescription("Health check: config, catalogue, binaries, state. Exit 0 = OK, 1 = warnings, 2 = errors");
+
     // vpnrouter service [install|uninstall|start|stop|status]
     config.AddBranch("service", svc =>
     {
