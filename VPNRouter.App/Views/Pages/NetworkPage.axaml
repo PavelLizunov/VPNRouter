@@ -129,14 +129,23 @@
                 </Border>
             </StackPanel>
 
-            <!-- Autostart section -->
+            <!-- Autostart section.
+                 v2.25.0-r2: the four sub-flags (Vpn/Zapret/TgProxy/Ui) are
+                 all Windows-only — Zapret + TgProxy features don't exist on
+                 Linux/macOS at all, VPN autostart is driven by the Windows
+                 Service (absent elsewhere), and UI autostart goes through
+                 HKCU\Run registry. On non-Windows the whole control panel
+                 was showing four disabled-looking but still-clickable
+                 checkboxes that did nothing on click — replace with a clear
+                 "not yet" banner. -->
             <StackPanel Spacing="10" IsVisible="{Binding IsSettingsAutostartSelected}">
                 <TextBlock Text="{Binding LblAutostartSection}" FontWeight="Bold" FontSize="13"/>
 
                 <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
                         Background="{DynamicResource SurfaceSunkenBrush}"
                         BorderBrush="{DynamicResource BorderDefaultBrush}"
-                        BorderThickness="1">
+                        BorderThickness="1"
+                        IsVisible="{Binding IsWindowsPlatform}">
                     <StackPanel Spacing="6">
                         <CheckBox IsChecked="{Binding AutostartVpn}"
                                   Content="{Binding LblAutostartVpn}"
@@ -151,6 +160,18 @@
                                   Content="{Binding LblAutostartUi}"
                                   MinHeight="0" Padding="4,0"/>
                     </StackPanel>
+                </Border>
+
+                <!-- Non-Windows notice: replaces the non-functional checkboxes. -->
+                <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
+                        Background="{DynamicResource InfoBgBrush}"
+                        BorderBrush="{DynamicResource InfoBorderBrush}"
+                        BorderThickness="1"
+                        IsVisible="{Binding !IsWindowsPlatform}">
+                    <TextBlock Text="{x:Static loc:Strings.AutostartPlatformNotice}"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource InfoFgBrush}"/>
                 </Border>
             </StackPanel>
 

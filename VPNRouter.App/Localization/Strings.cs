@@ -681,6 +681,13 @@ public static class Strings
         ? "Сохранить резервную копию конфига и перезапустить с заводскими настройками. Нажмите дважды для подтверждения."
         : "Backup current config and restart with factory defaults. Click twice to confirm.";
 
+    // v2.25.0-r2 — Autostart is Windows-only (service + registry Run key).
+    // On Linux/macOS this whole section is non-functional; replace the four
+    // checkboxes with a notice so users don't flip disabled toggles.
+    public static string AutostartPlatformNotice => Ru
+        ? "Автозапуск пока поддерживается только на Windows. Поддержка Linux (systemd) и macOS (launchd) появится в будущих версиях."
+        : "Autostart is currently available on Windows only. Linux (systemd) and macOS (launchd) support is planned for future releases.";
+
     // v2.25.0 — "About" dialog (version / build info moved out of header).
     public static string SmpMenuAbout        => Ru ? "О приложении"              : "About";
     public static string TipSmpMenuAbout     => Ru

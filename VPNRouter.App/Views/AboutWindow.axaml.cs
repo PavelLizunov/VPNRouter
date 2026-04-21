@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -61,6 +62,13 @@ public partial class AboutWindow : Window
     /// binary may not be extracted yet; in that case we return a placeholder
     /// rather than raising. Mirrors MainWindowViewModel.GetSingBoxVersion but
     /// kept local so the About dialog is self-contained.
+    /// v2.25.0-r2: on macOS the probe was silently returning "unknown"
+    /// because stderr wasn't redirected — sing-box on darwin writes some
+    /// boot diagnostics to stderr first, and without a reader the stderr
+    /// pipe fills up and the child blocks before it gets to print the
+    /// version line. Fix: redirect both streams, wait, then parse whichever
+    /// stream contained the "version" token. Also write any exception to a
+    /// sidecar log so the next Mac report has something concrete.
     /// </summary>
     private static string GetSingBoxVersion()
     {
@@ -78,27 +86,58 @@ public partial class AboutWindow : Window
                     Arguments = "version",
                     UseShellExecute = false,
                     RedirectStandardOutput = true,
+                    RedirectStandardError  = true,
                     CreateNoWindow = true
                 }
             };
             proc.Start();
-            var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(2000);
 
-            // Parse "sing-box version 1.13.7" → keep only the version number
-            // so the About dialog shows it without the redundant "sing-box"
-            // prefix (the field already has a "sing-box" label next to it).
-            foreach (var line in output.Split('\n'))
+            // Drain both pipes so neither fills up and blocks the child.
+            // ReadToEnd is fine because sing-box version exits within ms.
+            var stdout = proc.StandardOutput.ReadToEnd();
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(3000);
+
+            // Check stdout first (canonical), then stderr as fallback.
+            foreach (var source in new[] { stdout, stderr })
             {
-                var trimmed = line.Trim();
-                if (trimmed.StartsWith("sing-box version", StringComparison.OrdinalIgnoreCase))
-                    return trimmed.Substring("sing-box version".Length).Trim();
+                foreach (var line in source.Split('\n'))
+                {
+                    var trimmed = line.Trim();
+                    if (trimmed.StartsWith("sing-box version", StringComparison.OrdinalIgnoreCase))
+                        return trimmed.Substring("sing-box version".Length).Trim();
+                }
             }
+
+            // Nothing matched — last-resort: return the first non-empty
+            // output line so the user at least sees WHAT came back rather
+            // than an opaque "unknown". Cap length so the dialog layout
+            // doesn't explode if sing-box printed a huge stack trace.
+            var firstLine = (stdout + "\n" + stderr)
+                .Split('\n')
+                .Select(l => l.Trim())
+                .FirstOrDefault(l => !string.IsNullOrEmpty(l));
+            if (!string.IsNullOrEmpty(firstLine))
+                return firstLine.Length > 48 ? firstLine.Substring(0, 48) + "…" : firstLine;
+
             return "unknown";
         }
-        catch
+        catch (Exception ex)
         {
-            return "unknown";
+            // Best-effort: log to ~/.../logs/about-probe.log so the next
+            // support round can see what failed without having to add a
+            // debugger. Silent if log write itself fails.
+            try
+            {
+                var logPath = System.IO.Path.Combine(AppPaths.LogsDir, "about-probe.log");
+                System.IO.Directory.CreateDirectory(AppPaths.LogsDir);
+                System.IO.File.AppendAllText(
+                    logPath,
+                    $"[{DateTime.UtcNow:u}] GetSingBoxVersion failed: {ex.GetType().Name}: {ex.Message}\n");
+            }
+            catch { /* log failure is not a crash */ }
+
+            return $"err: {ex.GetType().Name}";
         }
     }
 }
