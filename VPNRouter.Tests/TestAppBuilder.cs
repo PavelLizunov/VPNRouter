@@ -29,11 +29,12 @@ public static class TestAppBuilder
 {
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<VPNRouterApp>()
+            .UseSkia() // needed for CaptureRenderedFrame PNG output
             .UseHeadless(new AvaloniaHeadlessPlatformOptions
             {
-                // No frame rendering / image capture needed for our current
-                // smoke tests. Flip this to true if a test needs to assert
-                // on visual output (screenshots, pixel diffs).
-                UseHeadlessDrawing = true
+                // false → Skia renders to offscreen bitmaps so we can
+                // grab WriteableBitmap from window.CaptureRenderedFrame().
+                // true would skip rendering entirely (fast, but no screenshots).
+                UseHeadlessDrawing = false
             });
 }

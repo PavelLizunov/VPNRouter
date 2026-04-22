@@ -44,3 +44,7 @@ VPNRouter-update-*.zip
 b_icon.png
 w_icon.png
 publish/
+
+# UI test screenshots (regenerated on every `dotnet test` run; inspection
+# artefact, not versioned content). See plans/ui-testing-workflow.md.
+VPNRouter.Tests/screenshots/
