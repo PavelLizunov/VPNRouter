@@ -158,9 +158,36 @@ public static class ConfigGenerator
             break;
         }
 
+        // v2.27.1-r2 — domain-only bypass (drop geoip-ru from the route rule).
+        //
+        // Previously the route rule OR'd geosite-ru + geoip-ru, which looks
+        // thorough but misroutes large international services:
+        //
+        //   Google / Cloudflare / Akamai / Valve keep edge-cache nodes
+        //   INSIDE Russian ISP infrastructure. Those edge IPs sit in RU
+        //   netblocks, so MaxMind (and therefore sing-box's geoip-ru) tags
+        //   them "RU". Our route rule then sent YouTube video chunks, CF-
+        //   cached static assets, etc. out via outbound/direct — and since
+        //   the user is physically on a Russian ISP, those bypassed flows
+        //   hit the same throttling / MITM that the VPN was there to avoid.
+        //
+        //   Repro from the v2.27.0 production dump:
+        //     grep 'outbound/direct\[direct\]' singbox.log | grep 142.251
+        //     → 4 YouTube IPs going direct instead of via VLESS.
+        //   User-visible symptom: "YouTube отваливается в браузере".
+        //
+        // geosite-ru (domain-based) is the right matcher for "Russian
+        // service" — it keys on .ru TLD + curated Russian-service domains,
+        // and the DNS rule above already routes those lookups to a
+        // Russian resolver so the returned IPs are whatever the local
+        // authority says. Adding geoip-ru on top was over-matching.
+        //
+        // Pure-IP Russian traffic (someone dialling 77.88.8.8 directly with
+        // no DNS) is rare and acceptable to leave going through VPN — the
+        // trade-off beats breaking YouTube for everyone.
         config.Route.Rules.Insert(insertAt, new RouteRule
         {
-            RuleSet = new List<string> { GeoSiteRuleSetTag, GeoIpRuleSetTag },
+            RuleSet = new List<string> { GeoSiteRuleSetTag },
             Action = "route",
             Outbound = "direct"
         });
