@@ -48,6 +48,16 @@ public partial class MainWindowViewModel
     public string L_AutostartVpn => Strings.AutostartVpn;
     public string L_AutostartWithWindows => Strings.AutostartWithWindows;
     public string L_AutostartZapret => Strings.AutostartZapret;
+    // v2.27 Bug C — two-section layout headers + hints
+    public string L_AutostartBootSectionTitle => Strings.AutostartBootSectionTitle;
+    public string L_AutostartBootSectionSub => Strings.AutostartBootSectionSub;
+    public string L_AutostartComponentsInfoHint => Strings.AutostartComponentsInfoHint;
+    public string L_AutostartLoginSectionTitle => Strings.AutostartLoginSectionTitle;
+    public string L_AutostartLoginAppDescription => Strings.AutostartLoginAppDescription;
+    // v2.27 §4.5 — prominent PID line replacing the small pill
+    public string L_ServiceStoppedLine => Strings.ServiceStoppedLine;
+    public string L_ServiceRunningLine =>
+        ServiceVm.ServicePid.HasValue ? Strings.ServiceRunningLine(ServiceVm.ServicePid.Value) : Strings.ServiceRunningText;
     public string L_BtnAdd => Strings.BtnAdd;
     public string L_BypassRussianTrafficHint => Strings.BypassRussianTrafficHint;
     public string L_BypassRussianTrafficLabel => Strings.BypassRussianTrafficLabel;

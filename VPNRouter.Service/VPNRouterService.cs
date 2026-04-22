@@ -11,6 +11,17 @@ namespace VPNRouter.Service;
 /// Windows Service implementation.
 /// On cold start: waits for network, then auto-starts VPN/Zapret/TgProxy
 /// based on config flags. Defers to desktop UI if it's running.
+///
+/// <para><b>v2.27 §4.6 C2 — config.yaml write invariant:</b> the Service
+/// MUST NOT write to <c>config.yaml</c>. The desktop App is the single
+/// authoritative writer; the Service is a pure reader + <c>FileSystem
+/// Watcher</c>-driven reconciler (see <see cref="SettingsLoader.Load"/>
+/// callers below). Enforced by convention, verified by a grep audit on
+/// every v2.27.x release — breaking this would reintroduce the race
+/// between App's <c>SaveSettings()</c> and a Service write that was
+/// called out in the plan. If a future feature needs Service-side
+/// persistence, add a separate <c>service-state.json</c> file instead
+/// of touching <c>config.yaml</c>.</para>
 /// </summary>
 public class VPNRouterService : BackgroundService
 {

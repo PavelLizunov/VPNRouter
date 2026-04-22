@@ -57,4 +57,27 @@ public class PageScreenshotTests
     [AvaloniaFact] public void TelegramPage() => Capture(new TelegramPage(), "page-telegram");
     [AvaloniaFact] public void FreeConfigsPage() => Capture(new FreeConfigsPage(), "page-free-configs");
     [AvaloniaFact] public void SimplePage() => Capture(new SimplePage(), "page-simple");
+
+    /// <summary>
+    /// NetworkPage has a left-rail navigator with 5 sections (Routing /
+    /// Leak Protection / Content / Updates / Autostart). The default
+    /// screenshot above captures Routing; this one explicitly selects
+    /// Autostart (index 4) before rendering so the v2.27 Bug C redesign
+    /// surface is visible in the PNG suite. Without this we'd ship the
+    /// whole UX redesign and have no visual record of what it looks like.
+    /// </summary>
+    [AvaloniaFact]
+    public void NetworkPage_AutostartTab()
+    {
+        var vm = GetVm();
+        vm.SelectedSettingsIndex = 4; // Autostart tab
+        try
+        {
+            ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, "page-network-autostart");
+        }
+        finally
+        {
+            vm.SelectedSettingsIndex = 0; // restore default so sibling tests aren't affected
+        }
+    }
 }

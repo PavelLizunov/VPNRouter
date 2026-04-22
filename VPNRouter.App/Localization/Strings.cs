@@ -127,6 +127,36 @@ public static class Strings
         ? "Пользовательский сеанс"
         : "User session";
 
+    // v2.27 Bug C — two-section layout for the Autostart panel, grouping
+    // controls by WHEN the autostart happens rather than by which Windows
+    // mechanism it's wired to. Makes "I want VPN on boot" actionable via a
+    // single checkbox instead of forcing users to understand service vs.
+    // Run-key vs. yaml flag.
+    public static string AutostartBootSectionTitle => Ru
+        ? "На старте Windows (до логина)"
+        : "At Windows startup (before sign-in)";
+    public static string AutostartBootSectionSub => Ru
+        ? "Нужна служба Windows для запуска VPN, Zapret или Telegram-прокси до входа пользователя"
+        : "Needs the Windows service to start VPN, Zapret or Telegram proxy before a user signs in";
+    public static string AutostartComponentsInfoHint => Ru
+        ? "Эти флаги читает служба при boot. Требуется установленная служба."
+        : "These flags are read by the service at boot. Requires the service to be installed.";
+    public static string AutostartLoginSectionTitle => Ru
+        ? "При входе пользователя"
+        : "At user sign-in";
+    public static string AutostartLoginAppDescription => Ru
+        ? "Запускает приложение VPNRouter после входа. VPN придётся стартануть вручную или включить «на старте Windows» выше."
+        : "Launches VPNRouter after you sign in. VPN itself must be started manually, or enable \u201Cat Windows startup\u201D above.";
+
+    /// <summary>Prominent running-state line with PID, e.g. "● Running — PID 1234".
+    /// Replaces the tiny pill that was easy to miss in v2.26.x.</summary>
+    public static string ServiceRunningLine(int pid) => Ru
+        ? $"\u25CF Запущена \u2014 PID {pid}"
+        : $"\u25CF Running \u2014 PID {pid}";
+    public static string ServiceStoppedLine => Ru
+        ? "\u25CB Остановлена"
+        : "\u25CB Stopped";
+
     // ── Dialogs ──
     public static string FailedStartVpn => Ru ? "Не удалось запустить VPN:" : "Failed to start VPN:";
     public static string AddServerFirst => Ru

@@ -24,6 +24,11 @@ public partial class ServiceViewModel : ObservableObject
     [ObservableProperty] private bool _isRunning;
     [ObservableProperty] private bool _autostartChecked;
     [ObservableProperty] private string _statusMessage = string.Empty;
+    // v2.27 §4.5 — expose service PID so the UI can show a prominent
+    // "● Running — PID 1234" status line instead of the tiny pill users miss.
+    // Best-effort; null when not running or when process enumeration fails
+    // (cross-session access-denied for a non-admin App, for example).
+    [ObservableProperty] private int? _servicePid;
     [ObservableProperty] private bool _isBusy;
 
 #if PLATFORM_WINDOWS
@@ -47,6 +52,7 @@ public partial class ServiceViewModel : ObservableObject
             IsInstalled = WindowsServiceHelper.IsInstalled();
             IsRunning = WindowsServiceHelper.IsRunning();
             AutostartChecked = IsInstalled;
+            ServicePid = IsRunning ? ResolveServicePid() : null;
         }
         finally
         {
@@ -54,6 +60,31 @@ public partial class ServiceViewModel : ObservableObject
         }
 #endif
     }
+
+#if PLATFORM_WINDOWS
+    // Best-effort lookup of VPNRouter.Service PID via Process enumeration.
+    // Returns null if the service isn't running, enumeration fails, or the
+    // caller lacks rights to see cross-session processes (non-admin App).
+    private static int? ResolveServicePid()
+    {
+        try
+        {
+            var procs = System.Diagnostics.Process.GetProcessesByName("VPNRouter.Service");
+            try
+            {
+                return procs.Length > 0 ? procs[0].Id : null;
+            }
+            finally
+            {
+                foreach (var p in procs) p.Dispose();
+            }
+        }
+        catch
+        {
+            return null;
+        }
+    }
+#endif
 
     partial void OnAutostartCheckedChanged(bool value)
     {
