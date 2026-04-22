@@ -32,10 +32,13 @@ public class MainWindowViewModelTests
     {
         var vm = new MainWindowViewModel();
 
-        // Collect PropertyChanged hits for our property under test. The VM
-        // fires a ton of these during construction (settings load, profile
-        // scan, etc.) — we only care about changes AFTER we've latched our
-        // starting baseline.
+        // We can't assume an initial state for the three inputs — a dev host
+        // may already have the service installed and AutostartVpn set from
+        // prior testing. Instead we force each input to a known value and
+        // assert the transition fires PropertyChanged AND the computed lines
+        // up with the inputs on each step. This still catches the pre-Bug-B
+        // regression (plain field, no re-notify on ServiceVm changes) because
+        // the test fails the moment one of the three inputs stops notifying.
         var notifications = new List<string>();
         vm.PropertyChanged += (_, e) =>
         {
@@ -43,38 +46,37 @@ public class MainWindowViewModelTests
                 notifications.Add($"changed@{vm.SmpAutostartChecked}");
         };
 
-        // Baseline: fresh VM on a clean VM host has no service installed, no
-        // AutostartVpn flag → computed must be false.
-        Assert.False(vm.SmpAutostartChecked,
-            "Initial SmpAutostartChecked should be false on a fresh VM (service not installed)");
+        // Force all three inputs to false → computed must be false.
+        vm.ServiceVm.IsInstalled = false;
+        vm.ServiceVm.IsRunning = false;
+        vm.AutostartVpn = false;
+        Assert.False(vm.SmpAutostartChecked, "All three inputs false → SmpAutostartChecked must be false");
 
-        // Case 1 — flip AutostartVpn alone. Not enough on its own (service
-        // isn't running), but the computed must re-notify so bindings see
-        // the stable-false value. Before the fix this path wouldn't fire at
-        // all because SmpAutostartChecked was a plain field.
+        // Flip AutostartVpn alone. Computed stays false (service off), but
+        // the PropertyChanged stream must fire — that's the re-notify pin.
         notifications.Clear();
         vm.AutostartVpn = true;
-        Assert.Contains("changed@", string.Join(",", notifications));
+        Assert.NotEmpty(notifications);
         Assert.False(vm.SmpAutostartChecked, "AutostartVpn alone shouldn't flip Simple on (service not running)");
 
-        // Case 2 — flip ServiceVm.IsInstalled. Still not enough (need IsRunning)
-        // but the subscription in the constructor must re-fire PropertyChanged.
+        // Flip ServiceVm.IsInstalled. Still not enough (need IsRunning) but
+        // the ServiceVm.PropertyChanged subscription in the ctor must fire.
         notifications.Clear();
         vm.ServiceVm.IsInstalled = true;
-        Assert.Contains("changed@", string.Join(",", notifications));
+        Assert.NotEmpty(notifications);
         Assert.False(vm.SmpAutostartChecked, "IsInstalled alone shouldn't flip Simple on");
 
-        // Case 3 — flip ServiceVm.IsRunning. Now all three signals are true,
-        // computed must flip to true AND notify.
+        // Flip ServiceVm.IsRunning. Now all three are true → computed flips
+        // to true AND notifies.
         notifications.Clear();
         vm.ServiceVm.IsRunning = true;
         Assert.Contains("changed@True", string.Join(",", notifications));
         Assert.True(vm.SmpAutostartChecked, "All three inputs true → SmpAutostartChecked must be true");
 
-        // Case 4 — flip AutostartVpn back off. Computed drops back to false
-        // and notifies. This is the Advanced-mode path where a user unchecks
-        // "auto-start VPN" but leaves the service installed (Zapret etc. may
-        // still want it); Simple must reflect the VPN-off state.
+        // Flip AutostartVpn back off. Computed drops back to false and
+        // notifies — Advanced-mode path where a user unchecks "auto-start
+        // VPN" but leaves the service installed (Zapret etc. may still need
+        // it); Simple must reflect the VPN-off state.
         notifications.Clear();
         vm.AutostartVpn = false;
         Assert.Contains("changed@False", string.Join(",", notifications));
