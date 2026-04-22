@@ -23,6 +23,10 @@ public class SingBoxManager : IDisposable
     public SingBoxState State { get; private set; } = SingBoxState.Stopped;
     public int? Pid => _process?.HasExited == false ? _process.Id : null;
     public event EventHandler? Crashed;
+    /// <summary>Fires after every successful LaunchProcess — initial start
+    /// AND restart after crash. Listeners (e.g. CLI StateFile writer) use
+    /// this to keep their persisted PID in sync with the live process.</summary>
+    public event Action<int>? Started;
 
     public SingBoxManager(SingBoxSettings settings, ILogger? logger = null)
     {
@@ -298,6 +302,18 @@ public class SingBoxManager : IDisposable
 
     private bool TryHotReload()
     {
+        // Pre-check: don't attempt an HTTP call to a dead sing-box. Without
+        // this, a crash-recovery path that tries hot-reload first (because
+        // a debounced process rescan landed between Crashed and our state
+        // update) dumps a 20-line HttpRequestException stack into the log
+        // — every single time. Checking HasExited gives us a fast, clean
+        // "hot-reload unavailable, restarting" log line instead.
+        if (_process == null || _process.HasExited)
+        {
+            _logger.Debug("[SingBoxManager] Hot-reload skipped — sing-box process not alive");
+            return false;
+        }
+
         try
         {
             var url = $"http://{_settings.ClashApi}/configs?force=true";
@@ -399,6 +415,7 @@ public class SingBoxManager : IDisposable
 
         State = SingBoxState.Running;
         _logger.Information("[SingBoxManager] sing-box started (PID {Pid})", _process.Id);
+        Started?.Invoke(_process.Id);
     }
 
     /// <summary>Check if sing-box Clash API responds (macOS: sing-box runs as root child of sudo).</summary>

@@ -114,6 +114,19 @@ public class StartCommand : AsyncCommand<StartSettings>
         engine.Warning += msg =>
             AnsiConsole.MarkupLine($"[yellow]⚠ {Markup.Escape(msg)}[/]");
 
+        // Keep state.json's SingBoxPid in sync with reality: this event fires
+        // after every successful sing-box launch (initial + every HealthMonitor
+        // restart). Without it, `vpnrouter stop` from another terminal would
+        // target the stale launch-time PID and silently no-op while the current
+        // sing-box keeps running.
+        engine.SingBoxStarted += newPid =>
+        {
+            var existing = StateFile.Read();
+            if (existing == null) return; // StartCommand hasn't written yet; first write below handles it
+            existing.SingBoxPid = newPid;
+            StateFile.Write(existing);
+        };
+
         try
         {
             await engine.StartAsync(appSettings);

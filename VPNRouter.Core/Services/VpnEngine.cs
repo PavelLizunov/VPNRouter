@@ -57,6 +57,13 @@ public class VpnEngine : IDisposable
     /// <summary>Fired on validation warnings</summary>
     public event Action<string>? Warning;
 
+    /// <summary>Fired after every successful sing-box launch (initial start
+    /// AND any restart). Consumers use this to keep persisted state (CLI
+    /// state.json, GUI banner PID, doctor lockfile) in sync with the live
+    /// process — without it, stop/status commands race against stale PIDs
+    /// the moment HealthMonitor does its first restart.</summary>
+    public event Action<int>? SingBoxStarted;
+
     public VpnEngine(
         IProcessScanner scanner,
         Func<IFirewallManager> firewallFactory,
@@ -486,6 +493,10 @@ public class VpnEngine : IDisposable
         // 8. Start sing-box
         OnStatus("Starting sing-box...");
         _singBox = new SingBoxManager(settings.SingBox, _logger);
+        // Re-emit every successful launch (initial + any restart) so consumers
+        // can keep persisted PID state in sync — the reason status/stop don't
+        // race against stale PIDs after HealthMonitor restarts.
+        _singBox.Started += pid => SingBoxStarted?.Invoke(pid);
         _singBox.StartWithJson(configJson);
 
         // Wait up to 5s for startup
