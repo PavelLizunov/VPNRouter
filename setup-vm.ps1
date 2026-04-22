@@ -270,6 +270,18 @@ if (-not $SkipBuild) {
 Write-Host ""
 Write-Host "Setup complete." -ForegroundColor Green
 Write-Host ""
+Write-Host "IMPORTANT: the PATH changes from Chocolatey only apply to NEW" `
+    -ForegroundColor Yellow
+Write-Host "           PowerShell windows. The shell you launched this script" `
+    -ForegroundColor Yellow
+Write-Host "           from still has the old PATH. Before running 'gh' or" `
+    -ForegroundColor Yellow
+Write-Host "           any other freshly installed tool, do ONE of:" `
+    -ForegroundColor Yellow
+Write-Host "             refreshenv" -ForegroundColor Yellow
+Write-Host "             # or: close this window and open a new elevated PowerShell" `
+    -ForegroundColor Yellow
+Write-Host ""
 Write-Host "Next steps:"
 Write-Host "  1. gh auth login"
 Write-Host "       - Authenticate GitHub CLI for release uploads."
