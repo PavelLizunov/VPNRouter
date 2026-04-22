@@ -88,6 +88,73 @@ function Install-WingetPackage($id, $name) {
     }
 }
 
+function Install-Winget {
+    <#
+    Ensures winget (App Installer / Microsoft.DesktopAppInstaller) is
+    available. Downloads the MSIX bundle plus the two common dependencies
+    (VCLibs UWP Desktop, Microsoft.UI.Xaml 2.8) directly from Microsoft
+    / GitHub and registers them with Add-AppxPackage. No external scripts
+    required - works on fresh Windows 11 images where the Store app is
+    missing or out of date.
+    #>
+    if (Test-Command winget) {
+        return
+    }
+
+    Write-Host "  winget not found - installing App Installer and deps..." `
+        -ForegroundColor Yellow
+
+    $tmp = Join-Path $env:TEMP "vpnrouter-winget-install"
+    New-Item -ItemType Directory -Path $tmp -Force | Out-Null
+
+    # Invoke-WebRequest is ~50x slower on PS 5.1 with the progress bar shown.
+    $prevProgress = $ProgressPreference
+    $ProgressPreference = 'SilentlyContinue'
+    try {
+        # Install order matters: dependencies first, then winget bundle.
+        $items = @(
+            @{ Name = "Microsoft.VCLibs.x64.Desktop.appx"
+               Url  = "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx" }
+            @{ Name = "Microsoft.UI.Xaml.2.8.x64.appx"
+               Url  = "https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.8.6/Microsoft.UI.Xaml.2.8.x64.appx" }
+            @{ Name = "Microsoft.DesktopAppInstaller.msixbundle"
+               Url  = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" }
+        )
+        foreach ($item in $items) {
+            $dest = Join-Path $tmp $item.Name
+            Write-Host "    Downloading $($item.Name)"
+            Invoke-WebRequest -Uri $item.Url -OutFile $dest -UseBasicParsing
+        }
+        foreach ($item in $items) {
+            $dest = Join-Path $tmp $item.Name
+            Write-Host "    Installing $($item.Name)"
+            try {
+                Add-AppxPackage -Path $dest -ErrorAction Stop
+            } catch {
+                # Most common: "package is already installed with equal or newer version"
+                # (0x80073D06). Safe to ignore.
+                Write-Warning "    Add-AppxPackage: $($_.Exception.Message)"
+            }
+        }
+    } finally {
+        $ProgressPreference = $prevProgress
+    }
+
+    # Refresh PATH so Get-Command can see the freshly registered winget.exe.
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("Path","User")
+
+    if (-not (Test-Command winget)) {
+        Write-Host ""
+        Write-Host "[!] winget still not found after install attempt." -ForegroundColor Red
+        Write-Host "    Manual fallback:"
+        Write-Host "      Start-Process 'ms-windows-store://pdp/?productid=9NBLGGH4NNS1'"
+        Write-Host "    Click Install / Update in Microsoft Store, then re-run this script."
+        exit 1
+    }
+    Write-Host "  winget OK: $(& winget --version)" -ForegroundColor Green
+}
+
 function Test-Endpoint($hostname, $port, $label) {
     $ok = $false
     try {
@@ -123,11 +190,7 @@ Write-Host "  Clone from:      $RepoUrl"
 if (-not $SkipWinget) {
     Write-Section "Installing dev tools via winget"
 
-    if (-not (Test-Command winget)) {
-        Write-Host "[!] winget is not available." -ForegroundColor Red
-        Write-Host "    Install 'App Installer' from Microsoft Store and re-run."
-        exit 1
-    }
+    Install-Winget   # bootstraps App Installer if it's missing on this VM
 
     Install-WingetPackage "Microsoft.DotNet.SDK.8" ".NET 8 SDK"
     Install-WingetPackage "GoLang.Go"              "Go"
