@@ -75,6 +75,25 @@ public class HeadlessGuiTests
     }
 
     /// <summary>
+    /// Captures the full MainWindow at three widths to repro the v2.27.0-r2
+    /// user report: "обводки/фоны у отдельных лейблов (VPN/Zapret/TG pills,
+    /// Режим chip и пр.) по-разному скрываются при сужении". Screenshots
+    /// let us see exactly which pill clips first and at which width, then
+    /// pin MinWidth / Margin / ClipToBounds on the offender.
+    /// </summary>
+    [AvaloniaTheory]
+    [InlineData(520, "mainwindow-520")]
+    [InlineData(440, "mainwindow-440")]
+    [InlineData(360, "mainwindow-360")]
+    [InlineData(300, "mainwindow-300")]
+    public void MainWindow_FullApp_Narrow(int width, string name)
+    {
+        var window = new MainWindow { Width = width, Height = 700 };
+        window.DataContext = new VPNRouter.App.ViewModels.MainWindowViewModel();
+        ScreenshotHelper.Capture(window, name);
+    }
+
+    /// <summary>
     /// Demonstrates real input simulation: programmatically click a button
     /// inside a hosted UserControl and assert on the resulting state change.
     /// Uses a tiny test-only window so we're not pulling in MainWindow's
