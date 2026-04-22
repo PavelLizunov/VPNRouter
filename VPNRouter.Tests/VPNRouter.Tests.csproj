@@ -1,7 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <!--
+      Switched from net8.0-windows to net8.0 so tests can consume VPNRouter.App
+      (Avalonia net8.0). Windows-only production code in Core uses OperatingSystem
+      guards, and Avalonia.Headless handles the GUI bits on any host.
+    -->
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
@@ -14,6 +19,12 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+
+    <!-- Avalonia headless testing: lets us instantiate Window/ViewModel and
+         drive them from xUnit without a display. Required for dev-loop GUI
+         testing on CI and in the VM shell. Pinned to the same 11.3.12 as App. -->
+    <PackageReference Include="Avalonia.Headless" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="11.3.12" />
   </ItemGroup>
 
   <ItemGroup>
@@ -22,6 +33,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VPNRouter.Core\VPNRouter.Core.csproj" />
+    <ProjectReference Include="..\VPNRouter.App\VPNRouter.App.csproj" />
   </ItemGroup>
 
 </Project>
