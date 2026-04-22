@@ -29,30 +29,44 @@ WriteEvent($"VPNRouter Service process started. PID={Environment.ProcessId}, Arg
 // ─── Kill zombie sing-box processes from previous runs ───────────────────────
 // If the service was stopped uncleanly (race condition, power loss, etc.),
 // a sing-box process may still be running and holding the TUN interface.
+// v2.26.3 fix for Bug A: before killing, check TunLock. If another VPNRouter
+// instance (App / CLI) legitimately holds the TUN adapter, its sing-box is
+// NOT an orphan — it's in active use. Killing it caused the v2.26.1-r1 bug
+// where ticking "Enable background service" in Advanced while VPN was up
+// instantly dropped the connection. If TUN is held, leave sing-box alone
+// and let the owner coordinate (Service will park in watcher mode inside
+// VPNRouterService.cs once the owner stops).
 
 try
 {
-    var zombies = Process.GetProcessesByName("sing-box");
-    if (zombies.Length > 0)
+    if (VPNRouter.Core.Services.TunOwnershipLock.IsOwnedByAnyone())
     {
-        WriteEvent($"Found {zombies.Length} orphan sing-box process(es), killing before startup", EventLogEntryType.Warning);
-        foreach (var z in zombies)
+        WriteEvent("TUN is held by another VPNRouter instance — skipping orphan sing-box cleanup (its sing-box is not an orphan)");
+    }
+    else
+    {
+        var zombies = Process.GetProcessesByName("sing-box");
+        if (zombies.Length > 0)
         {
-            try
+            WriteEvent($"Found {zombies.Length} orphan sing-box process(es), killing before startup", EventLogEntryType.Warning);
+            foreach (var z in zombies)
             {
-                z.Kill(entireProcessTree: true);
-                z.WaitForExit(3000);
-                WriteEvent($"Killed orphan sing-box PID {z.Id}");
+                try
+                {
+                    z.Kill(entireProcessTree: true);
+                    z.WaitForExit(3000);
+                    WriteEvent($"Killed orphan sing-box PID {z.Id}");
+                }
+                catch (Exception ex)
+                {
+                    WriteEvent($"Failed to kill orphan sing-box PID {z.Id}: {ex.Message}", EventLogEntryType.Warning);
+                }
+                finally { z.Dispose(); }
             }
-            catch (Exception ex)
-            {
-                WriteEvent($"Failed to kill orphan sing-box PID {z.Id}: {ex.Message}", EventLogEntryType.Warning);
-            }
-            finally { z.Dispose(); }
-        }
 
-        // Give OS time to release TUN interface after killing sing-box
-        Thread.Sleep(2000);
+            // Give OS time to release TUN interface after killing sing-box
+            Thread.Sleep(2000);
+        }
     }
 }
 catch (Exception ex)
