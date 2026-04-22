@@ -3,7 +3,11 @@
 </p>
 
 <h1 align="center">VPNRouter</h1>
-<p align="center"><b>Virtual Penguin Network</b> — process-based split-tunnel VPN router for Windows (+macOS).</p>
+<p align="center"><b>Virtual Penguin Network</b> — process-based split-tunnel VPN router for Windows, macOS and Linux.</p>
+
+<p align="center">
+  <a href="README.md"><b>English</b></a> · <a href="README.ru.md">Русский</a>
+</p>
 
 <p align="center">
   <a href="https://github.com/PavelLizunov/VPNRouter/releases/latest">
@@ -16,7 +20,7 @@
     <img src="https://img.shields.io/github/license/PavelLizunov/VPNRouter?color=2563EB" alt="License"/>
   </a>
   <img src="https://img.shields.io/badge/.NET-8.0-512BD4" alt=".NET 8"/>
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-lightgrey" alt="Platform"/>
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform"/>
 </p>
 
 ---
@@ -59,6 +63,9 @@ Grab the latest build from [Releases](https://github.com/PavelLizunov/VPNRouter/
 | `VPNRouter-*-win.zip.sha256` | 🪟 Windows | SHA256 companion file — auto-updater verifies the download against this before extracting (v2.15.8+) |
 | `VPNRouter-v{version}-mac.dmg` | 🍎 macOS | Drag-install DMG (Apple Silicon) with `InstallGuide.html` for one-time sudoers setup |
 | `VPNRouter-v{version}-mac.zip` | 🍎 macOS | Raw `.app` bundle (for manual install) |
+| `VPNRouter-v{version}-linux-amd64.deb` | 🐧 Linux | Debian/Ubuntu package (systemd service + desktop entry). Install: `sudo dpkg -i <file>.deb` |
+| `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Portable single-file build. `chmod +x`, run, no install needed |
+| `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Raw tarball (for manual install or packaging into other formats) |
 
 Also served automatically every 6 hours:
 
@@ -66,12 +73,13 @@ Also served automatically every 6 hours:
 |---|---|
 | [`free-pool-latest/pool.json`](https://github.com/PavelLizunov/VPNRouter/releases/tag/free-pool-latest) | Aggregated ~25 000 public VLESS configs + GeoIP metadata. Consumed by the in-app Free Configs tab. |
 
-Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + ETW process monitor + Firewall rules). On macOS, follow the in-DMG `InstallGuide.html` for the one-time sudoers entry that lets TUN come up without a password prompt each time.
+Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + ETW process monitor + Firewall rules). On macOS, follow the in-DMG `InstallGuide.html` for the one-time sudoers entry that lets TUN come up without a password prompt each time. On Linux, `.deb` installs a systemd service that handles the root privileges; `AppImage` requires `sudo` on first launch for TUN/NET_ADMIN capabilities.
 
 ## Requirements
 
 - **Windows 10/11 x64** — Administrator rights (TUN, firewall, ETW)
 - **macOS 12+** — Apple Silicon (arm64). Intel is not currently packaged. First-run sudoers setup required (guided)
+- **Linux x86_64** — kernel 5.6+ (TUN/wireguard), `glibc` 2.31+. Tested on Ubuntu 22.04 / 24.04 and Debian 12. `iptables` or `nftables` for firewall rules.
 - [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) — bundled in the installer
 - A VLESS+Reality server, or use the Free Configs tab for a public one
 
@@ -88,15 +96,20 @@ Release build + packaging:
 
 ```powershell
 # Windows (PowerShell) — produces both full + update ZIPs plus their .sha256
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.16.7"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.27.0"
 ```
 
 ```bash
 # macOS DMG — runs on any Mac with .NET 8 SDK
-./build-mac.sh 2.16.7
+./build-mac.sh 2.27.0
 ```
 
-Both releases (Win ZIP + Mac DMG) are also built automatically via GitHub Actions on every `v*` tag push — see `.github/workflows/build-mac.yml` and `.github/workflows/build-free-pool.yml` (the latter publishes the rolling Free Configs pool).
+```bash
+# Linux — .deb + .AppImage + .tar.gz via the same GitHub Actions pipeline
+# locally: dotnet publish -c Release -r linux-x64 --self-contained -o out/
+```
+
+All three platforms (Win ZIP, Mac DMG, Linux .deb/.AppImage/.tar.gz) are built automatically via GitHub Actions on every `v*` tag push — see `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/publish-apt.yml` (APT repo), and `.github/workflows/build-free-pool.yml` (rolling Free Configs pool).
 
 ## Architecture
 
