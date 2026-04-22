@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Text;
 using VPNRouter.Core.Models;
 
@@ -38,11 +40,45 @@ public static class HealthCheck
                 if (settings.SchemaVersion < AppSettings.CurrentSchemaVersion)
                     results.Add(new(Level.Warn,
                         $"config.yaml is schema v{settings.SchemaVersion}, current is v{AppSettings.CurrentSchemaVersion} — will migrate on next normal launch"));
+                else if (settings.SchemaVersion > AppSettings.CurrentSchemaVersion)
+                    results.Add(new(Level.Err,
+                        $"config.yaml is schema v{settings.SchemaVersion} but this VPNRouter only knows up to v{AppSettings.CurrentSchemaVersion} — upgrade VPNRouter or revert config.yaml"));
 
-                if (settings.Vless != null && settings.Vless.Servers.Count == 0 &&
-                    string.IsNullOrWhiteSpace(settings.Vless.Server))
+                // Per-mode config validation. Subscribe mode stores servers under
+                // app.subscriptions[].servers (resolved into Vless.Servers at startup
+                // by SubscriptionResolver). Custom mode points at an external sing-box
+                // JSON file. Generated/legacy mode reads vless.servers directly.
+                var mode = settings.App?.ConfigMode?.ToLowerInvariant() ?? "generated";
+                var subscriptionServerCount = settings.App?.Subscriptions?
+                    .Where(s => s.Enabled)
+                    .Sum(s => s.Servers?.Count ?? 0) ?? 0;
+
+                var hasLegacyVless = settings.Vless != null &&
+                    (settings.Vless.Servers.Count > 0 || !string.IsNullOrWhiteSpace(settings.Vless.Server));
+
+                switch (mode)
                 {
-                    results.Add(new(Level.Warn, "VLESS config has no servers — VPN will not start"));
+                    case "subscribe":
+                        if (subscriptionServerCount > 0)
+                            results.Add(new(Level.Ok, $"subscription has {subscriptionServerCount} cached server(s)"));
+                        else
+                            results.Add(new(Level.Warn, "subscription has no cached servers — refresh via GUI/CLI or check subscription URL"));
+                        break;
+
+                    case "custom":
+                        var customPath = settings.App?.CustomConfig ?? string.Empty;
+                        if (string.IsNullOrWhiteSpace(customPath))
+                            results.Add(new(Level.Err, "config_mode=custom but custom_config path is empty"));
+                        else if (!File.Exists(customPath))
+                            results.Add(new(Level.Err, $"custom_config file not found: {customPath}"));
+                        else
+                            results.Add(new(Level.Ok, $"custom config at {customPath}"));
+                        break;
+
+                    default: // "generated" and anything else falls through
+                        if (!hasLegacyVless)
+                            results.Add(new(Level.Warn, "VLESS config has no servers — VPN will not start"));
+                        break;
                 }
             }
             catch (Exception ex)

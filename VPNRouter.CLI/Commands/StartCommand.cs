@@ -60,6 +60,35 @@ public class StartCommand : AsyncCommand<StartSettings>
             return 1;
         }
 
+        // 3b. Resolve subscription-mode settings → flat Vless.Servers list.
+        // Without this, subscribe-mode configs fail validation with "No 'proxy'
+        // outbound defined" because ConfigGenerator only reads Vless.* fields.
+        // Matches the logic in VPNRouterService.cs so CLI / Service are equivalent.
+        var resolved = await SubscriptionResolver.ResolveAsync(
+            appSettings,
+            refreshFromNetwork: true,
+            Serilog.Log.Logger);
+        if (resolved > 0)
+            AnsiConsole.MarkupLine($"[grey]  → resolved {resolved} server(s) from subscription[/]");
+
+        // 3c. Pre-flight: verify we actually have a viable VLESS outbound source
+        // before we burn cycles on ConfigGenerator + LeakProtection only to fail
+        // with the cryptic "No 'proxy' outbound defined". Custom mode skips this
+        // check because it supplies its own JSON (and CustomConfigInjector handles
+        // missing-file errors separately).
+        var isCustomMode = string.Equals(appSettings.App.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase);
+        var hasVlessSource = appSettings.Vless.Servers.Count > 0 ||
+                             !string.IsNullOrWhiteSpace(appSettings.Vless.Server);
+        if (!isCustomMode && !hasVlessSource)
+        {
+            AnsiConsole.MarkupLine("[red]✗ No VLESS servers configured.[/]");
+            if (string.Equals(appSettings.App.ConfigMode, "subscribe", StringComparison.OrdinalIgnoreCase))
+                AnsiConsole.MarkupLine("[yellow]  Subscription returned 0 servers. Check the subscription URL or add servers manually.[/]");
+            else
+                AnsiConsole.MarkupLine("[yellow]  Add a subscription via GUI, or populate vless.servers / vless.server in config.yaml.[/]");
+            return 1;
+        }
+
         // 4. Dry-run: generate config, validate, write to disk, exit
         if (settings.DryRun)
         {

@@ -176,55 +176,14 @@ public class VPNRouterService : BackgroundService
         _engine.Warning += msg =>
             _logger.LogWarning("[Service] {Warn}", msg);
 
-        // Subscription mode: parallel refresh of ALL enabled subscriptions
-        var isSubscribe = settings.App.ConfigMode?.Equals("subscribe", StringComparison.OrdinalIgnoreCase) == true;
-
-        // Legacy migration: if only old SubscriptionUrl, promote to Subscriptions list
-        if (isSubscribe
-            && settings.App.Subscriptions.Count == 0
-            && !string.IsNullOrEmpty(settings.App.SubscriptionUrl))
-        {
-            settings.App.Subscriptions.Add(new SubscriptionEntry
-            {
-                Name = "Default",
-                Url = settings.App.SubscriptionUrl,
-                Enabled = true,
-                Servers = settings.App.SubscriptionServers ?? new()
-            });
-        }
-
-        if (isSubscribe && settings.App.Subscriptions.Count > 0)
-        {
-            _logger.LogInformation("[Service] Refreshing {Count} subscription(s) in parallel...",
-                settings.App.Subscriptions.Count(s => s.Enabled));
-            try
-            {
-                await Task.WhenAll(settings.App.Subscriptions
-                    .Where(s => s.Enabled)
-                    .Select(s => SubscriptionFetcher.RefreshEntryAsync(s, Serilog.Log.Logger, ct)));
-                var total = settings.App.Subscriptions.Where(s => s.Enabled).Sum(s => s.Servers.Count);
-                _logger.LogInformation("[Service] Subscriptions refreshed: {Total} total servers", total);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "[Service] Subscription refresh failed, using cached servers");
-            }
-        }
-
-        // Aggregate all enabled subscription servers → Vless engine
-        if (isSubscribe)
-        {
-            var aggregated = settings.App.Subscriptions
-                .Where(s => s.Enabled)
-                .SelectMany(s => s.Servers)
-                .ToList();
-            if (aggregated.Count > 0)
-            {
-                settings.Vless.Servers = aggregated;
-                settings.Vless.ActiveServer = settings.App.ActiveSubscriptionServer;
-                settings.App.ConfigMode = "generated";
-            }
-        }
+        // Subscription mode: refresh + aggregate via shared resolver so Service,
+        // CLI and GUI use the same bootstrap path. Mutates settings in place
+        // (flips ConfigMode → "generated" when at least one server is resolved).
+        await SubscriptionResolver.ResolveAsync(
+            settings,
+            refreshFromNetwork: true,
+            Serilog.Log.Logger,
+            ct);
 
         // v2.26.1 — Pre-flight: check the TUN ownership lock BEFORE trying
         // to start sing-box. If some other VPNRouter process (desktop App,

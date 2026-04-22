@@ -1,3 +1,4 @@
+using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 using VPNRouter.Core.Models;
@@ -33,6 +34,61 @@ public static class SettingsLoader
 
     public static AppSettings Parse(string yaml)
     {
+        // Pre-parse structural check: reject anything whose root node is NOT
+        // a mapping (key/value) before the main deserializer gets a chance.
+        // Without this, YamlDotNet + IgnoreUnmatchedProperties silently
+        // deserializes ANY well-formed YAML scalar / sequence into an empty
+        // AppSettings with defaults — masking real data loss. Garbage like
+        //   !!!not:valid: yaml: here
+        // currently slides through as "config.yaml parses" which is worse
+        // than a hard error because the user never sees the corruption.
+        //
+        // Empty / whitespace-only YAML is the one exception: YamlStream
+        // returns zero documents and we let the caller get fresh defaults
+        // (this is the first-launch path where we auto-create the file).
+        if (!string.IsNullOrWhiteSpace(yaml))
+        {
+            try
+            {
+                var yamlStream = new YamlStream();
+                yamlStream.Load(new StringReader(yaml));
+                if (yamlStream.Documents.Count > 0)
+                {
+                    var root = yamlStream.Documents[0].RootNode;
+                    if (root is not YamlMappingNode map)
+                        throw new InvalidDataException(
+                            $"config.yaml root must be a YAML mapping (key: value pairs), got {root.NodeType}. Check indentation / syntax.");
+
+                    // Recognize at least one top-level AppSettings key. Without
+                    // this, garbage like `!!!not:valid: yaml: here` parses as a
+                    // valid mapping with unknown keys, and IgnoreUnmatchedProperties
+                    // silently deserializes to an empty AppSettings with defaults.
+                    // We require at least one key we know about (the set below is
+                    // every top-level YamlMember on AppSettings as of schema v1).
+                    var knownKeys = new HashSet<string>(StringComparer.Ordinal)
+                    {
+                        "schema_version", "app", "profile_sources", "active_profile",
+                        "vless", "tun", "dns", "singbox", "monitoring",
+                        "custom_apps", "custom_group_apps", "custom_categories", "update"
+                    };
+                    var hasKnownKey = map.Children.Keys
+                        .OfType<YamlScalarNode>()
+                        .Any(k => k.Value != null && knownKeys.Contains(k.Value));
+                    if (!hasKnownKey)
+                        throw new InvalidDataException(
+                            "config.yaml does not contain any recognized VPNRouter settings keys " +
+                            $"(expected at least one of: {string.Join(", ", knownKeys.Take(5))}, ...). " +
+                            "The file may be corrupted or from a different application.");
+                }
+            }
+            catch (InvalidDataException) { throw; }
+            catch (Exception ex)
+            {
+                // YamlException from the low-level parser — malformed syntax
+                throw new InvalidDataException($"config.yaml is not valid YAML: {ex.Message}", ex);
+            }
+        }
+
         var deserializer = new DeserializerBuilder()
             .WithNamingConvention(UnderscoredNamingConvention.Instance)
             .IgnoreUnmatchedProperties()
@@ -40,7 +96,10 @@ public static class SettingsLoader
 
         var settings = deserializer.Deserialize<AppSettings>(yaml);
 
-        // YamlDotNet returns null for empty/whitespace YAML
+        // YamlDotNet returns null for empty/whitespace YAML (caller expects
+        // defaults on first launch). Real content reaching this path with
+        // null would be unusual now that the mapping check above has run,
+        // but belt-and-braces: keep the fallback so we never crash here.
         if (settings == null)
             return new AppSettings();
 

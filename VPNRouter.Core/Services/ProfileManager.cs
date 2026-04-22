@@ -60,8 +60,11 @@ public class ProfileManager
         if (_cache == null)
             throw new InvalidOperationException("Profiles not loaded. Call LoadAsync first.");
 
+        // Trim whitespace so CLI users typing `--profile "  Foo  "` or config
+        // files with accidental padding around names still resolve correctly.
+        var trimmed = name?.Trim() ?? string.Empty;
         var profile = _cache.Profiles.FirstOrDefault(p =>
-            string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+            string.Equals(p.Name, trimmed, StringComparison.OrdinalIgnoreCase));
 
         if (profile == null)
             throw new KeyNotFoundException($"Profile '{name}' not found. Available: {string.Join(", ", _cache.Profiles.Select(p => p.Name))}");
@@ -76,11 +79,13 @@ public class ProfileManager
     /// </summary>
     public Profile? TryGetProfile(string name)
     {
-        if (_cache == null || string.IsNullOrWhiteSpace(name))
-            return null;
+        if (_cache == null) return null;
+
+        var trimmed = name?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(trimmed)) return null;
 
         return _cache.Profiles.FirstOrDefault(p =>
-            string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+            string.Equals(p.Name, trimmed, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

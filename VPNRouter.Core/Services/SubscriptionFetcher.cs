@@ -150,9 +150,24 @@ public static class SubscriptionFetcher
         var servers = await FetchAsync(entry.Url, logger, ct);
         if (ct.IsCancellationRequested) return 0;
 
-        entry.Servers = servers;
-        entry.LastServerCount = servers.Count;
-        entry.LastRefreshedAt = DateTimeOffset.UtcNow;
+        // Only overwrite the cached server list on a successful fetch. If
+        // FetchAsync returns 0 (network error, DNS failure, provider 500,
+        // transient glitch) we keep the previously-cached servers so the VPN
+        // still comes up. Without this, any network blip between user
+        // starting VPNRouter and the subscription provider permanently wipes
+        // their config and forces them to re-fetch before they can connect.
+        if (servers.Count > 0)
+        {
+            entry.Servers = servers;
+            entry.LastServerCount = servers.Count;
+            entry.LastRefreshedAt = DateTimeOffset.UtcNow;
+        }
+        else
+        {
+            logger?.Warning("[Subscription] Refresh returned 0 servers for {Url}, keeping {Cached} cached server(s)",
+                entry.Url, entry.Servers?.Count ?? 0);
+        }
+
         return servers.Count;
     }
 }
