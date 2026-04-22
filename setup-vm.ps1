@@ -3,10 +3,16 @@
     Bootstrap a Windows 11 VirtualBox guest for VPNRouter development.
 
 .DESCRIPTION
-    Runs on a fresh Windows VM. Installs .NET 8 SDK, Go, Git, GitHub CLI,
-    Claude Code, and 7-Zip via winget; adds Windows Defender exclusions for
-    VPNRouter paths; clones the VPNRouter repo; verifies GitHub / Forgejo
-    network reachability; runs an initial dotnet build.
+    Runs on a fresh Windows VM (Windows 10/11, any edition including LTSC
+    and Enterprise without Microsoft Store). Bootstraps Chocolatey,
+    installs .NET 8 SDK, Go, Git, GitHub CLI, and 7-Zip; adds Windows
+    Defender exclusions for VPNRouter paths; clones the VPNRouter repo;
+    verifies GitHub / Forgejo network reachability; runs an initial
+    dotnet build.
+
+    Chocolatey is used instead of winget because LTSC/Enterprise images
+    typically ship without Microsoft Store / App Installer, and the UWP
+    substrate winget depends on is incomplete.
 
     Must be run as Administrator.
 
@@ -25,8 +31,8 @@
 .PARAMETER SkipDefender
     Skip adding Defender exclusions.
 
-.PARAMETER SkipWinget
-    Skip winget install step (assume tools already installed).
+.PARAMETER SkipInstall
+    Skip Chocolatey bootstrap + package install (assume tools already present).
 
 .PARAMETER SkipBuild
     Skip dotnet restore + build (useful for first run before PATH refresh).
@@ -49,7 +55,7 @@ param(
     [string]$GitUser  = "",
     [string]$GitEmail = "",
     [switch]$SkipDefender,
-    [switch]$SkipWinget,
+    [switch]$SkipInstall,
     [switch]$SkipBuild
 )
 
@@ -73,86 +79,54 @@ function Test-Command($name) {
     return [bool](Get-Command $name -ErrorAction SilentlyContinue)
 }
 
-function Install-WingetPackage($id, $name) {
-    Write-Host "  - $name ($id)"
-    & winget install --id $id --silent `
-        --accept-source-agreements --accept-package-agreements `
-        --disable-interactivity
-    # winget exit codes we treat as non-fatal:
-    #   0                 - installed OK
-    #   -1978335189       - APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE (already installed)
-    #   -1978335212       - APPINSTALLER_CLI_ERROR_NO_APPLICABLE_UPGRADE
-    $nonFatal = @(0, -1978335189, -1978335212)
-    if ($nonFatal -notcontains $LASTEXITCODE) {
-        Write-Warning "    winget returned exit code $LASTEXITCODE for $id - continuing"
-    }
-}
-
-function Install-Winget {
+function Install-Chocolatey {
     <#
-    Ensures winget (App Installer / Microsoft.DesktopAppInstaller) is
-    available. Downloads the MSIX bundle plus the two common dependencies
-    (VCLibs UWP Desktop, Microsoft.UI.Xaml 2.8) directly from Microsoft
-    / GitHub and registers them with Add-AppxPackage. No external scripts
-    required - works on fresh Windows 11 images where the Store app is
-    missing or out of date.
+    Ensures Chocolatey is installed. Uses the official community install
+    script. Chocolatey is preferred over winget because it works on all
+    Windows editions including Enterprise LTSC where Microsoft Store /
+    App Installer are absent.
     #>
-    if (Test-Command winget) {
+    if (Test-Command choco) {
+        Write-Host "  Chocolatey already installed: $(& choco --version)"
         return
     }
+    Write-Host "  Installing Chocolatey..." -ForegroundColor Yellow
 
-    Write-Host "  winget not found - installing App Installer and deps..." `
-        -ForegroundColor Yellow
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol =
+        [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
 
-    $tmp = Join-Path $env:TEMP "vpnrouter-winget-install"
-    New-Item -ItemType Directory -Path $tmp -Force | Out-Null
-
-    # Invoke-WebRequest is ~50x slower on PS 5.1 with the progress bar shown.
     $prevProgress = $ProgressPreference
     $ProgressPreference = 'SilentlyContinue'
     try {
-        # Install order matters: dependencies first, then winget bundle.
-        $items = @(
-            @{ Name = "Microsoft.VCLibs.x64.Desktop.appx"
-               Url  = "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx" }
-            @{ Name = "Microsoft.UI.Xaml.2.8.x64.appx"
-               Url  = "https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.8.6/Microsoft.UI.Xaml.2.8.x64.appx" }
-            @{ Name = "Microsoft.DesktopAppInstaller.msixbundle"
-               Url  = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" }
-        )
-        foreach ($item in $items) {
-            $dest = Join-Path $tmp $item.Name
-            Write-Host "    Downloading $($item.Name)"
-            Invoke-WebRequest -Uri $item.Url -OutFile $dest -UseBasicParsing
-        }
-        foreach ($item in $items) {
-            $dest = Join-Path $tmp $item.Name
-            Write-Host "    Installing $($item.Name)"
-            try {
-                Add-AppxPackage -Path $dest -ErrorAction Stop
-            } catch {
-                # Most common: "package is already installed with equal or newer version"
-                # (0x80073D06). Safe to ignore.
-                Write-Warning "    Add-AppxPackage: $($_.Exception.Message)"
-            }
-        }
+        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString(
+            'https://community.chocolatey.org/install.ps1'))
     } finally {
         $ProgressPreference = $prevProgress
     }
 
-    # Refresh PATH so Get-Command can see the freshly registered winget.exe.
+    # Refresh PATH - choco puts itself at %ProgramData%\chocolatey\bin
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
                 [System.Environment]::GetEnvironmentVariable("Path","User")
 
-    if (-not (Test-Command winget)) {
-        Write-Host ""
-        Write-Host "[!] winget still not found after install attempt." -ForegroundColor Red
-        Write-Host "    Manual fallback:"
-        Write-Host "      Start-Process 'ms-windows-store://pdp/?productid=9NBLGGH4NNS1'"
-        Write-Host "    Click Install / Update in Microsoft Store, then re-run this script."
+    if (-not (Test-Command choco)) {
+        Write-Host "[!] Chocolatey install failed." -ForegroundColor Red
         exit 1
     }
-    Write-Host "  winget OK: $(& winget --version)" -ForegroundColor Green
+    Write-Host "  Chocolatey OK: $(& choco --version)" -ForegroundColor Green
+}
+
+function Install-ChocoPackage($id, $name) {
+    Write-Host "  - $name ($id)"
+    & choco install $id -y --no-progress --limit-output
+    # Chocolatey exit codes we treat as non-fatal:
+    #   0      - installed OK
+    #   1641   - success, reboot initiated (MSI)
+    #   3010   - success, reboot required (MSI)
+    $nonFatal = @(0, 1641, 3010)
+    if ($nonFatal -notcontains $LASTEXITCODE) {
+        Write-Warning "    choco returned exit code $LASTEXITCODE for $id - continuing"
+    }
 }
 
 function Test-Endpoint($hostname, $port, $label) {
@@ -185,19 +159,18 @@ Write-Host "  Target repo dir: $RepoDir"
 Write-Host "  Clone from:      $RepoUrl"
 
 # -----------------------------------------------------------------------------
-# 1. Install dev tools via winget
+# 1. Install dev tools via Chocolatey
 # -----------------------------------------------------------------------------
-if (-not $SkipWinget) {
-    Write-Section "Installing dev tools via winget"
+if (-not $SkipInstall) {
+    Write-Section "Installing dev tools via Chocolatey"
 
-    Install-Winget   # bootstraps App Installer if it's missing on this VM
+    Install-Chocolatey
 
-    Install-WingetPackage "Microsoft.DotNet.SDK.8" ".NET 8 SDK"
-    Install-WingetPackage "GoLang.Go"              "Go"
-    Install-WingetPackage "Git.Git"                "Git for Windows"
-    Install-WingetPackage "GitHub.cli"             "GitHub CLI"
-    Install-WingetPackage "Anthropic.Claude"       "Claude Code"
-    Install-WingetPackage "7zip.7zip"              "7-Zip"
+    Install-ChocoPackage "dotnet-8.0-sdk" ".NET 8 SDK"
+    Install-ChocoPackage "golang"         "Go"
+    Install-ChocoPackage "git"            "Git for Windows"
+    Install-ChocoPackage "gh"             "GitHub CLI"
+    Install-ChocoPackage "7zip"           "7-Zip"
 
     # Refresh PATH in this session so later commands (git, dotnet) are found.
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
@@ -279,7 +252,7 @@ if (-not $SkipBuild) {
     if (-not (Test-Command dotnet)) {
         Write-Host "[!] dotnet not on PATH yet." -ForegroundColor Yellow
         Write-Host "    Close this PowerShell, open a new elevated one, then:"
-        Write-Host "      .\setup-vm.ps1 -SkipWinget -SkipDefender"
+        Write-Host "      .\setup-vm.ps1 -SkipInstall -SkipDefender"
     } else {
         Push-Location $RepoDir
         try {

@@ -76,14 +76,21 @@ needed for onboarding.
 
 The script:
 
-- installs `.NET 8 SDK`, `Go`, `Git`, `GitHub CLI`, `Claude Code`, `7-Zip`
-  via `winget`
+- bootstraps [Chocolatey](https://chocolatey.org/) if it's not already
+  installed (works on all Windows editions, including Enterprise LTSC,
+  where Microsoft Store / `winget` are absent)
+- installs `.NET 8 SDK`, `Go`, `Git`, `GitHub CLI`, `7-Zip` via `choco`
 - adds Windows Defender exclusions for `C:\Project\VPNRouter\` and
   `C:\ProgramData\VPNRouter\`
 - clones the repo to `C:\Project\VPNRouter`
 - optionally sets global `git user.name` / `user.email`
 - verifies GitHub + Forgejo TCP reachability
 - runs `dotnet restore` and `dotnet build`
+
+Claude Code is not installed automatically — Anthropic doesn't ship a
+Chocolatey package, and the Claude Code CLI is used from the host. If
+you need it inside the VM as well, install it manually per Anthropic's
+current instructions.
 
 Useful parameters:
 
@@ -95,20 +102,21 @@ Useful parameters:
   -SkipBuild
 ```
 
-If `winget install` finishes but `dotnet` or `git` are still not on `PATH`,
-close the PowerShell window, open a **new** elevated one, and re-run with
-`-SkipWinget -SkipDefender`.
+If the package manager bootstrap finishes but `dotnet` or `git` are
+still not on `PATH`, close the PowerShell window, open a **new**
+elevated one, and re-run with `-SkipInstall -SkipDefender`.
 
-### Option B — manual
+### Option B — manual (Chocolatey)
 
 ```powershell
 # Run as Administrator
-winget install Microsoft.DotNet.SDK.8 --silent --accept-source-agreements --accept-package-agreements
-winget install GoLang.Go              --silent --accept-source-agreements --accept-package-agreements
-winget install Git.Git                --silent --accept-source-agreements --accept-package-agreements
-winget install GitHub.cli             --silent --accept-source-agreements --accept-package-agreements
-winget install Anthropic.Claude       --silent --accept-source-agreements --accept-package-agreements
-winget install 7zip.7zip              --silent --accept-source-agreements --accept-package-agreements
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol =
+    [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+Invoke-Expression ((New-Object System.Net.WebClient).DownloadString(
+    'https://community.chocolatey.org/install.ps1'))
+
+choco install -y dotnet-8.0-sdk golang git gh 7zip
 
 Add-MpPreference -ExclusionPath "C:\Project\VPNRouter"
 Add-MpPreference -ExclusionPath "C:\ProgramData\VPNRouter"
@@ -204,10 +212,16 @@ only if you need a different sing-box version:
      icacls $HOME\.ssh\id_ed25519 /inheritance:r `
        /grant:r "$($env:USERNAME):F"
      ```
-- **PATH after winget.** Newly installed tools appear on `PATH` only for
-  processes started *after* winget finishes. If `dotnet` / `git` aren't
-  found, open a fresh elevated PowerShell and re-run with
-  `-SkipWinget -SkipDefender`.
+- **PATH after Chocolatey installs.** Newly installed tools appear on
+  `PATH` only for processes started *after* `choco install` finishes.
+  The script refreshes its own session, but if `dotnet` / `git` still
+  aren't found, open a fresh elevated PowerShell and re-run with
+  `-SkipInstall -SkipDefender`.
+- **LTSC / Enterprise without Store.** The setup script uses Chocolatey
+  exactly because winget depends on App Installer, which is stripped
+  from LTSC images. If you later need winget too, install App Installer
+  manually — but for this project everything required ships through
+  Chocolatey.
 - **sing-box process_name matching is case-sensitive.** Covered in
   `CLAUDE.md`. Not something you'll hit during setup, but worth knowing
   if you edit `ConfigGenerator.cs` / `ProcessScanner.cs`.
