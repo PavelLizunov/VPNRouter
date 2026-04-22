@@ -162,12 +162,40 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <!-- Autostart -->
-                        <CheckBox IsChecked="{Binding SmpAutostartChecked}"
-                                  Content="{Binding L_SmpAutostartLabel}"
-                                  ToolTip.Tip="{Binding L_SmpTipAutostart}"
-                                  FontSize="11"
-                                  MinHeight="0" Padding="4,0"/>
+                        <!-- Autostart link-card (v2.27.0-r2) — old Simple
+                             checkbox was a parallel toggle to the Advanced
+                             master that needed a three-input computed to
+                             stay in sync. User feedback (r1): "а как его
+                             отключить?" + constant Running status were the
+                             symptoms. Dropped the mirror; Simple now opens
+                             Advanced → Autostart via OpenAutostartSettings
+                             Command. Status pill keeps Simple informative
+                             ("service running" / "configure autostart"). -->
+                        <Button Command="{Binding OpenAutostartSettingsCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                Padding="10,8"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                                Background="{DynamicResource SurfaceSunkenBrush}"
+                                CornerRadius="{StaticResource RadiusSm}"
+                                ToolTip.Tip="{Binding L_SmpTipAutostart}">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding L_SmpAutostartCardTitle}"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="{Binding L_SmpAutostartCardStatus}"
+                                               FontSize="9"
+                                               TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextMutedBrush}"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="›"
+                                           FontSize="14" FontWeight="Bold"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource AccentFgBrush}"/>
+                            </Grid>
+                        </Button>
                     </StackPanel>
                 </Border>
 

@@ -157,6 +157,21 @@ public static class Strings
         ? "\u25CB Остановлена"
         : "\u25CB Stopped";
 
+    // v2.27.0-r2 — Simple-mode autostart link-card. Replaces the old
+    // SmpAutostartChecked checkbox whose computed-state UX caused the
+    // "how do I disable it?" confusion in r1 testing. The card now just
+    // navigates into Advanced → Network → Autostart where the full flow
+    // (install / configure / uninstall) lives.
+    public static string SmpAutostartCardTitle => Ru
+        ? "Автозапуск"
+        : "Autostart";
+    public static string SmpAutostartCardOn => Ru
+        ? "Служба установлена и запущена"
+        : "Service installed and running";
+    public static string SmpAutostartCardOff => Ru
+        ? "Настроить автозапуск VPN при старте Windows"
+        : "Configure VPN autostart at Windows boot";
+
     // ── Dialogs ──
     public static string FailedStartVpn => Ru ? "Не удалось запустить VPN:" : "Failed to start VPN:";
     public static string AddServerFirst => Ru

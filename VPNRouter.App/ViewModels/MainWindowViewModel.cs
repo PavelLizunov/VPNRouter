@@ -3173,6 +3173,28 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// v2.27.0-r2: jump from Simple mode straight into Advanced →
+    /// Network → Autostart. Originally Simple had its own "Start with
+    /// Windows" checkbox bound to a computed property over three backing
+    /// settings. User feedback: two parallel sources of truth was more
+    /// confusing than useful, and getting them in sync needed extra code
+    /// paths (Bug B / Bug D). Collapsing Simple down to a link-card keeps
+    /// Simple actually simple — one path, one place to look — and the
+    /// Advanced master checkbox (bound directly to ServiceVm.Autostart
+    /// Checked again) is the only autostart surface. See plans/vpnrouter-
+    /// v2.27-service-ux.md §4 and the companion user feedback loop.
+    /// </summary>
+    [RelayCommand]
+    private void OpenAutostartSettings()
+    {
+        IsSimpleMode = false;
+        _settings.App.UiMode = "advanced";
+        SelectedTabIndex = 2;           // Network tab
+        SelectedSettingsIndex = 4;      // Autostart sub-section
+        SaveSettings();
+    }
+
+    /// <summary>
     /// Workaround for Avalonia's <c>{x:Static loc:Strings.*}</c> bindings which
     /// are evaluated ONCE at XAML parse time and never re-read — so a language
     /// toggle doesn't update them (Free Configs page has ~100 such bindings).

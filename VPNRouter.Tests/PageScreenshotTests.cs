@@ -80,4 +80,64 @@ public class PageScreenshotTests
             vm.SelectedSettingsIndex = 0; // restore default so sibling tests aren't affected
         }
     }
+
+    /// <summary>
+    /// Reproduction of the v2.27.0-r1 user report: "обводка не умещается
+    /// когда сужаю окно". Captures the Autostart and Routing tabs at a
+    /// narrow 720x800 viewport — same resolution as an undocked half of a
+    /// 1440p screen. If cards, borders or wrapping labels overflow the
+    /// viewport, the diff in the PNG is immediately visible. Goal of any
+    /// fix: content wraps inside borders, borders stretch to available
+    /// width, no horizontal scroll.
+    /// </summary>
+    [AvaloniaFact]
+    public void NetworkPage_Autostart_Narrow720()
+    {
+        var vm = GetVm();
+        vm.SelectedSettingsIndex = 4;
+        try
+        {
+            ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, "page-network-autostart-narrow", width: 720, height: 800);
+        }
+        finally { vm.SelectedSettingsIndex = 0; }
+    }
+
+    [AvaloniaFact]
+    public void NetworkPage_Routing_Narrow720()
+    {
+        var vm = GetVm();
+        vm.SelectedSettingsIndex = 0; // Routing
+        ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, "page-network-routing-narrow", width: 720, height: 800);
+    }
+
+    /// <summary>Extra-narrow 500px variant — pushes past the point where
+    /// native window chrome still renders comfortably. Goal: identify the
+    /// control that overflows so we can pin HorizontalAlignment="Stretch"
+    /// / TextWrapping="Wrap" on the exact offender.</summary>
+    [AvaloniaFact]
+    public void NetworkPage_Autostart_Narrow500()
+    {
+        var vm = GetVm();
+        vm.SelectedSettingsIndex = 4;
+        try
+        {
+            ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, "page-network-autostart-narrow500", width: 500, height: 800);
+        }
+        finally { vm.SelectedSettingsIndex = 0; }
+    }
+
+    /// <summary>Absolute-worst-case 400px. User's real test shrunk the
+    /// window until borders visibly broke; this reproduces what they saw
+    /// without depending on their WM chrome.</summary>
+    [AvaloniaFact]
+    public void NetworkPage_Autostart_Narrow400()
+    {
+        var vm = GetVm();
+        vm.SelectedSettingsIndex = 4;
+        try
+        {
+            ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, "page-network-autostart-narrow400", width: 400, height: 800);
+        }
+        finally { vm.SelectedSettingsIndex = 0; }
+    }
 }

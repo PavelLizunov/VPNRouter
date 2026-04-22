@@ -58,6 +58,12 @@ public partial class MainWindowViewModel
     public string L_ServiceStoppedLine => Strings.ServiceStoppedLine;
     public string L_ServiceRunningLine =>
         ServiceVm.ServicePid.HasValue ? Strings.ServiceRunningLine(ServiceVm.ServicePid.Value) : Strings.ServiceRunningText;
+    // v2.27.0-r2 — Simple autostart link-card replacing the old checkbox
+    public string L_SmpAutostartCardTitle => Strings.SmpAutostartCardTitle;
+    public string L_SmpAutostartCardStatus =>
+        ServiceVm.IsInstalled && ServiceVm.IsRunning
+            ? Strings.SmpAutostartCardOn
+            : Strings.SmpAutostartCardOff;
     public string L_BtnAdd => Strings.BtnAdd;
     public string L_BypassRussianTrafficHint => Strings.BypassRussianTrafficHint;
     public string L_BypassRussianTrafficLabel => Strings.BypassRussianTrafficLabel;

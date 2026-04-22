@@ -44,6 +44,11 @@
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+      <!-- v2.27.0-r2: wrap when card narrows. Without this, a long
+           multi-word title (e.g. a localised "Windows background service")
+           would keep the card wider than its ScrollViewer parent and push
+           the right edge past the window — the overflow user reported. -->
+      <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
     <Style Selector="TextBlock.card-sub">
       <Setter Property="FontSize" Value="9"/>
@@ -92,12 +97,17 @@
       </ListBox>
     </Border>
 
-    <!-- DETAIL (right): selected section -->
+    <!-- DETAIL (right): selected section.
+         v2.27.0-r2: the border-overflow fix is entirely in the content
+         tree (WrapPanel for the status+buttons row, TextWrapping on
+         CheckBox content). The scrollbar was a red herring. Keeping
+         VerticalScrollBarVisibility at Auto so short tabs don't get a
+         cosmetic always-present scrollbar. -->
     <ScrollViewer Grid.Row="0" Grid.Column="1"
                   HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
                   Padding="14,10,14,12">
-      <StackPanel>
+      <StackPanel HorizontalAlignment="Stretch">
 
         <!-- ═══ Routing (Phase 4 showcase) ═══ -->
         <StackPanel Spacing="10" IsVisible="{Binding IsSettingsRoutingSelected}">
@@ -263,7 +273,16 @@
                        Foreground="{DynamicResource TextMutedBrush}"
                        Opacity="0.85"/>
 
-            <!-- ── Windows service master card ── -->
+            <!-- ── Windows service master card ──
+                 v2.27.0-r2: bound back to the raw ServiceVm.AutostartChecked
+                 (install/uninstall the service, nothing more) after user
+                 feedback on r1. The previous attempt to unify Simple and
+                 Advanced via SmpAutostartChecked created two equally-wide
+                 controls whose only job was to stay in sync with each other
+                 — at which point you don't need two. Simple's checkbox is
+                 now a link-card to this page, so this is the single source
+                 of truth for the install state. Sub-checkboxes below turn
+                 VPN / Zapret / Telegram on/off individually after install. -->
             <Border Classes="checkbox-card"
                     Classes.active="{Binding ServiceVm.AutostartChecked}">
               <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
@@ -280,33 +299,41 @@
                              Text="{Binding L_ServiceMasterSubtitle}"/>
 
                   <!-- v2.27 §4.5: prominent status line with PID — replaces
-                       the tiny 9pt pill that users missed. Visible only
-                       when service is installed. -->
-                  <StackPanel Orientation="Horizontal" Spacing="6"
-                              Margin="0,6,0,0"
-                              IsVisible="{Binding ServiceVm.IsInstalled}">
+                       the tiny 9pt pill that users missed.
+                       v2.27.0-r2 fix for user-reported narrow-window overflow:
+                       WrapPanel lets status + Restart + Reinstall buttons flow
+                       onto a second line when parent Border < ~350px wide,
+                       instead of forcing a horizontal StackPanel wider than
+                       the card and overflowing the right edge. -->
+                  <WrapPanel Orientation="Horizontal"
+                             Margin="0,6,0,0"
+                             IsVisible="{Binding ServiceVm.IsInstalled}">
                     <TextBlock Text="{Binding L_ServiceRunningLine}"
                                IsVisible="{Binding ServiceVm.IsRunning}"
                                FontSize="11" FontWeight="SemiBold"
                                Foreground="{DynamicResource SuccessFgBrush}"
-                               VerticalAlignment="Center"/>
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,4"/>
                     <TextBlock Text="{Binding L_ServiceStoppedLine}"
                                IsVisible="{Binding !ServiceVm.IsRunning}"
                                FontSize="11" FontWeight="SemiBold"
                                Foreground="{DynamicResource TextMutedBrush}"
-                               VerticalAlignment="Center"/>
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,4"/>
                     <Button Content="{Binding L_RestartService}"
                             Command="{Binding ServiceVm.RestartServiceCommand}"
                             IsVisible="{Binding ServiceVm.IsRunning}"
                             IsEnabled="{Binding !ServiceVm.IsBusy}"
                             Padding="10,3" FontSize="10"
-                            CornerRadius="{StaticResource RadiusSm}"/>
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Margin="0,0,6,4"/>
                     <Button Content="{Binding L_ReinstallService}"
                             Command="{Binding ServiceVm.ReinstallServiceCommand}"
                             IsEnabled="{Binding !ServiceVm.IsBusy}"
                             Padding="10,3" FontSize="10"
-                            CornerRadius="{StaticResource RadiusSm}"/>
-                  </StackPanel>
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Margin="0,0,6,4"/>
+                  </WrapPanel>
 
                   <!-- v2.27 §4.5 busy indicator: indeterminate progress bar
                        + status message. Replaces bare italic text so the
@@ -336,17 +363,27 @@
                 <TextBlock Text="{Binding L_ServiceComponentsHeader}"
                            FontSize="10" FontWeight="SemiBold"
                            Foreground="{DynamicResource TextMutedBrush}"/>
+                <!-- v2.27.0-r2 narrow-window fix: wrap each CheckBox.Content
+                     in an explicit TextBlock with TextWrapping="Wrap".
+                     Default Avalonia CheckBox template renders bare-string
+                     Content as a no-wrap TextBlock, which set the sub-card
+                     min-width to the widest localised label (~180px for
+                     "Start TgProxy on system boot") and blew past the
+                     ScrollViewer right edge when window dropped to ~500px. -->
                 <StackPanel Spacing="5"
                             IsEnabled="{Binding ServiceVm.IsInstalled}">
                   <CheckBox IsChecked="{Binding AutostartVpn}"
-                            Content="{Binding LblAutostartVpn}"
-                            MinHeight="0" Padding="4,0"/>
+                            MinHeight="0" Padding="4,0">
+                    <TextBlock Text="{Binding LblAutostartVpn}" TextWrapping="Wrap"/>
+                  </CheckBox>
                   <CheckBox IsChecked="{Binding AutostartZapret}"
-                            Content="{Binding LblAutostartZapret}"
-                            MinHeight="0" Padding="4,0"/>
+                            MinHeight="0" Padding="4,0">
+                    <TextBlock Text="{Binding LblAutostartZapret}" TextWrapping="Wrap"/>
+                  </CheckBox>
                   <CheckBox IsChecked="{Binding AutostartTgProxy}"
-                            Content="{Binding LblAutostartTgProxy}"
-                            MinHeight="0" Padding="4,0"/>
+                            MinHeight="0" Padding="4,0">
+                    <TextBlock Text="{Binding LblAutostartTgProxy}" TextWrapping="Wrap"/>
+                  </CheckBox>
                 </StackPanel>
                 <TextBlock Text="{Binding L_AutostartComponentsInfoHint}"
                            IsVisible="{Binding !ServiceVm.IsInstalled}"
@@ -371,8 +408,9 @@
                     BorderThickness="1">
               <StackPanel Spacing="5">
                 <CheckBox IsChecked="{Binding AutostartUi}"
-                          Content="{Binding LblAutostartUi}"
-                          MinHeight="0" Padding="4,0"/>
+                          MinHeight="0" Padding="4,0">
+                  <TextBlock Text="{Binding LblAutostartUi}" TextWrapping="Wrap"/>
+                </CheckBox>
                 <TextBlock Text="{Binding L_AutostartLoginAppDescription}"
                            FontSize="10"
                            TextWrapping="Wrap"
