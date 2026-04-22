@@ -58,7 +58,59 @@ public partial class MainWindowViewModel
     ///      auto-starts the VPN at boot, not just sits there idle).
     /// Unchecking removes the service and disables AutostartVpn.
     /// </summary>
-    [ObservableProperty] private bool _smpAutostartChecked;
+    /// <summary>
+    /// v2.27 Bug B fix — was `[ObservableProperty] _smpAutostartChecked`
+    /// initialised once from <c>AutostartVpn</c>. That broke Advanced → Simple
+    /// sync: if a user ticked the Advanced "Enable background service" master
+    /// toggle, only <c>ServiceVm.AutostartChecked</c> flipped, <c>AutostartVpn</c>
+    /// stayed false, and Simple's checkbox silently disagreed with reality.
+    ///
+    /// <para>Now a computed property over the three signals the user actually
+    /// cares about: service installed, service running, and the "auto-start
+    /// VPN at boot" flag that the Service reads at boot. All three must be
+    /// true for "VPN starts with Windows" to be true. PropertyChanged re-fires
+    /// from <c>OnAutostartVpnChanged</c> and the <c>ServiceVm.PropertyChanged</c>
+    /// subscription wired in the constructor, so either side ticking a box
+    /// makes the other surface the right value.</para>
+    ///
+    /// <para>Setter encapsulates the full enable/disable chain: install+start
+    /// service, flip <c>AutostartVpn</c>, and only uninstall the service when
+    /// no other component (Zapret / TgProxy) still needs it running.</para>
+    /// </summary>
+    public bool SmpAutostartChecked
+    {
+        get => ServiceVm.IsInstalled
+               && ServiceVm.IsRunning
+               && _settings.App.AutostartVpn;
+        set
+        {
+            if (_isLoadingUI) return;
+            if (SmpAutostartChecked == value) return;
+
+            if (value)
+            {
+                // install + start service via ServiceVm setter (it handles
+                // sc.exe calls + UI busy state). Flip the boot-autostart flag
+                // so the service actually starts the VPN rather than idling.
+                if (!ServiceVm.AutostartChecked)
+                    ServiceVm.AutostartChecked = true;
+                _settings.App.AutostartVpn = true;
+            }
+            else
+            {
+                _settings.App.AutostartVpn = false;
+                // Only tear down the service when nothing else depends on it.
+                // Keeping it installed for Zapret/TgProxy autostart is fine —
+                // the service just won't bring up VPN at boot.
+                var stillNeeded = _settings.App.AutostartZapret
+                                  || _settings.App.AutostartTgProxy;
+                if (!stillNeeded && ServiceVm.AutostartChecked)
+                    ServiceVm.AutostartChecked = false;
+            }
+            SaveSettings();
+            OnPropertyChanged(nameof(SmpAutostartChecked));
+        }
+    }
 
     /// <summary>
     /// Simple-mode split profile — comma-separated list of built-in profile
@@ -416,17 +468,6 @@ public partial class MainWindowViewModel
     ///     decide whether to auto-start the VPN. Off = service is installed
     ///     but sits idle until the user manually starts VPN.
     /// </summary>
-    partial void OnSmpAutostartCheckedChanged(bool value)
-    {
-        if (_isLoadingUI) return;
-
-        // Mirror to ServiceVm → install+start or stop+uninstall.
-        if (ServiceVm.AutostartChecked != value)
-            ServiceVm.AutostartChecked = value;
-
-        // Flip AppSettings.AutostartVpn so the running Service knows whether
-        // to bring up VPN at boot (service re-reads config.yaml on start).
-        _settings.App.AutostartVpn = value;
-        SaveSettings();
-    }
+    // OnSmpAutostartCheckedChanged removed — logic folded into the
+    // SmpAutostartChecked setter above now that the property is computed.
 }

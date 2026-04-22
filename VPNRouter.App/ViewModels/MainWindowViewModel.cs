@@ -356,7 +356,16 @@ public partial class MainWindowViewModel : ViewModelBase
         SaveSettings();
     }
 
-    partial void OnAutostartVpnChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
+    // v2.27 Bug B: re-fire PropertyChanged for SmpAutostartChecked whenever
+    // AutostartVpn flips — the Simple-mode checkbox is now a computed read
+    // of (ServiceVm.IsInstalled && ServiceVm.IsRunning && AutostartVpn),
+    // so any one of those changing must notify the binding. The matching
+    // ServiceVm.IsInstalled/IsRunning listener is wired in the constructor.
+    partial void OnAutostartVpnChanged(bool value)
+    {
+        if (!_isLoadingUI) SaveSettings();
+        OnPropertyChanged(nameof(SmpAutostartChecked));
+    }
     partial void OnAutostartZapretChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
     partial void OnAutostartTgProxyChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
 
@@ -853,6 +862,22 @@ public partial class MainWindowViewModel : ViewModelBase
         ServiceVm = new ServiceViewModel(_logger);
         FreeConfigsVm = new FreeConfigsPageViewModel(_logger, ApplyFreeConfigAsync, () => _settings);
 
+        // v2.27 Bug B: SmpAutostartChecked is a computed over ServiceVm state,
+        // so we need to re-fire PropertyChanged on Simple's checkbox binding
+        // every time the service transitions. Without this, an Advanced-mode
+        // "Enable background service" toggle that flips IsInstalled/IsRunning
+        // silently leaves Simple's UI stale until the user navigates away and
+        // back. Scoped to the two properties that actually feed the computed
+        // — ignores IsBusy / StatusMessage churn during install.
+        ServiceVm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(ServiceViewModel.IsInstalled)
+                               or nameof(ServiceViewModel.IsRunning))
+            {
+                OnPropertyChanged(nameof(SmpAutostartChecked));
+            }
+        };
+
         LoadSettingsIntoUI();
 
         // Detect VPN already running (e.g. started by Windows Service on boot)
@@ -980,10 +1005,10 @@ public partial class MainWindowViewModel : ViewModelBase
         // persisted value.
         IsSimpleMode = true;
 
-        // Simple-mode 'Start with Windows' checkbox — mirror of AutostartVpn.
-        // Setter is a no-op during _isLoadingUI so this doesn't re-trigger
-        // ServiceVm.Install.
-        SmpAutostartChecked = _settings.App.AutostartVpn;
+        // v2.27 Bug B: SmpAutostartChecked is now a computed property over
+        // ServiceVm.IsInstalled/IsRunning + AutostartVpn, so we don't assign
+        // it here. The UI will read it on first bind, and re-reads fire from
+        // OnAutostartVpnChanged + the ServiceVm.PropertyChanged handler.
 
         // Pre-fill Simple-mode input from existing settings so a user who
         // already has a config doesn't stare at an empty 'Paste VLESS...'
