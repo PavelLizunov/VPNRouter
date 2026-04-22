@@ -742,11 +742,32 @@ public class VpnEngine : IDisposable
                 configJson = ConfigGenerator.Serialize(sbConfig);
             }
 
+            // v2.27.1 — auto-detect structural changes that hot-reload CAN'T
+            // pick up. Observed in the wild: a user flipped RoutingMode from
+            // split → full via the UI, hot-reload accepted the new config
+            // (reported "succeeded HTTP 204"), sing-box internally updated
+            // route.final to "proxy"... but the TUN adapter kept the old
+            // routes populated by kernel/Windows from the split-tunnel pass.
+            // VM traffic on the host stayed direct until the user fully
+            // stopped the VPN + uninstalled the service. Hot-reload is
+            // config-layer only; any change that requires re-laying TUN
+            // routes has to bounce the process.
+            //
+            // The comment at the old call-site warned about this but the
+            // code didn't enforce it — escalating `forceRestart = true`
+            // here makes the invariant self-healing: callers never need
+            // to remember which setting changes are structural.
+            var newRoutingMode = (settings.App.RoutingMode ?? "split").ToLowerInvariant();
+            if (!string.Equals(newRoutingMode, ActiveRoutingMode, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger?.Information(
+                    "[VpnEngine] RoutingMode change detected ({Old} → {New}) — escalating to full restart so TUN routes are re-laid",
+                    ActiveRoutingMode, newRoutingMode);
+                forceRestart = true;
+            }
+
             // Try hot-reload first, UNLESS the caller explicitly asked for
-            // a full restart (v2.20.4). Structural changes like split↔full
-            // tunnel mode need a process restart — hot-reload accepts the
-            // new config but leaves existing TUN routes in place, so the
-            // user sees no effect.
+            // a full restart (v2.20.4 + v2.27.1 auto-detect above).
             if (!forceRestart && _singBox.TryReloadConfigJson(configJson))
             {
                 OnStatus($"Applied (hot-reload, PID {_singBox.Pid})");
@@ -760,6 +781,9 @@ public class VpnEngine : IDisposable
                 _logger?.Warning("[VpnEngine] Hot-reload failed, falling back to full restart");
 
             _singBox.ReloadConfigJson(configJson);
+            // Update cached routing-mode tracker post-restart so subsequent
+            // Apply calls see the new baseline.
+            ActiveRoutingMode = newRoutingMode;
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
             return true;
         }
