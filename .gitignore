@@ -28,6 +28,8 @@ nul
 
 # sing-box source & Go build cache (built via build-singbox.ps1)
 tools/
+# Exception: live-test scripts (reusable per-release regression harness)
+!tools/live-test-*.ps1
 
 # Misc
 *.jpg

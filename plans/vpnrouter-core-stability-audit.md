@@ -51,14 +51,19 @@ Core-функционал, который реально крутит трафи
 
 ### Гипотезы
 
-**B1. TUN interface остаётся после crash.**
-`sing-box.exe` создаёт Windows TAP/Wintun adapter. При crash-recovery мы рестартим sing-box, но сам adapter может остаться в системе (dangling). Следующий start попытается создать adapter с тем же именем — "Cannot create a file when that file already exists" (уже видели в логах v2.26.2-r1 test).
+**B1. TUN interface остаётся после crash.** ✅ **REFUTED live 2026-04-23**
+Гипотеза была что `taskkill /F /IM sing-box.exe` может оставлять
+dangling wintun adapter, требующий ручной cleanup. Живой тест в VM
+(`tools/live-test-r1.ps1`) с реальным admin-elevated запуском показал:
+- Graceful stop → adapter исчезает чисто
+- `taskkill /F` → adapter ТАКЖЕ исчезает чисто
+- `netsh interface show interface` после обоих сценариев — 0 residual rows
 
-**Что проверить**:
-- `netsh interface show interface | grep VPNRouter-TUN` — сколько adapter'ов есть после неожиданного kill.
-- Наш код cleanup'а TUN при force-kill (процесс sing-box упал без очистки) — есть ли он? В коде sing-box или у нас?
-
-**Тест**: `taskkill /F /IM sing-box.exe`, запустить VPNRouter снова — создаётся ли duplicate adapter или используется старый?
+Значит wintun driver корректно cleanup'ится сам в обоих случаях. Наш
+active TUN-delete фичи не нужен. `TunAdapterDiagnostics` который залит в
+v2.27.2-r1 остаётся как silent no-op monitoring — пусть если реальный
+пользовательский репро всплывёт (редкая комбинация driver/OS/crash-mode),
+логи сразу его засветят.
 
 **B2. TUN routes не чистятся при Stop().**
 При штатном Stop sing-box должен снять свои маршруты. Но если он застрял в TerminateProcess (force-kill), Windows routing table может остаться с записями `0.0.0.0/0 via 172.19.0.2`. После полной остановки VPN пользователь может обнаружить что трафик всё ещё «как бы» уходит на несуществующий TUN.
