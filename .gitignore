@@ -41,9 +41,14 @@ VPNRouter-v*.dmg
 VPNRouter-v*.sha256
 VPNRouter-install-*.zip
 VPNRouter-update-*.zip
+VPNRouter-update-v*.sha256
 b_icon.png
 w_icon.png
 publish/
+
+# Draft release-notes files — rendered into `gh release --notes-file`, not
+# checked in. The finalised copy is on the GitHub Release itself.
+release-notes-*.md
 
 # UI test screenshots (regenerated on every `dotnet test` run; inspection
 # artefact, not versioned content). See plans/ui-testing-workflow.md.
