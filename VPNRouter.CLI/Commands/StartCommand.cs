@@ -52,11 +52,16 @@ public class StartCommand : AsyncCommand<StartSettings>
             return 1;
         }
 
-        // 3. Check admin rights
-        if (!AdminHelper.IsAdmin())
+        // 3. Check admin rights — but NOT for --dry-run.
+        // Dry-run only generates + validates a config JSON; no TUN adapter,
+        // no firewall rules, no registry writes. Forcing admin there made
+        // the flag useless for what it's for (debugging from a regular
+        // shell before spawning an elevated run).
+        if (!settings.DryRun && !AdminHelper.IsAdmin())
         {
             AnsiConsole.MarkupLine("[red]✗ Administrator rights required for TUN interface.[/]");
             AnsiConsole.MarkupLine("[yellow]  Run as Administrator or via Windows Service.[/]");
+            AnsiConsole.MarkupLine("[grey]  (--dry-run works without admin — generates + validates config only)[/]");
             return 1;
         }
 
