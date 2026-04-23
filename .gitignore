@@ -26,9 +26,12 @@ Desktop.ini
 # Windows reserved device files
 nul
 
-# sing-box source & Go build cache (built via build-singbox.ps1)
-tools/
-# Exception: live-test scripts (reusable per-release regression harness)
+# sing-box source & Go build cache (built via build-singbox.ps1).
+# Use tools/* (not tools/) so we can re-include specific developer
+# scripts via exceptions below. With a trailing-slash ignore the dir
+# itself gets pruned and git never even looks inside for !-patterns.
+tools/*
+# Re-include: live-test scripts (reusable per-release regression harness).
 !tools/live-test-*.ps1
 
 # Misc
