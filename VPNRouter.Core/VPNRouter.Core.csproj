@@ -26,4 +26,12 @@
     <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
 
+  <!-- v2.27.2: expose internals to the test project so unit tests can
+       exercise helpers like VpnEngine.ComputeTunFingerprint without us
+       having to make them public. Standard .NET 8 friend-assembly
+       pattern — no runtime impact. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="VPNRouter.Tests" />
+  </ItemGroup>
+
 </Project>

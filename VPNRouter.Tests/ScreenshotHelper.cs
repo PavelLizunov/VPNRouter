@@ -59,8 +59,27 @@ public static class ScreenshotHelper
                     "CaptureRenderedFrame returned null — verify TestAppBuilder uses .UseSkia() and UseHeadlessDrawing=false.");
 
             var path = Path.Combine(ScreenshotsDir, $"{name}.png");
-            bitmap.Save(path);
-            return path;
+
+            // Defensive retry — an external process (screenshot viewer,
+            // antivirus scan, Windows thumbnailer) occasionally holds the
+            // old PNG handle exclusively when we're overwriting. Rare but
+            // breaks the suite in the VM dev-loop. Short exponential
+            // backoff is plenty; the lock is released within milliseconds.
+            Exception? lastEx = null;
+            for (int attempt = 0; attempt < 4; attempt++)
+            {
+                try
+                {
+                    bitmap.Save(path);
+                    return path;
+                }
+                catch (IOException ex)
+                {
+                    lastEx = ex;
+                    Thread.Sleep(50 * (1 << attempt));
+                }
+            }
+            throw lastEx!;
         }
         finally
         {

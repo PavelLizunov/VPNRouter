@@ -1,27 +1,40 @@
 <#
 .SYNOPSIS
-    Builds a minimal sing-box binary from source with only required features.
+    Downloads an upstream sing-box prebuilt binary and installs it for VPNRouter.
 .DESCRIPTION
-    Clones/updates sing-box source, checks out the specified version tag,
-    and builds with minimal Go build tags (with_utls + with_clash_api only).
+    v2.27.2: switched from custom-rebuilt sing-box (Go source + specific build
+    tags) to the official upstream binaries from SagerNet/sing-box releases.
 
-    Full official build: ~35 MB (8 tags: gvisor, quic, wireguard, tailscale, etc.)
-    VPNRouter build: ~23 MB (3 tags: utls + clash_api + quic)
+    Rationale for the switch:
+      - Upstream 1.13+ ships with_clash_api + with_utls + with_quic baked
+        in by default — the exact tags VPNRouter needs for Reality
+        fingerprinting and hot-reload via Clash API.
+      - Eliminates "custom build" as a variable when diagnosing weird
+        sing-box behaviour (was biting us on YouTube drops in v2.27.1 —
+        we couldn't trivially tell whether a quirk was in sing-box or
+        in our rebuild's Go version / tag combo).
+      - Upstream binaries are signed and reproducible; our custom build
+        was neither.
+      - ~12 MB size increase per platform (acceptable tradeoff).
+      - Linux CI and macOS build-mac.sh already use upstream for the same
+        reasons — Windows was the odd one out. This script keeps the
+        manual/local Windows release workflow aligned with the automated
+        Linux + macOS workflows.
 
-    VPNRouter needs:
-    - with_utls       : uTLS fingerprinting for Reality/TLS
-    - with_clash_api  : Clash REST API for hot-reload config
-    - with_quic       : QUIC transport (Hysteria2, TUIC, HTTP/3 — required for custom configs)
+    If you REALLY need a custom rebuild (e.g. to experiment with a tag
+    combo upstream doesn't ship), check git history for the Go-source
+    version of this script — tag v2.27.1 still has it.
 
-    NOT needed (stack="system", not gVisor; no WireGuard/Tailscale protocols):
-    - with_gvisor, with_wireguard, with_tailscale, with_dhcp, with_acme
 .PARAMETER Version
-    sing-box version tag to build (e.g. "1.12.21"). Required.
+    sing-box version tag to download (e.g. "1.13.10"). Required.
+    Defaults to whatever the release notes of this VPNRouter version
+    ship with, but you can override for local experiments.
 .PARAMETER Install
-    Copy built binary to %ProgramData%\VPNRouter\bin\sing-box.exe (requires admin + VPN stopped)
+    Copy downloaded binary to %ProgramData%\VPNRouter\bin\sing-box.exe
+    (requires admin + VPN stopped).
 .EXAMPLE
-    .\build-singbox.ps1 -Version "1.12.21"
-    .\build-singbox.ps1 -Version "1.12.21" -Install
+    .\build-singbox.ps1 -Version "1.13.10"
+    .\build-singbox.ps1 -Version "1.13.10" -Install
 #>
 param(
     [Parameter(Mandatory=$true)]
@@ -31,78 +44,77 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
-$SrcDir = Join-Path $Root "tools\sing-box-src"
-$Tags = "with_utls,with_clash_api,with_quic"
-$OutputExe = Join-Path $SrcDir "sing-box.exe"
+$CacheDir = Join-Path $Root "tools\singbox-cache"
+$ZipName = "sing-box-$Version-windows-amd64.zip"
+$ZipPath = Join-Path $CacheDir $ZipName
+$ExtractDir = Join-Path $CacheDir "sing-box-$Version-windows-amd64"
+$OutputExe = Join-Path $CacheDir "sing-box.exe"
 $InstallPath = "$env:ProgramData\VPNRouter\bin\sing-box.exe"
+$DownloadUrl = "https://github.com/SagerNet/sing-box/releases/download/v$Version/$ZipName"
 
-Write-Host "=== sing-box Minimal Build ===" -ForegroundColor Cyan
+Write-Host "=== sing-box Upstream Download ===" -ForegroundColor Cyan
 Write-Host "Version: $Version"
-Write-Host "Tags:    $Tags"
+Write-Host "Source:  $DownloadUrl"
 Write-Host ""
 
-# ── Check Go ──
-$goExe = Get-Command go -ErrorAction SilentlyContinue
-if (-not $goExe) {
-    Write-Host "ERROR: Go not found. Install: winget install GoLang.Go" -ForegroundColor Red
+# ── Prepare cache dir ──
+New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null
+
+# ── Download zip (skip if cached) ──
+if (Test-Path $ZipPath) {
+    Write-Host "[1/3] Using cached download: $ZipPath" -ForegroundColor Yellow
+} else {
+    Write-Host "[1/3] Downloading $ZipName..." -ForegroundColor Yellow
+    try {
+        # Use TLS 1.2+ explicitly — old PowerShell defaults to SSL3/TLS1.0
+        # which GitHub rejects.
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipPath -UseBasicParsing
+    } catch {
+        Write-Host "ERROR: Download failed: $_" -ForegroundColor Red
+        Write-Host "       Check: https://github.com/SagerNet/sing-box/releases/tag/v$Version" -ForegroundColor Gray
+        if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
+        exit 1
+    }
+
+    $sizeMB = [math]::Round((Get-Item $ZipPath).Length / 1MB, 1)
+    Write-Host "       Downloaded: $sizeMB MB" -ForegroundColor Gray
+}
+
+# ── Extract ──
+Write-Host "[2/3] Extracting..." -ForegroundColor Yellow
+if (Test-Path $ExtractDir) { Remove-Item -Recurse -Force $ExtractDir }
+Expand-Archive -Path $ZipPath -DestinationPath $CacheDir -Force
+
+$extractedExe = Join-Path $ExtractDir "sing-box.exe"
+if (-not (Test-Path $extractedExe)) {
+    Write-Host "ERROR: Expected $extractedExe inside zip, but it's missing." -ForegroundColor Red
+    Write-Host "       Zip contents:" -ForegroundColor Gray
+    Get-ChildItem $ExtractDir -Recurse | ForEach-Object { Write-Host "         $($_.FullName.Replace($ExtractDir, ''))" -ForegroundColor Gray }
     exit 1
 }
-Write-Host "[1/4] Go: $(go version)" -ForegroundColor Yellow
 
-# ── Clone or update source ──
-Write-Host "[2/4] Preparing source..." -ForegroundColor Yellow
-if (-not (Test-Path (Join-Path $SrcDir ".git"))) {
-    Write-Host "       Cloning sing-box..." -ForegroundColor Gray
-    git clone https://github.com/SagerNet/sing-box.git $SrcDir 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Clone failed" }
-} else {
-    Write-Host "       Fetching latest tags..." -ForegroundColor Gray
-    Push-Location $SrcDir
-    $fetchOutput = git fetch --tags 2>&1
-    Pop-Location
-}
-
-Push-Location $SrcDir
-$checkoutOutput = git checkout "v$Version" 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Pop-Location
-    throw "Tag v$Version not found. Check: https://github.com/SagerNet/sing-box/tags"
-}
-Write-Host "       Checked out v$Version" -ForegroundColor Gray
-
-# ── Build ──
-Write-Host "[3/4] Building (this may take a minute)..." -ForegroundColor Yellow
-$env:GOPROXY = "direct"
-$env:GOOS = "windows"
-$env:GOARCH = "amd64"
-
-$ldflags = "-s -w -buildid= -X 'github.com/sagernet/sing-box/constant.Version=$Version'"
-
-go build -v -trimpath `
-    -tags $Tags `
-    -ldflags $ldflags `
-    -o sing-box.exe `
-    ./cmd/sing-box 2>&1 | Select-Object -Last 5
-
-if ($LASTEXITCODE -ne 0) {
-    Pop-Location
-    throw "Build failed"
-}
-Pop-Location
-
+Copy-Item $extractedExe $OutputExe -Force
 $size = [math]::Round((Get-Item $OutputExe).Length / 1MB, 1)
-Write-Host "       Built: $OutputExe ($size MB)" -ForegroundColor Green
+Write-Host "       Extracted: $OutputExe ($size MB)" -ForegroundColor Green
 
 # ── Verify ──
 $versionOutput = & $OutputExe version 2>&1
 Write-Host "       $($versionOutput[0])" -ForegroundColor Gray
-Write-Host "       $($versionOutput[2])" -ForegroundColor Gray
+if ($versionOutput.Count -gt 2) { Write-Host "       $($versionOutput[2])" -ForegroundColor Gray }
+
+# Verify we got the version we asked for (not a redirect to latest etc.)
+$expectedVersionLine = "sing-box version $Version"
+if ($versionOutput[0] -notlike "*$Version*") {
+    Write-Host "WARN: Binary reports '$($versionOutput[0])' but expected '$expectedVersionLine'" -ForegroundColor Yellow
+    Write-Host "      (continuing anyway — check if upstream changed their version string)" -ForegroundColor Yellow
+}
 
 # ── Install ──
 if ($Install) {
-    Write-Host "[4/4] Installing to $InstallPath..." -ForegroundColor Yellow
+    Write-Host "[3/3] Installing to $InstallPath..." -ForegroundColor Yellow
 
-    # Check if sing-box is running
+    # Check if sing-box is running (would lock the exe)
     $running = Get-Process -Name "sing-box" -ErrorAction SilentlyContinue
     if ($running) {
         Write-Host "       ERROR: sing-box is running (PID $($running.Id)). Stop VPN first!" -ForegroundColor Red
@@ -113,7 +125,7 @@ if ($Install) {
     Copy-Item $OutputExe $InstallPath -Force
     Write-Host "       Installed!" -ForegroundColor Green
 } else {
-    Write-Host "[4/4] Skipping install (use -Install flag)" -ForegroundColor Gray
+    Write-Host "[3/3] Skipping install (use -Install flag)" -ForegroundColor Gray
     Write-Host "       Binary at: $OutputExe" -ForegroundColor Gray
 }
 

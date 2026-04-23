@@ -227,37 +227,54 @@ TunLock передаётся Service-у? Или App стартует с новы
 
 ## 11 · Execution checklist (для следующей итерации)
 
-1. **sing-box 1.13.10 rebuild**
-   - `git -C tools/sing-box-src pull`
-   - Update commit hash / tag in `build-singbox.ps1` to 1.13.10
-   - Build, upload new `sing-box.exe` to release pipeline
-   - Verify in VM: `sing-box.exe version` → 1.13.10-vpnrouter
+### v2.27.2-r1 — SHIPPED 2026-04-23
 
-2. **A3 audit — TUN structural changes**
-   - Extend `VpnEngine.ApplyAsync` detection: cache `Tun.InterfaceName`, `Tun.Mtu`, `Tun.IPv4Address`, `Tun.AutoRoute`, `Tun.StrictRoute` at StartAsync. If any differ on Apply → `forceRestart=true` (same pattern as RoutingMode).
-   - Add regression test via Avalonia.Headless: verify apply path catches each structural delta.
+1. ✅ **sing-box 1.13.10 upstream switch (всё три платформы)**
+   - Решили взять **upstream prebuild** вместо custom rebuild. Причины:
+     - `with_clash_api` + `with_utls` + `with_quic` — все три tag'а уже default в upstream 1.13+.
+     - Custom build добавлял "это наш билд или upstream?" как переменную при диагностике. Убрали.
+     - Upstream релизы подписаны, reproducible. Наш — нет.
+     - +12MB per platform — acceptable trade-off.
+   - Linux: `SINGBOX_VER` в `.github/workflows/build-linux.yml`: 1.13.3 → 1.13.10.
+   - Mac: `build-mac.sh` теперь `curl`'ит upstream darwin-arm64 tarball и кладёт в `$APP/Contents/MacOS/` (раньше вообще не бандлилось; комментарий в MainWindowViewModel был устаревший).
+   - Win: `build.ps1` auto-downloads upstream Windows zip в `tools/singbox-cache/`. `-SingBoxPath` остался как override для custom билдов. `build-singbox.ps1` переписан с "build from Go source" на "download upstream prebuild".
 
-3. **B1 audit — TUN adapter cleanup**
-   - `netsh interface show interface` before/after various crash scenarios.
-   - Document findings. If dangling adapters confirmed, add cleanup step to `OrphanCleanup.KillOrphans` or to sing-box startup script.
+2. ✅ **A3 audit — TUN structural changes**
+   - `VpnEngine.ComputeTunFingerprint(TunSettings)` — хеш из `InterfaceName / Ipv4Address / Ipv6Enabled / Mtu / AutoRoute / StrictRoute / RouteExcludeAddress`. Сортировка excludes order-independent.
+   - `TunFingerprint` кэшится в StartAsync, сравнивается в ApplyAsync. Любой mismatch → `forceRestart = true`. Тот же паттерн, что RoutingMode check в v2.27.1-r1.
+   - Regression tests: 12 новых xUnit тестов (VpnEngineTunFingerprintTests.cs). `InternalsVisibleTo("VPNRouter.Tests")` позволил protected helper без public surface.
 
-4. **C3 audit — DNS leak with strict_route=false**
+3. ✅ **B1 audit — TUN adapter diagnostics**
+   - `TunAdapterDiagnostics.LogAdapterState(logger, context)` — вызывает `netsh interface show interface`, грепает `VPNRouter-TUN` / `sing-box-tun`, пишет в лог.
+   - Вызывается из `OrphanCleanup.KillOrphans` (before/after) и `VpnEngine.Stop` (after).
+   - **PASSIVE**: никаких delete'ов. Цель — собрать production-логи подтверждающие/опровергающие гипотезу "dangling adapter после kill". Active cleanup добавим когда будет репро.
+
+### Deferred to v2.27.3+
+
+4. **C3 audit — DNS leak with strict_route=false** (P0)
    - Wireshark capture during VPN session, grep :53 traffic.
    - If leak confirmed, options: (a) flip strict_route=true (riskier — breaks LAN), (b) add explicit DNS firewall rule that blocks :53 outside TUN.
 
-5. **Regression test matrix in VPNRouter.Tests**
-   - Test per structural change triggers restart (not hot-reload).
-   - Test per fake geo lookup (geosite-ru matches mail.ru, doesn't match youtube.com).
-   - Test subscription refresh → config regenerates with new active server.
+5. **A4 — ApplyAsync vs StartAsync config diff** (P1)
+   - Ещё один integration test: два идентичных AppSettings, прогнать StartAsync + ApplyAsync, diff current.json. Должен быть byte-identical.
+
+6. **A5 — subscription refresh через mid-session** (P1)
+   - Smoke-test repro: poднять VPN на подписке → Refresh Subscription → grep live Clash API config на новый outbound tag.
+
+7. **§4.6 C3 — ServiceViewModel state machine** (P1 UI polish)
+   - Idle → Installing → Starting → Running / Failed с Retry button.
 
 ---
 
 ## 12 · Success criteria
 
-После прогона этого audit'а:
-- v2.27.2 ships с sing-box 1.13.10 + fixes для A3 + B1
-- Новые регрессии в structural-change paths ловятся автоматически (integration test в suite)
-- Документ `plans/vpnrouter-core-stability-audit.md` поддерживается живым: каждый production-bug добавляется в соответствующую подсистему, чтобы накапливать инвариантные знания.
+### v2.27.2-r1 status
+
+- ✅ Все три платформы на upstream sing-box 1.13.10
+- ✅ TUN structural-change regression auto-detected (no manual forceRestart)
+- ✅ 12 новых fingerprint тестов в CI
+- ✅ Diagnostic logging на место для сбора B1 данных
+- 📋 Документ поддерживается живым: каждый production-bug добавляется в соответствующую подсистему, чтобы накапливать инвариантные знания.
 
 ---
 

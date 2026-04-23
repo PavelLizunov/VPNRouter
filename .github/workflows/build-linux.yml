@@ -68,18 +68,34 @@ jobs:
       # Bundle sing-box-linux-amd64 next to VPNRouter.App so the first-run
       # Deploy step (in MainWindowViewModel.cs) can copy it into
       # ~/.config/vpnrouter/bin/ and chmod +x it. Same pattern macOS uses.
-      # Pinned to a known-good sing-box 1.13.x build with the tags we rely
-      # on (with_utls, with_clash_api, with_quic).
+      #
+      # v2.27.2: bumped to upstream 1.13.10 (from 1.13.3). Upstream's official
+      # Linux builds ship with-clash-api + with-utls + with-quic baked in by
+      # default — the tags we rely on for Reality fingerprinting and hot-reload.
+      # We dropped the custom VPNRouter rebuild (build-singbox.ps1) and use
+      # GitHub's prebuilt binaries on all three platforms now. Rationale:
+      #   - Eliminates "custom build" as a variable when diagnosing weird
+      #     sing-box behaviour (was biting us on YouTube drops in v2.27.1).
+      #   - Picks up 1.13.4 → 1.13.10 bug fixes we'd otherwise have to
+      #     backport manually, at the cost of ~12 MB per-platform (acceptable).
+      #   - Upstream releases are signed and reproducible, custom rebuild
+      #     wasn't signed or reproducible.
+      # CI pins the version rather than using "latest" so builds are
+      # reproducible; bump deliberately when a new upstream point release
+      # is verified against our test suite.
       - name: Bundle sing-box-linux-amd64
         run: |
           set -euo pipefail
-          SINGBOX_VER="1.13.3"
+          SINGBOX_VER="1.13.10"
           curl -sSL -o /tmp/singbox.tar.gz \
             "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-linux-amd64.tar.gz"
           tar -xzf /tmp/singbox.tar.gz -C /tmp
           cp "/tmp/sing-box-${SINGBOX_VER}-linux-amd64/sing-box" publish/linux-x64/sing-box
           chmod +x publish/linux-x64/sing-box
           ls -lh publish/linux-x64/sing-box
+          # Sanity check — fail the build early if the binary doesn't
+          # respond to `version` (bad download, corrupt tarball, etc.).
+          publish/linux-x64/sing-box version
 
       # ── AppImage ────────────────────────────────────────────────────────
       # AppImage layout:

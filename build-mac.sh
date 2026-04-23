@@ -46,6 +46,38 @@ cp -R "$PUBLISH_DIR/." "$APP/Contents/MacOS/"
 chmod +x "$APP/Contents/MacOS/VPNRouter.App"
 cp "$REPO_DIR/VPNRouter.App/Assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
+# v2.27.2: bundle upstream sing-box inside Contents/MacOS/ so first-run
+# DeployBundledProfiles (in MainWindowViewModel.cs) can copy it from
+# AppContext.BaseDirectory to ~/Library/Application Support/VPNRouter/bin/
+# and chmod +x. Previously Mac users had to install sing-box manually
+# (brew install sing-box) — the stale comment in MainWindowViewModel
+# claimed it was bundled but the build script wasn't actually doing it.
+#
+# Matching Linux workflow: we use GitHub's prebuilt upstream binary
+# (1.13.10) rather than the custom VPNRouter rebuild. Upstream includes
+# with_clash_api + with_utls + with_quic by default, and eliminates
+# "custom build" as a variable when diagnosing issues.
+SINGBOX_VER="1.13.10"
+# macos-latest on Actions is arm64; local dev Macs are usually arm64
+# too. Fall back to amd64 if running on Intel for the rare local case.
+ARCH="arm64"
+if [ "$(uname -m)" = "x86_64" ]; then
+    ARCH="amd64"
+fi
+echo "    sing-box: fetching v${SINGBOX_VER} darwin-${ARCH}..."
+curl -sSL -o /tmp/singbox.tar.gz \
+    "https://github.com/SagerNet/sing-box/releases/download/v${SINGBOX_VER}/sing-box-${SINGBOX_VER}-darwin-${ARCH}.tar.gz"
+tar -xzf /tmp/singbox.tar.gz -C /tmp
+cp "/tmp/sing-box-${SINGBOX_VER}-darwin-${ARCH}/sing-box" "$APP/Contents/MacOS/sing-box"
+chmod +x "$APP/Contents/MacOS/sing-box"
+# Strip macOS quarantine xattr so Gatekeeper doesn't refuse to launch
+# the helper binary on first run. (The .app bundle itself gets the
+# quarantine bit from Safari on download; the nested sing-box binary
+# would inherit it and get blocked.)
+xattr -d com.apple.quarantine "$APP/Contents/MacOS/sing-box" 2>/dev/null || true
+"$APP/Contents/MacOS/sing-box" version | head -1
+echo "    sing-box bundled ($(stat -f%z "$APP/Contents/MacOS/sing-box" 2>/dev/null || stat -c%s "$APP/Contents/MacOS/sing-box") bytes)"
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

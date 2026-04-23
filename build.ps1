@@ -23,7 +23,14 @@
 #>
 param(
     [string]$Version = "1.0",
-    [string]$SingBoxPath = "$env:ProgramData\VPNRouter\bin\sing-box.exe",
+    # SingBoxVersion: upstream sing-box release to bundle (v2.27.2+).
+    # Keep aligned with Linux workflow (.github/workflows/build-linux.yml)
+    # and build-mac.sh — all three platforms ship the same sing-box release.
+    [string]$SingBoxVersion = "1.13.10",
+    # Optional override: pre-existing sing-box.exe to bundle instead of
+    # downloading upstream. Used for local testing of custom builds.
+    # Empty string means "auto-download upstream $SingBoxVersion".
+    [string]$SingBoxPath = "",
     [switch]$Upload,
     [string]$GitHubRepo = "PavelLizunov/VPNRouter"
 )
@@ -180,12 +187,49 @@ Write-Host "       Cleaned PDB, locale, debug, WPF, and unused files" -Foregroun
 Write-Host "       Removed: WPF $([math]::Round($wpfRemoved/1MB,1)) MB + natives $([math]::Round($nativeRemoved/1MB,1)) MB + design $([math]::Round($designRemoved/1MB,1)) MB = $([math]::Round($totalSaved,1)) MB saved" -ForegroundColor Gray
 
 # ── Bundle sing-box.exe ──
+# v2.27.2: auto-download upstream sing-box prebuild by default. Previously
+# required -SingBoxPath pointing at a pre-installed copy (%ProgramData%\VPNRouter\bin\)
+# which in turn was populated via build-singbox.ps1 (custom Go rebuild).
+# Now falls back to upstream download, keeping manual rebuild as an opt-in
+# override via -SingBoxPath. See build-singbox.ps1 header for rationale.
 Write-Host "[6/9] Bundling sing-box.exe..." -ForegroundColor Yellow
-if (Test-Path $SingBoxPath) {
-    Copy-Item $SingBoxPath $DistDir
-    Write-Host "       Copied from: $SingBoxPath" -ForegroundColor Gray
+if ($SingBoxPath -and (Test-Path $SingBoxPath)) {
+    Copy-Item $SingBoxPath (Join-Path $DistDir "sing-box.exe") -Force
+    Write-Host "       Copied from: $SingBoxPath (override)" -ForegroundColor Gray
 } else {
-    Write-Host "       WARNING: sing-box.exe not found at $SingBoxPath" -ForegroundColor Red
+    # Auto-download upstream. Cache under tools\singbox-cache\ so repeat
+    # builds reuse the download — version-pinned, so this cache never
+    # needs manual invalidation.
+    $singBoxCache = Join-Path $Root "tools\singbox-cache"
+    New-Item -ItemType Directory -Force -Path $singBoxCache | Out-Null
+    $zipName = "sing-box-$SingBoxVersion-windows-amd64.zip"
+    $zipPath = Join-Path $singBoxCache $zipName
+    $extractDir = Join-Path $singBoxCache "sing-box-$SingBoxVersion-windows-amd64"
+    $cachedExe = Join-Path $extractDir "sing-box.exe"
+
+    if (-not (Test-Path $cachedExe)) {
+        if (-not (Test-Path $zipPath)) {
+            $dlUrl = "https://github.com/SagerNet/sing-box/releases/download/v$SingBoxVersion/$zipName"
+            Write-Host "       Downloading upstream sing-box v$SingBoxVersion from $dlUrl..." -ForegroundColor Gray
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            try {
+                Invoke-WebRequest -Uri $dlUrl -OutFile $zipPath -UseBasicParsing
+            } catch {
+                Write-Host "       ERROR: Download failed: $_" -ForegroundColor Red
+                if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+                throw "sing-box download failed. Check https://github.com/SagerNet/sing-box/releases/tag/v$SingBoxVersion"
+            }
+        }
+        if (Test-Path $extractDir) { Remove-Item -Recurse -Force $extractDir }
+        Expand-Archive -Path $zipPath -DestinationPath $singBoxCache -Force
+        if (-not (Test-Path $cachedExe)) {
+            throw "sing-box.exe not found inside $zipName after extraction"
+        }
+    }
+
+    Copy-Item $cachedExe (Join-Path $DistDir "sing-box.exe") -Force
+    $sbSize = [math]::Round((Get-Item $cachedExe).Length / 1MB, 1)
+    Write-Host "       Bundled upstream sing-box v$SingBoxVersion ($sbSize MB)" -ForegroundColor Green
 }
 
 # ── Zapret (DPI bypass) — downloaded on demand from Flowseal/zapret-discord-youtube ──

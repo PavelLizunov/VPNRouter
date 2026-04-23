@@ -43,6 +43,21 @@ public class VpnEngine : IDisposable
     /// <summary>IP/host of the active server (for status display).</summary>
     public string ActiveServerAddress { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Fingerprint of TUN-layer settings taken at the last successful
+    /// start/restart. Compared against the incoming AppSettings on every
+    /// ApplyAsync — any mismatch escalates to <c>forceRestart = true</c>
+    /// because TUN interface changes (name / IP / MTU / auto_route /
+    /// strict_route / route_exclude_address) can't be re-laid by sing-box's
+    /// Clash API hot-reload; the adapter has to be destroyed and recreated.
+    ///
+    /// <para>v2.27.2: introduced alongside RoutingMode auto-detect (v2.27.1)
+    /// as part of the "structural change self-heal" family. Callers should
+    /// NEVER need to manually pass <c>forceRestart = true</c> — the engine
+    /// figures it out.</para>
+    /// </summary>
+    internal string TunFingerprint { get; private set; } = string.Empty;
+
     // ─── Events for UI ───────────────────────────────────────────────────────
 
     /// <summary>Fired when engine status changes (e.g. "Loading profiles...", "sing-box started")</summary>
@@ -116,6 +131,10 @@ public class VpnEngine : IDisposable
         ActiveConfigMode = isCustomConfig ? "custom" : "generated";
         ActiveRoutingMode = (settings.App.RoutingMode ?? "split")
             .Equals("full", StringComparison.OrdinalIgnoreCase) ? "full" : "split";
+        // Capture the TUN fingerprint as the baseline for later Apply calls.
+        // Any subsequent mismatch forces a full process restart so the TUN
+        // adapter and its route table are laid fresh from the new settings.
+        TunFingerprint = ComputeTunFingerprint(settings.Tun);
 
         // 1. Validate config source
         if (isCustomConfig)
@@ -766,6 +785,34 @@ public class VpnEngine : IDisposable
                 forceRestart = true;
             }
 
+            // v2.27.2: TUN-layer structural change detection. Same pattern as
+            // RoutingMode above — Clash API hot-reload ACCEPTS the config
+            // silently but the live TUN adapter keeps its old interface
+            // name / IP / MTU / route-exclude list. Any mismatch here
+            // means we need to tear the adapter down and rebuild.
+            //
+            // Covers:
+            //   - Tun.InterfaceName    (rare, but user-visible in netsh)
+            //   - Tun.Ipv4Address      (changing the TUN subnet re-lays routes)
+            //   - Tun.Mtu              (kernel-level adapter property)
+            //   - Tun.AutoRoute        (auto route table installation toggle)
+            //   - Tun.StrictRoute      (block direct on non-TUN — critical for
+            //                           leak protection; hot-reload ignores it)
+            //   - Tun.Ipv6Enabled      (stack toggle, adapter-level)
+            //   - Tun.RouteExcludeAddress (v2.20 AmneziaWG coexistence — the
+            //                              exclude list is written into the
+            //                              adapter's kernel route table at
+            //                              creation; Clash API doesn't re-run
+            //                              the installer)
+            var newTunFingerprint = ComputeTunFingerprint(settings.Tun);
+            if (!string.Equals(newTunFingerprint, TunFingerprint, StringComparison.Ordinal))
+            {
+                _logger?.Information(
+                    "[VpnEngine] TUN settings change detected — escalating to full restart. Old fingerprint {Old}, new {New}",
+                    TunFingerprint, newTunFingerprint);
+                forceRestart = true;
+            }
+
             // Try hot-reload first, UNLESS the caller explicitly asked for
             // a full restart (v2.20.4 + v2.27.1 auto-detect above).
             if (!forceRestart && _singBox.TryReloadConfigJson(configJson))
@@ -781,9 +828,10 @@ public class VpnEngine : IDisposable
                 _logger?.Warning("[VpnEngine] Hot-reload failed, falling back to full restart");
 
             _singBox.ReloadConfigJson(configJson);
-            // Update cached routing-mode tracker post-restart so subsequent
-            // Apply calls see the new baseline.
+            // Update cached trackers post-restart so subsequent Apply calls
+            // see the new baseline for both RoutingMode and TUN fingerprint.
             ActiveRoutingMode = newRoutingMode;
+            TunFingerprint = newTunFingerprint;
             OnStatus($"Applied (restart, PID {_singBox.Pid})");
             return true;
         }
@@ -821,6 +869,19 @@ public class VpnEngine : IDisposable
         _healthMonitor = null;
         _etw = null;
         _firewall = null;
+
+        // v2.27.2 — passive diagnostic: log TUN adapter state *after* a
+        // graceful stop. If the adapter persists in netsh after
+        // sing-box has exited cleanly, we've got a wintun/sing-box
+        // driver-level leak. Useful for correlating with user reports
+        // like "after heavy toggling, TUN adapter 'sticks' and a new
+        // start either fails or reuses stale routes".
+        try
+        {
+            if (OperatingSystem.IsWindows())
+                TunAdapterDiagnostics.LogAdapterState(_logger, "VpnEngine.after-stop");
+        }
+        catch { /* diagnostics must never throw */ }
 
         OnStatus("Stopped");
         _logger?.Information("[VpnEngine] Stopped");
@@ -875,6 +936,38 @@ public class VpnEngine : IDisposable
     {
         _logger?.Information("[VpnEngine] {Status}", message);
         StatusChanged?.Invoke(message);
+    }
+
+    /// <summary>
+    /// Build a stable fingerprint of TUN-layer settings for change detection
+    /// between StartAsync and ApplyAsync. Any field here that changes means
+    /// the adapter needs to be rebuilt — Clash API hot-reload CANNOT re-lay
+    /// kernel-level TUN properties.
+    ///
+    /// <para>Exposed as <c>internal</c> (not public) because tests live in
+    /// the Tests project which has InternalsVisibleTo via friend assembly
+    /// attribute. Production callers should compare
+    /// <see cref="TunFingerprint"/> values instead of recomputing.</para>
+    /// </summary>
+    internal static string ComputeTunFingerprint(Models.TunSettings tun)
+    {
+        // Order-independent join of the exclude list — users might reorder
+        // entries in the UI without any structural change intended.
+        var excludes = tun.RouteExcludeAddress ?? new List<string>();
+        var excludeKey = string.Join(",",
+            excludes
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s.Trim().ToLowerInvariant())
+                .OrderBy(s => s, StringComparer.Ordinal));
+
+        return string.Join("|",
+            (tun.InterfaceName ?? "").Trim().ToLowerInvariant(),
+            (tun.Ipv4Address ?? "").Trim().ToLowerInvariant(),
+            tun.Ipv6Enabled ? "1" : "0",
+            tun.Mtu.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            tun.AutoRoute ? "1" : "0",
+            tun.StrictRoute ? "1" : "0",
+            excludeKey);
     }
 
     private static List<IProfileSource> BuildProfileSources(AppSettings settings)
