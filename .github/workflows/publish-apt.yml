@@ -193,8 +193,15 @@ jobs:
               TAG="$EVENT_TAG"
               echo "Triggered by release.published for tag: $TAG (prerelease=$EVENT_IS_PRERELEASE)"
               if [ "$EVENT_IS_PRERELEASE" = "true" ]; then
-                  echo "::notice::Skipping apt publish — $TAG is a prerelease"
-                  exit 0
+                  # v2.28.0: don't EXIT the whole workflow on prerelease —
+                  # just skip the .deb-download step. The install.sh and
+                  # index.html updates from earlier steps still need to hit
+                  # gh-pages so the one-liner reflects the latest script
+                  # version. Unset TAG so the download block below becomes
+                  # a no-op; commit step pushes only docs/script changes.
+                  echo "::notice::$TAG is a prerelease — install.sh/index.html will publish, apt repo will NOT add this .deb"
+                  TAG=""
+                  SKIP_DEB="true"
               fi
           elif [ -n "$INPUT_TAG" ]; then
               TAG="$INPUT_TAG"
@@ -207,7 +214,9 @@ jobs:
               echo "workflow_dispatch without tag — will re-index ALL STABLE releases from the last 30"
           fi
 
-          if [ -n "$TAG" ]; then
+          if [ "${SKIP_DEB:-false}" = "true" ]; then
+              echo "Skipping .deb download (prerelease) — install.sh + landing page will still publish"
+          elif [ -n "$TAG" ]; then
               # v2.22.4: retry — release.published fires the moment the
               # release is created, but the Linux CI upload of the .deb
               # may still be in flight. Wait up to ~3 minutes for the
