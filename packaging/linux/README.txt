@@ -19,18 +19,32 @@ First-time setup:
      update-desktop-database ~/.local/share/applications/
 
 
-Elevation
----------
-VPNRouter runs the sing-box proxy process as root (needed for TUN mode
-routing). It uses pkexec to show a GUI password prompt via your desktop
-environment's polkit agent (GNOME / KDE / XFCE / Cinnamon all include
-one by default).
+Elevation (passwordless since v2.28.0)
+--------------------------------------
+If you installed via the .deb package or the apt repository, the
+post-install hook already applied POSIX capabilities to the bundled
+sing-box binary:
 
-If pkexec isn't available on your system, grant sing-box the required
-capability once:
+    cap_net_admin + cap_net_bind_service
+
+That lets sing-box create a TUN adapter and bind low ports without
+running as root, and without any password prompt. Same approach as
+tcpdump, wireshark, ping. No pkexec round-trip every time you connect.
+
+tar.gz users: run setcap once to unlock passwordless mode —
+
      sudo setcap cap_net_admin,cap_net_bind_service=+eip ~/.config/vpnrouter/bin/sing-box
 
-Then VPNRouter will launch sing-box without a password prompt.
+AppImage users: AppImage is a read-only squashfs so setcap on the
+embedded binary is impossible. The app detects this and falls back to
+pkexec, which pops a GUI password prompt via your desktop polkit agent
+(GNOME / KDE / XFCE / Cinnamon all include one by default). Same UX
+as VPNRouter v2.21 — v2.27.
+
+If both capability and pkexec are unavailable (headless distro with no
+polkit agent), you can still run VPNRouter.App, but Connect will fail
+with a clear error. Install a polkit agent (e.g. policykit-1) or apply
+setcap manually to proceed.
 
 
 GNOME users — tray icon

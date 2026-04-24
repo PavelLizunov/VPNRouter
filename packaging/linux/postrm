@@ -1,0 +1,26 @@
+#!/bin/sh
+# VPNRouter .deb post-removal hook.
+#
+# Kills any running sing-box that our package started, so after uninstall
+# there's no orphan VPN eating CPU / holding a TUN adapter. Safe on
+# partial removal too — sing-box re-launches cleanly on reinstall.
+
+set -e
+
+# Only act on full removal / purge, not configure failures etc.
+case "$1" in
+    remove|purge)
+        pkill -f /opt/vpnrouter/sing-box 2>/dev/null || true
+        pkill -f VPNRouter.App          2>/dev/null || true
+        ;;
+esac
+
+# Refresh desktop + icon databases after the menu entry / icon files go away.
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q /usr/share/applications 2>/dev/null || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || true
+fi
+
+exit 0

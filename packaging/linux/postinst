@@ -1,0 +1,40 @@
+#!/bin/sh
+# VPNRouter .deb post-install hook.
+#
+# v2.28.0: passwordless-by-default mode — grant the bundled sing-box
+# binary the exact POSIX capabilities it needs to create TUN and bind
+# low ports, so the VPN can start without pkexec / password prompts.
+#
+# This is the standard Unix pattern for network tools that need privileged
+# operations without full root: same approach as tcpdump, wireshark,
+# dumpcap, ping. After this setcap call:
+#   - /opt/vpnrouter/sing-box runs as normal user
+#   - It can still create TUN adapters and bind <1024 ports
+#   - No other privileges (can't read /etc/shadow, no file system access
+#     outside user's home, no arbitrary exec, etc.)
+#
+# If setcap isn't available (unusual but possible on stripped systems),
+# we fall back silently — the app will detect the missing capability at
+# runtime and ask for pkexec instead (pre-v2.28 behaviour).
+
+set -e
+
+SINGBOX=/opt/vpnrouter/sing-box
+
+if [ -x "$SINGBOX" ]; then
+    if command -v setcap >/dev/null 2>&1; then
+        # cap_net_admin       - create TUN interface, modify routing table
+        # cap_net_bind_service - bind to ports < 1024 (DNS :53, Clash API :9090 ok either way)
+        setcap cap_net_admin,cap_net_bind_service=+eip "$SINGBOX" 2>/dev/null || true
+    fi
+fi
+
+# Refresh icon + desktop databases so the menu entry appears without logout.
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q /usr/share/applications 2>/dev/null || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || true
+fi
+
+exit 0

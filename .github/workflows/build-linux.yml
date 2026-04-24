@@ -197,6 +197,16 @@ jobs:
           chmod 755 "$PKG/usr/libexec/vpnrouter-update-helper"
           chmod 644 "$PKG/usr/share/polkit-1/actions/com.vpnrouter.update.policy"
 
+          # v2.28.0: passwordless VPN start via POSIX capabilities.
+          # postinst runs `setcap cap_net_admin,cap_net_bind_service=+eip`
+          # on the bundled sing-box so the app can spawn it as a normal
+          # user, no pkexec / password prompts. postrm cleans up running
+          # processes on uninstall. Both must be mode 0755 inside the
+          # .deb or dpkg refuses to execute them.
+          sed 's/\r$//' packaging/linux/postinst > "$PKG/DEBIAN/postinst"
+          sed 's/\r$//' packaging/linux/postrm   > "$PKG/DEBIAN/postrm"
+          chmod 755 "$PKG/DEBIAN/postinst" "$PKG/DEBIAN/postrm"
+
           # .desktop + icon
           cp packaging/linux/vpnrouter.desktop "$PKG/usr/share/applications/vpnrouter.desktop"
           sed -i 's|^Exec=.*|Exec=/usr/bin/vpnrouter|' "$PKG/usr/share/applications/vpnrouter.desktop"

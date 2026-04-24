@@ -247,6 +247,35 @@ jobs:
           echo "Collected debs:"
           ls -lh .apt-debs || true
 
+      - name: Publish install.sh one-liner to gh-pages root
+        run: |
+          # v2.28.0: ship a user-friendly installer script at the gh-pages
+          # root so people can do `curl -fsSL .../install.sh | sudo sh`
+          # without typing any apt-source-list incantations.
+          #
+          # Also available at the pretty redirect URLs configured by the
+          # user's own landing page (e.g. vpn.ninitux.com → CNAME or
+          # 302 → this script). See packaging/apt-repo/install.sh for the
+          # script content.
+          sed 's/\r$//' packaging/apt-repo/install.sh > gh-pages-dir/install.sh
+          chmod 755 gh-pages-dir/install.sh
+          # Copy to /apt/ too so both URLs work: install.sh and apt/install.sh.
+          cp gh-pages-dir/install.sh gh-pages-dir/apt/install.sh
+          # Simple landing page at gh-pages root linking to the installer +
+          # apt repo. Prevents the 404 that Pages currently returns for `/`.
+          cat > gh-pages-dir/index.html <<'HTML'
+          <!DOCTYPE html>
+          <meta charset="utf-8">
+          <title>VPNRouter — Linux install</title>
+          <style>body{font:14px/1.5 system-ui,sans-serif;max-width:720px;margin:3em auto;padding:0 1em;color:#222}code,pre{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:13px}pre{padding:12px;overflow:auto}h1{font-size:1.6em}a{color:#0366d6;text-decoration:none}a:hover{text-decoration:underline}</style>
+          <h1>VPNRouter — Linux install</h1>
+          <p>One-liner for Debian / Ubuntu / Mint and derivatives:</p>
+          <pre>curl -fsSL https://pavellizunov.github.io/VPNRouter/install.sh | sudo sh</pre>
+          <p>This adds the signed apt repository and runs <code>apt install vpnrouter</code>. After that, <code>sudo apt upgrade</code> keeps VPNRouter current.</p>
+          <p>Prefer to add the repo manually? See <a href="apt/">/apt/</a> for the traditional instructions.</p>
+          <p>Other platforms: <a href="https://github.com/PavelLizunov/VPNRouter/releases/latest">GitHub Releases</a> (Windows ZIP, macOS DMG, Linux AppImage / tar.gz).</p>
+          HTML
+
       - name: Add .deb(s) to apt repo
         run: |
           if ! ls .apt-debs/*.deb > /dev/null 2>&1; then

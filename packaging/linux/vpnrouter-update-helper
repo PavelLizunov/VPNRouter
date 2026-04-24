@@ -52,4 +52,15 @@ cp -rfT "$SRC" "$DST"
 [ -f "$DST/VPNRouter.App" ] && chmod +x "$DST/VPNRouter.App"
 [ -f "$DST/sing-box" ]       && chmod +x "$DST/sing-box"
 
+# v2.28.0: re-apply POSIX capabilities on the freshly-copied sing-box.
+# `cp` strips extended attributes by default, and the CAP_NET_ADMIN +
+# CAP_NET_BIND_SERVICE capabilities live as xattrs — so without this,
+# every auto-update would silently revert passwordless mode, pushing the
+# user back to the pkexec password-prompt path. setcap is idempotent;
+# `|| true` lets the helper succeed even on file systems that don't
+# support xattrs (we just fall back to pkexec at runtime then).
+if [ -f "$DST/sing-box" ] && command -v setcap >/dev/null 2>&1; then
+    setcap cap_net_admin,cap_net_bind_service=+eip "$DST/sing-box" 2>/dev/null || true
+fi
+
 exit 0

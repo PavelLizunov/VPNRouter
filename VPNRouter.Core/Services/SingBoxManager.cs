@@ -18,6 +18,16 @@ public class SingBoxManager : IDisposable
     private bool _disposed;
     private TunOwnershipLock _tunLock;
 
+    /// <summary>
+    /// Linux-only: did <see cref="LaunchProcess"/> elevate via pkexec?
+    /// If false, sing-box was spawned as a plain user process (possible when
+    /// the binary has CAP_NET_ADMIN + CAP_NET_BIND_SERVICE from the .deb
+    /// postinst / update-helper's setcap call). In that case
+    /// <see cref="Stop"/> can just kill the tracked PID directly —
+    /// no pkexec round-trip, no password prompt.
+    /// </summary>
+    private bool _linuxUsedPkexec;
+
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(3) };
 
     public SingBoxState State { get; private set; } = SingBoxState.Stopped;
@@ -109,6 +119,54 @@ public class SingBoxManager : IDisposable
             // exits immediately after spawning the root sing-box child.
             // Result: Stop was a no-op and sing-box kept running. Same
             // bug macOS would have had before we routed it here.
+            //
+            // v2.28.0: Linux capability-mode path — if LaunchProcess spawned
+            // sing-box as a plain user process (it has CAP_NET_ADMIN via
+            // setcap), then `_process` points at the REAL sing-box (not a
+            // short-lived pkexec wrapper), and WE OWN that PID. Just Kill()
+            // it directly — no elevation needed, no password prompt.
+            if (OperatingSystem.IsLinux() && !_linuxUsedPkexec)
+            {
+                try
+                {
+                    if (_process != null)
+                    {
+                        _process.EnableRaisingEvents = false;
+                        if (!_process.HasExited)
+                        {
+                            _process.Kill(entireProcessTree: true);
+                            _process.WaitForExit(5000);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "[SingBoxManager] Linux capability-mode Stop failed, falling back to pkill");
+                    // Best-effort fallback — try plain pkill as user. Will
+                    // succeed because we own the process in capability mode.
+                    try
+                    {
+                        using var pk = Process.Start(new ProcessStartInfo("/usr/bin/pkill", "-f sing-box")
+                        {
+                            UseShellExecute = false, CreateNoWindow = true,
+                            RedirectStandardOutput = true, RedirectStandardError = true
+                        });
+                        pk?.WaitForExit(3000);
+                    }
+                    catch { /* swallow, State will be Stopped anyway */ }
+                }
+                finally
+                {
+                    _process?.Dispose();
+                    _process = null;
+                    State = SingBoxState.Stopped;
+                    if (releaseLock) _tunLock.Release();
+                    _logger.Information("[SingBoxManager] sing-box stopped (Linux capability mode, no pkexec)");
+                }
+                return;
+            }
+
+            // pkexec path (pre-v2.28 behaviour on Linux + always on macOS).
             var elevator = OperatingSystem.IsLinux() ? "/usr/bin/pkexec" : "/usr/bin/sudo";
             try
             {
@@ -341,6 +399,54 @@ public class SingBoxManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Linux-only: does the binary at <paramref name="exePath"/> have
+    /// <c>cap_net_admin</c> + <c>cap_net_bind_service</c> set via setcap?
+    /// If yes, we can launch it as a plain user process instead of through
+    /// pkexec. Parses <c>getcap</c> output defensively — any unexpected
+    /// format or missing tool returns false (safe fallback to pkexec).
+    ///
+    /// <para>Expected matching <c>getcap</c> output looks like:
+    /// <c>/opt/vpnrouter/sing-box cap_net_admin,cap_net_bind_service=eip</c>
+    /// (spacing and flag order can vary between libcap versions).</para>
+    /// </summary>
+    private bool HasNetCapability(string exePath)
+    {
+        if (!OperatingSystem.IsLinux()) return false;
+        if (string.IsNullOrEmpty(exePath) || !File.Exists(exePath)) return false;
+
+        try
+        {
+            var psi = new ProcessStartInfo("/usr/sbin/getcap", $"\"{exePath}\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            using var p = Process.Start(psi);
+            if (p == null) return false;
+            var output = p.StandardOutput.ReadToEnd();
+            p.WaitForExit(2000);
+            if (!p.HasExited || p.ExitCode != 0) return false;
+
+            // getcap prints nothing if no capabilities are set.
+            // When set, we need BOTH cap_net_admin and cap_net_bind_service
+            // active ('e' = effective) so sing-box can actually use them.
+            // Be lenient on order / whitespace.
+            if (string.IsNullOrWhiteSpace(output)) return false;
+            if (output.IndexOf("cap_net_admin", StringComparison.OrdinalIgnoreCase) < 0) return false;
+            if (output.IndexOf("cap_net_bind_service", StringComparison.OrdinalIgnoreCase) < 0) return false;
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[SingBoxManager] getcap probe failed — falling back to pkexec path");
+            return false;
+        }
+    }
+
     private void LaunchProcess(string exePath)
     {
         ProcessStartInfo psi;
@@ -360,27 +466,56 @@ public class SingBoxManager : IDisposable
         }
         else if (OperatingSystem.IsLinux())
         {
-            // v2.21.0: Linux elevation via pkexec (PolicyKit).
-            // On standard desktop environments (GNOME / KDE / XFCE /
-            // Cinnamon) a polkit authentication agent runs in the session,
-            // so pkexec pops a native GUI password prompt and launches
-            // sing-box as root. Same UX model as macOS sudo, no terminal
-            // required.
+            // v2.28.0: Capability-first launch path (passwordless-by-default).
             //
-            // Fallback for headless or minimal distros (no polkit agent):
-            // user can `sudo setcap cap_net_admin,cap_net_bind_service=+eip
-            // <path/to/sing-box>` once, after which pkexec becomes a no-op
-            // — plain exec works without root.
-            // See plans/vpnrouter-linux-port-research.md.
-            psi = new ProcessStartInfo
+            // If the sing-box binary has CAP_NET_ADMIN + CAP_NET_BIND_SERVICE
+            // set via `setcap` (.deb postinst does this automatically; manual
+            // for AppImage / tar.gz), we can spawn it as a plain user process:
+            // it'll still be able to create a TUN adapter and bind low
+            // ports, but everything else runs at normal user privilege.
+            // No pkexec → no password prompt → same UX as Windows Service
+            // or macOS after first-run sudoers setup.
+            //
+            // If the capability is missing (AppImage first run, broken
+            // install, or xattr-less filesystem), fall back to the
+            // v2.21-era pkexec path, which pops a polkit GUI prompt in
+            // desktop sessions. Headless / no-agent systems get a clear
+            // exit-127 error and a one-time hint from the UI about running
+            // `sudo setcap ...` themselves.
+            //
+            // See plans/vpnrouter-v2.28-linux-passwordless.md for rationale
+            // vs. polkit-policy-based alternative (we picked capabilities
+            // because it's strictly least-privilege — sing-box runs as the
+            // user, not root — and doesn't require a polkit agent at all).
+            if (HasNetCapability(exePath))
             {
-                FileName = "/usr/bin/pkexec",
-                Arguments = $"\"{exePath}\" run -c \"{_currentConfigPath}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
+                _logger.Information("[SingBoxManager] Linux: launching as user (CAP_NET_ADMIN present, no pkexec needed)");
+                _linuxUsedPkexec = false;
+                psi = new ProcessStartInfo
+                {
+                    FileName = exePath,
+                    Arguments = $"run -c \"{_currentConfigPath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+            }
+            else
+            {
+                _logger.Information("[SingBoxManager] Linux: falling back to pkexec (sing-box lacks CAP_NET_ADMIN — install via .deb or run 'sudo setcap cap_net_admin,cap_net_bind_service=+eip {Exe}' once)",
+                    exePath);
+                _linuxUsedPkexec = true;
+                psi = new ProcessStartInfo
+                {
+                    FileName = "/usr/bin/pkexec",
+                    Arguments = $"\"{exePath}\" run -c \"{_currentConfigPath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+            }
         }
         else
         {
