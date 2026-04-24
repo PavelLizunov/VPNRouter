@@ -25,6 +25,45 @@
 
 ---
 
+## Install (one-liner, all three platforms)
+
+<table>
+<tr>
+<td width="80" align="center">🐧<br><b>Linux</b></td>
+<td>
+
+```bash
+curl -fsSL https://vpn.ninitux.com/install.sh | sudo sh
+```
+Debian / Ubuntu / Mint / Pop / elementary. Adds the signed apt repo, installs `vpnrouter`, sets up passwordless VPN via POSIX capabilities. Updates: `sudo apt upgrade`.
+</td>
+</tr>
+<tr>
+<td align="center">🍎<br><b>macOS</b></td>
+<td>
+
+```bash
+brew install --cask pavellizunov/vpnrouter/vpnrouter
+```
+Apple Silicon. Auto-strips Gatekeeper quarantine. First launch prompts once for sudoers setup, then passwordless. Updates: `brew upgrade --cask vpnrouter`.
+</td>
+</tr>
+<tr>
+<td align="center">🪟<br><b>Windows</b></td>
+<td>
+
+```powershell
+iwr -useb https://vpn.ninitux.com/install.ps1 | iex
+```
+Windows 10/11 x64. Auto-elevates via UAC. Registers Start Menu + Add/Remove Programs. Updates: re-run the same command. Uninstall: Settings → Apps → VPNRouter.
+</td>
+</tr>
+</table>
+
+Prefer manual install? See [**Manual download**](#manual-download) below for ZIPs / DMG / AppImage / deb / tar.gz.
+
+---
+
 ## What it does
 
 Routes **selected applications** through a VLESS+Reality proxy (via [sing-box](https://github.com/SagerNet/sing-box) TUN mode), everything else goes direct to your ISP. Not a full-tunnel VPN — it's a per-process router. Discord goes through the proxy, your bank site stays direct. No manual proxy settings per app.
@@ -53,30 +92,9 @@ Add-ons on top of the core router:
 
 *(Screenshots coming soon.)*
 
-## Download
+## Manual download
 
-### Quick install (one-liner)
-
-**🐧 Linux (Debian / Ubuntu / Mint / Pop / elementary):**
-
-```bash
-curl -fsSL https://vpn.ninitux.com/install.sh | sudo sh
-```
-
-Adds the signed apt repository and installs `vpnrouter`. Subsequent `sudo apt upgrade` keeps it current. Passwordless VPN start via POSIX capabilities (setcap) — same pattern as tcpdump/wireshark.
-
-**🍎 macOS (Apple Silicon, via Homebrew Cask):**
-
-```bash
-brew tap pavellizunov/vpnrouter
-brew install --cask vpnrouter
-```
-
-First-launch walks you through a one-time `sudoers.d` entry so sing-box can create TUN without a password prompt each time. `brew upgrade --cask vpnrouter` keeps it current.
-
-### Manual download
-
-Grab the latest build from [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest):
+For the one-liner install on all three platforms, see the [**Install**](#install-one-liner-all-three-platforms) section above. Prefer to install by hand? Grab the latest build from [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest):
 
 | File | Platform | What it is |
 |---|---|---|

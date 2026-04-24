@@ -25,6 +25,45 @@
 
 ---
 
+## Установка (one-liner на всех трёх платформах)
+
+<table>
+<tr>
+<td width="80" align="center">🐧<br><b>Linux</b></td>
+<td>
+
+```bash
+curl -fsSL https://vpn.ninitux.com/install.sh | sudo sh
+```
+Debian / Ubuntu / Mint / Pop / elementary. Добавляет подписанный apt-репо, ставит `vpnrouter`, включает passwordless VPN через POSIX capabilities. Обновление: `sudo apt upgrade`.
+</td>
+</tr>
+<tr>
+<td align="center">🍎<br><b>macOS</b></td>
+<td>
+
+```bash
+brew install --cask pavellizunov/vpnrouter/vpnrouter
+```
+Apple Silicon. Авто-снимает Gatekeeper quarantine. При первом запуске однократно просит пароль для sudoers, дальше passwordless. Обновление: `brew upgrade --cask vpnrouter`.
+</td>
+</tr>
+<tr>
+<td align="center">🪟<br><b>Windows</b></td>
+<td>
+
+```powershell
+iwr -useb https://vpn.ninitux.com/install.ps1 | iex
+```
+Windows 10/11 x64. Авто-поднимается через UAC. Регистрирует Start Menu + Add/Remove Programs. Обновление: запустить ту же команду повторно. Удалить: Settings → Приложения → VPNRouter.
+</td>
+</tr>
+</table>
+
+Предпочитаете установку вручную? См. [**Ручная установка**](#ручная-установка) ниже для ZIP / DMG / AppImage / deb / tar.gz.
+
+---
+
 ## Что делает
 
 Направляет трафик **выбранных приложений** через VLESS+Reality прокси (через [sing-box](https://github.com/SagerNet/sing-box) в TUN-режиме), всё остальное идёт напрямую к провайдеру. Это не full-tunnel VPN — это per-process роутер. Discord идёт через прокси, сайт банка остаётся напрямую. Никаких ручных proxy-настроек в каждом приложении.
@@ -53,30 +92,9 @@
 
 *(Скриншоты скоро.)*
 
-## Скачать
+## Ручная установка
 
-### Быстрая установка (one-liner)
-
-**🐧 Linux (Debian / Ubuntu / Mint / Pop / elementary):**
-
-```bash
-curl -fsSL https://vpn.ninitux.com/install.sh | sudo sh
-```
-
-Добавляет подписанный apt-репозиторий и ставит `vpnrouter`. Дальше `sudo apt upgrade` держит актуальной. Passwordless VPN-start через POSIX capabilities (setcap) — как у tcpdump/wireshark.
-
-**🍎 macOS (Apple Silicon, через Homebrew Cask):**
-
-```bash
-brew tap pavellizunov/vpnrouter
-brew install --cask vpnrouter
-```
-
-При первом запуске однократно прописывается `sudoers.d`-entry, после чего sing-box поднимает TUN без запроса пароля каждый раз. `brew upgrade --cask vpnrouter` держит актуальной.
-
-### Ручная установка
-
-Забирайте последний билд из [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest):
+One-liner'ы для всех трёх платформ — см. секцию [**Установка**](#установка-one-liner-на-всех-трёх-платформах) выше. Хочется поставить руками? Забирайте последний билд из [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest):
 
 | Файл | Платформа | Что это |
 |---|---|---|
