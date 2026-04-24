@@ -194,14 +194,20 @@ jobs:
               echo "Triggered by release.published for tag: $TAG (prerelease=$EVENT_IS_PRERELEASE)"
               if [ "$EVENT_IS_PRERELEASE" = "true" ]; then
                   # v2.28.0: don't EXIT the whole workflow on prerelease —
-                  # just skip the .deb-download step. The install.sh and
-                  # index.html updates from earlier steps still need to hit
-                  # gh-pages so the one-liner reflects the latest script
-                  # version. Unset TAG so the download block below becomes
-                  # a no-op; commit step pushes only docs/script changes.
-                  echo "::notice::$TAG is a prerelease — install.sh/index.html will publish, apt repo will NOT add this .deb"
+                  # we still want install.sh + landing page to publish.
+                  # Fix v2.28.0-r1+: also re-download ALL stable .debs and
+                  # re-include them, because the earlier "Lay out apt repo
+                  # skeleton" step wipes apt/db / pool / dists to guard
+                  # against half-broken reprepro state. If we skip the
+                  # download entirely, we'd end up publishing an EMPTY apt
+                  # repo (users `apt update` would stop working). Falling
+                  # through to the TAG="" branch re-downloads every stable
+                  # .deb from the last 30 releases and rebuilds dists/pool
+                  # from scratch — same effect as `workflow_dispatch` with
+                  # no tag, which is our documented "re-sync apt repo"
+                  # escape hatch.
+                  echo "::notice::$TAG is a prerelease — install.sh + landing page will publish, apt repo will re-sync from existing stable releases (this prerelease's .deb is NOT added)"
                   TAG=""
-                  SKIP_DEB="true"
               fi
           elif [ -n "$INPUT_TAG" ]; then
               TAG="$INPUT_TAG"
@@ -214,9 +220,7 @@ jobs:
               echo "workflow_dispatch without tag — will re-index ALL STABLE releases from the last 30"
           fi
 
-          if [ "${SKIP_DEB:-false}" = "true" ]; then
-              echo "Skipping .deb download (prerelease) — install.sh + landing page will still publish"
-          elif [ -n "$TAG" ]; then
+          if [ -n "$TAG" ]; then
               # v2.22.4: retry — release.published fires the moment the
               # release is created, but the Linux CI upload of the .deb
               # may still be in flight. Wait up to ~3 minutes for the
