@@ -92,3 +92,65 @@ jobs:
           echo "Uploading to release $TAG..."
           gh release upload "$TAG" "$DMG" "$ZIP" --repo "$GITHUB_REPOSITORY" --clobber
           echo "✓ Uploaded DMG + ZIP to $TAG"
+
+      # ── Homebrew Cask auto-bump (stable releases only) ─────────────────
+      # Fires `repository_dispatch` in the PavelLizunov/homebrew-vpnrouter
+      # tap repo on every STABLE release. That tap's update-cask.yml then
+      # downloads the fresh DMG, computes SHA256, bumps Casks/vpnrouter.rb
+      # and commits. Daily cron on the tap side is a safety net — if this
+      # dispatch is ever dropped (GH Actions outage, token expiry), the
+      # cron picks up the new stable the next morning.
+      #
+      # Skips prereleases: rolling -rN / -alpha / -beta candidates should
+      # NOT land in the cask (Homebrew users doing `brew upgrade` would
+      # get surprise-upgraded to experimental builds). Match against the
+      # same tag-pattern rules publish-apt.yml uses.
+      - name: Trigger Homebrew Cask update (stable only)
+        if: >-
+          (github.event_name == 'push' ||
+           (github.event_name == 'workflow_dispatch' && inputs.upload_to_release))
+        env:
+          # HOMEBREW_TAP_DISPATCH_TOKEN must be a PAT with `contents:write`
+          # on PavelLizunov/homebrew-vpnrouter. Create via GitHub Settings
+          # → Developer Settings → Fine-grained PAT, scoped to that single
+          # repo. Store as an Actions secret on THIS repo.
+          #
+          # If the secret is missing the step logs a notice and skips —
+          # so forks / downstream clones don't fail on this step.
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_DISPATCH_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          # Tag must not be a prerelease — mirror the pattern filter used
+          # in publish-apt.yml so only stable releases update the cask.
+          case "$TAG" in
+              *-r[0-9]*|*-rc*|*-beta*|*-alpha*|*-pre*)
+                  echo "::notice::$TAG looks like a prerelease — not bumping Homebrew Cask"
+                  exit 0
+                  ;;
+          esac
+
+          # Also check the release's isPrerelease flag on GitHub itself,
+          # just in case someone manually flagged a stable-looking tag
+          # as prerelease.
+          IS_PRE=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq '.isPrerelease' 2>/dev/null || echo "true")
+          if [ "$IS_PRE" = "true" ]; then
+              echo "::notice::$TAG is flagged prerelease on GitHub — not bumping Homebrew Cask"
+              exit 0
+          fi
+
+          if [ -z "${TAP_TOKEN:-}" ]; then
+              echo "::notice::HOMEBREW_TAP_DISPATCH_TOKEN secret is not configured — skipping tap dispatch. The tap's daily cron will pick up this release within 24h."
+              exit 0
+          fi
+
+          echo "Dispatching vpnrouter-release event to PavelLizunov/homebrew-vpnrouter (version=$VERSION)"
+          curl -fsSL -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $TAP_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/PavelLizunov/homebrew-vpnrouter/dispatches" \
+              -d "{\"event_type\":\"vpnrouter-release\",\"client_payload\":{\"version\":\"$VERSION\",\"tag\":\"$TAG\"}}"
+          echo "✓ Dispatched — tap's update-cask.yml should now be running"

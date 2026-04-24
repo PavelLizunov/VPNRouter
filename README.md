@@ -55,6 +55,27 @@ Add-ons on top of the core router:
 
 ## Download
 
+### Quick install (one-liner)
+
+**🐧 Linux (Debian / Ubuntu / Mint / Pop / elementary):**
+
+```bash
+curl -fsSL https://vpn.ninitux.com/install.sh | sudo sh
+```
+
+Adds the signed apt repository and installs `vpnrouter`. Subsequent `sudo apt upgrade` keeps it current. Passwordless VPN start via POSIX capabilities (setcap) — same pattern as tcpdump/wireshark.
+
+**🍎 macOS (Apple Silicon, via Homebrew Cask):**
+
+```bash
+brew tap pavellizunov/vpnrouter
+brew install --cask vpnrouter
+```
+
+First-launch walks you through a one-time `sudoers.d` entry so sing-box can create TUN without a password prompt each time. `brew upgrade --cask vpnrouter` keeps it current.
+
+### Manual download
+
 Grab the latest build from [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest):
 
 | File | Platform | What it is |

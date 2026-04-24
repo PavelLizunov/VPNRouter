@@ -55,6 +55,27 @@
 
 ## Скачать
 
+### Быстрая установка (one-liner)
+
+**🐧 Linux (Debian / Ubuntu / Mint / Pop / elementary):**
+
+```bash
+curl -fsSL https://vpn.ninitux.com/install.sh | sudo sh
+```
+
+Добавляет подписанный apt-репозиторий и ставит `vpnrouter`. Дальше `sudo apt upgrade` держит актуальной. Passwordless VPN-start через POSIX capabilities (setcap) — как у tcpdump/wireshark.
+
+**🍎 macOS (Apple Silicon, через Homebrew Cask):**
+
+```bash
+brew tap pavellizunov/vpnrouter
+brew install --cask vpnrouter
+```
+
+При первом запуске однократно прописывается `sudoers.d`-entry, после чего sing-box поднимает TUN без запроса пароля каждый раз. `brew upgrade --cask vpnrouter` держит актуальной.
+
+### Ручная установка
+
 Забирайте последний билд из [Releases](https://github.com/PavelLizunov/VPNRouter/releases/latest):
 
 | Файл | Платформа | Что это |
