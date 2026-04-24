@@ -66,25 +66,33 @@ Windows 10/11 x64. Авто-поднимается через UAC. Регист�
 
 ## Что делает
 
-Направляет трафик **выбранных приложений** через VLESS+Reality прокси (через [sing-box](https://github.com/SagerNet/sing-box) в TUN-режиме), всё остальное идёт напрямую к провайдеру. Это не full-tunnel VPN — это per-process роутер. Discord идёт через прокси, сайт банка остаётся напрямую. Никаких ручных proxy-настроек в каждом приложении.
+Направляет трафик **выбранных приложений** через VLESS+Reality прокси (через [sing-box](https://github.com/SagerNet/sing-box) в TUN-режиме); всё остальное идёт напрямую к провайдеру. Это не full-tunnel VPN — это per-process роутер. Discord идёт через прокси, сайт банка остаётся напрямую. Никаких ручных proxy-настроек в каждом приложении.
 
-Дополнительные возможности поверх базового роутера:
+### Кроссплатформенная основа
 
-- **Вкладка Free Configs** — агрегирует **25 000+ публичных VLESS-конфигов** из 14 открытых источников, проверяет каждый сервер через TCP+TLS-пробы и подтверждает реальную связность через временный sing-box с HTTP round-trip. Серверный агрегатор (GitHub Actions cron) пересчитывает GeoIP каждые 6 часов. Включает пресеты (Gaming / Streaming / Chat / Best effort) с целями по латенси и пропускной способности, опцию skip-RU, пользовательские источники подписок, диалог с security-предупреждением при первом подключении.
-- **Тестирование Servers & Subscriptions** (v2.15+) — те же TCP+TLS-пробы и deep-проверка (поднять временный sing-box, HTTP-трейс через SOCKS, тест пропускной на 5 МБ) теперь доступны для ваших VLESS-серверов и пула подписок, не только на вкладке Free Configs.
-- **Runtime status dashboard** (v2.15+) — три цветных бейджа в заголовке показывают live-состояние VPN / Zapret / TgProxy, обновляются каждые 2 с через process + port probing. Клик по бейджу → переход на вкладку, которая им управляет.
-- **Resilient autostart** (v2.15+) — Windows Service объявляет boot-зависимости на `Tcpip/Dnscache/Dhcp` и использует exponential backoff (5/10/20/40 с) при запуске VPN / Zapret / TgProxy. Транзиентные сбои на холодном boot больше не оставляют компоненты в остановленном состоянии.
-- **Обновления с проверкой чек-сумм** (v2.15+) — автоапдейтер скачивает `.sha256`-компаньон к каждому ZIP и прерывает работу при несовпадении хеша, так что обрезанная или битая загрузка не сломает установку молча.
-- **Arctic design system** (v2.16+) — палитра семантических токенов (surfaces, text, borders, state colors, отступы и радиусы на 4 px / 11 px grid), кастомная dark-тема с авто-переключением через Avalonia `ThemeDictionaries`, RGB-инвертированный penguin-лого для dark mode. См. `plans/vpnrouter-v2.16-arctic-theme.md`.
-- **Service-App coordination hardening** (v2.27+) — установка Windows-службы из UI пока работает VPN больше не рвёт соединение (TunLock-проверка в service orphan-sing-box sweep). Advanced autostart-панель переработана в две семантические секции — «На старте Windows (до логина)» и «При входе пользователя» — сгруппировано по *когда* срабатывает автозапуск, а не *каким* Windows-механизмом. Статус-строка показывает `● Running — PID 1234`, indeterminate progress bar во время `sc create`/`sc start`. См. `plans/vpnrouter-v2.27-service-ux.md`.
-- **Core stability: upstream sing-box 1.13.10 + TUN auto-detect** (v2.27.2) — все три платформы теперь бандлят официальный upstream sing-box 1.13.10 (был custom ребилд 1.13.7), подхватывает fix `process_name`-matching, регрессировавший в 1.13.9, плюс 5 других point-release багфиксов. Runtime re-apply авто-детектит структурные изменения TUN-слоя (имя интерфейса, IPv4-подсеть, MTU, auto/strict route, IPv6-toggle, exclude-лист) и эскалирует до полного рестарта процесса — Clash API hot-reload не может передернуть kernel-level adapter state, поэтому раньше такие изменения «успешно» применялись пока живой адаптер сохранял старые значения. Покрыто 12 новыми xUnit-регрессионными тестами и live-verified `tools/live-test-r1.ps1`. См. `plans/vpnrouter-core-stability-audit.md`.
-- **DPI-обход (Zapret)** — интегрирован [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) для платформ, заблокированных через DPI без необходимости прокси.
-- **Telegram-прокси** — встроенный MTProto-прокси ([Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy)) для обхода только в Telegram.
-- **Custom sing-box конфиги** — приносите свой JSON (TUIC, Hysteria2, Shadowsocks), per-process routing сохраняется.
-- **Подписки** — несколько VLESS subscription URL с авто-обновлением, единый серверный пул.
-- **Режим Windows Service** — работает с boot, переживает logoff пользователя.
-- **Поддержка macOS** — полный Avalonia UI + sing-box TUN на Apple Silicon. Автоматические сборки DMG через GitHub Actions.
-- **Двуязычный UI** — полный RU/EN перевод, переключается в runtime.
+- **Split-tunnel маршрутизация** — выберите приложения из живого списка процессов; они пойдут через ваш прокси, всё остальное останется напрямую.
+- **VLESS+Reality + кастомные конфиги** — используйте встроенную VLESS-настройку или принесите свой sing-box JSON (TUIC, Hysteria2, Shadowsocks). Per-process routing подмешивается в любом случае.
+- **Подписки** — вставьте один или несколько subscription URL, серверы обновляются в единый пул автоматически.
+- **Тестирование серверов** — в один клик TCP+TLS-проба любого сервера. Deep verification (реальный HTTP round-trip + 5 МБ bandwidth) для ваших серверов и пулов подписок.
+- **Безопасное авто-обновление** — каждый релиз сопровождается `.sha256`-файлом; встроенный апдейтер проверяет хеш перед распаковкой, чтобы обрезанная загрузка не установилась молча.
+- **Status dashboard + Arctic dark theme + RU/EN UI** — live-бейджи VPN / Zapret / TgProxy в хедере, кастомная Avalonia-тема, полностью переведённый интерфейс.
+
+### Платформенные детали
+
+- **Windows** — UAC-elevation; опциональный Windows Service для boot-time автозапуска, переживающий logoff пользователя.
+- **macOS** — нативный Apple Silicon; одноразовая настройка sudoers из DMG даёт passwordless TUN после.
+- **Linux** — POSIX capabilities (`cap_net_admin`) для passwordless TUN; systemd-сервис встроен в `.deb`.
+
+### Windows-only дополнения *(опционально)*
+
+Это тонкие обёртки вокруг сторонних проектов — не часть ядра роутера и не работают на macOS / Linux. Пропустите, если не нужен DPI-обход или отдельный Telegram-роутинг.
+
+- **DPI-обход (Zapret)** — интеграция [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube). Скачивается по запросу из вкладки Tools. Полезно, когда провайдер блокирует сайт через DPI, а полный прокси не нужен.
+- **Telegram-прокси** — встроенный MTProto-прокси ([Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy)) для обхода конкретно Telegram.
+
+### Бонус: вкладка Free Configs
+
+Агрегатор публичных VLESS-конфигов — ~25 000 из 14 открытых источников, предварительно провалидированных (TCP+TLS + GeoIP) на сервере раз в 6 часов. Удобно попробовать приложение без своего VPN-сервера; не замена оплачиваемому или self-hosted endpoint'у.
 
 ## Скриншоты
 

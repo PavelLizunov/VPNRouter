@@ -66,25 +66,33 @@ Prefer manual install? See [**Manual download**](#manual-download) below for ZIP
 
 ## What it does
 
-Routes **selected applications** through a VLESS+Reality proxy (via [sing-box](https://github.com/SagerNet/sing-box) TUN mode), everything else goes direct to your ISP. Not a full-tunnel VPN — it's a per-process router. Discord goes through the proxy, your bank site stays direct. No manual proxy settings per app.
+Routes **selected applications** through a VLESS+Reality proxy (via [sing-box](https://github.com/SagerNet/sing-box) TUN mode); everything else goes direct to your ISP. Not a full-tunnel VPN — it's a per-process router. Discord goes through the proxy, your bank site stays direct. No manual proxy settings per app.
 
-Add-ons on top of the core router:
+### Cross-platform core
 
-- **Free Configs tab** — aggregates **25 000+ public VLESS configs** from 14 open sources, TCP+TLS-validates each server, and verifies real connectivity through a temporary sing-box with an HTTP round-trip. Server-side aggregator (GitHub Actions cron) pre-computes GeoIP every 6 hours. Includes presets (Gaming / Streaming / Chat / Best effort) with latency + bandwidth goals, skip-RU option, per-user subscription sources, and a security-warning dialog on first connect.
-- **Servers & Subscriptions testing** (v2.15+) — same TCP+TLS probe and deep verification (spawn temporary sing-box, HTTP trace via SOCKS, 5 MB bandwidth test) now available on your own VLESS servers and subscription pool — not only on the Free Configs tab.
-- **Runtime status dashboard** (v2.15+) — three coloured badges in the header show live state of VPN / Zapret / TgProxy, updated every 2 s via process + port probing. Click any badge → jump to the tab that controls it.
-- **Resilient autostart** (v2.15+) — Windows Service declares boot dependencies on `Tcpip/Dnscache/Dhcp` and uses exponential backoff (5/10/20/40 s) when launching VPN / Zapret / TgProxy. Transient cold-boot failures no longer leave components stopped.
-- **Checksum-verified updates** (v2.15+) — auto-updater downloads each ZIP's `.sha256` companion and aborts on hash mismatch, so a truncated or corrupted download can't silently break the install.
-- **Arctic design system** (v2.16+) — semantic-token palette (surfaces, text, borders, state colors, spacing/radii on a 4 px / 11 px base grid), bespoke dark theme that auto-swaps via Avalonia `ThemeDictionaries`, and RGB-inverted penguin logo for dark mode. See `plans/vpnrouter-v2.16-arctic-theme.md`.
-- **Service-App coordination hardening** (v2.27+) — installing the Windows service from the UI while VPN is running no longer drops the connection (TunLock check in the service's orphan-sing-box sweep). Advanced autostart panel redesigned into two semantic sections — "At Windows startup (before sign-in)" and "At user sign-in" — grouped by *when* the autostart fires rather than by which Windows mechanism powers it. Status line shows `● Running — PID 1234` prominently, with an indeterminate progress bar during `sc create`/`sc start`. See `plans/vpnrouter-v2.27-service-ux.md`.
-- **Core stability: upstream sing-box 1.13.10 + TUN auto-detect** (v2.27.2) — all three platforms now bundle the official upstream sing-box 1.13.10 (was custom rebuild of 1.13.7), picking up the `process_name`-matching fix that regressed in 1.13.9 along with 5 other point-release bug fixes. Runtime re-apply auto-detects structural changes on TUN layer (interface name, IPv4 subnet, MTU, auto/strict route, IPv6 toggle, exclude list) and escalates to a full process restart — Clash API hot-reload can't re-lay kernel-level adapter state, so these used to silently "succeed" while the live adapter kept old values. Covered by 12 new xUnit regression tests and live-verified `tools/live-test-r1.ps1` harness. See `plans/vpnrouter-core-stability-audit.md`.
-- **DPI bypass (Zapret)** — integrated [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) for platforms blocked by DPI without needing a proxy.
+- **Split-tunnel routing** — pick the apps from a live process list; they go through your proxy, everything else stays direct.
+- **VLESS+Reality + custom configs** — use the built-in VLESS setup or bring your own sing-box JSON (TUIC, Hysteria2, Shadowsocks). Per-process routing is injected either way.
+- **Subscriptions** — paste one or more subscription URLs, servers auto-refresh into a unified pool.
+- **Server testing** — one-click TCP+TLS probe on any server. Deep verification (real HTTP round-trip + 5 MB bandwidth) for your own servers and subscription pools.
+- **Safe auto-update** — each release ships with a `.sha256` companion file; the in-app updater verifies hash before extracting, so a truncated download never installs silently.
+- **Status dashboard + Arctic dark theme + RU/EN UI** — live VPN / Zapret / TgProxy badges in the header, custom Avalonia theme, fully translated interface.
+
+### Platform specifics
+
+- **Windows** — UAC elevation; optional Windows Service for boot-time autostart that survives user logoff.
+- **macOS** — Apple Silicon native; one-time sudoers setup from the DMG gives passwordless TUN afterwards.
+- **Linux** — POSIX capabilities (`cap_net_admin`) for passwordless TUN; systemd service bundled in the `.deb`.
+
+### Windows-only add-ons *(optional)*
+
+These are thin wrappers around upstream projects — they aren't part of the core router and don't work on macOS / Linux. Skip them unless you specifically need DPI bypass or Telegram-only routing.
+
+- **DPI bypass (Zapret)** — integrates [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube). Downloaded on demand from the Tools tab. Useful when your ISP blocks a site by DPI and a full proxy isn't wanted.
 - **Telegram proxy** — embedded MTProto proxy ([Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy)) for Telegram-only bypass.
-- **Custom sing-box configs** — bring your own JSON (TUIC, Hysteria2, Shadowsocks), keep per-process routing.
-- **Subscriptions** — multiple VLESS subscription URLs with auto-refresh, unified server pool.
-- **Windows Service mode** — runs at boot, survives user logoff.
-- **macOS support** — full Avalonia UI + sing-box TUN on Apple Silicon. Automated DMG builds via GitHub Actions.
-- **Bilingual UI** — full RU/EN translation, switchable at runtime.
+
+### Bonus: Free Configs tab
+
+A public VLESS aggregator — ~25 000 configs from 14 open sources, pre-validated (TCP+TLS + GeoIP) server-side every 6 hours. Handy to try the app without your own VPN server; not a substitute for a paid or self-hosted endpoint.
 
 ## Screenshots
 
