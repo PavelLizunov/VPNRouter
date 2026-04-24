@@ -158,10 +158,19 @@ $zipPath = Join-Path $env:TEMP $zipAsset.name
 Say "Downloading $($zipAsset.name) ($([math]::Round($zipAsset.size / 1MB, 1)) MB)..."
 Invoke-WebRequest -Uri $zipAsset.browser_download_url -OutFile $zipPath -UseBasicParsing
 
-# Verify SHA256
+# Verify SHA256.
+#
+# Quirk: Windows PowerShell 5.1 returns Invoke-WebRequest .Content as
+# Byte[] for non-text responses (and GitHub serves .sha256 as
+# application/octet-stream), so calling .Trim() on .Content fails with
+# "Method 'Trim' does not exist on [System.Byte]". Workaround: download
+# to a temp file and read as text. Works on both PS 5.1 and PS 7+.
 if ($shaAsset) {
     Say "Verifying SHA256..."
-    $expectedSha = (Invoke-WebRequest -Uri $shaAsset.browser_download_url -UseBasicParsing).Content.Trim().Split()[0].ToLower()
+    $shaTmp = Join-Path $env:TEMP "vpnr-install-sha.txt"
+    Invoke-WebRequest -Uri $shaAsset.browser_download_url -OutFile $shaTmp -UseBasicParsing
+    $expectedSha = (Get-Content -Raw $shaTmp).Trim().Split()[0].ToLower()
+    Remove-Item $shaTmp -Force -ErrorAction SilentlyContinue
     $actualSha   = (Get-FileHash -Algorithm SHA256 $zipPath).Hash.ToLower()
     if ($actualSha -ne $expectedSha) {
         Err "SHA256 mismatch! Expected $expectedSha, got $actualSha"
