@@ -260,6 +260,19 @@ jobs:
           echo "Collected debs:"
           ls -lh .apt-debs || true
 
+      - name: Ensure CNAME for custom domain
+        run: |
+          # Custom domain: vpn.ninitux.com. This CNAME file is what tells
+          # GitHub Pages to serve gh-pages content at the custom hostname
+          # and to issue + renew a Let's Encrypt cert for it. Must be
+          # present at gh-pages root; regenerating here so it survives any
+          # future full rewrite of gh-pages content (e.g. if we ever wipe
+          # the branch to rebuild from scratch).
+          #
+          # A single FQDN, no newline — GitHub's parser is strict about
+          # trailing whitespace.
+          printf 'vpn.ninitux.com' > gh-pages-dir/CNAME
+
       - name: Publish install.sh one-liner to gh-pages root
         run: |
           # v2.28.0: ship a user-friendly installer script at the gh-pages
@@ -283,8 +296,8 @@ jobs:
           <style>body{font:14px/1.5 system-ui,sans-serif;max-width:720px;margin:3em auto;padding:0 1em;color:#222}code,pre{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:13px}pre{padding:12px;overflow:auto}h1{font-size:1.6em}a{color:#0366d6;text-decoration:none}a:hover{text-decoration:underline}</style>
           <h1>VPNRouter — Linux install</h1>
           <p>One-liner for Debian / Ubuntu / Mint and derivatives:</p>
-          <pre>curl -fsSL https://pavellizunov.github.io/VPNRouter/install.sh | sudo sh</pre>
-          <p>This adds the signed apt repository and runs <code>apt install vpnrouter</code>. After that, <code>sudo apt upgrade</code> keeps VPNRouter current.</p>
+          <pre>curl -fsSL https://vpn.ninitux.com/install.sh | sudo sh</pre>
+          <p>This adds the signed apt repository and runs <code>apt install vpnrouter</code>. After that, <code>sudo apt upgrade</code> keeps VPNRouter current — along with automatic passwordless VPN start via POSIX capabilities.</p>
           <p>Prefer to add the repo manually? See <a href="apt/">/apt/</a> for the traditional instructions.</p>
           <p>Other platforms: <a href="https://github.com/PavelLizunov/VPNRouter/releases/latest">GitHub Releases</a> (Windows ZIP, macOS DMG, Linux AppImage / tar.gz).</p>
           HTML

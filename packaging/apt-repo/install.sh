@@ -3,8 +3,11 @@
 #
 # Usage:
 #   curl -fsSL https://vpn.ninitux.com/install.sh | sudo sh
-#   # or, if the root URL serves this script:
-#   curl -fsSL https://vpn.ninitux.com | sudo sh
+#
+# The script is published on every release to:
+#   https://vpn.ninitux.com/install.sh           (vanity custom domain, canonical)
+#   https://pavellizunov.github.io/VPNRouter/install.sh   (fallback, kept for legacy)
+# Both are served from the same gh-pages content by the publish-apt workflow.
 #
 # What it does:
 #   1. Verifies the host is a supported Debian-family distribution.
