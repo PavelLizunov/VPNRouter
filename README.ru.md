@@ -38,6 +38,7 @@
 - **Обновления с проверкой чек-сумм** (v2.15+) — автоапдейтер скачивает `.sha256`-компаньон к каждому ZIP и прерывает работу при несовпадении хеша, так что обрезанная или битая загрузка не сломает установку молча.
 - **Arctic design system** (v2.16+) — палитра семантических токенов (surfaces, text, borders, state colors, отступы и радиусы на 4 px / 11 px grid), кастомная dark-тема с авто-переключением через Avalonia `ThemeDictionaries`, RGB-инвертированный penguin-лого для dark mode. См. `plans/vpnrouter-v2.16-arctic-theme.md`.
 - **Service-App coordination hardening** (v2.27+) — установка Windows-службы из UI пока работает VPN больше не рвёт соединение (TunLock-проверка в service orphan-sing-box sweep). Advanced autostart-панель переработана в две семантические секции — «На старте Windows (до логина)» и «При входе пользователя» — сгруппировано по *когда* срабатывает автозапуск, а не *каким* Windows-механизмом. Статус-строка показывает `● Running — PID 1234`, indeterminate progress bar во время `sc create`/`sc start`. См. `plans/vpnrouter-v2.27-service-ux.md`.
+- **Core stability: upstream sing-box 1.13.10 + TUN auto-detect** (v2.27.2) — все три платформы теперь бандлят официальный upstream sing-box 1.13.10 (был custom ребилд 1.13.7), подхватывает fix `process_name`-matching, регрессировавший в 1.13.9, плюс 5 других point-release багфиксов. Runtime re-apply авто-детектит структурные изменения TUN-слоя (имя интерфейса, IPv4-подсеть, MTU, auto/strict route, IPv6-toggle, exclude-лист) и эскалирует до полного рестарта процесса — Clash API hot-reload не может передернуть kernel-level adapter state, поэтому раньше такие изменения «успешно» применялись пока живой адаптер сохранял старые значения. Покрыто 12 новыми xUnit-регрессионными тестами и live-verified `tools/live-test-r1.ps1`. См. `plans/vpnrouter-core-stability-audit.md`.
 - **DPI-обход (Zapret)** — интегрирован [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) для платформ, заблокированных через DPI без необходимости прокси.
 - **Telegram-прокси** — встроенный MTProto-прокси ([Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy)) для обхода только в Telegram.
 - **Custom sing-box конфиги** — приносите свой JSON (TUIC, Hysteria2, Shadowsocks), per-process routing сохраняется.
@@ -96,12 +97,12 @@ Release-сборка + упаковка:
 
 ```powershell
 # Windows (PowerShell) — производит full + update ZIP'ы + их .sha256
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.27.0"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.27.2"
 ```
 
 ```bash
 # macOS DMG — запускается на любом Mac с .NET 8 SDK
-./build-mac.sh 2.27.0
+./build-mac.sh 2.27.2
 ```
 
 ```bash

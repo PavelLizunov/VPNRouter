@@ -38,6 +38,7 @@ Add-ons on top of the core router:
 - **Checksum-verified updates** (v2.15+) — auto-updater downloads each ZIP's `.sha256` companion and aborts on hash mismatch, so a truncated or corrupted download can't silently break the install.
 - **Arctic design system** (v2.16+) — semantic-token palette (surfaces, text, borders, state colors, spacing/radii on a 4 px / 11 px base grid), bespoke dark theme that auto-swaps via Avalonia `ThemeDictionaries`, and RGB-inverted penguin logo for dark mode. See `plans/vpnrouter-v2.16-arctic-theme.md`.
 - **Service-App coordination hardening** (v2.27+) — installing the Windows service from the UI while VPN is running no longer drops the connection (TunLock check in the service's orphan-sing-box sweep). Advanced autostart panel redesigned into two semantic sections — "At Windows startup (before sign-in)" and "At user sign-in" — grouped by *when* the autostart fires rather than by which Windows mechanism powers it. Status line shows `● Running — PID 1234` prominently, with an indeterminate progress bar during `sc create`/`sc start`. See `plans/vpnrouter-v2.27-service-ux.md`.
+- **Core stability: upstream sing-box 1.13.10 + TUN auto-detect** (v2.27.2) — all three platforms now bundle the official upstream sing-box 1.13.10 (was custom rebuild of 1.13.7), picking up the `process_name`-matching fix that regressed in 1.13.9 along with 5 other point-release bug fixes. Runtime re-apply auto-detects structural changes on TUN layer (interface name, IPv4 subnet, MTU, auto/strict route, IPv6 toggle, exclude list) and escalates to a full process restart — Clash API hot-reload can't re-lay kernel-level adapter state, so these used to silently "succeed" while the live adapter kept old values. Covered by 12 new xUnit regression tests and live-verified `tools/live-test-r1.ps1` harness. See `plans/vpnrouter-core-stability-audit.md`.
 - **DPI bypass (Zapret)** — integrated [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) for platforms blocked by DPI without needing a proxy.
 - **Telegram proxy** — embedded MTProto proxy ([Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy)) for Telegram-only bypass.
 - **Custom sing-box configs** — bring your own JSON (TUIC, Hysteria2, Shadowsocks), keep per-process routing.
@@ -96,12 +97,12 @@ Release build + packaging:
 
 ```powershell
 # Windows (PowerShell) — produces both full + update ZIPs plus their .sha256
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.27.0"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.27.2"
 ```
 
 ```bash
 # macOS DMG — runs on any Mac with .NET 8 SDK
-./build-mac.sh 2.27.0
+./build-mac.sh 2.27.2
 ```
 
 ```bash
