@@ -1,0 +1,7 @@
+# Created with wingetcreate equivalent (manual authoring).
+# Validated with: winget validate packaging\winget\manifests\p\PavelLizunov\VPNRouter\2.27.2\
+PackageIdentifier: PavelLizunov.VPNRouter
+PackageVersion: 2.27.2
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

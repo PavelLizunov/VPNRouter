@@ -1,0 +1,18 @@
+PackageIdentifier: PavelLizunov.VPNRouter
+PackageVersion: 2.27.2
+MinimumOSVersion: 10.0.17763.0     # Windows 10 1809 — earliest supported for TUN / WinTun
+InstallModes:
+  - interactive
+  - silent
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: "app\\VPNRouter.App.exe"
+    PortableCommandAlias: "vpnrouter"
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/PavelLizunov/VPNRouter/releases/download/v2.27.2/VPNRouter-v2.27.2-win.zip
+    InstallerSha256: B0E8A676F1336E4CA1C58B40CAE137E2BB857AEF9D68D9F60EF2EBDA88C1F29E
+ReleaseDate: 2026-04-24
+ManifestType: installer
+ManifestVersion: 1.6.0

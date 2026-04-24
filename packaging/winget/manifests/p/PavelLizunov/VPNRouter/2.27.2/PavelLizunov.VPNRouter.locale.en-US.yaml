@@ -1,0 +1,37 @@
+PackageIdentifier: PavelLizunov.VPNRouter
+PackageVersion: 2.27.2
+PackageLocale: en-US
+Publisher: NiniTux
+PublisherUrl: https://github.com/PavelLizunov/VPNRouter
+PublisherSupportUrl: https://github.com/PavelLizunov/VPNRouter/issues
+Author: NiniTux
+PackageName: VPNRouter
+PackageUrl: https://github.com/PavelLizunov/VPNRouter
+License: GPL-3.0-only
+LicenseUrl: https://github.com/PavelLizunov/VPNRouter/blob/main/LICENSE
+Copyright: Copyright (c) NiniTux, licensed under GNU GPL v3
+ShortDescription: Process-based split-tunnel VPN router (VLESS+Reality via sing-box TUN).
+Description: |-
+  VPNRouter is a process-based split-tunnel VPN client. It routes only the
+  applications you pick through a VLESS+Reality proxy (via sing-box in TUN
+  mode); everything else goes direct to your ISP. No manual proxy settings
+  per app. Includes a 25k+ public VLESS aggregator (Free Configs tab), real-
+  connectivity verification, and a rich GUI built on Avalonia.
+
+  Also ships as a Windows Service (runs at boot, survives user logoff), with
+  built-in passwordless TUN start on Linux (POSIX capabilities via .deb
+  postinst) and macOS (sudoers.d NOPASSWD entry on first Connect).
+Moniker: vpnrouter
+Tags:
+  - vpn
+  - vless
+  - reality
+  - split-tunnel
+  - sing-box
+  - proxy
+  - tun
+  - networking
+  - privacy
+ReleaseNotesUrl: https://github.com/PavelLizunov/VPNRouter/releases/tag/v2.27.2
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
