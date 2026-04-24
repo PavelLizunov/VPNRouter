@@ -1930,8 +1930,27 @@ public partial class MainWindowViewModel : ViewModelBase
         NewSubName = string.Empty;
         NewSubUrl = string.Empty;
 
-        // Immediately refresh this new subscription
+        // Auto-switch to Subscribe tab so user sees the newly added subscription
+        // and its fetched servers. Without this, if user adds subscription while
+        // on Manual (VLESS) tab, the result happens "behind the scenes" and user
+        // has no visual confirmation, leading to the "invisible add" perception.
+        if (!IsSubscribeMode)
+        {
+            IsSubscribeMode = true;
+            IsVlessMode = false;
+            SelectedTabIndex = 1; // Subscribe tab
+        }
+
+        // Immediately refresh this new subscription.
+        // RefreshSubscriptionAsync now has fail-safe RebuildSubscriptionPool + SaveSettings
+        // in its finally block, so even if fetch fails (bad URL, network), the UI
+        // shows the subscription entry (just without servers) instead of appearing
+        // to have done nothing.
         await RefreshSubscriptionAsync(svm);
+
+        // Belt-and-suspenders: rebuild one more time after Refresh in case
+        // Refresh's finally was short-circuited by some future exception path.
+        RebuildSubscriptionPool();
         SaveSettings();
     }
 
@@ -1958,14 +1977,22 @@ public partial class MainWindowViewModel : ViewModelBase
                 sub.UnderlyingEntry, _logger, CancellationToken.None);
             sub.LastServerCount = count;
             sub.LastRefreshedAt = sub.UnderlyingEntry.LastRefreshedAt;
-            RebuildSubscriptionPool();
-            SaveSettings();
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "[VM] RefreshSubscription failed for {Url}", sub.Url);
         }
-        finally { sub.IsRefreshing = false; }
+        finally
+        {
+            sub.IsRefreshing = false;
+            // Always rebuild + save, even on exception. Previously these only ran
+            // on the happy path, so a fetch failure left the UI with zero servers
+            // visible for the new subscription — user thought nothing happened.
+            // Now: failure means "sub entry exists, no servers" rather than
+            // "sub entry exists but UI still shows old state".
+            RebuildSubscriptionPool();
+            SaveSettings();
+        }
     }
 
     [RelayCommand]
@@ -1992,10 +2019,15 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
             }));
         }
-        finally { foreach (var s in enabled) s.IsRefreshing = false; }
-
-        RebuildSubscriptionPool();
-        SaveSettings();
+        finally
+        {
+            foreach (var s in enabled) s.IsRefreshing = false;
+            // Rebuild + save in finally so even if Task.WhenAll itself throws
+            // (shouldn't normally — inner try/catch per entry — but defensive),
+            // the UI still reflects any entries that did complete successfully.
+            RebuildSubscriptionPool();
+            SaveSettings();
+        }
     }
 
     [RelayCommand]
@@ -2221,10 +2253,19 @@ public partial class MainWindowViewModel : ViewModelBase
                 ? $"zapret {ZapretVersionText} установлен"
                 : $"zapret {ZapretVersionText} installed";
         }
+        catch (VPNRouter.Core.Services.ZapretDownloadException zex)
+        {
+            // Categorized error — use the already-human-readable message directly
+            // instead of wrapping with "Download error:" prefix (which adds noise).
+            _logger.Warning("[VM] Zapret download failed: {Category} {Msg}", zex.Category, zex.Message);
+            ZapretStatus = FormatZapretError(zex);
+        }
         catch (Exception ex)
         {
-            _logger.Error(ex, "[VM] Zapret download failed");
-            ZapretStatus = $"Download error: {ex.Message}";
+            _logger.Error(ex, "[VM] Zapret download failed (uncategorized)");
+            ZapretStatus = IsRussian
+                ? $"Ошибка загрузки: {ex.Message}"
+                : $"Download error: {ex.Message}";
         }
         finally
         {
@@ -2232,6 +2273,40 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 #endif
     }
+
+#if PLATFORM_WINDOWS
+    /// <summary>Translate categorized Zapret errors to localized, actionable user messages.</summary>
+    private string FormatZapretError(VPNRouter.Core.Services.ZapretDownloadException zex)
+    {
+        return zex.Category switch
+        {
+            VPNRouter.Core.Services.ZapretErrorCategory.Concurrent => IsRussian
+                ? "Загрузка уже идёт — дождитесь завершения."
+                : "Download already in progress — wait for it to finish.",
+            VPNRouter.Core.Services.ZapretErrorCategory.GitHubRateLimit => IsRussian
+                ? "GitHub временно ограничил запросы. Попробуйте через ~15 минут."
+                : "GitHub rate-limited us. Try again in ~15 minutes.",
+            VPNRouter.Core.Services.ZapretErrorCategory.GitHubServerError => IsRussian
+                ? "GitHub недоступен. Повторите попытку через минуту."
+                : "GitHub is temporarily down. Try again in a minute.",
+            VPNRouter.Core.Services.ZapretErrorCategory.Network => IsRussian
+                ? $"Сбой сети: {zex.Message}"
+                : zex.Message,
+            VPNRouter.Core.Services.ZapretErrorCategory.Corrupted => IsRussian
+                ? "Скачанный файл повреждён. Нажмите «Скачать» ещё раз."
+                : "Downloaded file is corrupted. Click Download to retry.",
+            VPNRouter.Core.Services.ZapretErrorCategory.Invalid => IsRussian
+                ? $"Формат релиза изменился: {zex.Message}"
+                : zex.Message,
+            VPNRouter.Core.Services.ZapretErrorCategory.FileSystem => IsRussian
+                ? $"Ошибка файловой системы: {zex.Message}"
+                : zex.Message,
+            _ => IsRussian
+                ? $"Ошибка: {zex.Message}"
+                : $"Error: {zex.Message}",
+        };
+    }
+#endif
 
     [RelayCommand]
     private async Task ToggleZapretAsync()

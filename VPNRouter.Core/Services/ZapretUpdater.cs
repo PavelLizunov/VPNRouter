@@ -7,6 +7,38 @@ using Serilog;
 namespace VPNRouter.Core.Services;
 
 /// <summary>
+/// Exception thrown when a Zapret download hits an actionable failure we can
+/// describe to the user (category + human-readable message). UI layer should
+/// display <see cref="Message"/> directly instead of wrapping again.
+/// </summary>
+public sealed class ZapretDownloadException : Exception
+{
+    public ZapretErrorCategory Category { get; }
+    public ZapretDownloadException(ZapretErrorCategory category, string message, Exception? inner = null)
+        : base(message, inner) => Category = category;
+}
+
+public enum ZapretErrorCategory
+{
+    /// <summary>GitHub API rate-limited us (403). Transient, time-based.</summary>
+    GitHubRateLimit,
+    /// <summary>GitHub server error (5xx). Transient, retry-friendly.</summary>
+    GitHubServerError,
+    /// <summary>Network drop / DNS / timeout. Transient, user-dependent.</summary>
+    Network,
+    /// <summary>Downloaded bytes don't match Content-Length or ZIP is malformed.</summary>
+    Corrupted,
+    /// <summary>Release structure unexpected (no .zip asset, no bin/winws.exe).</summary>
+    Invalid,
+    /// <summary>Antivirus / file system / permission issue during extract.</summary>
+    FileSystem,
+    /// <summary>Another Download already in progress.</summary>
+    Concurrent,
+    /// <summary>Everything else.</summary>
+    Unknown,
+}
+
+/// <summary>
 /// Downloads Flowseal zapret-discord-youtube releases from GitHub
 /// and parses .bat strategy files into winws.exe argument strings.
 /// </summary>
@@ -14,6 +46,9 @@ public class ZapretUpdater
 {
     private const string FlowsealRepo = "Flowseal/zapret-discord-youtube";
     private const string GitHubApiBase = "https://api.github.com/repos";
+
+    /// <summary>Prevents concurrent downloads — double-click / rebind races.</summary>
+    private static readonly SemaphoreSlim _downloadLock = new(1, 1);
 
     private static readonly string _dataDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
@@ -66,115 +101,356 @@ public class ZapretUpdater
         return null;
     }
 
-    /// <summary>Download and extract the latest Flowseal release.</summary>
+    /// <summary>
+    /// Download and extract the latest Flowseal release.
+    /// Thread-safe via <see cref="_downloadLock"/> — second concurrent call throws
+    /// <see cref="ZapretDownloadException"/> with <see cref="ZapretErrorCategory.Concurrent"/>.
+    /// Transient failures (network, GitHub 5xx) are retried up to 3 times with
+    /// exponential backoff (2s/4s/8s). Partial temp files are cleaned up pre-flight.
+    /// </summary>
     public async Task DownloadAndExtractAsync(CancellationToken ct)
     {
-        StatusChanged?.Invoke("Fetching release info...");
-        _logger.Information("[ZapretUpdater] Checking latest release");
-
-        // Get latest release from GitHub API
-        var url = $"{GitHubApiBase}/{FlowsealRepo}/releases/latest";
-        var resp = await _http.GetStringAsync(url, ct);
-        using var doc = JsonDocument.Parse(resp);
-        var root = doc.RootElement;
-
-        var tagName = root.GetProperty("tag_name").GetString() ?? "unknown";
-        _logger.Information("[ZapretUpdater] Latest release: {Tag}", tagName);
-
-        // Find ZIP asset
-        string? zipUrl = null;
-        foreach (var asset in root.GetProperty("assets").EnumerateArray())
+        // Service-level lock: second click while first is in flight gets a clear
+        // "already downloading" message instead of racing on ZIP extract.
+        if (!await _downloadLock.WaitAsync(TimeSpan.Zero, ct).ConfigureAwait(false))
         {
-            var name = asset.GetProperty("name").GetString() ?? "";
-            if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-            {
-                zipUrl = asset.GetProperty("browser_download_url").GetString();
-                break;
-            }
+            throw new ZapretDownloadException(
+                ZapretErrorCategory.Concurrent,
+                "A download is already in progress — wait for it to finish.");
         }
 
-        if (zipUrl == null)
-        {
-            // Fallback: use zipball_url
-            zipUrl = root.GetProperty("zipball_url").GetString();
-        }
-
-        if (zipUrl == null)
-            throw new Exception("No ZIP asset found in release");
-
-        // Download ZIP
-        StatusChanged?.Invoke($"Downloading {tagName}...");
-        _logger.Information("[ZapretUpdater] Downloading: {Url}", zipUrl);
-
-        var tempZip = Path.GetTempFileName() + ".zip";
         try
         {
-            using (var stream = await _http.GetStreamAsync(zipUrl, ct))
-            using (var file = File.Create(tempZip))
-            {
-                await stream.CopyToAsync(file, ct);
-            }
+            // Pre-flight: remove stale partial downloads from previous sessions
+            // (antivirus handle, crash, user force-quit). Keeps %TEMP% from bloating.
+            CleanupStaleTemps();
 
-            var zipSize = new FileInfo(tempZip).Length;
-            _logger.Information("[ZapretUpdater] Downloaded {Size} KB", zipSize / 1024);
+            StatusChanged?.Invoke("Fetching release info...");
+            _logger.Information("[ZapretUpdater] Checking latest release");
 
-            // Extract
-            StatusChanged?.Invoke("Extracting...");
-            var tempDir = Path.Combine(Path.GetTempPath(), $"zapret-extract-{Guid.NewGuid():N}");
+            // --- Step 1: GitHub API (with retry) ---
+            var apiUrl = $"{GitHubApiBase}/{FlowsealRepo}/releases/latest";
+            string resp;
             try
             {
-                _logger.Information("[ZapretUpdater] Extracting to {Dir}", tempDir);
-                ZipFile.ExtractToDirectory(tempZip, tempDir, overwriteFiles: true);
-
-                // Find the root folder inside ZIP (some releases wrap, some don't)
-                var extractedRoot = tempDir;
-                var subdirs = Directory.GetDirectories(tempDir);
-                var rootFiles = Directory.GetFiles(tempDir);
-                _logger.Information("[ZapretUpdater] Extracted: {Dirs} dirs, {Files} files in root",
-                    subdirs.Length, rootFiles.Length);
-
-                if (subdirs.Length == 1 && rootFiles.Length == 0)
-                    extractedRoot = subdirs[0]; // ZIP has a wrapper folder
-
-                // Verify it has bin/winws.exe
-                var testWinws = Path.Combine(extractedRoot, "bin", "winws.exe");
-                if (!File.Exists(testWinws))
-                {
-                    var actualContents = string.Join(", ",
-                        Directory.GetFileSystemEntries(extractedRoot).Select(Path.GetFileName));
-                    throw new Exception($"Invalid release: bin/winws.exe not found. " +
-                        $"Extracted contents: [{actualContents}]");
-                }
-
-                // WinDivert64.sys is locked while driver is loaded in kernel.
-                // Stop the service to unload it, then we can overwrite freely.
-                StopWinDivertService();
-
-                StatusChanged?.Invoke("Installing...");
-                Directory.CreateDirectory(ZapretDir);
-                CopyDirectoryOverwrite(extractedRoot, ZapretDir, _logger);
-
-                // Write version file
-                var version = ParseVersionFromServiceBat() ?? tagName;
-                File.WriteAllText(VersionFilePath, version);
-                _logger.Information("[ZapretUpdater] Installed version {Version}", version);
-
-                StatusChanged?.Invoke($"Installed {version}");
+                resp = await RetryAsync(
+                    () => _http.GetStringAsync(apiUrl, ct),
+                    attempts: 3,
+                    baseDelayMs: 2000,
+                    onRetry: (i, ex) =>
+                    {
+                        var secs = (2 * (1 << i)) / 1000 + 2; // 2,4,8
+                        StatusChanged?.Invoke($"Retry {i + 1}/3 in {secs}s (GitHub: {ShortError(ex)})");
+                        _logger.Warning(ex, "[ZapretUpdater] API retry {N}", i + 1);
+                    },
+                    ct).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (HttpRequestException hre) when ((int?)hre.StatusCode == 403)
             {
-                _logger.Error(ex, "[ZapretUpdater] Extract/install failed");
-                StatusChanged?.Invoke($"Error: {ex.Message}");
+                throw new ZapretDownloadException(
+                    ZapretErrorCategory.GitHubRateLimit,
+                    "GitHub API rate limit reached. Try again in ~15 minutes.",
+                    hre);
+            }
+            catch (HttpRequestException hre) when (hre.StatusCode is System.Net.HttpStatusCode sc && (int)sc >= 500)
+            {
+                throw new ZapretDownloadException(
+                    ZapretErrorCategory.GitHubServerError,
+                    $"GitHub is having issues ({(int)hre.StatusCode}). Try again in a minute.",
+                    hre);
+            }
+            catch (TaskCanceledException tce) when (!ct.IsCancellationRequested)
+            {
+                throw new ZapretDownloadException(
+                    ZapretErrorCategory.Network,
+                    "Timed out talking to GitHub. Check your internet connection.",
+                    tce);
+            }
+            catch (HttpRequestException hre)
+            {
+                throw new ZapretDownloadException(
+                    ZapretErrorCategory.Network,
+                    $"Network error talking to GitHub: {hre.Message}",
+                    hre);
+            }
+
+            using var doc = JsonDocument.Parse(resp);
+            var root = doc.RootElement;
+            var tagName = root.GetProperty("tag_name").GetString() ?? "unknown";
+            _logger.Information("[ZapretUpdater] Latest release: {Tag}", tagName);
+
+            // Find ZIP asset — prefer named .zip asset, fall back to zipball_url.
+            string? zipUrl = null;
+            long? expectedSize = null;
+            foreach (var asset in root.GetProperty("assets").EnumerateArray())
+            {
+                var name = asset.GetProperty("name").GetString() ?? "";
+                if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    zipUrl = asset.GetProperty("browser_download_url").GetString();
+                    if (asset.TryGetProperty("size", out var sizeProp) && sizeProp.ValueKind == JsonValueKind.Number)
+                        expectedSize = sizeProp.GetInt64();
+                    break;
+                }
+            }
+            if (zipUrl == null && root.TryGetProperty("zipball_url", out var zb))
+                zipUrl = zb.GetString();
+
+            if (zipUrl == null)
+            {
+                throw new ZapretDownloadException(
+                    ZapretErrorCategory.Invalid,
+                    "No ZIP asset found in the Flowseal release — upstream changed their release format.");
+            }
+
+            StatusChanged?.Invoke($"Downloading {tagName}...");
+            _logger.Information("[ZapretUpdater] Downloading: {Url} (expected {Size} bytes)",
+                zipUrl, expectedSize?.ToString() ?? "unknown");
+
+            // --- Step 2: Download ZIP (with retry on network failures, size check) ---
+            var tempZip = Path.Combine(Path.GetTempPath(), $"vpnr-zapret-{Guid.NewGuid():N}.zip");
+            try
+            {
+                await RetryAsync(
+                    async () =>
+                    {
+                        // Clean prior attempt's partial file
+                        try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
+
+                        using (var stream = await _http.GetStreamAsync(zipUrl, ct).ConfigureAwait(false))
+                        using (var file = File.Create(tempZip))
+                        {
+                            await stream.CopyToAsync(file, ct).ConfigureAwait(false);
+                        }
+
+                        // Verify size if GitHub told us what to expect (named assets do,
+                        // zipball_url doesn't). Mismatch → force retry.
+                        if (expectedSize.HasValue)
+                        {
+                            var actualSize = new FileInfo(tempZip).Length;
+                            if (actualSize != expectedSize.Value)
+                            {
+                                throw new IOException(
+                                    $"Partial download: got {actualSize} bytes, expected {expectedSize.Value}. " +
+                                    "Network likely dropped mid-transfer.");
+                            }
+                        }
+                        return true;
+                    },
+                    attempts: 3,
+                    baseDelayMs: 2000,
+                    onRetry: (i, ex) =>
+                    {
+                        var secs = (2 * (1 << i)) / 1000 + 2;
+                        StatusChanged?.Invoke($"Retry {i + 1}/3 in {secs}s (download: {ShortError(ex)})");
+                        _logger.Warning(ex, "[ZapretUpdater] Download retry {N}", i + 1);
+                    },
+                    ct).ConfigureAwait(false);
+
+                var zipSize = new FileInfo(tempZip).Length;
+                _logger.Information("[ZapretUpdater] Downloaded {Size} KB", zipSize / 1024);
+
+                // --- Step 3: Extract + install ---
+                StatusChanged?.Invoke("Extracting...");
+                var tempDir = Path.Combine(Path.GetTempPath(), $"vpnr-zapret-extract-{Guid.NewGuid():N}");
+                try
+                {
+                    _logger.Information("[ZapretUpdater] Extracting to {Dir}", tempDir);
+                    try
+                    {
+                        ZipFile.ExtractToDirectory(tempZip, tempDir, overwriteFiles: true);
+                    }
+                    catch (InvalidDataException ide)
+                    {
+                        // ZIP central-directory corrupt → almost always truncated download
+                        // even though Content-Length matched (rare). Treat as corrupted.
+                        throw new ZapretDownloadException(
+                            ZapretErrorCategory.Corrupted,
+                            "Downloaded file is corrupted (not a valid ZIP). Click Download to retry.",
+                            ide);
+                    }
+
+                    var extractedRoot = tempDir;
+                    var subdirs = Directory.GetDirectories(tempDir);
+                    var rootFiles = Directory.GetFiles(tempDir);
+                    _logger.Information("[ZapretUpdater] Extracted: {Dirs} dirs, {Files} files in root",
+                        subdirs.Length, rootFiles.Length);
+
+                    if (subdirs.Length == 1 && rootFiles.Length == 0)
+                        extractedRoot = subdirs[0];
+
+                    var testWinws = Path.Combine(extractedRoot, "bin", "winws.exe");
+                    if (!File.Exists(testWinws))
+                    {
+                        var actualContents = string.Join(", ",
+                            Directory.GetFileSystemEntries(extractedRoot).Select(Path.GetFileName));
+                        throw new ZapretDownloadException(
+                            ZapretErrorCategory.Invalid,
+                            $"Release doesn't contain bin/winws.exe (found: [{actualContents}]). " +
+                            "Upstream release format changed — report a bug.");
+                    }
+
+                    StopWinDivertService();
+
+                    StatusChanged?.Invoke("Installing...");
+                    try
+                    {
+                        Directory.CreateDirectory(ZapretDir);
+                        CopyDirectoryOverwrite(extractedRoot, ZapretDir, _logger);
+                    }
+                    catch (UnauthorizedAccessException ua)
+                    {
+                        throw new ZapretDownloadException(
+                            ZapretErrorCategory.FileSystem,
+                            $"Permission denied writing to {ZapretDir}. Run VPNRouter as administrator.",
+                            ua);
+                    }
+                    catch (IOException ioe)
+                    {
+                        throw new ZapretDownloadException(
+                            ZapretErrorCategory.FileSystem,
+                            $"Couldn't install files (antivirus may be blocking): {ioe.Message}",
+                            ioe);
+                    }
+
+                    var version = ParseVersionFromServiceBat() ?? tagName;
+                    try { File.WriteAllText(VersionFilePath, version); } catch { }
+                    _logger.Information("[ZapretUpdater] Installed version {Version}", version);
+
+                    StatusChanged?.Invoke($"Installed {version}");
+                }
+                catch (ZapretDownloadException)
+                {
+                    throw; // already categorized, don't wrap again
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "[ZapretUpdater] Extract/install failed");
+                    throw new ZapretDownloadException(
+                        ZapretErrorCategory.Unknown,
+                        $"Install failed: {ex.Message}",
+                        ex);
+                }
+                finally
+                {
+                    try { Directory.Delete(tempDir, recursive: true); } catch { }
+                }
+            }
+            catch (ZapretDownloadException)
+            {
                 throw;
+            }
+            catch (IOException ioe)
+            {
+                throw new ZapretDownloadException(
+                    ZapretErrorCategory.Network,
+                    $"Download interrupted: {ioe.Message}. Click Download to retry.",
+                    ioe);
             }
             finally
             {
-                try { Directory.Delete(tempDir, recursive: true); } catch { }
+                try { File.Delete(tempZip); } catch { }
             }
         }
         finally
         {
-            try { File.Delete(tempZip); } catch { }
+            _downloadLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Exponential-backoff retry helper. Only retries on transient errors
+    /// (network / HTTP 5xx / timeout). Permanent errors (404, ZIP corrupt,
+    /// UnauthorizedAccessException) surface immediately.
+    /// </summary>
+    private static async Task<T> RetryAsync<T>(
+        Func<Task<T>> op,
+        int attempts,
+        int baseDelayMs,
+        Action<int, Exception>? onRetry,
+        CancellationToken ct)
+    {
+        for (int i = 0; i < attempts; i++)
+        {
+            try
+            {
+                return await op().ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw; // user cancelled — don't retry
+            }
+            catch (Exception ex) when (i < attempts - 1 && IsTransient(ex))
+            {
+                onRetry?.Invoke(i, ex);
+                var delayMs = baseDelayMs * (1 << i); // 2s, 4s, 8s with baseDelayMs=2000
+                await Task.Delay(delayMs, ct).ConfigureAwait(false);
+            }
+        }
+        // Last attempt — let exception bubble up for categorization above
+        return await op().ConfigureAwait(false);
+    }
+
+    private static bool IsTransient(Exception ex) => ex switch
+    {
+        HttpRequestException hre when hre.StatusCode is System.Net.HttpStatusCode sc
+            && ((int)sc >= 500 || (int)sc == 408 || (int)sc == 429) => true,
+        HttpRequestException => true, // connection refused, DNS, reset
+        TaskCanceledException => true, // HttpClient timeout
+        IOException => true, // copy stream interrupted mid-flight
+        _ => false,
+    };
+
+    private static string ShortError(Exception ex) => ex switch
+    {
+        HttpRequestException hre when hre.StatusCode.HasValue => $"HTTP {(int)hre.StatusCode}",
+        TaskCanceledException => "timeout",
+        IOException => "network drop",
+        _ => ex.GetType().Name,
+    };
+
+    /// <summary>
+    /// Remove our own stale temp files (from previous crashed/interrupted runs).
+    /// Scoped to files matching our naming scheme + older than 1h to avoid
+    /// interfering with active parallel processes on shared machines.
+    /// </summary>
+    private void CleanupStaleTemps()
+    {
+        try
+        {
+            var tempRoot = Path.GetTempPath();
+            var cutoff = DateTime.UtcNow.AddHours(-1);
+
+            foreach (var f in Directory.GetFiles(tempRoot, "vpnr-zapret-*.zip"))
+            {
+                try
+                {
+                    if (File.GetLastWriteTimeUtc(f) < cutoff)
+                    {
+                        File.Delete(f);
+                        _logger.Debug("[ZapretUpdater] Cleaned stale temp {File}", Path.GetFileName(f));
+                    }
+                }
+                catch { /* file in use by AV, skip */ }
+            }
+
+            foreach (var d in Directory.GetDirectories(tempRoot, "vpnr-zapret-extract-*"))
+            {
+                try
+                {
+                    if (Directory.GetLastWriteTimeUtc(d) < cutoff)
+                    {
+                        Directory.Delete(d, recursive: true);
+                        _logger.Debug("[ZapretUpdater] Cleaned stale temp dir {Dir}", Path.GetFileName(d));
+                    }
+                }
+                catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Cleanup is best-effort; never fail the download because of it.
+            _logger.Debug("[ZapretUpdater] Temp cleanup skipped: {Msg}", ex.Message);
         }
     }
 
