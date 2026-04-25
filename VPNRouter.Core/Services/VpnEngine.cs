@@ -760,6 +760,23 @@ public class VpnEngine : IDisposable
                     return false;
                 }
                 var rawJson = File.ReadAllText(customPath);
+
+                // v2.28.2: validate custom JSON before injecting. StartAsync did
+                // this on initial start, but Apply never did. If a user edits
+                // their custom config to something broken (no proxy outbound,
+                // no outbounds array, malformed JSON), Apply would silently
+                // produce an injected config with route rules pointing at a
+                // missing "proxy" tag — same class of bug as the empty
+                // Vless.Servers leak fixed in 14ec5da, just for custom mode.
+                var (customValid, customErrs) = CustomConfigInjector.Validate(rawJson);
+                if (!customValid)
+                {
+                    _logger?.Warning(
+                        "[VpnEngine] Apply: custom config invalid, skipping reload — {Errors}",
+                        string.Join("; ", customErrs));
+                    return false;
+                }
+
                 configJson = CustomConfigInjector.Inject(rawJson, _scanResult.ProcessNames, settings);
             }
             else
