@@ -157,13 +157,20 @@ public class VpnEngine : IDisposable
         }
         else
         {
-            var allServers = settings.Vless.GetEffectiveServers()
-                .Where(s => !string.IsNullOrWhiteSpace(s.Server) && s.Server != "your.server.com")
-                .ToList();
-            if (allServers.Count == 0)
-                throw new InvalidOperationException("VLESS server not configured.");
+            // v2.28.2: route through the shared resolver so subscribe-mode
+            // servers in App.Subscriptions[].Servers are picked up here even
+            // if the GUI's MainWindowViewModel pre-aggregation didn't run
+            // (e.g. CLI startup, autostart-before-LoadSettings race, hot
+            // reload). Single source of truth — same code path as Apply().
+            var allServers = VlessServersResolver.Resolve(settings, _logger);
 
-            settings.Vless.Servers = allServers;
+            if (allServers.Count == 0)
+            {
+                var why = VlessServersResolver.DescribeEmptyReason(settings)
+                          ?? "VLESS server not configured.";
+                throw new InvalidOperationException(why);
+            }
+
             // Show the active server's IP (what actually runs), not just [0]
             var activeServers = settings.Vless.GetActiveServers();
             ActiveServerAddress = activeServers.Count > 0 ? activeServers[0].Server : allServers[0].Server;
@@ -757,6 +764,32 @@ public class VpnEngine : IDisposable
             }
             else
             {
+                // v2.28.2 critical fix: ROOT CAUSE of the v2.28.1 field-test
+                // "flow mismatch: expected xtls-rprx-vision but got none"
+                // server-log spam (249 errors/day from one machine).
+                //
+                // Apply was reading fresh settings.Vless.Servers straight
+                // from disk (always [] in subscribe mode — subscription
+                // servers live in App.Subscriptions[].Servers, not Vless.
+                // Servers) and calling ConfigGenerator with an empty list.
+                // That produced sing-box JSON with route rules pointing
+                // at a "proxy" outbound that was never emitted, so all
+                // traffic silently went out direct AND sing-box still
+                // urltest-probed the upstream server with no VLESS
+                // handshake — the source of the server-side errors.
+                //
+                // Resolve() mutates settings.Vless.Servers in place so the
+                // downstream ConfigGenerator picks up the correct list.
+                // Same call as StartAsync — single source of truth.
+                var resolved = VlessServersResolver.Resolve(settings, _logger);
+                if (resolved.Count == 0)
+                {
+                    var why = VlessServersResolver.DescribeEmptyReason(settings)
+                              ?? "VLESS server not configured.";
+                    _logger?.Warning("[VpnEngine] Apply: skipping config regen — {Reason}", why);
+                    return false;
+                }
+
                 var sbConfig = ConfigGenerator.Generate(_activeProfile!, _scanResult.ProcessNames, settings);
                 configJson = ConfigGenerator.Serialize(sbConfig);
             }

@@ -1283,3 +1283,346 @@ public class CustomConfigInjectorTests
         }
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VlessServersResolver — v2.28.2 regression
+//
+// Triggering bug: a v2.28.1 user had `config_mode: subscribe` with 6 servers
+// in `app.subscriptions[0].servers` but `vless.servers: []` (subscription
+// servers don't get persisted into Vless.Servers — they live in App.Subscriptions
+// and get aggregated into Vless.Servers IN MEMORY only when VPN starts).
+// MainWindowViewModel did this aggregation in the Connect handler, but
+// VpnEngine.Apply (hot-reload path) did NOT — it called ConfigGenerator
+// straight on the freshly-loaded settings with empty Vless.Servers, producing
+// a sing-box JSON with route rules pointing at a "proxy" outbound that was
+// never emitted. sing-box silently ignored the rules → traffic went direct,
+// AND urltest probes still hit the upstream server with raw TCP (no VLESS
+// handshake) → server log filled with 249 "flow mismatch" errors per day.
+//
+// These tests pin the new contract: VlessServersResolver.Resolve() is the
+// single source of truth for server aggregation, and ConfigGenerator throws
+// loudly if called with no servers (instead of silently producing broken JSON).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+public class VlessServersResolverTests
+{
+    private static SubscriptionEntry MakeSub(string name, params VlessServerEntry[] servers) =>
+        new()
+        {
+            Name = name,
+            Url = $"https://example.com/sub/{name}",
+            Enabled = true,
+            Servers = servers.ToList()
+        };
+
+    private static VlessServerEntry MakeServer(string host, int port = 443) =>
+        new()
+        {
+            Name = $"{host}:{port}",
+            Server = host,
+            Port = port,
+            Uuid = "test-uuid-" + host.GetHashCode().ToString("X"),
+            Flow = "xtls-rprx-vision",
+            Security = "reality",
+            Reality = new VlessRealityConfig
+            {
+                Enabled = true,
+                ServerName = "www.microsoft.com",
+                Fingerprint = "chrome",
+                PublicKey = "test-pbk-" + host.GetHashCode().ToString("X"),
+                ShortId = "abcd1234"
+            }
+        };
+
+    [Fact]
+    public void SubscribeMode_AggregatesEnabledSubscriptionServers()
+    {
+        // Reproduces user's config.yaml: subscribe mode, Vless.Servers empty,
+        // 6 servers in subscriptions[0].servers (here we use 2 for brevity).
+        var settings = new AppSettings
+        {
+            App = new AppConfig
+            {
+                ConfigMode = "subscribe",
+                ActiveSubscriptionServer = "104.194.156.93:443",
+                Subscriptions = new List<SubscriptionEntry>
+                {
+                    MakeSub("simple",
+                        MakeServer("104.194.156.93", 443),
+                        MakeServer("104.194.156.93", 2083))
+                }
+            },
+            Vless = new VlessConfig() // empty Servers + empty Server
+        };
+
+        var resolved = VlessServersResolver.Resolve(settings);
+
+        Assert.Equal(2, resolved.Count);
+        Assert.Equal("104.194.156.93", resolved[0].Server);
+        Assert.Equal(443, resolved[0].Port);
+        Assert.Equal("xtls-rprx-vision", resolved[0].Flow);
+
+        // Side-effect: settings.Vless.Servers populated for downstream consumers
+        Assert.Equal(2, settings.Vless.Servers.Count);
+        // ActiveServer carried from App.ActiveSubscriptionServer if Vless.ActiveServer was empty
+        Assert.Equal("104.194.156.93:443", settings.Vless.ActiveServer);
+    }
+
+    [Fact]
+    public void SubscribeMode_SkipsDisabledSubscriptions()
+    {
+        var settings = new AppSettings
+        {
+            App = new AppConfig
+            {
+                ConfigMode = "subscribe",
+                Subscriptions = new List<SubscriptionEntry>
+                {
+                    MakeSub("active", MakeServer("1.1.1.1")),
+                    new()
+                    {
+                        Name = "disabled",
+                        Url = "https://example.com/x",
+                        Enabled = false, // ← disabled
+                        Servers = new List<VlessServerEntry> { MakeServer("2.2.2.2") }
+                    }
+                }
+            },
+            Vless = new VlessConfig()
+        };
+
+        var resolved = VlessServersResolver.Resolve(settings);
+
+        Assert.Single(resolved);
+        Assert.Equal("1.1.1.1", resolved[0].Server);
+    }
+
+    [Fact]
+    public void SubscribeMode_NoSubscriptions_FallsBackToManualVless()
+    {
+        var settings = new AppSettings
+        {
+            App = new AppConfig
+            {
+                ConfigMode = "subscribe",
+                Subscriptions = new List<SubscriptionEntry>() // empty
+            },
+            Vless = new VlessConfig
+            {
+                Servers = new List<VlessServerEntry> { MakeServer("manual.example.com") }
+            }
+        };
+
+        var resolved = VlessServersResolver.Resolve(settings);
+
+        // Subscribe mode + no subs → fallback to Vless.Servers
+        Assert.Single(resolved);
+        Assert.Equal("manual.example.com", resolved[0].Server);
+    }
+
+    [Fact]
+    public void GeneratedMode_UsesVlessServersDirectly()
+    {
+        var settings = new AppSettings
+        {
+            App = new AppConfig { ConfigMode = "generated" },
+            Vless = new VlessConfig
+            {
+                Servers = new List<VlessServerEntry>
+                {
+                    MakeServer("manual1.com"),
+                    MakeServer("manual2.com")
+                }
+            }
+        };
+
+        var resolved = VlessServersResolver.Resolve(settings);
+
+        Assert.Equal(2, resolved.Count);
+        Assert.Equal("manual1.com", resolved[0].Server);
+    }
+
+    [Fact]
+    public void EmptyEverything_ReturnsEmptyList()
+    {
+        var settings = new AppSettings
+        {
+            App = new AppConfig { ConfigMode = "subscribe" },
+            Vless = new VlessConfig()
+        };
+
+        var resolved = VlessServersResolver.Resolve(settings);
+
+        Assert.Empty(resolved);
+    }
+
+    [Fact]
+    public void DescribeEmptyReason_NoSubscriptions()
+    {
+        var settings = new AppSettings
+        {
+            App = new AppConfig { ConfigMode = "subscribe", Subscriptions = new() },
+            Vless = new VlessConfig()
+        };
+
+        var reason = VlessServersResolver.DescribeEmptyReason(settings);
+
+        Assert.NotNull(reason);
+        Assert.Contains("no subscription URLs are configured", reason!);
+    }
+
+    [Fact]
+    public void DescribeEmptyReason_AllSubscriptionsDisabled()
+    {
+        var settings = new AppSettings
+        {
+            App = new AppConfig
+            {
+                ConfigMode = "subscribe",
+                Subscriptions = new List<SubscriptionEntry>
+                {
+                    new() { Name = "x", Url = "https://x", Enabled = false }
+                }
+            },
+            Vless = new VlessConfig()
+        };
+
+        var reason = VlessServersResolver.DescribeEmptyReason(settings);
+
+        Assert.NotNull(reason);
+        Assert.Contains("every subscription is disabled", reason!);
+    }
+
+    [Fact]
+    public void DescribeEmptyReason_EnabledButNoServers()
+    {
+        var settings = new AppSettings
+        {
+            App = new AppConfig
+            {
+                ConfigMode = "subscribe",
+                Subscriptions = new List<SubscriptionEntry>
+                {
+                    new() { Name = "x", Url = "https://x", Enabled = true, Servers = new() }
+                }
+            },
+            Vless = new VlessConfig()
+        };
+
+        var reason = VlessServersResolver.DescribeEmptyReason(settings);
+
+        Assert.NotNull(reason);
+        Assert.Contains("no subscription has fetched any servers yet", reason!);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ConfigGenerator hard guard — v2.28.2
+//
+// If ConfigGenerator gets called without servers (caller forgot to resolve),
+// it MUST throw rather than emit a JSON with route rules pointing at a missing
+// "proxy" outbound. The original bug produced a silently-broken sing-box config
+// that sing-box loaded without complaint, then drove urltest probes against
+// the upstream server with no VLESS handshake (-> "flow mismatch" log spam).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+public class ConfigGeneratorEmptyServersGuardTests
+{
+    [Fact]
+    public void EmptyServers_ThrowsClearly()
+    {
+        var settings = new AppSettings
+        {
+            App = new AppConfig { LogLevel = "info", ConfigMode = "generated" },
+            Tun = new TunSettings(),
+            Dns = new DnsSettings { VpnDns = "https://1.1.1.1/dns-query" },
+            SingBox = new SingBoxSettings(),
+            Vless = new VlessConfig() // ← critical: no servers
+        };
+        var profile = new Profile
+        {
+            Name = "T",
+            DnsMode = "vpn_only",
+            Processes = new() { new ProcessRule { Name = "Discord.exe", ScanPatterns = new[] { "Discord.exe" } } }
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => ConfigGenerator.Generate(profile, new[] { "Discord.exe" }, settings));
+
+        Assert.Contains("no active VLESS servers", ex.Message);
+        Assert.Contains("VlessServersResolver", ex.Message);
+    }
+
+    [Fact]
+    public void ResolverThenGenerate_ProducesProxyOutbound()
+    {
+        // End-to-end: subscribe mode w/ servers → Resolve → Generate → JSON with proxy.
+        // This is the path that BROKE in v2.28.1 (Apply skipped Resolve step).
+        var settings = new AppSettings
+        {
+            App = new AppConfig
+            {
+                LogLevel = "info",
+                ConfigMode = "subscribe",
+                ActiveSubscriptionServer = "main",
+                Subscriptions = new List<SubscriptionEntry>
+                {
+                    new()
+                    {
+                        Name = "test-sub",
+                        Url = "https://example.com",
+                        Enabled = true,
+                        Servers = new List<VlessServerEntry>
+                        {
+                            new()
+                            {
+                                Name = "main",
+                                Server = "104.194.156.93",
+                                Port = 443,
+                                Uuid = "b25684c3-90d6-454a-a911-4e0abba568b0",
+                                Flow = "xtls-rprx-vision",
+                                Security = "reality",
+                                Reality = new VlessRealityConfig
+                                {
+                                    Enabled = true,
+                                    ServerName = "www.microsoft.com",
+                                    Fingerprint = "chrome",
+                                    PublicKey = "gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A",
+                                    ShortId = "d86e92a0c6dd2271"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            Tun = new TunSettings(),
+            Dns = new DnsSettings { VpnDns = "https://1.1.1.1/dns-query" },
+            SingBox = new SingBoxSettings(),
+            Vless = new VlessConfig() // empty — must be populated by Resolve
+        };
+        var profile = new Profile
+        {
+            Name = "T",
+            DnsMode = "vpn_only",
+            Processes = new() { new ProcessRule { Name = "Discord.exe", ScanPatterns = new[] { "Discord.exe" } } }
+        };
+
+        // Step 1: Resolve (what VpnEngine.Apply now does, didn't before)
+        var resolved = VlessServersResolver.Resolve(settings);
+        Assert.Single(resolved);
+
+        // Step 2: Generate
+        var config = ConfigGenerator.Generate(profile, new[] { "Discord.exe" }, settings);
+
+        // Verification: proxy outbound must exist with correct flow
+        var proxy = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy");
+        Assert.NotNull(proxy);
+        Assert.Equal("vless", proxy!.Type);
+        Assert.Equal("104.194.156.93", proxy.Server);
+        Assert.Equal(443, proxy.ServerPort);
+        Assert.Equal("xtls-rprx-vision", proxy.Flow);
+        Assert.NotNull(proxy.Tls);
+        Assert.True(proxy.Tls!.Reality?.Enabled);
+        Assert.Equal("gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A", proxy.Tls.Reality.PublicKey);
+    }
+}

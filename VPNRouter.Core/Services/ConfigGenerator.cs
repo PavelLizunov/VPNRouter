@@ -313,6 +313,33 @@ public static class ConfigGenerator
     private static List<SingBoxOutbound> BuildOutbounds(AppSettings settings, out bool hasUdpProxy)
     {
         var servers = settings.Vless.GetActiveServers();
+
+        // v2.28.2 hard guard: if we got here with no servers, the resulting
+        // sing-box JSON would have route rules referencing a "proxy" outbound
+        // tag that we never emit (because AddOutboundGroup short-circuits on
+        // empty lists). sing-box loads that config but silently ignores the
+        // process_name → proxy rule, so all routed traffic falls through to
+        // route.final ("direct") — a silent leak. Worse, sing-box still runs
+        // urltest probes against the upstream server which produce a wave of
+        // "flow mismatch" errors in the server log (no VLESS handshake on a
+        // raw TCP probe). Field-discovered in v2.28.1: VpnEngine.Apply
+        // (hot-reload path) had no aggregation guard and would call us with
+        // empty Vless.Servers when the user had only subscription-stored
+        // servers in App.Subscriptions[].Servers. The fix is two-pronged:
+        //   1. VlessServersResolver.Resolve() in StartAsync + Apply (callers).
+        //   2. This guard here as a safety net so any future caller path
+        //      that forgets to resolve fails loud instead of producing a
+        //      silently-broken config.
+        if (servers.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "ConfigGenerator: no active VLESS servers — refusing to generate sing-box config " +
+                "with route rules pointing at a missing 'proxy' outbound. " +
+                "Caller must populate settings.Vless.Servers (via VlessServersResolver.Resolve) " +
+                "before calling Generate(). " +
+                "See plans/vpnrouter-v2.28-flow-mismatch.md for context.");
+        }
+
         var outbounds = new List<SingBoxOutbound>();
 
         // Auto-detect: split servers by flow presence
