@@ -90,12 +90,26 @@ if (-not $isAdmin) {
     if ($NoLaunch)   { $passThrough += "-NoLaunch" }
     $flagsString = ($passThrough -join ' ')
 
+    # IMPORTANT: download via -OutFile, NOT via .Content / WriteAllText.
+    #
+    # On Windows PowerShell 5.1, Invoke-WebRequest returns .Content as
+    # Byte[] (not string) when the response Content-Type isn't recognized
+    # as text. github.io / Pages occasionally serves install.ps1 with
+    # application/octet-stream depending on edge cache state, which
+    # triggers this. WriteAllText(path, byte[]) implicitly stringifies
+    # the array via [string]::Join(' ', $bytes), so the saved file
+    # literally contains "35 32 86 80 78 82..." (each byte as decimal),
+    # then the elevated shell tries to parse those numbers as PowerShell
+    # tokens and emits a wall of "Unexpected token '32'" errors.
+    #
+    # -OutFile writes raw response bytes to disk regardless of the
+    # detected MIME type, so the saved file is byte-identical to what
+    # the server sent. Same fix applied to the .sha256 sidecar earlier.
     $bootstrap = @"
-`$p = @{ErrorActionPreference='Stop'}
+`$ErrorActionPreference='Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-`$script = Invoke-WebRequest -Uri 'https://vpn.ninitux.com/install.ps1' -UseBasicParsing -ErrorAction Stop
 `$tmp = Join-Path `$env:TEMP 'vpnrouter-install.ps1'
-[IO.File]::WriteAllText(`$tmp, `$script.Content)
+Invoke-WebRequest -Uri 'https://vpn.ninitux.com/install.ps1' -OutFile `$tmp -UseBasicParsing -ErrorAction Stop
 & `$tmp $flagsString
 pause
 "@

@@ -66,12 +66,17 @@ if (-not $isAdmin) {
     if ($Yes)   { $passThrough += "-Yes" }
     $flagsString = ($passThrough -join ' ')
 
+    # IMPORTANT: download via -OutFile, NOT via .Content / WriteAllText.
+    # Symmetric fix to install.ps1 — see that file for the full explanation
+    # of the PS 5.1 Byte[] stringification bug. Short version: WriteAllText
+    # implicitly calls [string]::Join(' ', $bytes) on a Byte[], producing
+    # "35 32 86 80..." in the saved file, which the elevated shell then
+    # tries (and fails) to parse as PowerShell tokens.
     $bootstrap = @"
-`$p = @{ErrorActionPreference='Stop'}
+`$ErrorActionPreference='Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-`$script = Invoke-WebRequest -Uri 'https://vpn.ninitux.com/uninstall.ps1' -UseBasicParsing -ErrorAction Stop
 `$tmp = Join-Path `$env:TEMP 'vpnrouter-uninstall.ps1'
-[IO.File]::WriteAllText(`$tmp, `$script.Content)
+Invoke-WebRequest -Uri 'https://vpn.ninitux.com/uninstall.ps1' -OutFile `$tmp -UseBasicParsing -ErrorAction Stop
 & `$tmp $flagsString
 pause
 "@
