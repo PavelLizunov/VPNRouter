@@ -1625,4 +1625,117 @@ public class ConfigGeneratorEmptyServersGuardTests
         Assert.True(proxy.Tls!.Reality?.Enabled);
         Assert.Equal("gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A", proxy.Tls.Reality.PublicKey);
     }
+
+    /// <summary>
+    /// End-to-end integration test: subscribe-mode AppSettings → VlessServersResolver
+    /// → ConfigGenerator → sing-box check. Verifies the generated JSON is not just
+    /// internally consistent but actually loadable by sing-box 1.13. This pins the
+    /// fix at the binary level — if a future change breaks compatibility with
+    /// upstream sing-box validator, this test fails immediately.
+    /// </summary>
+    [Fact]
+    public void Generate_FromSubscribeMode_PassesSingBoxCheck()
+    {
+        var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
+        if (!File.Exists(singBoxPath))
+            return; // sing-box.exe not installed locally — skip on CI without binary
+
+        var settings = new AppSettings
+        {
+            App = new AppConfig
+            {
+                LogLevel = "info",
+                ConfigMode = "subscribe",
+                ActiveSubscriptionServer = "main",
+                Subscriptions = new List<SubscriptionEntry>
+                {
+                    new()
+                    {
+                        Name = "field-test-subscription",
+                        Url = "https://example.com",
+                        Enabled = true,
+                        Servers = new List<VlessServerEntry>
+                        {
+                            new()
+                            {
+                                Name = "main",
+                                Server = "104.194.156.93",
+                                Port = 443,
+                                Uuid = "b25684c3-90d6-454a-a911-4e0abba568b0",
+                                Flow = "xtls-rprx-vision",
+                                Security = "reality",
+                                Reality = new VlessRealityConfig
+                                {
+                                    Enabled = true,
+                                    ServerName = "www.microsoft.com",
+                                    Fingerprint = "chrome",
+                                    PublicKey = "gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A",
+                                    ShortId = "d86e92a0c6dd2271"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            Tun = new TunSettings
+            {
+                InterfaceName = "VPNRouter-TUN",
+                Ipv4Address = "172.19.0.1/30",
+                Mtu = 9000,
+                AutoRoute = true,
+                StrictRoute = false
+            },
+            Dns = new DnsSettings
+            {
+                VpnDns = "https://1.1.1.1/dns-query",
+                Strategy = "ipv4_only"
+            },
+            SingBox = new SingBoxSettings { ClashApi = "127.0.0.1:9090" },
+            Vless = new VlessConfig() // empty — must be populated by Resolve
+        };
+        var profile = new Profile
+        {
+            Name = "TestProfile",
+            DnsMode = "vpn_only",
+            Processes = new() { new ProcessRule { Name = "Discord.exe", ScanPatterns = new[] { "Discord.exe" } } }
+        };
+
+        // Pipeline same as VpnEngine.Apply now does
+        var resolved = VlessServersResolver.Resolve(settings);
+        Assert.Single(resolved);
+        var sbConfig = ConfigGenerator.Generate(profile, new[] { "Discord.exe" }, settings);
+        var validation = LeakProtection.ValidateConfig(sbConfig);
+        Assert.True(validation.IsValid,
+            $"LeakProtection validation failed: {string.Join("; ", validation.Errors)}");
+        var json = ConfigGenerator.Serialize(sbConfig);
+
+        // Run sing-box check on the generated JSON
+        var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-test-resolver-{Guid.NewGuid()}.json");
+        try
+        {
+            File.WriteAllText(tempPath, json);
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = singBoxPath,
+                Arguments = $"check -c \"{tempPath}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var proc = System.Diagnostics.Process.Start(psi)!;
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(10000);
+
+            Assert.True(proc.ExitCode == 0,
+                $"sing-box check failed on resolver+generator output (exit {proc.ExitCode}):\n{stderr}\n\nConfig:\n{json}");
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
+    }
 }
