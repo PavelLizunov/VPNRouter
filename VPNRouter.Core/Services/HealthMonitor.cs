@@ -340,6 +340,14 @@ public class HealthMonitor : IDisposable
             }
         }
 
+        // v2.28.2: defense-in-depth — also resolve here. HealthMonitor's
+        // _appSettings reference is normally kept consistent by VpnEngine's
+        // Resolve() at StartAsync, but if something clears _appSettings.Vless.
+        // Servers between then and a hot-reload trigger from health rescan,
+        // we'd produce a broken config (no proxy outbound). Resolve again to
+        // be safe — idempotent if already populated.
+        VlessServersResolver.Resolve(_appSettings);
+
         var config = ConfigGenerator.Generate(_activeProfile, processNames, _appSettings);
         return ConfigGenerator.Serialize(config);
     }

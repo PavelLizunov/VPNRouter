@@ -791,6 +791,24 @@ public class VpnEngine : IDisposable
                 }
 
                 var sbConfig = ConfigGenerator.Generate(_activeProfile!, _scanResult.ProcessNames, settings);
+
+                // v2.28.2: defense-in-depth — Apply now validates the regenerated
+                // config the same way StartAsync does. Previously skipped here,
+                // which is how the v2.28.1 broken-config-with-no-proxy-outbound
+                // ever got past Apply at all (LeakProtection.ValidateConfig
+                // catches missing proxy outbound on line 67-69, but it was only
+                // being run in StartAsync, not Apply).
+                var validation = LeakProtection.ValidateConfig(sbConfig);
+                foreach (var warn in validation.Warnings)
+                    _logger?.Warning("[VpnEngine] Apply: {Warn}", warn);
+
+                if (!validation.IsValid)
+                {
+                    var errs = string.Join("; ", validation.Errors);
+                    _logger?.Warning("[VpnEngine] Apply: validation failed, skipping reload — {Errors}", errs);
+                    return false;
+                }
+
                 configJson = ConfigGenerator.Serialize(sbConfig);
             }
 
