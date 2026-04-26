@@ -1540,8 +1540,43 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         catch (Exception ex) { _logger.Debug(ex, "[Settings] Backup failed"); }
 
-        // Config mode (three-way)
-        _settings.App.ConfigMode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "generated" : "custom";
+        // Config mode (three-way) — v2.28.2-r2 guard:
+        //
+        // The ServerModeIndex sub-tab handler (OnSelectedServerModeIndexChanged)
+        // flips IsVlessMode whenever the user clicks the "Custom" sub-tab,
+        // which would normally land here as ConfigMode = "custom". But if the
+        // user is just *peeking* at the Custom sub-tab without having actually
+        // imported / selected a custom JSON config, persisting "custom" is a
+        // foot-gun: on next StartAsync the engine reads ConfigMode="custom"
+        // + empty CustomConfig path → throws "Custom config not found" → VPN
+        // doesn't start. User reported this exact scenario after clicking
+        // through tabs (2026-04-26 field test).
+        //
+        // Guard: only persist "custom" if there's actually a custom config
+        // ready to use (either ActiveCustomConfig points at one OR the legacy
+        // CustomConfig path is set OR there's at least one entry in the
+        // CustomConfigs list). Otherwise fall back based on what's available:
+        // subscriptions present → "subscribe", else → "generated".
+        var wantsCustomMode = !IsSubscribeMode && !IsVlessMode;
+        var hasCustomConfig = !string.IsNullOrWhiteSpace(_settings.App.ActiveCustomConfig)
+                              || !string.IsNullOrWhiteSpace(_settings.App.CustomConfig)
+                              || (_settings.App.CustomConfigs?.Count ?? 0) > 0;
+
+        if (wantsCustomMode && !hasCustomConfig)
+        {
+            // No custom config ready → don't lock the user into a mode that
+            // can't start. Pick the next best persistable mode.
+            var hasSubscription = (_settings.App.Subscriptions?.Any(s => s != null && s.Enabled) ?? false)
+                                  || !string.IsNullOrWhiteSpace(_settings.App.SubscriptionUrl);
+            _settings.App.ConfigMode = hasSubscription ? "subscribe" : "generated";
+            _logger?.Information(
+                "[Settings] User clicked Custom sub-tab but no custom config is configured — keeping ConfigMode={Mode} instead of 'custom'",
+                _settings.App.ConfigMode);
+        }
+        else
+        {
+            _settings.App.ConfigMode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "generated" : "custom";
+        }
 
         // Persist all subscription entries (multi-subscription support)
         _settings.App.Subscriptions = Subscriptions.Select(sv => sv.ToEntry()).ToList();
