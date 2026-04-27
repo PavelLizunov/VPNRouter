@@ -212,6 +212,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         if (IsBusy) return;
         IsBusy = true;
         _refreshCts = new CancellationTokenSource();
+        var refreshFoundOk = false;
         try
         {
             // v2.13.18: apply fast scan toggle before RefreshAsync reads it
@@ -220,9 +221,18 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             // v2.14.4: merge user-provided sources with built-in 14.
             var sources = FreeConfigSources.GetAll(_getSettings?.Invoke());
 
+            // v2.28.3-r2: pull a slightly larger candidate pool than the user's
+            // target N so the chained Deep Verify has buffer when some TCP-OK
+            // entries fail the real connectivity test. Heuristic: 3× target,
+            // capped at 300 — Deep Verify will early-stop once it finds N
+            // truly-working anyway.
+            var refreshTarget = UseLatencyGoal
+                ? Math.Min(300, Math.Max(LatencyGoalTarget * 3, LatencyGoalTarget + 30))
+                : (int?)null;
+
             var fresh = await Task.Run(() => _aggregator.RefreshAsync(
                 sources: sources,
-                goalTargetCount:  UseLatencyGoal ? LatencyGoalTarget : (int?)null,
+                goalTargetCount:  refreshTarget,
                 goalMaxLatencyMs: UseLatencyGoal ? LatencyGoalMaxPingMs : (int?)null,
                 ct: _refreshCts.Token));
             await Dispatcher.UIThread.InvokeAsync(() =>
@@ -231,6 +241,16 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 ApplyFiltersAndStats();
                 StatusText = Strings.FcStatusRefreshed(fresh.Count);
             });
+
+            // v2.28.3-r2 auto-chain: TCP+TLS pass is a weak signal — any random
+            // box that responds to TLS handshake on 443 satisfies it, but the
+            // VLESS+Reality handshake might still fail at apply-time. Run Deep
+            // Verify automatically on the OK candidates so the user gets N
+            // *actually-working* servers from one click instead of two. Skip
+            // chaining if the user cancelled the refresh.
+            refreshFoundOk = !_refreshCts.IsCancellationRequested
+                          && _allConfigs.Any(c => c.Status == FreeConfigStatus.Ok
+                                              || c.Status == FreeConfigStatus.Verified);
         }
         catch (OperationCanceledException)
         {
@@ -249,6 +269,20 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             IsBusy = false;
             ProgressTotal = 0;
             ProgressDone = 0;
+        }
+
+        // Chain Deep Verify *outside* the IsBusy=true block so DeepVerifyTopAsync's
+        // own IsBusy guard fires cleanly. The inner method spawns sing-box per
+        // candidate, takes its own CTS, and updates its own status text.
+        if (refreshFoundOk)
+        {
+            // v2.28.3-r2: align Deep Verify's target with the user's N input.
+            // The Simple-only UI exposes ONE numeric "N working" — wire it
+            // through to DeepVerifyTargetCount so the chained run terminates
+            // at the same N the user picked. (Old default DeepVerifyTargetCount=5
+            // was too small to cover a 100-candidate ask.)
+            DeepVerifyTargetCount = LatencyGoalTarget;
+            await DeepVerifyTopAsync();
         }
     }
 

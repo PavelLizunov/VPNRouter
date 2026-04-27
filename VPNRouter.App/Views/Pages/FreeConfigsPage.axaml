@@ -82,36 +82,55 @@
                     </Grid>
                 </Border>
 
-                <!-- Action row: Refresh + Country filter + "Only working" toggle.
-                     One row that fits all sane window widths. Refresh is the
-                     only action button — no Retest/Deep Verify/Cleanup. -->
-                <Grid ColumnDefinitions="Auto,8,*,8,Auto" VerticalAlignment="Center">
-                    <Button Grid.Column="0"
-                            Content="{Binding L_FcRefreshSources}"
+                <!-- Action row: Refresh + N target + skip-RU + filters.
+                     v2.28.3-r2: surfaced 2 inputs the user explicitly asked for —
+                     "сразу искать N кол-во рабочих" + "не из России". The N
+                     input controls how many TRULY-WORKING servers the chained
+                     Refresh→Deep Verify pipeline targets. Skip-RU prevents
+                     Russian endpoints from filling the verified slots. -->
+                <WrapPanel Orientation="Horizontal" ItemSpacing="8">
+                    <Button Content="{Binding L_FcRefreshSources}"
                             Command="{Binding FreeConfigsVm.RefreshCommand}"
                             IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                             Padding="16,8" FontSize="12" FontWeight="SemiBold"
                             CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource AccentSolidBrush}"
                             Foreground="{DynamicResource AccentOnSolidBrush}"
-                            ToolTip.Tip="{Binding L_FcRefreshTooltip}"/>
+                            ToolTip.Tip="{Binding L_FcRefreshTooltip}"
+                            VerticalAlignment="Center"/>
 
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                    <StackPanel Orientation="Horizontal" Spacing="4"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="N:" FontSize="11" Opacity="0.7"
+                                   VerticalAlignment="Center"/>
+                        <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalTarget}"
+                                       Minimum="3" Maximum="500" Increment="5"
+                                       FormatString="0"
+                                       MinWidth="80" Padding="4,2" FontSize="11"
+                                       VerticalAlignment="Center"
+                                       ToolTip.Tip="{Binding L_TipFcSmartRefresh}"/>
+                    </StackPanel>
+
+                    <CheckBox Content="{Binding L_FcDeepExcludeRu}"
+                              IsChecked="{Binding FreeConfigsVm.ExcludeRu}"
+                              ToolTip.Tip="{Binding L_TipFcSkipRu}"
+                              FontSize="11" VerticalAlignment="Center"/>
+
+                    <StackPanel Orientation="Horizontal" Spacing="4"
                                 VerticalAlignment="Center">
                         <TextBlock Text="{Binding L_FcCountryFilter}"
                                    FontSize="11" Opacity="0.7"
                                    VerticalAlignment="Center"/>
                         <ComboBox ItemsSource="{Binding FreeConfigsVm.Countries}"
                                   SelectedItem="{Binding FreeConfigsVm.SelectedCountry}"
-                                  MinWidth="110" Padding="6,3" FontSize="11"
+                                  MinWidth="100" Padding="6,3" FontSize="11"
                                   VerticalAlignment="Center"/>
                     </StackPanel>
 
-                    <CheckBox Grid.Column="4"
-                              Content="{Binding L_FcOnlyWorking}"
+                    <CheckBox Content="{Binding L_FcOnlyWorking}"
                               IsChecked="{Binding FreeConfigsVm.OnlyWorking}"
                               FontSize="11" VerticalAlignment="Center"/>
-                </Grid>
+                </WrapPanel>
 
                 <!-- Counter line: "1247 servers · 230 working" — quick at-a-glance
                      stats without the 6-chip dashboard. Only shown when there's
