@@ -20,9 +20,14 @@
          are no longer needed in this file. SimplePage is now pure body
          content. -->
 
+    <!-- v2.28.4-r8: same r7 pattern — push horizontal padding from
+         ScrollViewer to inner Grid Margin so the centered Grid doesn't
+         shift when the scrollbar appears on resize. -->
     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
-                  Padding="16,12,16,16">
+                  AllowAutoHide="False"
+                  Padding="0,12,0,16">
+        <Grid Margin="16,0,16,0">
         <Grid MaxWidth="420" HorizontalAlignment="Center">
             <StackPanel Spacing="14">
 
@@ -270,6 +275,7 @@
                 </Button>
 
             </StackPanel>
+        </Grid>
         </Grid>
     </ScrollViewer>
 </UserControl>
