@@ -130,6 +130,28 @@ gh release view vX.Y.Z-rN --repo PavelLizunov/VPNRouter --json assets --jq '.ass
 - **PS 5.1 NumericUpDown null bug** — если фикс касается UI input — обязательно `int?` + `?? fallback` (см. v2.28.3-r4).
 - **Mac CI race** — если Mac success но 0 уплоада, re-trigger через workflow_dispatch.
 - **Homebrew Cask** — на prerelease НЕ обновляется (correct behaviour). На stable cut — autobump через repository_dispatch.
+- **GitHub REST `/releases` listing cache lag** — после `gh release create` + серии `gh release edit` (prerelease flag, notes, --latest restore) запись в DB корректна (`gh release view` работает, прямой URL открывается), но **public listing endpoint** (REST `/releases?per_page=N` — именно его дёргает in-app update check) может зависнуть на 30-60+ минут. Atom feed и HTML release page тоже лагают. **Verify after step 6**:
+  ```bash
+  gh api "repos/PavelLizunov/VPNRouter/releases?per_page=10" --jq '.[].tag_name' | grep "vX.Y.Z-rN"
+  ```
+  Если **не виден** через 5 минут после finalize → принудительно invalidate через delete+recreate (тег сохраняем):
+  ```bash
+  # 1. Скачать все 12 assets локально
+  mkdir /tmp/r-assets && cd /tmp/r-assets
+  gh release download vX.Y.Z-rN --repo PavelLizunov/VPNRouter
+
+  # 2. Delete release (tag preserved!)
+  gh release delete vX.Y.Z-rN --repo PavelLizunov/VPNRouter --yes --cleanup-tag=false
+
+  # 3. Recreate fresh (single create call, no follow-up edits)
+  gh release create vX.Y.Z-rN /tmp/r-assets/* \
+    --repo PavelLizunov/VPNRouter \
+    --target main \
+    --prerelease \
+    --title "VPNRouter vX.Y.Z-rN — ..." \
+    --notes-file plans/release-notes-vX.Y.Z-rN.md
+  ```
+  Свежая запись индексируется немедленно. См. v2.28.4-r1 incident 2026-04-27.
 
 ## NOT to do
 
