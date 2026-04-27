@@ -109,37 +109,25 @@
                             </StackPanel>
                         </WrapPanel>
 
-                        <!-- Filter checkboxes — radio-card pattern (Grid 24,*)
-                             so long localised labels wrap instead of pushing
-                             the card past the ScrollViewer right edge. -->
-                        <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                            <Grid Grid.Column="0" ColumnDefinitions="20,*" ColumnSpacing="4">
-                                <CheckBox Grid.Column="0"
-                                          IsChecked="{Binding FreeConfigsVm.ExcludeRu}"
-                                          ToolTip.Tip="{Binding L_TipFcSkipRu}"
-                                          MinHeight="0" Padding="0"
-                                          VerticalAlignment="Top"
-                                          Margin="0,1,0,0"/>
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding L_FcDeepExcludeRu}"
-                                           FontSize="11"
-                                           TextWrapping="Wrap"
-                                           VerticalAlignment="Top"
-                                           Foreground="{DynamicResource SuccessFgBrush}"/>
-                            </Grid>
-                            <Grid Grid.Column="1" ColumnDefinitions="20,*" ColumnSpacing="4">
-                                <CheckBox Grid.Column="0"
-                                          IsChecked="{Binding FreeConfigsVm.OnlyWorking}"
-                                          MinHeight="0" Padding="0"
-                                          VerticalAlignment="Top"
-                                          Margin="0,1,0,0"/>
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding L_FcOnlyWorking}"
-                                           FontSize="11"
-                                           TextWrapping="Wrap"
-                                           VerticalAlignment="Top"
-                                           Foreground="{DynamicResource SuccessFgBrush}"/>
-                            </Grid>
+                        <!-- Filter row — only Skip-RU now. v2.28.4-r3: dropped
+                             "Only working" toggle since this whole search IS the
+                             "find working" path; the displayed list is always
+                             status-filtered to Verified/Ok and capped by the
+                             max-ping input above. radio-card 24,* pattern so a
+                             long localised label wraps instead of overflowing. -->
+                        <Grid ColumnDefinitions="20,*" ColumnSpacing="4">
+                            <CheckBox Grid.Column="0"
+                                      IsChecked="{Binding FreeConfigsVm.ExcludeRu}"
+                                      ToolTip.Tip="{Binding L_TipFcSkipRu}"
+                                      MinHeight="0" Padding="0"
+                                      VerticalAlignment="Top"
+                                      Margin="0,1,0,0"/>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding L_FcDeepExcludeRu}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       VerticalAlignment="Top"
+                                       Foreground="{DynamicResource SuccessFgBrush}"/>
                         </Grid>
 
                         <!-- Primary green action (auto-chains Refresh + DeepVerify).

@@ -131,9 +131,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _selectedCountry = "All";
     partial void OnSelectedCountryChanged(string value) => ApplyFiltersAndStats();
 
-    [ObservableProperty] private bool _onlyWorking = true;
-    partial void OnOnlyWorkingChanged(bool value) => ApplyFiltersAndStats();
-
     /// <summary>How many Verified configs to hunt for in a deep-verify session.</summary>
     [ObservableProperty] private int _deepVerifyTargetCount = 5;
 
@@ -780,22 +777,27 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             if (!Countries.Contains(SelectedCountry))
                 SelectedCountry = "All";
 
-            // Apply filter + sort.
-            IEnumerable<FreeConfigEntry> q = _allConfigs;
-            if (OnlyWorking)
-                q = q.Where(c => c.Status == FreeConfigStatus.Ok || c.Status == FreeConfigStatus.Verified);
+            // Filter + sort. v2.28.4-r3: this is the "find working" search,
+            // so the displayed list is always status-filtered to Ok/Verified
+            // (the OnlyWorking toggle was a leftover from the 6-section UX
+            // when users could see the full aggregator output as a debugging
+            // view; the Simple flow doesn't surface failed/Implausible/Timeout
+            // entries — the user is asking "show me what works", not "show me
+            // every TCP probe attempt").
+            IEnumerable<FreeConfigEntry> q = _allConfigs
+                .Where(c => c.Status == FreeConfigStatus.Ok || c.Status == FreeConfigStatus.Verified);
             if (!string.Equals(SelectedCountry, "All", StringComparison.OrdinalIgnoreCase))
                 q = q.Where(c => string.Equals(c.CountryCode, SelectedCountry, StringComparison.OrdinalIgnoreCase));
 
-            // v2.28.3-r4 — also honour the max-ping setting in the displayed list.
-            // User report: "ищу с пингом 50, приложение пишет нашло, а на самом
-            // деле нет". Root cause: the goal-target filter only stops Refresh
-            // early — it doesn't filter the displayed entries. After Deep Verify
-            // re-measures latency (which is usually higher than TCP-only ping),
-            // some entries may exceed the user's threshold but still show up.
-            // Apply max-ping filter only when "Only working" is on, so the
-            // unfiltered view still lets users see all aggregator output.
-            if (OnlyWorking && UseLatencyGoal && LatencyGoalMaxPingMs.HasValue)
+            // v2.28.3-r4 — also honour the max-ping setting in the displayed
+            // list. User report: "ищу с пингом 50, приложение пишет нашло, а
+            // на самом деле нет". Root cause: the goal-target filter only stops
+            // Refresh early — it doesn't filter the displayed entries. After
+            // Deep Verify re-measures latency (which is usually higher than
+            // TCP-only ping), some entries may exceed the user's threshold but
+            // still show up. v2.28.4-r3: applied unconditionally now that
+            // OnlyWorking is implicit.
+            if (UseLatencyGoal && LatencyGoalMaxPingMs.HasValue)
             {
                 var maxPing = LatencyGoalMaxPingMs.Value;
                 q = q.Where(c => c.LatencyMs > 0 && c.LatencyMs <= maxPing);

@@ -133,7 +133,6 @@ public partial class MainWindowViewModel
     public string L_FcMbpsUnit => Strings.FcMbpsUnit;
     public string L_FcMoreOptions => Strings.FcMoreOptions;
     public string L_FcMsUnit => Strings.FcMsUnit;
-    public string L_FcOnlyWorking => Strings.FcOnlyWorking;
     public string L_FcOpenLogs => Strings.FcOpenLogs;
     public string L_FcPageDescription => Strings.FcPageDescription;
     public string L_FcPresetBest => Strings.FcPresetBest;

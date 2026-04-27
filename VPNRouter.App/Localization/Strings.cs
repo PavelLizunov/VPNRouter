@@ -425,7 +425,6 @@ public static class Strings
         ? $"Удалено {removed} · осталось {kept}"
         : $"Removed {removed} · kept {kept}";
     public static string FcCountryFilter      => Ru ? "Страна:"       : "Country:";
-    public static string FcOnlyWorking        => Ru ? "Только рабочие" : "Only working";
     public static string FcRefreshSources     => Ru ? "↻ Обновить список"    : "↻ Refresh list";
     public static string FcRetestAll          => Ru ? "▶ Перепроверить"      : "▶ Retest all";
     public static string FcConnectHint        => Ru ? "Выберите строку ↑ и нажмите Connect (или двойной клик)"
