@@ -234,8 +234,10 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             // capped at 300 — Deep Verify will early-stop once it finds N
             // truly-working anyway.
             // v2.28.3-r4: handle nullable inputs from cleared NumericUpDown.
+            // v2.28.3-r5: empty ping = "no max-ping limit" semantics. The
+            // count target still drives early-stop; we just don't filter by
+            // latency at all when LatencyGoalMaxPingMs is null.
             var nGoal = LatencyGoalTarget ?? 100;
-            var pingGoal = LatencyGoalMaxPingMs ?? 300;
             var refreshTarget = UseLatencyGoal
                 ? Math.Min(300, Math.Max(nGoal * 3, nGoal + 30))
                 : (int?)null;
@@ -243,7 +245,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             var fresh = await Task.Run(() => _aggregator.RefreshAsync(
                 sources: sources,
                 goalTargetCount:  refreshTarget,
-                goalMaxLatencyMs: UseLatencyGoal ? (int?)pingGoal : (int?)null,
+                goalMaxLatencyMs: (UseLatencyGoal && LatencyGoalMaxPingMs.HasValue)
+                                    ? LatencyGoalMaxPingMs
+                                    : (int?)null,
                 ct: _refreshCts.Token));
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -297,7 +301,10 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             // <1 Mbps and get correctly excluded.
             DeepVerifyTargetCount = LatencyGoalTarget ?? 100;
             DeepVerifyPresetIndex = 4;                          // 4 = Custom
-            CustomMaxPingMs       = LatencyGoalMaxPingMs ?? 300;
+            // v2.28.3-r5: empty ping → effectively no limit (1000ms ≈ all real
+            // VLESS endpoints fit). Custom preset's CustomMaxPingMs is non-
+            // nullable int, so we use a high sentinel rather than null.
+            CustomMaxPingMs       = LatencyGoalMaxPingMs ?? 1000;
             CustomMinBandwidthMbps = 1;
             await DeepVerifyTopAsync();
         }

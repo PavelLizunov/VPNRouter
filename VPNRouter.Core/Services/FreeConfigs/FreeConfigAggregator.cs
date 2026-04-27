@@ -193,6 +193,19 @@ public sealed class FreeConfigAggregator
             }
         }
 
+        // v2.28.3-r5: ALSO preserve previously-validated entries that aren't in
+        // the freshly-fetched pool. See PreservePreviousValidation for the full
+        // rationale + test coverage.
+        var preservedFromCache = PreservePreviousValidation(
+            byId, configs, existing.Configs, DateTime.UtcNow);
+
+        if (preservedFromCache > 0)
+        {
+            _logger.Information(
+                "FreeConfigAggregator: preserved {n} previously-validated entries not in fresh pool",
+                preservedFromCache);
+        }
+
         // ── Stage 3: enrich GeoIP (only for entries without CC) ──
         var needGeo = configs.Where(c => string.IsNullOrEmpty(c.CountryCode)).ToList();
         if (needGeo.Count > 0)
@@ -374,5 +387,56 @@ public sealed class FreeConfigAggregator
         var key = $"{host.ToLowerInvariant()}:{port}:{uuid.ToLowerInvariant()}";
         var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(key));
         return Convert.ToHexString(hash, 0, 8); // 16-char prefix is unique enough for ~100k configs.
+    }
+
+    /// <summary>
+    /// v2.28.3-r5: preserve previously-validated entries from the cache that
+    /// are no longer in the freshly-fetched pool.
+    ///
+    /// <para>The server-side pool.json is regenerated every 6h and can drop
+    /// entries (source rotation, server-side TLS failures, upstream removal).
+    /// Without this merge, a user who runs Refresh with new criteria loses
+    /// their previously-Verified results just because the upstream pool moved
+    /// on. User report (2026-04-27): "не пропадают пред идущие рабочие".</para>
+    ///
+    /// <para>Preserve only "interesting" entries:</para>
+    /// <list type="bullet">
+    /// <item>Verified (gold — passed full Deep Verify with HTTP round-trip)</item>
+    /// <item>Ok and tested in the last 24h (TCP+TLS pass, recent enough to trust)</item>
+    /// </list>
+    /// <para>Older Ok entries (&gt;24h) get dropped to keep the cache tractable;
+    /// they would re-test from scratch anyway via the skip-recent logic.</para>
+    ///
+    /// <para>Mutates both <paramref name="byId"/> and <paramref name="configs"/>
+    /// in place, returns the number of preserved entries for logging.</para>
+    /// </summary>
+    /// <remarks>Public for unit testing — exposed via internal visibility
+    /// to <see cref="VPNRouter.Tests"/> via InternalsVisibleTo.</remarks>
+    internal static int PreservePreviousValidation(
+        Dictionary<string, FreeConfigEntry> byId,
+        List<FreeConfigEntry> configs,
+        IList<FreeConfigEntry> existingConfigs,
+        DateTime nowUtc)
+    {
+        var ageCutoff = nowUtc.AddHours(-24);
+        var preserved = 0;
+        foreach (var prev in existingConfigs)
+        {
+            if (string.IsNullOrEmpty(prev.Id)) continue;
+            if (byId.ContainsKey(prev.Id)) continue;
+
+            var isVerified = prev.Status == FreeConfigStatus.Verified;
+            var isRecentOk = prev.Status == FreeConfigStatus.Ok
+                          && prev.LastTestedAt.HasValue
+                          && prev.LastTestedAt.Value >= ageCutoff;
+
+            if (isVerified || isRecentOk)
+            {
+                configs.Add(prev);
+                byId[prev.Id] = prev;
+                preserved++;
+            }
+        }
+        return preserved;
     }
 }
