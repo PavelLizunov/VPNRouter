@@ -58,3 +58,9 @@ release-notes-*.md
 # UI test screenshots (regenerated on every `dotnet test` run; inspection
 # artefact, not versioned content). See plans/ui-testing-workflow.md.
 VPNRouter.Tests/screenshots/
+
+# Claude session handoff (memory layer for CSM context system).
+# Contains current state + persons + infrastructure pointers. May contain
+# secrets in future iterations (Forgejo creds, GitHub PATs, etc.) — keep
+# private. See /CLAUDE.md "Memory layer" section for workflow.
+.claude_handoff.md
