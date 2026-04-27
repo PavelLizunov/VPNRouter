@@ -150,11 +150,14 @@
       </Grid>
 
       <!-- Master enable toggle -->
+      <!-- v2.28.3: TextWrapping fix for narrow-window overflow. -->
       <Border Grid.Row="1" Padding="14,4,14,8">
         <CheckBox IsChecked="{Binding IsChecked}"
-                  Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_EnableWholeGroup}"
                   FontWeight="SemiBold" FontSize="12"
-                  MinHeight="0" Padding="4,0"/>
+                  MinHeight="0" Padding="4,0">
+          <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_EnableWholeGroup}"
+                     TextWrapping="Wrap" FontWeight="SemiBold" FontSize="12"/>
+        </CheckBox>
       </Border>
 
       <!-- Empty state -->

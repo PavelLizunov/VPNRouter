@@ -187,10 +187,14 @@
                             HorizontalContentAlignment="Left"
                             FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
 
+                    <!-- v2.28.3: TextWrapping fix for narrow-window overflow.
+                         Same anti-pattern as the v2.27.0-r2 fix in NetworkPage. -->
                     <CheckBox IsChecked="{Binding ZapretAutoUpdateCheck}"
-                              Content="{Binding L_AutoUpdateCheckLabel}"
                               ToolTip.Tip="{Binding L_TipZapretAutoUpdate}"
-                              FontSize="10" MinHeight="0" Padding="4,0"/>
+                              FontSize="10" MinHeight="0" Padding="4,0">
+                        <TextBlock Text="{Binding L_AutoUpdateCheckLabel}"
+                                   TextWrapping="Wrap" FontSize="10"/>
+                    </CheckBox>
                 </StackPanel>
 
                 <!-- ═══ Diagnostics ═══ -->

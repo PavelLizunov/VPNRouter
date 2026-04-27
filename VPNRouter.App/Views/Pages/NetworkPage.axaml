@@ -182,23 +182,37 @@
         <StackPanel Spacing="10" IsVisible="{Binding IsSettingsLeakSelected}">
           <TextBlock Text="{Binding LblSettingsLeak}" FontWeight="Bold" FontSize="13"/>
 
+          <!-- v2.28.3: bare-string CheckBox.Content wrapped in TextBlock with
+               TextWrapping="Wrap". Same fix as Section A applied here — the
+               Leak Protection panel was missed in the v2.27.0-r2 pass and
+               kept overflowing on narrow windows for users with long
+               localised labels (e.g. RU "Strict mode (block all leaks)"
+               can wrap to ~200px). User report 2026-04-26. -->
           <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
                   Background="{DynamicResource SurfaceSunkenBrush}"
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
                   BorderThickness="1">
             <StackPanel Spacing="4">
-              <CheckBox IsChecked="{Binding StrictMode}" Content="{Binding StrictModeLabel}"
+              <CheckBox IsChecked="{Binding StrictMode}"
                         ToolTip.Tip="{Binding L_TipLeakStrictMode}"
-                        MinHeight="0" Padding="4,0"/>
-              <CheckBox IsChecked="{Binding ForceIpv4Only}" Content="{Binding ForceIpv4Label}"
+                        MinHeight="0" Padding="4,0">
+                <TextBlock Text="{Binding StrictModeLabel}" TextWrapping="Wrap"/>
+              </CheckBox>
+              <CheckBox IsChecked="{Binding ForceIpv4Only}"
                         ToolTip.Tip="{Binding L_TipLeakForceIpv4}"
-                        MinHeight="0" Padding="4,0"/>
-              <CheckBox IsChecked="{Binding FlushDnsOnStart}" Content="{Binding FlushDnsLabel}"
+                        MinHeight="0" Padding="4,0">
+                <TextBlock Text="{Binding ForceIpv4Label}" TextWrapping="Wrap"/>
+              </CheckBox>
+              <CheckBox IsChecked="{Binding FlushDnsOnStart}"
                         ToolTip.Tip="{Binding L_TipLeakFlushDns}"
-                        MinHeight="0" Padding="4,0"/>
-              <CheckBox IsChecked="{Binding StrictDns}" Content="{Binding StrictDnsLabel}"
+                        MinHeight="0" Padding="4,0">
+                <TextBlock Text="{Binding FlushDnsLabel}" TextWrapping="Wrap"/>
+              </CheckBox>
+              <CheckBox IsChecked="{Binding StrictDns}"
                         ToolTip.Tip="{Binding L_TipLeakStrictDns}"
-                        MinHeight="0" Padding="4,0"/>
+                        MinHeight="0" Padding="4,0">
+                <TextBlock Text="{Binding StrictDnsLabel}" TextWrapping="Wrap"/>
+              </CheckBox>
             </StackPanel>
           </Border>
         </StackPanel>
@@ -231,10 +245,13 @@
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
                   BorderThickness="1">
             <StackPanel Spacing="3">
-              <TextBlock Text="{Binding UpdateChannelHeader}" FontWeight="SemiBold" Opacity="0.7"/>
+              <TextBlock Text="{Binding UpdateChannelHeader}" FontWeight="SemiBold" Opacity="0.7"
+                         TextWrapping="Wrap"/>
+              <!-- v2.28.3: same TextWrapping fix as Section A's checkboxes. -->
               <CheckBox IsChecked="{Binding ReceivePrereleases}"
-                        Content="{Binding ReceivePrereleasesLabel}"
-                        MinHeight="0" Padding="4,0"/>
+                        MinHeight="0" Padding="4,0">
+                <TextBlock Text="{Binding ReceivePrereleasesLabel}" TextWrapping="Wrap"/>
+              </CheckBox>
             </StackPanel>
           </Border>
         </StackPanel>

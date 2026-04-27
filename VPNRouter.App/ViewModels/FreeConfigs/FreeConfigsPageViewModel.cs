@@ -140,10 +140,13 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     /// <summary>If true, skip Russian-country configs during deep-verify (user is bypassing RU blocks).</summary>
     [ObservableProperty] private bool _excludeRu = true;
 
-    /// <summary>v2.13.17: if true, Refresh stops early once N configs matching the latency criterion are found.</summary>
-    [ObservableProperty] private bool _useLatencyGoal = false;
-    [ObservableProperty] private int _latencyGoalTarget = 50;
-    [ObservableProperty] private int _latencyGoalMaxPingMs = 200;
+    /// <summary>v2.13.17: if true, Refresh stops early once N configs matching the latency criterion are found.
+    /// v2.28.3: default flipped true so the Simple-only UI (no toggle) gets early-stop out of the box.
+    /// Without this, Refresh would TCP-test all 30k+ pool entries — minutes of wait for first-time users.
+    /// Target=100/maxPing=300ms is a reasonable "find me a few good ones" goal that finishes in ~30s.</summary>
+    [ObservableProperty] private bool _useLatencyGoal = true;
+    [ObservableProperty] private int _latencyGoalTarget = 100;
+    [ObservableProperty] private int _latencyGoalMaxPingMs = 300;
 
     /// <summary>v2.13.17: show the 3-step quickstart banner at top of page. User can dismiss.</summary>
     [ObservableProperty] private bool _showQuickstart = true;
@@ -151,8 +154,11 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void DismissQuickstart() => ShowQuickstart = false;
 
-    /// <summary>v2.13.18: if true, Refresh does TCP-only test (skip TLS handshake). 3× faster but misses honeypots.</summary>
-    [ObservableProperty] private bool _fastScanMode = false;
+    /// <summary>v2.13.18: if true, Refresh does TCP-only test (skip TLS handshake). 3× faster but misses honeypots.
+    /// v2.28.3: default flipped true so first-run aggregator doesn't wait minutes for full TLS validation.
+    /// Server-side pool.json already pre-validates TLS every 6h (cron in build-free-pool.yml), so client-side
+    /// TLS recheck on first refresh adds delay without much extra signal. Power users can disable via CLI/yaml.</summary>
+    [ObservableProperty] private bool _fastScanMode = true;
 
     // v2.14.3 — Deep Verify presets (ping + bandwidth goals)
     /// <summary>Preset index: 0=Gaming, 1=Streaming, 2=Chat, 3=BestEffort, 4=Custom.</summary>
