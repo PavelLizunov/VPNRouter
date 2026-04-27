@@ -1,7 +1,7 @@
 ---
 name: cut-stable
 description: Promote a rolling -rN candidate to stable vX.Y.Z (no suffix). Bumps AppVersion, creates fresh tag without suffix, full rebuild + Mac/Linux CI, restores Latest, deletes -rN.
-when: User confirms the latest -rN works ("работает", "OK, cut stable", "Делай stable"). NOT before user confirmation.
+when: Latest -rN passed verification gate (build + tests + Mac/Linux CI green + 12 assets) и no user-reported regressions за ~24h. Cut autonomously. User паузит явной командой "hold stable" если хочет задержать.
 ---
 
 # Cut a stable release
@@ -10,10 +10,17 @@ Promotes `vX.Y.Z-rN` to stable `vX.Y.Z` (без суффикса). Per CLAUDE.lo
 "Build / push steps" — обязательно НОВЫЙ тэг без `-rN`, а не просто переброс
 prerelease flag.
 
-## Pre-flight
+## Pre-flight (verification gate, autonomous)
 
-User должен явно подтвердить ("работает", "OK", "cut'ай"). НЕ инициировать
-самостоятельно.
+Все 5 чек-боксов должны быть зелёные:
+1. `dotnet build -c Release` → 0 errors
+2. Regression tests зелёные (`VlessServersResolverTests`, `ConfigGeneratorEmptyServersGuardTests`, `FreeConfigAggregatorPreserveTests`)
+3. Mac CI на последнем -rN — `success`
+4. Linux CI на последнем -rN — `success`
+5. `gh release view vX.Y.Z-rN --json assets --jq '.assets|length'` → `12`
+6. (soft) No user-reported regressions за ~24h после shipping последнего -rN
+
+Если все зелёные — cut. User паузит явной командой "hold stable".
 
 ## Step 1 — bump AppVersion (drop -rN suffix)
 
@@ -131,7 +138,6 @@ HTTP/1.1 200 OK ожидается. `publish-apt.yml` workflow должен бы
 
 ## NOT to do
 
-- Cut stable без user confirmation.
 - Force-update stable tag (`git tag -f vX.Y.Z`) после публикации release.
 - Skip Homebrew Cask verify — пользователи на macOS застревают на старом cask.
 - Удалить тэг `vX.Y.Z-rN` из git — мы только release удаляем.

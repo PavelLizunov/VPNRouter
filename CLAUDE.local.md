@@ -30,21 +30,24 @@ candidates `vX.Y.Z-r1`, `vX.Y.Z-r2` to keep the Releases page clean
 and avoid 30-prerelease bursts we had in v2.17 → v2.21 cycle.
 
 1. Pick version `vX.Y.Z` (patch bump vs. current stable).
-2. Ship first iteration as `vX.Y.Z-r1` prerelease.
-3. User tests → reports feedback.
+2. Ship first iteration as `vX.Y.Z-r1` prerelease (autonomously, no confirm).
+3. User tests на своей машине. Если репортит баги — итерируем; если молчит и
+   verification gate зелёная — продвигаемся (см. шаг 5).
 4. Ship fix as `vX.Y.Z-r2`, **delete previous candidate**:
    ```bash
    gh release delete "vX.Y.Z-r1" --yes --repo PavelLizunov/VPNRouter
    ```
-5. Repeat until user says "works".
-6. Cut stable `vX.Y.Z` (no suffix):
+5. Repeat until verification gate зелёная (build + tests + Mac/Linux CI green +
+   12 assets) и no user-reported regressions за ~24h.
+6. Cut stable `vX.Y.Z` (no suffix) **autonomously** когда gate зелёная:
    ```bash
    gh release create vX.Y.Z <assets> --title "vX.Y.Z — ..." --notes "..."
    gh release edit "vX.Y.Z" --prerelease=false --latest
    gh release delete "vX.Y.Z-rN" --yes --repo PavelLizunov/VPNRouter
    ```
 
-**Only one in-flight prerelease visible at any time.** Full strategy +
+**Only one in-flight prerelease visible at any time.** User паузит явной
+командой "hold stable" если хочет задержать promotion. Full strategy +
 rationale + hotfix emergency path in `plans/vpnrouter-release-strategy.md`.
 
 ## GitHub Release Retention Policy
@@ -65,7 +68,9 @@ page подчищаем. Если надо восстановить старый
 **Когда чистить**: каждый раз когда общее число релизов выходит за 30
 (обычно после серии -rN итераций внутри одного минорного цикла).
 
-Never promote to stable until the user confirms it works.
+Promote to stable когда verification gate зелёная (build + tests + Mac/Linux CI +
+12 assets) и user не репортил regressions за ~24h. Default mode: autonomous;
+user паузит явной командой "hold stable" если хочет задержать promotion.
 
 ### Build / push steps (unchanged)
 

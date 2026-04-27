@@ -39,7 +39,7 @@ dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build \
 # Ship a rolling candidate (skill: ship-rolling-candidate)
 powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.X.Y-rN" -Upload
 
-# Cut stable (skill: cut-stable, only after user confirm)
+# Cut stable (skill: cut-stable, autonomous когда -rN прошёл verification)
 powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.X.Y" -Upload
 
 # Push to both remotes
@@ -70,7 +70,7 @@ gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json isPrerelease,assets
 | Skill | When |
 |---|---|
 | `ship-rolling-candidate` | Выпускаем `-rN` после code change |
-| `cut-stable` | User подтвердил `-rN`, промоутим к stable без суффикса |
+| `cut-stable` | -rN прошёл verification (build/tests/CI green, 12 assets) — промоутим к stable |
 | `diagnose-config` | User шлёт config.yaml + current.json + log — методичный walkthrough |
 | `audit-overflow-fix` | UI overflow / стилевое несоответствие на settings page |
 | `merge-design-handoff` | User шлёт `claude.ai/design` URL — fetch + extract + map tokens |
@@ -87,25 +87,37 @@ gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json isPrerelease,assets
 Секции handoff (см. файл): Persons / Infrastructure / Code Artifacts /
 Open Tasks / Last session log.
 
-## Golden rules — что нельзя делать
+## Golden rules
 
-1. **Никогда не commit без user-explicit запроса.** "Commit if needed" — НЕТ.
-   Только когда юзер сказал "commit" / "ship" / "release".
+**Mode = autonomous by default.** Подтверждений от user'а не запрашиваем —
+делаем всё сами (commit / push / tag / release / cut stable / cleanup).
+User прерывает явной командой ("стоп", "hold", "откати") если направление
+неверное. Safety rails ниже остаются — это про destructive ops, не workflow.
+
+1. **Default = autonomous full cycle.** Code change → build → tests → commit →
+   push в оба remote → ship -rN → mac/linux CI → finalize release → delete
+   previous -rN. Без вопросов между шагами. Cut stable тоже autonomous когда
+   последний -rN прошёл verification gate (см. rule #6).
 2. **Push в ОБА remote** после commit'а: `git push github HEAD:main && git push origin HEAD:main`.
-   Forgejo через VPN — может быть down, retry позже.
+   Forgejo через VPN — может быть down, retry позже автоматически.
 3. **Никогда `--no-verify` / `--no-gpg-sign`** без явного запроса. Если pre-commit
-   hook упал — фиксить причину, не bypass.
-4. **Никогда `git push --force`** на `main` без явного запроса. Force-update
-   tag (`git tag -f`) допустим только для prerelease tag'ов до того как
-   опубликован release.
+   hook упал — фиксить причину, не bypass. (Safety rail, не workflow confirm.)
+4. **Никогда `git push --force` на `main`** — destructive, можно потерять работу.
+   Force-update tag (`git tag -f`) допустим только для prerelease tag'ов
+   до того как опубликован release. (Safety rail.)
 5. **`AppVersion.Version` ВСЕГДА совпадает с release tag**, включая `-rN`
    суффикс. Урок v2.25.0-r1→r2 в `CLAUDE.local.md`.
-6. **stable cut только на user confirmation**. Never auto-promote.
+6. **Stable cut autonomous gate**: cut когда (a) `dotnet build -c Release` 0 errors,
+   (b) regression tests зелёные, (c) Mac+Linux CI на последнем -rN зелёные,
+   (d) `gh release view` показывает 12 assets, (e) no user-reported regressions
+   за reasonable timeframe (~24h по умолчанию). Все 5 → cut. User паузит явной
+   командой "hold stable".
 7. **process_name в sing-box case-sensitive** — не использовать `ToLowerInvariant()`.
    Дедупликация через `StringComparer.OrdinalIgnoreCase` без mutation.
-8. **`.claude/` не редактировать** — это harness config директория. `.md` файлы
-   с контентом идут в `plans/`, кроме `CLAUDE.md` которые сейчас стоят как
-   context layer (исключение из rule).
+8. **`.claude/` partially editable** — `.claude/skills/<name>/SKILL.md` и
+   `.claude/CLAUDE.md` (если есть) — content layer, редактируем. Остальное
+   (`settings.json`, `workflow.md`, `hooks/`, runtime cache) — harness config,
+   не трогать без user-явного запроса.
 9. **Никогда не emoji в файлах кода / config / документации** (это правило
    user'а на этот проект). Ru/En текст, технические symbols (✓ ✗ → · ║) ОК если
    user сам их использует в release notes.
@@ -137,5 +149,6 @@ Open Tasks / Last session log.
 
 ---
 
-**Когда непонятно** — спросить user'а до того как начать. Дешевле уточнить scope чем
-build не то.
+**Когда genuine ambiguity** — несколько валидных путей с разной семантикой,
+scope действительно непонятен, риск destructive op без отката — спросить.
+Иначе **делать**. По умолчанию: действие, не вопрос.

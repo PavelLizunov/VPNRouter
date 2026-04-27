@@ -1,14 +1,14 @@
 ---
 name: ship-rolling-candidate
 description: Ship a rolling release candidate vX.Y.Z-rN. Bumps AppVersion, builds Windows + triggers Mac/Linux CI, applies notes, marks prerelease, deletes previous candidate per rolling-rN policy.
-when: User finished a code change and says "ship" / "release" / "выпускай" / "выложи" / "бампай" or after their feedback on the previous -rN.
+when: Code change closed (plan item done, build/tests green) — ship autonomously без ожидания команды. Triggered automatically после fix-cycle. User intervenes только если direction wrong ("стоп", "hold", "откати").
 ---
 
 # Ship a rolling release candidate
 
 VPNRouter ships iterations as `vX.Y.Z-r1`, `vX.Y.Z-r2`, etc. Only one
-prerelease visible at a time. Stable cut only on user confirmation
-(see `cut-stable` skill).
+prerelease visible at a time. Stable cut autonomous когда -rN passes
+verification gate (см. `cut-stable` skill).
 
 ## Pre-flight checks
 
@@ -117,12 +117,12 @@ gh run watch <linux-run-id> --repo PavelLizunov/VPNRouter --exit-status
 gh release view vX.Y.Z-rN --repo PavelLizunov/VPNRouter --json assets --jq '.assets | length'
 ```
 
-## Step 9 — report to user
+## Step 9 — report to user (notification only, не блокирующее)
 
 Кратко:
 - ✅ tag, prerelease=true, Latest=PREV, 12 assets
 - Recovery shortcut + test flow checklist
-- Спросить "если ОК → cut stable"
+- Указать "verification gate зелёная — следующее действие cut-stable когда нет regression reports за ~24h"
 
 ## Known gotchas
 
@@ -135,5 +135,4 @@ gh release view vX.Y.Z-rN --repo PavelLizunov/VPNRouter --json assets --jq '.ass
 
 - Force-push tag после shipping — поломаешь download links для уже скачавших.
 - Skip suffix `-rN` в AppVersion — update-check сломается.
-- Promote -rN → Latest без user confirm.
 - Push с `--no-verify` или `--no-gpg-sign` без явной команды user'а.
