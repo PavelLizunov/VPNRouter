@@ -769,9 +769,23 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             if (!string.Equals(SelectedCountry, "All", StringComparison.OrdinalIgnoreCase))
                 q = q.Where(c => string.Equals(c.CountryCode, SelectedCountry, StringComparison.OrdinalIgnoreCase));
 
+            // v2.28.3-r3: IP-level dedup at display time. The aggregator's
+            // dedup key is Server:Port:UUID, so the same IP can appear with
+            // different ports (Reality endpoints multiplexing one IP) or
+            // different UUIDs (key rotation / multi-tenant) — all legit
+            // entries technically, but visual noise for the user picking a
+            // server. User report on -r2: "1 и тот же IP несколько раз
+            // (например 205.237.107.192)". Keep the *best* entry per IP
+            // (lowest LatencySortKey, which already encodes status priority +
+            // latency). The aggregator-level entries are still all retained
+            // in _allConfigs so cache + Deep Verify still see them; only the
+            // visible list is collapsed.
             var items = q
                 .Select(c => new FreeConfigItemViewModel(c))
                 .OrderBy(vm => vm.LatencySortKey)
+                .GroupBy(vm => vm.Entry.Host ?? string.Empty,
+                         StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
                 .Take(300) // cap at 300 visible to keep ListBox responsive with emoji flags
                 .ToList();
 

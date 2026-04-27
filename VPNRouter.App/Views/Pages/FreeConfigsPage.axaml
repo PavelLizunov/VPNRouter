@@ -82,55 +82,86 @@
                     </Grid>
                 </Border>
 
-                <!-- Action row: Refresh + N target + skip-RU + filters.
-                     v2.28.3-r2: surfaced 2 inputs the user explicitly asked for —
-                     "сразу искать N кол-во рабочих" + "не из России". The N
-                     input controls how many TRULY-WORKING servers the chained
-                     Refresh→Deep Verify pipeline targets. Skip-RU prevents
-                     Russian endpoints from filling the verified slots. -->
-                <WrapPanel Orientation="Horizontal" ItemSpacing="8">
-                    <Button Content="{Binding L_FcRefreshSources}"
-                            Command="{Binding FreeConfigsVm.RefreshCommand}"
-                            IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
-                            Padding="16,8" FontSize="12" FontWeight="SemiBold"
-                            CornerRadius="{StaticResource RadiusSm}"
-                            Background="{DynamicResource AccentSolidBrush}"
-                            Foreground="{DynamicResource AccentOnSolidBrush}"
-                            ToolTip.Tip="{Binding L_FcRefreshTooltip}"
-                            VerticalAlignment="Center"/>
+                <!-- Search-settings card.
+                     v2.28.3-r3 redesign per user feedback on -r2:
+                       1. Country dropdown dropped (redundant with Skip Russia
+                          + the list already shows country flags inline).
+                       2. "N" input got proper "Find ___ configs" label.
+                       3. Max-ping input restored (was hidden behind a flag in
+                          -r2; user wanted explicit control over the latency
+                          ceiling that drives early-stop).
+                       4. Wrapped in a Tokens-styled Border (Surface-sunken +
+                          RadiusSm + Border) to match NetworkPage's grouped-
+                          settings cards. Single big Refresh button below the
+                          inputs replaces the inline action button — matches
+                          the "settings card → primary action" pattern from
+                          the rest of the app. -->
+                <Border Padding="12,10" CornerRadius="{StaticResource RadiusSm}"
+                        Background="{DynamicResource SurfaceSunkenBrush}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        BorderThickness="1">
+                    <StackPanel Spacing="10">
 
-                    <StackPanel Orientation="Horizontal" Spacing="4"
-                                VerticalAlignment="Center">
-                        <TextBlock Text="N:" FontSize="11" Opacity="0.7"
-                                   VerticalAlignment="Center"/>
-                        <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalTarget}"
-                                       Minimum="3" Maximum="500" Increment="5"
-                                       FormatString="0"
-                                       MinWidth="80" Padding="4,2" FontSize="11"
-                                       VerticalAlignment="Center"
-                                       ToolTip.Tip="{Binding L_TipFcSmartRefresh}"/>
+                        <!-- Goal row: "Find N configs with ping < X ms" -->
+                        <WrapPanel Orientation="Horizontal" ItemSpacing="14">
+                            <StackPanel Orientation="Horizontal" Spacing="6"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="{Binding L_FcTargetNLabel}"
+                                           FontSize="11" FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalTarget}"
+                                               Minimum="3" Maximum="500" Increment="5"
+                                               FormatString="0"
+                                               MinWidth="90" Padding="4,2" FontSize="11"
+                                               VerticalAlignment="Center"
+                                               ToolTip.Tip="{Binding L_TipFcSmartRefresh}"/>
+                                <TextBlock Text="{Binding L_FcConfigsWord}"
+                                           FontSize="11" Opacity="0.7"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="6"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="{Binding L_FcWithPingUnder}"
+                                           FontSize="11"
+                                           VerticalAlignment="Center"/>
+                                <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalMaxPingMs}"
+                                               Minimum="20" Maximum="1000" Increment="50"
+                                               FormatString="0"
+                                               MinWidth="100" Padding="4,2" FontSize="11"
+                                               VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding L_FcMsUnit}"
+                                           FontSize="11" Opacity="0.7"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </WrapPanel>
+
+                        <!-- Filter row: skip-RU + only-working -->
+                        <WrapPanel Orientation="Horizontal" ItemSpacing="18">
+                            <CheckBox Content="{Binding L_FcDeepExcludeRu}"
+                                      IsChecked="{Binding FreeConfigsVm.ExcludeRu}"
+                                      ToolTip.Tip="{Binding L_TipFcSkipRu}"
+                                      FontSize="11"
+                                      MinHeight="0" Padding="4,0"/>
+                            <CheckBox Content="{Binding L_FcOnlyWorking}"
+                                      IsChecked="{Binding FreeConfigsVm.OnlyWorking}"
+                                      FontSize="11"
+                                      MinHeight="0" Padding="4,0"/>
+                        </WrapPanel>
+
+                        <!-- Primary action: full-width Refresh button -->
+                        <Button Content="{Binding L_FcRefreshSources}"
+                                Command="{Binding FreeConfigsVm.RefreshCommand}"
+                                IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                                Padding="0,9" FontSize="12" FontWeight="SemiBold"
+                                CornerRadius="{StaticResource RadiusSm}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                Background="{DynamicResource AccentSolidBrush}"
+                                Foreground="{DynamicResource AccentOnSolidBrush}"
+                                ToolTip.Tip="{Binding L_FcRefreshTooltip}"/>
                     </StackPanel>
-
-                    <CheckBox Content="{Binding L_FcDeepExcludeRu}"
-                              IsChecked="{Binding FreeConfigsVm.ExcludeRu}"
-                              ToolTip.Tip="{Binding L_TipFcSkipRu}"
-                              FontSize="11" VerticalAlignment="Center"/>
-
-                    <StackPanel Orientation="Horizontal" Spacing="4"
-                                VerticalAlignment="Center">
-                        <TextBlock Text="{Binding L_FcCountryFilter}"
-                                   FontSize="11" Opacity="0.7"
-                                   VerticalAlignment="Center"/>
-                        <ComboBox ItemsSource="{Binding FreeConfigsVm.Countries}"
-                                  SelectedItem="{Binding FreeConfigsVm.SelectedCountry}"
-                                  MinWidth="100" Padding="6,3" FontSize="11"
-                                  VerticalAlignment="Center"/>
-                    </StackPanel>
-
-                    <CheckBox Content="{Binding L_FcOnlyWorking}"
-                              IsChecked="{Binding FreeConfigsVm.OnlyWorking}"
-                              FontSize="11" VerticalAlignment="Center"/>
-                </WrapPanel>
+                </Border>
 
                 <!-- Counter line: "1247 servers · 230 working" — quick at-a-glance
                      stats without the 6-chip dashboard. Only shown when there's
