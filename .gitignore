@@ -64,3 +64,10 @@ VPNRouter.Tests/screenshots/
 # secrets in future iterations (Forgejo creds, GitHub PATs, etc.) — keep
 # private. See /CLAUDE.md "Memory layer" section for workflow.
 .claude_handoff.md
+
+# Claude Code per-user permission allowlist (autonomous-mode bypass for
+# ship-rolling-candidate workflow). Personal overrides — convention says
+# settings.local.json is gitignored. settings.json (committed) is for
+# team-wide config; settings.local.json is for "I trust these commands
+# on my machine".
+.claude/settings.local.json
