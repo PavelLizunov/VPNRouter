@@ -88,6 +88,7 @@ public partial class MainWindowViewModel
     public string L_DoubleClickEditServer => Strings.DoubleClickEditServer;
     public string L_EnableWholeGroup => Strings.EnableWholeGroup;
     public string L_FailedStartVpn => Strings.FailedStartVpn;
+    public string L_FcAdvancedSettings => Strings.FcAdvancedSettings;
     public string L_FcApplySelected => Strings.FcApplySelected;
     public string L_FcBandwidthHint => Strings.FcBandwidthHint;
     public string L_FcCancel => Strings.FcCancel;

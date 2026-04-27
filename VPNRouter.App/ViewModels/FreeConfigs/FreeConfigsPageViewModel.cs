@@ -69,7 +69,21 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         try
         {
             var file = _aggregator.Cache.Load();
-            _allConfigs = file.Configs;
+            // v2.28.4-r4: drop entries that aren't Verified at cache-load time.
+            // The cache historically held everything the aggregator touched —
+            // Ok, Slow, TlsFailed, Implausible, Timeout, Unreachable — even
+            // entries that never made it through Deep Verify. After a session
+            // restart the user saw a list of "configs" that had only ever
+            // passed TCP+TLS (or hadn't even gotten that far) and were
+            // indistinguishable in the UI from genuinely Verified entries.
+            // Verified is the only status that proves a config carried real
+            // traffic at least once, so it's the only one worth surfacing on
+            // the next launch. Non-Verified entries can still be re-discovered
+            // by clicking the search button — and PreservePreviousValidation
+            // will keep this run's verified rows on subsequent searches.
+            _allConfigs = file.Configs
+                .Where(c => c.Status == FreeConfigStatus.Verified)
+                .ToList();
             ApplyFiltersAndStats();
 
             if (file.LastAggregatedAt == DateTime.MinValue)
@@ -149,8 +163,14 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     /// the binding error as visible UI text. Nullable property accepts the transient
     /// null and the `?? fallback` in usage sites preserves a sane default.</summary>
     [ObservableProperty] private bool _useLatencyGoal = true;
-    [ObservableProperty] private int? _latencyGoalTarget = 100;
-    [ObservableProperty] private int? _latencyGoalMaxPingMs = 300;
+    /// <summary>v2.28.4-r4: default flipped 100 → 10 because the Simple-flow target user wants
+    /// to press one button and walk away with a handful of working configs, not a 100-entry list.
+    /// 10 entries match the Refresh's batch-style early stop and a typical Deep Verify finishes
+    /// in ~30 sec. Power users can still raise it via the Advanced Settings expander.</summary>
+    [ObservableProperty] private int? _latencyGoalTarget = 10;
+    /// <summary>v2.28.4-r4: default 300 → 400 ms. 300 ms was too aggressive for users not on
+    /// fiber — many real-world working configs sit in 250-400 ms range from RU/CIS endpoints.</summary>
+    [ObservableProperty] private int? _latencyGoalMaxPingMs = 400;
 
     /// <summary>v2.13.18: if true, Refresh does TCP-only test (skip TLS handshake). 3× faster but misses honeypots.
     /// v2.28.3: default flipped true so first-run aggregator doesn't wait minutes for full TLS validation.
@@ -228,9 +248,14 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             // v2.28.3-r5: empty ping = "no max-ping limit" semantics. The
             // count target still drives early-stop; we just don't filter by
             // latency at all when LatencyGoalMaxPingMs is null.
-            var nGoal = LatencyGoalTarget ?? 100;
+            // v2.28.4-r4: tightened the heuristic (was *3, now *2) + lowered the
+            // floor (was nGoal+30, now nGoal+10). With the new default nGoal=10,
+            // refreshTarget collapses to ~20, so Refresh's TCP-stage early-stops
+            // after finding ~20 ping-matching configs instead of 130. That alone
+            // shaves 30s-2min off perceived "поиск идёт по всем конфигам" complaint.
+            var nGoal = LatencyGoalTarget ?? 10;
             var refreshTarget = UseLatencyGoal
-                ? Math.Min(300, Math.Max(nGoal * 3, nGoal + 30))
+                ? Math.Min(300, Math.Max(nGoal * 2, nGoal + 10))
                 : (int?)null;
 
             var fresh = await Task.Run(() => _aggregator.RefreshAsync(

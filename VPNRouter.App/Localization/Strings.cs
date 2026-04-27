@@ -484,6 +484,9 @@ public static class Strings
         ? "Прекратить текущий поиск. Найденные до отмены конфиги сохранены в кэше."
         : "Abort the current search. Configs found before cancel are preserved in cache.";
 
+    // v2.28.4-r4 — Advanced settings expander label inside the green search card
+    public static string FcAdvancedSettings => Ru ? "▾ Настройки" : "▾ Settings";
+
     // v2.13.18 — Fast scan toggle
     public static string FcFastScanLabel => Ru ? "⚡ Fast scan (только TCP, без TLS)" : "⚡ Fast scan (TCP only, no TLS)";
     public static string FcFastScanHint  => Ru

@@ -26,38 +26,16 @@
                       Padding="14,12,14,8">
             <StackPanel Spacing="10">
 
-                <!-- ─── Busy banner (always-visible cancel during operation) ─── -->
-                <Border IsVisible="{Binding FreeConfigsVm.IsBusy}"
-                        Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource WarningBgBrush}"
-                        BorderBrush="{DynamicResource WarningBorderBrush}"
-                        BorderThickness="1">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding FreeConfigsVm.StatusText}"
-                                       FontSize="11" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource WarningFgBrush}"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <ProgressBar Margin="0,3,0,0" Height="3"
-                                         Minimum="0"
-                                         Maximum="{Binding FreeConfigsVm.ProgressTotal}"
-                                         Value="{Binding FreeConfigsVm.ProgressDone}"
-                                         Foreground="{DynamicResource WarningSolidBrush}"/>
-                        </StackPanel>
-                        <Button Grid.Column="1"
-                                Content="{Binding L_FcCancel}"
-                                Command="{Binding FreeConfigsVm.CancelCommand}"
-                                Padding="14,6" FontSize="11"
-                                CornerRadius="{StaticResource RadiusSm}"
-                                Background="{DynamicResource DangerSolidBrush}"
-                                Foreground="White"
-                                VerticalAlignment="Center"/>
-                    </Grid>
-                </Border>
-
                 <!-- ═══════════════════════════════════════════════════════
-                     ⭐ Main green Search-settings card (design-tokens).
-                     Single primary action auto-chains Refresh → Deep verify.
+                     ⭐ Main green Search card.
+                     v2.28.4-r4: stripped to title + description + one button.
+                     Knobs (target N, max ping, Skip RU) folded into a hidden
+                     "Settings" expander — sane defaults work for the least
+                     sophisticated user out of the box; power users can still
+                     reach the controls. The top warning banner with its own
+                     Cancel button + ProgressBar was removed: the card swaps
+                     Start↔Stop, the bottom Apply bar already shows the only
+                     status line + progress bar (no duplication).
                      ═══════════════════════════════════════════════════════ -->
                 <Border Padding="14,12"
                         CornerRadius="{StaticResource RadiusSm}"
@@ -77,60 +55,7 @@
                                    Foreground="{DynamicResource SuccessFgBrush}"
                                    Opacity="0.85"/>
 
-                        <!-- Goal inputs row — wraps on narrow windows -->
-                        <WrapPanel Orientation="Horizontal" ItemWidth="NaN" ItemHeight="NaN">
-                            <StackPanel Orientation="Horizontal" Spacing="4"
-                                        Margin="0,0,12,4" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding L_FcTargetNLabel}"
-                                           FontSize="11" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource SuccessFgBrush}"/>
-                                <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalTarget}"
-                                               Minimum="5" Maximum="500" Increment="5"
-                                               FormatString="0"
-                                               MinWidth="84" Padding="4,2" FontSize="11"/>
-                                <TextBlock Text="{Binding L_FcConfigsWord}"
-                                           FontSize="11" Opacity="0.75"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource SuccessFgBrush}"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="4"
-                                        Margin="0,0,0,4" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding L_FcWithPingUnder}"
-                                           FontSize="11" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource SuccessFgBrush}"/>
-                                <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalMaxPingMs}"
-                                               Minimum="20" Maximum="1000" Increment="50"
-                                               FormatString="0"
-                                               MinWidth="92" Padding="4,2" FontSize="11"/>
-                                <TextBlock Text="{Binding L_FcMsUnit}"
-                                           FontSize="11" Opacity="0.75"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource SuccessFgBrush}"/>
-                            </StackPanel>
-                        </WrapPanel>
-
-                        <!-- Filter row — only Skip-RU now. v2.28.4-r3: dropped
-                             "Only working" toggle since this whole search IS the
-                             "find working" path; the displayed list is always
-                             status-filtered to Verified/Ok and capped by the
-                             max-ping input above. radio-card 24,* pattern so a
-                             long localised label wraps instead of overflowing. -->
-                        <Grid ColumnDefinitions="20,*" ColumnSpacing="4">
-                            <CheckBox Grid.Column="0"
-                                      IsChecked="{Binding FreeConfigsVm.ExcludeRu}"
-                                      ToolTip.Tip="{Binding L_TipFcSkipRu}"
-                                      MinHeight="0" Padding="0"
-                                      VerticalAlignment="Top"
-                                      Margin="0,1,0,0"/>
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding L_FcDeepExcludeRu}"
-                                       FontSize="11"
-                                       TextWrapping="Wrap"
-                                       VerticalAlignment="Top"
-                                       Foreground="{DynamicResource SuccessFgBrush}"/>
-                        </Grid>
-
-                        <!-- Primary green action (auto-chains Refresh + DeepVerify).
+                        <!-- Primary green action (auto-chains Refresh → Deep verify).
                              Hidden during busy; Stop replaces it. -->
                         <Button Content="{Binding L_FcDeepVerify}"
                                 Command="{Binding FreeConfigsVm.RefreshCommand}"
@@ -153,6 +78,61 @@
                                 Background="{DynamicResource DangerSolidBrush}"
                                 Foreground="White"
                                 ToolTip.Tip="{Binding L_FcDeepStopTooltip}"/>
+
+                        <!-- Hidden settings — only opened by users who want to tune. -->
+                        <Expander Header="{Binding L_FcAdvancedSettings}"
+                                  Background="Transparent"
+                                  Padding="0,2"
+                                  Margin="0,4,0,0"
+                                  Foreground="{DynamicResource SuccessFgBrush}">
+                            <StackPanel Spacing="8" Margin="0,6,0,2">
+                                <WrapPanel Orientation="Horizontal" ItemWidth="NaN" ItemHeight="NaN">
+                                    <StackPanel Orientation="Horizontal" Spacing="4"
+                                                Margin="0,0,12,4" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding L_FcTargetNLabel}"
+                                                   FontSize="11" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource SuccessFgBrush}"/>
+                                        <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalTarget}"
+                                                       Minimum="5" Maximum="500" Increment="5"
+                                                       FormatString="0"
+                                                       MinWidth="84" Padding="4,2" FontSize="11"/>
+                                        <TextBlock Text="{Binding L_FcConfigsWord}"
+                                                   FontSize="11" Opacity="0.75"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource SuccessFgBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="4"
+                                                Margin="0,0,0,4" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding L_FcWithPingUnder}"
+                                                   FontSize="11" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource SuccessFgBrush}"/>
+                                        <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalMaxPingMs}"
+                                                       Minimum="20" Maximum="1000" Increment="50"
+                                                       FormatString="0"
+                                                       MinWidth="92" Padding="4,2" FontSize="11"/>
+                                        <TextBlock Text="{Binding L_FcMsUnit}"
+                                                   FontSize="11" Opacity="0.75"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource SuccessFgBrush}"/>
+                                    </StackPanel>
+                                </WrapPanel>
+
+                                <Grid ColumnDefinitions="20,*" ColumnSpacing="4">
+                                    <CheckBox Grid.Column="0"
+                                              IsChecked="{Binding FreeConfigsVm.ExcludeRu}"
+                                              ToolTip.Tip="{Binding L_TipFcSkipRu}"
+                                              MinHeight="0" Padding="0"
+                                              VerticalAlignment="Top"
+                                              Margin="0,1,0,0"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding L_FcDeepExcludeRu}"
+                                               FontSize="11"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Top"
+                                               Foreground="{DynamicResource SuccessFgBrush}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Expander>
                     </StackPanel>
                 </Border>
 
