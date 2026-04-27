@@ -103,14 +103,21 @@
          CheckBox content). The scrollbar was a red herring. Keeping
          VerticalScrollBarVisibility at Auto so short tabs don't get a
          cosmetic always-present scrollbar. -->
-    <!-- v2.28.4-r5: AllowAutoHide=False so the scrollbar reserves width
-         instead of overlaying right padding on resize. -->
+    <!-- v2.28.4-r7: same pattern as the FreeConfigsPage r6 fix — push the
+         horizontal padding off the ScrollViewer onto an inner Grid via
+         Margin. The ScrollViewer keeps only its vertical padding; the
+         scrollbar reserves width with AllowAutoHide=False; and the inner
+         Grid's `Margin="14,0,14,0"` is part of the Grid's external
+         layout, decoupled from the ScrollViewer's scrollbar metrics —
+         so right padding stays locked even when text inside cards wraps
+         on resize. -->
     <ScrollViewer Grid.Row="0" Grid.Column="1"
                   HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
                   AllowAutoHide="False"
-                  Padding="14,10,14,12">
-      <StackPanel HorizontalAlignment="Stretch">
+                  Padding="0,10,0,12">
+      <Grid Margin="14,0,14,0">
+        <StackPanel HorizontalAlignment="Stretch">
 
         <!-- ═══ Routing (Phase 4 showcase) ═══ -->
         <StackPanel Spacing="10" IsVisible="{Binding IsSettingsRoutingSelected}">
@@ -488,6 +495,7 @@
         </StackPanel>
 
       </StackPanel>
+      </Grid>
     </ScrollViewer>
 
     <!-- Apply bar: "Autosave is on" left hint + compact Apply right. -->

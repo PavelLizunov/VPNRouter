@@ -49,13 +49,17 @@
                 </ListBox>
             </Border>
 
-            <!-- Detail. v2.28.4-r5: AllowAutoHide=False so scrollbar reserves
-                 width instead of overlaying right padding on resize. -->
+            <!-- Detail. v2.28.4-r7: same pattern as FreeConfigsPage r6 fix —
+                 push horizontal padding from ScrollViewer to an inner Grid
+                 Margin. Decouples the page's right edge from the scrollbar
+                 reservation so the visible right padding stays locked even
+                 when card heights change on resize / text wrap. -->
             <ScrollViewer Grid.Column="1"
                           HorizontalScrollBarVisibility="Disabled"
                           VerticalScrollBarVisibility="Auto"
                           AllowAutoHide="False"
-                          Padding="12,10,14,10">
+                          Padding="0,10,0,10">
+              <Grid Margin="12,0,14,0">
               <StackPanel>
 
                 <!-- ═══ Status ═══ -->
@@ -271,6 +275,7 @@
                 </StackPanel>
 
               </StackPanel>
+              </Grid>
             </ScrollViewer>
         </Grid>
 
