@@ -103,9 +103,12 @@
          CheckBox content). The scrollbar was a red herring. Keeping
          VerticalScrollBarVisibility at Auto so short tabs don't get a
          cosmetic always-present scrollbar. -->
+    <!-- v2.28.4-r5: AllowAutoHide=False so the scrollbar reserves width
+         instead of overlaying right padding on resize. -->
     <ScrollViewer Grid.Row="0" Grid.Column="1"
                   HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
+                  AllowAutoHide="False"
                   Padding="14,10,14,12">
       <StackPanel HorizontalAlignment="Stretch">
 

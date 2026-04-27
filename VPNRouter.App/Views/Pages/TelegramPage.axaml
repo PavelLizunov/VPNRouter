@@ -15,9 +15,12 @@
 
     <Grid RowDefinitions="*,Auto">
 
+        <!-- v2.28.4-r5: AllowAutoHide=False so the scrollbar reserves width
+             instead of overlaying right padding on resize. -->
         <ScrollViewer Grid.Row="0"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto"
+                      AllowAutoHide="False"
                       Padding="10,8,16,12">
             <StackPanel Spacing="10">
 

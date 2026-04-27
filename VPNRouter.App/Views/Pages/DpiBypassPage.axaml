@@ -49,10 +49,12 @@
                 </ListBox>
             </Border>
 
-            <!-- Detail -->
+            <!-- Detail. v2.28.4-r5: AllowAutoHide=False so scrollbar reserves
+                 width instead of overlaying right padding on resize. -->
             <ScrollViewer Grid.Column="1"
                           HorizontalScrollBarVisibility="Disabled"
                           VerticalScrollBarVisibility="Auto"
+                          AllowAutoHide="False"
                           Padding="12,10,14,10">
               <StackPanel>
 

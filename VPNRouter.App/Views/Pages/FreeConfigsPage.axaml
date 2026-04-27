@@ -20,9 +20,15 @@
 
     <Grid RowDefinitions="*,Auto">
 
+        <!-- v2.28.4-r5: AllowAutoHide=False so the vertical scrollbar reserves
+             its own width instead of overlaying content. With overlay (Avalonia
+             Fluent default) the scrollbar visually eats the right padding when
+             the window is resized smaller and content overflows — left edge
+             keeps the 14px gap, right edge looks flush. -->
         <ScrollViewer Grid.Row="0"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto"
+                      AllowAutoHide="False"
                       Padding="14,12,14,8">
             <StackPanel Spacing="10">
 
