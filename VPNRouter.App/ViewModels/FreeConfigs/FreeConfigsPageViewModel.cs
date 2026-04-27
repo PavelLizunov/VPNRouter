@@ -324,6 +324,81 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             CustomMinBandwidthMbps = 1;
             await DeepVerifyTopAsync();
         }
+        else
+        {
+            // v2.28.5: no Ok candidates from Refresh → no DeepVerify chained.
+            // _allConfigs holds the full pool (~25k FreeConfigEntry) all with
+            // failed/dead statuses. Trim now so the user's working set drops
+            // back to baseline within seconds of the search finishing.
+            TrimAndReclaim();
+        }
+    }
+
+    /// <summary>
+    /// v2.28.5: trim <see cref="_allConfigs"/> to entries we want to keep
+    /// across sessions (Verified + Ok), save the trimmed list to cache,
+    /// and force a gen-2 GC so the user sees the working-set drop in task
+    /// manager immediately instead of waiting minutes for a natural
+    /// gen-2 collection.
+    ///
+    /// <para>The full pool fetch produces ~25k <see cref="FreeConfigEntry"/>
+    /// objects (~12 MB managed heap). Of those, after a default search
+    /// only ~10 reach Verified (deep-verified) and a few hundred Ok
+    /// (TCP+TLS-passed). The rest are dead statuses (Timeout, Unreachable,
+    /// TlsFailed, Implausible, ParseError) that the displayed list filters
+    /// out anyway — they sit in memory contributing nothing but bloat
+    /// until the next search overwrites <see cref="_allConfigs"/>.</para>
+    ///
+    /// <para>Idempotent: safe to call after a no-op refresh, after a
+    /// cancelled deep-verify, after a successful pipeline. Only trims +
+    /// saves when there's actually something to drop.</para>
+    /// </summary>
+    private void TrimAndReclaim()
+    {
+        try
+        {
+            var beforeCount = _allConfigs.Count;
+            _allConfigs = _allConfigs
+                .Where(FreeConfigKeepPolicy.ShouldKeepInLiveCache)
+                .ToList();
+            var afterCount = _allConfigs.Count;
+            var freed = beforeCount - afterCount;
+
+            if (freed <= 0)
+            {
+                _logger.Debug("[FreeConfigs] TrimAndReclaim: nothing to trim ({n} entries kept)", afterCount);
+                return;
+            }
+
+            _logger.Information("[FreeConfigs] TrimAndReclaim: {before} → {after} entries ({freed} dropped)",
+                beforeCount, afterCount, freed);
+
+            // Save trimmed cache so the next session starts lean (the r4
+            // EnsureCacheLoaded already prunes non-Verified at load, but
+            // saving lean now means the cache file on disk shrinks too).
+            try
+            {
+                var file = _aggregator.Cache.Load();
+                file.Configs = _allConfigs;
+                file.LastAggregatedAt = DateTime.UtcNow;
+                _aggregator.Cache.Save(file);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[FreeConfigs] TrimAndReclaim: cache save failed (non-fatal)");
+            }
+
+            // Force gen-2 GC so the released ~12 MB shows up in the user's
+            // task manager view within ~1s. Without this, .NET's natural
+            // gen-2 schedule can hold on for minutes after a peak.
+            // Non-blocking variant: GC starts but the search-completion
+            // status update isn't held back waiting for it.
+            GC.Collect(2, GCCollectionMode.Forced, blocking: false, compacting: true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[FreeConfigs] TrimAndReclaim threw — skipping");
+        }
     }
 
     [RelayCommand]
@@ -698,7 +773,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 await Task.WhenAll(runningTasks);
             });
 
-            // Final persist.
+            // v2.28.5: trim non-keep entries before final persist so the cache
+            // file on disk and `_allConfigs` in memory both shrink to the
+            // useful subset (Verified + Ok). See TrimAndReclaim docstring.
+            await Dispatcher.UIThread.InvokeAsync(TrimAndReclaim);
+
+            // Final persist (post-trim — cache now lean).
             var finalFile = _aggregator.Cache.Load();
             finalFile.Configs = _allConfigs;
             _aggregator.Cache.Save(finalFile);
@@ -713,7 +793,11 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
         catch (OperationCanceledException)
         {
-            // Save whatever we have so far.
+            // v2.28.5: trim before save on cancel too — keeps the cache lean
+            // even when the user aborts mid-deep-verify.
+            await Dispatcher.UIThread.InvokeAsync(TrimAndReclaim);
+
+            // Save whatever we have so far (post-trim).
             var file = _aggregator.Cache.Load();
             file.Configs = _allConfigs;
             _aggregator.Cache.Save(file);
@@ -728,6 +812,10 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         {
             _logger.Warning(ex, "DeepVerify failed");
             StatusText = Strings.FcStatusFailed(ex.Message);
+            // v2.28.5: even on unexpected exception, trim what we have so
+            // the user's working set drops back even if the deep verify
+            // chain didn't complete cleanly.
+            try { await Dispatcher.UIThread.InvokeAsync(TrimAndReclaim); } catch { }
         }
         finally
         {
