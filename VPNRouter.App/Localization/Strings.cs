@@ -385,7 +385,7 @@ public static class Strings
     public static string FcDashboardTlsFail   => Ru ? "TLS провал"    : "TLS failed";
     public static string FcDashboardVerified  => Ru ? "Проверено"     : "Verified";
     public static string FcDashboardFake      => Ru ? "Подозр."       : "Fake";
-    public static string FcDeepVerify         => Ru ? "✓✓ Глубокая проверка" : "✓✓ Deep verify";
+    public static string FcDeepVerify         => Ru ? "✓✓ Найти рабочие конфиги" : "✓✓ Find working configs";
     public static string FcStatusNoDeepCandidates => Ru
         ? "Нет кандидатов для глубокой проверки — сначала «Обновить список»."
         : "No candidates to deep-verify — click 'Refresh list' first.";
@@ -408,8 +408,8 @@ public static class Strings
     public static string FcDeepTargetLabel => Ru ? "Цель:" : "Target:";
     public static string FcDeepExcludeRu   => Ru ? "Пропускать RU" : "Skip RU servers";
     public static string FcDeepHint        => Ru
-        ? "Глубокая проверка: временный sing-box + реальный HTTP. Ищет пока не найдёт N рабочих или не кончатся кандидаты. Может идти часами — это норм."
-        : "Deep verify: spins up a temporary sing-box + real HTTP. Runs until N working configs are found or candidates exhausted. May take hours — that's fine.";
+        ? "Скачает публичные VLESS-конфиги и проверит каждый реальной попыткой подключения. Найдёт N рабочих с пингом ниже порога."
+        : "Downloads public VLESS configs and tries each one with a real connection. Stops when N working ones meet your ping threshold.";
     public static string FcStatusMainVpnActive => Ru
         ? "⚠ Основной VPN активен — результаты проверки могут быть недостоверны. Отключите VPN перед deep verify."
         : "⚠ Main VPN is active — verification results may be unreliable. Disconnect VPN first.";
@@ -470,18 +470,7 @@ public static class Strings
         ? "Ускоряет Refresh: остановка как только накопится N конфигов с низким пингом. Отключите для полного сканирования."
         : "Speeds up Refresh: stops once N low-ping configs are found. Uncheck for full scan.";
 
-    // v2.13.17 — Quickstart banner
-    public static string FcQuickstartTitle => Ru ? "👋 Как начать (3 шага)" : "👋 How to start (3 steps)";
-    public static string FcQuickstartStep1 => Ru
-        ? "1. Нажмите «Обновить список» — приложение скачает конфиги из 14 публичных источников и проверит их (TCP + TLS). Это занимает ~15 мин в первый раз."
-        : "1. Click 'Refresh list' — app downloads configs from 14 public sources and tests them (TCP + TLS). Takes ~15 min first time.";
-    public static string FcQuickstartStep2 => Ru
-        ? "2. Нажмите «Deep verify» — временный sing-box проверит реально ли конфиг несёт трафик через HTTPS запрос. Обычно находит 5 рабочих из 30 за ~3 мин."
-        : "2. Click 'Deep verify' — a temporary sing-box tests whether each config actually carries HTTPS traffic. Usually finds 5 working out of 30 in ~3 min.";
-    public static string FcQuickstartStep3 => Ru
-        ? "3. Выберите строку с ✓✓ (зелёный бейдж) и нажмите «Connect» внизу. Для точного теста отключите текущий VPN перед Refresh."
-        : "3. Select a row with ✓✓ (green badge) and click 'Connect' at the bottom. For accurate testing, disconnect your main VPN before Refresh.";
-    public static string FcQuickstartDismiss => Ru ? "Понятно, скрыть гайд" : "Got it, hide guide";
+    // v2.28.4-r2: Quickstart banner removed (single-button flow makes the 3-step lecture obsolete).
 
     // v2.14.7 — collapsible More Options
     public static string FcMoreOptions => Ru ? "⚙ Больше опций (фильтры, очистка, свои источники)" : "⚙ More options (filters, cleanup, user sources)";
@@ -490,11 +479,11 @@ public static class Strings
     public static string FcListHeader    => Ru ? "📋 Конфиги"       : "📋 Configs";
     public static string FcListShown     => Ru ? "показано"         : "shown";
 
-    // v2.14.10 — Stop button in Deep Verify section
-    public static string FcDeepStop        => Ru ? "⏹ Остановить Deep Verify" : "⏹ Stop Deep Verify";
+    // Stop button in the Free Configs search card
+    public static string FcDeepStop        => Ru ? "⏹ Остановить поиск" : "⏹ Stop search";
     public static string FcDeepStopTooltip => Ru
-        ? "Прекратить текущую проверку. Найденные до отмены конфиги сохранены в кэше."
-        : "Abort the current verification run. Configs found before cancel are preserved in cache.";
+        ? "Прекратить текущий поиск. Найденные до отмены конфиги сохранены в кэше."
+        : "Abort the current search. Configs found before cancel are preserved in cache.";
 
     // v2.13.18 — Fast scan toggle
     public static string FcFastScanLabel => Ru ? "⚡ Fast scan (только TCP, без TLS)" : "⚡ Fast scan (TCP only, no TLS)";
@@ -539,8 +528,8 @@ public static class Strings
         ? "Перепроверить все ранее найденные конфиги (игнорирует skip-recent). ~15 мин для 25k."
         : "Re-test every cached config (ignores skip-recent filter). ~15 min for 25k.";
     public static string FcDeepVerifyTooltip => Ru
-        ? "Реальный HTTP-тест через временный sing-box. Единственная 100% проверка что конфиг работает. ~3-5 сек/конфиг."
-        : "Real HTTP test via a spawned sing-box. The only 100% proof a config actually works. ~3-5 sec/config.";
+        ? "Скачивает свежие VLESS-конфиги из 14 источников и проверяет каждый реальным HTTPS-запросом через временный sing-box. Останавливается когда найдёт N рабочих с пингом ниже порога. ~1-3 минуты."
+        : "Fetches fresh VLESS configs from 14 sources and tests each with a real HTTPS request via a temporary sing-box. Stops when N working configs match the ping threshold. ~1-3 minutes.";
 
     // v2.13.19 — Privacy warning on first Connect from Free Configs
     public static string FcSecWarnTitle => Ru
@@ -644,8 +633,6 @@ public static class Strings
     public static string TipFcSkipRu => Ru
         ? "Пропускать сервера в RU при deep verify"
         : "Skip servers located in RU during deep verify";
-    public static string TipFcDismissQuickstart => Ru ? "Закрыть подсказку" : "Dismiss quickstart";
-
     // ── Simple mode (v2.17+) ──
 
     /// <summary>Header toggle button: Simple → Advanced.</summary>

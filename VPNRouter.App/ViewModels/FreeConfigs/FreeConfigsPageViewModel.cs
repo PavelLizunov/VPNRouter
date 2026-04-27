@@ -155,12 +155,6 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int? _latencyGoalTarget = 100;
     [ObservableProperty] private int? _latencyGoalMaxPingMs = 300;
 
-    /// <summary>v2.13.17: show the 3-step quickstart banner at top of page. User can dismiss.</summary>
-    [ObservableProperty] private bool _showQuickstart = true;
-
-    [RelayCommand]
-    private void DismissQuickstart() => ShowQuickstart = false;
-
     /// <summary>v2.13.18: if true, Refresh does TCP-only test (skip TLS handshake). 3× faster but misses honeypots.
     /// v2.28.3: default flipped true so first-run aggregator doesn't wait minutes for full TLS validation.
     /// Server-side pool.json already pre-validates TLS every 6h (cron in build-free-pool.yml), so client-side

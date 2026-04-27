@@ -142,11 +142,6 @@ public partial class MainWindowViewModel
     public string L_FcPresetGaming => Strings.FcPresetGaming;
     public string L_FcPresetLabel => Strings.FcPresetLabel;
     public string L_FcPresetStream => Strings.FcPresetStream;
-    public string L_FcQuickstartDismiss => Strings.FcQuickstartDismiss;
-    public string L_FcQuickstartStep1 => Strings.FcQuickstartStep1;
-    public string L_FcQuickstartStep2 => Strings.FcQuickstartStep2;
-    public string L_FcQuickstartStep3 => Strings.FcQuickstartStep3;
-    public string L_FcQuickstartTitle => Strings.FcQuickstartTitle;
     public string L_FcRefreshHint => Strings.FcRefreshHint;
     public string L_FcRefreshSources => Strings.FcRefreshSources;
     public string L_FcRefreshTooltip => Strings.FcRefreshTooltip;
@@ -364,7 +359,6 @@ public partial class MainWindowViewModel
     public string L_TipClearFailed => Strings.TipClearFailed;
     public string L_TipCloseServerDetail => Strings.TipCloseServerDetail;
     public string L_TipDeepVerifyServers => Strings.TipDeepVerifyServers;
-    public string L_TipFcDismissQuickstart => Strings.TipFcDismissQuickstart;
     public string L_TipFcFastScan => Strings.TipFcFastScan;
     public string L_TipFcSkipRu => Strings.TipFcSkipRu;
     public string L_TipFcSmartRefresh => Strings.TipFcSmartRefresh;

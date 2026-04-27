@@ -55,36 +55,6 @@
                     </Grid>
                 </Border>
 
-                <!-- ─── Quickstart banner (dismissible) ─── -->
-                <Border IsVisible="{Binding FreeConfigsVm.ShowQuickstart}"
-                        Padding="12,8" CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource InfoBgBrush}"
-                        BorderBrush="{DynamicResource InfoBorderBrush}"
-                        BorderThickness="1">
-                    <StackPanel Spacing="4">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0"
-                                       Text="{Binding L_FcQuickstartTitle}"
-                                       FontSize="12" FontWeight="Bold"
-                                       Foreground="{DynamicResource InfoFgBrush}"/>
-                            <Button Grid.Column="1" Content="✕"
-                                    Command="{Binding FreeConfigsVm.DismissQuickstartCommand}"
-                                    Background="Transparent" BorderThickness="0"
-                                    Padding="6,2" FontSize="12" Opacity="0.6"
-                                    ToolTip.Tip="{Binding L_FcQuickstartDismiss}"/>
-                        </Grid>
-                        <TextBlock Text="{Binding L_FcQuickstartStep1}"
-                                   TextWrapping="Wrap" FontSize="10"
-                                   Foreground="{DynamicResource InfoFgBrush}"/>
-                        <TextBlock Text="{Binding L_FcQuickstartStep2}"
-                                   TextWrapping="Wrap" FontSize="10"
-                                   Foreground="{DynamicResource InfoFgBrush}"/>
-                        <TextBlock Text="{Binding L_FcQuickstartStep3}"
-                                   TextWrapping="Wrap" FontSize="10"
-                                   Foreground="{DynamicResource InfoFgBrush}"/>
-                    </StackPanel>
-                </Border>
-
                 <!-- ═══════════════════════════════════════════════════════
                      ⭐ Main green Search-settings card (design-tokens).
                      Single primary action auto-chains Refresh → Deep verify.
