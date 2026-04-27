@@ -33,15 +33,19 @@ public static class FreeConfigKeepPolicy
     /// True if the entry is worth keeping in <c>_allConfigs</c> /
     /// the on-disk cache between searches.
     ///
+    /// <para>v2.28.5-r2: tightened to Verified only (was Verified + Ok in
+    /// r1). User feedback: "только полностью рабочие конфиги, ничего
+    /// другого". Ok = TCP+TLS handshake passed but never went through a
+    /// real HTTPS round-trip via sing-box; from the user's perspective
+    /// these are not "working" yet. The new batched search loop already
+    /// runs Deep Verify on every Ok candidate inline, so the surviving
+    /// list naturally contains only Verified entries.</para>
+    ///
     /// <para>Verified: gold — proved real HTTP traffic via deep verify.</para>
-    /// <para>Ok: TCP + TLS handshake passed. Useful as a candidate seed
-    /// for the next search's deep verify (priority 1 in the
-    /// <c>DeepVerifyTopAsync</c> Priority function).</para>
     /// </summary>
     public static bool ShouldKeepInLiveCache(FreeConfigEntry entry)
     {
         if (entry == null) return false;
-        return entry.Status == FreeConfigStatus.Verified
-            || entry.Status == FreeConfigStatus.Ok;
+        return entry.Status == FreeConfigStatus.Verified;
     }
 }

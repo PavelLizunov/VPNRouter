@@ -1997,23 +1997,16 @@ public class FreeConfigKeepPolicyTests
             .ShouldKeepInLiveCache(entry));
     }
 
-    [Fact]
-    public void Ok_Kept()
-    {
-        var entry = Make(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Ok);
-        Assert.True(VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
-            .ShouldKeepInLiveCache(entry));
-    }
-
     [Theory]
     [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Unknown)]
+    [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Ok)] // v2.28.5-r2: Ok no longer kept (Verified-only)
     [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Slow)]
     [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.TlsFailed)]
     [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Implausible)]
     [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Timeout)]
     [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Unreachable)]
     [InlineData(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.ParseError)]
-    public void DeadStatus_Dropped(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus status)
+    public void NonVerifiedStatus_Dropped(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus status)
     {
         var entry = Make(status);
         Assert.False(VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
@@ -2028,10 +2021,13 @@ public class FreeConfigKeepPolicyTests
     }
 
     [Fact]
-    public void TrimSimulation_DropsExpectedRatio()
+    public void TrimSimulation_DropsToVerifiedOnly()
     {
         // Mimic a realistic post-search _allConfigs: ~25k entries, of which
-        // ~10 are Verified, ~200 are Ok, the rest are dead statuses.
+        // ~10 are Verified, ~200 Ok (TCP+TLS but not deep-verified), the
+        // rest dead statuses. v2.28.5-r2: only Verified survive — Ok no
+        // longer counted as "keep" because the user wants the displayed
+        // list to show only fully-working configs.
         var entries = new List<VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry>();
         for (int i = 0; i < 10; i++)
             entries.Add(Make(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified));
@@ -2051,10 +2047,8 @@ public class FreeConfigKeepPolicyTests
             .ToList();
 
         Assert.Equal(25000, entries.Count);
-        Assert.Equal(210, trimmed.Count);
-        Assert.Equal(10, trimmed.Count(e => e.Status ==
-            VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified));
-        Assert.Equal(200, trimmed.Count(e => e.Status ==
-            VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Ok));
+        Assert.Equal(10, trimmed.Count);
+        Assert.All(trimmed, e => Assert.Equal(
+            VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified, e.Status));
     }
 }

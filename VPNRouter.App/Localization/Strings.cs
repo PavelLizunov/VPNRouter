@@ -405,6 +405,17 @@ public static class Strings
         ? $"Список исчерпан — протестировано {tested}, найдено {verified} рабочих"
         : $"Queue exhausted — tested {tested}, found {verified} working";
 
+    // v2.28.5-r2: batched fetch+test+verify status messages
+    public static string FcStatusBatchedSearchStart(int target, int poolSize) => Ru
+        ? $"Поиск {target} рабочих конфигов из пула {poolSize}..."
+        : $"Searching {target} working configs from pool of {poolSize}...";
+    public static string FcStatusBatchedTcpTls(int found, int target, int batchStart, int totalQueue) => Ru
+        ? $"Найдено {found}/{target} · проверка батча {batchStart}/{totalQueue} (TCP+TLS)..."
+        : $"Found {found}/{target} · testing batch {batchStart}/{totalQueue} (TCP+TLS)...";
+    public static string FcStatusBatchedProgress(int found, int target, int processed, int totalQueue) => Ru
+        ? $"Найдено {found}/{target} · обработано {processed}/{totalQueue}"
+        : $"Found {found}/{target} · processed {processed}/{totalQueue}";
+
     public static string FcDeepTargetLabel => Ru ? "Цель:" : "Target:";
     public static string FcDeepExcludeRu   => Ru ? "Пропускать RU" : "Skip RU servers";
     public static string FcDeepHint        => Ru
@@ -438,6 +449,7 @@ public static class Strings
     public static string FcColCountry         => Ru ? "Страна"        : "Country";
     public static string FcColEndpoint        => Ru ? "Адрес"         : "Endpoint";
     public static string FcColLatency         => Ru ? "Пинг"          : "Latency";
+    public static string FcColBandwidth       => Ru ? "Скорость"      : "Speed";
     public static string FcColSni             => "SNI";
     public static string FcColTransport       => Ru ? "Транспорт"     : "Transport";
     public static string FcEmptyHint          => Ru

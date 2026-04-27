@@ -95,6 +95,7 @@ public partial class MainWindowViewModel
     public string L_FcCleanupHint => Strings.FcCleanupHint;
     public string L_FcClearAll => Strings.FcClearAll;
     public string L_FcClearFailed => Strings.FcClearFailed;
+    public string L_FcColBandwidth => Strings.FcColBandwidth;
     public string L_FcColCountry => Strings.FcColCountry;
     public string L_FcColEndpoint => Strings.FcColEndpoint;
     public string L_FcColLatency => Strings.FcColLatency;

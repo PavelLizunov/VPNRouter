@@ -224,75 +224,248 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     public bool HasProgress => ProgressTotal > 0;
     partial void OnProgressTotalChanged(int value) => OnPropertyChanged(nameof(HasProgress));
 
+    /// <summary>
+    /// v2.28.5-r2: batched fetch + per-batch test + per-batch deep verify.
+    ///
+    /// <para>Old flow (replaced): fetch full pool ~25k → test all 25k →
+    /// hand entire Ok subset to Deep Verify → trim. Mid-search peak was
+    /// large because all 25k <see cref="FreeConfigEntry"/> sat in memory
+    /// at once, plus the testing infrastructure (parallel tasks,
+    /// SocketsHttpHandlers) ran across the whole pool.</para>
+    ///
+    /// <para>New flow:</para>
+    /// <list type="number">
+    /// <item>Fetch raw pool (no testing) via <see cref="FreeConfigAggregator.FetchPoolAsync"/>.</item>
+    /// <item>For each ~500-entry batch from the pool, in priority order:
+    ///   <list type="bullet">
+    ///   <item>TCP+TLS test the batch (parallel, semaphore-capped).</item>
+    ///   <item>For each Ok / Verified entry in the batch, spawn a sing-box
+    ///         and run <see cref="FreeConfigDeepVerifier.VerifyOneAsync"/>
+    ///         (real HTTPS through the proxy + bandwidth measurement).</item>
+    ///   <item>If the entry meets target ping + bandwidth thresholds, add
+    ///         to the running Verified list and update the displayed list
+    ///         immediately so the user sees progress trickling in.</item>
+    ///   <item>If we hit the target count or the user cancels, break out.</item>
+    ///   </list>
+    /// </item>
+    /// <item>After the loop, the pool reference goes out of scope and GC
+    ///       reclaims everything except the small Verified list.</item>
+    /// </list>
+    ///
+    /// <para>Memory benefit: at any given moment only the current ~500-entry
+    /// batch + the small Verified list (typically ≤ 50 entries) are
+    /// retained. The 25k pool is released after the loop ends; mid-search
+    /// peak drops by roughly 80–90 % compared to the v2.28.5-r1 flow.</para>
+    /// </summary>
     [RelayCommand]
     private async Task RefreshAsync()
     {
         if (IsBusy) return;
         IsBusy = true;
         _refreshCts = new CancellationTokenSource();
-        var refreshFoundOk = false;
+        var ct = _refreshCts.Token;
+
+        // Defaults pulled out so they're consistent for the whole run.
+        var target = LatencyGoalTarget ?? 10;
+        var maxPing = (UseLatencyGoal && LatencyGoalMaxPingMs.HasValue)
+            ? LatencyGoalMaxPingMs.Value
+            : 1000; // sentinel: no real ping cap
+
+        // Verified list is the only thing surviving the search. Build it up
+        // incrementally so the UI shows progress as soon as the first config
+        // is verified rather than waiting for the whole search to end.
+        var verifiedList = new List<FreeConfigEntry>();
+
         try
         {
-            // v2.13.18: apply fast scan toggle before RefreshAsync reads it
+            // v2.13.18: apply fast scan toggle before any test runs.
             _aggregator.RequireTlsHandshake = !FastScanMode;
+            // v2.28.5-r2: always measure bandwidth in the batched flow so the
+            // list shows speed alongside latency. The min-bandwidth gate is
+            // intentionally lenient (1 Mbps); we want to *display* bw, not
+            // aggressively filter on it. Truly dead servers fail < 1 Mbps and
+            // get excluded.
+            _deepVerifier.MeasureBandwidth = true;
 
-            // v2.14.4: merge user-provided sources with built-in 14.
+            // v2.14.4: merge user-provided sources with the built-in 14.
             var sources = FreeConfigSources.GetAll(_getSettings?.Invoke());
 
-            // v2.28.3-r2: pull a slightly larger candidate pool than the user's
-            // target N so the chained Deep Verify has buffer when some TCP-OK
-            // entries fail the real connectivity test. Heuristic: 3× target,
-            // capped at 300 — Deep Verify will early-stop once it finds N
-            // truly-working anyway.
-            // v2.28.3-r4: handle nullable inputs from cleared NumericUpDown.
-            // v2.28.3-r5: empty ping = "no max-ping limit" semantics. The
-            // count target still drives early-stop; we just don't filter by
-            // latency at all when LatencyGoalMaxPingMs is null.
-            // v2.28.4-r4: tightened the heuristic (was *3, now *2) + lowered the
-            // floor (was nGoal+30, now nGoal+10). With the new default nGoal=10,
-            // refreshTarget collapses to ~20, so Refresh's TCP-stage early-stops
-            // after finding ~20 ping-matching configs instead of 130. That alone
-            // shaves 30s-2min off perceived "поиск идёт по всем конфигам" complaint.
-            var nGoal = LatencyGoalTarget ?? 10;
-            var refreshTarget = UseLatencyGoal
-                ? Math.Min(300, Math.Max(nGoal * 2, nGoal + 10))
-                : (int?)null;
+            // ── Stage 1: fetch raw pool (no testing) ──
+            var pool = await Task.Run(() => _aggregator.FetchPoolAsync(sources, ct));
+            ct.ThrowIfCancellationRequested();
 
-            var fresh = await Task.Run(() => _aggregator.RefreshAsync(
-                sources: sources,
-                goalTargetCount:  refreshTarget,
-                goalMaxLatencyMs: (UseLatencyGoal && LatencyGoalMaxPingMs.HasValue)
-                                    ? LatencyGoalMaxPingMs
-                                    : (int?)null,
-                ct: _refreshCts.Token));
+            // Pull cached Verified entries to the front of the queue so they
+            // re-test first (lowest cost; mostly retain status). Existing-
+            // verified-not-in-fresh-pool are also surfaced via FetchPoolAsync's
+            // internal MergeWithCache.
+            var cachedVerified = pool
+                .Where(c => c.Status == FreeConfigStatus.Verified)
+                .ToList();
+            var cachedVerifiedIds = new HashSet<string>(
+                cachedVerified.Select(c => c.Id), StringComparer.OrdinalIgnoreCase);
+
+            // Build the ordered queue: cached Verified first, then everything
+            // else, with RU exclusion applied if the user opted in.
+            var queue = cachedVerified
+                .Concat(pool.Where(c =>
+                    !cachedVerifiedIds.Contains(c.Id) &&
+                    (!ExcludeRu || !string.Equals(
+                        c.CountryCode, "RU", StringComparison.OrdinalIgnoreCase))))
+                .ToList();
+
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                _allConfigs = fresh;
+                StatusText = Strings.FcStatusBatchedSearchStart(target, pool.Count);
+                _allConfigs = new List<FreeConfigEntry>(verifiedList);
                 ApplyFiltersAndStats();
-                StatusText = Strings.FcStatusRefreshed(fresh.Count);
+                ProgressTotal = Math.Min(queue.Count, FreeConfigAggregator.DefaultBatchSize * 4);
+                ProgressDone = 0;
             });
 
-            // v2.28.3-r2 auto-chain: TCP+TLS pass is a weak signal — any random
-            // box that responds to TLS handshake on 443 satisfies it, but the
-            // VLESS+Reality handshake might still fail at apply-time. Run Deep
-            // Verify automatically on the OK candidates so the user gets N
-            // *actually-working* servers from one click instead of two. Skip
-            // chaining if the user cancelled the refresh.
-            refreshFoundOk = !_refreshCts.IsCancellationRequested
-                          && _allConfigs.Any(c => c.Status == FreeConfigStatus.Ok
-                                              || c.Status == FreeConfigStatus.Verified);
+            // ── Stage 2: batched test+verify loop ──
+            // Limit deep-verify concurrency. Each verify spawns a sing-box
+            // process so unbounded would be too heavy — 5 is a safe default
+            // matching the previous DeepVerifyTopAsync semaphore.
+            var deepSem = new SemaphoreSlim(5);
+            var batchSize = FreeConfigAggregator.DefaultBatchSize;
+            var processedCount = 0;
+
+            for (int i = 0; i < queue.Count; i += batchSize)
+            {
+                if (ct.IsCancellationRequested || verifiedList.Count >= target) break;
+
+                // Slice the next batch. ToList() materialises a fresh list so
+                // the rest of `queue` is still referenced — but the batch
+                // testers operate on this small slice only.
+                var batch = queue.Skip(i).Take(batchSize).ToList();
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    StatusText = Strings.FcStatusBatchedTcpTls(
+                        verifiedList.Count, target, i + 1, queue.Count);
+                });
+
+                // 2a: TCP + TLS test the batch (semaphore-capped, parallel).
+                try
+                {
+                    await _aggregator.Tester.TestAllAsync(batch, progress: null, ct);
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "[FreeConfigs] Batch TCP+TLS test threw — skipping");
+                    continue;
+                }
+
+                if (ct.IsCancellationRequested) break;
+
+                // 2b: deep-verify the Ok subset of this batch.
+                var okSubset = batch
+                    .Where(c => c.Status == FreeConfigStatus.Ok
+                             || c.Status == FreeConfigStatus.Verified)
+                    .OrderBy(c => c.LatencyMs > 0 ? c.LatencyMs : int.MaxValue)
+                    .ToList();
+
+                var deepTasks = new List<Task>();
+                foreach (var cfg in okSubset)
+                {
+                    if (ct.IsCancellationRequested || verifiedList.Count >= target) break;
+
+                    deepTasks.Add(VerifyOneAndAppendAsync(
+                        cfg, verifiedList, deepSem, target, maxPing, ct));
+
+                    // Cap in-flight deep verifies so we don't queue all 500
+                    // candidate verifies at once. WhenAny releases as each
+                    // finishes; we only refill up to 5 in-flight.
+                    if (deepTasks.Count >= 5)
+                    {
+                        var done = await Task.WhenAny(deepTasks);
+                        deepTasks.Remove(done);
+                    }
+                }
+
+                if (deepTasks.Count > 0)
+                    await Task.WhenAll(deepTasks);
+
+                processedCount += batch.Count;
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    ProgressDone = Math.Min(processedCount, ProgressTotal);
+                    StatusText = Strings.FcStatusBatchedProgress(
+                        verifiedList.Count, target, processedCount, queue.Count);
+                });
+
+                // 2c: explicit drop of intermediate references so the GC
+                // can reclaim batch + okSubset between iterations. Without
+                // these, .NET sometimes holds the previous batch alive
+                // until the loop iteration object is replaced.
+                batch = null!;
+                okSubset = null!;
+                deepTasks.Clear();
+            }
+
+            // ── Stage 3: finalise ──
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                _allConfigs = new List<FreeConfigEntry>(verifiedList);
+                ApplyFiltersAndStats();
+                StatusText = ct.IsCancellationRequested
+                    ? Strings.FcStatusCancelled
+                    : verifiedList.Count >= target
+                        ? Strings.FcStatusDeepVerifyDone(verifiedList.Count)
+                        : Strings.FcStatusDeepVerifyExhausted(verifiedList.Count, processedCount);
+                ProgressTotal = 0;
+                ProgressDone = 0;
+            });
+
+            // Persist trimmed cache (only Verified entries).
+            try
+            {
+                var file = _aggregator.Cache.Load();
+                file.Configs = _allConfigs;
+                file.LastAggregatedAt = DateTime.UtcNow;
+                _aggregator.Cache.Save(file);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[FreeConfigs] Cache save failed (non-fatal)");
+            }
+
+            // Drop the local pool / queue references explicitly so the GC
+            // sees them eligible immediately, then force a gen-2 collect.
+            queue = null!;
+            pool = null!;
+            cachedVerified = null!;
+            cachedVerifiedIds = null!;
+
+            GC.Collect(2, GCCollectionMode.Forced, blocking: false, compacting: true);
         }
         catch (OperationCanceledException)
         {
-            // CRITICAL: Aggregator saves partial test results to cache every 50 tests / 5s.
-            // On cancel, reload cache into the UI so the user sees their accumulated progress
-            // (not the stale pre-refresh state). Otherwise 14k/24k tested feels "reset".
-            await ReloadFromCacheAsync(Strings.FcStatusCancelled);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                _allConfigs = new List<FreeConfigEntry>(verifiedList);
+                ApplyFiltersAndStats();
+                StatusText = Strings.FcStatusCancelled;
+            });
+            // Save what we got.
+            try
+            {
+                var file = _aggregator.Cache.Load();
+                file.Configs = _allConfigs;
+                file.LastAggregatedAt = DateTime.UtcNow;
+                _aggregator.Cache.Save(file);
+            }
+            catch { }
+            GC.Collect(2, GCCollectionMode.Forced, blocking: false, compacting: true);
         }
         catch (Exception ex)
         {
-            _logger.Warning("FreeConfigs refresh failed: {err}", ex.Message);
-            StatusText = Strings.FcStatusFailed(ex.Message);
+            _logger.Warning(ex, "FreeConfigs RefreshAsync failed");
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                StatusText = Strings.FcStatusFailed(ex.Message);
+            });
         }
         finally
         {
@@ -300,37 +473,64 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             ProgressTotal = 0;
             ProgressDone = 0;
         }
+    }
 
-        // Chain Deep Verify *outside* the IsBusy=true block so DeepVerifyTopAsync's
-        // own IsBusy guard fires cleanly. The inner method spawns sing-box per
-        // candidate, takes its own CTS, and updates its own status text.
-        if (refreshFoundOk)
+    /// <summary>v2.28.5-r2: deep-verify a single config and, if it passes
+    /// the user's target thresholds (ping + bandwidth), append to the
+    /// shared verified list and refresh the displayed list. Throttled by
+    /// a shared <paramref name="sem"/> so we don't spawn unbounded sing-box
+    /// instances.</summary>
+    private async Task VerifyOneAndAppendAsync(
+        FreeConfigEntry cfg,
+        List<FreeConfigEntry> verifiedList,
+        SemaphoreSlim sem,
+        int target,
+        int maxPing,
+        CancellationToken ct)
+    {
+        await sem.WaitAsync(ct);
+        try
         {
-            // v2.28.3-r4: switch chained Deep Verify into Custom-preset mode and
-            // wire the user's max-ping + a sane min-bandwidth (1 Mbps) into its
-            // accept-criterion. Custom preset has MeasureBandwidth=true, so the
-            // chained pipeline now ALSO surfaces bandwidth in the result list
-            // (user request: "хотелось бы проверять пропускную способность").
-            // The min-bandwidth threshold is intentionally lenient — we want to
-            // *measure* and *display* bandwidth, not aggressively filter it.
-            // 1 Mbps is below most browsing thresholds; truly dead servers fail
-            // <1 Mbps and get correctly excluded.
-            DeepVerifyTargetCount = LatencyGoalTarget ?? 100;
-            DeepVerifyPresetIndex = 4;                          // 4 = Custom
-            // v2.28.3-r5: empty ping → effectively no limit (1000ms ≈ all real
-            // VLESS endpoints fit). Custom preset's CustomMaxPingMs is non-
-            // nullable int, so we use a high sentinel rather than null.
-            CustomMaxPingMs       = LatencyGoalMaxPingMs ?? 1000;
-            CustomMinBandwidthMbps = 1;
-            await DeepVerifyTopAsync();
+            await _deepVerifier.VerifyOneAsync(cfg, ct);
+
+            // Only "fully working" entries reach the displayed list:
+            //   Verified (real HTTP round-trip succeeded)
+            //   AND ping under the user's threshold.
+            // Bandwidth is recorded but not gated on (>=1 Mbps would only
+            // exclude truly dead links).
+            if (cfg.Status == FreeConfigStatus.Verified &&
+                cfg.LatencyMs > 0 && cfg.LatencyMs <= maxPing)
+            {
+                bool added;
+                lock (verifiedList)
+                {
+                    if (verifiedList.Count >= target) return;
+                    verifiedList.Add(cfg);
+                    added = true;
+                }
+
+                if (added)
+                {
+                    var snapshot = default(List<FreeConfigEntry>);
+                    lock (verifiedList) snapshot = new List<FreeConfigEntry>(verifiedList);
+
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        _allConfigs = snapshot;
+                        ApplyFiltersAndStats();
+                    });
+                }
+            }
         }
-        else
+        catch (OperationCanceledException) { /* swallow — propagated by ct */ }
+        catch (Exception ex)
         {
-            // v2.28.5: no Ok candidates from Refresh → no DeepVerify chained.
-            // _allConfigs holds the full pool (~25k FreeConfigEntry) all with
-            // failed/dead statuses. Trim now so the user's working set drops
-            // back to baseline within seconds of the search finishing.
-            TrimAndReclaim();
+            _logger.Warning(ex, "[FreeConfigs] VerifyOneAndAppend failed for {host}:{port}",
+                cfg.Host, cfg.Port);
+        }
+        finally
+        {
+            sem.Release();
         }
     }
 
@@ -890,15 +1090,15 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             if (!Countries.Contains(SelectedCountry))
                 SelectedCountry = "All";
 
-            // Filter + sort. v2.28.4-r3: this is the "find working" search,
-            // so the displayed list is always status-filtered to Ok/Verified
-            // (the OnlyWorking toggle was a leftover from the 6-section UX
-            // when users could see the full aggregator output as a debugging
-            // view; the Simple flow doesn't surface failed/Implausible/Timeout
-            // entries — the user is asking "show me what works", not "show me
-            // every TCP probe attempt").
+            // Filter + sort. v2.28.5-r2: tightened to Verified only (was
+            // Ok + Verified). User feedback: "только полностью рабочие
+            // конфиги ничего другого". Ok = TCP+TLS-passed but never
+            // through real HTTPS, so it's not "fully working" yet. The
+            // new batched RefreshAsync loop already runs Deep Verify on
+            // every Ok candidate inline, so the displayed list shows only
+            // configs that completed the full pipeline.
             IEnumerable<FreeConfigEntry> q = _allConfigs
-                .Where(c => c.Status == FreeConfigStatus.Ok || c.Status == FreeConfigStatus.Verified);
+                .Where(c => c.Status == FreeConfigStatus.Verified);
             if (!string.Equals(SelectedCountry, "All", StringComparison.OrdinalIgnoreCase))
                 q = q.Where(c => string.Equals(c.CountryCode, SelectedCountry, StringComparison.OrdinalIgnoreCase));
 

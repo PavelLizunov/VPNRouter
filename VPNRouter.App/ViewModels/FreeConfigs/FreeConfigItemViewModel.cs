@@ -33,11 +33,17 @@ public partial class FreeConfigItemViewModel : ObservableObject
         ? "—"
         : $"{FlagFor(Entry.CountryCode)} {Entry.CountryCode}";
 
+    /// <summary>v2.28.5-r2: bandwidth column was previously crammed into the
+    /// LatencyDisplay badge; now it's its own column so the latency badge
+    /// stays tight. Shows "X Mbps" when measured, "—" when not (a verified
+    /// config without bandwidth means the deep verifier ran without bw
+    /// measurement enabled, e.g. user picked a non-bw preset).</summary>
+    public string BandwidthDisplay => Entry.MeasuredBandwidthMbps.HasValue
+        ? $"{Entry.MeasuredBandwidthMbps} Mbps"
+        : "—";
+
     public string LatencyDisplay => Entry.Status switch
     {
-        // v2.14.3: show bandwidth in the badge when measured
-        FreeConfigStatus.Verified when Entry.MeasuredBandwidthMbps.HasValue =>
-            $"{Entry.LatencyMs}ms · {Entry.MeasuredBandwidthMbps} Mbps ✓✓",
         FreeConfigStatus.Verified    => $"{Entry.LatencyMs} ms ✓✓",
         FreeConfigStatus.Ok          => $"{Entry.LatencyMs} ms ✓",
         FreeConfigStatus.Slow        => $"{Entry.LatencyMs} ms slow",

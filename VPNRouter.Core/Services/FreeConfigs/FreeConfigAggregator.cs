@@ -47,6 +47,18 @@ public sealed class FreeConfigAggregator
     /// <summary>Access to the underlying cache for UI (path, current snapshot).</summary>
     public FreeConfigCache Cache => _cache;
 
+    /// <summary>v2.28.5-r2: expose tester for the batched search flow in
+    /// <c>FreeConfigsPageViewModel</c>. The VM tests per-batch so memory
+    /// stays bounded — only the current ~500-entry batch lives in the
+    /// hot path, instead of all 25 000 pool entries.</summary>
+    public FreeConfigTester Tester => _tester;
+
+    /// <summary>v2.28.5-r2: tunable batch size for the new VM-driven
+    /// batched flow. 500 keeps memory bounded while still amortising
+    /// HTTP fetch + GeoIP overhead. Power users can override via
+    /// reflection or future config setting.</summary>
+    public const int DefaultBatchSize = 500;
+
     /// <summary>
     /// Events for UI progress reporting.
     /// </summary>
@@ -364,6 +376,137 @@ public sealed class FreeConfigAggregator
 
         OnStageChanged?.Invoke("Done");
         return configs;
+    }
+
+    /// <summary>
+    /// v2.28.5-r2: fetch + parse + dedupe + GeoIP enrichment, but skip
+    /// the TCP+TLS test stage. Used by the batched VM flow which tests
+    /// each ~500-entry slice itself (via <see cref="Tester"/>) instead of
+    /// loading the whole pool into one big test pass — keeps the
+    /// mid-search memory peak bounded.
+    /// </summary>
+    public async Task<List<FreeConfigEntry>> FetchPoolAsync(
+        IReadOnlyList<FreeConfigSource>? sources = null,
+        CancellationToken ct = default)
+    {
+        sources ??= FreeConfigSources.Default;
+
+        // Stage 0: try server-side pool.json first (cheapest path).
+        List<FreeConfigEntry>? poolEntries = null;
+        if (UseServerPool)
+        {
+            OnStageChanged?.Invoke("Fetching pool.json from GitHub Releases...");
+            try
+            {
+                poolEntries = await _poolFetcher.FetchPoolAsync(ct);
+                if (poolEntries != null && poolEntries.Count > 1000)
+                {
+                    _logger.Information("Pool loaded: {n} entries", poolEntries.Count);
+                    OnStageChanged?.Invoke($"Pool loaded: {poolEntries.Count} configs");
+                    return MergeWithCache(poolEntries);
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.Warning("Pool fetch failed: {err} — falling back to per-source fetch", ex.Message);
+            }
+        }
+
+        // Fallback: per-source fetch + parse + dedupe + GeoIP.
+        var enabledSources = sources.Where(s => s.Enabled).ToList();
+        OnStageChanged?.Invoke($"Fetching sources (0/{enabledSources.Count})...");
+
+        var fetchedCount = 0;
+        var fetchTasks = enabledSources.Select(async s =>
+        {
+            try
+            {
+                var raws = await _fetcher.FetchAsync(s, ct);
+                var done = Interlocked.Increment(ref fetchedCount);
+                OnStageChanged?.Invoke($"Fetching sources ({done}/{enabledSources.Count})...");
+                return (s, raws);
+            }
+            finally { /* best-effort */ }
+        });
+        var fetched = await Task.WhenAll(fetchTasks);
+
+        OnStageChanged?.Invoke("Parsing configs...");
+        var byId = new Dictionary<string, FreeConfigEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (src, raws) in fetched)
+        {
+            foreach (var raw in raws)
+            {
+                try
+                {
+                    var vless = VlessUriParser.Parse(raw);
+                    var id = BuildId(vless.Server, vless.Port, vless.Uuid);
+                    if (byId.ContainsKey(id)) continue;
+                    byId[id] = new FreeConfigEntry
+                    {
+                        Id = id,
+                        SourceUrl = src.Url,
+                        RawUri = raw,
+                        Host = vless.Server,
+                        Port = vless.Port,
+                        Uuid = vless.Uuid,
+                        Name = vless.Name ?? "",
+                        Sni = vless.Reality?.ServerName ?? vless.Tls?.ServerName ?? "",
+                        Transport = vless.Transport?.Type ?? "tcp",
+                        Security = vless.Security ?? "reality",
+                    };
+                }
+                catch { }
+            }
+        }
+        var configs = byId.Values.ToList();
+
+        // GeoIP enrichment (best-effort).
+        var needGeo = configs.Where(c => string.IsNullOrEmpty(c.CountryCode)).ToList();
+        if (needGeo.Count > 0)
+        {
+            OnStageChanged?.Invoke($"Resolving country codes ({needGeo.Count} IPs)...");
+            try { await _geoIp.EnrichAsync(needGeo, ct); }
+            catch (Exception ex) { _logger.Warning("GeoIP enrich failed: {err}", ex.Message); }
+        }
+
+        return MergeWithCache(configs);
+    }
+
+    /// <summary>v2.28.5-r2: merge fresh pool with existing cache so
+    /// previously-Verified entries (and recent-Ok entries within the
+    /// 24h window) keep their status across Refreshes. Used by
+    /// <see cref="FetchPoolAsync"/>.</summary>
+    private List<FreeConfigEntry> MergeWithCache(List<FreeConfigEntry> fresh)
+    {
+        try
+        {
+            var existing = _cache.Load();
+            var existingById = existing.Configs.ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
+            foreach (var cfg in fresh)
+            {
+                if (existingById.TryGetValue(cfg.Id, out var prev))
+                {
+                    cfg.FirstSeenAt = prev.FirstSeenAt;
+                    cfg.CountryCode = prev.CountryCode;
+                    cfg.ResolvedIp = prev.ResolvedIp;
+                    cfg.Status = prev.Status;
+                    cfg.LatencyMs = prev.LatencyMs;
+                    cfg.LastTestedAt = prev.LastTestedAt;
+                    cfg.MeasuredBandwidthMbps = prev.MeasuredBandwidthMbps;
+                    cfg.BandwidthTestedAt = prev.BandwidthTestedAt;
+                }
+            }
+
+            // Also merge previously-Verified entries that the upstream pool dropped.
+            var byId = fresh.ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
+            PreservePreviousValidation(byId, fresh, existing.Configs, DateTime.UtcNow);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[FreeConfigAggregator] MergeWithCache failed (non-fatal)");
+        }
+        return fresh;
     }
 
     /// <summary>Re-test all known configs (no re-fetch).</summary>

@@ -209,8 +209,13 @@
                     BorderBrush="{DynamicResource BorderDefaultBrush}"
                     ClipToBounds="True">
                 <Grid RowDefinitions="Auto,*">
+                    <!-- v2.28.5-r2: SNI column dropped, Speed column added.
+                         SNI is a TLS-handshake detail not relevant to "find a
+                         working config". Speed (bandwidth in Mbps) is what
+                         users actually care about — restored after the
+                         simplified-list pass dropped it. -->
                     <Grid Grid.Row="0" Background="{DynamicResource SurfaceSunkenBrush}"
-                          ColumnDefinitions="44,*,88,70,72" Height="24">
+                          ColumnDefinitions="44,*,80,80,72" Height="24">
                         <TextBlock Grid.Column="0" Text="{Binding L_FcColCountry}"
                                    FontWeight="SemiBold" FontSize="9" Opacity="0.65"
                                    VerticalAlignment="Center" HorizontalAlignment="Center"/>
@@ -220,9 +225,9 @@
                         <TextBlock Grid.Column="2" Text="{Binding L_FcColLatency}"
                                    FontWeight="SemiBold" FontSize="9" Opacity="0.65"
                                    VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                        <TextBlock Grid.Column="3" Text="{Binding L_FcColSni}"
+                        <TextBlock Grid.Column="3" Text="{Binding L_FcColBandwidth}"
                                    FontWeight="SemiBold" FontSize="9" Opacity="0.65"
-                                   VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                   VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
                         <TextBlock Grid.Column="4" Text="{Binding L_FcColTransport}"
                                    FontWeight="SemiBold" FontSize="9" Opacity="0.65"
                                    VerticalAlignment="Center" HorizontalAlignment="Center"/>
@@ -242,7 +247,7 @@
                         </ListBox.ItemsPanel>
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="fcvm:FreeConfigItemViewModel">
-                                <Grid ColumnDefinitions="44,*,88,70,72" Height="22">
+                                <Grid ColumnDefinitions="44,*,80,80,72" Height="22">
                                     <TextBlock Grid.Column="0" Text="{Binding CountryDisplay}"
                                                FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                     <TextBlock Grid.Column="1" Text="{Binding Endpoint}"
@@ -255,10 +260,9 @@
                                         <TextBlock Text="{Binding LatencyDisplay}"
                                                    Foreground="White" FontSize="9" FontWeight="SemiBold"/>
                                     </Border>
-                                    <TextBlock Grid.Column="3" Text="{Binding Sni}"
-                                               FontSize="9" Opacity="0.6"
-                                               VerticalAlignment="Center" HorizontalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Grid.Column="3" Text="{Binding BandwidthDisplay}"
+                                               FontSize="9" Opacity="0.75" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
                                     <TextBlock Grid.Column="4" Text="{Binding Transport}"
                                                FontSize="9" Opacity="0.6"
                                                VerticalAlignment="Center" HorizontalAlignment="Center"/>
