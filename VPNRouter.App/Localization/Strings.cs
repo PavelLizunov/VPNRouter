@@ -454,8 +454,8 @@ public static class Strings
         ? "⚡ Загрузить список конфигов"
         : "⚡ Load configs list";
     public static string FcFilteredEmpty      => Ru
-        ? "Ничего не найдено по фильтру. Снимите «Только рабочие» или выберите «Все страны»."
-        : "No results for current filter. Uncheck 'Only working' or choose 'All countries'.";
+        ? "Ничего не найдено по фильтру. Снимите «Только рабочие», увеличьте порог пинга или выберите «Все страны»."
+        : "No results for current filter. Uncheck 'Only working', raise the ping threshold, or choose 'All countries'.";
     public static string FcRefreshHint        => Ru
         ? "Первый запуск ≈1 мин. Тестируется до 500 серверов за раз — повторяйте для более полных данных."
         : "First run ≈1 min. Tests up to 500 servers at a time — repeat for fuller coverage.";
