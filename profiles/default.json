@@ -267,6 +267,59 @@
       "block_on_vpn_fail": false
     },
     {
+      "name": "Virtualization",
+      "description": "VirtualBox VMs & host network helpers",
+      "processes": [
+        {
+          "name": "VirtualBox.exe",
+          "include_children": true,
+          "scan_patterns": ["VirtualBox.exe"]
+        },
+        {
+          "name": "VirtualBoxVM.exe",
+          "include_children": true,
+          "scan_patterns": ["VirtualBoxVM.exe"]
+        },
+        {
+          "name": "VBoxHeadless.exe",
+          "include_children": true,
+          "scan_patterns": ["VBoxHeadless.exe"]
+        },
+        {
+          "name": "VBoxManage.exe",
+          "include_children": true,
+          "scan_patterns": ["VBoxManage.exe"]
+        },
+        {
+          "name": "VBoxSVC.exe",
+          "include_children": true,
+          "scan_patterns": ["VBoxSVC.exe"]
+        },
+        {
+          "name": "VBoxNetDHCP.exe",
+          "include_children": true,
+          "scan_patterns": ["VBoxNetDHCP.exe"]
+        },
+        {
+          "name": "VBoxNetNAT.exe",
+          "include_children": true,
+          "scan_patterns": ["VBoxNetNAT.exe"]
+        },
+        {
+          "name": "VBoxTray.exe",
+          "include_children": true,
+          "scan_patterns": ["VBoxTray.exe"]
+        },
+        {
+          "name": "VBoxClient.exe",
+          "include_children": true,
+          "scan_patterns": ["VBoxClient.exe"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
       "name": "Privacy_Shell",
       "description": "Terminal, shell & dev tools",
       "processes": [

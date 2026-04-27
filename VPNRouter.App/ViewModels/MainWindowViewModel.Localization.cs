@@ -152,12 +152,6 @@ public partial class MainWindowViewModel
     public string L_FcRefreshTooltip => Strings.FcRefreshTooltip;
     public string L_FcRetestAll => Strings.FcRetestAll;
     public string L_FcRetestTooltip => Strings.FcRetestTooltip;
-    public string L_FcSecCleanup => Strings.FcSecCleanup;
-    public string L_FcSecDeep => Strings.FcSecDeep;
-    public string L_FcSecFilters => Strings.FcSecFilters;
-    public string L_FcSecMySources => Strings.FcSecMySources;
-    public string L_FcSecOverview => Strings.FcSecOverview;
-    public string L_FcSecScan => Strings.FcSecScan;
     public string L_FcSecWarnBody => Strings.FcSecWarnBody;
     public string L_FcSecWarnCancel => Strings.FcSecWarnCancel;
     public string L_FcSecWarnDontUseList => Strings.FcSecWarnDontUseList;

@@ -388,23 +388,6 @@ public partial class MainWindowViewModel : ViewModelBase
     public bool IsZapretDiagnosticsSection => SelectedZapretSectionIndex == 5;
     public bool IsZapretAdvancedSection => SelectedZapretSectionIndex == 6;
 
-    // Free Configs section navigator (v2.14.8 master-detail restructure, matches NetworkPage/DpiBypassPage)
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsFreeOverviewSection))]
-    [NotifyPropertyChangedFor(nameof(IsFreeScanSection))]
-    [NotifyPropertyChangedFor(nameof(IsFreeDeepSection))]
-    [NotifyPropertyChangedFor(nameof(IsFreeFiltersSection))]
-    [NotifyPropertyChangedFor(nameof(IsFreeMySourcesSection))]
-    [NotifyPropertyChangedFor(nameof(IsFreeCleanupSection))]
-    private int _selectedFreeSectionIndex;
-
-    public bool IsFreeOverviewSection   => SelectedFreeSectionIndex == 0;
-    public bool IsFreeScanSection       => SelectedFreeSectionIndex == 1;
-    public bool IsFreeDeepSection       => SelectedFreeSectionIndex == 2;
-    public bool IsFreeFiltersSection    => SelectedFreeSectionIndex == 3;
-    public bool IsFreeMySourcesSection  => SelectedFreeSectionIndex == 4;
-    public bool IsFreeCleanupSection    => SelectedFreeSectionIndex == 5;
-
     // Zapret tool state
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblFlowsealHosts))]

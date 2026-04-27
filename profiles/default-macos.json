@@ -197,6 +197,59 @@
       "block_on_vpn_fail": false
     },
     {
+      "name": "Virtualization",
+      "description": "VirtualBox VMs & host network helpers",
+      "processes": [
+        {
+          "name": "VirtualBox",
+          "include_children": true,
+          "scan_patterns": ["VirtualBox"]
+        },
+        {
+          "name": "VirtualBoxVM",
+          "include_children": true,
+          "scan_patterns": ["VirtualBoxVM"]
+        },
+        {
+          "name": "VBoxHeadless",
+          "include_children": true,
+          "scan_patterns": ["VBoxHeadless"]
+        },
+        {
+          "name": "VBoxManage",
+          "include_children": true,
+          "scan_patterns": ["VBoxManage"]
+        },
+        {
+          "name": "VBoxSVC",
+          "include_children": true,
+          "scan_patterns": ["VBoxSVC"]
+        },
+        {
+          "name": "VBoxXPCOMIPCD",
+          "include_children": false,
+          "scan_patterns": ["VBoxXPCOMIPCD"]
+        },
+        {
+          "name": "VBoxNetDHCP",
+          "include_children": true,
+          "scan_patterns": ["VBoxNetDHCP"]
+        },
+        {
+          "name": "VBoxNetNAT",
+          "include_children": true,
+          "scan_patterns": ["VBoxNetNAT"]
+        },
+        {
+          "name": "VBoxClient",
+          "include_children": true,
+          "scan_patterns": ["VBoxClient*"]
+        }
+      ],
+      "dns_mode": "vpn_only",
+      "block_on_vpn_fail": false
+    },
+    {
       "name": "Privacy_Shell",
       "description": "Terminal, shells, system tools",
       "processes": [

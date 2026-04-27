@@ -182,37 +182,71 @@
         <StackPanel Spacing="10" IsVisible="{Binding IsSettingsLeakSelected}">
           <TextBlock Text="{Binding LblSettingsLeak}" FontWeight="Bold" FontSize="13"/>
 
-          <!-- v2.28.3: bare-string CheckBox.Content wrapped in TextBlock with
-               TextWrapping="Wrap". Same fix as Section A applied here — the
-               Leak Protection panel was missed in the v2.27.0-r2 pass and
-               kept overflowing on narrow windows for users with long
-               localised labels (e.g. RU "Strict mode (block all leaks)"
-               can wrap to ~200px). User report 2026-04-26. -->
+          <!-- v2.28.4-r1: switched from CheckBox.Content<TextBlock> to the
+               radio-card 24,* pattern. The earlier v2.28.3-r1 fix wrapped
+               labels in <TextBlock TextWrapping="Wrap"> but the inner
+               TextBlock still inherited the CheckBox content-presenter's
+               natural width — Avalonia's default CheckBox template gives
+               the content slot all the space it asks for, so a long
+               localised label (e.g. RU "Строгая защита от утечек") still
+               pushed the parent Border past the ScrollViewer right edge
+               on ~500px windows. The 24,* Grid pattern (proven in this
+               same file's radio-card / checkbox-card sections) places the
+               TextBlock in a sized * column so it gets the parent width
+               as a real constraint and Wrap takes effect. -->
           <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
                   Background="{DynamicResource SurfaceSunkenBrush}"
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
                   BorderThickness="1">
-            <StackPanel Spacing="4">
-              <CheckBox IsChecked="{Binding StrictMode}"
-                        ToolTip.Tip="{Binding L_TipLeakStrictMode}"
-                        MinHeight="0" Padding="4,0">
-                <TextBlock Text="{Binding StrictModeLabel}" TextWrapping="Wrap"/>
-              </CheckBox>
-              <CheckBox IsChecked="{Binding ForceIpv4Only}"
-                        ToolTip.Tip="{Binding L_TipLeakForceIpv4}"
-                        MinHeight="0" Padding="4,0">
-                <TextBlock Text="{Binding ForceIpv4Label}" TextWrapping="Wrap"/>
-              </CheckBox>
-              <CheckBox IsChecked="{Binding FlushDnsOnStart}"
-                        ToolTip.Tip="{Binding L_TipLeakFlushDns}"
-                        MinHeight="0" Padding="4,0">
-                <TextBlock Text="{Binding FlushDnsLabel}" TextWrapping="Wrap"/>
-              </CheckBox>
-              <CheckBox IsChecked="{Binding StrictDns}"
-                        ToolTip.Tip="{Binding L_TipLeakStrictDns}"
-                        MinHeight="0" Padding="4,0">
-                <TextBlock Text="{Binding StrictDnsLabel}" TextWrapping="Wrap"/>
-              </CheckBox>
+            <StackPanel Spacing="6">
+              <Grid ColumnDefinitions="24,*" ColumnSpacing="6"
+                    ToolTip.Tip="{Binding L_TipLeakStrictMode}">
+                <CheckBox Grid.Column="0"
+                          IsChecked="{Binding StrictMode}"
+                          MinHeight="0" Padding="0"
+                          VerticalAlignment="Top"
+                          Margin="0,1,0,0"/>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding StrictModeLabel}"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Top"/>
+              </Grid>
+              <Grid ColumnDefinitions="24,*" ColumnSpacing="6"
+                    ToolTip.Tip="{Binding L_TipLeakForceIpv4}">
+                <CheckBox Grid.Column="0"
+                          IsChecked="{Binding ForceIpv4Only}"
+                          MinHeight="0" Padding="0"
+                          VerticalAlignment="Top"
+                          Margin="0,1,0,0"/>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding ForceIpv4Label}"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Top"/>
+              </Grid>
+              <Grid ColumnDefinitions="24,*" ColumnSpacing="6"
+                    ToolTip.Tip="{Binding L_TipLeakFlushDns}">
+                <CheckBox Grid.Column="0"
+                          IsChecked="{Binding FlushDnsOnStart}"
+                          MinHeight="0" Padding="0"
+                          VerticalAlignment="Top"
+                          Margin="0,1,0,0"/>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding FlushDnsLabel}"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Top"/>
+              </Grid>
+              <Grid ColumnDefinitions="24,*" ColumnSpacing="6"
+                    ToolTip.Tip="{Binding L_TipLeakStrictDns}">
+                <CheckBox Grid.Column="0"
+                          IsChecked="{Binding StrictDns}"
+                          MinHeight="0" Padding="0"
+                          VerticalAlignment="Top"
+                          Margin="0,1,0,0"/>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding StrictDnsLabel}"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Top"/>
+              </Grid>
             </StackPanel>
           </Border>
         </StackPanel>

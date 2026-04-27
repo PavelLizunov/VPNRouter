@@ -486,13 +486,7 @@ public static class Strings
     // v2.14.7 — collapsible More Options
     public static string FcMoreOptions => Ru ? "⚙ Больше опций (фильтры, очистка, свои источники)" : "⚙ More options (filters, cleanup, user sources)";
 
-    // v2.14.8 — master-detail sections
-    public static string FcSecOverview   => Ru ? "🌐 Обзор"         : "🌐 Overview";
-    public static string FcSecScan       => Ru ? "🔍 Скан"          : "🔍 Scan";
-    public static string FcSecDeep       => Ru ? "✓✓ Deep verify"   : "✓✓ Deep verify";
-    public static string FcSecFilters    => Ru ? "⚙ Фильтры"        : "⚙ Filters";
-    public static string FcSecMySources  => Ru ? "👤 Мои источники" : "👤 My sources";
-    public static string FcSecCleanup    => Ru ? "🧹 Очистка"       : "🧹 Cleanup";
+    // v2.28.4-r1: 6-section nav removed (FreeConfigs is now single Simple page).
     public static string FcListHeader    => Ru ? "📋 Конфиги"       : "📋 Configs";
     public static string FcListShown     => Ru ? "показано"         : "shown";
 
