@@ -143,10 +143,17 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     /// <summary>v2.13.17: if true, Refresh stops early once N configs matching the latency criterion are found.
     /// v2.28.3: default flipped true so the Simple-only UI (no toggle) gets early-stop out of the box.
     /// Without this, Refresh would TCP-test all 30k+ pool entries — minutes of wait for first-time users.
-    /// Target=100/maxPing=300ms is a reasonable "find me a few good ones" goal that finishes in ~30s.</summary>
+    /// Target=100/maxPing=300ms is a reasonable "find me a few good ones" goal that finishes in ~30s.
+    ///
+    /// v2.28.3-r4 — switched from int to int? to fix the NumericUpDown binding crash:
+    /// Avalonia's NumericUpDown.Value is decimal? and pushes null when the user clears
+    /// the input box; binding to a non-nullable int threw
+    /// "InvalidCastException: Could not convert '(null)' to System.Int32" and rendered
+    /// the binding error as visible UI text. Nullable property accepts the transient
+    /// null and the `?? fallback` in usage sites preserves a sane default.</summary>
     [ObservableProperty] private bool _useLatencyGoal = true;
-    [ObservableProperty] private int _latencyGoalTarget = 100;
-    [ObservableProperty] private int _latencyGoalMaxPingMs = 300;
+    [ObservableProperty] private int? _latencyGoalTarget = 100;
+    [ObservableProperty] private int? _latencyGoalMaxPingMs = 300;
 
     /// <summary>v2.13.17: show the 3-step quickstart banner at top of page. User can dismiss.</summary>
     [ObservableProperty] private bool _showQuickstart = true;
@@ -226,14 +233,17 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             // entries fail the real connectivity test. Heuristic: 3× target,
             // capped at 300 — Deep Verify will early-stop once it finds N
             // truly-working anyway.
+            // v2.28.3-r4: handle nullable inputs from cleared NumericUpDown.
+            var nGoal = LatencyGoalTarget ?? 100;
+            var pingGoal = LatencyGoalMaxPingMs ?? 300;
             var refreshTarget = UseLatencyGoal
-                ? Math.Min(300, Math.Max(LatencyGoalTarget * 3, LatencyGoalTarget + 30))
+                ? Math.Min(300, Math.Max(nGoal * 3, nGoal + 30))
                 : (int?)null;
 
             var fresh = await Task.Run(() => _aggregator.RefreshAsync(
                 sources: sources,
                 goalTargetCount:  refreshTarget,
-                goalMaxLatencyMs: UseLatencyGoal ? LatencyGoalMaxPingMs : (int?)null,
+                goalMaxLatencyMs: UseLatencyGoal ? (int?)pingGoal : (int?)null,
                 ct: _refreshCts.Token));
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -276,12 +286,19 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         // candidate, takes its own CTS, and updates its own status text.
         if (refreshFoundOk)
         {
-            // v2.28.3-r2: align Deep Verify's target with the user's N input.
-            // The Simple-only UI exposes ONE numeric "N working" — wire it
-            // through to DeepVerifyTargetCount so the chained run terminates
-            // at the same N the user picked. (Old default DeepVerifyTargetCount=5
-            // was too small to cover a 100-candidate ask.)
-            DeepVerifyTargetCount = LatencyGoalTarget;
+            // v2.28.3-r4: switch chained Deep Verify into Custom-preset mode and
+            // wire the user's max-ping + a sane min-bandwidth (1 Mbps) into its
+            // accept-criterion. Custom preset has MeasureBandwidth=true, so the
+            // chained pipeline now ALSO surfaces bandwidth in the result list
+            // (user request: "хотелось бы проверять пропускную способность").
+            // The min-bandwidth threshold is intentionally lenient — we want to
+            // *measure* and *display* bandwidth, not aggressively filter it.
+            // 1 Mbps is below most browsing thresholds; truly dead servers fail
+            // <1 Mbps and get correctly excluded.
+            DeepVerifyTargetCount = LatencyGoalTarget ?? 100;
+            DeepVerifyPresetIndex = 4;                          // 4 = Custom
+            CustomMaxPingMs       = LatencyGoalMaxPingMs ?? 300;
+            CustomMinBandwidthMbps = 1;
             await DeepVerifyTopAsync();
         }
     }
@@ -768,6 +785,20 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 q = q.Where(c => c.Status == FreeConfigStatus.Ok || c.Status == FreeConfigStatus.Verified);
             if (!string.Equals(SelectedCountry, "All", StringComparison.OrdinalIgnoreCase))
                 q = q.Where(c => string.Equals(c.CountryCode, SelectedCountry, StringComparison.OrdinalIgnoreCase));
+
+            // v2.28.3-r4 — also honour the max-ping setting in the displayed list.
+            // User report: "ищу с пингом 50, приложение пишет нашло, а на самом
+            // деле нет". Root cause: the goal-target filter only stops Refresh
+            // early — it doesn't filter the displayed entries. After Deep Verify
+            // re-measures latency (which is usually higher than TCP-only ping),
+            // some entries may exceed the user's threshold but still show up.
+            // Apply max-ping filter only when "Only working" is on, so the
+            // unfiltered view still lets users see all aggregator output.
+            if (OnlyWorking && UseLatencyGoal && LatencyGoalMaxPingMs.HasValue)
+            {
+                var maxPing = LatencyGoalMaxPingMs.Value;
+                q = q.Where(c => c.LatencyMs > 0 && c.LatencyMs <= maxPing);
+            }
 
             // v2.28.3-r3: IP-level dedup at display time. The aggregator's
             // dedup key is Server:Port:UUID, so the same IP can appear with

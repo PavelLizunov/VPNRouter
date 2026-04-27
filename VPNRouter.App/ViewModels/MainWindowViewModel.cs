@@ -3556,8 +3556,20 @@ public partial class MainWindowViewModel : ViewModelBase
 
             // Make it the active server for the Manual/VLESS mode.
             // SaveSettings() reads SelectedServer + the Servers OC and persists them correctly.
+            //
+            // v2.28.3-r4 critical fix: also clear IsSubscribeMode. SaveSettings
+            // line 1544 picks ConfigMode by checking IsSubscribeMode FIRST, then
+            // IsVlessMode. If the user was on the Subscribe tab when they hit
+            // Apply on a free config, IsSubscribeMode stayed true and SaveSettings
+            // persisted ConfigMode='subscribe' — which made the engine pick
+            // subscription servers on Start instead of the freshly-applied free
+            // config. User report: "я подключаюсь а на самом деле к моей подписке
+            // подключает а не к выбранному конфигу". Explicitly flipping both
+            // mode flags so SaveSettings writes ConfigMode='generated' regardless
+            // of which tab the user came from.
             SelectedServer = target;
             _settings.App.ConfigMode = "generated";
+            IsSubscribeMode = false;
             IsVlessMode = true;
             SelectedServerModeIndex = 0;
 
