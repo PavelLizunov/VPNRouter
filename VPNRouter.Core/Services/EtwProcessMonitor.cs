@@ -46,10 +46,35 @@ public class EtwProcessMonitor : IProcessMonitor
     public void Stop()
     {
         _logger.Information("[ETW] Stopping process monitor");
-        _session?.Stop();
-        _session?.Dispose();
+        // v2.28.5-r2: capture references first so the thread we're trying to
+        // join doesn't see them re-nulled mid-shutdown. Stop() the session
+        // (this is what unblocks session.Source.Process() in the worker
+        // thread). Then Join with a short timeout so callers don't hang
+        // forever if the kernel ETW source is wedged. Skip Dispose here —
+        // RunSession's `using var session` already disposes deterministically
+        // when Process() returns, and a second Dispose can throw on the
+        // already-finalised session in some TraceEvent versions.
+        var thread = _sessionThread;
+        var session = _session;
         _session = null;
         _sessionThread = null;
+
+        try { session?.Stop(); }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[ETW] session.Stop threw — best-effort, continuing");
+        }
+
+        if (thread != null && thread.IsAlive)
+        {
+            // ~2 s is enough for kernel ETW Process() to unblock after Stop.
+            // If it still hasn't exited, leave it as a daemon (IsBackground=true)
+            // — the runtime will tear it down on app exit.
+            if (!thread.Join(TimeSpan.FromSeconds(2)))
+            {
+                _logger.Warning("[ETW] worker thread didn't exit within 2s after Stop; leaving daemon");
+            }
+        }
     }
 
     private void RunSession()
