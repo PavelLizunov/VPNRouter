@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Runtime;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -463,13 +464,14 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             }
 
             // Drop the local pool / queue references explicitly so the GC
-            // sees them eligible immediately, then force a gen-2 collect.
+            // sees them eligible immediately, then run the v2.28.5-r5
+            // post-search reclaim sequence.
             queue = null!;
             pool = null!;
             cachedVerified = null!;
             cachedVerifiedIds = null!;
 
-            GC.Collect(2, GCCollectionMode.Forced, blocking: false, compacting: true);
+            ReclaimPostSearchMemory();
         }
         catch (OperationCanceledException)
         {
@@ -488,7 +490,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 _aggregator.Cache.Save(file);
             }
             catch { }
-            GC.Collect(2, GCCollectionMode.Forced, blocking: false, compacting: true);
+            ReclaimPostSearchMemory();
         }
         catch (Exception ex)
         {
@@ -625,17 +627,60 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 _logger.Warning(ex, "[FreeConfigs] TrimAndReclaim: cache save failed (non-fatal)");
             }
 
-            // Force gen-2 GC so the released ~12 MB shows up in the user's
-            // task manager view within ~1s. Without this, .NET's natural
-            // gen-2 schedule can hold on for minutes after a peak.
-            // Non-blocking variant: GC starts but the search-completion
-            // status update isn't held back waiting for it.
-            GC.Collect(2, GCCollectionMode.Forced, blocking: false, compacting: true);
+            ReclaimPostSearchMemory();
         }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[FreeConfigs] TrimAndReclaim threw — skipping");
         }
+    }
+
+    /// <summary>
+    /// v2.28.5-r5: aggressive post-search reclaim. Called after the batched
+    /// flow finishes (success / cancel / exception) and from
+    /// <see cref="TrimAndReclaim"/> in the legacy path.
+    ///
+    /// <para>Three steps, in order:</para>
+    /// <list type="number">
+    /// <item><b>Schedule LOH compaction</b> (`GCSettings.LargeObjectHeapCompactionMode`
+    ///   = `CompactOnce`). Without this, large objects (e.g. the multi-MB
+    ///   `pool.json` byte buffer the fetcher allocated) live in the LOH
+    ///   indefinitely; gen-2 GC sweeps them but doesn't compact, so
+    ///   working set stays elevated even after the references are dead.</item>
+    /// <item><b>Force gen-2 GC</b> (blocking, compacting). Releases the
+    ///   freshly-marked-dead pool entries + the LOH buffers in one pass.
+    ///   Blocking is fine here — search just ended, user is looking at
+    ///   results, sub-second hitch is acceptable for a working-set drop.</item>
+    /// <item><b>Skia.PurgeAllCaches</b> — drops native font atlases and
+    ///   GPU texture caches. User report on memory-research plan: a single
+    ///   `PurgeAllCaches` call dropped ~40 MB working set in a long-lived
+    ///   Avalonia app. The 60-s `RuntimeStatus` purge is amortised; this
+    ///   one happens at the exact moment the user expects "memory should
+    ///   drop now".</item>
+    /// </list>
+    /// </summary>
+    private static void ReclaimPostSearchMemory()
+    {
+        try
+        {
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+        }
+        catch { /* not supported on all runtimes; non-fatal */ }
+
+        try
+        {
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+            // Second pass — sweep finalized objects this round picked up.
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+        }
+        catch { /* GC.Collect can be no-op if disallowed; non-fatal */ }
+
+        try
+        {
+            SkiaSharp.SKGraphics.PurgeAllCaches();
+        }
+        catch { /* native-side failures are not fatal */ }
     }
 
     [RelayCommand]
