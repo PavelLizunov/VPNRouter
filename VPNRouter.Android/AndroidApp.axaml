@@ -1,0 +1,16 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="VPNRouter.Android.AndroidApp"
+             RequestedThemeVariant="Default">
+
+    <!--
+      v3.0 Phase 0 — minimal Avalonia App for Android.
+      Phase 3 will share App.axaml and design tokens with the
+      desktop VPNRouter.App project (link the same XAML files).
+    -->
+
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+
+</Application>

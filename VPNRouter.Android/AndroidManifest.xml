@@ -2,19 +2,17 @@
 <!--
   v3.0 Android port — Phase 0 scaffold AndroidManifest.
 
-  Required permissions and service registration per the Android
-  VpnService API. See plans/vpnrouter-android-research.md §"Required
-  Android manifest bits" for rationale.
+  Minimal: only declares permissions + VpnService registration.
+  - The Avalonia MainActivity is auto-registered from `[Activity]`
+    attribute on MainActivity.cs (don't list here).
+  - Icons / themes default to system until we add resources/ in
+    Phase 1.
 
-  TODO before first build:
-    - Verify package name matches ApplicationId in csproj.
-    - Add VpnRouterService class (Phase 1: Kotlin/Java shim that
-      extends android.net.VpnService).
-    - Add MainActivity class (Avalonia entry point).
+  Reference: plans/vpnrouter-android-research.md §"Required Android
+  manifest bits".
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          xmlns:tools="http://schemas.android.com/tools"
-          package="com.ninitux.vpnrouter">
+          xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -24,36 +22,27 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
                      tools:ignore="QueryAllPackagesPermission" />
 
+    <!--
+      VpnService class — added in Phase 1 as a Kotlin/Java native shim
+      extending android.net.VpnService. Once we have the class file,
+      uncomment:
+
+      <service android:name=".VpnRouterService"
+               android:permission="android.permission.BIND_VPN_SERVICE"
+               android:foregroundServiceType="systemExempted"
+               android:exported="false">
+          <intent-filter>
+              <action android:name="android.net.VpnService" />
+          </intent-filter>
+          <meta-data
+              android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"
+              android:value="true" />
+      </service>
+    -->
+
     <application android:label="VPNRouter"
-                 android:icon="@mipmap/ic_launcher"
-                 android:roundIcon="@mipmap/ic_launcher_round"
-                 android:theme="@style/Theme.AppCompat.NoActionBar">
-
-        <!-- TODO: Avalonia MainActivity goes here once the C# shim is added. -->
-        <activity android:name="crc6450e568c951913723.MainActivity"
-                  android:exported="true"
-                  android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|keyboard|screenLayout|uiMode|fontScale|locale|navigation|density"
-                  android:launchMode="singleTask">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-        <!-- VPN service. Bound by Android system on user-confirm of VPN consent.
-             foregroundServiceType=systemExempted lets us keep running in Doze. -->
-        <service android:name=".VpnRouterService"
-                 android:permission="android.permission.BIND_VPN_SERVICE"
-                 android:foregroundServiceType="systemExempted"
-                 android:exported="false">
-            <intent-filter>
-                <action android:name="android.net.VpnService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"
-                android:value="true" />
-        </service>
-
+                 android:supportsRtl="true">
+        <!-- Avalonia MainActivity auto-generated from [Activity] attribute. -->
     </application>
 
 </manifest>
