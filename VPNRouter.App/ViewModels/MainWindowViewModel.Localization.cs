@@ -173,6 +173,7 @@ public partial class MainWindowViewModel
     public string L_FcSavedEmpty             => Strings.FcSavedEmpty;
     public string L_FcSavedRecheckOneTooltip => Strings.FcSavedRecheckOneTooltip;
     public string L_FcSavedRemoveOneTooltip  => Strings.FcSavedRemoveOneTooltip;
+    public string L_FcSearchListEmptyHint    => Strings.FcSearchListEmptyHint;
     public string L_FcTargetNLabel => Strings.FcTargetNLabel;
     public string L_FcTipVpnActive => Strings.FcTipVpnActive;
     public string L_FcUserSrcAdd => Strings.FcUserSrcAdd;

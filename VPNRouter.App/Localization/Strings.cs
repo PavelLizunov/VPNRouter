@@ -550,6 +550,15 @@ public static class Strings
         ? $"Перепроверено · {verified} работают, {failed} не работают"
         : $"Rechecked · {verified} working, {failed} failed";
 
+    /// <summary>v2.28.6-r3: thin hint shown inside the empty search-tab
+    /// list area. Replaces the v2.28.6-r1/r2 "no configs loaded" CTA card —
+    /// the green search card right above the list IS the call-to-action,
+    /// a second button below was redundant and broke the visual style of
+    /// other pages (ServersPage / ToolsPage have no big empty-state CTA).</summary>
+    public static string FcSearchListEmptyHint => Ru
+        ? "Нажмите кнопку выше, чтобы найти конфиги."
+        : "Click the button above to find configs.";
+
     // v2.13.18 — Fast scan toggle
     public static string FcFastScanLabel => Ru ? "⚡ Fast scan (только TCP, без TLS)" : "⚡ Fast scan (TCP only, no TLS)";
     public static string FcFastScanHint  => Ru
