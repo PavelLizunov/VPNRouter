@@ -75,76 +75,45 @@ public partial class FreeConfigItemViewModel : ObservableObject
 
     public bool IsWorking => Entry.Status == FreeConfigStatus.Ok;
 
-    // ── v2.28.6 Phase 2 — Saved-tab freshness ──
+    // ── v2.28.6 Phase 2/5 — Saved-tab freshness ──
+    // All five getters delegate to FreeConfigFreshness in Core so the
+    // classification rules are testable from VPNRouter.Tests without
+    // an Avalonia headless harness.
 
     /// <summary>True if the most recent re-verify (or the original verify)
-    /// failed, leaving us with last-good numbers but no current connectivity.
-    /// Phase 3 sets <see cref="FreeConfigEntry.LastVerifyFailedAt"/> to
-    /// drive this; Phase 1 left it null on every entry.</summary>
-    public bool HasFailedLastCheck =>
-        Entry.LastVerifyFailedAt.HasValue &&
-        (!Entry.LastTestedAt.HasValue ||
-            Entry.LastVerifyFailedAt.Value >= Entry.LastTestedAt.Value);
+    /// failed, leaving us with last-good numbers but no current connectivity.</summary>
+    public bool HasFailedLastCheck => FreeConfigFreshness.HasFailedLastCheck(Entry);
 
     /// <summary>True when the saved entry is older than 24 h since its
-    /// last successful verify, OR the last re-verify failed. Drives the
-    /// "Recheck stale (N)" bulk button + the dim-opacity rendering.</summary>
-    public bool IsStale
-    {
-        get
-        {
-            if (HasFailedLastCheck) return true;
-            if (!Entry.LastTestedAt.HasValue) return true;
-            return (DateTime.UtcNow - Entry.LastTestedAt.Value).TotalHours > 24;
-        }
-    }
+    /// last successful verify, OR the last re-verify failed.</summary>
+    public bool IsStale => FreeConfigFreshness.IsStale(Entry, DateTime.UtcNow);
 
     /// <summary>Human label for the Status column on the Saved tab:
-    /// "fresh" / "Nd ago" / "stale" / "failed". Computed from
-    /// <see cref="FreeConfigEntry.LastTestedAt"/> +
-    /// <see cref="FreeConfigEntry.LastVerifyFailedAt"/> at VM build time.</summary>
+    /// "fresh" / "Nd ago" / "stale" / "failed".</summary>
     public string FreshnessLabel
     {
         get
         {
-            if (HasFailedLastCheck) return Strings.FcFreshnessFailed;
-            if (!Entry.LastTestedAt.HasValue) return Strings.FcFreshnessFresh;
-            var ageDays = (DateTime.UtcNow - Entry.LastTestedAt.Value).TotalDays;
-            if (ageDays < 1) return Strings.FcFreshnessFresh;
-            if (ageDays > 7) return Strings.FcFreshnessStale;
-            return Strings.FcFreshnessAgeingDays((int)Math.Floor(ageDays));
+            var now = DateTime.UtcNow;
+            return FreeConfigFreshness.ClassifyTier(Entry, now) switch
+            {
+                FreeConfigFreshnessTier.Failed => Strings.FcFreshnessFailed,
+                FreeConfigFreshnessTier.Stale  => Strings.FcFreshnessStale,
+                FreeConfigFreshnessTier.Ageing => Strings.FcFreshnessAgeingDays(
+                    FreeConfigFreshness.AgeDays(Entry, now)),
+                _ => Strings.FcFreshnessFresh,
+            };
         }
     }
 
     /// <summary>Visual dim level for the Saved tab: 1.0 fresh / 0.75
     /// ageing / 0.5 stale or failed. Bound to row Opacity.</summary>
-    public double OpacityValue
-    {
-        get
-        {
-            if (HasFailedLastCheck) return 0.5;
-            if (!Entry.LastTestedAt.HasValue) return 1.0;
-            var ageDays = (DateTime.UtcNow - Entry.LastTestedAt.Value).TotalDays;
-            if (ageDays < 1) return 1.0;
-            if (ageDays > 7) return 0.5;
-            return 0.75;
-        }
-    }
+    public double OpacityValue =>
+        FreeConfigFreshness.OpacityFor(
+            FreeConfigFreshness.ClassifyTier(Entry, DateTime.UtcNow));
 
-    /// <summary>Sort key for the Saved tab: ascending by freshness tier
-    /// (fresh first), then by latency. Failed-last-check rows go to the
-    /// bottom regardless of age.</summary>
-    public int FreshnessSortKey
-    {
-        get
-        {
-            if (HasFailedLastCheck) return 1_000_000;
-            if (!Entry.LastTestedAt.HasValue) return Entry.LatencyMs > 0 ? Entry.LatencyMs : 0;
-            var ageDays = (DateTime.UtcNow - Entry.LastTestedAt.Value).TotalDays;
-            int tier = ageDays < 1 ? 0 : ageDays > 7 ? 200_000 : 100_000;
-            return tier + (Entry.LatencyMs > 0 ? Entry.LatencyMs : 0);
-        }
-    }
+    /// <summary>Sort key for the Saved tab: tier-first then by latency.</summary>
+    public int FreshnessSortKey => FreeConfigFreshness.SortKey(Entry, DateTime.UtcNow);
 
     /// <summary>Hex color string for latency badge.</summary>
     public string LatencyColor => Entry.Status switch

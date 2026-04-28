@@ -779,9 +779,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 
         // Snapshot last-good values before the verifier mutates them.
         var entry = item.Entry;
-        var prevLatency = entry.LatencyMs;
-        var prevBw = entry.MeasuredBandwidthMbps;
-        var prevTested = entry.LastTestedAt;
+        var prior = FreeConfigFreshness.RecheckSnapshot.Capture(entry);
 
         item.IsRecheckRunning = true;
         IsBusy = true;
@@ -797,28 +795,24 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             });
 
             _deepVerifier.MeasureBandwidth = true;
-            await _deepVerifier.VerifyOneAsync(entry, ct);
-
-            // VerifyOneAsync sets LastTestedAt = now and may flip Status to
-            // TlsFailed / leave it at Ok if the proxy didn't connect. For the
-            // saved-list semantics, we want to keep Status = Verified so the
-            // entry stays under the retention filter; success clears the
-            // failure marker, failure restores last-good numbers.
-            if (entry.Status == FreeConfigStatus.Verified)
+            try
             {
-                entry.LastVerifyFailedAt = null;
-                _logger.Information("[Recheck] {host}:{port} → Verified (latency {ms}ms)",
-                    entry.Host, entry.Port, entry.LatencyMs);
+                await _deepVerifier.VerifyOneAsync(entry, ct);
+                FreeConfigFreshness.MergeRecheckResult(entry, prior, DateTime.UtcNow);
+                _logger.Information("[Recheck] {host}:{port} → {result}",
+                    entry.Host, entry.Port,
+                    entry.LastVerifyFailedAt.HasValue ? "failed; last-good preserved" : "Verified");
             }
-            else
+            catch (OperationCanceledException)
             {
-                entry.Status = FreeConfigStatus.Verified;
-                entry.LatencyMs = prevLatency;
-                entry.MeasuredBandwidthMbps = prevBw;
-                entry.LastTestedAt = prevTested;
-                entry.LastVerifyFailedAt = DateTime.UtcNow;
-                _logger.Information("[Recheck] {host}:{port} → failed; last-good preserved",
-                    entry.Host, entry.Port);
+                // v2.28.6-r2 cancel safety: restore the entry to prior
+                // state. Without this, a cancelled recheck would leave
+                // Status = TlsFailed (or whatever the verifier mutated to)
+                // and the retention filter would drop the entry on next
+                // cache load. Don't set LastVerifyFailedAt — cancel isn't
+                // a failure event.
+                FreeConfigFreshness.RestorePriorState(entry, prior);
+                throw;
             }
 
             UpsertSavedConfig(entry);
@@ -885,28 +879,13 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             var tasks = stale.Select(async cfg =>
             {
                 await sem.WaitAsync(ct);
+                var prior = FreeConfigFreshness.RecheckSnapshot.Capture(cfg);
                 try
                 {
-                    var prevLatency = cfg.LatencyMs;
-                    var prevBw = cfg.MeasuredBandwidthMbps;
-                    var prevTested = cfg.LastTestedAt;
-
                     await _deepVerifier.VerifyOneAsync(cfg, ct);
-
-                    if (cfg.Status == FreeConfigStatus.Verified)
-                    {
-                        cfg.LastVerifyFailedAt = null;
-                        Interlocked.Increment(ref verified);
-                    }
-                    else
-                    {
-                        cfg.Status = FreeConfigStatus.Verified;
-                        cfg.LatencyMs = prevLatency;
-                        cfg.MeasuredBandwidthMbps = prevBw;
-                        cfg.LastTestedAt = prevTested;
-                        cfg.LastVerifyFailedAt = DateTime.UtcNow;
-                        Interlocked.Increment(ref failed);
-                    }
+                    FreeConfigFreshness.MergeRecheckResult(cfg, prior, DateTime.UtcNow);
+                    if (cfg.LastVerifyFailedAt.HasValue) Interlocked.Increment(ref failed);
+                    else Interlocked.Increment(ref verified);
 
                     var d = Interlocked.Increment(ref done);
                     Dispatcher.UIThread.Post(() =>
@@ -915,7 +894,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                         ProgressDone = d;
                     });
                 }
-                catch (OperationCanceledException) { throw; }
+                catch (OperationCanceledException)
+                {
+                    // v2.28.6-r2 cancel safety — see RecheckOneAsync above.
+                    FreeConfigFreshness.RestorePriorState(cfg, prior);
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     _logger.Warning(ex, "[Recheck-bulk] failed for {host}:{port}",
