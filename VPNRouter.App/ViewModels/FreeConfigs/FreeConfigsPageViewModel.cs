@@ -313,12 +313,19 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                         c.CountryCode, "RU", StringComparison.OrdinalIgnoreCase))))
                 .ToList();
 
+            // v2.28.5-r4: progress bar tracks "found / target" instead of
+            // "processed / queue". The user's mental model is "I want N
+            // working configs"; the bar fills from 0 to N as each Verified
+            // is added. Previously the bar updated only once per ~500-entry
+            // batch — visible freezes for 30-90 s during deep-verify made
+            // it look like the app had hung. Now it ticks within seconds
+            // of each Verified finding.
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 StatusText = Strings.FcStatusBatchedSearchStart(target, pool.Count);
                 _allConfigs = new List<FreeConfigEntry>(verifiedList);
                 ApplyFiltersAndStats();
-                ProgressTotal = Math.Min(queue.Count, FreeConfigAggregator.DefaultBatchSize * 4);
+                ProgressTotal = target;
                 ProgressDone = 0;
             });
 
@@ -329,10 +336,13 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             var deepSem = new SemaphoreSlim(5);
             var batchSize = FreeConfigAggregator.DefaultBatchSize;
             var processedCount = 0;
+            var totalBatches = (queue.Count + batchSize - 1) / batchSize;
 
             for (int i = 0; i < queue.Count; i += batchSize)
             {
                 if (ct.IsCancellationRequested || verifiedList.Count >= target) break;
+
+                var currentBatchNum = (i / batchSize) + 1;
 
                 // Slice the next batch. ToList() materialises a fresh list so
                 // the rest of `queue` is still referenced — but the batch
@@ -342,13 +352,35 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     StatusText = Strings.FcStatusBatchedTcpTls(
-                        verifiedList.Count, target, i + 1, queue.Count);
+                        verifiedList.Count, target, currentBatchNum, totalBatches);
                 });
 
                 // 2a: TCP + TLS test the batch (semaphore-capped, parallel).
+                // v2.28.5-r4: pass a progress callback so the status line
+                // updates while TCP+TLS is in flight (200-500 entries take
+                // ~5-15 s; without progress feedback the bar appears frozen).
+                var tcpDone = 0;
+                var tcpTotal = batch.Count;
+                var lastStatusUpdate = DateTime.MinValue;
+                var batchProgress = new Progress<(int done, int total)>(p =>
+                {
+                    Interlocked.Exchange(ref tcpDone, p.done);
+                    // Throttle UI updates to ~5/sec so we don't spam the
+                    // dispatcher when 80 parallel TCP probes finish at once.
+                    var now = DateTime.UtcNow;
+                    if ((now - lastStatusUpdate).TotalMilliseconds < 200) return;
+                    lastStatusUpdate = now;
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        StatusText = Strings.FcStatusBatchedTcpTlsProgress(
+                            verifiedList.Count, target, currentBatchNum, totalBatches,
+                            p.done, p.total);
+                    });
+                });
+
                 try
                 {
-                    await _aggregator.Tester.TestAllAsync(batch, progress: null, ct);
+                    await _aggregator.Tester.TestAllAsync(batch, batchProgress, ct);
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
@@ -365,6 +397,13 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                              || c.Status == FreeConfigStatus.Verified)
                     .OrderBy(c => c.LatencyMs > 0 ? c.LatencyMs : int.MaxValue)
                     .ToList();
+
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    StatusText = Strings.FcStatusBatchedDeepVerify(
+                        verifiedList.Count, target, currentBatchNum, totalBatches,
+                        okSubset.Count);
+                });
 
                 var deepTasks = new List<Task>();
                 foreach (var cfg in okSubset)
@@ -388,17 +427,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     await Task.WhenAll(deepTasks);
 
                 processedCount += batch.Count;
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    ProgressDone = Math.Min(processedCount, ProgressTotal);
-                    StatusText = Strings.FcStatusBatchedProgress(
-                        verifiedList.Count, target, processedCount, queue.Count);
-                });
 
                 // 2c: explicit drop of intermediate references so the GC
-                // can reclaim batch + okSubset between iterations. Without
-                // these, .NET sometimes holds the previous batch alive
-                // until the loop iteration object is replaced.
+                // can reclaim batch + okSubset between iterations.
                 batch = null!;
                 okSubset = null!;
                 deepTasks.Clear();
@@ -518,6 +549,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     {
                         _allConfigs = snapshot;
                         ApplyFiltersAndStats();
+                        // v2.28.5-r4: tick progress bar each time a Verified
+                        // entry is appended. ProgressTotal=target, so the bar
+                        // fills 0→target as configs trickle in. This is what
+                        // the user sees as "search is making progress".
+                        ProgressDone = Math.Min(snapshot.Count, ProgressTotal);
+                        StatusText = Strings.FcStatusBatchedFound(snapshot.Count, target);
                     });
                 }
             }

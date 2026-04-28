@@ -405,16 +405,22 @@ public static class Strings
         ? $"Список исчерпан — протестировано {tested}, найдено {verified} рабочих"
         : $"Queue exhausted — tested {tested}, found {verified} working";
 
-    // v2.28.5-r2: batched fetch+test+verify status messages
+    // v2.28.5-r2/r4: batched fetch+test+verify status messages
     public static string FcStatusBatchedSearchStart(int target, int poolSize) => Ru
         ? $"Поиск {target} рабочих конфигов из пула {poolSize}..."
         : $"Searching {target} working configs from pool of {poolSize}...";
-    public static string FcStatusBatchedTcpTls(int found, int target, int batchStart, int totalQueue) => Ru
-        ? $"Найдено {found}/{target} · проверка батча {batchStart}/{totalQueue} (TCP+TLS)..."
-        : $"Found {found}/{target} · testing batch {batchStart}/{totalQueue} (TCP+TLS)...";
-    public static string FcStatusBatchedProgress(int found, int target, int processed, int totalQueue) => Ru
-        ? $"Найдено {found}/{target} · обработано {processed}/{totalQueue}"
-        : $"Found {found}/{target} · processed {processed}/{totalQueue}";
+    public static string FcStatusBatchedTcpTls(int found, int target, int batchNum, int totalBatches) => Ru
+        ? $"Найдено {found}/{target} · батч {batchNum}/{totalBatches} (TCP+TLS)..."
+        : $"Found {found}/{target} · batch {batchNum}/{totalBatches} (TCP+TLS)...";
+    public static string FcStatusBatchedTcpTlsProgress(int found, int target, int batchNum, int totalBatches, int done, int total) => Ru
+        ? $"Найдено {found}/{target} · батч {batchNum}/{totalBatches} · проверено {done}/{total}"
+        : $"Found {found}/{target} · batch {batchNum}/{totalBatches} · tested {done}/{total}";
+    public static string FcStatusBatchedDeepVerify(int found, int target, int batchNum, int totalBatches, int candidates) => Ru
+        ? $"Найдено {found}/{target} · батч {batchNum}/{totalBatches} · глубокая проверка {candidates} кандидатов..."
+        : $"Found {found}/{target} · batch {batchNum}/{totalBatches} · deep-verifying {candidates} candidates...";
+    public static string FcStatusBatchedFound(int found, int target) => Ru
+        ? $"Найдено {found}/{target} рабочих конфигов..."
+        : $"Found {found}/{target} working configs...";
 
     public static string FcDeepTargetLabel => Ru ? "Цель:" : "Target:";
     public static string FcDeepExcludeRu   => Ru ? "Пропускать RU" : "Skip RU servers";
