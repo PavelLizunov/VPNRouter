@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v3.0 Android port — Phase 0 scaffold AndroidManifest.
+
+  Required permissions and service registration per the Android
+  VpnService API. See plans/vpnrouter-android-research.md §"Required
+  Android manifest bits" for rationale.
+
+  TODO before first build:
+    - Verify package name matches ApplicationId in csproj.
+    - Add VpnRouterService class (Phase 1: Kotlin/Java shim that
+      extends android.net.VpnService).
+    - Add MainActivity class (Avalonia entry point).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools"
+          package="com.ninitux.vpnrouter">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
+                     tools:ignore="QueryAllPackagesPermission" />
+
+    <application android:label="VPNRouter"
+                 android:icon="@mipmap/ic_launcher"
+                 android:roundIcon="@mipmap/ic_launcher_round"
+                 android:theme="@style/Theme.AppCompat.NoActionBar">
+
+        <!-- TODO: Avalonia MainActivity goes here once the C# shim is added. -->
+        <activity android:name="crc6450e568c951913723.MainActivity"
+                  android:exported="true"
+                  android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|keyboard|screenLayout|uiMode|fontScale|locale|navigation|density"
+                  android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- VPN service. Bound by Android system on user-confirm of VPN consent.
+             foregroundServiceType=systemExempted lets us keep running in Doze. -->
+        <service android:name=".VpnRouterService"
+                 android:permission="android.permission.BIND_VPN_SERVICE"
+                 android:foregroundServiceType="systemExempted"
+                 android:exported="false">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"
+                android:value="true" />
+        </service>
+
+    </application>
+
+</manifest>

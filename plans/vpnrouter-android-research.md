@@ -483,3 +483,67 @@ External references:
 **Status**: research only. No code changes. Decision pending on whether to
 start v3.0-android-beta now or after v2.x desktop reaches a quieter
 maintenance period.
+
+---
+
+## Phase 0 progress — 2026-04-29
+
+User triggered start of implementation immediately after this research
+landed ("Можешь релизить и начинать реализацию для android"). Phase 0
+laid the foundation:
+
+### What's done
+
+- **`.NET 8 android workload installed**: Mono runtime + AOT cross-
+  compilers for arm, arm64, x86, x64. ~600 MB. Verified via
+  `dotnet workload list`.
+- **`VPNRouter.Core.csproj` multi-target opt-in**: added
+  `<TargetFrameworks Condition="EnableAndroidTarget==true">net8.0;net8.0-android</TargetFrameworks>`.
+  Default build (and CI) still compiles only `net8.0`. `dotnet build /p:EnableAndroidTarget=true`
+  flips the switch. `PLATFORM_ANDROID` define added for that target.
+  `InternalsVisibleTo` on tests scoped to net8.0 only.
+- **`VPNRouter.Android/` scaffold project**:
+  - `VPNRouter.Android.csproj` — Avalonia 11.3 + ProjectReference to
+    Core (with `EnableAndroidTarget=true`), application id
+    `com.ninitux.vpnrouter`, multi-RID (arm64/arm/x64/x86), APK package
+    format. NOT yet added to solution to avoid breaking `dotnet build VPNRouter.sln`
+    for users without Android SDK.
+  - `AndroidManifest.xml` — VpnService registration, INTERNET +
+    FOREGROUND_SERVICE + POST_NOTIFICATIONS + QUERY_ALL_PACKAGES
+    permissions, supports-always-on metadata.
+  - `README.md` — install steps for Android SDK + JDK, Phase 1
+    breakdown with Kotlin/Java pseudocode.
+
+### Blocker hit
+
+- **JDK install via choco fails on this VM** (jdk8 dependency MSI
+  rejects, Temurin 17 also fails — likely VirtualBox guest's choco
+  mirror cache or the MSI signature gate). Without JDK no Android SDK,
+  without Android SDK no Android compile.
+- **Workaround paths** (any one unblocks):
+  - Direct download Temurin 17 MSI from adoptium.net + run installer
+    by hand.
+  - Install Android Studio (~3 GB, bundles JDK).
+  - Switch to Linux VM where `apt install openjdk-17-jdk` is a one-liner.
+  - Build on the existing Mac host (`slovn@192.168.0.246`) which already
+    has Xcode + likely a JDK. SSH in and run from there.
+
+### Next session — Phase 1 entry
+
+When SDK ready:
+
+1. Verify `dotnet build VPNRouter.Core/VPNRouter.Core.csproj /p:EnableAndroidTarget=true`
+   succeeds. Identify all source files that need `#if PLATFORM_ANDROID`
+   guards (likely zero — most Windows-only code is already gated by
+   `#if PLATFORM_WINDOWS`).
+2. `dotnet build VPNRouter.Android/VPNRouter.Android.csproj` — should
+   succeed once SDK is found. Empty APK output expected (no Activity
+   yet).
+3. Add `MainActivity.cs` (Avalonia entry point) — see README's Phase 1
+   pseudocode.
+4. Build libbox.aar from sing-box-for-android upstream, drop into
+   `VPNRouter.Android/Lib/`.
+5. Add `VpnRouterService.kt` (Kotlin VpnService shim).
+
+Estimated to first APK that actually starts a tunnel: 1-1.5 weeks of
+focused work after SDK ready.

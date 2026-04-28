@@ -1,17 +1,29 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Multi-targeting net8.0 + net8.0-android is opt-in via the
+         EnableAndroidTarget MSBuild property. Default builds (and CI)
+         compile only net8.0. To enable Android compile:
+             dotnet build /p:EnableAndroidTarget=true
+         The Android SDK (platforms;android-34, build-tools, platform-
+         tools) must be installed and AndroidSdkDirectory set. v3.0
+         Android port roadmap in plans/vpnrouter-android-research.md. -->
+    <TargetFrameworks Condition="'$(EnableAndroidTarget)' == 'true'">net8.0;net8.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="'$(EnableAndroidTarget)' != 'true'">net8.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == 'net8.0-android'">21.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
-  <!-- Windows-only: define PLATFORM_WINDOWS for conditional compilation -->
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+  <!-- Platform constants: defined per (target framework × build host OS). -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0' AND $([MSBuild]::IsOSPlatform('Windows'))">
     <DefineConstants>$(DefineConstants);PLATFORM_WINDOWS</DefineConstants>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-android'">
+    <DefineConstants>$(DefineConstants);PLATFORM_ANDROID</DefineConstants>
+  </PropertyGroup>
 
-  <!-- Cross-platform packages -->
+  <!-- Cross-platform packages — load for all targets. -->
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="Serilog" Version="3.1.1" />
@@ -20,8 +32,11 @@
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
   </ItemGroup>
 
-  <!-- Windows-only packages (ETW, WMI) -->
-  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+  <!-- Windows-only packages (ETW, WMI). Only loaded when building net8.0
+       target on a Windows host. Android target excludes these — Windows-
+       specific files in the source tree are gated behind PLATFORM_WINDOWS
+       so they compile out on Android. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0' AND $([MSBuild]::IsOSPlatform('Windows'))">
     <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.7" />
     <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
@@ -29,8 +44,8 @@
   <!-- v2.27.2: expose internals to the test project so unit tests can
        exercise helpers like VpnEngine.ComputeTunFingerprint without us
        having to make them public. Standard .NET 8 friend-assembly
-       pattern — no runtime impact. -->
-  <ItemGroup>
+       pattern — no runtime impact. Tests project is net8.0 only. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
     <InternalsVisibleTo Include="VPNRouter.Tests" />
   </ItemGroup>
 

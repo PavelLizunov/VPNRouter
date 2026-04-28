@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- v3.0 Android port — Phase 0 scaffold.
+       Cannot build standalone yet (Android SDK not installed on this
+       host). Build when SDK is available:
+           dotnet build VPNRouter.Android/VPNRouter.Android.csproj \
+                  /p:AndroidSdkDirectory=<path>
+       Or set $ANDROID_HOME / $ANDROID_SDK_ROOT env var.
+
+       Reference plan: plans/vpnrouter-android-research.md
+       Reference issue tracker: TBD on first user-visible Android build.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>21.0</SupportedOSPlatformVersion>
+    <TargetPlatformVersion>34</TargetPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <ApplicationId>com.ninitux.vpnrouter</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>3.0.0-android-alpha</ApplicationDisplayVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- Android-only define so VPNRouter.Core's Android branches compile. -->
+    <DefineConstants>$(DefineConstants);PLATFORM_ANDROID</DefineConstants>
+
+    <!-- Android-specific build flags. -->
+    <RuntimeIdentifiers>android-arm64;android-arm;android-x64;android-x86</RuntimeIdentifiers>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <AndroidSigningKeyStore Condition="'$(Configuration)' == 'Release'">vpnrouter.keystore</AndroidSigningKeyStore>
+    <AndroidSigningKeyAlias Condition="'$(Configuration)' == 'Release'">vpnrouter</AndroidSigningKeyAlias>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- VPNRouter.Core needs to be built with Android target enabled. -->
+    <ProjectReference Include="..\VPNRouter.Core\VPNRouter.Core.csproj">
+      <Properties>EnableAndroidTarget=true</Properties>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Avalonia for Android. Same version as desktop App. Note:
+         Avalonia.Android pulls in System.Net.WebSockets, System.IO.Pipelines,
+         and the Mono Android runtime by transitive dependency. -->
+    <PackageReference Include="Avalonia" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Android" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+  </ItemGroup>
+
+  <!-- libbox.aar — sing-box Android binding from sagernet/sing-box-for-android.
+       Once we have the SDK + a real keystore, drop libbox.aar into Lib/ and
+       reference here. For Phase 0 scaffold, this is a placeholder include. -->
+  <!--
+  <ItemGroup>
+    <AndroidLibrary Include="Lib\libbox.aar" />
+  </ItemGroup>
+  -->
+
+</Project>
