@@ -321,6 +321,7 @@
                                     <Grid ColumnDefinitions="44,*,72,72,68,52" Height="22"
                                           Opacity="{Binding OpacityValue}">
                                         <TextBlock Grid.Column="0" Text="{Binding CountryDisplay}"
+                                                   FontFamily="{DynamicResource EmojiFlagFont}, $Default"
                                                    FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                         <TextBlock Grid.Column="1" Text="{Binding Endpoint}"
                                                    FontSize="10" VerticalAlignment="Center" Margin="8,0,0,0"
