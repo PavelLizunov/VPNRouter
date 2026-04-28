@@ -159,7 +159,29 @@ public sealed class FreeConfigDeepVerifier
             if (httpOk)
             {
                 cfg.Status = FreeConfigStatus.Verified;
-                cfg.LatencyMs = httpLatencyMs;
+                // v2.28.6-r5: do NOT overwrite cfg.LatencyMs with httpLatencyMs.
+                // HTTP RTT through the proxy includes 5-7 round-trips:
+                //   1. local TCP+SOCKS handshake
+                //   2. TCP connect to proxy server
+                //   3. VLESS+Reality TLS-like handshake
+                //   4. TCP connect from proxy to target (cloudflare.com)
+                //   5. TLS handshake to target
+                //   6. HTTP request/response
+                // Even on a 30 ms link to the proxy, this stacks up to
+                // 200-500 ms — what the user sees as "ping > 300 ms".
+                // The user's mental model of "ping" is raw TCP RTT to the
+                // proxy server. That value was already measured by
+                // FreeConfigTester.TestOneAsync before this method ran.
+                // We keep cfg.LatencyMs = TCP ping; httpLatencyMs is used
+                // only for logging and as the "did the proxy actually
+                // pass traffic" gate above.
+                if (cfg.LatencyMs == 0)
+                {
+                    // Defensive fallback for recheck-only flows where the
+                    // verifier ran without a fresh TCP ping (e.g. legacy
+                    // call site). Still better than showing 0 ms.
+                    cfg.LatencyMs = httpLatencyMs;
+                }
                 cfg.LastError = null;
 
                 // v2.14.3: optional bandwidth measurement via 5 MB download through same SOCKS proxy.

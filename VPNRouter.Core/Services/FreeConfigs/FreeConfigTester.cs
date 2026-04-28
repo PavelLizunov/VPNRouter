@@ -18,7 +18,11 @@ namespace VPNRouter.Core.Services.FreeConfigs;
 /// </summary>
 public sealed class FreeConfigTester
 {
-    private static readonly TimeSpan TcpConnectTimeout = TimeSpan.FromSeconds(3);
+    // v2.28.6-r5: TCP connect timeout dropped 3s → 1.5s. Most live VLESS
+    // servers respond in < 500 ms; 1.5 s still covers slow / overseas links.
+    // Effect: dead entries (most of the pool) get killed twice as fast,
+    // halving the "tested 500/500" wait before deep-verify starts.
+    private static readonly TimeSpan TcpConnectTimeout = TimeSpan.FromMilliseconds(1500);
     private static readonly TimeSpan TlsHandshakeTimeout = TimeSpan.FromSeconds(3);  // v2.13.16: was 5s — most real servers handshake in <1s; 3s covers slow links
 
     /// <summary>Above this latency (ms) mark as "Slow" even if reachable.</summary>
@@ -135,6 +139,25 @@ public sealed class FreeConfigTester
 
         cfg.LatencyMs = bestLatency;
         cfg.Status = bestLatency > SlowThresholdMs ? FreeConfigStatus.Slow : FreeConfigStatus.Ok;
+    }
+
+    /// <summary>v2.28.6-r5: public TCP-only ping helper used by the
+    /// Recheck commands. Updates <see cref="FreeConfigEntry.LatencyMs"/>
+    /// with a fresh raw TCP RTT (the recheck flow then runs deep-verify
+    /// for the proxy-alive gate; we keep TCP ping as the displayed value).
+    /// Skips TLS validation — Recheck runs only on already-Verified entries
+    /// that previously passed the full TCP+TLS gauntlet, so re-validating
+    /// TLS is redundant and costs another second per entry.</summary>
+    public async Task TcpPingOnlyAsync(FreeConfigEntry cfg, CancellationToken ct = default)
+    {
+        if (cfg == null) return;
+        var (status, latency, _) = await TcpPingAsync(cfg.Host, cfg.Port, ct);
+        if (status == FreeConfigStatus.Ok)
+        {
+            cfg.LatencyMs = latency;
+        }
+        // Don't mutate Status/LastError on failure — caller (Recheck flow)
+        // needs the original Verified status preserved for retention.
     }
 
     /// <summary>Single TCP connect attempt with timeout.</summary>

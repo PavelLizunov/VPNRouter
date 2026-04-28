@@ -797,11 +797,17 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             _deepVerifier.MeasureBandwidth = true;
             try
             {
+                // v2.28.6-r5: refresh raw TCP ping FIRST so cfg.LatencyMs
+                // reflects current network RTT to the proxy server (not the
+                // 5-7-RTT-inflated HTTP roundtrip the deep verifier writes).
+                // Quick: TCP-only, ~500 ms - 1.5 s typical.
+                await _aggregator.Tester.TcpPingOnlyAsync(entry, ct);
                 await _deepVerifier.VerifyOneAsync(entry, ct);
                 FreeConfigFreshness.MergeRecheckResult(entry, prior, DateTime.UtcNow);
-                _logger.Information("[Recheck] {host}:{port} → {result}",
+                _logger.Information("[Recheck] {host}:{port} → {result} ({ping} ms)",
                     entry.Host, entry.Port,
-                    entry.LastVerifyFailedAt.HasValue ? "failed; last-good preserved" : "Verified");
+                    entry.LastVerifyFailedAt.HasValue ? "failed; last-good preserved" : "Verified",
+                    entry.LatencyMs);
             }
             catch (OperationCanceledException)
             {
@@ -882,6 +888,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 var prior = FreeConfigFreshness.RecheckSnapshot.Capture(cfg);
                 try
                 {
+                    // v2.28.6-r5: see RecheckOneAsync — refresh TCP ping
+                    // so LatencyMs is raw network RTT, not HTTP RTT.
+                    await _aggregator.Tester.TcpPingOnlyAsync(cfg, ct);
                     await _deepVerifier.VerifyOneAsync(cfg, ct);
                     FreeConfigFreshness.MergeRecheckResult(cfg, prior, DateTime.UtcNow);
                     if (cfg.LastVerifyFailedAt.HasValue) Interlocked.Increment(ref failed);

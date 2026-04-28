@@ -434,7 +434,7 @@ public static class Strings
         ? "Скачает публичные VLESS-конфиги и проверит каждый реальной попыткой подключения. Найдёт N рабочих с пингом ниже порога."
         : "Downloads public VLESS configs and tries each one with a real connection. Stops when N working ones meet your ping threshold.";
     public static string FcStatusMainVpnActive => Ru
-        ? "⚠ Основной VPN активен — результаты проверки могут быть недостоверны. Отключите VPN перед deep verify."
+        ? "⚠ Основной VPN активен — результаты проверки могут быть недостоверны. Отключите VPN перед глубокой проверкой."
         : "⚠ Main VPN is active — verification results may be unreliable. Disconnect VPN first.";
     public static string FcOpenLogs         => Ru ? "📁 Логи"                : "📁 Logs";
     public static string FcClearFailed      => Ru ? "🧹 Убрать мусор"        : "🧹 Clear dead";
@@ -442,7 +442,7 @@ public static class Strings
     public static string FcKeepVerifiedOnly => FcKeepVerified;
     public static string FcClearAll         => Ru ? "💥 Очистить всё"        : "💥 Clear all";
     public static string FcCleanupHint      => Ru
-        ? "Очистка: убери мусорные записи, чтобы быстрее работал Refresh. При следующем обновлении всё перезагрузится из источников."
+        ? "Очистка: убери мусорные записи, чтобы поиск работал быстрее. При следующем обновлении всё перезагрузится из источников."
         : "Cleanup: remove dead entries to speed up Refresh. Next Refresh re-fetches from sources.";
     public static string FcStatusCleared(int removed, int kept) => Ru
         ? $"Удалено {removed} · осталось {kept}"
@@ -450,7 +450,7 @@ public static class Strings
     public static string FcCountryFilter      => Ru ? "Страна:"       : "Country:";
     public static string FcRefreshSources     => Ru ? "↻ Обновить список"    : "↻ Refresh list";
     public static string FcRetestAll          => Ru ? "▶ Перепроверить"      : "▶ Retest all";
-    public static string FcConnectHint        => Ru ? "Выберите строку ↑ и нажмите Connect (или двойной клик)"
+    public static string FcConnectHint        => Ru ? "Выберите строку ↑ и нажмите «Подключить» (или двойной клик)"
                                                     : "Select a row ↑ and click Connect (or double-click)";
     public static string FcTipVpnActive       => Ru
         ? "⚠ VPN активен — результаты пинга проходят через туннель и могут быть недостоверны. Для точного теста отключите VPN."
@@ -516,7 +516,7 @@ public static class Strings
     public static string FcTabSaved                  => Ru ? "★ Сохранённые" : "★ Saved";
     public static string FcTabSavedWithCount(int n)  => Ru ? $"★ Сохранённые ({n})" : $"★ Saved ({n})";
     public static string FcSavedTabHint              => Ru
-        ? "Конфиги, найденные в прошлых поисках. Они могут разработать со временем — нажмите ↻ чтобы перепроверить."
+        ? "Конфиги, найденные в прошлых поисках. Они могут перестать работать со временем — нажмите ↻ чтобы перепроверить."
         : "Configs you've found in past searches. They may stop working over time — click ↻ to recheck.";
     public static string FcSavedRecheckStaleBtn(int n) => Ru
         ? $"↻ Перепроверить ({n})"
@@ -526,7 +526,7 @@ public static class Strings
     public static string FcSavedColStatus            => Ru ? "Статус"            : "Status";
     public static string FcSavedEmpty                => Ru
         ? "Здесь появятся ваши рабочие конфиги. Нажмите «Поиск» чтобы найти первые."
-        : "Your working configs will appear here. Click «Search» to find your first ones.";
+        : "Your working configs will appear here. Click \"Search\" to find your first ones.";
     public static string FcSavedRecheckOneTooltip    => Ru
         ? "Перепроверить этот конфиг (полная глубокая проверка)"
         : "Recheck this config (full deep verify)";
