@@ -4,7 +4,7 @@
              xmlns:fcvm="using:VPNRouter.App.ViewModels.FreeConfigs"
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.microsoft.com/markup-compatibility/2006"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="520"
              x:Class="VPNRouter.App.Views.Pages.FreeConfigsPage"
              x:DataType="vm:MainWindowViewModel">
