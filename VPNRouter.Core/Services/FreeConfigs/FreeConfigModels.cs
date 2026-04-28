@@ -85,6 +85,16 @@ public sealed class FreeConfigEntry
     /// <summary>v2.14.3: when bandwidth was last measured (UTC).</summary>
     public DateTime? BandwidthTestedAt { get; set; }
 
+    /// <summary>v2.28.6: timestamp of the last re-verify that failed on a
+    /// previously-Verified entry. The recheck flow keeps the entry in the
+    /// saved list (with <see cref="Status"/> still set to
+    /// <see cref="FreeConfigStatus.Verified"/>) so historical numbers
+    /// (LatencyMs, MeasuredBandwidthMbps) survive, while
+    /// <see cref="LastVerifyFailedAt"/> &gt; <see cref="LastTestedAt"/> tells
+    /// the UI to render the entry with a "failed last check" badge. Null on
+    /// entries that have never failed a re-verify.</summary>
+    public DateTime? LastVerifyFailedAt { get; set; }
+
     /// <summary>
     /// Builds a VlessServerEntry from this free config, suitable for insertion into AppSettings.Vless.Servers.
     /// </summary>

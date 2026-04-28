@@ -22,6 +22,20 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     private readonly Func<VPNRouter.Core.Models.AppSettings>? _getSettings;
 
     private List<FreeConfigEntry> _allConfigs = new();
+
+    /// <summary>
+    /// v2.28.6 Phase 1: persistent all-time-verified set (the future
+    /// "Сохранённые" tab source). Built from the on-disk cache at
+    /// <see cref="EnsureCacheLoaded"/> time, then accumulates entries
+    /// from each search session (deduped by <see cref="FreeConfigEntry.Id"/>).
+    /// Persisted back to <c>free_configs.json</c> after a search ends.
+    ///
+    /// <para>Phase 1 keeps this list parallel to <see cref="_allConfigs"/>
+    /// without changing the displayed UI; Phase 2 introduces a separate
+    /// "Сохранённые" tab that surfaces it.</para>
+    /// </summary>
+    private List<FreeConfigEntry> _savedConfigs = new();
+
     private CancellationTokenSource? _refreshCts;
     private bool _disposed;
 
@@ -82,9 +96,21 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             // the next launch. Non-Verified entries can still be re-discovered
             // by clicking the search button — and PreservePreviousValidation
             // will keep this run's verified rows on subsequent searches.
-            _allConfigs = file.Configs
-                .Where(c => c.Status == FreeConfigStatus.Verified)
+            //
+            // v2.28.6 Phase 1: also apply a retention filter on LastTestedAt
+            // (FreeConfigKeepPolicy.ShouldRetainInSavedList) to drop entries
+            // that are too stale to be likely useful, even if they were
+            // Verified at the time. Build the _savedConfigs list (the future
+            // Сохранённые-tab source) from the same filtered set, and keep
+            // _allConfigs (the search-tab source) populated identically for
+            // now — Phase 2 will diverge them when the tab UI lands.
+            var now = DateTime.UtcNow;
+            var kept = file.Configs
+                .Where(c => FreeConfigKeepPolicy.ShouldRetainInSavedList(c, now))
                 .ToList();
+            _allConfigs = kept;
+            _savedConfigs = new List<FreeConfigEntry>(kept);
+            OnPropertyChanged(nameof(SavedConfigsCount));
             ApplyFiltersAndStats();
 
             if (file.LastAggregatedAt == DateTime.MinValue)
@@ -142,6 +168,22 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     private FreeConfigItemViewModel? _selectedItem;
 
     public bool HasSelection => SelectedItem != null;
+
+    /// <summary>v2.28.6 Phase 1: which Free Configs sub-tab is selected.
+    /// 0 = Поиск (default, search-tab as today). 1 = Сохранённые (Phase 2
+    /// will surface the persistent saved list here). Phase 1 keeps this
+    /// property scaffolded but unused by the XAML — UI tabs land in Phase 2.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSearchTab))]
+    [NotifyPropertyChangedFor(nameof(IsSavedTab))]
+    private int _selectedFreeTabIndex;
+
+    public bool IsSearchTab => SelectedFreeTabIndex == 0;
+    public bool IsSavedTab  => SelectedFreeTabIndex == 1;
+
+    /// <summary>v2.28.6 Phase 1: count for the future Сохранённые-tab badge.
+    /// Phase 2 will bind this to the tab header.</summary>
+    public int SavedConfigsCount => _savedConfigs.Count;
 
     [ObservableProperty] private string _selectedCountry = "All";
     partial void OnSelectedCountryChanged(string value) => ApplyFiltersAndStats();
@@ -450,11 +492,15 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 ProgressDone = 0;
             });
 
-            // Persist trimmed cache (only Verified entries).
+            // v2.28.6 Phase 1: persist the all-time saved set, not just
+            // this session's results. _savedConfigs already absorbed every
+            // newly-verified entry via UpsertSavedConfig during the loop,
+            // so cache file now holds the cumulative history (capped at
+            // SavedConfigsRetentionDays at next load).
             try
             {
                 var file = _aggregator.Cache.Load();
-                file.Configs = _allConfigs;
+                file.Configs = _savedConfigs;
                 file.LastAggregatedAt = DateTime.UtcNow;
                 _aggregator.Cache.Save(file);
             }
@@ -481,11 +527,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 ApplyFiltersAndStats();
                 StatusText = Strings.FcStatusCancelled;
             });
-            // Save what we got.
+            // Save the saved-set (carries any partial verifies absorbed
+            // before cancellation; see Phase 1 note in success path).
             try
             {
                 var file = _aggregator.Cache.Load();
-                file.Configs = _allConfigs;
+                file.Configs = _savedConfigs;
                 file.LastAggregatedAt = DateTime.UtcNow;
                 _aggregator.Cache.Save(file);
             }
@@ -571,6 +618,11 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     await Dispatcher.UIThread.InvokeAsync(() =>
                     {
                         _allConfigs = snapshot;
+                        // v2.28.6 Phase 1: also merge the freshly-verified
+                        // entry into the persistent saved list (Id-deduped).
+                        // The saved list survives across sessions; the search
+                        // session list (above) is rebuilt each search.
+                        UpsertSavedConfig(cfg);
                         ApplyFiltersAndStats();
                         // v2.28.5-r4: tick progress bar each time a Verified
                         // entry is appended. ProgressTotal=target, so the bar
@@ -592,6 +644,32 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         {
             sem.Release();
         }
+    }
+
+    /// <summary>
+    /// v2.28.6 Phase 1: insert <paramref name="entry"/> into
+    /// <see cref="_savedConfigs"/> if it's not already there (by
+    /// <see cref="FreeConfigEntry.Id"/>); otherwise replace the existing
+    /// row so the saved list reflects the freshest test results
+    /// (LatencyMs, MeasuredBandwidthMbps, LastTestedAt). Notifies
+    /// <see cref="SavedConfigsCount"/> for the future tab badge.
+    ///
+    /// <para>Called from the search flow on every newly-Verified entry.
+    /// Phase 2's per-row Recheck will reuse this same helper.</para>
+    /// </summary>
+    private void UpsertSavedConfig(FreeConfigEntry entry)
+    {
+        if (entry == null || string.IsNullOrEmpty(entry.Id)) return;
+        for (int i = 0; i < _savedConfigs.Count; i++)
+        {
+            if (string.Equals(_savedConfigs[i].Id, entry.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                _savedConfigs[i] = entry;
+                return;
+            }
+        }
+        _savedConfigs.Add(entry);
+        OnPropertyChanged(nameof(SavedConfigsCount));
     }
 
     /// <summary>

@@ -48,4 +48,30 @@ public static class FreeConfigKeepPolicy
         if (entry == null) return false;
         return entry.Status == FreeConfigStatus.Verified;
     }
+
+    /// <summary>v2.28.6 Phase 1: how many days a Verified entry survives in
+    /// the persistent saved list (the future Сохранённые tab) before
+    /// EnsureCacheLoaded silently drops it on next launch. Beyond this the
+    /// upstream pool is still re-discoverable on the next search.</summary>
+    public const int SavedListRetentionDays = 30;
+
+    /// <summary>
+    /// v2.28.6 Phase 1: predicate for the persistent saved list at
+    /// cache-load time. Stricter than <see cref="ShouldKeepInLiveCache"/>:
+    /// in addition to the Verified-status requirement, applies a
+    /// <see cref="SavedListRetentionDays"/>-day age cap on
+    /// <see cref="FreeConfigEntry.LastTestedAt"/>.
+    ///
+    /// <para>Entries with a null <c>LastTestedAt</c> are kept (defensive:
+    /// they may be brand-new entries whose timestamp wasn't set yet, or
+    /// post-import entries from an older cache version where the field
+    /// hadn't been recorded).</para>
+    /// </summary>
+    public static bool ShouldRetainInSavedList(FreeConfigEntry entry, DateTime nowUtc)
+    {
+        if (entry == null) return false;
+        if (entry.Status != FreeConfigStatus.Verified) return false;
+        if (!entry.LastTestedAt.HasValue) return true;
+        return (nowUtc - entry.LastTestedAt.Value).TotalDays <= SavedListRetentionDays;
+    }
 }

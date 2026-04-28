@@ -2052,3 +2052,155 @@ public class FreeConfigKeepPolicyTests
             VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified, e.Status));
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// v2.28.6 Phase 1 — Saved-list retention policy + LastVerifyFailedAt schema
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// The Сохранённые tab persists Verified entries across sessions, capped at
+// FreeConfigKeepPolicy.SavedListRetentionDays (=30). At cache-load time
+// (FreeConfigsPageViewModel.EnsureCacheLoaded) entries beyond the cap are
+// silently dropped. Phase 1 introduces this policy and the
+// LastVerifyFailedAt schema field that Phase 3 will use for the
+// "failed last check" badge.
+public class FreeConfigSavedRetentionTests
+{
+    private static VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry Make(
+        VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus status,
+        DateTime? lastTestedAt)
+    {
+        return new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
+        {
+            Id = "x",
+            Host = "h.example.com",
+            Port = 443,
+            Uuid = "u",
+            Status = status,
+            LastTestedAt = lastTestedAt,
+        };
+    }
+
+    private static readonly DateTime Now = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public void Verified_FreshlyTested_Retained()
+    {
+        var entry = Make(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified,
+            Now.AddHours(-1));
+        Assert.True(VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
+            .ShouldRetainInSavedList(entry, Now));
+    }
+
+    [Fact]
+    public void Verified_29Days_Retained()
+    {
+        // Just under the 30-day cap.
+        var entry = Make(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified,
+            Now.AddDays(-29));
+        Assert.True(VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
+            .ShouldRetainInSavedList(entry, Now));
+    }
+
+    [Fact]
+    public void Verified_31Days_Dropped()
+    {
+        // Just past the 30-day cap.
+        var entry = Make(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified,
+            Now.AddDays(-31));
+        Assert.False(VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
+            .ShouldRetainInSavedList(entry, Now));
+    }
+
+    [Fact]
+    public void Verified_NullLastTested_Retained()
+    {
+        // Defensive: post-import or pre-Phase-1 entries with null timestamp
+        // are kept rather than nuked. The next search will set the timestamp.
+        var entry = Make(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified, null);
+        Assert.True(VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
+            .ShouldRetainInSavedList(entry, Now));
+    }
+
+    [Fact]
+    public void NonVerified_Dropped_RegardlessOfAge()
+    {
+        // Even a fresh Ok entry shouldn't reach the saved list — the saved
+        // list is for things that proved real connectivity, not just TCP+TLS.
+        var entry = Make(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Ok,
+            Now.AddHours(-1));
+        Assert.False(VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
+            .ShouldRetainInSavedList(entry, Now));
+    }
+
+    [Fact]
+    public void Null_Dropped()
+    {
+        Assert.False(VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
+            .ShouldRetainInSavedList(null!, Now));
+    }
+
+    [Fact]
+    public void RetentionDays_Const_Is30()
+    {
+        // Pin the public constant — if we ever need to bump it, surface
+        // the change in code review (and update the saved-list tooltip).
+        Assert.Equal(30, VPNRouter.Core.Services.FreeConfigs.FreeConfigKeepPolicy
+            .SavedListRetentionDays);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// v2.28.6 Phase 1 — FreeConfigEntry schema additions
+// ═══════════════════════════════════════════════════════════════════════════════
+public class FreeConfigEntrySchemaTests
+{
+    [Fact]
+    public void LastVerifyFailedAt_Defaults_Null()
+    {
+        var entry = new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry();
+        Assert.Null(entry.LastVerifyFailedAt);
+    }
+
+    [Fact]
+    public void LastVerifyFailedAt_RoundTrips_Through_Json()
+    {
+        var original = new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
+        {
+            Id = "abc",
+            Host = "h.example.com",
+            Port = 443,
+            Uuid = "u",
+            Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified,
+            LastTestedAt = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc),
+            LatencyMs = 42,
+            MeasuredBandwidthMbps = 25,
+            LastVerifyFailedAt = new DateTime(2026, 5, 2, 8, 30, 0, DateTimeKind.Utc),
+        };
+
+        var json = System.Text.Json.JsonSerializer.Serialize(original);
+        var revived = System.Text.Json.JsonSerializer
+            .Deserialize<VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry>(json);
+
+        Assert.NotNull(revived);
+        Assert.Equal(original.LastVerifyFailedAt, revived!.LastVerifyFailedAt);
+        // Last-good numbers must survive too — Phase 3 displays them on
+        // entries that failed re-verify.
+        Assert.Equal(42, revived.LatencyMs);
+        Assert.Equal(25, revived.MeasuredBandwidthMbps);
+    }
+
+    [Fact]
+    public void LastVerifyFailedAt_Indicates_FailedLastCheck_When_Greater_Than_LastTestedAt()
+    {
+        // Phase 3 display logic check: if LastVerifyFailedAt > LastTestedAt,
+        // the row gets the "failed last check" badge while preserving the
+        // last-good numbers. Phase 1 just pins the comparison semantics.
+        var entry = new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
+        {
+            LastTestedAt = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc),
+            LastVerifyFailedAt = new DateTime(2026, 5, 2, 8, 30, 0, DateTimeKind.Utc),
+        };
+
+        Assert.True(entry.LastVerifyFailedAt > entry.LastTestedAt);
+    }
+}
