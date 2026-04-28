@@ -14,6 +14,18 @@
                 <!-- v2.16.0 Arctic design tokens (Light + Dark via ThemeDictionaries) -->
                 <ResourceInclude Source="avares://VPNRouter.App/Styles/Tokens.axaml"/>
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- v2.28.6-r7: Twemoji-Mozilla COLR/CPAL emoji font.
+                 Windows Segoe UI Emoji renders Regional Indicator pairs
+                 (🇩🇪 = U+1F1E9 + U+1F1EA) as letter boxes ("DE") instead
+                 of country flags. Mac and Linux do render proper colored
+                 flags via Apple Color Emoji / Noto Color Emoji. Embedding
+                 Twemoji-Mozilla (~1.4 MB COLR-format) gives Avalonia /
+                 Skia a font with proper colored flag glyphs that works
+                 identically across all three OSes.
+                 License: MIT (Mozilla / Twitter Twemoji).
+                 Source: https://github.com/mozilla/twemoji-colr -->
+            <FontFamily x:Key="EmojiFlagFont">avares://VPNRouter.App/Assets/Fonts/Twemoji.Mozilla.ttf#Twemoji Mozilla</FontFamily>
         </ResourceDictionary>
     </Application.Resources>
 
