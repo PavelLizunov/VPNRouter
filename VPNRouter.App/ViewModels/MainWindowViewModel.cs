@@ -1429,21 +1429,72 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <summary>
     /// One-time: create /etc/sudoers.d/vpnrouter via osascript on UI thread
     /// so the admin password dialog appears properly.
+    ///
+    /// <para>v2.28.6-r6: two bug fixes for the "sudo: a password is required"
+    /// failure on macOS that left users unable to start the VPN:</para>
+    /// <list type="number">
+    /// <item><b>Escape spaces in path</b>. The default install path is
+    /// <c>/Users/$USER/Library/Application Support/VPNRouter/bin/sing-box</c>
+    /// — sudoers' <c>Cmnd_Spec</c> grammar requires spaces to be escaped
+    /// with a backslash, otherwise the rule is malformed and sudo silently
+    /// falls back to password prompt → fails because no terminal.</item>
+    /// <item><b>Add <c>*</c> wildcard for arguments</b>. Without it, the rule
+    /// only matches a bare <c>sudo sing-box</c> call with NO arguments —
+    /// but we always invoke <c>sudo sing-box run -c &lt;path&gt;</c>. With
+    /// the wildcard, any argument list is allowed.</item>
+    /// </list>
+    /// <para>For users who already have a broken sudoers file from
+    /// v2.28.6-r1..r5 or older, the marker comment <c>SudoersFormatMarker</c>
+    /// flags whether the current rewrite has been applied; if absent, we
+    /// rewrite (which means the user gets a one-time osascript prompt
+    /// after upgrading).</para>
     /// </summary>
+    private const string SudoersFormatMarker = "# vpnrouter v2.28.6-r6 sudoers (escaped spaces + args wildcard)";
+
     private void EnsureMacSudoAccess()
     {
         const string sudoersPath = "/etc/sudoers.d/vpnrouter";
-        if (File.Exists(sudoersPath)) return;
+
+        // v2.28.6-r6: check the file's CONTENT, not just existence — older
+        // releases wrote a malformed file (spaces unescaped, no args
+        // wildcard) that exists on disk but doesn't grant NOPASSWD for
+        // our actual sudo invocation.
+        bool needsRewrite = true;
+        try
+        {
+            if (File.Exists(sudoersPath))
+            {
+                var existing = File.ReadAllText(sudoersPath);
+                if (existing.Contains(SudoersFormatMarker, StringComparison.Ordinal))
+                    needsRewrite = false;
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // /etc/sudoers.d/vpnrouter is mode 0440 root:wheel — non-root
+            // user can't read it. If the file exists but we can't see its
+            // content, assume the previous (possibly malformed) write
+            // already happened and we need a rewrite to be safe.
+            // (osascript prompt is a one-time annoyance — much better
+            // than a permanently broken VPN.)
+            needsRewrite = true;
+        }
+        catch { needsRewrite = true; }
+        if (!needsRewrite) return;
 
         StatusText = IsRussian ? "Настройка sudo (один раз)..." : "Setting up sudo (one-time)...";
 
-        // Write sudoers content to temp file (avoids all quoting problems)
+        // v2.28.6-r6: escape spaces in the binary path for sudoers
+        // Cmnd_Spec syntax. Add ` *` wildcard so any arguments
+        // (`run -c <path>`) are allowed under NOPASSWD.
         var user = Environment.UserName;
         var singbox = AppPaths.SingBoxExePath;
+        var singboxEscaped = singbox.Replace(" ", "\\ ");
         var tmpFile = Path.Combine(Path.GetTempPath(), "vpnrouter-sudoers");
         File.WriteAllText(tmpFile,
-            $"{user} ALL=(root) NOPASSWD: {singbox}\n" +
-            $"{user} ALL=(root) NOPASSWD: /usr/bin/pkill -f sing-box\n");
+            $"{SudoersFormatMarker}\n" +
+            $"{user} ALL=(root) NOPASSWD: {singboxEscaped} *\n" +
+            $"{user} ALL=(root) NOPASSWD: /usr/bin/pkill *\n");
 
         // Write a helper script
         var helperScript = Path.Combine(Path.GetTempPath(), "vpnrouter-setup.sh");
