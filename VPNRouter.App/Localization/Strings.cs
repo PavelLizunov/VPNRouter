@@ -421,6 +421,12 @@ public static class Strings
     public static string FcStatusBatchedFound(int found, int target) => Ru
         ? $"Найдено {found}/{target} рабочих конфигов..."
         : $"Found {found}/{target} working configs...";
+    /// <summary>v2.28.5-r6: per-probe status update so the UI doesn't appear
+    /// frozen during the deep-verify phase. Each probe takes 3-5s, 5 in
+    /// parallel → status flips every ~600 ms.</summary>
+    public static string FcStatusBatchedProbing(int found, int target, string host, int port, string cc) => Ru
+        ? $"Найдено {found}/{target} · проверяю {host}:{port} [{cc}]..."
+        : $"Found {found}/{target} · probing {host}:{port} [{cc}]...";
 
     public static string FcDeepTargetLabel => Ru ? "Цель:" : "Target:";
     public static string FcDeepExcludeRu   => Ru ? "Пропускать RU" : "Skip RU servers";

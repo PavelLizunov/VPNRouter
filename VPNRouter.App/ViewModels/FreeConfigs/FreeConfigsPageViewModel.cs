@@ -524,6 +524,27 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         await sem.WaitAsync(ct);
         try
         {
+            // v2.28.5-r6: per-probe status update so the UI doesn't appear
+            // frozen during the deep-verify phase. Each probe takes 3-5 s,
+            // 5 run in parallel, so this fires every 600-1000 ms — enough
+            // visible motion that ADHD-leaning / TikTok-pace users don't
+            // mistake the wait for a hang.
+            var probedHost = cfg.Host;
+            var probedPort = cfg.Port;
+            var probedCc = string.IsNullOrEmpty(cfg.CountryCode) ? "??" : cfg.CountryCode;
+            var startedFound = 0;
+            lock (verifiedList) startedFound = verifiedList.Count;
+
+            // Fire-and-forget UI update; don't await so probe can start
+            // immediately. Dispatcher batches these 5 parallel pokes and
+            // only the latest one wins as visible status — that's exactly
+            // what we want.
+            Dispatcher.UIThread.Post(() =>
+            {
+                StatusText = Strings.FcStatusBatchedProbing(
+                    startedFound, target, probedHost, probedPort, probedCc);
+            });
+
             await _deepVerifier.VerifyOneAsync(cfg, ct);
 
             // Only "fully working" entries reach the displayed list:
