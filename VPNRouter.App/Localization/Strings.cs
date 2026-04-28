@@ -511,6 +511,45 @@ public static class Strings
     // v2.28.4-r4 — Advanced settings expander label inside the green search card
     public static string FcAdvancedSettings => Ru ? "▾ Настройки" : "▾ Settings";
 
+    // ── v2.28.6 — Free Configs tab strip (Search / Saved) + Saved-tab UI ──
+    public static string FcTabSearch                 => Ru ? "▶ Поиск"     : "▶ Search";
+    public static string FcTabSaved                  => Ru ? "★ Сохранённые" : "★ Saved";
+    public static string FcTabSavedWithCount(int n)  => Ru ? $"★ Сохранённые ({n})" : $"★ Saved ({n})";
+    public static string FcSavedTabHint              => Ru
+        ? "Конфиги, найденные в прошлых поисках. Они могут разработать со временем — нажмите ↻ чтобы перепроверить."
+        : "Configs you've found in past searches. They may stop working over time — click ↻ to recheck.";
+    public static string FcSavedRecheckStaleBtn(int n) => Ru
+        ? $"↻ Перепроверить ({n})"
+        : $"↻ Recheck ({n})";
+    public static string FcSavedRecheckAllBtn        => Ru ? "↻ Перепроверить всё" : "↻ Recheck all";
+    public static string FcSavedClearAllBtn          => Ru ? "✕ Удалить всё"     : "✕ Clear all";
+    public static string FcSavedColStatus            => Ru ? "Статус"            : "Status";
+    public static string FcSavedEmpty                => Ru
+        ? "Здесь появятся ваши рабочие конфиги. Нажмите «Поиск» чтобы найти первые."
+        : "Your working configs will appear here. Click «Search» to find your first ones.";
+    public static string FcSavedRecheckOneTooltip    => Ru
+        ? "Перепроверить этот конфиг (полная глубокая проверка)"
+        : "Recheck this config (full deep verify)";
+    public static string FcSavedRemoveOneTooltip     => Ru
+        ? "Удалить из сохранённых"
+        : "Remove from saved";
+    public static string FcFreshnessFresh            => Ru ? "свежий"           : "fresh";
+    public static string FcFreshnessAgeingDays(int d) => Ru ? $"{d}д назад" : $"{d}d ago";
+    public static string FcFreshnessStale            => Ru ? "устарел"          : "stale";
+    public static string FcFreshnessFailed           => Ru ? "не работает"      : "failed";
+    public static string FcStatusRecheckOne(string host, int port, string cc) => Ru
+        ? $"Перепроверка {host}:{port} [{cc}]..."
+        : $"Rechecking {host}:{port} [{cc}]...";
+    public static string FcStatusRecheckAllStart(int total) => Ru
+        ? $"Перепроверка {total} конфигов..."
+        : $"Rechecking {total} configs...";
+    public static string FcStatusRecheckAllProgress(int done, int total) => Ru
+        ? $"Перепроверка {done}/{total}..."
+        : $"Rechecking {done}/{total}...";
+    public static string FcStatusRecheckAllDone(int verified, int failed) => Ru
+        ? $"Перепроверено · {verified} работают, {failed} не работают"
+        : $"Rechecked · {verified} working, {failed} failed";
+
     // v2.13.18 — Fast scan toggle
     public static string FcFastScanLabel => Ru ? "⚡ Fast scan (только TCP, без TLS)" : "⚡ Fast scan (TCP only, no TLS)";
     public static string FcFastScanHint  => Ru

@@ -97,21 +97,23 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             // by clicking the search button — and PreservePreviousValidation
             // will keep this run's verified rows on subsequent searches.
             //
-            // v2.28.6 Phase 1: also apply a retention filter on LastTestedAt
-            // (FreeConfigKeepPolicy.ShouldRetainInSavedList) to drop entries
-            // that are too stale to be likely useful, even if they were
-            // Verified at the time. Build the _savedConfigs list (the future
-            // Сохранённые-tab source) from the same filtered set, and keep
-            // _allConfigs (the search-tab source) populated identically for
-            // now — Phase 2 will diverge them when the tab UI lands.
+            // v2.28.6 Phase 2: tabs split — Search list is now ephemeral
+            // (cleared on app open / new search), Saved list persists from
+            // cache with a 30-day retention filter. If there's any saved
+            // history, default to the Saved tab so returning users see
+            // their working configs immediately instead of an empty Search
+            // tab.
             var now = DateTime.UtcNow;
             var kept = file.Configs
                 .Where(c => FreeConfigKeepPolicy.ShouldRetainInSavedList(c, now))
                 .ToList();
-            _allConfigs = kept;
+            _allConfigs = new List<FreeConfigEntry>();
             _savedConfigs = new List<FreeConfigEntry>(kept);
-            OnPropertyChanged(nameof(SavedConfigsCount));
             ApplyFiltersAndStats();
+            RebuildSavedDisplayList();
+            NotifySavedTabBindings();
+            if (_savedConfigs.Count > 0 && SelectedFreeTabIndex == 0)
+                SelectedFreeTabIndex = 1;
 
             if (file.LastAggregatedAt == DateTime.MinValue)
             {
@@ -153,6 +155,14 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     }
 
     [ObservableProperty] private ObservableCollection<FreeConfigItemViewModel> _displayedConfigs = new();
+
+    /// <summary>v2.28.6 Phase 2: source for the Сохранённые tab list.
+    /// Rebuilt from <see cref="_savedConfigs"/> by
+    /// <see cref="RebuildSavedDisplayList"/> on every modification.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSavedEmpty))]
+    private ObservableCollection<FreeConfigItemViewModel> _displayedSavedConfigs = new();
+
     [ObservableProperty] private ObservableCollection<string> _countries = new();
 
     [ObservableProperty] private int _totalCount;
@@ -181,9 +191,39 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     public bool IsSearchTab => SelectedFreeTabIndex == 0;
     public bool IsSavedTab  => SelectedFreeTabIndex == 1;
 
-    /// <summary>v2.28.6 Phase 1: count for the future Сохранённые-tab badge.
-    /// Phase 2 will bind this to the tab header.</summary>
+    /// <summary>v2.28.6 Phase 1: count for the Сохранённые-tab badge.</summary>
     public int SavedConfigsCount => _savedConfigs.Count;
+
+    /// <summary>v2.28.6 Phase 2: localised "★ Сохранённые (N)" header
+    /// (or just "★ Сохранённые" when count is 0).</summary>
+    public string SavedTabHeaderText => SavedConfigsCount > 0
+        ? Strings.FcTabSavedWithCount(SavedConfigsCount)
+        : Strings.FcTabSaved;
+
+    /// <summary>v2.28.6 Phase 2/3: count of saved entries that the user
+    /// might want to bulk-recheck — older than 24 h since last verify, or
+    /// failed-last-check.</summary>
+    public int StaleSavedCount
+    {
+        get
+        {
+            var now = DateTime.UtcNow;
+            return _savedConfigs.Count(c =>
+                (c.LastVerifyFailedAt.HasValue &&
+                    (!c.LastTestedAt.HasValue ||
+                        c.LastVerifyFailedAt.Value >= c.LastTestedAt.Value)) ||
+                (c.LastTestedAt.HasValue &&
+                    (now - c.LastTestedAt.Value).TotalHours > 24));
+        }
+    }
+
+    /// <summary>v2.28.6 Phase 2: localised "↻ Recheck (N)" button label.
+    /// When N=0 the bulk button is hidden via <see cref="HasStaleSaved"/>.</summary>
+    public string SavedRecheckStaleButtonText => Strings.FcSavedRecheckStaleBtn(StaleSavedCount);
+
+    public bool HasStaleSaved => StaleSavedCount > 0;
+
+    public bool IsSavedEmpty => DisplayedSavedConfigs.Count == 0;
 
     [ObservableProperty] private string _selectedCountry = "All";
     partial void OnSelectedCountryChanged(string value) => ApplyFiltersAndStats();
@@ -618,12 +658,13 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     await Dispatcher.UIThread.InvokeAsync(() =>
                     {
                         _allConfigs = snapshot;
-                        // v2.28.6 Phase 1: also merge the freshly-verified
-                        // entry into the persistent saved list (Id-deduped).
-                        // The saved list survives across sessions; the search
-                        // session list (above) is rebuilt each search.
+                        // v2.28.6: also merge the freshly-verified entry
+                        // into the persistent saved list (Id-deduped) and
+                        // rebuild the Saved-tab list so the badge counter
+                        // and the Saved view stay live during the search.
                         UpsertSavedConfig(cfg);
                         ApplyFiltersAndStats();
+                        RebuildSavedDisplayList();
                         // v2.28.5-r4: tick progress bar each time a Verified
                         // entry is appended. ProgressTotal=target, so the bar
                         // fills 0→target as configs trickle in. This is what
@@ -665,11 +706,292 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             if (string.Equals(_savedConfigs[i].Id, entry.Id, StringComparison.OrdinalIgnoreCase))
             {
                 _savedConfigs[i] = entry;
+                NotifySavedTabBindings();
                 return;
             }
         }
         _savedConfigs.Add(entry);
+        NotifySavedTabBindings();
+    }
+
+    /// <summary>v2.28.6 Phase 2: rebuild <see cref="DisplayedSavedConfigs"/>
+    /// from <see cref="_savedConfigs"/>. Sort: fresh < ageing < stale <
+    /// failed; secondary by latency. Wraps each entry in a fresh
+    /// <see cref="FreeConfigItemViewModel"/> so the freshness label / opacity
+    /// reflect <c>DateTime.UtcNow</c> at build time.</summary>
+    private void RebuildSavedDisplayList()
+    {
+        try
+        {
+            var items = _savedConfigs
+                .Select(c => new FreeConfigItemViewModel(c))
+                .OrderBy(vm => vm.FreshnessSortKey)
+                .ToList();
+            DisplayedSavedConfigs = new ObservableCollection<FreeConfigItemViewModel>(items);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[FreeConfigs] RebuildSavedDisplayList failed");
+            DisplayedSavedConfigs = new ObservableCollection<FreeConfigItemViewModel>();
+        }
+    }
+
+    /// <summary>v2.28.6 Phase 2: fire all derived saved-tab bindings.
+    /// Called after every <see cref="_savedConfigs"/> mutation so the tab
+    /// header badge / "Recheck (N)" label / IsSavedEmpty all stay coherent.</summary>
+    private void NotifySavedTabBindings()
+    {
         OnPropertyChanged(nameof(SavedConfigsCount));
+        OnPropertyChanged(nameof(SavedTabHeaderText));
+        OnPropertyChanged(nameof(StaleSavedCount));
+        OnPropertyChanged(nameof(SavedRecheckStaleButtonText));
+        OnPropertyChanged(nameof(HasStaleSaved));
+        OnPropertyChanged(nameof(IsSavedEmpty));
+    }
+
+    /// <summary>v2.28.6 Phase 2: persist <see cref="_savedConfigs"/> to
+    /// <c>free_configs.json</c>. Wraps the cache write in a try/catch
+    /// because cache I/O failures shouldn't break the in-memory list.</summary>
+    private void SaveSavedConfigsToCache()
+    {
+        try
+        {
+            var file = _aggregator.Cache.Load();
+            file.Configs = _savedConfigs;
+            file.LastAggregatedAt = DateTime.UtcNow;
+            _aggregator.Cache.Save(file);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[FreeConfigs] SaveSavedConfigsToCache failed (non-fatal)");
+        }
+    }
+
+    /// <summary>v2.28.6 Phase 3: re-verify a single saved entry. Mirrors the
+    /// search-flow VerifyOneAndAppendAsync, but operates on an already-saved
+    /// entry and preserves last-good Latency/Bandwidth on failure (the user
+    /// can still see "this used to work at 15 ms / 50 Mbps" with a "failed"
+    /// badge on top).</summary>
+    [RelayCommand]
+    private async Task RecheckOneAsync(FreeConfigItemViewModel? item)
+    {
+        if (item == null || IsBusy) return;
+
+        // Snapshot last-good values before the verifier mutates them.
+        var entry = item.Entry;
+        var prevLatency = entry.LatencyMs;
+        var prevBw = entry.MeasuredBandwidthMbps;
+        var prevTested = entry.LastTestedAt;
+
+        item.IsRecheckRunning = true;
+        IsBusy = true;
+        _refreshCts = new CancellationTokenSource();
+        var ct = _refreshCts.Token;
+
+        try
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                StatusText = Strings.FcStatusRecheckOne(entry.Host, entry.Port,
+                    string.IsNullOrEmpty(entry.CountryCode) ? "??" : entry.CountryCode);
+            });
+
+            _deepVerifier.MeasureBandwidth = true;
+            await _deepVerifier.VerifyOneAsync(entry, ct);
+
+            // VerifyOneAsync sets LastTestedAt = now and may flip Status to
+            // TlsFailed / leave it at Ok if the proxy didn't connect. For the
+            // saved-list semantics, we want to keep Status = Verified so the
+            // entry stays under the retention filter; success clears the
+            // failure marker, failure restores last-good numbers.
+            if (entry.Status == FreeConfigStatus.Verified)
+            {
+                entry.LastVerifyFailedAt = null;
+                _logger.Information("[Recheck] {host}:{port} → Verified (latency {ms}ms)",
+                    entry.Host, entry.Port, entry.LatencyMs);
+            }
+            else
+            {
+                entry.Status = FreeConfigStatus.Verified;
+                entry.LatencyMs = prevLatency;
+                entry.MeasuredBandwidthMbps = prevBw;
+                entry.LastTestedAt = prevTested;
+                entry.LastVerifyFailedAt = DateTime.UtcNow;
+                _logger.Information("[Recheck] {host}:{port} → failed; last-good preserved",
+                    entry.Host, entry.Port);
+            }
+
+            UpsertSavedConfig(entry);
+            SaveSavedConfigsToCache();
+            RebuildSavedDisplayList();
+            NotifySavedTabBindings();
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                StatusText = entry.LastVerifyFailedAt.HasValue
+                    ? Strings.FcStatusRecheckAllDone(0, 1)
+                    : Strings.FcStatusRecheckAllDone(1, 0);
+            });
+        }
+        catch (OperationCanceledException) { /* swallow */ }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[FreeConfigs] RecheckOne failed for {host}:{port}",
+                entry.Host, entry.Port);
+            StatusText = Strings.FcStatusFailed(ex.Message);
+        }
+        finally
+        {
+            item.IsRecheckRunning = false;
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>v2.28.6 Phase 3: re-verify all saved entries that are stale
+    /// (older than 24 h, or failed-last-check). 5-permit semaphore on
+    /// sing-box spawns matches the search-flow concurrency. Cancellable.</summary>
+    [RelayCommand]
+    private async Task RecheckAllStaleAsync()
+    {
+        if (IsBusy) return;
+        var stale = _savedConfigs
+            .Where(c =>
+                (c.LastVerifyFailedAt.HasValue &&
+                    (!c.LastTestedAt.HasValue ||
+                        c.LastVerifyFailedAt.Value >= c.LastTestedAt.Value)) ||
+                (c.LastTestedAt.HasValue &&
+                    (DateTime.UtcNow - c.LastTestedAt.Value).TotalHours > 24))
+            .ToList();
+        if (stale.Count == 0) return;
+
+        IsBusy = true;
+        _refreshCts = new CancellationTokenSource();
+        var ct = _refreshCts.Token;
+        var verified = 0;
+        var failed = 0;
+
+        try
+        {
+            _deepVerifier.MeasureBandwidth = true;
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                StatusText = Strings.FcStatusRecheckAllStart(stale.Count);
+                ProgressTotal = stale.Count;
+                ProgressDone = 0;
+            });
+
+            var sem = new SemaphoreSlim(5);
+            var done = 0;
+            var tasks = stale.Select(async cfg =>
+            {
+                await sem.WaitAsync(ct);
+                try
+                {
+                    var prevLatency = cfg.LatencyMs;
+                    var prevBw = cfg.MeasuredBandwidthMbps;
+                    var prevTested = cfg.LastTestedAt;
+
+                    await _deepVerifier.VerifyOneAsync(cfg, ct);
+
+                    if (cfg.Status == FreeConfigStatus.Verified)
+                    {
+                        cfg.LastVerifyFailedAt = null;
+                        Interlocked.Increment(ref verified);
+                    }
+                    else
+                    {
+                        cfg.Status = FreeConfigStatus.Verified;
+                        cfg.LatencyMs = prevLatency;
+                        cfg.MeasuredBandwidthMbps = prevBw;
+                        cfg.LastTestedAt = prevTested;
+                        cfg.LastVerifyFailedAt = DateTime.UtcNow;
+                        Interlocked.Increment(ref failed);
+                    }
+
+                    var d = Interlocked.Increment(ref done);
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        StatusText = Strings.FcStatusRecheckAllProgress(d, stale.Count);
+                        ProgressDone = d;
+                    });
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "[Recheck-bulk] failed for {host}:{port}",
+                        cfg.Host, cfg.Port);
+                }
+                finally
+                {
+                    sem.Release();
+                }
+            }).ToList();
+
+            await Task.WhenAll(tasks);
+
+            SaveSavedConfigsToCache();
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                RebuildSavedDisplayList();
+                NotifySavedTabBindings();
+                StatusText = Strings.FcStatusRecheckAllDone(verified, failed);
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            SaveSavedConfigsToCache();
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                RebuildSavedDisplayList();
+                NotifySavedTabBindings();
+                StatusText = Strings.FcStatusCancelled;
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[FreeConfigs] RecheckAllStale failed");
+            StatusText = Strings.FcStatusFailed(ex.Message);
+        }
+        finally
+        {
+            IsBusy = false;
+            ProgressTotal = 0;
+            ProgressDone = 0;
+        }
+    }
+
+    /// <summary>v2.28.6 Phase 3: drop a single entry from the persistent
+    /// saved list. No confirmation — the entry is re-discoverable on the
+    /// next search if the upstream pool still has it.</summary>
+    [RelayCommand]
+    private void RemoveFromSaved(FreeConfigItemViewModel? item)
+    {
+        if (item == null) return;
+        var id = item.Entry.Id;
+        if (string.IsNullOrEmpty(id)) return;
+
+        _savedConfigs.RemoveAll(c =>
+            string.Equals(c.Id, id, StringComparison.OrdinalIgnoreCase));
+        // Drop selection too if the user removed the row they had selected.
+        if (SelectedItem == item) SelectedItem = null;
+
+        SaveSavedConfigsToCache();
+        RebuildSavedDisplayList();
+        NotifySavedTabBindings();
+    }
+
+    /// <summary>v2.28.6 Phase 3: wipe the entire saved list. No
+    /// confirmation per the plan — saved entries are re-discoverable via
+    /// next search.</summary>
+    [RelayCommand]
+    private void ClearAllSaved()
+    {
+        if (_savedConfigs.Count == 0) return;
+        _savedConfigs.Clear();
+        SelectedItem = null;
+        SaveSavedConfigsToCache();
+        RebuildSavedDisplayList();
+        NotifySavedTabBindings();
     }
 
     /// <summary>

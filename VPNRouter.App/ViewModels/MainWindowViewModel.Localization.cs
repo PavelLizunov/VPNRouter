@@ -162,6 +162,17 @@ public partial class MainWindowViewModel
     public string L_FcStatusEmpty => Strings.FcStatusEmpty;
     public string L_FcStatusMainVpnActive => Strings.FcStatusMainVpnActive;
     public string L_FcStatusNoDeepCandidates => Strings.FcStatusNoDeepCandidates;
+
+    // ── v2.28.6 Phase 2 — Saved-tab strings ──
+    public string L_FcTabSearch              => Strings.FcTabSearch;
+    public string L_FcTabSaved               => Strings.FcTabSaved;
+    public string L_FcSavedTabHint           => Strings.FcSavedTabHint;
+    public string L_FcSavedRecheckAllBtn     => Strings.FcSavedRecheckAllBtn;
+    public string L_FcSavedClearAllBtn       => Strings.FcSavedClearAllBtn;
+    public string L_FcSavedColStatus         => Strings.FcSavedColStatus;
+    public string L_FcSavedEmpty             => Strings.FcSavedEmpty;
+    public string L_FcSavedRecheckOneTooltip => Strings.FcSavedRecheckOneTooltip;
+    public string L_FcSavedRemoveOneTooltip  => Strings.FcSavedRemoveOneTooltip;
     public string L_FcTargetNLabel => Strings.FcTargetNLabel;
     public string L_FcTipVpnActive => Strings.FcTipVpnActive;
     public string L_FcUserSrcAdd => Strings.FcUserSrcAdd;

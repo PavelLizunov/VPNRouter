@@ -9,275 +9,402 @@
              x:Class="VPNRouter.App.Views.Pages.FreeConfigsPage"
              x:DataType="vm:MainWindowViewModel">
 
-    <!-- v2.28.4-r6: restructured to a Grid-rows layout with no outer
-         ScrollViewer, mirroring SubscribePage. The previous layout wrapped
-         the green card + list + apply bar inside one outer ScrollViewer,
-         which meant when the description text wrapped on window narrow,
-         total content could exceed the viewport height; the outer
-         scrollbar appeared, and even with AllowAutoHide=False the layout
-         briefly desynced between the card Border and the list Border on
-         resize — visually the card's right edge drifted out of step with
-         the table's right edge. By giving the card explicit Margin and
-         the list its own Grid row, both Borders' widths are now derived
-         purely from window width (= width - 28 px) and stay locked
-         together regardless of how text inside the card wraps. -->
+    <!-- v2.28.6: Tab strip at top splits Free Configs into "Поиск" (the
+         existing search-card flow) and "Сохранённые" (persistent list of
+         all-time-verified configs with per-row Recheck). Layout still
+         mirrors SubscribePage: no outer ScrollViewer, Grid rows for the
+         tab strip, the active tab's content, and the shared Apply bar at
+         the bottom. The Apply bar lives outside the TabControl so its
+         "Connect" button picks up SelectedItem regardless of which tab
+         the user has open. -->
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <Grid RowDefinitions="*,Auto">
 
-        <!-- ═══════════════════════════════════════════════════════
-             ⭐ Main green Search card — Auto-height row.
-             Title + description + one big button. Knobs hidden under the
-             "▾ Settings" Expander. ═══════════════════════════════════════════ -->
-        <Border Grid.Row="0"
-                Margin="14,12,14,0"
-                Padding="14,12"
-                CornerRadius="{StaticResource RadiusSm}"
-                Background="{DynamicResource SuccessBgBrush}"
-                BorderBrush="{DynamicResource SuccessSolidBrush}"
-                BorderThickness="1">
-            <StackPanel Spacing="10">
+        <TabControl Grid.Row="0"
+                    SelectedIndex="{Binding FreeConfigsVm.SelectedFreeTabIndex, Mode=TwoWay}"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="0">
 
-                <!-- Title -->
-                <TextBlock Text="{Binding L_FcDeepVerify}"
-                           FontSize="13" FontWeight="Bold"
-                           Foreground="{DynamicResource SuccessFgBrush}"/>
+            <!-- ════════════════════════════════════════════════════════════
+                 Tab 1 — Поиск (search flow). Unchanged from v2.28.5-r6.
+                 ════════════════════════════════════════════════════════════ -->
+            <TabItem Header="{Binding L_FcTabSearch}" Padding="14,6" FontSize="11">
+                <Grid RowDefinitions="Auto,Auto,*">
 
-                <!-- Description (wraps; that's why we removed the outer
-                     ScrollViewer in r6 — wrap-induced height changes used
-                     to retrigger layout cascades that desynced the right
-                     padding between card and list). -->
-                <TextBlock Text="{Binding L_FcDeepHint}"
-                           FontSize="10" TextWrapping="Wrap"
-                           Foreground="{DynamicResource SuccessFgBrush}"
-                           Opacity="0.85"/>
-
-                <!-- Primary green action (auto-chains Refresh → Deep verify). -->
-                <Button Content="{Binding L_FcDeepVerify}"
-                        Command="{Binding FreeConfigsVm.RefreshCommand}"
-                        IsVisible="{Binding !FreeConfigsVm.IsBusy}"
-                        Padding="0,10" FontSize="13" FontWeight="Bold"
-                        CornerRadius="{StaticResource RadiusSm}"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Background="{DynamicResource SuccessSolidBrush}"
-                        Foreground="White"
-                        ToolTip.Tip="{Binding L_FcDeepVerifyTooltip}"/>
-
-                <Button Content="{Binding L_FcDeepStop}"
-                        Command="{Binding FreeConfigsVm.CancelCommand}"
-                        IsVisible="{Binding FreeConfigsVm.IsBusy}"
-                        Padding="0,10" FontSize="13" FontWeight="Bold"
-                        CornerRadius="{StaticResource RadiusSm}"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Background="{DynamicResource DangerSolidBrush}"
-                        Foreground="White"
-                        ToolTip.Tip="{Binding L_FcDeepStopTooltip}"/>
-
-                <!-- Hidden settings — only opened by users who want to tune.
-                     v2.28.4-r6: explicit styling so the Expander reads as
-                     part of the green card instead of a default-themed
-                     control floating on top. -->
-                <Expander Header="{Binding L_FcAdvancedSettings}"
-                          Background="Transparent"
-                          BorderBrush="{DynamicResource SuccessBorderBrush}"
-                          BorderThickness="0,1,0,0"
-                          Padding="0,4,0,0"
-                          Margin="0,4,0,0"
-                          Foreground="{DynamicResource SuccessFgBrush}"
-                          FontSize="11" FontWeight="SemiBold">
-                    <StackPanel Spacing="8" Margin="0,6,0,2">
-                        <WrapPanel Orientation="Horizontal" ItemWidth="NaN" ItemHeight="NaN">
-                            <StackPanel Orientation="Horizontal" Spacing="4"
-                                        Margin="0,0,12,4" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding L_FcTargetNLabel}"
-                                           FontSize="11" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource SuccessFgBrush}"/>
-                                <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalTarget}"
-                                               Minimum="5" Maximum="500" Increment="5"
-                                               FormatString="0"
-                                               MinWidth="84" Padding="4,2" FontSize="11"/>
-                                <TextBlock Text="{Binding L_FcConfigsWord}"
-                                           FontSize="11" Opacity="0.75"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource SuccessFgBrush}"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="4"
-                                        Margin="0,0,0,4" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding L_FcWithPingUnder}"
-                                           FontSize="11" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource SuccessFgBrush}"/>
-                                <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalMaxPingMs}"
-                                               Minimum="20" Maximum="1000" Increment="50"
-                                               FormatString="0"
-                                               MinWidth="92" Padding="4,2" FontSize="11"/>
-                                <TextBlock Text="{Binding L_FcMsUnit}"
-                                           FontSize="11" Opacity="0.75"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource SuccessFgBrush}"/>
-                            </StackPanel>
-                        </WrapPanel>
-
-                        <Grid ColumnDefinitions="20,*" ColumnSpacing="4">
-                            <CheckBox Grid.Column="0"
-                                      IsChecked="{Binding FreeConfigsVm.ExcludeRu}"
-                                      ToolTip.Tip="{Binding L_TipFcSkipRu}"
-                                      MinHeight="0" Padding="0"
-                                      VerticalAlignment="Top"
-                                      Margin="0,1,0,0"/>
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding L_FcDeepExcludeRu}"
-                                       FontSize="11"
-                                       TextWrapping="Wrap"
-                                       VerticalAlignment="Top"
+                    <!-- Main green Search card — Auto-height row. -->
+                    <Border Grid.Row="0"
+                            Margin="14,12,14,0"
+                            Padding="14,12"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Background="{DynamicResource SuccessBgBrush}"
+                            BorderBrush="{DynamicResource SuccessSolidBrush}"
+                            BorderThickness="1">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="{Binding L_FcDeepVerify}"
+                                       FontSize="13" FontWeight="Bold"
                                        Foreground="{DynamicResource SuccessFgBrush}"/>
-                        </Grid>
+                            <TextBlock Text="{Binding L_FcDeepHint}"
+                                       FontSize="10" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource SuccessFgBrush}"
+                                       Opacity="0.85"/>
+                            <Button Content="{Binding L_FcDeepVerify}"
+                                    Command="{Binding FreeConfigsVm.RefreshCommand}"
+                                    IsVisible="{Binding !FreeConfigsVm.IsBusy}"
+                                    Padding="0,10" FontSize="13" FontWeight="Bold"
+                                    CornerRadius="{StaticResource RadiusSm}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Background="{DynamicResource SuccessSolidBrush}"
+                                    Foreground="White"
+                                    ToolTip.Tip="{Binding L_FcDeepVerifyTooltip}"/>
+                            <Button Content="{Binding L_FcDeepStop}"
+                                    Command="{Binding FreeConfigsVm.CancelCommand}"
+                                    IsVisible="{Binding FreeConfigsVm.IsBusy}"
+                                    Padding="0,10" FontSize="13" FontWeight="Bold"
+                                    CornerRadius="{StaticResource RadiusSm}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Background="{DynamicResource DangerSolidBrush}"
+                                    Foreground="White"
+                                    ToolTip.Tip="{Binding L_FcDeepStopTooltip}"/>
+                            <Expander Header="{Binding L_FcAdvancedSettings}"
+                                      Background="Transparent"
+                                      BorderBrush="{DynamicResource SuccessBorderBrush}"
+                                      BorderThickness="0,1,0,0"
+                                      Padding="0,4,0,0"
+                                      Margin="0,4,0,0"
+                                      Foreground="{DynamicResource SuccessFgBrush}"
+                                      FontSize="11" FontWeight="SemiBold">
+                                <StackPanel Spacing="8" Margin="0,6,0,2">
+                                    <WrapPanel Orientation="Horizontal" ItemWidth="NaN" ItemHeight="NaN">
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    Margin="0,0,12,4" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding L_FcTargetNLabel}"
+                                                       FontSize="11" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource SuccessFgBrush}"/>
+                                            <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalTarget}"
+                                                           Minimum="5" Maximum="500" Increment="5"
+                                                           FormatString="0"
+                                                           MinWidth="84" Padding="4,2" FontSize="11"/>
+                                            <TextBlock Text="{Binding L_FcConfigsWord}"
+                                                       FontSize="11" Opacity="0.75"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource SuccessFgBrush}"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="4"
+                                                    Margin="0,0,0,4" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding L_FcWithPingUnder}"
+                                                       FontSize="11" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource SuccessFgBrush}"/>
+                                            <NumericUpDown Value="{Binding FreeConfigsVm.LatencyGoalMaxPingMs}"
+                                                           Minimum="20" Maximum="1000" Increment="50"
+                                                           FormatString="0"
+                                                           MinWidth="92" Padding="4,2" FontSize="11"/>
+                                            <TextBlock Text="{Binding L_FcMsUnit}"
+                                                       FontSize="11" Opacity="0.75"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource SuccessFgBrush}"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                    <Grid ColumnDefinitions="20,*" ColumnSpacing="4">
+                                        <CheckBox Grid.Column="0"
+                                                  IsChecked="{Binding FreeConfigsVm.ExcludeRu}"
+                                                  ToolTip.Tip="{Binding L_TipFcSkipRu}"
+                                                  MinHeight="0" Padding="0"
+                                                  VerticalAlignment="Top"
+                                                  Margin="0,1,0,0"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding L_FcDeepExcludeRu}"
+                                                   FontSize="11"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Top"
+                                                   Foreground="{DynamicResource SuccessFgBrush}"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Expander>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- List header -->
+                    <StackPanel Grid.Row="1"
+                                Orientation="Horizontal" Spacing="8"
+                                Margin="16,10,14,4">
+                        <TextBlock Text="{Binding L_FcListHeader}"
+                                   FontSize="11" FontWeight="SemiBold" Opacity="0.75"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock FontSize="9" Opacity="0.5" VerticalAlignment="Center">
+                            <Run Text="{Binding FreeConfigsVm.DisplayedConfigs.Count}"/>
+                            <Run Text="{Binding L_FcListShown}"/>
+                        </TextBlock>
                     </StackPanel>
-                </Expander>
-            </StackPanel>
-        </Border>
 
-        <!-- ═══ List header ═══ — Auto-height row -->
-        <StackPanel Grid.Row="1"
-                    Orientation="Horizontal" Spacing="8"
-                    Margin="16,10,14,4">
-            <TextBlock Text="{Binding L_FcListHeader}"
-                       FontSize="11" FontWeight="SemiBold" Opacity="0.75"
-                       VerticalAlignment="Center"/>
-            <TextBlock FontSize="9" Opacity="0.5" VerticalAlignment="Center">
-                <Run Text="{Binding FreeConfigsVm.DisplayedConfigs.Count}"/>
-                <Run Text="{Binding L_FcListShown}"/>
-            </TextBlock>
-        </StackPanel>
-
-        <!-- ═══ List / Empty / Filtered states ═══ — fills remaining space.
-             All three states overlay each other with mutually-exclusive
-             IsVisible bindings; only one renders. -->
-        <Grid Grid.Row="2" Margin="14,0,14,8">
-
-            <!-- Empty: no aggregator data yet -->
-            <Border IsVisible="{Binding FreeConfigsVm.IsEmpty}"
-                    BorderThickness="1" CornerRadius="{StaticResource RadiusMd}"
-                    BorderBrush="{DynamicResource BorderDefaultBrush}"
-                    Background="{DynamicResource SurfaceRaisedBrush}"
-                    Padding="24,22"
-                    HorizontalAlignment="Stretch">
-                <StackPanel Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <TextBlock Text="☁" FontSize="22" Opacity="0.6"
-                               HorizontalAlignment="Center"/>
-                    <TextBlock Text="{Binding L_FcEmptyCtaTitle}"
-                               FontSize="12" FontWeight="SemiBold"
-                               HorizontalAlignment="Center"
-                               Foreground="{DynamicResource TextPrimaryBrush}"/>
-                    <TextBlock Text="{Binding L_FcEmptyCtaSubtitle}"
-                               TextWrapping="Wrap" FontSize="11"
-                               HorizontalAlignment="Center" TextAlignment="Center"
-                               MaxWidth="320"
-                               Foreground="{DynamicResource TextMutedBrush}"/>
-                    <Button Content="{Binding L_FcEmptyCtaButton}"
-                            Command="{Binding FreeConfigsVm.RefreshCommand}"
-                            IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
-                            FontSize="11" FontWeight="SemiBold"
-                            Padding="14,6" CornerRadius="{StaticResource RadiusSm}"
-                            Margin="0,4,0,0"
-                            Background="{DynamicResource AccentSolidBrush}"
-                            Foreground="{DynamicResource AccentOnSolidBrush}"
-                            HorizontalAlignment="Center"/>
-                </StackPanel>
-            </Border>
-
-            <!-- Filtered empty: cache has data but filters hide it all -->
-            <Border IsVisible="{Binding FreeConfigsVm.IsFilteredEmpty}"
-                    BorderThickness="1" CornerRadius="{StaticResource RadiusSm}"
-                    BorderBrush="{DynamicResource BorderDefaultBrush}"
-                    Padding="16">
-                <StackPanel Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <TextBlock Text="🔍" FontSize="24"
-                               HorizontalAlignment="Center" Opacity="0.5"/>
-                    <TextBlock Text="{Binding L_FcFilteredEmpty}"
-                               TextWrapping="Wrap" FontSize="10" Opacity="0.7"
-                               HorizontalAlignment="Center" TextAlignment="Center"
-                               MaxWidth="360"/>
-                </StackPanel>
-            </Border>
-
-            <!-- Populated list: column headers + virtualised ListBox.
-                 The ListBox manages its own scroll internally; no outer
-                 ScrollViewer is needed. -->
-            <Border IsVisible="{Binding FreeConfigsVm.IsListVisible}"
-                    BorderThickness="1" CornerRadius="{StaticResource RadiusSm}"
-                    BorderBrush="{DynamicResource BorderDefaultBrush}"
-                    ClipToBounds="True">
-                <Grid RowDefinitions="Auto,*">
-                    <!-- v2.28.5-r2: SNI column dropped, Speed column added.
-                         SNI is a TLS-handshake detail not relevant to "find a
-                         working config". Speed (bandwidth in Mbps) is what
-                         users actually care about — restored after the
-                         simplified-list pass dropped it. -->
-                    <Grid Grid.Row="0" Background="{DynamicResource SurfaceSunkenBrush}"
-                          ColumnDefinitions="44,*,80,80,72" Height="24">
-                        <TextBlock Grid.Column="0" Text="{Binding L_FcColCountry}"
-                                   FontWeight="SemiBold" FontSize="9" Opacity="0.65"
-                                   VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Text="{Binding L_FcColEndpoint}"
-                                   FontWeight="SemiBold" FontSize="9" Opacity="0.65"
-                                   VerticalAlignment="Center" Margin="8,0,0,0"/>
-                        <TextBlock Grid.Column="2" Text="{Binding L_FcColLatency}"
-                                   FontWeight="SemiBold" FontSize="9" Opacity="0.65"
-                                   VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                        <TextBlock Grid.Column="3" Text="{Binding L_FcColBandwidth}"
-                                   FontWeight="SemiBold" FontSize="9" Opacity="0.65"
-                                   VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                        <TextBlock Grid.Column="4" Text="{Binding L_FcColTransport}"
-                                   FontWeight="SemiBold" FontSize="9" Opacity="0.65"
-                                   VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                    </Grid>
-                    <ListBox Grid.Row="1"
-                             x:Name="ConfigsList"
-                             ItemsSource="{Binding FreeConfigsVm.DisplayedConfigs}"
-                             SelectedItem="{Binding FreeConfigsVm.SelectedItem}"
-                             DoubleTapped="ConfigsList_DoubleTapped"
-                             BorderThickness="0"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto">
-                        <ListBox.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <VirtualizingStackPanel/>
-                            </ItemsPanelTemplate>
-                        </ListBox.ItemsPanel>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate DataType="fcvm:FreeConfigItemViewModel">
-                                <Grid ColumnDefinitions="44,*,80,80,72" Height="22">
-                                    <TextBlock Grid.Column="0" Text="{Binding CountryDisplay}"
-                                               FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Endpoint}"
-                                               FontSize="10" VerticalAlignment="Center" Margin="8,0,0,0"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <Border Grid.Column="2" CornerRadius="{StaticResource RadiusXs}"
-                                            Padding="4,1" HorizontalAlignment="Right" Margin="0,0,4,0"
-                                            VerticalAlignment="Center"
-                                            Background="{Binding LatencyColor}">
-                                        <TextBlock Text="{Binding LatencyDisplay}"
-                                                   Foreground="White" FontSize="9" FontWeight="SemiBold"/>
-                                    </Border>
-                                    <TextBlock Grid.Column="3" Text="{Binding BandwidthDisplay}"
-                                               FontSize="9" Opacity="0.75" FontWeight="SemiBold"
+                    <!-- List / Empty / Filtered states -->
+                    <Grid Grid.Row="2" Margin="14,0,14,8">
+                        <Border IsVisible="{Binding FreeConfigsVm.IsEmpty}"
+                                BorderThickness="1" CornerRadius="{StaticResource RadiusMd}"
+                                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                                Background="{DynamicResource SurfaceRaisedBrush}"
+                                Padding="24,22"
+                                HorizontalAlignment="Stretch">
+                            <StackPanel Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <TextBlock Text="☁" FontSize="22" Opacity="0.6"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding L_FcEmptyCtaTitle}"
+                                           FontSize="12" FontWeight="SemiBold"
+                                           HorizontalAlignment="Center"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                <TextBlock Text="{Binding L_FcEmptyCtaSubtitle}"
+                                           TextWrapping="Wrap" FontSize="11"
+                                           HorizontalAlignment="Center" TextAlignment="Center"
+                                           MaxWidth="320"
+                                           Foreground="{DynamicResource TextMutedBrush}"/>
+                                <Button Content="{Binding L_FcEmptyCtaButton}"
+                                        Command="{Binding FreeConfigsVm.RefreshCommand}"
+                                        IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                                        FontSize="11" FontWeight="SemiBold"
+                                        Padding="14,6" CornerRadius="{StaticResource RadiusSm}"
+                                        Margin="0,4,0,0"
+                                        Background="{DynamicResource AccentSolidBrush}"
+                                        Foreground="{DynamicResource AccentOnSolidBrush}"
+                                        HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <Border IsVisible="{Binding FreeConfigsVm.IsFilteredEmpty}"
+                                BorderThickness="1" CornerRadius="{StaticResource RadiusSm}"
+                                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                                Padding="16">
+                            <StackPanel Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <TextBlock Text="🔍" FontSize="24"
+                                           HorizontalAlignment="Center" Opacity="0.5"/>
+                                <TextBlock Text="{Binding L_FcFilteredEmpty}"
+                                           TextWrapping="Wrap" FontSize="10" Opacity="0.7"
+                                           HorizontalAlignment="Center" TextAlignment="Center"
+                                           MaxWidth="360"/>
+                            </StackPanel>
+                        </Border>
+                        <Border IsVisible="{Binding FreeConfigsVm.IsListVisible}"
+                                BorderThickness="1" CornerRadius="{StaticResource RadiusSm}"
+                                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                                ClipToBounds="True">
+                            <Grid RowDefinitions="Auto,*">
+                                <Grid Grid.Row="0" Background="{DynamicResource SurfaceSunkenBrush}"
+                                      ColumnDefinitions="44,*,80,80,72" Height="24">
+                                    <TextBlock Grid.Column="0" Text="{Binding L_FcColCountry}"
+                                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
+                                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding L_FcColEndpoint}"
+                                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
+                                               VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding L_FcColLatency}"
+                                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
                                                VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                                    <TextBlock Grid.Column="4" Text="{Binding Transport}"
-                                               FontSize="9" Opacity="0.6"
+                                    <TextBlock Grid.Column="3" Text="{Binding L_FcColBandwidth}"
+                                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
+                                               VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
+                                    <TextBlock Grid.Column="4" Text="{Binding L_FcColTransport}"
+                                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
                                                VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                 </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                                <ListBox Grid.Row="1"
+                                         x:Name="ConfigsList"
+                                         ItemsSource="{Binding FreeConfigsVm.DisplayedConfigs}"
+                                         SelectedItem="{Binding FreeConfigsVm.SelectedItem}"
+                                         DoubleTapped="ConfigsList_DoubleTapped"
+                                         BorderThickness="0"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListBox.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <VirtualizingStackPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ListBox.ItemsPanel>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="fcvm:FreeConfigItemViewModel">
+                                            <Grid ColumnDefinitions="44,*,80,80,72" Height="22">
+                                                <TextBlock Grid.Column="0" Text="{Binding CountryDisplay}"
+                                                           FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Endpoint}"
+                                                           FontSize="10" VerticalAlignment="Center" Margin="8,0,0,0"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <Border Grid.Column="2" CornerRadius="{StaticResource RadiusXs}"
+                                                        Padding="4,1" HorizontalAlignment="Right" Margin="0,0,4,0"
+                                                        VerticalAlignment="Center"
+                                                        Background="{Binding LatencyColor}">
+                                                    <TextBlock Text="{Binding LatencyDisplay}"
+                                                               Foreground="White" FontSize="9" FontWeight="SemiBold"/>
+                                                </Border>
+                                                <TextBlock Grid.Column="3" Text="{Binding BandwidthDisplay}"
+                                                           FontSize="9" Opacity="0.75" FontWeight="SemiBold"
+                                                           VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
+                                                <TextBlock Grid.Column="4" Text="{Binding Transport}"
+                                                           FontSize="9" Opacity="0.6"
+                                                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
+                        </Border>
+                    </Grid>
                 </Grid>
-            </Border>
-        </Grid>
+            </TabItem>
 
-        <!-- ═══ Bottom: status + Connect button — Auto-height row ═══
+            <!-- ════════════════════════════════════════════════════════════
+                 Tab 2 — Сохранённые (persistent saved list with per-row Recheck).
+                 ════════════════════════════════════════════════════════════ -->
+            <TabItem Header="{Binding FreeConfigsVm.SavedTabHeaderText}"
+                     Padding="14,6" FontSize="11">
+                <Grid RowDefinitions="Auto,Auto,*">
+
+                    <!-- Saved-tab description -->
+                    <TextBlock Grid.Row="0"
+                               Text="{Binding L_FcSavedTabHint}"
+                               TextWrapping="Wrap" FontSize="11" Opacity="0.7"
+                               Margin="14,12,14,6"
+                               Foreground="{DynamicResource TextMutedBrush}"/>
+
+                    <!-- Bulk-action button row. The "Recheck (N)" button is
+                         only visible when there's something stale to recheck;
+                         "Clear all" is always visible when the list is non-empty. -->
+                    <Grid Grid.Row="1"
+                          ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6"
+                          Margin="14,0,14,8"
+                          IsVisible="{Binding !FreeConfigsVm.IsSavedEmpty}">
+                        <Button Grid.Column="1"
+                                Content="{Binding FreeConfigsVm.SavedRecheckStaleButtonText}"
+                                Command="{Binding FreeConfigsVm.RecheckAllStaleCommand}"
+                                IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                                IsVisible="{Binding FreeConfigsVm.HasStaleSaved}"
+                                FontSize="10" Padding="10,5"
+                                CornerRadius="{StaticResource RadiusSm}"
+                                Background="{DynamicResource SurfaceRaisedBrush}"
+                                Foreground="{DynamicResource TextPrimaryBrush}"/>
+                        <Button Grid.Column="2"
+                                Content="{Binding L_FcSavedClearAllBtn}"
+                                Command="{Binding FreeConfigsVm.ClearAllSavedCommand}"
+                                IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
+                                FontSize="10" Padding="10,5"
+                                CornerRadius="{StaticResource RadiusSm}"
+                                Background="{DynamicResource SurfaceRaisedBrush}"
+                                Foreground="{DynamicResource TextMutedBrush}"/>
+                    </Grid>
+
+                    <!-- Saved list area: empty-state vs populated -->
+                    <Grid Grid.Row="2" Margin="14,0,14,8">
+                        <Border IsVisible="{Binding FreeConfigsVm.IsSavedEmpty}"
+                                BorderThickness="1" CornerRadius="{StaticResource RadiusMd}"
+                                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                                Background="{DynamicResource SurfaceRaisedBrush}"
+                                Padding="24,22"
+                                HorizontalAlignment="Stretch">
+                            <StackPanel Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <TextBlock Text="★" FontSize="22" Opacity="0.5"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding L_FcSavedEmpty}"
+                                           TextWrapping="Wrap" FontSize="11"
+                                           HorizontalAlignment="Center" TextAlignment="Center"
+                                           MaxWidth="320"
+                                           Foreground="{DynamicResource TextMutedBrush}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border IsVisible="{Binding !FreeConfigsVm.IsSavedEmpty}"
+                                BorderThickness="1" CornerRadius="{StaticResource RadiusSm}"
+                                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                                ClipToBounds="True">
+                            <Grid RowDefinitions="Auto,*">
+                                <!-- Header row: country, endpoint, latency, speed, status, actions -->
+                                <Grid Grid.Row="0" Background="{DynamicResource SurfaceSunkenBrush}"
+                                      ColumnDefinitions="44,*,72,72,68,52" Height="24">
+                                    <TextBlock Grid.Column="0" Text="{Binding L_FcColCountry}"
+                                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
+                                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding L_FcColEndpoint}"
+                                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
+                                               VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding L_FcColLatency}"
+                                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
+                                               VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
+                                    <TextBlock Grid.Column="3" Text="{Binding L_FcColBandwidth}"
+                                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
+                                               VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
+                                    <TextBlock Grid.Column="4" Text="{Binding L_FcSavedColStatus}"
+                                               FontWeight="SemiBold" FontSize="9" Opacity="0.65"
+                                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                </Grid>
+                                <ListBox Grid.Row="1"
+                                         x:Name="SavedConfigsList"
+                                         ItemsSource="{Binding FreeConfigsVm.DisplayedSavedConfigs}"
+                                         SelectedItem="{Binding FreeConfigsVm.SelectedItem}"
+                                         DoubleTapped="ConfigsList_DoubleTapped"
+                                         BorderThickness="0"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListBox.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <VirtualizingStackPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ListBox.ItemsPanel>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate DataType="fcvm:FreeConfigItemViewModel">
+                                            <Grid ColumnDefinitions="44,*,72,72,68,52" Height="22"
+                                                  Opacity="{Binding OpacityValue}">
+                                                <TextBlock Grid.Column="0" Text="{Binding CountryDisplay}"
+                                                           FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Endpoint}"
+                                                           FontSize="10" VerticalAlignment="Center" Margin="8,0,0,0"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <Border Grid.Column="2" CornerRadius="{StaticResource RadiusXs}"
+                                                        Padding="4,1" HorizontalAlignment="Right" Margin="0,0,4,0"
+                                                        VerticalAlignment="Center"
+                                                        Background="{Binding LatencyColor}">
+                                                    <TextBlock Text="{Binding LatencyDisplay}"
+                                                               Foreground="White" FontSize="9" FontWeight="SemiBold"/>
+                                                </Border>
+                                                <TextBlock Grid.Column="3" Text="{Binding BandwidthDisplay}"
+                                                           FontSize="9" Opacity="0.85" FontWeight="SemiBold"
+                                                           VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
+                                                <TextBlock Grid.Column="4" Text="{Binding FreshnessLabel}"
+                                                           FontSize="9" Opacity="0.7"
+                                                           VerticalAlignment="Center" HorizontalAlignment="Center"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="2"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                    <Button Content="↻"
+                                                            Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).FreeConfigsVm.RecheckOneCommand}"
+                                                            CommandParameter="{Binding}"
+                                                            IsEnabled="{Binding !IsRecheckRunning}"
+                                                            ToolTip.Tip="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).L_FcSavedRecheckOneTooltip}"
+                                                            FontSize="10" Padding="4,1"
+                                                            MinWidth="22" MinHeight="0"
+                                                            CornerRadius="{StaticResource RadiusXs}"
+                                                            Background="Transparent"/>
+                                                    <Button Content="✕"
+                                                            Command="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).FreeConfigsVm.RemoveFromSavedCommand}"
+                                                            CommandParameter="{Binding}"
+                                                            ToolTip.Tip="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).L_FcSavedRemoveOneTooltip}"
+                                                            FontSize="10" Padding="4,1"
+                                                            MinWidth="22" MinHeight="0"
+                                                            CornerRadius="{StaticResource RadiusXs}"
+                                                            Background="Transparent"
+                                                            Foreground="{DynamicResource DangerSolidBrush}"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+        </TabControl>
+
+        <!-- ═══ Bottom: status + Connect button — shared across both tabs.
              Edge-to-edge intentionally (no horizontal Margin) so the top
-             border line spans the full window width. -->
-        <Border Grid.Row="3"
+             border line spans the full window width. ═══ -->
+        <Border Grid.Row="1"
                 Padding="12,8,14,8"
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource BorderDefaultBrush}"

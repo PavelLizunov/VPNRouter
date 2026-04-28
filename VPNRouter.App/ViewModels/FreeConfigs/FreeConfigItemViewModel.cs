@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using VPNRouter.App.Localization;
 using VPNRouter.Core.Services.FreeConfigs;
 
 namespace VPNRouter.App.ViewModels.FreeConfigs;
@@ -15,6 +16,11 @@ public partial class FreeConfigItemViewModel : ObservableObject
     {
         Entry = entry;
     }
+
+    /// <summary>v2.28.6 Phase 3: in-row spinner toggle while a single-row
+    /// Recheck is in flight. Bound by the Recheck commands; the saved-tab
+    /// row template flips its trailing icon to a spinner when this is true.</summary>
+    [ObservableProperty] private bool _isRecheckRunning;
 
     public string Id          => Entry.Id;
     public string Endpoint    => $"{Entry.Host}:{Entry.Port}";
@@ -68,6 +74,77 @@ public partial class FreeConfigItemViewModel : ObservableObject
     };
 
     public bool IsWorking => Entry.Status == FreeConfigStatus.Ok;
+
+    // ── v2.28.6 Phase 2 — Saved-tab freshness ──
+
+    /// <summary>True if the most recent re-verify (or the original verify)
+    /// failed, leaving us with last-good numbers but no current connectivity.
+    /// Phase 3 sets <see cref="FreeConfigEntry.LastVerifyFailedAt"/> to
+    /// drive this; Phase 1 left it null on every entry.</summary>
+    public bool HasFailedLastCheck =>
+        Entry.LastVerifyFailedAt.HasValue &&
+        (!Entry.LastTestedAt.HasValue ||
+            Entry.LastVerifyFailedAt.Value >= Entry.LastTestedAt.Value);
+
+    /// <summary>True when the saved entry is older than 24 h since its
+    /// last successful verify, OR the last re-verify failed. Drives the
+    /// "Recheck stale (N)" bulk button + the dim-opacity rendering.</summary>
+    public bool IsStale
+    {
+        get
+        {
+            if (HasFailedLastCheck) return true;
+            if (!Entry.LastTestedAt.HasValue) return true;
+            return (DateTime.UtcNow - Entry.LastTestedAt.Value).TotalHours > 24;
+        }
+    }
+
+    /// <summary>Human label for the Status column on the Saved tab:
+    /// "fresh" / "Nd ago" / "stale" / "failed". Computed from
+    /// <see cref="FreeConfigEntry.LastTestedAt"/> +
+    /// <see cref="FreeConfigEntry.LastVerifyFailedAt"/> at VM build time.</summary>
+    public string FreshnessLabel
+    {
+        get
+        {
+            if (HasFailedLastCheck) return Strings.FcFreshnessFailed;
+            if (!Entry.LastTestedAt.HasValue) return Strings.FcFreshnessFresh;
+            var ageDays = (DateTime.UtcNow - Entry.LastTestedAt.Value).TotalDays;
+            if (ageDays < 1) return Strings.FcFreshnessFresh;
+            if (ageDays > 7) return Strings.FcFreshnessStale;
+            return Strings.FcFreshnessAgeingDays((int)Math.Floor(ageDays));
+        }
+    }
+
+    /// <summary>Visual dim level for the Saved tab: 1.0 fresh / 0.75
+    /// ageing / 0.5 stale or failed. Bound to row Opacity.</summary>
+    public double OpacityValue
+    {
+        get
+        {
+            if (HasFailedLastCheck) return 0.5;
+            if (!Entry.LastTestedAt.HasValue) return 1.0;
+            var ageDays = (DateTime.UtcNow - Entry.LastTestedAt.Value).TotalDays;
+            if (ageDays < 1) return 1.0;
+            if (ageDays > 7) return 0.5;
+            return 0.75;
+        }
+    }
+
+    /// <summary>Sort key for the Saved tab: ascending by freshness tier
+    /// (fresh first), then by latency. Failed-last-check rows go to the
+    /// bottom regardless of age.</summary>
+    public int FreshnessSortKey
+    {
+        get
+        {
+            if (HasFailedLastCheck) return 1_000_000;
+            if (!Entry.LastTestedAt.HasValue) return Entry.LatencyMs > 0 ? Entry.LatencyMs : 0;
+            var ageDays = (DateTime.UtcNow - Entry.LastTestedAt.Value).TotalDays;
+            int tier = ageDays < 1 ? 0 : ageDays > 7 ? 200_000 : 100_000;
+            return tier + (Entry.LatencyMs > 0 ? Entry.LatencyMs : 0);
+        }
+    }
 
     /// <summary>Hex color string for latency badge.</summary>
     public string LatencyColor => Entry.Status switch
