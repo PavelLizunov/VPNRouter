@@ -214,7 +214,31 @@ public static class CustomRulesImportExport
         var warnings = new List<string>();
         try
         {
-            var rules = JsonSerializer.Deserialize<List<CustomRule>>(text, JsonOptions)
+            // v2.30.0-r20 — accept either a bare array `[ {...} ]` (default
+            // export shape) OR a wrapping object `{ "rules": [...] }` (user
+            // edits, sample files with $schema metadata, etc.). Pre-r20 only
+            // accepted the bare array; user report «example-rules.json
+            // выдаёт ошибки» because the sample shipped with a wrapping
+            // object.
+            using var doc = JsonDocument.Parse(text);
+            var root = doc.RootElement;
+            JsonElement arr;
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                arr = root;
+            }
+            else if (root.ValueKind == JsonValueKind.Object &&
+                     root.TryGetProperty("rules", out var inner) &&
+                     inner.ValueKind == JsonValueKind.Array)
+            {
+                arr = inner;
+            }
+            else
+            {
+                warnings.Add("JSON: expected an array of rules, or an object with a \"rules\" array");
+                return new ImportResult(new(), warnings, Format.VpnrouterJson);
+            }
+            var rules = JsonSerializer.Deserialize<List<CustomRule>>(arr.GetRawText(), JsonOptions)
                 ?? new List<CustomRule>();
             return new ImportResult(rules, warnings, Format.VpnrouterJson);
         }
