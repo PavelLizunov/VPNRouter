@@ -264,6 +264,19 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
     [ObservableProperty] private bool _bypassRussianTraffic = true;
+
+    /// <summary>
+    /// v2.29.0 — text-format mirror of <see cref="AppSettings.App.CustomDirectRules"/>.
+    /// User edits this multi-line string in the Network → Routing →
+    /// "Custom direct rules" textbox; SaveSettings parses it back to the
+    /// structured list. Errors during parse populate
+    /// <see cref="CustomDirectRulesErrorText"/>.
+    /// </summary>
+    [ObservableProperty] private string _customDirectRulesText = string.Empty;
+
+    /// <summary>v2.29.0 — error diagnostic shown below the textbox; empty
+    /// when all lines parsed cleanly.</summary>
+    [ObservableProperty] private string _customDirectRulesErrorText = string.Empty;
     [ObservableProperty] private bool _strictMode = false;
     [ObservableProperty] private bool _forceIpv4Only = true;
     [ObservableProperty] private bool _flushDnsOnStart = true;
@@ -338,6 +351,21 @@ public partial class MainWindowViewModel : ViewModelBase
         // Sync IsVlessMode with sub-tab index (0=VLESS, 1=Custom)
         IsVlessMode = value == 0;
         SaveSettings();
+    }
+
+    /// <summary>v2.29.0 — auto-save when the user types in the Custom
+    /// Direct Rules textbox. Throttled by Avalonia's TextBox change-on-
+    /// commit (focus loss / Enter), so we don't spam SaveSettings on
+    /// every keystroke. Errors during parse populate the inline error
+    /// box but don't block save (valid lines persist).</summary>
+    partial void OnCustomDirectRulesTextChanged(string value)
+    {
+        if (_isLoadingUI) return;
+        SaveSettings();
+        // The settings round-trip writes parse errors into
+        // CustomDirectRulesErrorText. Notify so the UI re-binds the
+        // diagnostic block visibility.
+        OnPropertyChanged(nameof(CustomDirectRulesErrorText));
     }
 
     partial void OnAutostartUiChanged(bool value)
@@ -1024,6 +1052,12 @@ public partial class MainWindowViewModel : ViewModelBase
         // Russian geo bypass
         BypassRussianTraffic = _settings.App.BypassRussianTraffic;
 
+        // v2.29.0 — custom direct rules (text format for the textbox).
+        // Round-trip: SaveSettings serialises CustomDirectRulesText back to
+        // _settings.App.CustomDirectRules.
+        CustomDirectRulesText = VPNRouter.Core.Services.CustomDirectRulesParser
+            .SerializeToText(_settings.App.CustomDirectRules);
+
         // Strict mode
         StrictMode = _settings.App.StrictMode;
 
@@ -1648,6 +1682,25 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Routing mode
         _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
+
+        // v2.29.0 — custom direct rules. Parse the textbox content and
+        // persist the structured list. Errors are reported in
+        // CustomDirectRulesErrorText (UI subtitle below the textbox);
+        // valid lines still save even if some lines errored.
+        try
+        {
+            var parsed = VPNRouter.Core.Services.CustomDirectRulesParser
+                .ParseFromText(CustomDirectRulesText);
+            _settings.App.CustomDirectRules = parsed.Rules;
+            CustomDirectRulesErrorText = parsed.Errors.Count == 0
+                ? string.Empty
+                : string.Join("\n", parsed.Errors.Select(e =>
+                    $"line {e.LineNumber}: {e.Reason}"));
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] CustomDirectRules parse failed");
+        }
 
         // Russian geo bypass
         _settings.App.BypassRussianTraffic = BypassRussianTraffic;

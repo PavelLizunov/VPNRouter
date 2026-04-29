@@ -702,6 +702,23 @@ public static class Strings
     public static string AppsFullTunnelBannerAction => Ru
         ? "Переключить на Split tunnel"
         : "Switch to split tunnel";
+
+    // v2.29.0 — Custom direct rules (Network → Routing → expander).
+    // Mac tester request 2026-04-29: «хотелось бы расширенную настройку
+    // конфига, у меня есть кейсы с wireguard где мне хотелось бы самому
+    // прописывать direct правила».
+    public static string CustomDirectRulesTitle => Ru
+        ? "Свои правила direct (расширенно)"
+        : "Custom direct rules (advanced)";
+    public static string CustomDirectRulesDescription => Ru
+        ? "Маршрутизировать определённые домены, IP/CIDR или порты НАПРЯМУЮ, минуя VPN. Полезно когда параллельно работает другой туннель (например, WireGuard) или нужно исключить локальную сеть из VPN."
+        : "Route specific domains, IPs/CIDRs or ports DIRECTLY, bypassing the VPN. Useful when running another tunnel alongside (e.g. WireGuard) or excluding LAN ranges from the tunnel.";
+    public static string CustomDirectRulesPlaceholder => Ru
+        ? "# Одно правило на строку. Типы: domain / domain_suffix / domain_keyword / ip_cidr / port / process_name\n# Несколько значений через запятую. Комментарий — после '#'. Отключить — '!' в начале.\n\nip_cidr 10.0.0.0/8, 192.168.0.0/16    # Локальные сети\ndomain_suffix .lan.local\nport 22"
+        : "# One rule per line. Types: domain / domain_suffix / domain_keyword / ip_cidr / port / process_name\n# Multiple values separated by ','. Inline comment after '#'. Prefix '!' to disable.\n\nip_cidr 10.0.0.0/8, 192.168.0.0/16    # Local LANs\ndomain_suffix .lan.local\nport 22";
+    public static string CustomDirectRulesErrorHeader => Ru
+        ? "Ошибки парсинга:"
+        : "Parse errors:";
     public static string SelectCategoryHint => Ru
         ? "← Выберите категорию"
         : "← Select a category";

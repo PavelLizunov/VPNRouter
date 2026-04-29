@@ -395,6 +395,28 @@ public class RouteRule
     /// <summary>Match by rule set tags (geoip-ru, geosite-ru, etc).</summary>
     [JsonProperty("rule_set", NullValueHandling = NullValueHandling.Ignore)]
     public List<string>? RuleSet { get; set; }
+
+    // v2.29.0 — fields for custom direct rules (CustomDirectRule).
+
+    /// <summary>Match by exact FQDN(s) (e.g. ["example.com", "api.example.com"]).</summary>
+    [JsonProperty("domain", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? Domain { get; set; }
+
+    /// <summary>Match by domain suffix(es) (e.g. [".lan.local"] matches "printer.lan.local").</summary>
+    [JsonProperty("domain_suffix", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? DomainSuffix { get; set; }
+
+    /// <summary>Match by substring(s) anywhere in the FQDN.</summary>
+    [JsonProperty("domain_keyword", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? DomainKeyword { get; set; }
+
+    /// <summary>Match by IP CIDR(s) (e.g. ["10.0.0.0/8", "192.168.0.0/16"]).</summary>
+    [JsonProperty("ip_cidr", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? IpCidr { get; set; }
+
+    /// <summary>Match by destination port(s).</summary>
+    [JsonProperty("port", NullValueHandling = NullValueHandling.Ignore)]
+    public List<int>? Port { get; set; }
 }
 
 // ─── Experimental ─────────────────────────────────────────────────────────────

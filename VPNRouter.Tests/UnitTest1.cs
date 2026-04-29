@@ -2637,3 +2637,375 @@ public class AutostartHelperShapeTests
         Assert.Equal(wasEnabled, VPNRouter.Core.Platform.AutostartHelper.IsEnabled());
     }
 }
+
+/// <summary>v2.29.0-r4: tests for custom direct rules generation.
+/// Each test exercises <see cref="VPNRouter.Core.Services.ConfigGenerator.BuildCustomDirectRouteRule"/>
+/// directly (the route-rule construction step), which is the
+/// nontrivial part of <see cref="VPNRouter.Core.Services.ConfigGenerator.ApplyCustomDirectRules"/>.
+/// Insertion + ordering are tested via ApplyCustomDirectRules with a
+/// minimal stub config.</summary>
+public class CustomDirectRulesGeneratorTests
+{
+    [Fact]
+    public void BuildRule_DomainSuffix_SingleValue()
+    {
+        var rule = new VPNRouter.Core.Models.CustomDirectRule
+        {
+            Type = "domain_suffix",
+            Value = ".lan.local",
+            Enabled = true,
+        };
+        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomDirectRouteRule(rule);
+        Assert.NotNull(route);
+        Assert.Equal("route", route!.Action);
+        Assert.Equal("direct", route.Outbound);
+        Assert.NotNull(route.DomainSuffix);
+        Assert.Single(route.DomainSuffix!);
+        Assert.Equal(".lan.local", route.DomainSuffix![0]);
+    }
+
+    [Fact]
+    public void BuildRule_IpCidr_MultiValue_CommaSeparated()
+    {
+        var rule = new VPNRouter.Core.Models.CustomDirectRule
+        {
+            Type = "ip_cidr",
+            Value = "10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12",
+            Enabled = true,
+        };
+        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomDirectRouteRule(rule);
+        Assert.NotNull(route);
+        Assert.NotNull(route!.IpCidr);
+        Assert.Equal(3, route.IpCidr!.Count);
+        Assert.Contains("10.0.0.0/8", route.IpCidr!);
+        Assert.Contains("192.168.0.0/16", route.IpCidr!);
+        Assert.Contains("172.16.0.0/12", route.IpCidr!);
+    }
+
+    [Fact]
+    public void BuildRule_Port_FiltersInvalidNumbers()
+    {
+        var rule = new VPNRouter.Core.Models.CustomDirectRule
+        {
+            Type = "port",
+            Value = "22, 80, abc, 99999, 443, 0",
+            Enabled = true,
+        };
+        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomDirectRouteRule(rule);
+        Assert.NotNull(route);
+        Assert.NotNull(route!.Port);
+        Assert.Equal(3, route.Port!.Count);
+        Assert.Contains(22, route.Port!);
+        Assert.Contains(80, route.Port!);
+        Assert.Contains(443, route.Port!);
+    }
+
+    [Fact]
+    public void BuildRule_EmptyValue_ReturnsNull()
+    {
+        var rule = new VPNRouter.Core.Models.CustomDirectRule
+        {
+            Type = "domain",
+            Value = "",
+            Enabled = true,
+        };
+        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomDirectRouteRule(rule);
+        Assert.Null(route);
+    }
+
+    [Fact]
+    public void BuildRule_UnknownType_ReturnsNull()
+    {
+        var rule = new VPNRouter.Core.Models.CustomDirectRule
+        {
+            Type = "geosite",
+            Value = "ru",
+            Enabled = true,
+        };
+        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomDirectRouteRule(rule);
+        Assert.Null(route);
+    }
+
+    [Fact]
+    public void BuildRule_DomainKeyword_SingleValue()
+    {
+        var rule = new VPNRouter.Core.Models.CustomDirectRule
+        {
+            Type = "domain_keyword",
+            Value = "internal",
+            Enabled = true,
+        };
+        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomDirectRouteRule(rule);
+        Assert.NotNull(route);
+        Assert.NotNull(route!.DomainKeyword);
+        Assert.Single(route.DomainKeyword!);
+        Assert.Equal("internal", route.DomainKeyword![0]);
+    }
+
+    [Fact]
+    public void BuildRule_ProcessName_PreservesCase()
+    {
+        // sing-box process_name matching is case-sensitive — preserve
+        // original casing from user input.
+        var rule = new VPNRouter.Core.Models.CustomDirectRule
+        {
+            Type = "process_name",
+            Value = "Discord.exe, ChromE.exe",
+            Enabled = true,
+        };
+        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomDirectRouteRule(rule);
+        Assert.NotNull(route);
+        Assert.NotNull(route!.ProcessName);
+        Assert.Contains("Discord.exe", route.ProcessName!);
+        Assert.Contains("ChromE.exe", route.ProcessName!);
+    }
+
+    [Fact]
+    public void Apply_DisabledRule_Skipped()
+    {
+        var config = new VPNRouter.Core.Models.SingBoxConfig
+        {
+            Route = new VPNRouter.Core.Models.SingBoxRoute
+            {
+                Rules = new List<VPNRouter.Core.Models.RouteRule>(),
+            }
+        };
+        var rules = new List<VPNRouter.Core.Models.CustomDirectRule>
+        {
+            new() { Type = "domain", Value = "skipped.example", Enabled = false },
+            new() { Type = "domain", Value = "kept.example",    Enabled = true  },
+        };
+        VPNRouter.Core.Services.ConfigGenerator.ApplyCustomDirectRules(config, rules);
+        Assert.Single(config.Route.Rules);
+        Assert.NotNull(config.Route.Rules[0].Domain);
+        Assert.Equal("kept.example", config.Route.Rules[0].Domain![0]);
+    }
+
+    [Fact]
+    public void Apply_EmptyList_NoChange()
+    {
+        var config = new VPNRouter.Core.Models.SingBoxConfig
+        {
+            Route = new VPNRouter.Core.Models.SingBoxRoute
+            {
+                Rules = new List<VPNRouter.Core.Models.RouteRule>
+                {
+                    new() { Action = "sniff" },
+                },
+            }
+        };
+        VPNRouter.Core.Services.ConfigGenerator.ApplyCustomDirectRules(
+            config, new List<VPNRouter.Core.Models.CustomDirectRule>());
+        Assert.Single(config.Route.Rules); // only the original sniff rule
+    }
+
+    [Fact]
+    public void Apply_OrderPreserved_AfterSniffHijackPrivate()
+    {
+        // Insertion point should be AFTER sniff/hijack-dns/private-ip but
+        // BEFORE everything else. Existing process_name route rule
+        // should end up AFTER our custom direct rules.
+        var config = new VPNRouter.Core.Models.SingBoxConfig
+        {
+            Route = new VPNRouter.Core.Models.SingBoxRoute
+            {
+                Rules = new List<VPNRouter.Core.Models.RouteRule>
+                {
+                    new() { Action = "sniff" },
+                    new() { Action = "hijack-dns" },
+                    new() { IpIsPrivate = true, Action = "route", Outbound = "direct" },
+                    new() { ProcessName = new List<string> { "Discord.exe" }, Action = "route", Outbound = "proxy" },
+                },
+            }
+        };
+        var customRules = new List<VPNRouter.Core.Models.CustomDirectRule>
+        {
+            new() { Type = "domain_suffix", Value = ".lan.local", Enabled = true },
+            new() { Type = "ip_cidr",       Value = "10.0.0.0/8", Enabled = true },
+        };
+        VPNRouter.Core.Services.ConfigGenerator.ApplyCustomDirectRules(config, customRules);
+
+        // Expected order:
+        //   [0] sniff
+        //   [1] hijack-dns
+        //   [2] private-ip
+        //   [3] custom rule 1 (domain_suffix .lan.local)
+        //   [4] custom rule 2 (ip_cidr 10.0.0.0/8)
+        //   [5] process_name Discord
+        Assert.Equal(6, config.Route.Rules.Count);
+        Assert.Equal("sniff", config.Route.Rules[0].Action);
+        Assert.Equal("hijack-dns", config.Route.Rules[1].Action);
+        Assert.True(config.Route.Rules[2].IpIsPrivate);
+        Assert.NotNull(config.Route.Rules[3].DomainSuffix);
+        Assert.Equal(".lan.local", config.Route.Rules[3].DomainSuffix![0]);
+        Assert.NotNull(config.Route.Rules[4].IpCidr);
+        Assert.Equal("10.0.0.0/8", config.Route.Rules[4].IpCidr![0]);
+        Assert.NotNull(config.Route.Rules[5].ProcessName);
+    }
+
+    [Fact]
+    public void Apply_AllRulesGetActionRoute_OutboundDirect()
+    {
+        var config = new VPNRouter.Core.Models.SingBoxConfig
+        {
+            Route = new VPNRouter.Core.Models.SingBoxRoute
+            {
+                Rules = new List<VPNRouter.Core.Models.RouteRule>(),
+            }
+        };
+        var rules = new List<VPNRouter.Core.Models.CustomDirectRule>
+        {
+            new() { Type = "domain",         Value = "a.example", Enabled = true },
+            new() { Type = "domain_suffix",  Value = ".b.example", Enabled = true },
+            new() { Type = "domain_keyword", Value = "c", Enabled = true },
+            new() { Type = "ip_cidr",        Value = "10.0.0.0/8", Enabled = true },
+            new() { Type = "port",           Value = "22", Enabled = true },
+        };
+        VPNRouter.Core.Services.ConfigGenerator.ApplyCustomDirectRules(config, rules);
+
+        Assert.Equal(5, config.Route.Rules.Count);
+        foreach (var r in config.Route.Rules)
+        {
+            Assert.Equal("route", r.Action);
+            Assert.Equal("direct", r.Outbound);
+        }
+    }
+}
+
+/// <summary>v2.29.0-r4: tests for the text-format parser/serializer
+/// used by the Network → Routing → "Custom direct rules" textbox.</summary>
+public class CustomDirectRulesParserTests
+{
+    [Fact]
+    public void Parse_EmptyText_NoRules_NoErrors()
+    {
+        var result = VPNRouter.Core.Services.CustomDirectRulesParser.ParseFromText("");
+        Assert.Empty(result.Rules);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
+    public void Parse_WhitespaceOnly_NoRules_NoErrors()
+    {
+        var result = VPNRouter.Core.Services.CustomDirectRulesParser.ParseFromText("   \n\n  \r\n  ");
+        Assert.Empty(result.Rules);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
+    public void Parse_SimpleRule()
+    {
+        var result = VPNRouter.Core.Services.CustomDirectRulesParser.ParseFromText("ip_cidr 10.0.0.0/8");
+        Assert.Single(result.Rules);
+        Assert.Empty(result.Errors);
+        Assert.Equal("ip_cidr", result.Rules[0].Type);
+        Assert.Equal("10.0.0.0/8", result.Rules[0].Value);
+        Assert.True(result.Rules[0].Enabled);
+    }
+
+    [Fact]
+    public void Parse_MultipleRulesAndComments()
+    {
+        var text = """
+            # Comment line
+            ip_cidr 10.0.0.0/8, 192.168.0.0/16    # Local LANs
+            domain_suffix .lan.local
+            !port 53                              # disabled
+            """;
+        var result = VPNRouter.Core.Services.CustomDirectRulesParser.ParseFromText(text);
+        Assert.Empty(result.Errors);
+        Assert.Equal(3, result.Rules.Count);
+
+        Assert.Equal("ip_cidr", result.Rules[0].Type);
+        Assert.Equal("10.0.0.0/8, 192.168.0.0/16", result.Rules[0].Value);
+        Assert.Equal("Local LANs", result.Rules[0].Comment);
+        Assert.True(result.Rules[0].Enabled);
+
+        Assert.Equal("domain_suffix", result.Rules[1].Type);
+        Assert.Equal(".lan.local", result.Rules[1].Value);
+
+        Assert.Equal("port", result.Rules[2].Type);
+        Assert.Equal("53", result.Rules[2].Value);
+        Assert.False(result.Rules[2].Enabled);
+        Assert.Equal("disabled", result.Rules[2].Comment);
+    }
+
+    [Fact]
+    public void Parse_InvalidCidr_RaisesError()
+    {
+        var result = VPNRouter.Core.Services.CustomDirectRulesParser.ParseFromText("ip_cidr 999.999.0.0/8");
+        Assert.Empty(result.Rules);
+        Assert.Single(result.Errors);
+        Assert.Equal(1, result.Errors[0].LineNumber);
+        Assert.Contains("CIDR", result.Errors[0].Reason);
+    }
+
+    [Fact]
+    public void Parse_InvalidPort_RaisesError()
+    {
+        var result = VPNRouter.Core.Services.CustomDirectRulesParser.ParseFromText("port 99999");
+        Assert.Empty(result.Rules);
+        Assert.Single(result.Errors);
+        Assert.Contains("port", result.Errors[0].Reason);
+    }
+
+    [Fact]
+    public void Parse_UnknownType_RaisesError()
+    {
+        var result = VPNRouter.Core.Services.CustomDirectRulesParser.ParseFromText("unknown_type foo");
+        Assert.Empty(result.Rules);
+        Assert.Single(result.Errors);
+        Assert.Contains("Unknown type", result.Errors[0].Reason);
+    }
+
+    [Fact]
+    public void Parse_PartialFailure_KeepsValidRules()
+    {
+        var text = """
+            ip_cidr 10.0.0.0/8
+            unknown_type foo
+            domain_suffix .lan.local
+            """;
+        var result = VPNRouter.Core.Services.CustomDirectRulesParser.ParseFromText(text);
+        Assert.Equal(2, result.Rules.Count);
+        Assert.Single(result.Errors);
+    }
+
+    [Fact]
+    public void Serialize_RoundTrips_Correctly()
+    {
+        var input = new List<VPNRouter.Core.Models.CustomDirectRule>
+        {
+            new() { Type = "ip_cidr", Value = "10.0.0.0/8, 192.168.0.0/16", Comment = "LANs", Enabled = true },
+            new() { Type = "port",    Value = "53",                          Enabled = false },
+            new() { Type = "domain_suffix", Value = ".internal" },
+        };
+        var text = VPNRouter.Core.Services.CustomDirectRulesParser.SerializeToText(input);
+        var roundTrip = VPNRouter.Core.Services.CustomDirectRulesParser.ParseFromText(text);
+        Assert.Empty(roundTrip.Errors);
+        Assert.Equal(3, roundTrip.Rules.Count);
+
+        Assert.Equal("ip_cidr", roundTrip.Rules[0].Type);
+        Assert.Equal("LANs", roundTrip.Rules[0].Comment);
+        Assert.True(roundTrip.Rules[0].Enabled);
+
+        Assert.Equal("port", roundTrip.Rules[1].Type);
+        Assert.False(roundTrip.Rules[1].Enabled);
+    }
+
+    [Fact]
+    public void Serialize_Empty_ReturnsEmptyString()
+    {
+        Assert.Equal(string.Empty, VPNRouter.Core.Services.CustomDirectRulesParser.SerializeToText(null));
+        Assert.Equal(string.Empty, VPNRouter.Core.Services.CustomDirectRulesParser.SerializeToText(
+            new List<VPNRouter.Core.Models.CustomDirectRule>()));
+    }
+
+    [Fact]
+    public void Parse_PreservesProcessNameCasing()
+    {
+        var result = VPNRouter.Core.Services.CustomDirectRulesParser.ParseFromText("process_name Discord.exe, ChromE.exe");
+        Assert.Single(result.Rules);
+        Assert.Equal("Discord.exe, ChromE.exe", result.Rules[0].Value);
+    }
+}

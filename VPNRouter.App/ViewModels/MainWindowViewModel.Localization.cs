@@ -43,6 +43,11 @@ public partial class MainWindowViewModel
     // disable, see ApplicationsPage.axaml).
     public string L_AppsFullTunnelBanner => Strings.AppsFullTunnelBanner;
     public string L_AppsFullTunnelBannerAction => Strings.AppsFullTunnelBannerAction;
+    // v2.29.0 — Custom direct rules (Network → Routing → expander).
+    public string L_CustomDirectRulesTitle => Strings.CustomDirectRulesTitle;
+    public string L_CustomDirectRulesDescription => Strings.CustomDirectRulesDescription;
+    public string L_CustomDirectRulesPlaceholder => Strings.CustomDirectRulesPlaceholder;
+    public string L_CustomDirectRulesErrorHeader => Strings.CustomDirectRulesErrorHeader;
     public string L_AutoUpdateCheckLabel => Strings.AutoUpdateCheckLabel;
     public string L_AutostartPlatformNotice => Strings.AutostartPlatformNotice;
     public string L_AutostartSection => Strings.AutostartSection;
