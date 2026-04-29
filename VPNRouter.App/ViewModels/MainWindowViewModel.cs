@@ -364,31 +364,209 @@ public partial class MainWindowViewModel : ViewModelBase
     private void RebuildFilteredCustomRulesList()
     {
         FilteredCustomRulesList.Clear();
-        var query = CustomRulesSearchText?.Trim();
-        if (string.IsNullOrEmpty(query))
+        var query = (CustomRulesSearchText ?? string.Empty).Trim().ToLowerInvariant();
+        var actionFilter = RulesActionFilter ?? "all";
+
+        // Per-action counts BEFORE filter — drives the segment-control
+        // counters next to each chip label (so the user can see how
+        // many rules of each type exist regardless of current filter).
+        int total = 0, direct = 0, proxy = 0, block = 0;
+
+        foreach (var vm in CustomRulesList)
         {
-            foreach (var vm in CustomRulesList)
-                FilteredCustomRulesList.Add(vm);
-        }
-        else
-        {
-            foreach (var vm in CustomRulesList)
+            total++;
+            switch (vm.Action)
+            {
+                case "direct": direct++; break;
+                case "proxy":  proxy++;  break;
+                case "block":  block++;  break;
+            }
+
+            // Apply both filters: action AND search.
+            if (actionFilter != "all" &&
+                !string.Equals(vm.Action, actionFilter, System.StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (query.Length > 0)
             {
                 var haystack = $"{vm.Action} {vm.Type} {vm.Value} {vm.Comment}".ToLowerInvariant();
-                if (haystack.Contains(query.ToLowerInvariant()))
-                    FilteredCustomRulesList.Add(vm);
+                if (!haystack.Contains(query)) continue;
             }
+            FilteredCustomRulesList.Add(vm);
         }
+
+        RulesFilterCountAll    = total.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        RulesFilterCountDirect = direct.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        RulesFilterCountProxy  = proxy.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        RulesFilterCountBlock  = block.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
         OnPropertyChanged(nameof(CustomRulesCountText));
     }
 
     partial void OnCustomRulesSearchTextChanged(string value) => RebuildFilteredCustomRulesList();
 
-    [ObservableProperty] private string _newRuleAction = "direct";
-    [ObservableProperty] private string _newRuleType = "domain_suffix";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NewRuleActionHint))]
+    private string _newRuleAction = "direct";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NewRuleTypeHint))]
+    [NotifyPropertyChangedFor(nameof(NewRuleValuePlaceholder))]
+    private string _newRuleType = "domain_suffix";
+
     [ObservableProperty] private string _newRuleValue = string.Empty;
     [ObservableProperty] private string _newRuleComment = string.Empty;
     [ObservableProperty] private string _newRuleValidationError = string.Empty;
+
+    // v2.30.0-r11 — live-validation per type for the Add-form Value field.
+    // typeMeta from RulesPage.html: each type has a placeholder, a hint,
+    // and a regex (or RegExp ctor for domain_regex). We translate the live
+    // regex check to NewRuleValueIsValid + NewRuleValueHint + a colored
+    // border. Empty value = neutral (hint shows the per-type guidance).
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(NewRuleValueBorderColor))]
+    private bool _newRuleValueIsValid = true;
+
+    [ObservableProperty] private string _newRuleValueHint = string.Empty;
+    [ObservableProperty] private string _newRuleValuePlaceholder = ".corp.example";
+
+    /// <summary>True when the value is INVALID (Border-color converter
+    /// uses bool->Brush param "DangerBorder|SuccessBorder", so true means
+    /// danger). When the value is empty, kept false (= success/default).</summary>
+    public bool NewRuleValueBorderColor => !NewRuleValueIsValid;
+
+    /// <summary>Live "this action does X" hint shown under the Action
+    /// ComboBox in the Add-form. Per design `updateActionColor` JS handler.</summary>
+    public string NewRuleActionHint => NewRuleAction switch
+    {
+        "direct" => IsRussian ? "через VPN: нет" : "via VPN: no",
+        "proxy"  => IsRussian ? "через VPN: да"  : "via VPN: yes",
+        "block"  => IsRussian ? "трафик блокируется" : "traffic blocked",
+        _ => string.Empty,
+    };
+
+    /// <summary>Per-type guidance text shown under the Type ComboBox + as
+    /// the default Value-hint. From RulesPage.html `typeMeta[type].hint`.</summary>
+    public string NewRuleTypeHint => NewRuleType switch
+    {
+        "domain"         => IsRussian ? "полное доменное имя"          : "full domain name",
+        "domain_suffix"  => IsRussian ? "точное совпадение конца имени" : "exact suffix match",
+        "domain_keyword" => IsRussian ? "подстрока в имени"             : "substring match",
+        "ip_cidr"        => IsRussian ? "IPv4/IPv6 + маска /N"          : "IPv4/IPv6 + /N mask",
+        "port"           => IsRussian ? "один порт или список через запятую" : "single port or comma list",
+        "port_range"     => IsRussian ? "диапазон портов: 1000-2000"    : "port range: 1000-2000",
+        "network"        => IsRussian ? "tcp / udp"                     : "tcp / udp",
+        "process_name"   => IsRussian ? "имя исполняемого файла"        : "executable name",
+        "process_path"   => IsRussian ? "полный путь к .exe"            : "full .exe path",
+        "geosite"        => IsRussian ? "тег geosite (cn, ads, ...)"    : "geosite tag (cn, ads, ...)",
+        "geoip"          => IsRussian ? "тег geoip (cn, us, private)"   : "geoip tag (cn, us, private)",
+        _                => string.Empty,
+    };
+
+    /// <summary>Compiled regex per type for live-validation of the Value
+    /// input. <c>domain_regex</c> uses runtime <c>new Regex(input)</c>
+    /// validity check instead of a fixed pattern.</summary>
+    private static readonly System.Collections.Generic.Dictionary<string, System.Text.RegularExpressions.Regex> _typeValidatorMap = new()
+    {
+        ["domain"]         = new(@"^[a-z0-9.-]+\.[a-z]{2,}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        ["domain_suffix"]  = new(@"^\.?[a-z0-9.-]+\.[a-z]{2,}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        ["domain_keyword"] = new(@"^[a-z0-9.\-]+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        ["ip_cidr"]        = new(@"^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$|^[0-9a-f:]+/\d{1,3}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        ["port"]           = new(@"^\d{1,5}(\s*,\s*\d{1,5})*$", System.Text.RegularExpressions.RegexOptions.Compiled),
+        ["port_range"]     = new(@"^\d{1,5}-\d{1,5}$", System.Text.RegularExpressions.RegexOptions.Compiled),
+        ["network"]        = new(@"^(tcp|udp)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        ["process_name"]   = new(@"^[\w.\-]+(\.exe)?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        ["process_path"]   = new(@"^([A-Z]:\\|/).+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        ["geosite"]        = new(@"^[a-z][a-z0-9_-]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        ["geoip"]          = new(@"^[a-z][a-z0-9_-]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+    };
+
+    /// <summary>Per-type Value-input placeholder. Updates when user
+    /// changes Type. From RulesPage.html `typeMeta[type].ph`.</summary>
+    private string ResolveValuePlaceholder(string type) => type switch
+    {
+        "domain"         => "mail.example.com",
+        "domain_suffix"  => ".corp.example",
+        "domain_keyword" => "doubleclick",
+        "ip_cidr"        => "10.0.0.0/8",
+        "port"           => "443  or  80, 443",
+        "port_range"     => "1000-2000",
+        "network"        => "tcp",
+        "process_name"   => "chrome.exe",
+        "process_path"   => "C:\\Program Files\\app\\app.exe",
+        "geosite"        => "cn",
+        "geoip"          => "cn",
+        _                => string.Empty,
+    };
+
+    partial void OnNewRuleTypeChanged(string value)
+    {
+        NewRuleValuePlaceholder = ResolveValuePlaceholder(value);
+        // Re-validate the existing value against the new type rules.
+        ValidateNewRuleValue(NewRuleValue);
+    }
+
+    partial void OnNewRuleValueChanged(string value) => ValidateNewRuleValue(value);
+
+    private void ValidateNewRuleValue(string val)
+    {
+        if (string.IsNullOrWhiteSpace(val))
+        {
+            // Empty = neutral state: show the type's default guidance,
+            // border stays default (not danger).
+            NewRuleValueIsValid = true;
+            NewRuleValueHint = NewRuleTypeHint;
+            return;
+        }
+
+        bool ok;
+        if (NewRuleType == "domain_regex")
+        {
+            try { _ = new System.Text.RegularExpressions.Regex(val); ok = true; }
+            catch { ok = false; }
+        }
+        else if (_typeValidatorMap.TryGetValue(NewRuleType, out var regex))
+        {
+            ok = regex.IsMatch(val.Trim());
+        }
+        else
+        {
+            ok = true; // Unknown type — don't block.
+        }
+
+        NewRuleValueIsValid = ok;
+        NewRuleValueHint = ok
+            ? (IsRussian ? "✓ корректно" : "✓ valid")
+            : (IsRussian ? $"✗ не подходит формату {NewRuleType}" : $"✗ wrong format for {NewRuleType}");
+    }
+
+    // v2.30.0-r11 — Action filter chips state.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRulesFilterAll))]
+    [NotifyPropertyChangedFor(nameof(IsRulesFilterDirect))]
+    [NotifyPropertyChangedFor(nameof(IsRulesFilterProxy))]
+    [NotifyPropertyChangedFor(nameof(IsRulesFilterBlock))]
+    private string _rulesActionFilter = "all";
+
+    public bool IsRulesFilterAll    => RulesActionFilter == "all";
+    public bool IsRulesFilterDirect => RulesActionFilter == "direct";
+    public bool IsRulesFilterProxy  => RulesActionFilter == "proxy";
+    public bool IsRulesFilterBlock  => RulesActionFilter == "block";
+
+    /// <summary>Per-action counts shown in the filter chip secondary text.
+    /// Refreshed by <see cref="RebuildFilteredCustomRulesList"/>.</summary>
+    [ObservableProperty] private string _rulesFilterCountAll    = string.Empty;
+    [ObservableProperty] private string _rulesFilterCountDirect = string.Empty;
+    [ObservableProperty] private string _rulesFilterCountProxy  = string.Empty;
+    [ObservableProperty] private string _rulesFilterCountBlock  = string.Empty;
+
+    [RelayCommand]
+    private void SetRulesActionFilter(string filter)
+    {
+        if (string.IsNullOrEmpty(filter)) filter = "all";
+        RulesActionFilter = filter;
+        RebuildFilteredCustomRulesList();
+    }
 
     /// <summary>Static list of action options for the Add-rule ComboBox.</summary>
     public IReadOnlyList<string> AvailableRuleActions { get; }

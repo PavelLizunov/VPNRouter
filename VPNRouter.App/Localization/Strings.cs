@@ -833,6 +833,10 @@ public static class Strings
     // Help banner — replaces the dense single-paragraph description.
     // Bullet points highlight the toggle precedence + LAN auto-direct +
     // order-doesn't-matter facts. Dismissable via X button.
+    // v2.30.0-r11 — Filter chips + bulk-actions menu.
+    public static string RulesFilterAll => Ru ? "Все" : "All";
+    public static string RulesBulkActions => Ru ? "Массовые действия" : "Bulk actions";
+
     public static string RulesHelpBanner => Ru
         ? "Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» срабатывают РАНЬШЕ ваших правил.   Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически.   Порядок правил не важен — для каждого адреса выбирается первое совпавшее."
         : "The toggles «Russian traffic via real IP» and «Block ads» fire BEFORE your rules.   Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.   Rule order does not matter — first match wins per address.";

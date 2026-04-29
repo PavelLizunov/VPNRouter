@@ -88,6 +88,8 @@ public partial class MainWindowViewModel
     public string L_RulesEditorDirty => Strings.RulesEditorDirty;
     public string L_RulesEditorFormatHint => Strings.RulesEditorFormatHint;
     public string L_RulesHelpBanner => Strings.RulesHelpBanner;
+    public string L_RulesFilterAll => Strings.RulesFilterAll;
+    public string L_RulesBulkActions => Strings.RulesBulkActions;
     public string LblSettingsRules => Strings.SectionRules;
     // Legacy v2.29.0 aliases (kept for cached XAML).
     public string L_CustomDirectRulesTitle => L_CustomRulesTitle;
