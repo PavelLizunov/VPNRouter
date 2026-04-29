@@ -39,6 +39,10 @@ public partial class MainWindowViewModel
     public string L_ApplyNowReloadVpn => Strings.ApplyNowReloadVpn;
     public string L_AppsGroupEmpty => Strings.AppsGroupEmpty;
     public string L_AppsHint => Strings.AppsHint;
+    // v2.29.0 — Apps page full-tunnel banner (replaces silent IsEnabled
+    // disable, see ApplicationsPage.axaml).
+    public string L_AppsFullTunnelBanner => Strings.AppsFullTunnelBanner;
+    public string L_AppsFullTunnelBannerAction => Strings.AppsFullTunnelBannerAction;
     public string L_AutoUpdateCheckLabel => Strings.AutoUpdateCheckLabel;
     public string L_AutostartPlatformNotice => Strings.AutostartPlatformNotice;
     public string L_AutostartSection => Strings.AutostartSection;

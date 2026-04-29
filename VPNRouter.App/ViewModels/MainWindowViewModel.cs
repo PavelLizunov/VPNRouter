@@ -1336,6 +1336,27 @@ public partial class MainWindowViewModel : ViewModelBase
     private Task ApplyPendingChangesAsync() => ApplyPendingChangesInternalAsync(forceRestart: false);
 
     /// <summary>
+    /// v2.29.0 — Apps page full-tunnel banner action. When user is in
+    /// full-tunnel mode the apps list is irrelevant (all traffic is
+    /// routed through VPN regardless of selection); previously the page
+    /// silently disabled the entire Grid which read as "broken" to a
+    /// Mac tester (2026-04-29 feedback). Now we show a banner with this
+    /// command as the action. Flips IsSplitTunnel + persists.
+    /// HasPendingAppChanges is set so the user sees the standard Apply
+    /// gating without us having to start a tunnel restart unilaterally
+    /// — the routing-mode change requires a forceRestart Apply, which
+    /// the user kicks off themselves via the Apply bar.
+    /// </summary>
+    [RelayCommand]
+    private void SwitchToSplitTunnel()
+    {
+        if (IsSplitTunnel) return; // no-op if already split
+        IsSplitTunnel = true;
+        HasPendingAppChanges = true;
+        SaveSettings();
+    }
+
+    /// <summary>
     /// v2.20.4: shared Apply pipeline with a <c>forceRestart</c> switch.
     /// Callers changing RoutingMode (split ↔ full) or other structural
     /// sing-box config should pass true — hot-reload doesn't re-do the

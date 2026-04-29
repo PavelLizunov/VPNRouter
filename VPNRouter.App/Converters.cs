@@ -48,6 +48,23 @@ public class BoolToChevronConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>
+/// v2.29.0 — full-tunnel Apps page hint. Maps <c>true</c> → 1.0,
+/// <c>false</c> → 0.5. Used to dim the apps list when full-tunnel mode
+/// is active without disabling it (the visible-but-faded look reads as
+/// "not currently used" rather than "broken"). Together with
+/// <c>IsHitTestVisible</c> on the same Grid this gives a clean
+/// "selection is ignored, see banner above" affordance.
+/// </summary>
+public class BoolTo10or05Converter : IValueConverter
+{
+    public static readonly BoolTo10or05Converter Instance = new();
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is bool b && b ? 1.0 : 0.5;
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 public class AppsTabVisibleConverter : IMultiValueConverter
 {
     public static readonly AppsTabVisibleConverter Instance = new();

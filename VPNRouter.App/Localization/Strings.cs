@@ -8,6 +8,16 @@ public static class Strings
     public static string Lang { get; set; } = "en";
     private static bool Ru => Lang.Equals("ru", StringComparison.OrdinalIgnoreCase);
 
+    // v2.29.0: dynamic OS name shown in user-facing autostart copy. Mac
+    // users were seeing "Windows" hardcoded in Simple-mode autostart card
+    // and Network → Autostart labels (reported 2026-04-29). Now Strings
+    // detect runtime platform and substitute "macOS" / "Linux" / "Windows"
+    // into RU+EN templates. Does NOT change Windows-Service-tech labels
+    // (those reference an actual Windows-only API surface).
+    public static string OsDisplayName =>
+        OperatingSystem.IsWindows() ? "Windows" :
+        OperatingSystem.IsMacOS() ? "macOS" : "Linux";
+
     // ── Tabs ──
     public static string TabServers => Ru ? "Серверы" : "Servers";
     public static string TabApps => Ru ? "Приложения" : "Applications";
@@ -169,8 +179,8 @@ public static class Strings
         ? "Служба установлена и запущена"
         : "Service installed and running";
     public static string SmpAutostartCardOff => Ru
-        ? "Настроить автозапуск VPN при старте Windows"
-        : "Configure VPN autostart at Windows boot";
+        ? $"Настроить автозапуск VPN при старте {OsDisplayName}"
+        : $"Configure VPN autostart at {OsDisplayName} boot";
 
     // ── Dialogs ──
     public static string FailedStartVpn => Ru ? "Не удалось запустить VPN:" : "Failed to start VPN:";
@@ -373,8 +383,8 @@ public static class Strings
         ? "Запускать TgProxy при старте системы"
         : "Start TgProxy on system boot";
     public static string AutostartUi => Ru
-        ? "Запускать интерфейс при входе в Windows"
-        : "Start UI on Windows logon";
+        ? $"Запускать интерфейс при входе в {OsDisplayName}"
+        : $"Start UI on {OsDisplayName} logon";
 
     // ── Free Configs ──
     public static string TabFreeConfigs => Ru ? "Free" : "Free";
@@ -649,7 +659,9 @@ public static class Strings
         : $"Connected: {ep}";
 
     // ── Service (Windows-only) ──
-    public static string AutostartWithWindows => Ru ? "Автозапуск с Windows" : "Autostart with Windows";
+    public static string AutostartWithWindows => Ru
+        ? $"Автозапуск с {OsDisplayName}"
+        : $"Autostart with {OsDisplayName}";
     public static string RestartService => Ru ? "Перезапустить службу" : "Restart Service";
     public static string ReinstallService => Ru ? "Переустановить" : "Reinstall";
     public static string InstallingService => Ru ? "Установка службы..." : "Installing service...";
@@ -665,6 +677,17 @@ public static class Strings
     public static string AppsGroupEmpty => Ru
         ? "В этой группе пока нет приложений."
         : "No apps in this group yet.";
+
+    // v2.29.0 — full-tunnel mode banner on the Apps page. Mac feedback
+    // 2026-04-29: при RoutingMode=full весь content disabled без объяс-
+    // нения; юзер думал что приложение сломано. Заменяем silent disable
+    // на banner с объяснением + кнопка "Switch to split tunnel".
+    public static string AppsFullTunnelBanner => Ru
+        ? "Активен Full-tunnel — выбор приложений игнорируется, весь трафик идёт через VPN."
+        : "Full-tunnel mode is active. App selection is ignored — all traffic goes through VPN.";
+    public static string AppsFullTunnelBannerAction => Ru
+        ? "Переключить на Split tunnel"
+        : "Switch to split tunnel";
     public static string SelectCategoryHint => Ru
         ? "← Выберите категорию"
         : "← Select a category";
@@ -761,7 +784,9 @@ public static class Strings
     public static string SmpTipFull => Ru
         ? "Весь трафик компьютера идёт через VPN. Включая игры и банки."
         : "All traffic on this computer goes through the VPN — including games and banking.";
-    public static string SmpAutostartLabel => Ru ? "Запускать вместе с Windows" : "Start with Windows";
+    public static string SmpAutostartLabel => Ru
+        ? $"Запускать вместе с {OsDisplayName}"
+        : $"Start with {OsDisplayName}";
     public static string SmpTipAutostart => Ru
         ? "Установит VPNRouter как службу Windows — VPN поднимется при старте системы, до входа пользователя."
         : "Installs VPNRouter as a Windows Service so the VPN comes up at boot, before you log in.";
