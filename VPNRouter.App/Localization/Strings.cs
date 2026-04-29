@@ -383,6 +383,7 @@ public static class Strings
     };
 
     public static string SectionRouting => Ru ? "Маршрутизация" : "Routing";
+    public static string SectionRules => Ru ? "Правила" : "Rules";
     public static string SectionLeakProtection => Ru ? "Защита от утечек" : "Leak Protection";
     public static string SectionContent => Ru ? "Контент" : "Content";
     public static string SectionUpdates => Ru ? "Обновления" : "Updates";
@@ -724,6 +725,53 @@ public static class Strings
     public static string CustomRulesConflictHeader => Ru
         ? "Предупреждения о конфликтах:"
         : "Conflict warnings:";
+
+    // v2.30.0-r2: structured row-table editor strings (Network → Rules section).
+    public static string CustomRulesPageDescription => Ru
+        ? "Свои правила маршрутизации для определённых доменов / IP / портов / процессов. ⓘ Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» имеют ВЫСШИЙ приоритет — если включены, их правила сработают раньше ваших. Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически."
+        : "Custom routing rules for specific domains / IPs / ports / processes. ⓘ The toggles «Russian traffic via real IP» and «Block ads» have HIGHEST priority — if enabled, their rules fire before yours. Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.";
+
+    public static string CustomRulesEmpty => Ru
+        ? "Нет правил. Добавьте через форму ниже или раскройте «Расширенный режим» для редактирования через текст."
+        : "No rules yet. Add via the form below or expand «Advanced mode» for text editing.";
+
+    public static string CustomRulesAddTitle => Ru ? "Добавить правило:" : "Add rule:";
+    public static string CustomRulesAddBtn => Ru ? "+ Добавить" : "+ Add";
+    public static string CustomRulesActionLabel => Ru ? "Действие" : "Action";
+    public static string CustomRulesTypeLabel => Ru ? "Тип" : "Type";
+    public static string CustomRulesValueLabel => Ru ? "Значение" : "Value";
+    public static string CustomRulesCommentLabel => Ru ? "Комментарий" : "Comment";
+
+    public static string CustomRulesActionDirect => "direct";
+    public static string CustomRulesActionProxy => "proxy";
+    public static string CustomRulesActionBlock => "block";
+
+    public static string CustomRulesValuePlaceholder => Ru
+        ? "напр. 10.0.0.0/8 или .corp.example"
+        : "e.g. 10.0.0.0/8 or .corp.example";
+
+    public static string CustomRulesAdvancedMode => Ru
+        ? "Расширенный режим (текстовый формат)"
+        : "Advanced mode (text format)";
+
+    public static string CustomRulesValidationFailed => Ru
+        ? "Ошибка валидации:"
+        : "Validation failed:";
+
+    public static string CustomRulesActionDirectLabel => Ru
+        ? "direct (мимо VPN)"
+        : "direct (bypass VPN)";
+    public static string CustomRulesActionProxyLabel => Ru
+        ? "proxy (через VPN)"
+        : "proxy (force through VPN)";
+    public static string CustomRulesActionBlockLabel => Ru
+        ? "block (заблокировать)"
+        : "block (drop)";
+
+    public static string CustomRulesDelete => Ru ? "Удалить" : "Delete";
+    public static string CustomRulesEdit => Ru ? "Редактировать" : "Edit";
+    public static string CustomRulesMoveUp => Ru ? "Выше" : "Move up";
+    public static string CustomRulesMoveDown => Ru ? "Ниже" : "Move down";
 
     // ── Legacy v2.29.0-r4 names (kept for back-compat with cached XAML) ──
     public static string CustomDirectRulesTitle => CustomRulesTitle;

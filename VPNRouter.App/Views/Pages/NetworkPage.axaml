@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:loc="using:VPNRouter.App.Localization"
+             xmlns:conv="using:VPNRouter.App"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
@@ -90,6 +91,11 @@
                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                ScrollViewer.VerticalScrollBarVisibility="Auto">
         <ListBoxItem Content="{Binding LblSettingsRouting}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+        <!-- v2.30.0-r2: dedicated Rules section as a separate left-nav
+             item (was buried inside the Routing section as an expander).
+             Per user direction 2026-04-29: «Для кастомных настроек
+             маршрутизации нужен отдельный пункт в меню». -->
+        <ListBoxItem Content="{Binding LblSettingsRules}"      Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
         <ListBoxItem Content="{Binding LblSettingsLeak}"       Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
         <ListBoxItem Content="{Binding LblSettingsContent}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
         <ListBoxItem Content="{Binding LblSettingsUpdates}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
@@ -187,31 +193,157 @@
             </Grid>
           </Border>
 
-          <!-- v2.29.0 — Custom direct rules (advanced, collapsed by default).
-               Power-user knob for adding domain/CIDR/port direct routes. The
-               textbox round-trips through CustomDirectRulesParser; structured
-               list lives in AppSettings.App.CustomDirectRules. -->
-          <Expander Header="{Binding L_CustomRulesTitle}"
+          <!-- v2.30.0-r2: Custom rules expander REMOVED from Routing
+               section — moved to its own dedicated Rules section
+               (left-nav index 1). See below. -->
+        </StackPanel>
+
+        <!-- ═══ Rules (v2.30.0-r2 — structured row-table editor) ═══
+             User direction 2026-04-29: «Для кастомных настроек
+             маршрутизации нужен отдельный пункт в меню. И простенькую
+             графическую форму».
+             Layout: description → list of existing rules (action chips +
+             toggle + delete) → add-rule form → advanced text-mode
+             expander as fallback. -->
+        <StackPanel Spacing="10" IsVisible="{Binding IsSettingsRulesSelected}">
+          <TextBlock Text="{Binding LblSettingsRules}" FontWeight="Bold" FontSize="13"/>
+          <TextBlock Text="{Binding L_CustomRulesPageDescription}"
+                     FontSize="11"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+          <!-- Existing rules list. Empty hint when no rules. -->
+          <TextBlock Text="{Binding L_CustomRulesEmpty}"
+                     FontSize="11"
+                     FontStyle="Italic"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextMutedBrush}"
+                     IsVisible="{Binding CustomRulesList.Count, Converter={x:Static ObjectConverters.IsNull}}"/>
+
+          <ItemsControl ItemsSource="{Binding CustomRulesList}"
+                        IsVisible="{Binding CustomRulesList.Count}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:CustomRuleViewModel">
+                <Border Margin="0,0,0,4"
+                        Padding="8,6"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        Background="{DynamicResource SurfaceSunkenBrush}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        BorderThickness="1"
+                        Opacity="{Binding RowOpacity}">
+                  <Grid ColumnDefinitions="78,Auto,*,Auto,Auto" ColumnSpacing="8" VerticalAlignment="Center">
+                    <!-- Action chip — colored badge via ActionToChipColorConverter.
+                         direct=blue, proxy=orange, block=red. -->
+                    <Border Grid.Column="0"
+                            CornerRadius="3"
+                            Padding="6,2"
+                            HorizontalAlignment="Left"
+                            Background="{Binding Action, Converter={x:Static conv:ActionToChipColorConverter.Instance}}">
+                      <TextBlock Text="{Binding Action}"
+                                 FontSize="10"
+                                 FontWeight="SemiBold"
+                                 Foreground="White"
+                                 HorizontalAlignment="Center"/>
+                    </Border>
+                    <!-- Type label, monospace -->
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Type}"
+                               FontSize="10"
+                               FontFamily="Consolas, 'SF Mono', monospace"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               VerticalAlignment="Center"/>
+                    <!-- Value, ellide on overflow -->
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding Value}"
+                               FontSize="11"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"
+                               ToolTip.Tip="{Binding Comment}"/>
+                    <!-- Enabled toggle -->
+                    <CheckBox Grid.Column="3"
+                              IsChecked="{Binding Enabled}"
+                              MinHeight="0" Padding="0"
+                              VerticalAlignment="Center"/>
+                    <!-- Delete -->
+                    <Button Grid.Column="4"
+                            Content="✕"
+                            Command="{Binding RemoveCommand}"
+                            FontSize="10"
+                            Padding="6,0" MinHeight="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="{DynamicResource TextMutedBrush}"
+                            ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_CustomRulesDelete}"/>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <!-- Add-rule form -->
+          <Border Padding="10"
+                  CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource SurfaceRaisedBrush}"
+                  BorderBrush="{DynamicResource BorderDefaultBrush}"
+                  BorderThickness="1">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding L_CustomRulesAddTitle}"
+                         FontSize="11" FontWeight="SemiBold"/>
+              <Grid ColumnDefinitions="100,140,*" ColumnSpacing="6">
+                <ComboBox Grid.Column="0"
+                          ItemsSource="{Binding AvailableRuleActions}"
+                          SelectedItem="{Binding NewRuleAction}"
+                          FontSize="11" Padding="6,3" MinHeight="0"
+                          ToolTip.Tip="{Binding L_CustomRulesActionLabel}"/>
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding AvailableRuleTypes}"
+                          SelectedItem="{Binding NewRuleType}"
+                          FontSize="11" Padding="6,3" MinHeight="0"
+                          ToolTip.Tip="{Binding L_CustomRulesTypeLabel}"/>
+                <TextBox Grid.Column="2"
+                         Text="{Binding NewRuleValue}"
+                         Watermark="{Binding L_CustomRulesValuePlaceholder}"
+                         FontSize="11" Padding="6,3" MinHeight="0"
+                         FontFamily="Consolas, 'SF Mono', monospace"/>
+              </Grid>
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                <TextBox Grid.Column="0"
+                         Text="{Binding NewRuleComment}"
+                         Watermark="{Binding L_CustomRulesCommentLabel}"
+                         FontSize="11" Padding="6,3" MinHeight="0"/>
+                <Button Grid.Column="1"
+                        Content="{Binding L_CustomRulesAddBtn}"
+                        Command="{Binding AddCustomRuleFromFormCommand}"
+                        FontSize="11" FontWeight="SemiBold"
+                        Padding="14,3" MinHeight="0"
+                        Background="{DynamicResource AccentSolidBrush}"
+                        Foreground="{DynamicResource AccentOnSolidBrush}"
+                        CornerRadius="{StaticResource RadiusSm}"/>
+              </Grid>
+              <!-- Validation error inline -->
+              <TextBlock Text="{Binding NewRuleValidationError}"
+                         FontSize="10"
+                         Foreground="{DynamicResource DangerFgBrush}"
+                         IsVisible="{Binding NewRuleValidationError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+            </StackPanel>
+          </Border>
+
+          <!-- Advanced (text-format) fallback -->
+          <Expander Header="{Binding L_CustomRulesAdvancedMode}"
                     IsExpanded="False"
                     Padding="0,4">
             <StackPanel Spacing="6" Margin="0,4,0,0">
-              <TextBlock Text="{Binding L_CustomRulesDescription}"
-                         FontSize="11"
-                         TextWrapping="Wrap"
-                         Foreground="{DynamicResource TextSecondaryBrush}"/>
               <TextBox Text="{Binding CustomRulesText}"
                        Watermark="{Binding L_CustomRulesPlaceholder}"
                        AcceptsReturn="True"
-                       MinHeight="140"
-                       MaxHeight="280"
+                       MinHeight="160"
+                       MaxHeight="320"
                        FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
                        FontSize="11"
                        TextWrapping="NoWrap"
                        ScrollViewer.HorizontalScrollBarVisibility="Auto"
                        ScrollViewer.VerticalScrollBarVisibility="Auto"/>
-              <!-- Inline parse-error diagnostics. Empty when all lines
-                   parsed cleanly. Errors don't block save — valid lines
-                   still persist. -->
+              <!-- Inline parse-error diagnostics. -->
               <Border IsVisible="{Binding CustomRulesErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                       Padding="8,5"
                       CornerRadius="{StaticResource RadiusSm}"
@@ -229,9 +361,6 @@
                              Foreground="{DynamicResource DangerFgBrush}"/>
                 </StackPanel>
               </Border>
-              <!-- v2.30.0: separate conflict-warning block (catch-all
-                   rule shadowing subsequent rules). Yellow vs red so
-                   user can tell parse-errors from conflict-warnings. -->
               <Border IsVisible="{Binding CustomRulesConflictText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                       Padding="8,5"
                       CornerRadius="{StaticResource RadiusSm}"

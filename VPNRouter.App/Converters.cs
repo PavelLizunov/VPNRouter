@@ -65,6 +65,42 @@ public class BoolTo10or05Converter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>
+/// v2.30.0-r2 — action chip color converter for the structured rules
+/// list in Network → Rules. Maps the rule action string to a colored
+/// SolidColorBrush:
+/// <list type="bullet">
+/// <item><c>direct</c> → blue (Accent — bypass-VPN affordance)</item>
+/// <item><c>proxy</c> → orange (Warning — non-default routing)</item>
+/// <item><c>block</c> → red (Danger — destructive)</item>
+/// </list>
+/// Falls back to gray for unknown actions. Colors are hardcoded to
+/// approximate the design tokens — using DynamicResource lookup from
+/// inside a converter requires a control reference, which isn't worth
+/// the plumbing for this small visual element.
+/// </summary>
+public class ActionToChipColorConverter : IValueConverter
+{
+    public static readonly ActionToChipColorConverter Instance = new();
+    private static readonly SolidColorBrush DirectBrush = new(Color.FromRgb(0x21, 0x6E, 0xC4));   // accent
+    private static readonly SolidColorBrush ProxyBrush  = new(Color.FromRgb(0xC2, 0x6F, 0x05));   // warning-orange
+    private static readonly SolidColorBrush BlockBrush  = new(Color.FromRgb(0xC0, 0x33, 0x33));   // danger-red
+    private static readonly SolidColorBrush DefaultBrush = new(Color.FromRgb(0x80, 0x80, 0x80));
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        return value as string switch
+        {
+            "direct" => DirectBrush,
+            "proxy"  => ProxyBrush,
+            "block"  => BlockBrush,
+            _        => DefaultBrush,
+        };
+    }
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 public class AppsTabVisibleConverter : IMultiValueConverter
 {
     public static readonly AppsTabVisibleConverter Instance = new();

@@ -49,6 +49,23 @@ public partial class MainWindowViewModel
     public string L_CustomRulesPlaceholder => Strings.CustomRulesPlaceholder;
     public string L_CustomRulesErrorHeader => Strings.CustomRulesErrorHeader;
     public string L_CustomRulesConflictHeader => Strings.CustomRulesConflictHeader;
+    // v2.30.0-r2 — Network → Rules section strings.
+    public string L_CustomRulesPageDescription => Strings.CustomRulesPageDescription;
+    public string L_CustomRulesEmpty => Strings.CustomRulesEmpty;
+    public string L_CustomRulesAddTitle => Strings.CustomRulesAddTitle;
+    public string L_CustomRulesAddBtn => Strings.CustomRulesAddBtn;
+    public string L_CustomRulesActionLabel => Strings.CustomRulesActionLabel;
+    public string L_CustomRulesTypeLabel => Strings.CustomRulesTypeLabel;
+    public string L_CustomRulesValueLabel => Strings.CustomRulesValueLabel;
+    public string L_CustomRulesCommentLabel => Strings.CustomRulesCommentLabel;
+    public string L_CustomRulesValuePlaceholder => Strings.CustomRulesValuePlaceholder;
+    public string L_CustomRulesAdvancedMode => Strings.CustomRulesAdvancedMode;
+    public string L_CustomRulesValidationFailed => Strings.CustomRulesValidationFailed;
+    public string L_CustomRulesDelete => Strings.CustomRulesDelete;
+    public string L_CustomRulesEdit => Strings.CustomRulesEdit;
+    public string L_CustomRulesMoveUp => Strings.CustomRulesMoveUp;
+    public string L_CustomRulesMoveDown => Strings.CustomRulesMoveDown;
+    public string LblSettingsRules => Strings.SectionRules;
     // Legacy v2.29.0 aliases (kept for cached XAML).
     public string L_CustomDirectRulesTitle => L_CustomRulesTitle;
     public string L_CustomDirectRulesDescription => L_CustomRulesDescription;

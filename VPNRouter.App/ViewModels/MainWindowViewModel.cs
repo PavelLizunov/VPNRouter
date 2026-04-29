@@ -311,6 +311,36 @@ public partial class MainWindowViewModel : ViewModelBase
     /// the parse-error block.</summary>
     [ObservableProperty] private string _customRulesConflictText = string.Empty;
 
+    // v2.30.0-r2 — structured row-table for Network → Rules section.
+    // Mirrors AppSettings.App.CustomRules. CustomRulesText (textbox) +
+    // CustomRulesList (rows) are TWO views of the SAME underlying data.
+    // Rebuilt on settings load + after each user edit (add/delete/toggle/
+    // textbox change). To avoid feedback loop, _isSyncingCustomRules
+    // suppresses cross-update during the rebuild.
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> CustomRulesList { get; }
+        = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
+    private bool _isSyncingCustomRules;
+
+    [ObservableProperty] private string _newRuleAction = "direct";
+    [ObservableProperty] private string _newRuleType = "domain_suffix";
+    [ObservableProperty] private string _newRuleValue = string.Empty;
+    [ObservableProperty] private string _newRuleComment = string.Empty;
+    [ObservableProperty] private string _newRuleValidationError = string.Empty;
+
+    /// <summary>Static list of action options for the Add-rule ComboBox.</summary>
+    public IReadOnlyList<string> AvailableRuleActions { get; }
+        = new[] { "direct", "proxy", "block" };
+
+    /// <summary>Static list of type options for the Add-rule ComboBox.
+    /// Order matches the textbox grammar documentation for UX consistency.</summary>
+    public IReadOnlyList<string> AvailableRuleTypes { get; }
+        = new[]
+        {
+            "domain", "domain_suffix", "domain_keyword",
+            "ip_cidr", "port", "port_range", "network",
+            "process_name", "geosite", "geoip",
+        };
+
     // ─── Legacy v2.29.0 properties (deprecated, kept for binding back-compat) ───
     /// <summary>v2.29.0-r4 legacy. Kept as a thin alias to CustomRulesText
     /// so v2.29.0-r4..r8 cached XAML bindings still resolve. New UI binds
@@ -415,6 +445,7 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnCustomRulesTextChanged(string value)
     {
         if (_isLoadingUI) return;
+        if (_isSyncingCustomRules) return;
         SaveSettings();
         // SaveSettings writes parse errors + conflict warnings.
         // Notify so the UI re-binds diagnostic blocks.
@@ -423,6 +454,122 @@ public partial class MainWindowViewModel : ViewModelBase
         // Legacy aliases too — for any v2.29 cached XAML still binding to them.
         OnPropertyChanged(nameof(CustomDirectRulesText));
         OnPropertyChanged(nameof(CustomDirectRulesErrorText));
+
+        // v2.30.0-r2: rebuild CustomRulesList rows from the parsed
+        // structured list so the structured view stays in sync with
+        // textbox edits.
+        RebuildCustomRulesList();
+    }
+
+    /// <summary>v2.30.0-r2 — build CustomRulesList from
+    /// _settings.App.CustomRules. Called on settings load + after
+    /// textbox edits + after structured-row edits. The
+    /// _isSyncingCustomRules guard prevents feedback when this method
+    /// itself triggers OnCustomRulesTextChanged via SaveSettings.</summary>
+    private void RebuildCustomRulesList()
+    {
+        if (_isSyncingCustomRules) return;
+        _isSyncingCustomRules = true;
+        try
+        {
+            CustomRulesList.Clear();
+            foreach (var rule in _settings.App.CustomRules)
+            {
+                CustomRulesList.Add(new CustomRuleViewModel(
+                    rule,
+                    onChanged: OnCustomRuleRowChanged,
+                    onRemoveRequested: OnCustomRuleRowRemoveRequested));
+            }
+        }
+        finally { _isSyncingCustomRules = false; }
+    }
+
+    /// <summary>v2.30.0-r2 — re-emit settings + textbox sync after
+    /// a structured-row property change (Action / Type / Value / Comment
+    /// / Enabled). Avoids RebuildCustomRulesList loop because the row
+    /// VM was already mutated in place; we just flush to settings +
+    /// regenerate the textbox view.</summary>
+    private void OnCustomRuleRowChanged(CustomRuleViewModel _)
+    {
+        if (_isSyncingCustomRules || _isLoadingUI) return;
+        FlushCustomRulesListToSettings();
+    }
+
+    /// <summary>v2.30.0-r2 — handle row's Remove button.</summary>
+    private void OnCustomRuleRowRemoveRequested(CustomRuleViewModel row)
+    {
+        if (_isLoadingUI) return;
+        CustomRulesList.Remove(row);
+        FlushCustomRulesListToSettings();
+    }
+
+    /// <summary>v2.30.0-r2 — flush the in-memory CustomRulesList rows
+    /// to _settings.App.CustomRules + regenerate the CustomRulesText
+    /// textbox content so both views stay in sync. Triggered by
+    /// add / remove / property change on rows.</summary>
+    private void FlushCustomRulesListToSettings()
+    {
+        if (_isSyncingCustomRules) return;
+        _isSyncingCustomRules = true;
+        try
+        {
+            _settings.App.CustomRules = CustomRulesList.Select(vm => vm.ToModel()).ToList();
+            CustomRulesText = VPNRouter.Core.Services.CustomRulesParser
+                .SerializeToText(_settings.App.CustomRules);
+            // Conflict detection re-runs on the serialized text via
+            // the next OnCustomRulesTextChanged path — but we suppressed
+            // that, so explicitly recompute here.
+            var conflicts = VPNRouter.Core.Services.CustomRulesParser
+                .DetectConflicts(_settings.App.CustomRules);
+            CustomRulesConflictText = conflicts.Count == 0
+                ? string.Empty
+                : string.Join("\n", conflicts);
+            CustomRulesErrorText = string.Empty;
+        }
+        finally { _isSyncingCustomRules = false; }
+        SaveSettings();
+    }
+
+    /// <summary>v2.30.0-r2 — Add-form submit. Validates the new rule
+    /// via the parser (one-line text), prepends to the list, clears
+    /// the form. Validation errors surface in NewRuleValidationError.</summary>
+    [RelayCommand]
+    private void AddCustomRuleFromForm()
+    {
+        if (string.IsNullOrWhiteSpace(NewRuleValue))
+        {
+            NewRuleValidationError = "Empty value";
+            return;
+        }
+        // Assemble a single-line rule and run it through the parser
+        // so all the type-specific validation we already wrote (CIDR,
+        // port range, geosite name format) gets re-used here.
+        var commentSuffix = string.IsNullOrWhiteSpace(NewRuleComment)
+            ? string.Empty
+            : $"  # {NewRuleComment.Trim()}";
+        var line = $"{NewRuleAction} {NewRuleType} {NewRuleValue.Trim()}{commentSuffix}";
+        var parsed = VPNRouter.Core.Services.CustomRulesParser.ParseFromText(line);
+        if (parsed.Errors.Count > 0)
+        {
+            NewRuleValidationError = parsed.Errors[0].Reason;
+            return;
+        }
+        if (parsed.Rules.Count == 0)
+        {
+            NewRuleValidationError = "Failed to parse";
+            return;
+        }
+        // Append to list. New rules go to the END (lowest priority by
+        // default — user can reorder later via move-up/down in v2.31).
+        CustomRulesList.Add(new CustomRuleViewModel(
+            parsed.Rules[0],
+            onChanged: OnCustomRuleRowChanged,
+            onRemoveRequested: OnCustomRuleRowRemoveRequested));
+        // Clear form.
+        NewRuleValue = string.Empty;
+        NewRuleComment = string.Empty;
+        NewRuleValidationError = string.Empty;
+        FlushCustomRulesListToSettings();
     }
 
     partial void OnAutostartUiChanged(bool value)
@@ -488,19 +635,24 @@ public partial class MainWindowViewModel : ViewModelBase
         : (FlowsealHostsInstalled ? "Remove Flowseal hosts" : "Add Flowseal hosts");
 
     // Settings section navigator (master-detail)
+    // v2.30.0-r2: added Rules as section index 1 (between Routing and
+    // Leak Protection — natural sibling to Routing, since both deal
+    // with traffic routing). Existing indexes shifted +1.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsSettingsRoutingSelected))]
+    [NotifyPropertyChangedFor(nameof(IsSettingsRulesSelected))]
     [NotifyPropertyChangedFor(nameof(IsSettingsLeakSelected))]
     [NotifyPropertyChangedFor(nameof(IsSettingsContentSelected))]
     [NotifyPropertyChangedFor(nameof(IsSettingsUpdatesSelected))]
     [NotifyPropertyChangedFor(nameof(IsSettingsAutostartSelected))]
     private int _selectedSettingsIndex;
 
-    public bool IsSettingsRoutingSelected => SelectedSettingsIndex == 0;
-    public bool IsSettingsLeakSelected => SelectedSettingsIndex == 1;
-    public bool IsSettingsContentSelected => SelectedSettingsIndex == 2;
-    public bool IsSettingsUpdatesSelected => SelectedSettingsIndex == 3;
-    public bool IsSettingsAutostartSelected => SelectedSettingsIndex == 4;
+    public bool IsSettingsRoutingSelected   => SelectedSettingsIndex == 0;
+    public bool IsSettingsRulesSelected     => SelectedSettingsIndex == 1;
+    public bool IsSettingsLeakSelected      => SelectedSettingsIndex == 2;
+    public bool IsSettingsContentSelected   => SelectedSettingsIndex == 3;
+    public bool IsSettingsUpdatesSelected   => SelectedSettingsIndex == 4;
+    public bool IsSettingsAutostartSelected => SelectedSettingsIndex == 5;
 
     // Tools sub-tabs
     [ObservableProperty]
@@ -622,6 +774,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public string LblTabTools => IsRussian ? "Инструменты" : "Tools";
     public string LblTabFreeConfigs => Strings.TabFreeConfigs;
     public string LblSettingsRouting => Strings.SectionRouting;
+    // LblSettingsRules lives in MainWindowViewModel.Localization.cs (v2.30.0-r2).
     public string LblSettingsLeak => Strings.SectionLeakProtection;
     public string LblSettingsContent => Strings.SectionContent;
     public string LblSettingsUpdates => Strings.SectionUpdates;
@@ -1125,8 +1278,17 @@ public partial class MainWindowViewModel : ViewModelBase
         // Migration from v2.29 CustomDirectRules already happened in
         // SettingsMigrator.Migrate_1_to_2 — at this point CustomRules
         // holds whatever the user has, CustomDirectRules is empty.
-        CustomRulesText = VPNRouter.Core.Services.CustomRulesParser
-            .SerializeToText(_settings.App.CustomRules);
+        // v2.30.0-r2: also rebuild the CustomRulesList structured rows
+        // (separate ListBox view in the new Network → Rules section).
+        // Both views (textbox + rows) drive the same _settings.App.CustomRules.
+        _isSyncingCustomRules = true;
+        try
+        {
+            CustomRulesText = VPNRouter.Core.Services.CustomRulesParser
+                .SerializeToText(_settings.App.CustomRules);
+        }
+        finally { _isSyncingCustomRules = false; }
+        RebuildCustomRulesList();
 
         // Strict mode
         StrictMode = _settings.App.StrictMode;
@@ -3487,7 +3649,7 @@ public partial class MainWindowViewModel : ViewModelBase
         IsSimpleMode = false;
         _settings.App.UiMode = "advanced";
         SelectedTabIndex = 2;           // Network tab
-        SelectedSettingsIndex = 4;      // Autostart sub-section
+        SelectedSettingsIndex = 5;      // Autostart sub-section (v2.30.0-r2: shifted +1 for Rules)
         SaveSettings();
     }
 
