@@ -48,16 +48,33 @@ public partial class NetworkPage : UserControl
         vm.IsRulesNarrow = width < NarrowBreakpoint;
     }
 
-    /// <summary>v2.30.0-r14 — close the parent Flyout after a bulk-popover
-    /// item button has fired its Command. Avalonia's <see cref="Flyout"/>
-    /// doesn't auto-close on inner-Button clicks (unlike MenuFlyout +
-    /// MenuItem), so we explicitly hide the named ⋯ buttons' Flyouts.
-    /// The closed-already case is a no-op (Hide on a hidden flyout is
-    /// safe). Two named buttons exist (wide + narrow toolbars); we hide
-    /// both — only the currently-open one actually closes.</summary>
+    /// <summary>v2.30.0-r14 → r19: close the parent Flyout AFTER a
+    /// bulk-popover item button has fired its Command.
+    ///
+    /// <para>Click event handlers in Avalonia run BEFORE the Button's
+    /// Command (per <c>Button.OnClick</c> source: <c>RaiseEvent(ClickEvent)</c>
+    /// then <c>Command.Execute()</c>). If we Hide the flyout
+    /// synchronously inside the Click handler, the popup teardown can
+    /// race against the Command execution — particularly visible with
+    /// the Clear All command, which depends on its property-change
+    /// notification (ClearAllConfirmPending) propagating to the inline
+    /// confirm bar's IsVisible binding. r18 user report: «Очистить все
+    /// до сих пор не работает».</para>
+    ///
+    /// <para>Fix: defer Hide() to the next UI dispatcher tick. This
+    /// guarantees:
+    /// 1. The synchronous Click + Command sequence finishes (state
+    ///    changes propagate, INPC fires).
+    /// 2. The render pass picks up the new state (confirm bar becomes
+    ///    visible).
+    /// 3. THEN the flyout closes, revealing the just-rendered confirm
+    ///    bar to the user.</para></summary>
     private void OnBulkItemClick(object? sender, RoutedEventArgs e)
     {
-        BulkBtnWide?.Flyout?.Hide();
-        BulkBtnNarrow?.Flyout?.Hide();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            BulkBtnWide?.Flyout?.Hide();
+            BulkBtnNarrow?.Flyout?.Hide();
+        });
     }
 }
