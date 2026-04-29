@@ -723,10 +723,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         CancellationToken ct)
     {
         var deepTasks = new List<Task>();
-        var deepCap = deepSem.CurrentCount > 0 ? deepSem.CurrentCount + 1 : 5;
-        // Use a slightly wider in-flight cap than the semaphore itself so
-        // the loop can keep queuing while waiters drain — semaphore handles
-        // the actual ceiling. Use the adaptive deepCap as the headroom.
+        // In-flight cap matches the semaphore cap. The semaphore is the
+        // hard ceiling on simultaneous sing-box spawns (shared across all
+        // in-flight batches when cross-batch overlap is on); inFlightCap
+        // here is the soft cap on TASK objects we have queued at the
+        // batch level, to keep deepTasks from growing unbounded for
+        // huge ok-subsets.
         var inFlightCap = ComputeAdaptiveDeepCap();
         foreach (var cfg in okSubset)
         {
