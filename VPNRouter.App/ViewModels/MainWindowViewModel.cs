@@ -343,7 +343,10 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnAutostartUiChanged(bool value)
     {
         if (_isLoadingUI) return;
-#if PLATFORM_WINDOWS
+        // v2.29.0: AutostartHelper became cross-platform (Mac LaunchAgent +
+        // Linux XDG autostart in addition to the existing Win HKCU\Run).
+        // Old `#if PLATFORM_WINDOWS` guard removed — helper handles platform
+        // dispatch internally, no-ops on unsupported OS (none currently).
         try
         {
             if (value)
@@ -352,7 +355,6 @@ public partial class MainWindowViewModel : ViewModelBase
                 AutostartHelper.Disable();
         }
         catch (Exception ex) { _logger.Error(ex, "[VM] Autostart UI toggle failed"); }
-#endif
         SaveSettings();
     }
 

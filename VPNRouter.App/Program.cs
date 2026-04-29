@@ -129,25 +129,6 @@ sealed class Program
             return;
         }
 
-        // v2.25.13 — autostart path self-heal. If user enabled
-        // "Start with Windows" at an earlier install location and later
-        // reinstalled / moved the binary, HKCU\...\Run still holds the
-        // stale ghost path — silent fail at next login. Every startup we
-        // verify the stored path matches the currently-running exe and
-        // rewrite if it doesn't. No-op when autostart is disabled.
-        try
-        {
-            var exe = Environment.ProcessPath;
-            if (!string.IsNullOrEmpty(exe) && AutostartHelper.EnsureCurrentPath(exe))
-            {
-                // Log via stderr so it's visible in any attached console
-                // without requiring the full Serilog stack to be wired up.
-                try { Console.Error.WriteLine($"[autostart] HKCU Run key rewritten → {exe}"); }
-                catch { }
-            }
-        }
-        catch { /* never block app startup over a cosmetic registry fix */ }
-
         // v2.26.0 — service binPath self-heal (Windows only). Analog of the
         // Run-key fix above but for `sc config VPNRouter binPath=`. Non-
         // disruptive: just reconfigures the service, change takes effect on
@@ -179,6 +160,27 @@ sealed class Program
         }
         catch { }
 #endif
+
+        // v2.25.13 — autostart path self-heal. v2.29.0 extended to Mac+Linux.
+        // If user enabled "Start with system" at an earlier install location
+        // and later reinstalled / moved the binary, the autostart entry
+        // (HKCU\Run on Win, ~/Library/LaunchAgents/*.plist on Mac,
+        // ~/.config/autostart/*.desktop on Linux) still holds the stale
+        // ghost path — silent fail at next login. Every startup we verify
+        // the stored path matches the currently-running exe and rewrite if
+        // it doesn't. No-op when autostart is disabled.
+        // (Moved out of #if PLATFORM_WINDOWS in v2.29.0-r2 — AutostartHelper
+        // now dispatches Win/Mac/Linux internally.)
+        try
+        {
+            var exe = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(exe) && AutostartHelper.EnsureCurrentPath(exe))
+            {
+                try { Console.Error.WriteLine($"[autostart] entry rewritten -> {exe}"); }
+                catch { }
+            }
+        }
+        catch { /* never block app startup over a cosmetic autostart fix */ }
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }

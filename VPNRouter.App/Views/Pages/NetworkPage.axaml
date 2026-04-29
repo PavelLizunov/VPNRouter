@@ -457,9 +457,12 @@
           </StackPanel>
 
           <!-- ══════════════════════════════════════════════════════════
-               Section B — At user sign-in (HKCU Run key)
+               Section B — At user sign-in
+               (Win HKCU\Run / Mac LaunchAgent / Linux XDG autostart)
+               v2.29.0: cross-platform. Pre-r2 was Windows-only with the
+               "available on Windows only" notice for Mac/Linux users.
                ══════════════════════════════════════════════════════════ -->
-          <StackPanel Spacing="8" IsVisible="{Binding IsWindowsPlatform}">
+          <StackPanel Spacing="8">
             <TextBlock Text="{Binding L_AutostartLoginSectionTitle}"
                        FontSize="11" FontWeight="SemiBold"
                        Foreground="{DynamicResource TextMutedBrush}"/>
@@ -480,18 +483,6 @@
               </StackPanel>
             </Border>
           </StackPanel>
-
-          <!-- Non-Windows notice: replaces both sections above. -->
-          <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
-                  Background="{DynamicResource InfoBgBrush}"
-                  BorderBrush="{DynamicResource InfoBorderBrush}"
-                  BorderThickness="1"
-                  IsVisible="{Binding !IsWindowsPlatform}">
-            <TextBlock Text="{Binding L_AutostartPlatformNotice}"
-                       FontSize="11"
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource InfoFgBrush}"/>
-          </Border>
         </StackPanel>
 
       </StackPanel>

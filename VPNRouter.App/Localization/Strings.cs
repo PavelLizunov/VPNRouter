@@ -154,7 +154,21 @@ public static class Strings
     public static string AutostartLoginSectionTitle => Ru
         ? "При входе пользователя"
         : "At user sign-in";
-    public static string AutostartLoginAppDescription => Ru
+    // v2.29.0: section A "At system startup (before sign-in)" only renders
+    // on Windows (Service-based, no Mac/Linux equivalent yet); section B
+    // description should not reference it on Mac/Linux. Pre-r2 EN+RU
+    // pointed at "above" assuming Section A was visible, which broke on
+    // Mac. Now branches by OS.
+    public static string AutostartLoginAppDescription =>
+        OperatingSystem.IsWindows()
+            ? AutostartLoginAppDescriptionWindows
+            : AutostartLoginAppDescriptionUnix;
+
+    private static string AutostartLoginAppDescriptionUnix => Ru
+        ? "Запускает приложение VPNRouter в трей после входа в систему. VPN придётся стартануть вручную."
+        : "Launches VPNRouter into the tray after you sign in. VPN itself must be started manually.";
+
+    private static string AutostartLoginAppDescriptionWindows => Ru
         ? "Запускает приложение VPNRouter после входа. VPN придётся стартануть вручную или включить «на старте Windows» выше."
         : "Launches VPNRouter after you sign in. VPN itself must be started manually, or enable \u201Cat Windows startup\u201D above.";
 
