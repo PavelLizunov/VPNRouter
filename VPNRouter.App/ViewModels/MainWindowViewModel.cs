@@ -321,6 +321,69 @@ public partial class MainWindowViewModel : ViewModelBase
         = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
     private bool _isSyncingCustomRules;
 
+    // v2.30.0-r4 — search filter + bulk actions for large rule sets.
+    // User concern: «обычно если импортирую какой-то список правил из
+    // git ок включает в себя 100 и более правил». Without virtualization
+    // + search, 100+ rows became painful: ItemsControl rendered all,
+    // no way to find specific rule, no bulk operations. r4 adds:
+    //   1. ListBox + VirtualizingStackPanel (handled in XAML).
+    //   2. CustomRulesSearchText filter — substring match across
+    //      action/type/value/comment.
+    //   3. FilteredCustomRulesList — view rebuilt on filter change,
+    //      bound by ListBox.ItemsSource.
+    //   4. CustomRulesCountText — "showing N of M" display.
+    //   5. Bulk action commands: Clear all, Enable all, Disable all.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CustomRulesCountText))]
+    private string _customRulesSearchText = string.Empty;
+
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> FilteredCustomRulesList { get; }
+        = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
+
+    /// <summary>v2.30.0-r4 — "Showing 12 of 248 rules" display.</summary>
+    public string CustomRulesCountText
+    {
+        get
+        {
+            var total = CustomRulesList.Count;
+            var shown = string.IsNullOrWhiteSpace(CustomRulesSearchText)
+                ? total
+                : FilteredCustomRulesList.Count;
+            if (total == 0) return string.Empty;
+            if (string.IsNullOrWhiteSpace(CustomRulesSearchText) || shown == total)
+                return IsRussian ? $"Всего: {total}" : $"Total: {total}";
+            return IsRussian
+                ? $"Показано: {shown} из {total}"
+                : $"Showing: {shown} of {total}";
+        }
+    }
+
+    /// <summary>v2.30.0-r4 — apply CustomRulesSearchText to CustomRulesList,
+    /// repopulate FilteredCustomRulesList. Called on search-text change
+    /// + on every CustomRulesList change.</summary>
+    private void RebuildFilteredCustomRulesList()
+    {
+        FilteredCustomRulesList.Clear();
+        var query = CustomRulesSearchText?.Trim();
+        if (string.IsNullOrEmpty(query))
+        {
+            foreach (var vm in CustomRulesList)
+                FilteredCustomRulesList.Add(vm);
+        }
+        else
+        {
+            foreach (var vm in CustomRulesList)
+            {
+                var haystack = $"{vm.Action} {vm.Type} {vm.Value} {vm.Comment}".ToLowerInvariant();
+                if (haystack.Contains(query.ToLowerInvariant()))
+                    FilteredCustomRulesList.Add(vm);
+            }
+        }
+        OnPropertyChanged(nameof(CustomRulesCountText));
+    }
+
+    partial void OnCustomRulesSearchTextChanged(string value) => RebuildFilteredCustomRulesList();
+
     [ObservableProperty] private string _newRuleAction = "direct";
     [ObservableProperty] private string _newRuleType = "domain_suffix";
     [ObservableProperty] private string _newRuleValue = string.Empty;
@@ -465,7 +528,8 @@ public partial class MainWindowViewModel : ViewModelBase
     /// _settings.App.CustomRules. Called on settings load + after
     /// textbox edits + after structured-row edits. The
     /// _isSyncingCustomRules guard prevents feedback when this method
-    /// itself triggers OnCustomRulesTextChanged via SaveSettings.</summary>
+    /// itself triggers OnCustomRulesTextChanged via SaveSettings.
+    /// v2.30.0-r4: also rebuilds FilteredCustomRulesList + count text.</summary>
     private void RebuildCustomRulesList()
     {
         if (_isSyncingCustomRules) return;
@@ -482,6 +546,54 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         }
         finally { _isSyncingCustomRules = false; }
+        RebuildFilteredCustomRulesList();
+    }
+
+    /// <summary>v2.30.0-r4 — bulk action: clear all rules. With confirmation
+    /// loop (one click sets ClearAllConfirmPending, second click within
+    /// 5 s actually clears). Prevents accidental nukes on large lists.</summary>
+    [RelayCommand]
+    private void ClearAllCustomRules()
+    {
+        if (CustomRulesList.Count == 0) return;
+
+        // Two-click confirm pattern, same as SmpMenuResetConfig.
+        var now = DateTime.UtcNow;
+        if (_clearAllConfirmAt.HasValue && (now - _clearAllConfirmAt.Value) < TimeSpan.FromSeconds(5))
+        {
+            CustomRulesList.Clear();
+            FilteredCustomRulesList.Clear();
+            FlushCustomRulesListToSettings();
+            _clearAllConfirmAt = null;
+            ClearAllConfirmText = string.Empty;
+            return;
+        }
+        _clearAllConfirmAt = now;
+        ClearAllConfirmText = IsRussian
+            ? "Нажмите ещё раз чтобы удалить ВСЕ правила"
+            : "Click again to delete ALL rules";
+    }
+    private DateTime? _clearAllConfirmAt;
+    [ObservableProperty] private string _clearAllConfirmText = string.Empty;
+
+    /// <summary>v2.30.0-r4 — bulk enable all rules.</summary>
+    [RelayCommand]
+    private void EnableAllCustomRules()
+    {
+        if (CustomRulesList.Count == 0) return;
+        foreach (var vm in CustomRulesList) vm.Enabled = true;
+        // FlushCustomRulesListToSettings fires per-row via OnCustomRuleRowChanged;
+        // batch by setting _isSyncingCustomRules briefly... actually toggle
+        // the property normally — feedback loop is fine because
+        // _isSyncingCustomRules covers the row→settings sync.
+    }
+
+    /// <summary>v2.30.0-r4 — bulk disable all rules.</summary>
+    [RelayCommand]
+    private void DisableAllCustomRules()
+    {
+        if (CustomRulesList.Count == 0) return;
+        foreach (var vm in CustomRulesList) vm.Enabled = false;
     }
 
     /// <summary>v2.30.0-r2 — re-emit settings + textbox sync after
@@ -495,18 +607,23 @@ public partial class MainWindowViewModel : ViewModelBase
         FlushCustomRulesListToSettings();
     }
 
-    /// <summary>v2.30.0-r2 — handle row's Remove button.</summary>
+    /// <summary>v2.30.0-r2 — handle row's Remove button. r4: also drop
+    /// from FilteredCustomRulesList so the visible list stays in sync.</summary>
     private void OnCustomRuleRowRemoveRequested(CustomRuleViewModel row)
     {
         if (_isLoadingUI) return;
         CustomRulesList.Remove(row);
+        FilteredCustomRulesList.Remove(row);
+        OnPropertyChanged(nameof(CustomRulesCountText));
         FlushCustomRulesListToSettings();
     }
 
     /// <summary>v2.30.0-r2 — flush the in-memory CustomRulesList rows
     /// to _settings.App.CustomRules + regenerate the CustomRulesText
     /// textbox content so both views stay in sync. Triggered by
-    /// add / remove / property change on rows.</summary>
+    /// add / remove / property change on rows.
+    /// v2.30.0-r4: also rebuilds FilteredCustomRulesList + count text
+    /// (reapplies search filter to whatever's now in CustomRulesList).</summary>
     private void FlushCustomRulesListToSettings()
     {
         if (_isSyncingCustomRules) return;
@@ -527,6 +644,7 @@ public partial class MainWindowViewModel : ViewModelBase
             CustomRulesErrorText = string.Empty;
         }
         finally { _isSyncingCustomRules = false; }
+        RebuildFilteredCustomRulesList();
         SaveSettings();
     }
 

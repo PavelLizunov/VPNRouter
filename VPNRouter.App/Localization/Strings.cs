@@ -783,6 +783,26 @@ public static class Strings
         ? "Экспорт в CSV / JSON / sing-box JSON"
         : "Export to CSV / JSON / sing-box JSON";
 
+    // v2.30.0-r4 — search filter + bulk actions for large rule lists.
+    public static string CustomRulesSearchPlaceholder => Ru
+        ? "Поиск по action / type / value / комментарию..."
+        : "Search across action / type / value / comment...";
+    public static string CustomRulesClearAll => Ru ? "Очистить всё" : "Clear all";
+    public static string CustomRulesEnableAll => Ru ? "Вкл. все" : "Enable all";
+    public static string CustomRulesDisableAll => Ru ? "Выкл. все" : "Disable all";
+    public static string CustomRulesClearAllTooltip => Ru
+        ? "Удалить все правила (нажмите дважды для подтверждения)"
+        : "Delete all rules (click twice to confirm)";
+    public static string CustomRulesEnableAllTooltip => Ru
+        ? "Включить все правила"
+        : "Enable all rules";
+    public static string CustomRulesDisableAllTooltip => Ru
+        ? "Выключить все правила (без удаления)"
+        : "Disable all rules (without deleting)";
+    public static string CustomRulesNoMatchHint => Ru
+        ? "По запросу ничего не найдено."
+        : "No rules match the search.";
+
     // ── Legacy v2.29.0-r4 names (kept for back-compat with cached XAML) ──
     public static string CustomDirectRulesTitle => CustomRulesTitle;
     public static string CustomDirectRulesDescription => CustomRulesDescription;

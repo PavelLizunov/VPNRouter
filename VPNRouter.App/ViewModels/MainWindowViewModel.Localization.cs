@@ -69,6 +69,14 @@ public partial class MainWindowViewModel
     public string L_CustomRulesExport => Strings.CustomRulesExport;
     public string L_CustomRulesImportTooltip => Strings.CustomRulesImportTooltip;
     public string L_CustomRulesExportTooltip => Strings.CustomRulesExportTooltip;
+    public string L_CustomRulesSearchPlaceholder => Strings.CustomRulesSearchPlaceholder;
+    public string L_CustomRulesClearAll => Strings.CustomRulesClearAll;
+    public string L_CustomRulesEnableAll => Strings.CustomRulesEnableAll;
+    public string L_CustomRulesDisableAll => Strings.CustomRulesDisableAll;
+    public string L_CustomRulesClearAllTooltip => Strings.CustomRulesClearAllTooltip;
+    public string L_CustomRulesEnableAllTooltip => Strings.CustomRulesEnableAllTooltip;
+    public string L_CustomRulesDisableAllTooltip => Strings.CustomRulesDisableAllTooltip;
+    public string L_CustomRulesNoMatchHint => Strings.CustomRulesNoMatchHint;
     public string LblSettingsRules => Strings.SectionRules;
     // Legacy v2.29.0 aliases (kept for cached XAML).
     public string L_CustomDirectRulesTitle => L_CustomRulesTitle;
