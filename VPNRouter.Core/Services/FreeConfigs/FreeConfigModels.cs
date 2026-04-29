@@ -96,6 +96,26 @@ public sealed class FreeConfigEntry
     public DateTime? LastVerifyFailedAt { get; set; }
 
     /// <summary>
+    /// v2.29.0 Phase 3C: timestamp of the last successful Deep Verify pass
+    /// (real HTTP round-trip through sing-box, not just TCP+TLS). Set by
+    /// FreeConfigDeepVerifier on Verified result, cleared on subsequent
+    /// non-Verified re-test.
+    ///
+    /// <para>Used by the batched search loop to skip re-verifying entries
+    /// that were Deep-Verified within the last 6 hours — saves 5-15 s
+    /// per entry that's already known-working. Especially valuable on the
+    /// "first cached pass" of a search where many entries were Verified
+    /// in the prior session and just need a TCP ping refresh.</para>
+    ///
+    /// <para>Distinct from <see cref="LastTestedAt"/> which covers ANY
+    /// test type (TCP+TLS or Deep). Distinct from
+    /// <see cref="BandwidthTestedAt"/> which only fires when bandwidth
+    /// measurement was opt-in. Null on entries that have never been
+    /// Deep-Verified successfully.</para>
+    /// </summary>
+    public DateTime? LastDeepVerifyAt { get; set; }
+
+    /// <summary>
     /// Builds a VlessServerEntry from this free config, suitable for insertion into AppSettings.Vless.Servers.
     /// </summary>
     public VlessServerEntry ToVlessServerEntry()

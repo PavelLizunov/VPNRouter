@@ -159,6 +159,11 @@ public sealed class FreeConfigDeepVerifier
             if (httpOk)
             {
                 cfg.Status = FreeConfigStatus.Verified;
+                // v2.29.0 Phase 3C: stamp the successful Deep Verify time so
+                // the next search session can skip re-verifying this entry
+                // if it ran within the last 6 hours. Saves 5-15 s per
+                // already-known-working config in the cached re-test pass.
+                cfg.LastDeepVerifyAt = DateTime.UtcNow;
                 // v2.28.6-r5: do NOT overwrite cfg.LatencyMs with httpLatencyMs.
                 // HTTP RTT through the proxy includes 5-7 round-trips:
                 //   1. local TCP+SOCKS handshake

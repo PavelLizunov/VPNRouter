@@ -791,7 +791,28 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     startedFound, target, probedHost, probedPort, probedCc);
             });
 
-            await _deepVerifier.VerifyOneAsync(cfg, ct);
+            // v2.29.0 Phase 3C: skip Deep Verify if this entry was verified
+            // within the last 6 hours AND we already have a TCP ping number
+            // for it. Saves 5-15 s per already-known-working config on the
+            // cached re-test pass. The skip preserves Status=Verified +
+            // LatencyMs + MeasuredBandwidthMbps as-is; downstream Append
+            // logic still gates on Status==Verified + LatencyMs<=maxPing,
+            // so behaviour is identical to a fresh successful verify.
+            //
+            // Why 6h: Verified entries have already passed real HTTP round-
+            // trip + TLS handshake. The most likely failure mode in a 6h
+            // window is server going down (caught by next-day refresh) or
+            // SNI/cert rotation (rare for stable VLESS+Reality endpoints).
+            // 6h trades a small staleness risk for noticeable UX speedup.
+            var skipDeep = cfg.Status == FreeConfigStatus.Verified
+                && cfg.LastDeepVerifyAt.HasValue
+                && (DateTime.UtcNow - cfg.LastDeepVerifyAt.Value) < TimeSpan.FromHours(6)
+                && cfg.LatencyMs > 0;
+
+            if (!skipDeep)
+            {
+                await _deepVerifier.VerifyOneAsync(cfg, ct);
+            }
 
             // Only "fully working" entries reach the displayed list:
             //   Verified (real HTTP round-trip succeeded)
