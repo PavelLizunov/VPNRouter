@@ -335,13 +335,40 @@ public class UpdateChecker
         // binary set. Mirrors the existing Mac `ditto` helper pattern.
         var appDir = AppContext.BaseDirectory.TrimEnd('\\');
 
-        // Strip app/ wrapper from install ZIP layout
+        // Strip app/ wrapper from install ZIP layout (legacy install ZIPs).
         var appSubDir = Path.Combine(extractedDir, "app");
         if (Directory.Exists(appSubDir) &&
             (File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.exe")) ||
              File.Exists(Path.Combine(appSubDir, "VPNRouter.GUI.dll"))))
         {
             extractedDir = appSubDir;
+        }
+
+        // v2.29.0-r6 — strip `_bootstrap/` wrapper from update ZIP layout.
+        // The bootstrap layout was added in r6 to rescue users on the
+        // pre-r6 broken updater (see r6 release notes / VPNRouter.GUI/main.go).
+        // For r6+ users running this fixed updater, we want to copy the
+        // _bootstrap/ contents directly to appDir and skip the GUI.exe-
+        // bootstrap recovery (which would still WORK as a no-op fallback,
+        // but adds a redundant copy round-trip). The Go stub at
+        // extractedDir-root is identical to what's inside _bootstrap/'s
+        // peer set — keep it where it is, that's the launcher.
+        var bootstrapSubDir = Path.Combine(extractedDir, "_bootstrap");
+        if (Directory.Exists(bootstrapSubDir) &&
+            File.Exists(Path.Combine(extractedDir, "VPNRouter.GUI.exe")))
+        {
+            // Move the Go stub into _bootstrap/ so the unified xcopy
+            // brings it across alongside everything else; otherwise
+            // we'd need a separate copy step for it.
+            try
+            {
+                File.Copy(
+                    Path.Combine(extractedDir, "VPNRouter.GUI.exe"),
+                    Path.Combine(bootstrapSubDir, "VPNRouter.GUI.exe"),
+                    overwrite: true);
+            }
+            catch { /* ignore — original stub stays at root, helper still finds it */ }
+            extractedDir = bootstrapSubDir;
         }
 
         var guiExe = Path.Combine(appDir, "VPNRouter.GUI.exe");

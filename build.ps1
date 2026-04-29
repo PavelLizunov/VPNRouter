@@ -298,37 +298,88 @@ Write-Host "[8/9] Creating install ZIP (app/ layout)..." -ForegroundColor Yellow
 if (Test-Path $InstallZipPath) { Remove-Item $InstallZipPath }
 Compress-Archive -Path "$PackageDir\*" -DestinationPath $InstallZipPath -CompressionLevel Optimal
 
-# ── Create UPDATE ZIP (app files + sing-box + profiles) ──
-Write-Host "[9/9] Creating update ZIP..." -ForegroundColor Yellow
+# ── Create UPDATE ZIP (v2.29.0-r6 bootstrap layout) ──
+# Layout:
+#   VPNRouter.GUI.exe       ← Go stub at ROOT (not locked, copyable by
+#                              broken pre-r6 ApplyUpdate)
+#   _bootstrap/             ← all app DLLs + sing-box + profiles
+#       VPNRouter.App.exe
+#       VPNRouter.Core.dll
+#       hostfxr.dll  ← .NET runtime, locked at copy time but goes to a
+#                      fresh subdir → no conflict
+#       ... rest ...
+#       sing-box.exe
+#       profiles/
+#       README.txt
+#
+# Why this layout: pre-r6 ApplyUpdateWindows did file copy in-process.
+# Many runtime DLLs were mapped into the running .NET app, .NET on
+# Windows refuses to overwrite mapped files, the .bak rename fallback
+# also failed silently for files opened without FILE_SHARE_DELETE.
+# Result: ~10% of files stayed old, app relaunch loaded a mixed-version
+# DLL set, AppVersion still showed the old number. Half the user base
+# couldn't update. r6 fix:
+#   * Top-level VPNRouter.GUI.exe is a freestanding Go binary, never
+#     mapped by .NET, never locked. Copy succeeds via plain File.Copy.
+#   * Everything else lives in `_bootstrap/`. Pre-r6 ApplyUpdate walks
+#     extractedDir recursively and copies each file to appDir at
+#     relative paths → DLLs land at appDir/_bootstrap/<dll>. None of
+#     those targets exist before the copy → no conflicts → no silent
+#     skips.
+#   * Pre-r6 ApplyUpdate then Process.Start's appDir/VPNRouter.GUI.exe.
+#     That's the NEW Go stub (just replaced). The new stub detects
+#     `_bootstrap/` next to itself, waits for the parent VPNRouter.App
+#     to exit (now nothing locked), xcopies _bootstrap/* over appDir
+#     overwriting, deletes _bootstrap/, launches the freshly-replaced
+#     VPNRouter.App.exe.
+#
+# r5+ ApplyUpdateWindows (detached .cmd helper) also handles this layout
+# correctly because the helper xcopies extractedDir as-is and the same
+# bootstrap recovery runs in the relaunch.
+Write-Host "[9/9] Creating update ZIP (bootstrap layout)..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Force -Path $UpdateDir | Out-Null
 
+# Top-level: ONLY the Go stub. This is the bootstrap entry point.
+$updateGuiStub = Join-Path $DistDir "VPNRouter.GUI.exe"
+if (-not (Test-Path $updateGuiStub)) {
+    throw "Update ZIP build: VPNRouter.GUI.exe missing from $DistDir — Go stub not built?"
+}
+Copy-Item $updateGuiStub $UpdateDir
+Write-Host "       VPNRouter.GUI.exe -> ROOT (bootstrap entry)" -ForegroundColor Gray
+
+# Bootstrap subdir: everything else.
+$BootstrapDir = Join-Path $UpdateDir "_bootstrap"
+New-Item -ItemType Directory -Force -Path $BootstrapDir | Out-Null
+
 # Copy app-only files from dist (using fd file list as reference)
+# EXCEPT VPNRouter.GUI.exe — that one stays at ROOT.
 $fdFileNames = (Get-ChildItem $FdDir -File).Name | Sort-Object -Unique
 $updateFileCount = 0
 foreach ($name in $fdFileNames) {
+    if ($name -eq "VPNRouter.GUI.exe") { continue }  # already at root
     $src = Join-Path $DistDir $name
     if (Test-Path $src) {
-        Copy-Item $src $UpdateDir
+        Copy-Item $src $BootstrapDir
         $updateFileCount++
     }
 }
 # Include sing-box.exe (version may change between releases)
 $singBoxInDist = Join-Path $DistDir "sing-box.exe"
 if (Test-Path $singBoxInDist) {
-    Copy-Item $singBoxInDist $UpdateDir
+    Copy-Item $singBoxInDist $BootstrapDir
     $updateFileCount++
-    Write-Host "       sing-box.exe included in update" -ForegroundColor Gray
+    Write-Host "       sing-box.exe included in update (under _bootstrap/)" -ForegroundColor Gray
 }
 # Zapret: downloaded on demand, not in update package
-# Also include profiles and README
-$UpdateProfilesDst = Join-Path $UpdateDir "profiles"
+# Also include profiles and README under _bootstrap/.
+$UpdateProfilesDst = Join-Path $BootstrapDir "profiles"
 if (Test-Path $ProfilesSrc) {
     New-Item -ItemType Directory -Force -Path $UpdateProfilesDst | Out-Null
     Copy-Item "$ProfilesSrc\*" $UpdateProfilesDst -Recurse
 }
-Copy-Item $ReadmePath $UpdateDir
+Copy-Item $ReadmePath $BootstrapDir
 
-Write-Host "       Update package: $updateFileCount files" -ForegroundColor Gray
+Write-Host "       Update package: 1 stub at root + $updateFileCount files in _bootstrap/" -ForegroundColor Gray
 
 if (Test-Path $UpdateZipPath) { Remove-Item $UpdateZipPath }
 Compress-Archive -Path "$UpdateDir\*" -DestinationPath $UpdateZipPath -CompressionLevel Optimal
