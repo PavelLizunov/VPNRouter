@@ -331,7 +331,26 @@ public class VpnEngine : IDisposable
                     settings.ActiveProfile = sanitized;
                     try
                     {
-                        SettingsLoader.Save(settings);
+                        // CRITICAL — v2.30.0-r8: do NOT persist `settings`
+                        // directly here. By this point in StartAsync,
+                        // VlessServersResolver.Resolve has already mutated
+                        // settings.Vless.Servers in-place with the aggregated
+                        // subscription server list (subscribe mode). Saving
+                        // this object would write that aggregate into
+                        // vless.servers in YAML, which on next app launch
+                        // resurfaces as fake "manual VLESS servers" in the
+                        // VLESS tab.
+                        // User report 2026-04-29 (Linux): «конфиги из подписки
+                        // закинулись не в Подписки а во Vless». Linux happens
+                        // to hit this more often because bundled profile
+                        // names differ across platforms (default-linux.json
+                        // etc.), increasing the chance the "missing profile"
+                        // sanitizer fires and persists.
+                        // Fix: reload a fresh copy from YAML (untouched by
+                        // the resolver), mutate ONLY ActiveProfile, save.
+                        var fresh = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+                        fresh.ActiveProfile = sanitized;
+                        SettingsLoader.Save(fresh);
                         _logger?.Information(
                             "[VpnEngine] ActiveProfile migrated: '{Old}' → '{New}'",
                             profileName, sanitized);
