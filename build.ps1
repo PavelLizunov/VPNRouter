@@ -37,6 +37,51 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
+
+# ── v2.29.0-r7 LAYER 1: AppVersion match check ──
+# Trigger: v2.29.0-r1..r5 dev cycle bug (CLAUDE-AI fake-tag fiasco).
+# build.ps1 was being run from main repo's working directory while the
+# author was developing in a worktree. main repo's AppVersion.cs was
+# stuck at v2.28.7 while the -Version arg said "2.29.0-r5". Build
+# silently produced v2.28.7 binary tagged as v2.29.0-r5. Users on
+# Windows clicked Update and got the same v2.28.7 binary back.
+#
+# Fix: compare -Version CLI arg with AppVersion.cs literal at build
+# start. Mismatch -> abort with a clear remediation hint. Catches the
+# entire class of "compiled wrong source tree" bugs in 0 seconds.
+#
+# See plans/vpnrouter-update-reliability-strategy.md Layer 1.
+$appVersionFile = Join-Path $Root "VPNRouter.Core\AppVersion.cs"
+if (-not (Test-Path $appVersionFile)) {
+    throw "ABORT: AppVersion.cs not found at $appVersionFile. Are you running build.ps1 from the wrong directory?"
+}
+$appVersionLine = (Get-Content $appVersionFile |
+    Select-String 'public const string Version =' | Select-Object -First 1).Line
+if (-not $appVersionLine) {
+    throw "ABORT: could not parse 'public const string Version =' from $appVersionFile."
+}
+# Extract the string between the first pair of double quotes.
+if ($appVersionLine -match '"([^"]+)"') {
+    $srcVersion = $Matches[1]
+} else {
+    throw "ABORT: AppVersion.cs Version line has no quoted value: $appVersionLine"
+}
+if ($srcVersion -ne $Version) {
+    throw @"
+ABORT: -Version '$Version' does not match AppVersion.cs '$srcVersion'.
+
+This is the v2.29.0-r1..r5 fake-tag bug. Either:
+  (a) Bump $appVersionFile Version constant to '$Version' and commit, OR
+  (b) Run build.ps1 with -Version '$srcVersion' to match the source on disk, OR
+  (c) If you're working in a worktree, make sure you've pulled main repo:
+        cd '$Root' ; git pull --ff-only origin main
+      then re-run.
+
+Refusing to ship a binary whose AppVersion does not match the release tag.
+"@
+}
+Write-Host "[0/9] AppVersion match: $srcVersion = -Version $Version OK" -ForegroundColor Green
+
 $DistDir = Join-Path $Root "publish\dist"
 $FdDir = Join-Path $Root "publish\fd"
 $UpdateDir = Join-Path $Root "publish\update"

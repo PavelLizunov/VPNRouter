@@ -308,8 +308,12 @@ public class UpdateChecker
 
     // ─── Windows ─────────────────────────────────────────────────────────────
 
-    private static void ApplyUpdateWindows(string extractedDir)
+    private void ApplyUpdateWindows(string extractedDir)
     {
+        // v2.29.0-r7: changed from static → instance so we can call
+        // TryWriteInstallReceipt (which uses _currentVersion). The Mac
+        // and Linux variants similarly differ — Mac is static, Linux is
+        // instance because Linux already wrote receipts via Log helper.
         // v2.29.0-r5 — detached .cmd helper. User report 2026-04-29:
         // «обновление завершается, приложение перезапускается, но снова
         // со старой версией».
@@ -373,6 +377,16 @@ public class UpdateChecker
 
         var guiExe = Path.Combine(appDir, "VPNRouter.GUI.exe");
         var parentPid = Environment.ProcessId;
+
+        // v2.29.0-r7 LAYER 7: install receipt. Mirrors Linux's existing
+        // .update-installed-version receipt (TryWriteInstallReceipt below).
+        // Records the currently-running version + timestamp BEFORE the
+        // file copy. On next startup CheckInstallReceipt() reads it; if
+        // the running version is NOT strictly newer than the receipt's
+        // pre-update version → surface "Last update didn't take effect"
+        // warning to the user. Catches partial updates that the cmd
+        // helper xcopy can't recover from.
+        TryWriteInstallReceipt();
 
         // Helper script + log live in %TEMP% (always user-writable).
         var tempDir = Path.GetTempPath();
@@ -908,6 +922,26 @@ public class UpdateChecker
         catch (Exception ex)
         {
             log($"Receipt write failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>v2.29.0-r7 — receipt-write overload for Windows
+    /// updater (no log file). Writes the same .update-installed-version
+    /// receipt as the Linux flow. On next startup
+    /// <see cref="CheckInstallReceipt"/> compares the running version to
+    /// this receipt; if not strictly newer, surfaces "Last update didn't
+    /// take effect" warning to the UI.</summary>
+    private void TryWriteInstallReceipt()
+    {
+        try
+        {
+            var receiptPath = Path.Combine(AppPaths.DataDir, ".update-installed-version");
+            File.WriteAllText(receiptPath, $"{DateTime.UtcNow:o}\n{_currentVersion}\n");
+        }
+        catch
+        {
+            // Non-fatal — best-effort receipt; CheckInstallReceipt
+            // returns null gracefully if the file is missing.
         }
     }
 
