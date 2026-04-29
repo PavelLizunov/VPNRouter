@@ -1116,13 +1116,48 @@
         </StackPanel>
         <!-- ↑ End responsive toolbar wrapper -->
 
-          <!-- Confirm prompt for two-click Clear All — surfaces above
-               the list when the first click is registered. -->
-          <TextBlock Text="{Binding ClearAllConfirmText}"
-                     FontSize="10" FontWeight="SemiBold"
-                     Foreground="{DynamicResource DangerFgBrush}"
-                     IsVisible="{Binding ClearAllConfirmText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                     HorizontalAlignment="Right"/>
+          <!-- v2.30.0-r18 — inline confirm bar for Clear All. Replaces
+               the broken two-click pattern in the popover. Stays visible
+               until user clicks Cancel or Delete (no auto-dismiss).
+               User report: «после клика окошко закрывается а там нужен
+               дабл-клик» — popover-close was killing the second click. -->
+          <Border IsVisible="{Binding ClearAllConfirmPending}"
+                  Padding="10,8"
+                  CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource DangerBgBrush}"
+                  BorderBrush="{DynamicResource DangerBorderBrush}"
+                  BorderThickness="1">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+              <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="{Binding ClearAllConfirmText}"
+                           FontSize="11" FontWeight="SemiBold"
+                           Foreground="{DynamicResource DangerFgBrush}"/>
+                <TextBlock Text="{Binding L_RulesClearAllHint}"
+                           FontSize="10"
+                           Foreground="{DynamicResource DangerFgBrush}"
+                           Opacity="0.85"
+                           TextWrapping="Wrap"/>
+              </StackPanel>
+              <Button Grid.Column="1"
+                      Content="{Binding L_Cancel}"
+                      Command="{Binding CancelClearAllCustomRulesCommand}"
+                      FontSize="10" Padding="10,4" MinHeight="0"
+                      Background="Transparent"
+                      BorderBrush="{DynamicResource DangerBorderBrush}"
+                      BorderThickness="1"
+                      Foreground="{DynamicResource DangerFgBrush}"
+                      CornerRadius="{StaticResource RadiusXs}"/>
+              <Button Grid.Column="2"
+                      Content="{Binding L_RulesClearAllConfirm}"
+                      Command="{Binding ConfirmClearAllCustomRulesCommand}"
+                      FontSize="10" FontWeight="SemiBold"
+                      Padding="10,4" MinHeight="0"
+                      Background="{DynamicResource DangerSolidBrush}"
+                      Foreground="White"
+                      BorderThickness="0"
+                      CornerRadius="{StaticResource RadiusXs}"/>
+            </Grid>
+          </Border>
 
           <!-- v2.30.0-r17 — transient toast for bulk-action feedback
                (sort, etc.). Auto-clears after 2 s via the

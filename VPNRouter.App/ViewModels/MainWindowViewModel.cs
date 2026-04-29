@@ -1078,31 +1078,59 @@ public partial class MainWindowViewModel : ViewModelBase
         RebuildFilteredCustomRulesList();
     }
 
-    /// <summary>v2.30.0-r4 — bulk action: clear all rules. With confirmation
-    /// loop (one click sets ClearAllConfirmPending, second click within
-    /// 5 s actually clears). Prevents accidental nukes on large lists.</summary>
+    /// <summary>v2.30.0-r4 → r18: bulk action: request clear-all
+    /// confirmation. Sets <see cref="ClearAllConfirmPending"/> = true
+    /// which surfaces the inline confirm bar above the list with
+    /// explicit Cancel + Delete buttons. The actual destructive action
+    /// runs in <see cref="ConfirmClearAllCustomRules"/>.
+    ///
+    /// <para>r18 user report: «Кнопка очистить все перестала работать,
+    /// видимо из-за того что после клика окошко закрывается а там
+    /// нужен дабл-клик». The pre-r18 two-click 5-s pattern broke when
+    /// the popover closed on first click — user couldn't make the
+    /// second click. r18 swaps to a non-popover confirm bar that
+    /// stays visible until the user explicitly Confirms or Cancels
+    /// (no time-based auto-dismiss).</para></summary>
     [RelayCommand]
     private void ClearAllCustomRules()
     {
         if (CustomRulesList.Count == 0) return;
+        ClearAllConfirmPending = true;
+        ClearAllConfirmText = IsRussian
+            ? $"Удалить все правила ({CustomRulesList.Count})?"
+            : $"Delete all rules ({CustomRulesList.Count})?";
+    }
 
-        // Two-click confirm pattern, same as SmpMenuResetConfig.
-        var now = DateTime.UtcNow;
-        if (_clearAllConfirmAt.HasValue && (now - _clearAllConfirmAt.Value) < TimeSpan.FromSeconds(5))
+    /// <summary>v2.30.0-r18 — actually clear after the user clicks the
+    /// confirm bar's Delete button.</summary>
+    [RelayCommand]
+    private void ConfirmClearAllCustomRules()
+    {
+        if (CustomRulesList.Count == 0)
         {
-            CustomRulesList.Clear();
-            FilteredCustomRulesList.Clear();
-            FlushCustomRulesListToSettings();
-            _clearAllConfirmAt = null;
+            ClearAllConfirmPending = false;
             ClearAllConfirmText = string.Empty;
             return;
         }
-        _clearAllConfirmAt = now;
-        ClearAllConfirmText = IsRussian
-            ? "Нажмите ещё раз чтобы удалить ВСЕ правила"
-            : "Click again to delete ALL rules";
+        CustomRulesList.Clear();
+        FilteredCustomRulesList.Clear();
+        FlushCustomRulesListToSettings();
+        ClearAllConfirmPending = false;
+        ClearAllConfirmText = string.Empty;
+        ShowRulesToast(IsRussian ? "✓ Удалено все правила" : "✓ All rules deleted");
     }
-    private DateTime? _clearAllConfirmAt;
+
+    /// <summary>v2.30.0-r18 — dismiss the confirm bar without deleting.</summary>
+    [RelayCommand]
+    private void CancelClearAllCustomRules()
+    {
+        ClearAllConfirmPending = false;
+        ClearAllConfirmText = string.Empty;
+    }
+
+    /// <summary>True while the inline confirm bar is shown (between
+    /// the popover-Click and the Delete/Cancel button click).</summary>
+    [ObservableProperty] private bool _clearAllConfirmPending;
     [ObservableProperty] private string _clearAllConfirmText = string.Empty;
 
     /// <summary>v2.30.0-r4 — bulk enable all rules.</summary>

@@ -844,6 +844,14 @@ public static class Strings
     // v2.30.0-r14 — Sort-by-type bulk action (per design `.bulk-pop`).
     public static string RulesSortByType => Ru ? "Сортировать по типу" : "Sort by type";
 
+    // v2.30.0-r18 — Clear All inline confirm bar (replaces broken
+    // two-click-in-popover pattern). Also adds a generic Cancel string.
+    public static string RulesClearAllHint => Ru
+        ? "Это действие нельзя отменить."
+        : "This action cannot be undone.";
+    public static string RulesClearAllConfirm => Ru ? "Удалить" : "Delete";
+    public static string CommonCancel => Ru ? "Отмена" : "Cancel";
+
     // v2.30.0-r17 — Custom-rules-priority CheckBox label + tooltip.
     public static string RulesCustomAboveToggles => Ru
         ? "Свои правила важнее тумблеров"

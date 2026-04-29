@@ -97,6 +97,10 @@ public partial class MainWindowViewModel
     // v2.30.0-r17 — Custom-rules-priority CheckBox.
     public string L_RulesCustomAboveToggles => Strings.RulesCustomAboveToggles;
     public string L_RulesCustomAboveTogglesHint => Strings.RulesCustomAboveTogglesHint;
+    // v2.30.0-r18 — Clear All inline confirm bar.
+    public string L_RulesClearAllHint => Strings.RulesClearAllHint;
+    public string L_RulesClearAllConfirm => Strings.RulesClearAllConfirm;
+    public string L_Cancel => Strings.CommonCancel;
     public string L_RulesAddLabelAction  => Strings.RulesAddLabelAction;
     public string L_RulesAddLabelType    => Strings.RulesAddLabelType;
     public string L_RulesAddLabelValue   => Strings.RulesAddLabelValue;
