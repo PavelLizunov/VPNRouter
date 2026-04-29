@@ -312,6 +312,22 @@
                         Foreground="{Binding IsRulesViewCards,
                                      Converter={x:Static conv:BoolToBrushConverter.Instance},
                                      ConverterParameter=AccentFgBrush|TextSecondaryBrush}"/>
+                <!-- v2.30.0-r12 — third Read view-mode button per design
+                     RulesExplorations.html `▦ Cards · ☰ Read · ✎ Edit`.
+                     Read = grouped monospace display, no editing. -->
+                <Button Content="{Binding L_RulesViewRead}"
+                        Command="{Binding SetRulesViewReadCommand}"
+                        FontSize="10" FontWeight="SemiBold"
+                        Padding="8,3" MinHeight="0"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource RadiusXs}"
+                        ToolTip.Tip="{Binding L_RulesViewReadTooltip}"
+                        Background="{Binding IsRulesViewRead,
+                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                     ConverterParameter=SurfaceBaseBrush|Transparent}"
+                        Foreground="{Binding IsRulesViewRead,
+                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                     ConverterParameter=AccentFgBrush|TextSecondaryBrush}"/>
                 <Button Content="{Binding L_RulesViewEdit}"
                         Command="{Binding SetRulesViewEditCommand}"
                         FontSize="10" FontWeight="SemiBold"
@@ -339,28 +355,73 @@
                     ToolTip.Tip="{Binding L_CustomRulesExportTooltip}"/>
           </Grid>
 
-          <!-- Help banner (info-tinted) — replaces the dense paragraph
-               with key bullets about toggle precedence, LAN auto-direct,
-               and order-doesn't-matter. Dismissable via X. -->
+          <!-- Help banner — v2.30.0-r12 structured per design `.help`:
+               bold heading + 3 bullets with FontWeight=SemiBold for
+               toggle names + FontFamily=mono for technical code values
+               (CIDR ranges, "direct" action). Dismissable via X. -->
           <Border IsVisible="{Binding !IsRulesHelpBannerDismissed}"
-                  Padding="10,8"
+                  Padding="12,10"
                   CornerRadius="{StaticResource RadiusMd}"
                   Background="{DynamicResource InfoBgBrush}"
                   BorderBrush="{DynamicResource InfoBorderBrush}"
                   BorderThickness="1">
-            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
               <TextBlock Grid.Column="0"
                          Text="ⓘ"
-                         FontSize="13" FontWeight="Bold"
+                         FontSize="14" FontWeight="Bold"
                          Foreground="{DynamicResource InfoFgBrush}"
                          VerticalAlignment="Top" Margin="0,1,0,0"/>
-              <TextBlock Grid.Column="1"
-                         Text="{Binding L_RulesHelpBanner}"
-                         FontSize="10"
-                         TextWrapping="Wrap"
-                         LineHeight="15"
-                         Foreground="{DynamicResource InfoFgBrush}"
-                         VerticalAlignment="Center"/>
+              <StackPanel Grid.Column="1" Spacing="4">
+                <!-- Heading -->
+                <TextBlock Text="{Binding L_RulesHelpHeader}"
+                           FontSize="10" FontWeight="SemiBold"
+                           Foreground="{DynamicResource InfoFgBrush}"/>
+                <!-- Bullet 1: «toggle1» and «toggle2» fire BEFORE your rules. -->
+                <TextBlock FontSize="10"
+                           TextWrapping="Wrap" LineHeight="15"
+                           Foreground="{DynamicResource InfoFgBrush}">
+                  <Run Text="•  "/>
+                  <Run Text="{Binding L_RulesHelpB1Pre}"/>
+                  <Run Text="{Binding L_RulesHelpB1T1}" FontWeight="SemiBold"/>
+                  <Run Text="{Binding L_RulesHelpB1Mid}"/>
+                  <Run Text="{Binding L_RulesHelpB1T2}" FontWeight="SemiBold"/>
+                  <Run Text="{Binding L_RulesHelpB1Suf}"/>
+                </TextBlock>
+                <!-- Bullet 2: Private nets (CIDR, ...) already go direct
+                     automatically. CIDR + "direct" rendered in monospace
+                     to match the design's <code> tag styling. -->
+                <TextBlock FontSize="10"
+                           TextWrapping="Wrap" LineHeight="15"
+                           Foreground="{DynamicResource InfoFgBrush}">
+                  <Run Text="•  "/>
+                  <Run Text="{Binding L_RulesHelpB2Pre}"/>
+                  <Run Text="10.0.0.0/8"
+                       FontFamily="Consolas, 'SF Mono', monospace"
+                       FontSize="10"/>
+                  <Run Text=", "/>
+                  <Run Text="192.168.0.0/16"
+                       FontFamily="Consolas, 'SF Mono', monospace"
+                       FontSize="10"/>
+                  <Run Text=", "/>
+                  <Run Text="172.16.0.0/12"
+                       FontFamily="Consolas, 'SF Mono', monospace"
+                       FontSize="10"/>
+                  <Run Text="{Binding L_RulesHelpB2Mid}"/>
+                  <Run Text="direct"
+                       FontFamily="Consolas, 'SF Mono', monospace"
+                       FontSize="10"/>
+                  <Run Text="{Binding L_RulesHelpB2Suf}"/>
+                </TextBlock>
+                <!-- Bullet 3: Rule order DOES NOT matter — first match wins. -->
+                <TextBlock FontSize="10"
+                           TextWrapping="Wrap" LineHeight="15"
+                           Foreground="{DynamicResource InfoFgBrush}">
+                  <Run Text="•  "/>
+                  <Run Text="{Binding L_RulesHelpB3Pre}"/>
+                  <Run Text="{Binding L_RulesHelpB3Bold}" FontWeight="SemiBold"/>
+                  <Run Text="{Binding L_RulesHelpB3Suf}"/>
+                </TextBlock>
+              </StackPanel>
               <Button Grid.Column="2"
                       Content="✕"
                       Command="{Binding DismissRulesHelpBannerCommand}"
@@ -699,9 +760,14 @@
                          + white text) to ActionToTokenBrushConverter
                          which looks up theme brushes per (action, role).
                          Width pinned 74 to match design `.pill`. -->
+                    <!-- v2.30.0-r12: padding 10,5 per design `padding:5px 10px`
+                         (was 0,3 in r9-r11). With explicit Width=74 and
+                         box-border-style padding (Avalonia padding sits
+                         INSIDE Width, like CSS box-sizing:border-box),
+                         text gets 10 px horizontal + 5 px vertical room. -->
                     <Border Grid.Column="0"
                             CornerRadius="{StaticResource RadiusXs}"
-                            Padding="0,3"
+                            Padding="10,5"
                             Width="74"
                             BorderThickness="1"
                             HorizontalAlignment="Left"
@@ -756,15 +822,29 @@
                               Theme="{StaticResource IosToggleCheckBox}"
                               IsChecked="{Binding Enabled}"
                               VerticalAlignment="Center"/>
+                    <!-- v2.30.0-r12: ⋯ context menu replaces direct ✕
+                         button per design `.menu-btn`. Currently the menu
+                         only has Delete; Edit / Move up/down are deferred
+                         to v2.30.1. The ⋯ pattern keeps destructive
+                         actions one-tap away rather than directly on the
+                         row surface. -->
                     <Button Grid.Column="5"
-                            Content="✕"
-                            Command="{Binding RemoveCommand}"
-                            FontSize="10"
-                            Padding="6,0" MinHeight="0"
+                            Content="⋯"
+                            Width="24" Height="24"
+                            Padding="0" MinHeight="0"
+                            FontSize="14"
                             Background="Transparent"
                             BorderThickness="0"
                             Foreground="{DynamicResource TextMutedBrush}"
-                            ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_CustomRulesDelete}"/>
+                            ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_RulesBulkActions}">
+                      <Button.Flyout>
+                        <MenuFlyout>
+                          <MenuItem Header="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_CustomRulesDelete}"
+                                    Command="{Binding RemoveCommand}"
+                                    Foreground="{DynamicResource DangerFgBrush}"/>
+                        </MenuFlyout>
+                      </Button.Flyout>
+                    </Button>
                   </Grid>
                 </Border>
               </DataTemplate>
@@ -781,6 +861,185 @@
 
           </StackPanel>
           <!-- ↑ End Cards view -->
+
+          <!-- ═══ Read view (read-only grouped monospace) ═══
+               v2.30.0-r12 — third view-mode per design RulesExplorations.html
+               TextList component. Shows rules grouped by action with mono
+               typography:
+                   — direct (4) —
+                   ●  direct  domain_suffix  .corp.local       # comment
+                   ●  direct  ip_cidr        100.64.0.0/10     # CGNAT
+                   ...
+                   — proxy (3) —
+                   ...
+               Each row keeps its toggle (●/○) and a ⋯ delete affordance,
+               but no Type/Value editing — flip to Cards or Edit for that. -->
+          <StackPanel Spacing="4" IsVisible="{Binding IsRulesViewRead}">
+            <Border Padding="0,8"
+                    BorderBrush="{DynamicResource BorderDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusSm}"
+                    Background="{DynamicResource SurfaceAppBrush}">
+              <StackPanel Spacing="2">
+                <!-- Group: direct -->
+                <StackPanel IsVisible="{Binding ReadModeDirectRules.Count}" Spacing="0">
+                  <TextBlock Text="{Binding ReadModeDirectHeader}"
+                             FontSize="9"
+                             FontFamily="Consolas, 'SF Mono', monospace"
+                             FontWeight="SemiBold"
+                             Foreground="{DynamicResource TextMutedBrush}"
+                             Padding="14,6,14,4"/>
+                  <ItemsControl ItemsSource="{Binding ReadModeDirectRules}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:CustomRuleViewModel">
+                        <Grid ColumnDefinitions="20,70,140,*,Auto"
+                              ColumnSpacing="10"
+                              Margin="14,1"
+                              Opacity="{Binding RowOpacity}">
+                          <TextBlock Grid.Column="0"
+                                     Text="●"
+                                     FontFamily="Consolas, 'SF Mono', monospace"
+                                     FontSize="11"
+                                     Foreground="{DynamicResource SuccessFgBrush}"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Grid.Column="1"
+                                     Text="{Binding Action}"
+                                     FontFamily="Consolas, 'SF Mono', monospace"
+                                     FontSize="11"
+                                     FontWeight="Bold"
+                                     Foreground="{DynamicResource TextSecondaryBrush}"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Grid.Column="2"
+                                     Text="{Binding Type}"
+                                     FontFamily="Consolas, 'SF Mono', monospace"
+                                     FontSize="11"
+                                     Foreground="{DynamicResource TextMutedBrush}"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Grid.Column="3"
+                                     Text="{Binding Value}"
+                                     FontFamily="Consolas, 'SF Mono', monospace"
+                                     FontSize="11"
+                                     FontWeight="SemiBold"
+                                     TextTrimming="CharacterEllipsis"
+                                     VerticalAlignment="Center"
+                                     ToolTip.Tip="{Binding Comment}"/>
+                          <Button Grid.Column="4"
+                                  Content="✕"
+                                  Command="{Binding RemoveCommand}"
+                                  FontSize="11"
+                                  Padding="6,0" MinHeight="0"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  Foreground="{DynamicResource TextMutedBrush}"/>
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
+                <!-- Group: proxy -->
+                <StackPanel IsVisible="{Binding ReadModeProxyRules.Count}" Spacing="0">
+                  <TextBlock Text="{Binding ReadModeProxyHeader}"
+                             FontSize="9"
+                             FontFamily="Consolas, 'SF Mono', monospace"
+                             FontWeight="SemiBold"
+                             Foreground="{DynamicResource TextMutedBrush}"
+                             Padding="14,8,14,4"/>
+                  <ItemsControl ItemsSource="{Binding ReadModeProxyRules}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:CustomRuleViewModel">
+                        <Grid ColumnDefinitions="20,70,140,*,Auto"
+                              ColumnSpacing="10"
+                              Margin="14,1"
+                              Opacity="{Binding RowOpacity}">
+                          <TextBlock Grid.Column="0" Text="●"
+                                     FontFamily="Consolas, 'SF Mono', monospace"
+                                     FontSize="11"
+                                     Foreground="{DynamicResource SuccessFgBrush}"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Grid.Column="1" Text="{Binding Action}"
+                                     FontFamily="Consolas, 'SF Mono', monospace"
+                                     FontSize="11" FontWeight="Bold"
+                                     Foreground="{DynamicResource AccentFgBrush}"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Grid.Column="2" Text="{Binding Type}"
+                                     FontFamily="Consolas, 'SF Mono', monospace"
+                                     FontSize="11"
+                                     Foreground="{DynamicResource TextMutedBrush}"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Grid.Column="3" Text="{Binding Value}"
+                                     FontFamily="Consolas, 'SF Mono', monospace"
+                                     FontSize="11" FontWeight="SemiBold"
+                                     TextTrimming="CharacterEllipsis"
+                                     VerticalAlignment="Center"
+                                     ToolTip.Tip="{Binding Comment}"/>
+                          <Button Grid.Column="4" Content="✕"
+                                  Command="{Binding RemoveCommand}"
+                                  FontSize="11" Padding="6,0" MinHeight="0"
+                                  Background="Transparent" BorderThickness="0"
+                                  Foreground="{DynamicResource TextMutedBrush}"/>
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
+                <!-- Group: block -->
+                <StackPanel IsVisible="{Binding ReadModeBlockRules.Count}" Spacing="0">
+                  <TextBlock Text="{Binding ReadModeBlockHeader}"
+                             FontSize="9"
+                             FontFamily="Consolas, 'SF Mono', monospace"
+                             FontWeight="SemiBold"
+                             Foreground="{DynamicResource TextMutedBrush}"
+                             Padding="14,8,14,4"/>
+                  <ItemsControl ItemsSource="{Binding ReadModeBlockRules}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:CustomRuleViewModel">
+                        <Grid ColumnDefinitions="20,70,140,*,Auto"
+                              ColumnSpacing="10"
+                              Margin="14,1"
+                              Opacity="{Binding RowOpacity}">
+                          <TextBlock Grid.Column="0" Text="●"
+                                     FontFamily="Consolas, 'SF Mono', monospace"
+                                     FontSize="11"
+                                     Foreground="{DynamicResource SuccessFgBrush}"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Grid.Column="1" Text="{Binding Action}"
+                                     FontFamily="Consolas, 'SF Mono', monospace"
+                                     FontSize="11" FontWeight="Bold"
+                                     Foreground="{DynamicResource DangerFgBrush}"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Grid.Column="2" Text="{Binding Type}"
+                                     FontFamily="Consolas, 'SF Mono', monospace"
+                                     FontSize="11"
+                                     Foreground="{DynamicResource TextMutedBrush}"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Grid.Column="3" Text="{Binding Value}"
+                                     FontFamily="Consolas, 'SF Mono', monospace"
+                                     FontSize="11" FontWeight="SemiBold"
+                                     TextTrimming="CharacterEllipsis"
+                                     VerticalAlignment="Center"
+                                     ToolTip.Tip="{Binding Comment}"/>
+                          <Button Grid.Column="4" Content="✕"
+                                  Command="{Binding RemoveCommand}"
+                                  FontSize="11" Padding="6,0" MinHeight="0"
+                                  Background="Transparent" BorderThickness="0"
+                                  Foreground="{DynamicResource TextMutedBrush}"/>
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+
+                <!-- Empty state -->
+                <TextBlock Text="{Binding L_CustomRulesEmpty}"
+                           FontSize="11" FontStyle="Italic"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           Padding="14,8"
+                           IsVisible="{Binding !CustomRulesList.Count}"/>
+              </StackPanel>
+            </Border>
+          </StackPanel>
 
           <!-- ═══ Edit view (Text mode) ═══
                v2.30.0-r7 — replaces the old Advanced expander. Per

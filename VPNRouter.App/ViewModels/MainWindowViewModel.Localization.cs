@@ -80,8 +80,10 @@ public partial class MainWindowViewModel
     public string L_CustomRulesExistingHeader => Strings.CustomRulesExistingHeader;
     // v2.30.0-r7 — Cards/Edit view-mode toggle (RulesExplorations.html design).
     public string L_RulesViewCards => Strings.RulesViewCards;
+    public string L_RulesViewRead => Strings.RulesViewRead;
     public string L_RulesViewEdit => Strings.RulesViewEdit;
     public string L_RulesViewCardsTooltip => Strings.RulesViewCardsTooltip;
+    public string L_RulesViewReadTooltip => Strings.RulesViewReadTooltip;
     public string L_RulesViewEditTooltip => Strings.RulesViewEditTooltip;
     public string L_RulesEditorApply => Strings.RulesEditorApply;
     public string L_RulesEditorRevert => Strings.RulesEditorRevert;
@@ -90,6 +92,19 @@ public partial class MainWindowViewModel
     public string L_RulesHelpBanner => Strings.RulesHelpBanner;
     public string L_RulesFilterAll => Strings.RulesFilterAll;
     public string L_RulesBulkActions => Strings.RulesBulkActions;
+    // v2.30.0-r12 — structured help-banner Runs (per-piece localization).
+    public string L_RulesHelpHeader => Strings.RulesHelpHeader;
+    public string L_RulesHelpB1Pre  => Strings.RulesHelpB1Pre;
+    public string L_RulesHelpB1T1   => Strings.RulesHelpB1T1;
+    public string L_RulesHelpB1Mid  => Strings.RulesHelpB1Mid;
+    public string L_RulesHelpB1T2   => Strings.RulesHelpB1T2;
+    public string L_RulesHelpB1Suf  => Strings.RulesHelpB1Suf;
+    public string L_RulesHelpB2Pre  => Strings.RulesHelpB2Pre;
+    public string L_RulesHelpB2Mid  => Strings.RulesHelpB2Mid;
+    public string L_RulesHelpB2Suf  => Strings.RulesHelpB2Suf;
+    public string L_RulesHelpB3Pre  => Strings.RulesHelpB3Pre;
+    public string L_RulesHelpB3Bold => Strings.RulesHelpB3Bold;
+    public string L_RulesHelpB3Suf  => Strings.RulesHelpB3Suf;
     public string LblSettingsRules => Strings.SectionRules;
     // Legacy v2.29.0 aliases (kept for cached XAML).
     public string L_CustomDirectRulesTitle => L_CustomRulesTitle;

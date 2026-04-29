@@ -400,6 +400,11 @@ public partial class MainWindowViewModel : ViewModelBase
         RulesFilterCountProxy  = proxy.ToString(System.Globalization.CultureInfo.InvariantCulture);
         RulesFilterCountBlock  = block.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
+        // v2.30.0-r12 — keep Read-mode groups in sync. Cheap (O(N)
+        // single pass) and only meaningful when user is in Read view,
+        // but rebuilding always avoids stale data when they flip into it.
+        RebuildReadModeGroups();
+
         OnPropertyChanged(nameof(CustomRulesCountText));
     }
 
@@ -727,17 +732,30 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsRulesViewCards))]
+    [NotifyPropertyChangedFor(nameof(IsRulesViewRead))]
     [NotifyPropertyChangedFor(nameof(IsRulesViewEdit))]
     private string _rulesViewMode = "cards";
 
     /// <summary>True when Cards view is active (default).</summary>
     public bool IsRulesViewCards => RulesViewMode == "cards";
 
+    /// <summary>True when Read (read-only grouped monospace) view is active.
+    /// v2.30.0-r12 — added per design RulesExplorations.html third
+    /// view-mode `▦ Cards · ☰ Read · ✎ Edit`.</summary>
+    public bool IsRulesViewRead => RulesViewMode == "read";
+
     /// <summary>True when Edit (text-mode) view is active.</summary>
     public bool IsRulesViewEdit => RulesViewMode == "edit";
 
     [RelayCommand]
     private void SetRulesViewCards() => RulesViewMode = "cards";
+
+    [RelayCommand]
+    private void SetRulesViewRead()
+    {
+        RebuildReadModeGroups();
+        RulesViewMode = "read";
+    }
 
     [RelayCommand]
     private void SetRulesViewEdit()
@@ -747,6 +765,47 @@ public partial class MainWindowViewModel : ViewModelBase
         EditedCustomRulesText = CustomRulesText;
         RulesViewMode = "edit";
         RecomputeRulesEditorState();
+    }
+
+    // v2.30.0-r12 — Read view-mode grouped collections.
+    // Three filtered ObservableCollections drive the read-only view's
+    // 3-section layout (direct / proxy / block). Each section shows its
+    // header ("— direct (N) —") only when at least one rule of that
+    // action exists.
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeDirectRules { get; }
+        = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeProxyRules { get; }
+        = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
+    public System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel> ReadModeBlockRules { get; }
+        = new System.Collections.ObjectModel.ObservableCollection<CustomRuleViewModel>();
+
+    [ObservableProperty] private string _readModeDirectHeader = string.Empty;
+    [ObservableProperty] private string _readModeProxyHeader  = string.Empty;
+    [ObservableProperty] private string _readModeBlockHeader  = string.Empty;
+
+    /// <summary>v2.30.0-r12 — rebuild the three Read-mode groups from
+    /// CustomRulesList. Called on view-mode flip + on every CustomRulesList
+    /// change (via RebuildCustomRulesList → RebuildFilteredCustomRulesList
+    /// chain that already runs after add/delete/toggle/import/etc).</summary>
+    private void RebuildReadModeGroups()
+    {
+        ReadModeDirectRules.Clear();
+        ReadModeProxyRules.Clear();
+        ReadModeBlockRules.Clear();
+
+        foreach (var vm in CustomRulesList)
+        {
+            switch (vm.Action)
+            {
+                case "direct": ReadModeDirectRules.Add(vm); break;
+                case "proxy":  ReadModeProxyRules.Add(vm);  break;
+                case "block":  ReadModeBlockRules.Add(vm);  break;
+            }
+        }
+
+        ReadModeDirectHeader = $"— direct ({ReadModeDirectRules.Count}) —";
+        ReadModeProxyHeader  = $"— proxy ({ReadModeProxyRules.Count}) —";
+        ReadModeBlockHeader  = $"— block ({ReadModeBlockRules.Count}) —";
     }
 
     /// <summary>Working buffer for the Edit-mode textarea. Decoupled from

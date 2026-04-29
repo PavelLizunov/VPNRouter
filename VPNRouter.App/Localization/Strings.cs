@@ -813,10 +813,14 @@ public static class Strings
     // Edit view is a full textarea with line-numbered gutter, per-line
     // errors, and explicit Apply / Revert (no auto-save while typing).
     public static string RulesViewCards => Ru ? "Карточки" : "Cards";
-    public static string RulesViewEdit => Ru ? "Текст" : "Text";
+    public static string RulesViewRead => Ru ? "Список" : "Read";
+    public static string RulesViewEdit => Ru ? "Текст" : "Edit";
     public static string RulesViewCardsTooltip => Ru
         ? "Структурированный список правил с цветными чипами, тумблерами и инлайн-удалением"
         : "Structured rule list with colored chips, toggles, and inline delete";
+    public static string RulesViewReadTooltip => Ru
+        ? "Сгруппированный read-only вид (моноспейс): direct / proxy / block по секциям"
+        : "Grouped read-only view (monospace): direct / proxy / block sections";
     public static string RulesViewEditTooltip => Ru
         ? "Полностью редактируемый текстовый режим: одно правило на строку"
         : "Fully editable text mode: one rule per line";
@@ -837,6 +841,42 @@ public static class Strings
     public static string RulesFilterAll => Ru ? "Все" : "All";
     public static string RulesBulkActions => Ru ? "Массовые действия" : "Bulk actions";
 
+    // v2.30.0-r12 — Help banner restructured per design RulesPage.html
+    // `.help` block: bold heading + 3 bullets with <code>-styled values
+    // for technical terms (CIDR ranges, "direct" action). Each bullet is
+    // split into prefix / emphasized-name / mid / emphasized-name / suffix
+    // pieces so the XAML can apply per-Run styling (FontWeight=SemiBold for
+    // names, FontFamily=mono for code values) without a markup parser.
+    public static string RulesHelpHeader => Ru
+        ? "Как работают правила."
+        : "How rules work.";
+
+    // Bullet 1: «toggle1» and «toggle2» fire BEFORE your rules.
+    public static string RulesHelpB1Pre  => Ru ? "Тумблеры " : "The toggles ";
+    public static string RulesHelpB1T1   => Ru
+        ? "«Российский трафик через реальный IP»"
+        : "«Russian traffic via real IP»";
+    public static string RulesHelpB1Mid  => Ru ? " и " : " and ";
+    public static string RulesHelpB1T2   => Ru ? "«Блокировать рекламу»" : "«Block ads»";
+    public static string RulesHelpB1Suf  => Ru
+        ? " срабатывают раньше ваших правил."
+        : " fire before your rules.";
+
+    // Bullet 2: Private nets (10.0.0.0/8, ...) already go direct automatically.
+    public static string RulesHelpB2Pre  => Ru ? "Локальные сети (" : "Private networks (";
+    public static string RulesHelpB2Mid  => Ru ? ") уже идут " : ") already go ";
+    public static string RulesHelpB2Suf  => Ru ? " автоматически." : " automatically.";
+
+    // Bullet 3: Rule order DOES NOT matter — first match wins per address.
+    public static string RulesHelpB3Pre  => Ru ? "Порядок правил " : "Rule order ";
+    public static string RulesHelpB3Bold => Ru ? "не важен" : "does not matter";
+    public static string RulesHelpB3Suf  => Ru
+        ? " — для каждого адреса выбирается первое совпавшее."
+        : " — first match wins per address.";
+
+    // Legacy single-string accessor (kept for any cached XAML still binding
+    // to the pre-r12 RulesHelpBanner). New XAML uses the structured
+    // RulesHelpHeader + RulesHelpB1..B3* set instead.
     public static string RulesHelpBanner => Ru
         ? "Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» срабатывают РАНЬШЕ ваших правил.   Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически.   Порядок правил не важен — для каждого адреса выбирается первое совпавшее."
         : "The toggles «Russian traffic via real IP» and «Block ads» fire BEFORE your rules.   Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.   Rule order does not matter — first match wins per address.";
