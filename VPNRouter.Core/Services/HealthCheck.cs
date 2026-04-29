@@ -156,6 +156,28 @@ public static class HealthCheck
         if (!string.IsNullOrEmpty(receipt))
             results.Add(new(Level.Warn, receipt));
 
+        // ── Linux: pkexec / polkit availability (v2.30 #3.3) ──
+        // Some minimal distros (Alpine, headless servers) ship without
+        // polkit. Without pkexec, the Stop escalation chain falls through
+        // to sudo -n (which fails fast unless NOPASSWD sudoers is set up),
+        // and the auto-update privilege escalation breaks. Detect at
+        // health-check time so the user can install policykit-1 BEFORE
+        // they hit the failure mid-Stop.
+        if (OperatingSystem.IsLinux())
+        {
+            if (File.Exists("/usr/bin/pkexec"))
+            {
+                results.Add(new(Level.Ok, "pkexec / polkit available"));
+            }
+            else
+            {
+                results.Add(new(Level.Warn,
+                    "pkexec not found at /usr/bin/pkexec — auto-update + " +
+                    "elevated Stop will fail unless NOPASSWD sudoers is " +
+                    "configured. Install policykit-1 (apt) or polkit (dnf)."));
+            }
+        }
+
         // ── State / running indicator ──
         // Parse state.json inline rather than referencing StateFile which
         // lives in the CLI project. Structure: { "sing_box_pid": N, ... }.
