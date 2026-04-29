@@ -1,0 +1,31 @@
+action,type,value,comment,enabled
+direct,domain_suffix,.gosuslugi.ru,Russian Gov Services portal,true
+direct,domain_suffix,.nalog.gov.ru,Russian Tax Service,true
+direct,domain_suffix,.nalog.ru,Russian Tax Service (legacy),true
+direct,domain_suffix,.fns.ru,Federal Tax Service,true
+direct,domain_suffix,.pfr.ru,Pension Fund of Russia,true
+direct,domain_suffix,.sberbank.ru,Sberbank,true
+direct,domain_suffix,.online.sberbank.ru,Sberbank Online,true
+direct,domain_suffix,.tinkoff.ru,Tinkoff Bank,true
+direct,domain_suffix,.alfabank.ru,Alfa-Bank,true
+direct,domain_suffix,.vtb.ru,VTB Bank,true
+direct,domain_suffix,.gazprombank.ru,Gazprombank,true
+direct,domain_suffix,.raiffeisen.ru,Raiffeisen Bank,true
+direct,domain_suffix,.psbank.ru,Promsvyazbank,true
+direct,domain_suffix,.rosbank.ru,Rosbank,true
+direct,domain_suffix,.mts.ru,MTS,true
+direct,domain_suffix,.beeline.ru,Beeline,true
+direct,domain_suffix,.megafon.ru,MegaFon,true
+direct,domain_suffix,.tele2.ru,Tele2,true
+direct,domain_suffix,.yota.ru,Yota,true
+direct,domain_suffix,.yandex.ru,Yandex services,true
+direct,domain_suffix,.mail.ru,Mail.ru,true
+direct,domain_suffix,.vk.com,VKontakte,true
+direct,domain_suffix,.ok.ru,Odnoklassniki,true
+direct,domain_suffix,.avito.ru,Avito,true
+direct,domain_suffix,.wildberries.ru,Wildberries,true
+direct,domain_suffix,.ozon.ru,Ozon,true
+direct,domain_suffix,.kinopoisk.ru,Kinopoisk,true
+direct,domain_suffix,.rt.ru,Rostelecom,true
+direct,domain_suffix,.mosreg.ru,Moscow Region Gov,true
+direct,domain_suffix,.mos.ru,Moscow Gov portal,true

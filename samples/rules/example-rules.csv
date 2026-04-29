@@ -9,5 +9,5 @@ proxy,process_name,discord,Discord voice through VPN,true
 proxy,domain_suffix,.openai.com,Geo-block bypass,true
 block,domain_keyword,doubleclick,Google ad network,true
 block,domain_keyword,googlesyndication,Google ad network,true
-block,geosite,ads,Generic ad blocklist,true
-block,domain_regex,^ads?\..*\.com$,Regex example: ads/ad subdomains,false
+block,domain_keyword,google-analytics,Tracking,true
+block,geosite,ads,Generic ad blocklist,false

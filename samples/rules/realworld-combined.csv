@@ -1,0 +1,65 @@
+action,type,value,comment,enabled
+direct,ip_cidr,10.0.0.0/8,LAN private,true
+direct,ip_cidr,172.16.0.0/12,LAN private,true
+direct,ip_cidr,192.168.0.0/16,LAN private,true
+direct,ip_cidr,100.64.0.0/10,CGNAT,true
+direct,domain_suffix,.gosuslugi.ru,RU Gov portal,true
+direct,domain_suffix,.nalog.gov.ru,RU Tax,true
+direct,domain_suffix,.nalog.ru,RU Tax (legacy),true
+direct,domain_suffix,.fns.ru,Federal Tax Service,true
+direct,domain_suffix,.pfr.ru,Pension Fund,true
+direct,domain_suffix,.mos.ru,Moscow Gov,true
+direct,domain_suffix,.sberbank.ru,Sberbank,true
+direct,domain_suffix,.tinkoff.ru,Tinkoff,true
+direct,domain_suffix,.alfabank.ru,Alfa-Bank,true
+direct,domain_suffix,.vtb.ru,VTB,true
+direct,domain_suffix,.gazprombank.ru,Gazprombank,true
+direct,domain_suffix,.mts.ru,MTS,true
+direct,domain_suffix,.beeline.ru,Beeline,true
+direct,domain_suffix,.megafon.ru,MegaFon,true
+direct,domain_suffix,.tele2.ru,Tele2,true
+direct,domain_suffix,.yandex.ru,Yandex services,true
+direct,domain_suffix,.mail.ru,Mail.ru,true
+direct,domain_suffix,.vk.com,VKontakte,true
+direct,domain_suffix,.ok.ru,Odnoklassniki,true
+direct,domain_suffix,.avito.ru,Avito,true
+direct,domain_suffix,.wildberries.ru,Wildberries,true
+direct,domain_suffix,.ozon.ru,Ozon,true
+direct,domain_suffix,.kinopoisk.ru,Kinopoisk,true
+proxy,domain_suffix,.youtube.com,YouTube,true
+proxy,domain_suffix,.googlevideo.com,YouTube CDN,true
+proxy,domain_suffix,.ytimg.com,YouTube static,true
+proxy,domain_suffix,.youtu.be,YouTube shortener,true
+proxy,domain_suffix,.spotify.com,Spotify,true
+proxy,domain_suffix,.scdn.co,Spotify CDN,true
+proxy,domain_suffix,.discord.com,Discord,true
+proxy,domain_suffix,.discord.gg,Discord invites,true
+proxy,domain_suffix,.discordapp.com,Discord app,true
+proxy,domain_suffix,.discord.media,Discord voice CDN,true
+proxy,domain_suffix,.openai.com,OpenAI / ChatGPT,true
+proxy,domain_suffix,.chatgpt.com,ChatGPT,true
+proxy,domain_suffix,.anthropic.com,Anthropic,true
+proxy,domain_suffix,.claude.ai,Claude,true
+proxy,domain_suffix,.gemini.google.com,Google Gemini,true
+proxy,domain_suffix,.x.com,X (Twitter),true
+proxy,domain_suffix,.twitter.com,Twitter (legacy),true
+proxy,domain_suffix,.instagram.com,Instagram,true
+proxy,domain_suffix,.facebook.com,Facebook,true
+proxy,domain_suffix,.linkedin.com,LinkedIn,true
+proxy,domain_suffix,.figma.com,Figma,true
+proxy,domain_suffix,.notion.so,Notion,true
+proxy,process_name,discord,Discord process,true
+block,domain_keyword,doubleclick,Google ads,true
+block,domain_keyword,googlesyndication,Google ads,true
+block,domain_keyword,google-analytics,GA tracking,true
+block,domain_keyword,googletagmanager,GTM tracking,true
+block,domain_suffix,.googleadservices.com,Google ads,true
+block,domain_keyword,adnxs,AppNexus,true
+block,domain_suffix,.scorecardresearch.com,ComScore tracking,true
+block,domain_suffix,.outbrain.com,Outbrain,true
+block,domain_suffix,.taboola.com,Taboola,true
+block,domain_suffix,.criteo.com,Criteo,true
+block,domain_suffix,.adsrvr.org,Trade Desk,true
+block,domain_suffix,.amazon-adsystem.com,Amazon ads,true
+block,domain_keyword,hotjar,Hotjar tracking,true
+block,domain_keyword,mixpanel,Mixpanel,true

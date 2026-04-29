@@ -1,0 +1,31 @@
+action,type,value,comment,enabled
+proxy,domain_suffix,.youtube.com,YouTube (RU blocked rate-limit),true
+proxy,domain_suffix,.googlevideo.com,YouTube CDN,true
+proxy,domain_suffix,.ytimg.com,YouTube static,true
+proxy,domain_suffix,.youtu.be,YouTube short links,true
+proxy,domain_suffix,.netflix.com,Netflix (geo-restricted),true
+proxy,domain_suffix,.nflxvideo.net,Netflix CDN,true
+proxy,domain_suffix,.nflximg.net,Netflix images,true
+proxy,domain_suffix,.spotify.com,Spotify,true
+proxy,domain_suffix,.scdn.co,Spotify CDN,true
+proxy,domain_suffix,.discord.com,Discord,true
+proxy,domain_suffix,.discord.gg,Discord invites,true
+proxy,domain_suffix,.discordapp.com,Discord app,true
+proxy,domain_suffix,.discord.media,Discord voice CDN,true
+proxy,domain_suffix,.openai.com,OpenAI / ChatGPT (geo-blocked),true
+proxy,domain_suffix,.chatgpt.com,ChatGPT,true
+proxy,domain_suffix,.anthropic.com,Anthropic,true
+proxy,domain_suffix,.claude.ai,Claude,true
+proxy,domain_suffix,.gemini.google.com,Google Gemini,true
+proxy,domain_suffix,.bard.google.com,Google Bard,true
+proxy,domain_suffix,.copilot.microsoft.com,Microsoft Copilot,true
+proxy,domain_suffix,.x.com,X (Twitter),true
+proxy,domain_suffix,.twitter.com,Twitter (legacy),true
+proxy,domain_suffix,.t.co,Twitter shortener,true
+proxy,domain_suffix,.instagram.com,Instagram,true
+proxy,domain_suffix,.facebook.com,Facebook,true
+proxy,domain_suffix,.fbcdn.net,Facebook CDN,true
+proxy,domain_suffix,.linkedin.com,LinkedIn,true
+proxy,domain_suffix,.tiktok.com,TikTok,true
+proxy,domain_suffix,.figma.com,Figma,true
+proxy,domain_suffix,.notion.so,Notion,true

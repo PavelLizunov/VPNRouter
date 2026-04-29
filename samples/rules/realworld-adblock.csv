@@ -1,0 +1,31 @@
+action,type,value,comment,enabled
+block,domain_keyword,doubleclick,Google ad network,true
+block,domain_keyword,googlesyndication,Google ad network,true
+block,domain_keyword,google-analytics,Google Analytics tracking,true
+block,domain_keyword,googletagmanager,Google Tag Manager,true
+block,domain_keyword,googletagservices,Google Tag Services,true
+block,domain_suffix,.googleadservices.com,Google ads,true
+block,domain_suffix,.adservice.google.com,Google ads,true
+block,domain_keyword,adsystem,Generic ad systems,true
+block,domain_keyword,adnxs,AppNexus ad network,true
+block,domain_suffix,.facebook.net,Facebook tracking pixel,true
+block,domain_suffix,.connect.facebook.net,Facebook Connect tracking,true
+block,domain_suffix,.scorecardresearch.com,ComScore tracking,true
+block,domain_suffix,.quantserve.com,Quantcast tracking,true
+block,domain_suffix,.outbrain.com,Outbrain ad network,true
+block,domain_suffix,.taboola.com,Taboola ad network,true
+block,domain_suffix,.criteo.com,Criteo ad network,true
+block,domain_suffix,.criteo.net,Criteo ad network,true
+block,domain_suffix,.adsrvr.org,The Trade Desk,true
+block,domain_suffix,.adsafeprotected.com,IAS verification ads,true
+block,domain_suffix,.moatads.com,Moat ad analytics,true
+block,domain_suffix,.amazon-adsystem.com,Amazon advertising,true
+block,domain_keyword,hotjar,Hotjar session recording,true
+block,domain_keyword,fullstory,FullStory session recording,true
+block,domain_keyword,mixpanel,Mixpanel analytics,true
+block,domain_keyword,segment,Segment.io analytics,true
+block,domain_keyword,branch.io,Branch.io tracking,true
+block,domain_suffix,.adform.net,Adform ad network,true
+block,domain_suffix,.bluekai.com,BlueKai DMP tracking,true
+block,domain_suffix,.exelator.com,Nielsen Exelate,true
+block,domain_suffix,.rubiconproject.com,Rubicon Project ads,true

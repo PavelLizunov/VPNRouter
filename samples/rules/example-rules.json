@@ -11,6 +11,6 @@
 
   { "action": "block",  "type": "domain_keyword", "value": "doubleclick",       "comment": "Google ad network",             "enabled": true },
   { "action": "block",  "type": "domain_keyword", "value": "googlesyndication", "comment": "Google ad network",             "enabled": true },
-  { "action": "block",  "type": "geosite",        "value": "ads",               "comment": "Generic ad blocklist",          "enabled": true },
-  { "action": "block",  "type": "domain_regex",   "value": "^ads?\\..*\\.com$", "comment": "Regex example: ads/ad subdomains", "enabled": false }
+  { "action": "block",  "type": "domain_keyword", "value": "google-analytics",  "comment": "Tracking",                      "enabled": true },
+  { "action": "block",  "type": "geosite",        "value": "ads",               "comment": "Generic ad blocklist",          "enabled": false }
 ]
