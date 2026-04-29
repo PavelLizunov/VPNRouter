@@ -487,31 +487,38 @@
                v2.30.0-r11/r13 — strict design `.add-row` 5-col grid
                (130 / 160 / 1fr / 1fr / Auto). Visible only when
                IsRulesNarrow=false; the narrow sibling below stacks
-               vertically when the viewport shrinks. -->
+               vertically when the viewport shrinks.
+               v2.30.0-r16: ClipToBounds=True so any rare overflow during
+               a fast resize transition stays inside the Border edge
+               instead of bleeding into the surrounding page. -->
           <Border IsVisible="{Binding !IsRulesNarrow}"
                   Padding="14"
                   CornerRadius="{StaticResource RadiusMd}"
                   Background="{DynamicResource SurfaceBaseBrush}"
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
-                  BorderThickness="1">
+                  BorderThickness="1"
+                  ClipToBounds="True">
             <StackPanel Spacing="8">
               <TextBlock Text="{Binding L_CustomRulesAddTitle}"
                          FontSize="9" FontWeight="SemiBold"
                          Foreground="{DynamicResource TextMutedBrush}"
                          TextTrimming="CharacterEllipsis"/>
               <!-- Add-row: 5-col grid per design `.add-row` 130/160/1fr/
-                   1fr/Auto. v2.30.0-r15: MinWidth on * cols relaxed
-                   80 → 60 to give the breakpoint headroom. With the
-                   r15 breakpoint bumped 620 → 660, this is defense-
-                   in-depth only (narrow mode kicks in before any
-                   overflow risk). -->
+                   1fr/Auto. v2.30.0-r16: button column changed Auto → 100
+                   fixed. User report after r15: «Слово add всё равно
+                   вылазиет за обводку». Auto col with default MinWidth=0
+                   could shrink below the button's content width when the
+                   grid was squeezed; button text then overflowed its own
+                   column past the right Border edge. Fixed 100 px is
+                   enough for «+ Добавить» (~85 px) plus a small safety
+                   margin and never collapses regardless of grid pressure. -->
               <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="130"/>
                   <ColumnDefinition Width="160"/>
                   <ColumnDefinition Width="*" MinWidth="60"/>
                   <ColumnDefinition Width="*" MinWidth="60"/>
-                  <ColumnDefinition Width="Auto"/>
+                  <ColumnDefinition Width="100"/>
                 </Grid.ColumnDefinitions>
                 <!-- Action -->
                 <StackPanel Grid.Column="0" Spacing="3">
@@ -578,12 +585,20 @@
                            FontSize="11" Padding="6,3" MinHeight="0"/>
                   <TextBlock Text=" " FontSize="9" MinHeight="11"/>
                 </StackPanel>
-                <!-- Add button (aligned to value baseline, not label). -->
+                <!-- Add button (aligned to value baseline, not label).
+                     v2.30.0-r16: HorizontalAlignment=Stretch +
+                     HorizontalContentAlignment=Center fills the fixed
+                     100-px column edge-to-edge; centers the «+ Добавить»
+                     glyph + label. Padding reduced 14,5 → 8,5 so the
+                     content fits in 100 px even with the slightly wider
+                     RU label. -->
                 <Button Grid.Column="4"
                         Content="{Binding L_CustomRulesAddBtn}"
                         Command="{Binding AddCustomRuleFromFormCommand}"
                         FontSize="11" FontWeight="SemiBold"
-                        Padding="14,5" MinHeight="0"
+                        Padding="8,5" MinHeight="0"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
                         VerticalAlignment="Top"
                         Margin="0,15,0,0"
                         Background="{DynamicResource AccentSolidBrush}"

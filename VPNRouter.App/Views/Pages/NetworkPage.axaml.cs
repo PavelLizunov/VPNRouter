@@ -9,21 +9,21 @@ namespace VPNRouter.App.Views.Pages;
 public partial class NetworkPage : UserControl
 {
     /// <summary>
-    /// v2.30.0-r13 → r14 → r15: narrow-window breakpoint for the Rules
-    /// section.
-    /// Bumped to 660 px after r14 user feedback: «теперь кнопки не
-    /// залазиют друг на друга а вылазиют за экран». r14 used 620 px +
-    /// MinWidth=80 on each * col, but at container widths between
-    /// 580–620 (when SizeChanged hadn't yet promoted to narrow) the
-    /// MinWidths forced the wide grid to its minimum 560 + padding ≈
-    /// 590 px = visible right-edge overflow.
-    /// r15: relax MinWidth 80 → 60, raise breakpoint 620 → 660. New
-    /// math: wide form fixed = 130 + 160 + 8×4 + button ~80 = 402.
-    /// Plus 2 × MinWidth(60) = 120. Total ≈ 522 px content. With
-    /// Border padding 14×2 = 28, container ≥ 550 px renders cleanly.
-    /// 660 breakpoint gives 110 px buffer — overflow-proof.
+    /// v2.30.0-r13 → r14 → r15 → r16: narrow-window breakpoint for the
+    /// Rules section.
+    /// Bumped to 700 px after r15 user feedback: «слово add всё равно
+    /// вылазиет за обводку». r15 used 660 px + Auto button column;
+    /// at certain mid-widths the Auto col couldn't grow large enough
+    /// for the «+ Добавить» content, button text overflowed past its
+    /// own column → past Border edge.
+    /// r16 fix: button col fixed 100 px (always fits content), button
+    /// padding 14,5 → 8,5, Border ClipToBounds=True, breakpoint 700.
+    /// New math: 130 + 160 + 8×4 + 100(button) + 2×60(MinWidth) = 542.
+    /// + 28 padding = 570 px container minimum. 700 px breakpoint
+    /// leaves a 130-px buffer — accommodates ScrollViewer scrollbars
+    /// and any layout-pass jitter during fast resize.
     /// </summary>
-    private const double NarrowBreakpoint = 660.0;
+    private const double NarrowBreakpoint = 700.0;
 
     public NetworkPage()
     {
