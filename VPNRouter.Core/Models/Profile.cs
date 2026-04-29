@@ -18,6 +18,27 @@ public class Profile
 
     [JsonProperty("block_on_vpn_fail")]
     public bool BlockOnVpnFail { get; set; } = false;
+
+    /// <summary>
+    /// v3.0 Android: package IDs (com.discord, org.telegram.messenger, etc.)
+    /// for VpnService.Builder.addAllowedApplication() calls. On Android,
+    /// per-app routing is done at the OS layer by passing package names to
+    /// VpnService.Builder, not via sing-box process_name rules (which don't
+    /// translate to Android's app sandboxing model).
+    ///
+    /// <para>Profile catalogs are per-platform: <c>default.json</c> uses
+    /// <see cref="Processes"/> with .exe names, <c>default-macos.json</c>
+    /// uses Mach-O binary names in <see cref="Processes"/>,
+    /// <c>default-linux.json</c> uses Unix-style binary names in
+    /// <see cref="Processes"/>, and <c>default-android.json</c> uses
+    /// <see cref="AndroidPackages"/> with reverse-DNS package IDs.</para>
+    ///
+    /// <para>Empty on non-Android profile catalogs. The Android catalog
+    /// keeps <see cref="Processes"/> empty too — Android profiles only
+    /// drive package-level routing.</para>
+    /// </summary>
+    [JsonProperty("android_packages", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string> AndroidPackages { get; set; } = new();
 }
 
 public class ProfileCollection
