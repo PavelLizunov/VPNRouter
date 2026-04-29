@@ -442,20 +442,35 @@
             </ListBox.ItemTemplate>
           </ListBox>
 
-          <!-- Advanced (text-format) fallback -->
+          <!-- Advanced (text-format) fallback. v2.30.0-r6: layout fixes
+               for narrow windows. User report 2026-04-29: «расширенный
+               режим не умещается и его будто срезает». Pre-r6 had:
+               (a) TextWrapping=NoWrap with horizontal scroll, which on
+               narrow windows hid right-edge content behind a scrollbar
+               that themes don't always render visibly; (b) MaxHeight=320
+               which combined with parse-error + conflict-warning blocks
+               below pushed the expander tail off-screen.
+               r6 fix: switch to TextWrapping=Wrap (display-only, doesn't
+               break logical line semantics for AcceptsReturn — '\n' in
+               the string still maps to user-typed Enter), drop horizontal
+               scroll (no longer needed), reduce MaxHeight 320 → 240,
+               explicit HorizontalAlignment=Stretch so the textbox always
+               uses the available width. -->
           <Expander Header="{Binding L_CustomRulesAdvancedMode}"
                     IsExpanded="False"
-                    Padding="0,4">
-            <StackPanel Spacing="6" Margin="0,4,0,0">
+                    Padding="0,4"
+                    HorizontalAlignment="Stretch">
+            <StackPanel Spacing="6" Margin="0,4,0,0" HorizontalAlignment="Stretch">
               <TextBox Text="{Binding CustomRulesText}"
                        Watermark="{Binding L_CustomRulesPlaceholder}"
                        AcceptsReturn="True"
-                       MinHeight="160"
-                       MaxHeight="320"
+                       HorizontalAlignment="Stretch"
+                       MinHeight="140"
+                       MaxHeight="240"
                        FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
                        FontSize="11"
-                       TextWrapping="NoWrap"
-                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                       TextWrapping="Wrap"
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                        ScrollViewer.VerticalScrollBarVisibility="Auto"/>
               <!-- Inline parse-error diagnostics. -->
               <Border IsVisible="{Binding CustomRulesErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
@@ -512,6 +527,16 @@
                same file's radio-card / checkbox-card sections) places the
                TextBlock in a sized * column so it gets the parent width
                as a real constraint and Wrap takes effect. -->
+          <!-- v2.30.0-r6: switched checkbox + text both to VerticalAlignment=Center.
+               User report: «текст съехал он стал выше галочек».
+               Pre-r6 used Top alignment on both with a 1px top margin on
+               the checkbox — was correct for multi-line wrapped labels
+               (checkbox aligned with first line) but visually misaligned
+               for single-line labels because CheckBox box sits a few px
+               below its container's top while TextBlock baseline is
+               higher. Center alignment works for both single-line and
+               multi-line labels (checkbox sits at vertical center of
+               multi-line block, which reads as "checkbox owns the row"). -->
           <Border Padding="8,6" CornerRadius="{StaticResource RadiusSm}"
                   Background="{DynamicResource SurfaceSunkenBrush}"
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
@@ -522,48 +547,44 @@
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding StrictMode}"
                           MinHeight="0" Padding="0"
-                          VerticalAlignment="Top"
-                          Margin="0,1,0,0"/>
+                          VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1"
                            Text="{Binding StrictModeLabel}"
                            TextWrapping="Wrap"
-                           VerticalAlignment="Top"/>
+                           VerticalAlignment="Center"/>
               </Grid>
               <Grid ColumnDefinitions="24,*" ColumnSpacing="6"
                     ToolTip.Tip="{Binding L_TipLeakForceIpv4}">
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding ForceIpv4Only}"
                           MinHeight="0" Padding="0"
-                          VerticalAlignment="Top"
-                          Margin="0,1,0,0"/>
+                          VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1"
                            Text="{Binding ForceIpv4Label}"
                            TextWrapping="Wrap"
-                           VerticalAlignment="Top"/>
+                           VerticalAlignment="Center"/>
               </Grid>
               <Grid ColumnDefinitions="24,*" ColumnSpacing="6"
                     ToolTip.Tip="{Binding L_TipLeakFlushDns}">
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding FlushDnsOnStart}"
                           MinHeight="0" Padding="0"
-                          VerticalAlignment="Top"
-                          Margin="0,1,0,0"/>
+                          VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1"
                            Text="{Binding FlushDnsLabel}"
                            TextWrapping="Wrap"
-                           VerticalAlignment="Top"/>
+                           VerticalAlignment="Center"/>
               </Grid>
               <Grid ColumnDefinitions="24,*" ColumnSpacing="6"
                     ToolTip.Tip="{Binding L_TipLeakStrictDns}">
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding StrictDns}"
                           MinHeight="0" Padding="0"
-                          VerticalAlignment="Top"
-                          Margin="0,1,0,0"/>
+                          VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1"
                            Text="{Binding StrictDnsLabel}"
                            TextWrapping="Wrap"
-                           VerticalAlignment="Top"/>
+                           VerticalAlignment="Center"/>
               </Grid>
             </StackPanel>
           </Border>
