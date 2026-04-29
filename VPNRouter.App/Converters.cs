@@ -101,6 +101,43 @@ public class ActionToChipColorConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>
+/// v2.30.0-r7 — segmented-toggle background/foreground swap for the
+/// Cards / Edit view-mode selector in Network → Rules. Takes a bool
+/// (IsActive) and a <c>ConverterParameter</c> of the form
+/// "<c>ActiveResourceKey|InactiveResourceKey</c>" and returns the
+/// corresponding theme brush from <see cref="Avalonia.Application.Current"/>'s
+/// resources. The reserved key <c>"Transparent"</c> bypasses the resource
+/// lookup and returns <see cref="Brushes.Transparent"/> directly.
+/// <para>This avoids two-button-with-IsVisible duplication or the
+/// MultiBinding-with-trigger-pattern boilerplate. Theme-aware via
+/// <see cref="Avalonia.Styling.ThemeVariant.Default"/> — Avalonia
+/// resolves the active variant automatically.</para>
+/// </summary>
+public class BoolToBrushConverter : IValueConverter
+{
+    public static readonly BoolToBrushConverter Instance = new();
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var isTrue = value is bool b && b;
+        var keys = (parameter as string ?? string.Empty).Split('|');
+        if (keys.Length != 2) return Avalonia.AvaloniaProperty.UnsetValue;
+        var key = isTrue ? keys[0] : keys[1];
+        if (string.Equals(key, "Transparent", StringComparison.Ordinal))
+            return Brushes.Transparent;
+        var app = Avalonia.Application.Current;
+        if (app != null
+            && app.TryGetResource(key, app.ActualThemeVariant, out var res)
+            && res is IBrush brush)
+            return brush;
+        return Avalonia.AvaloniaProperty.UnsetValue;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 public class AppsTabVisibleConverter : IMultiValueConverter
 {
     public static readonly AppsTabVisibleConverter Instance = new();

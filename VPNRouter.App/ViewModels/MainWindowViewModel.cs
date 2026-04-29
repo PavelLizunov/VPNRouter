@@ -522,7 +522,259 @@ public partial class MainWindowViewModel : ViewModelBase
         // structured list so the structured view stays in sync with
         // textbox edits.
         RebuildCustomRulesList();
+
+        // v2.30.0-r7: refresh dirty state of the Edit-mode buffer if Edit
+        // view is active. Apply commits EditedCustomRulesText → CustomRulesText
+        // which lands here, so dirty must clear naturally.
+        OnPropertyChanged(nameof(RulesEditorIsDirty));
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // v2.30.0-r7 — Cards / Edit view-mode toggle (RulesExplorations.html
+    // design handoff). Replaces the old "Advanced (text format)" expander
+    // at the bottom of the section. Two modes:
+    //   1. Cards (▦) — structured row-table editor, default; same UI as
+    //      v2.30.0-r6.
+    //   2. Edit (✎) — full textarea editor with line-numbered gutter,
+    //      per-line errors, explicit Apply / Revert buttons (no auto-save
+    //      while typing — that was the OLD Advanced expander's behavior).
+    //
+    // Why the buffered Edit mode: power users editing 100+ rules in text
+    // form should see live error markers, but each intermediate keystroke
+    // shouldn't commit (e.g. typing "doma" → "domain_suffix" parses cleanly
+    // only at the final state). The buffer + Apply pattern lets the user
+    // make any-state edits, see errors, fix them, then commit atomically.
+    // Revert rolls back to the canonical CustomRulesText snapshot.
+    // ═══════════════════════════════════════════════════════════════
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRulesViewCards))]
+    [NotifyPropertyChangedFor(nameof(IsRulesViewEdit))]
+    private string _rulesViewMode = "cards";
+
+    /// <summary>True when Cards view is active (default).</summary>
+    public bool IsRulesViewCards => RulesViewMode == "cards";
+
+    /// <summary>True when Edit (text-mode) view is active.</summary>
+    public bool IsRulesViewEdit => RulesViewMode == "edit";
+
+    [RelayCommand]
+    private void SetRulesViewCards() => RulesViewMode = "cards";
+
+    [RelayCommand]
+    private void SetRulesViewEdit()
+    {
+        // Snapshot current canonical text into edit buffer + recompute
+        // diagnostics + line-number gutter.
+        EditedCustomRulesText = CustomRulesText;
+        RulesViewMode = "edit";
+        RecomputeRulesEditorState();
+    }
+
+    /// <summary>Working buffer for the Edit-mode textarea. Decoupled from
+    /// CustomRulesText so intermediate states don't trigger SaveSettings
+    /// or CustomRulesList rebuilds. Apply commits, Revert rolls back.</summary>
+    [ObservableProperty]
+    private string _editedCustomRulesText = string.Empty;
+
+    partial void OnEditedCustomRulesTextChanged(string value) => RecomputeRulesEditorState();
+
+    /// <summary>Multi-line string of line numbers for the gutter.
+    /// Bound to a TextBlock with same font + line-height as the textbox
+    /// so 1:1 line correspondence is preserved (text wrapping disabled
+    /// in Edit mode for this reason).</summary>
+    [ObservableProperty] private string _rulesEditorLineNumbers = "1";
+
+    /// <summary>Status strip text: "N rules active · M errors".</summary>
+    [ObservableProperty] private string _rulesEditorStatusText = string.Empty;
+
+    /// <summary>First 4 errors as a multi-line string for the red callout
+    /// below the editor: "line N: msg". Empty when there are no errors.</summary>
+    [ObservableProperty] private string _rulesEditorErrorListText = string.Empty;
+
+    /// <summary>True when the buffer has at least one parse error. Apply
+    /// is disabled while this is true (button greyed in XAML).</summary>
+    [ObservableProperty] private bool _rulesEditorHasErrors;
+
+    /// <summary>Active rule count (excludes commented + empty + errored
+    /// lines). Drives the Apply button label "Apply (N)".</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RulesEditorApplyText))]
+    private int _rulesEditorActiveCount;
+
+    /// <summary>Buffer differs from canonical → user has uncommitted
+    /// edits. Drives the "● unsaved changes" indicator.</summary>
+    public bool RulesEditorIsDirty =>
+        !string.Equals(EditedCustomRulesText ?? string.Empty,
+                       CustomRulesText ?? string.Empty,
+                       System.StringComparison.Ordinal);
+
+    /// <summary>Apply button label: "Apply (N)" / "Применить (N)".</summary>
+    public string RulesEditorApplyText => IsRussian
+        ? $"Применить ({RulesEditorActiveCount})"
+        : $"Apply ({RulesEditorActiveCount})";
+
+    /// <summary>v2.30.0-r7 — recompute everything the Edit-mode UI binds:
+    /// line numbers (one per logical line), status strip, error list,
+    /// active count, has-errors flag, dirty flag.
+    ///
+    /// Validation grammar mirrors <see cref="CustomRulesParser"/> at a
+    /// surface level: action ∈ {direct, proxy, block}, type ∈ known set,
+    /// value present. Per-line; comments (lines starting with # or !)
+    /// are skipped without contributing to active count or errors.
+    ///
+    /// Note: this is a LIGHT pre-validator for fast UI feedback. The
+    /// authoritative parser still runs in <see cref="CustomRulesParser"/>
+    /// during Apply / SaveSettings; it can produce additional warnings
+    /// (e.g. catch-all rule conflicts) that the editor doesn't preview.</summary>
+    private void RecomputeRulesEditorState()
+    {
+        var text = EditedCustomRulesText ?? string.Empty;
+        // Avalonia normalises CRLF to LF in TextBox; split on \n is fine
+        // for both \n-only and CRLF inputs.
+        var lines = text.Replace("\r\n", "\n").Replace("\r", "\n").Split('\n');
+
+        var validActions = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "direct", "proxy", "block"
+        };
+        var validTypes = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "domain", "domain_suffix", "domain_keyword", "domain_regex",
+            "ip_cidr", "port", "port_range", "network",
+            "process_name", "process_path", "geosite", "geoip"
+        };
+
+        int active = 0;
+        var errors = new System.Collections.Generic.List<(int Line, string Msg)>();
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var raw = lines[i];
+            var ln = raw.Trim();
+            if (string.IsNullOrEmpty(ln)) continue;
+            // Comment / disabled line — skip without erroring.
+            if (ln.StartsWith("#", System.StringComparison.Ordinal) ||
+                ln.StartsWith("!", System.StringComparison.Ordinal)) continue;
+
+            // Strip trailing inline comment "# ..."
+            var hashIdx = ln.IndexOf('#');
+            if (hashIdx >= 0) ln = ln.Substring(0, hashIdx).Trim();
+            if (string.IsNullOrWhiteSpace(ln)) continue;
+
+            var tokens = ln.Split(new[] { ' ', '\t' },
+                System.StringSplitOptions.RemoveEmptyEntries);
+
+            var firstTok = tokens.Length > 0 ? tokens[0] : string.Empty;
+            if (!validActions.Contains(firstTok))
+            {
+                errors.Add((i + 1, IsRussian
+                    ? $"неизвестный action «{firstTok}»"
+                    : $"unknown action «{firstTok}»"));
+                continue;
+            }
+            var secondTok = tokens.Length > 1 ? tokens[1] : string.Empty;
+            if (!validTypes.Contains(secondTok))
+            {
+                errors.Add((i + 1, IsRussian
+                    ? $"неизвестный type «{secondTok}»"
+                    : $"unknown type «{secondTok}»"));
+                continue;
+            }
+            if (tokens.Length < 3)
+            {
+                errors.Add((i + 1, IsRussian ? "нет value" : "missing value"));
+                continue;
+            }
+            active++;
+        }
+
+        RulesEditorActiveCount = active;
+        RulesEditorHasErrors = errors.Count > 0;
+
+        // Line-number gutter: one number per source line.
+        var sbNums = new System.Text.StringBuilder();
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (i > 0) sbNums.Append('\n');
+            sbNums.Append((i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+        RulesEditorLineNumbers = sbNums.ToString();
+
+        // Status strip — "N rules active · M errors"
+        var status = IsRussian
+            ? $"{active} {(active == 1 ? "правило" : "правил")} активно"
+            : $"{active} rule{(active == 1 ? "" : "s")} active";
+        if (errors.Count > 0)
+        {
+            status += IsRussian
+                ? $"  ·  {errors.Count} {(errors.Count == 1 ? "ошибка" : "ошибок")}"
+                : $"  ·  {errors.Count} error{(errors.Count == 1 ? "" : "s")}";
+        }
+        RulesEditorStatusText = status;
+
+        // Error list — first 4 errors with "line N: msg"
+        if (errors.Count == 0)
+        {
+            RulesEditorErrorListText = string.Empty;
+        }
+        else
+        {
+            var head = new System.Text.StringBuilder();
+            int take = System.Math.Min(4, errors.Count);
+            for (int i = 0; i < take; i++)
+            {
+                if (i > 0) head.Append('\n');
+                var e = errors[i];
+                head.Append(IsRussian
+                    ? $"строка {e.Line}: {e.Msg}"
+                    : $"line {e.Line}: {e.Msg}");
+            }
+            if (errors.Count > take)
+            {
+                head.Append('\n');
+                head.Append(IsRussian
+                    ? $"и ещё {errors.Count - take}…"
+                    : $"and {errors.Count - take} more…");
+            }
+            RulesEditorErrorListText = head.ToString();
+        }
+
+        OnPropertyChanged(nameof(RulesEditorIsDirty));
+        OnPropertyChanged(nameof(RulesEditorApplyText));
+    }
+
+    /// <summary>v2.30.0-r7 — commit the Edit-mode buffer to the canonical
+    /// CustomRulesText. The setter triggers OnCustomRulesTextChanged →
+    /// SaveSettings + RebuildCustomRulesList. Disabled while there are
+    /// parse errors (button greyed in XAML).</summary>
+    [RelayCommand]
+    private void ApplyEditedRules()
+    {
+        if (RulesEditorHasErrors) return;
+        CustomRulesText = EditedCustomRulesText ?? string.Empty;
+        // OnCustomRulesTextChanged fires RulesEditorIsDirty notification —
+        // dirty becomes false because both buffers now match.
+        RecomputeRulesEditorState();
+    }
+
+    /// <summary>v2.30.0-r7 — discard buffer changes, restore to canonical
+    /// CustomRulesText snapshot.</summary>
+    [RelayCommand]
+    private void RevertEditedRules()
+    {
+        EditedCustomRulesText = CustomRulesText ?? string.Empty;
+        RecomputeRulesEditorState();
+    }
+
+    /// <summary>v2.30.0-r7 — sticky-dismiss for the Rules help banner.
+    /// Bound to the dismiss X button. Persists in-session only (banner
+    /// reappears on app restart — settings persistence is overkill for
+    /// a one-line dismissable bullet block).</summary>
+    [ObservableProperty] private bool _isRulesHelpBannerDismissed;
+
+    [RelayCommand]
+    private void DismissRulesHelpBanner() => IsRulesHelpBannerDismissed = true;
 
     /// <summary>v2.30.0-r2 — build CustomRulesList from
     /// _settings.App.CustomRules. Called on settings load + after

@@ -78,6 +78,16 @@ public partial class MainWindowViewModel
     public string L_CustomRulesDisableAllTooltip => Strings.CustomRulesDisableAllTooltip;
     public string L_CustomRulesNoMatchHint => Strings.CustomRulesNoMatchHint;
     public string L_CustomRulesExistingHeader => Strings.CustomRulesExistingHeader;
+    // v2.30.0-r7 — Cards/Edit view-mode toggle (RulesExplorations.html design).
+    public string L_RulesViewCards => Strings.RulesViewCards;
+    public string L_RulesViewEdit => Strings.RulesViewEdit;
+    public string L_RulesViewCardsTooltip => Strings.RulesViewCardsTooltip;
+    public string L_RulesViewEditTooltip => Strings.RulesViewEditTooltip;
+    public string L_RulesEditorApply => Strings.RulesEditorApply;
+    public string L_RulesEditorRevert => Strings.RulesEditorRevert;
+    public string L_RulesEditorDirty => Strings.RulesEditorDirty;
+    public string L_RulesEditorFormatHint => Strings.RulesEditorFormatHint;
+    public string L_RulesHelpBanner => Strings.RulesHelpBanner;
     public string LblSettingsRules => Strings.SectionRules;
     // Legacy v2.29.0 aliases (kept for cached XAML).
     public string L_CustomDirectRulesTitle => L_CustomRulesTitle;

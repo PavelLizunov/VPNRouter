@@ -807,6 +807,36 @@ public static class Strings
         ? "Существующие правила"
         : "Existing rules";
 
+    // ── v2.30.0-r7 — Cards / Edit view-mode toggle (RulesExplorations.html) ──
+    // Power-user editable text mode replaces the old "Advanced" expander.
+    // Cards view is the structured row-table editor (default, friendly).
+    // Edit view is a full textarea with line-numbered gutter, per-line
+    // errors, and explicit Apply / Revert (no auto-save while typing).
+    public static string RulesViewCards => Ru ? "Карточки" : "Cards";
+    public static string RulesViewEdit => Ru ? "Текст" : "Text";
+    public static string RulesViewCardsTooltip => Ru
+        ? "Структурированный список правил с цветными чипами, тумблерами и инлайн-удалением"
+        : "Structured rule list with colored chips, toggles, and inline delete";
+    public static string RulesViewEditTooltip => Ru
+        ? "Полностью редактируемый текстовый режим: одно правило на строку"
+        : "Fully editable text mode: one rule per line";
+
+    public static string RulesEditorApply => Ru ? "Применить" : "Apply";
+    public static string RulesEditorRevert => Ru ? "Откатить" : "Revert";
+    public static string RulesEditorDirty => Ru
+        ? "● несохранённые изменения"
+        : "● unsaved changes";
+    public static string RulesEditorFormatHint => Ru
+        ? "Формат: action  type  value  # comment.   Выключить правило: # или # off в начале строки.   Пустые строки игнорируются."
+        : "Format: action  type  value  # comment.   Disable a rule: # or # off at start of line.   Empty lines are ignored.";
+
+    // Help banner — replaces the dense single-paragraph description.
+    // Bullet points highlight the toggle precedence + LAN auto-direct +
+    // order-doesn't-matter facts. Dismissable via X button.
+    public static string RulesHelpBanner => Ru
+        ? "Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» срабатывают РАНЬШЕ ваших правил.   Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически.   Порядок правил не важен — для каждого адреса выбирается первое совпавшее."
+        : "The toggles «Russian traffic via real IP» and «Block ads» fire BEFORE your rules.   Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.   Rule order does not matter — first match wins per address.";
+
     // ── Legacy v2.29.0-r4 names (kept for back-compat with cached XAML) ──
     public static string CustomDirectRulesTitle => CustomRulesTitle;
     public static string CustomDirectRulesDescription => CustomRulesDescription;

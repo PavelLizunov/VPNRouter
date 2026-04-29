@@ -198,56 +198,120 @@
                (left-nav index 1). See below. -->
         </StackPanel>
 
-        <!-- ═══ Rules (v2.30.0-r2 — structured row-table editor) ═══
-             User direction 2026-04-29: «Для кастомных настроек
-             маршрутизации нужен отдельный пункт в меню. И простенькую
-             графическую форму».
-             Layout: description → list of existing rules (action chips +
-             toggle + delete) → add-rule form → advanced text-mode
-             expander as fallback. -->
+        <!-- ═══ Rules (v2.30.0-r7 — Cards/Edit view-mode toggle per
+             RulesExplorations.html design handoff) ═══
+             User direction 2026-04-29: «компоную контекст и дам тебе
+             дизайн и переработку страницы правила». Design ships
+             two view modes: Cards (default, structured) + Edit (full
+             text-mode editor with line-numbered gutter, per-line errors,
+             explicit Apply / Revert).
+             v2.30.0-r2..r6 carry-over: structured row editor, search,
+             bulk actions, Import/Export 3 formats, virtualization.
+             Edit mode replaces the old "Advanced (text format)" expander
+             at the bottom of the section. -->
         <StackPanel Spacing="10" IsVisible="{Binding IsSettingsRulesSelected}">
-          <!-- Header row: title left, Import/Export buttons right.
-               v2.30.0-r3 added Import/Export buttons here. -->
-          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+          <!-- Header row: title + Cards/Edit segmented toggle (right) +
+               Import/Export. The toggle replaces the bottom Advanced
+               expander; Cards is default friendly view, Edit is the
+               power-user textarea. -->
+          <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
             <TextBlock Grid.Column="0"
                        Text="{Binding LblSettingsRules}"
                        FontWeight="Bold" FontSize="13"
                        VerticalAlignment="Center"/>
-            <Button Grid.Column="1"
+            <!-- Segmented toggle (▦ Cards · ✎ Text). Each button is
+                 borderless when inactive, filled+accent when active.
+                 Sits in a Sunken-bg pill for visual grouping per
+                 the design's `.view-seg` pattern. -->
+            <Border Grid.Column="1"
+                    Padding="2"
+                    CornerRadius="{StaticResource RadiusSm}"
+                    Background="{DynamicResource SurfaceSunkenBrush}"
+                    BorderThickness="0"
+                    VerticalAlignment="Center">
+              <StackPanel Orientation="Horizontal" Spacing="2">
+                <Button Content="{Binding L_RulesViewCards}"
+                        Command="{Binding SetRulesViewCardsCommand}"
+                        FontSize="10" FontWeight="SemiBold"
+                        Padding="8,3" MinHeight="0"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource RadiusXs}"
+                        ToolTip.Tip="{Binding L_RulesViewCardsTooltip}"
+                        Background="{Binding IsRulesViewCards,
+                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                     ConverterParameter=SurfaceBaseBrush|Transparent}"
+                        Foreground="{Binding IsRulesViewCards,
+                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                     ConverterParameter=AccentFgBrush|TextSecondaryBrush}"/>
+                <Button Content="{Binding L_RulesViewEdit}"
+                        Command="{Binding SetRulesViewEditCommand}"
+                        FontSize="10" FontWeight="SemiBold"
+                        Padding="8,3" MinHeight="0"
+                        BorderThickness="0"
+                        CornerRadius="{StaticResource RadiusXs}"
+                        ToolTip.Tip="{Binding L_RulesViewEditTooltip}"
+                        Background="{Binding IsRulesViewEdit,
+                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                     ConverterParameter=SurfaceBaseBrush|Transparent}"
+                        Foreground="{Binding IsRulesViewEdit,
+                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                     ConverterParameter=AccentFgBrush|TextSecondaryBrush}"/>
+              </StackPanel>
+            </Border>
+            <Button Grid.Column="2"
                     Content="{Binding L_CustomRulesImport}"
                     Command="{Binding ImportCustomRulesCommand}"
                     FontSize="10" Padding="8,3" MinHeight="0"
                     ToolTip.Tip="{Binding L_CustomRulesImportTooltip}"/>
-            <Button Grid.Column="2"
+            <Button Grid.Column="3"
                     Content="{Binding L_CustomRulesExport}"
                     Command="{Binding ExportCustomRulesCommand}"
                     FontSize="10" Padding="8,3" MinHeight="0"
                     ToolTip.Tip="{Binding L_CustomRulesExportTooltip}"/>
           </Grid>
-          <TextBlock Text="{Binding L_CustomRulesPageDescription}"
-                     FontSize="11"
-                     TextWrapping="Wrap"
-                     Foreground="{DynamicResource TextSecondaryBrush}"/>
 
-          <!-- ═══ v2.30.0-r5 layout reorder ═══
-               User report 2026-04-29: «теперь не умещается, давай сделаем
-               чтоб правила были ниже, подумай как переработать чтоб всё
-               умещалось».
-               Pre-r5 had: description → search/bulk-buttons row →
-               count → list → add-form → advanced. The list was sandwiched
-               between header content and add-form, which on narrower
-               windows pushed the bulk-action buttons off-screen and
-               hid the add-form below the fold.
-               r5 reorder:
-                 1. Description
-                 2. Add-form (PRIMARY ACTION — user wants to add rules)
-                 3. Section divider with search bar (full width)
-                 4. Bulk action chips on their own row (don't compete
-                    with search for width)
-                 5. Count display
-                 6. ListBox of rules (LOWER, takes remaining space)
-                 7. Advanced (text mode) expander at bottom
-               -->
+          <!-- Help banner (info-tinted) — replaces the dense paragraph
+               with key bullets about toggle precedence, LAN auto-direct,
+               and order-doesn't-matter. Dismissable via X. -->
+          <Border IsVisible="{Binding !IsRulesHelpBannerDismissed}"
+                  Padding="10,8"
+                  CornerRadius="{StaticResource RadiusMd}"
+                  Background="{DynamicResource InfoBgBrush}"
+                  BorderBrush="{DynamicResource InfoBorderBrush}"
+                  BorderThickness="1">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+              <TextBlock Grid.Column="0"
+                         Text="ⓘ"
+                         FontSize="13" FontWeight="Bold"
+                         Foreground="{DynamicResource InfoFgBrush}"
+                         VerticalAlignment="Top" Margin="0,1,0,0"/>
+              <TextBlock Grid.Column="1"
+                         Text="{Binding L_RulesHelpBanner}"
+                         FontSize="10"
+                         TextWrapping="Wrap"
+                         LineHeight="15"
+                         Foreground="{DynamicResource InfoFgBrush}"
+                         VerticalAlignment="Center"/>
+              <Button Grid.Column="2"
+                      Content="✕"
+                      Command="{Binding DismissRulesHelpBannerCommand}"
+                      FontSize="11"
+                      Padding="4,1" MinHeight="0"
+                      Background="Transparent"
+                      BorderThickness="0"
+                      Foreground="{DynamicResource InfoFgBrush}"
+                      Opacity="0.6"
+                      VerticalAlignment="Top"/>
+            </Grid>
+          </Border>
+
+          <!-- ═══ Cards view (default) — structured row-table editor ═══
+               v2.30.0-r5 layout: description → add-form (top, primary)
+               → existing-rules header → search → bulk → list. v2.30.0-r7
+               wraps the whole thing in IsRulesViewCards visibility — the
+               sibling Edit-view panel below is shown when the segmented
+               toggle is flipped to Text. -->
+          <StackPanel Spacing="10" IsVisible="{Binding IsRulesViewCards}">
 
           <!-- ═══ Add-rule form (primary action, top of section) ═══ -->
           <Border Padding="10"
@@ -442,73 +506,157 @@
             </ListBox.ItemTemplate>
           </ListBox>
 
-          <!-- Advanced (text-format) fallback. v2.30.0-r6: layout fixes
-               for narrow windows. User report 2026-04-29: «расширенный
-               режим не умещается и его будто срезает». Pre-r6 had:
-               (a) TextWrapping=NoWrap with horizontal scroll, which on
-               narrow windows hid right-edge content behind a scrollbar
-               that themes don't always render visibly; (b) MaxHeight=320
-               which combined with parse-error + conflict-warning blocks
-               below pushed the expander tail off-screen.
-               r6 fix: switch to TextWrapping=Wrap (display-only, doesn't
-               break logical line semantics for AcceptsReturn — '\n' in
-               the string still maps to user-typed Enter), drop horizontal
-               scroll (no longer needed), reduce MaxHeight 320 → 240,
-               explicit HorizontalAlignment=Stretch so the textbox always
-               uses the available width. -->
-          <Expander Header="{Binding L_CustomRulesAdvancedMode}"
-                    IsExpanded="False"
-                    Padding="0,4"
-                    HorizontalAlignment="Stretch">
-            <StackPanel Spacing="6" Margin="0,4,0,0" HorizontalAlignment="Stretch">
-              <TextBox Text="{Binding CustomRulesText}"
-                       Watermark="{Binding L_CustomRulesPlaceholder}"
-                       AcceptsReturn="True"
-                       HorizontalAlignment="Stretch"
-                       MinHeight="140"
-                       MaxHeight="240"
-                       FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
-                       FontSize="11"
-                       TextWrapping="Wrap"
-                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                       ScrollViewer.VerticalScrollBarVisibility="Auto"/>
-              <!-- Inline parse-error diagnostics. -->
-              <Border IsVisible="{Binding CustomRulesErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                      Padding="8,5"
+          </StackPanel>
+          <!-- ↑ End Cards view -->
+
+          <!-- ═══ Edit view (Text mode) ═══
+               v2.30.0-r7 — replaces the old Advanced expander. Per
+               RulesExplorations.html design: textarea with line-numbered
+               gutter, per-line errors, status strip with active count +
+               dirty indicator, Apply / Revert buttons, error list, format
+               hint. Unlike the old auto-saving expander, edits live in
+               EditedCustomRulesText buffer until Apply commits. -->
+          <StackPanel Spacing="8" IsVisible="{Binding IsRulesViewEdit}">
+
+            <!-- Editor: gutter (Auto col) + TextBox (* col) inside a
+                 Border with BorderDefault + RadiusSm. Both share font +
+                 line-height so line numbers align with rules.
+                 The TextBox has TextWrapping=NoWrap so a long single line
+                 doesn't visually wrap and break the 1:1 line-to-number
+                 mapping (horizontal scroll handles long values). -->
+            <Border BorderBrush="{DynamicResource BorderDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusSm}"
+                    Background="{DynamicResource SurfaceAppBrush}"
+                    ClipToBounds="True">
+              <Grid ColumnDefinitions="Auto,*"
+                    MinHeight="160"
+                    MaxHeight="280">
+                <!-- Gutter — read-only line numbers in muted mono.
+                     IsHitTestVisible=False so clicks pass through to
+                     the textbox. Padding mirrors the textbox so visual
+                     line origin matches. -->
+                <Border Grid.Column="0"
+                        Background="{DynamicResource SurfaceSunkenBrush}"
+                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                        BorderThickness="0,0,1,0"
+                        Padding="10,8,8,8"
+                        IsHitTestVisible="False">
+                  <ScrollViewer VerticalScrollBarVisibility="Hidden"
+                                HorizontalScrollBarVisibility="Hidden">
+                    <TextBlock Text="{Binding RulesEditorLineNumbers}"
+                               FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
+                               FontSize="11"
+                               LineHeight="18"
+                               TextAlignment="Right"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               MinWidth="22"/>
+                  </ScrollViewer>
+                </Border>
+                <!-- Editor TextBox. Borderless + transparent bg so the
+                     parent Border owns the visual frame. AcceptsReturn,
+                     NoWrap, monospace 11/18.
+                     v2.30.0-r7 note: keystrokes update the buffer
+                     (EditedCustomRulesText) but DON'T trigger SaveSettings.
+                     Apply commits to the canonical CustomRulesText. -->
+                <TextBox Grid.Column="1"
+                         Text="{Binding EditedCustomRulesText}"
+                         Watermark="{Binding L_CustomRulesPlaceholder}"
+                         AcceptsReturn="True"
+                         TextWrapping="NoWrap"
+                         FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
+                         FontSize="11"
+                         LineHeight="18"
+                         Padding="10,8,12,8"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+              </Grid>
+            </Border>
+
+            <!-- Status strip: active count + dirty indicator on left,
+                 Revert + Apply buttons on right. -->
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
+              <TextBlock Grid.Column="0"
+                         Text="{Binding RulesEditorStatusText}"
+                         FontSize="10"
+                         FontFamily="Consolas, 'SF Mono', monospace"
+                         Foreground="{DynamicResource TextMutedBrush}"
+                         VerticalAlignment="Center"/>
+              <TextBlock Grid.Column="1"
+                         Text="{Binding L_RulesEditorDirty}"
+                         FontSize="10"
+                         FontWeight="SemiBold"
+                         Foreground="{DynamicResource WarningFgBrush}"
+                         IsVisible="{Binding RulesEditorIsDirty}"
+                         VerticalAlignment="Center"
+                         Margin="0,0,4,0"/>
+              <Button Grid.Column="2"
+                      Content="{Binding L_RulesEditorRevert}"
+                      Command="{Binding RevertEditedRulesCommand}"
+                      FontSize="10" Padding="8,3" MinHeight="0"
+                      IsEnabled="{Binding RulesEditorIsDirty}"/>
+              <Button Grid.Column="3"
+                      Content="{Binding RulesEditorApplyText}"
+                      Command="{Binding ApplyEditedRulesCommand}"
+                      FontSize="10" FontWeight="SemiBold"
+                      Padding="10,3" MinHeight="0"
+                      Background="{DynamicResource AccentSolidBrush}"
+                      Foreground="{DynamicResource AccentOnSolidBrush}"
                       CornerRadius="{StaticResource RadiusSm}"
-                      Background="{DynamicResource DangerBgBrush}"
-                      BorderBrush="{DynamicResource DangerBorderBrush}"
-                      BorderThickness="1">
-                <StackPanel Spacing="3">
-                  <TextBlock Text="{Binding L_CustomRulesErrorHeader}"
-                             FontSize="10" FontWeight="SemiBold"
-                             Foreground="{DynamicResource DangerFgBrush}"/>
-                  <TextBlock Text="{Binding CustomRulesErrorText}"
-                             FontSize="10"
-                             FontFamily="Consolas, 'SF Mono', monospace"
-                             TextWrapping="Wrap"
-                             Foreground="{DynamicResource DangerFgBrush}"/>
-                </StackPanel>
-              </Border>
-              <Border IsVisible="{Binding CustomRulesConflictText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                      Padding="8,5"
-                      CornerRadius="{StaticResource RadiusSm}"
-                      Background="{DynamicResource WarningBgBrush}"
-                      BorderBrush="{DynamicResource WarningBorderBrush}"
-                      BorderThickness="1">
-                <StackPanel Spacing="3">
-                  <TextBlock Text="{Binding L_CustomRulesConflictHeader}"
-                             FontSize="10" FontWeight="SemiBold"
-                             Foreground="{DynamicResource WarningFgBrush}"/>
-                  <TextBlock Text="{Binding CustomRulesConflictText}"
-                             FontSize="10"
-                             FontFamily="Consolas, 'SF Mono', monospace"
-                             TextWrapping="Wrap"
-                             Foreground="{DynamicResource WarningFgBrush}"/>
-                </StackPanel>
-              </Border>
-            </StackPanel>
-          </Expander>
+                      IsEnabled="{Binding RulesEditorIsDirty}"/>
+            </Grid>
+
+            <!-- Error list (visible only on parse errors). First 4 errors
+                 with line-number prefix; "and N more…" if more exist. -->
+            <Border IsVisible="{Binding RulesEditorErrorListText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                    Padding="8,6"
+                    CornerRadius="{StaticResource RadiusSm}"
+                    Background="{DynamicResource DangerBgBrush}"
+                    BorderBrush="{DynamicResource DangerBorderBrush}"
+                    BorderThickness="1">
+              <TextBlock Text="{Binding RulesEditorErrorListText}"
+                         FontSize="10"
+                         FontFamily="Consolas, 'SF Mono', monospace"
+                         TextWrapping="Wrap"
+                         Foreground="{DynamicResource DangerFgBrush}"/>
+            </Border>
+
+            <!-- Conflict warning (catch-all rule shadowing) — surfaced
+                 from the canonical CustomRulesConflictText (computed at
+                 Apply / SaveSettings time). Stays visible after Apply. -->
+            <Border IsVisible="{Binding CustomRulesConflictText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                    Padding="8,5"
+                    CornerRadius="{StaticResource RadiusSm}"
+                    Background="{DynamicResource WarningBgBrush}"
+                    BorderBrush="{DynamicResource WarningBorderBrush}"
+                    BorderThickness="1">
+              <StackPanel Spacing="3">
+                <TextBlock Text="{Binding L_CustomRulesConflictHeader}"
+                           FontSize="10" FontWeight="SemiBold"
+                           Foreground="{DynamicResource WarningFgBrush}"/>
+                <TextBlock Text="{Binding CustomRulesConflictText}"
+                           FontSize="10"
+                           FontFamily="Consolas, 'SF Mono', monospace"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource WarningFgBrush}"/>
+              </StackPanel>
+            </Border>
+
+            <!-- Format hint — small, muted, monospace. Reminds the user
+                 of grammar + comment syntax. -->
+            <Border Padding="10,7"
+                    CornerRadius="{StaticResource RadiusSm}"
+                    Background="{DynamicResource SurfaceSunkenBrush}">
+              <TextBlock Text="{Binding L_RulesEditorFormatHint}"
+                         FontSize="10"
+                         FontFamily="Consolas, 'SF Mono', monospace"
+                         TextWrapping="Wrap"
+                         LineHeight="16"
+                         Foreground="{DynamicResource TextSecondaryBrush}"/>
+            </Border>
+          </StackPanel>
         </StackPanel>
 
         <!-- ═══ Leak Protection ═══ -->
