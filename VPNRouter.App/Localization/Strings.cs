@@ -773,6 +773,16 @@ public static class Strings
     public static string CustomRulesMoveUp => Ru ? "Выше" : "Move up";
     public static string CustomRulesMoveDown => Ru ? "Ниже" : "Move down";
 
+    // v2.30.0-r3 — Import/Export 3 formats.
+    public static string CustomRulesImport => Ru ? "Импорт..." : "Import...";
+    public static string CustomRulesExport => Ru ? "Экспорт..." : "Export...";
+    public static string CustomRulesImportTooltip => Ru
+        ? "Импорт из CSV / JSON / sing-box JSON (NekoBox, Hiddify)"
+        : "Import from CSV / JSON / sing-box JSON (NekoBox, Hiddify)";
+    public static string CustomRulesExportTooltip => Ru
+        ? "Экспорт в CSV / JSON / sing-box JSON"
+        : "Export to CSV / JSON / sing-box JSON";
+
     // ── Legacy v2.29.0-r4 names (kept for back-compat with cached XAML) ──
     public static string CustomDirectRulesTitle => CustomRulesTitle;
     public static string CustomDirectRulesDescription => CustomRulesDescription;

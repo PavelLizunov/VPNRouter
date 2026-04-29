@@ -530,6 +530,149 @@ public partial class MainWindowViewModel : ViewModelBase
         SaveSettings();
     }
 
+    /// <summary>v2.30.0-r3 — import rules from a CSV / JSON / sing-box-
+    /// native file. Auto-detects format by content sniff. Appends to
+    /// the existing list (preserves user's current rules). Surfaces
+    /// import warnings in NewRuleValidationError.</summary>
+    [RelayCommand]
+    private async Task ImportCustomRulesAsync()
+    {
+        try
+        {
+            var window = GetMainWindow();
+            if (window == null)
+            {
+                NewRuleValidationError = "Could not open file picker";
+                return;
+            }
+
+            var files = await window.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+            {
+                Title = "Import rules",
+                AllowMultiple = false,
+                FileTypeFilter = new[]
+                {
+                    new Avalonia.Platform.Storage.FilePickerFileType("Rule files (CSV, JSON)")
+                    {
+                        Patterns = new[] { "*.csv", "*.json", "*.txt" },
+                    },
+                    new Avalonia.Platform.Storage.FilePickerFileType("All files")
+                    {
+                        Patterns = new[] { "*.*" },
+                    },
+                }
+            });
+            if (files.Count == 0) return;
+
+            var file = files[0];
+            var path = file.TryGetLocalPath();
+            if (string.IsNullOrEmpty(path)) return;
+
+            var text = await File.ReadAllTextAsync(path);
+            var result = VPNRouter.Core.Services.CustomRulesImportExport.ImportFromText(text);
+
+            if (result.Rules.Count == 0)
+            {
+                NewRuleValidationError = result.Warnings.Count > 0
+                    ? "Import failed: " + result.Warnings[0]
+                    : "Import: file contained no rules";
+                return;
+            }
+
+            // Append imported rules to the live list (preserve existing).
+            foreach (var rule in result.Rules)
+            {
+                CustomRulesList.Add(new CustomRuleViewModel(
+                    rule,
+                    onChanged: OnCustomRuleRowChanged,
+                    onRemoveRequested: OnCustomRuleRowRemoveRequested));
+            }
+            FlushCustomRulesListToSettings();
+
+            // Show success summary in the validation slot.
+            var msg = $"Imported {result.Rules.Count} rule(s) [{result.DetectedFormat}]";
+            if (result.Warnings.Count > 0)
+                msg += $" — {result.Warnings.Count} warning(s) (see app log)";
+            NewRuleValidationError = msg;
+            foreach (var w in result.Warnings)
+                _logger.Information("[CustomRules import] {Warning}", w);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] ImportCustomRules failed");
+            NewRuleValidationError = "Import error: " + ex.Message;
+        }
+    }
+
+    /// <summary>v2.30.0-r3 — export current rules to a file. User picks
+    /// destination path; format determined by file extension (.csv = CSV,
+    /// .singbox.json = sing-box-native, anything else = our native JSON).
+    /// Disabled rules are still exported (with enabled=false) so the
+    /// user can round-trip a backup.</summary>
+    [RelayCommand]
+    private async Task ExportCustomRulesAsync()
+    {
+        try
+        {
+            var window = GetMainWindow();
+            if (window == null)
+            {
+                NewRuleValidationError = "Could not open file picker";
+                return;
+            }
+
+            if (CustomRulesList.Count == 0)
+            {
+                NewRuleValidationError = "Nothing to export — rule list is empty";
+                return;
+            }
+
+            var file = await window.StorageProvider.SaveFilePickerAsync(new Avalonia.Platform.Storage.FilePickerSaveOptions
+            {
+                Title = "Export rules",
+                SuggestedFileName = $"vpnrouter-rules-{DateTime.Now:yyyyMMdd}",
+                DefaultExtension = "json",
+                FileTypeChoices = new[]
+                {
+                    new Avalonia.Platform.Storage.FilePickerFileType("VPNRouter JSON (native)")
+                    {
+                        Patterns = new[] { "*.json" },
+                    },
+                    new Avalonia.Platform.Storage.FilePickerFileType("CSV (spreadsheet-friendly)")
+                    {
+                        Patterns = new[] { "*.csv" },
+                    },
+                    new Avalonia.Platform.Storage.FilePickerFileType("sing-box JSON (NekoBox / Hiddify compat)")
+                    {
+                        Patterns = new[] { "*.singbox.json" },
+                    },
+                }
+            });
+            if (file == null) return;
+
+            var path = file.TryGetLocalPath();
+            if (string.IsNullOrEmpty(path)) return;
+
+            // Decide format from extension.
+            var fmt = VPNRouter.Core.Services.CustomRulesImportExport.Format.VpnrouterJson;
+            if (path.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                fmt = VPNRouter.Core.Services.CustomRulesImportExport.Format.Csv;
+            else if (path.EndsWith(".singbox.json", StringComparison.OrdinalIgnoreCase))
+                fmt = VPNRouter.Core.Services.CustomRulesImportExport.Format.SingBoxJson;
+
+            var rules = CustomRulesList.Select(vm => vm.ToModel()).ToList();
+            var content = VPNRouter.Core.Services.CustomRulesImportExport.ExportToText(rules, fmt);
+            await File.WriteAllTextAsync(path, content);
+
+            NewRuleValidationError = $"Exported {rules.Count} rule(s) to {Path.GetFileName(path)}";
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] ExportCustomRules failed");
+            NewRuleValidationError = "Export error: " + ex.Message;
+        }
+    }
+
     /// <summary>v2.30.0-r2 — Add-form submit. Validates the new rule
     /// via the parser (one-line text), prepends to the list, clears
     /// the form. Validation errors surface in NewRuleValidationError.</summary>

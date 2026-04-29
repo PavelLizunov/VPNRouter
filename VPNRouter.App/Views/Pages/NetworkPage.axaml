@@ -206,7 +206,24 @@
              toggle + delete) → add-rule form → advanced text-mode
              expander as fallback. -->
         <StackPanel Spacing="10" IsVisible="{Binding IsSettingsRulesSelected}">
-          <TextBlock Text="{Binding LblSettingsRules}" FontWeight="Bold" FontSize="13"/>
+          <!-- Header row: title left, Import/Export buttons right.
+               v2.30.0-r3 added Import/Export buttons here. -->
+          <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+            <TextBlock Grid.Column="0"
+                       Text="{Binding LblSettingsRules}"
+                       FontWeight="Bold" FontSize="13"
+                       VerticalAlignment="Center"/>
+            <Button Grid.Column="1"
+                    Content="{Binding L_CustomRulesImport}"
+                    Command="{Binding ImportCustomRulesCommand}"
+                    FontSize="10" Padding="8,3" MinHeight="0"
+                    ToolTip.Tip="{Binding L_CustomRulesImportTooltip}"/>
+            <Button Grid.Column="2"
+                    Content="{Binding L_CustomRulesExport}"
+                    Command="{Binding ExportCustomRulesCommand}"
+                    FontSize="10" Padding="8,3" MinHeight="0"
+                    ToolTip.Tip="{Binding L_CustomRulesExportTooltip}"/>
+          </Grid>
           <TextBlock Text="{Binding L_CustomRulesPageDescription}"
                      FontSize="11"
                      TextWrapping="Wrap"
@@ -280,7 +297,12 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
 
-          <!-- Add-rule form -->
+          <!-- Add-rule form. v2.30.0-r3: vertical-stack layout (was a 3-col
+               Grid 100/140/* in r2). User report: «при сужении окна
+               проблемы — дропдавн на дропдавн накладывается». Fixed-
+               width ComboBoxes overflowed on narrow windows + their open
+               popups visually clashed. Now each row owns full width or
+               splits 50/50 — no overlap regardless of window width. -->
           <Border Padding="10"
                   CornerRadius="{StaticResource RadiusSm}"
                   Background="{DynamicResource SurfaceRaisedBrush}"
@@ -289,23 +311,32 @@
             <StackPanel Spacing="6">
               <TextBlock Text="{Binding L_CustomRulesAddTitle}"
                          FontSize="11" FontWeight="SemiBold"/>
-              <Grid ColumnDefinitions="100,140,*" ColumnSpacing="6">
+              <!-- Row 1: Action + Type (50/50). Each ComboBox flexes
+                   with the available width; their open popups can never
+                   overlap because they sit in distinct grid columns. -->
+              <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
                 <ComboBox Grid.Column="0"
                           ItemsSource="{Binding AvailableRuleActions}"
                           SelectedItem="{Binding NewRuleAction}"
+                          HorizontalAlignment="Stretch"
                           FontSize="11" Padding="6,3" MinHeight="0"
                           ToolTip.Tip="{Binding L_CustomRulesActionLabel}"/>
                 <ComboBox Grid.Column="1"
                           ItemsSource="{Binding AvailableRuleTypes}"
                           SelectedItem="{Binding NewRuleType}"
+                          HorizontalAlignment="Stretch"
                           FontSize="11" Padding="6,3" MinHeight="0"
                           ToolTip.Tip="{Binding L_CustomRulesTypeLabel}"/>
-                <TextBox Grid.Column="2"
-                         Text="{Binding NewRuleValue}"
-                         Watermark="{Binding L_CustomRulesValuePlaceholder}"
-                         FontSize="11" Padding="6,3" MinHeight="0"
-                         FontFamily="Consolas, 'SF Mono', monospace"/>
               </Grid>
+              <!-- Row 2: Value full width — most rules need more chars
+                   than 50% of a 500px window allows. -->
+              <TextBox Text="{Binding NewRuleValue}"
+                       Watermark="{Binding L_CustomRulesValuePlaceholder}"
+                       FontSize="11" Padding="6,3" MinHeight="0"
+                       FontFamily="Consolas, 'SF Mono', monospace"/>
+              <!-- Row 3: Comment + Add button. Comment flexes, button
+                   auto-sizes — on very narrow windows the button stays
+                   readable while comment shrinks. -->
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                 <TextBox Grid.Column="0"
                          Text="{Binding NewRuleComment}"
@@ -323,6 +354,7 @@
               <!-- Validation error inline -->
               <TextBlock Text="{Binding NewRuleValidationError}"
                          FontSize="10"
+                         TextWrapping="Wrap"
                          Foreground="{DynamicResource DangerFgBrush}"
                          IsVisible="{Binding NewRuleValidationError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
             </StackPanel>
