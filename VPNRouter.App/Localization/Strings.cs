@@ -841,6 +841,18 @@ public static class Strings
     public static string RulesFilterAll => Ru ? "Все" : "All";
     public static string RulesBulkActions => Ru ? "Массовые действия" : "Bulk actions";
 
+    // v2.30.0-r14 — Sort-by-type bulk action (per design `.bulk-pop`).
+    public static string RulesSortByType => Ru ? "Сортировать по типу" : "Sort by type";
+
+    // v2.30.0-r14 — Add-form mini-labels (uppercase, per design `.field .ftitle`).
+    // Localized so the UI is single-language end-to-end (matches user's
+    // "не использовать микс" rule).
+    public static string RulesAddLabelAction  => Ru ? "ДЕЙСТВИЕ"    : "ACTION";
+    public static string RulesAddLabelType    => Ru ? "ТИП"         : "TYPE";
+    public static string RulesAddLabelValue   => Ru ? "ЗНАЧЕНИЕ"    : "VALUE";
+    public static string RulesAddLabelComment => Ru ? "КОММЕНТАРИЙ" : "COMMENT";
+    public static string RulesAddLabelOpt     => Ru ? "(опц.)"      : "(opt.)";
+
     // v2.30.0-r12 — Help banner restructured per design RulesPage.html
     // `.help` block: bold heading + 3 bullets with <code>-styled values
     // for technical terms (CIDR ranges, "direct" action). Each bullet is

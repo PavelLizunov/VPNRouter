@@ -97,6 +97,31 @@
       <Setter Property="BorderBrush" Value="{DynamicResource BorderDefaultBrush}"/>
     </Style>
 
+    <!-- v2.30.0-r14 — bulk-actions popover items per design `.bulk-pop .it`.
+         Plain transparent button with icon + text, hover gets sunken bg.
+         The .danger modifier paints text in danger-fg + danger-bg on hover. -->
+    <Style Selector="Button.bulk-it">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="9,7"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusXs}"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.bulk-it:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
+    </Style>
+    <Style Selector="Button.bulk-it.danger">
+      <Setter Property="Foreground" Value="{DynamicResource DangerFgBrush}"/>
+    </Style>
+    <Style Selector="Button.bulk-it.danger:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+    </Style>
+
     <!-- Radio card: full-width clickable block with title + sub -->
     <Style Selector="Border.radio-card">
       <Setter Property="BorderThickness" Value="1"/>
@@ -459,11 +484,22 @@
                          FontSize="9" FontWeight="SemiBold"
                          Foreground="{DynamicResource TextMutedBrush}"
                          TextTrimming="CharacterEllipsis"/>
-              <!-- Add-row: 5-col grid, exactly as design `.add-row`. -->
-              <Grid ColumnDefinitions="130,160,*,*,Auto" ColumnSpacing="8">
+              <!-- Add-row: 5-col grid per design `.add-row` 130/160/1fr/
+                   1fr/Auto. v2.30.0-r14: explicit ColumnDefinitions with
+                   MinWidth=80 on the two star cols to keep value+comment
+                   from overlapping if the breakpoint hasn't kicked in
+                   yet (race during resize). -->
+              <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="130"/>
+                  <ColumnDefinition Width="160"/>
+                  <ColumnDefinition Width="*" MinWidth="80"/>
+                  <ColumnDefinition Width="*" MinWidth="80"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
                 <!-- Action -->
                 <StackPanel Grid.Column="0" Spacing="3">
-                  <TextBlock Text="ACTION" FontSize="9"
+                  <TextBlock Text="{Binding L_RulesAddLabelAction}" FontSize="9"
                              FontWeight="SemiBold"
                              Foreground="{DynamicResource TextMutedBrush}"/>
                   <ComboBox ItemsSource="{Binding AvailableRuleActions}"
@@ -478,7 +514,7 @@
                 </StackPanel>
                 <!-- Type -->
                 <StackPanel Grid.Column="1" Spacing="3">
-                  <TextBlock Text="TYPE" FontSize="9"
+                  <TextBlock Text="{Binding L_RulesAddLabelType}" FontSize="9"
                              FontWeight="SemiBold"
                              Foreground="{DynamicResource TextMutedBrush}"/>
                   <ComboBox ItemsSource="{Binding AvailableRuleTypes}"
@@ -493,7 +529,7 @@
                 </StackPanel>
                 <!-- Value (with live-validation) -->
                 <StackPanel Grid.Column="2" Spacing="3">
-                  <TextBlock Text="VALUE" FontSize="9"
+                  <TextBlock Text="{Binding L_RulesAddLabelValue}" FontSize="9"
                              FontWeight="SemiBold"
                              Foreground="{DynamicResource TextMutedBrush}"/>
                   <TextBox Text="{Binding NewRuleValue}"
@@ -515,8 +551,10 @@
                 <StackPanel Grid.Column="3" Spacing="3">
                   <TextBlock FontSize="9" FontWeight="SemiBold"
                              Foreground="{DynamicResource TextMutedBrush}">
-                    <Run Text="COMMENT"/>
-                    <Run Text="(opt.)" Foreground="{DynamicResource TextMutedBrush}"
+                    <Run Text="{Binding L_RulesAddLabelComment}"/>
+                    <Run Text=" "/>
+                    <Run Text="{Binding L_RulesAddLabelOpt}"
+                         Foreground="{DynamicResource TextMutedBrush}"
                          FontWeight="Normal"/>
                   </TextBlock>
                   <TextBox Text="{Binding NewRuleComment}"
@@ -763,6 +801,7 @@
                  actions live behind ⋯ — not on the surface — so the
                  user has to deliberately open the menu. -->
             <Button Grid.Column="2"
+                    Name="BulkBtnWide"
                     Content="⋯"
                     Width="28" Height="28" Padding="0" MinHeight="0"
                     FontSize="14"
@@ -772,16 +811,69 @@
                     CornerRadius="{StaticResource RadiusSm}"
                     ToolTip.Tip="{Binding L_RulesBulkActions}">
               <Button.Flyout>
-                <MenuFlyout>
-                  <MenuItem Header="{Binding L_CustomRulesEnableAll}"
-                            Command="{Binding EnableAllCustomRulesCommand}"/>
-                  <MenuItem Header="{Binding L_CustomRulesDisableAll}"
-                            Command="{Binding DisableAllCustomRulesCommand}"/>
-                  <Separator/>
-                  <MenuItem Header="{Binding L_CustomRulesClearAll}"
-                            Command="{Binding ClearAllCustomRulesCommand}"
-                            Foreground="{DynamicResource DangerFgBrush}"/>
-                </MenuFlyout>
+                <!-- v2.30.0-r14 — custom Flyout per design `.bulk-pop`.
+                     Replaces the OS-default MenuFlyout to fully control
+                     surface/border/shadow/padding/icons. -->
+                <Flyout Placement="BottomEdgeAlignedRight">
+                  <Border Background="{DynamicResource SurfaceBaseBrush}"
+                          BorderBrush="{DynamicResource BorderDefaultBrush}"
+                          BorderThickness="1"
+                          CornerRadius="{StaticResource RadiusMd}"
+                          BoxShadow="{StaticResource ShadowLg}"
+                          Padding="6"
+                          MinWidth="200">
+                    <StackPanel Spacing="1">
+                      <Button Classes="bulk-it"
+                              Command="{Binding EnableAllCustomRulesCommand}"
+                              Click="OnBulkItemClick">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="⊕" Width="14"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Text="{Binding L_CustomRulesEnableAll}"
+                                     VerticalAlignment="Center"/>
+                        </StackPanel>
+                      </Button>
+                      <Button Classes="bulk-it"
+                              Command="{Binding DisableAllCustomRulesCommand}"
+                              Click="OnBulkItemClick">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="⊝" Width="14"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Text="{Binding L_CustomRulesDisableAll}"
+                                     VerticalAlignment="Center"/>
+                        </StackPanel>
+                      </Button>
+                      <Button Classes="bulk-it"
+                              Command="{Binding SortCustomRulesByTypeCommand}"
+                              Click="OnBulkItemClick">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="↕" Width="14"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Text="{Binding L_RulesSortByType}"
+                                     VerticalAlignment="Center"/>
+                        </StackPanel>
+                      </Button>
+                      <!-- Separator: 1px BorderSubtle, margin 4,2 per design -->
+                      <Border Height="1"
+                              Background="{DynamicResource BorderSubtleBrush}"
+                              Margin="2,4"/>
+                      <Button Classes="bulk-it danger"
+                              Command="{Binding ClearAllCustomRulesCommand}"
+                              Click="OnBulkItemClick">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="✕" Width="14"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"/>
+                          <TextBlock Text="{Binding L_CustomRulesClearAll}"
+                                     VerticalAlignment="Center"/>
+                        </StackPanel>
+                      </Button>
+                    </StackPanel>
+                  </Border>
+                </Flyout>
               </Button.Flyout>
             </Button>
           </Grid>
@@ -860,6 +952,7 @@
                 </UniformGrid>
               </Border>
               <Button Grid.Column="1"
+                      Name="BulkBtnNarrow"
                       Content="⋯"
                       Width="28" Height="28" Padding="0" MinHeight="0"
                       FontSize="14"
@@ -869,16 +962,68 @@
                       CornerRadius="{StaticResource RadiusSm}"
                       ToolTip.Tip="{Binding L_RulesBulkActions}">
                 <Button.Flyout>
-                  <MenuFlyout>
-                    <MenuItem Header="{Binding L_CustomRulesEnableAll}"
-                              Command="{Binding EnableAllCustomRulesCommand}"/>
-                    <MenuItem Header="{Binding L_CustomRulesDisableAll}"
-                              Command="{Binding DisableAllCustomRulesCommand}"/>
-                    <Separator/>
-                    <MenuItem Header="{Binding L_CustomRulesClearAll}"
-                              Command="{Binding ClearAllCustomRulesCommand}"
-                              Foreground="{DynamicResource DangerFgBrush}"/>
-                  </MenuFlyout>
+                  <!-- v2.30.0-r14 — same design `.bulk-pop` content as
+                       wide toolbar; duplicated because Flyout instances
+                       can't be shared across parents. -->
+                  <Flyout Placement="BottomEdgeAlignedRight">
+                    <Border Background="{DynamicResource SurfaceBaseBrush}"
+                            BorderBrush="{DynamicResource BorderDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusMd}"
+                            BoxShadow="{StaticResource ShadowLg}"
+                            Padding="6"
+                            MinWidth="200">
+                      <StackPanel Spacing="1">
+                        <Button Classes="bulk-it"
+                                Command="{Binding EnableAllCustomRulesCommand}"
+                                Click="OnBulkItemClick">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="⊕" Width="14"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding L_CustomRulesEnableAll}"
+                                       VerticalAlignment="Center"/>
+                          </StackPanel>
+                        </Button>
+                        <Button Classes="bulk-it"
+                                Command="{Binding DisableAllCustomRulesCommand}"
+                                Click="OnBulkItemClick">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="⊝" Width="14"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding L_CustomRulesDisableAll}"
+                                       VerticalAlignment="Center"/>
+                          </StackPanel>
+                        </Button>
+                        <Button Classes="bulk-it"
+                                Command="{Binding SortCustomRulesByTypeCommand}"
+                                Click="OnBulkItemClick">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="↕" Width="14"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding L_RulesSortByType}"
+                                       VerticalAlignment="Center"/>
+                          </StackPanel>
+                        </Button>
+                        <Border Height="1"
+                                Background="{DynamicResource BorderSubtleBrush}"
+                                Margin="2,4"/>
+                        <Button Classes="bulk-it danger"
+                                Command="{Binding ClearAllCustomRulesCommand}"
+                                Click="OnBulkItemClick">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="✕" Width="14"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding L_CustomRulesClearAll}"
+                                       VerticalAlignment="Center"/>
+                          </StackPanel>
+                        </Button>
+                      </StackPanel>
+                    </Border>
+                  </Flyout>
                 </Button.Flyout>
               </Button>
             </Grid>

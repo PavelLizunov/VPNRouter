@@ -92,6 +92,13 @@ public partial class MainWindowViewModel
     public string L_RulesHelpBanner => Strings.RulesHelpBanner;
     public string L_RulesFilterAll => Strings.RulesFilterAll;
     public string L_RulesBulkActions => Strings.RulesBulkActions;
+    // v2.30.0-r14 — bulk-actions popover localizations.
+    public string L_RulesSortByType => Strings.RulesSortByType;
+    public string L_RulesAddLabelAction  => Strings.RulesAddLabelAction;
+    public string L_RulesAddLabelType    => Strings.RulesAddLabelType;
+    public string L_RulesAddLabelValue   => Strings.RulesAddLabelValue;
+    public string L_RulesAddLabelComment => Strings.RulesAddLabelComment;
+    public string L_RulesAddLabelOpt     => Strings.RulesAddLabelOpt;
     // v2.30.0-r12 — structured help-banner Runs (per-piece localization).
     public string L_RulesHelpHeader => Strings.RulesHelpHeader;
     public string L_RulesHelpB1Pre  => Strings.RulesHelpB1Pre;

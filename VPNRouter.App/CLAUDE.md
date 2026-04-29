@@ -125,6 +125,114 @@ _settings.App.ConfigMode = IsSubscribeMode ? "subscribe"
 SaveSettings: если `wantsCustomMode && !hasCustomConfig` → fallback на
 "subscribe" / "generated".
 
+## UI design rules (avoid recurring revisions)
+
+User feedback after r10..r13 surfaced ~5 same-class revisions. Lessons
+encoded as rules below. Apply BEFORE every UI iteration to avoid the
+back-and-forth.
+
+### A. Adapt to narrow window from the start
+
+VPNRouter's default window is 520×640 but users resize down to ~360 px
+and up to ~900 px. Layouts that look fine at design-mock width WILL
+break at narrow.
+
+**Rule A1**: Any horizontal Grid with ≥3 children needs either
+- A narrow sibling layout (vertical stack) gated by an `IsXxxNarrow`
+  VM flag, OR
+- `MinWidth` on every star/Auto column to guarantee non-zero width
+  during resize, OR
+- A wrap (UniformGrid / WrapPanel) with `Stretch` items.
+
+**Rule A2**: Set the breakpoint AFTER measuring the wide layout's
+fixed-width sum. If wide form needs N px (fixed cols + spacing +
+button), breakpoint = N + ~80 px comfort margin. Rules page wide
+Add-form: 130 + 160 + 8×4 + button~80 = 402 + 2×* → need ≥562 px →
+breakpoint 620 (with content padding).
+
+**Rule A3**: Two `IsVisible` bindings on one element doesn't work in
+Avalonia. Wrap-and-divide: outer parent carries one condition, each
+inner sibling carries the other.
+
+**Rule A4**: Drive `IsXxxNarrow` from `SizeChanged` in code-behind
+(Avalonia has no container queries). Also fire on `AttachedToVisualTree`
+so the initial layout is correct before the user resizes.
+
+### B. Strict design tokens — no improvisation
+
+Every revision the user said «без отсебятины» / «строго по дизайну».
+
+**Rule B1**: BEFORE writing XAML, fetch the design CSS for that
+selector and copy: `padding`, `border-radius`, `border`, `background`,
+`font-size`, `font-weight`, `gap`. Don't approximate.
+
+**Rule B2**: Avalonia `Padding=H,V` and CSS `padding:V H` differ in
+order. CSS `padding:5px 10px` = vertical 5, horizontal 10 → Avalonia
+`Padding="10,5"`. Don't rely on memory; check.
+
+**Rule B3**: Use only semantic tokens (`SurfaceBaseBrush`,
+`AccentFgBrush`, `BorderSubtleBrush`, etc.). No raw hex (the only
+exception so far: `#33000000` in iOS-toggle thumb shadow, mirroring
+design's literal `rgba(0,0,0,.2)`).
+
+**Rule B4**: Don't add wrappers / cards / decoration not in the design
+even when the user verbally requests them — they often reverse course
+later when re-reviewing. If user *insists* on a deviation, comment
+the XAML explicitly: `<!-- v2.X.Y per user override; design has no
+wrapper -->`. Two recent regressions (r10 wrapper Border) fit this
+pattern.
+
+### C. Component behavior parity
+
+**Rule C1**: When replacing a stock control with a custom one (e.g.
+`MenuFlyout` → custom `Flyout` with Border + Buttons), preserve the
+stock's behaviors:
+- Auto-close on item click → wire `Click` handler that calls
+  `parentButton.Flyout?.Hide()`.
+- Outside-click close → built-in to `Flyout`, no extra work.
+- Escape close → built-in.
+
+**Rule C2**: For state-flip controls (toggle, segmented selector),
+wrap state-driving converters with token resource keys
+(`BoolToBrushConverter` with `"ActiveResourceKey|InactiveResourceKey"`)
+so theme switching stays automatic.
+
+### D. Single-language UI
+
+**Rule D1**: Don't hardcode English in XAML when the project supports
+RU/EN. Add `Strings.X` + `L_X` even for tiny mini-labels (`ACTION`,
+`(opt.)`, etc.). The user explicitly flagged a mix of RU body text +
+EN labels in r13.
+
+**Rule D2**: Reference Russian copy in the design's HTML directly
+when localizing — copy verbatim from `RulesPage.html` etc.
+
+### E. Audit before claiming completion
+
+**Rule E1**: After implementing, re-fetch the design and walk
+selector-by-selector through the relevant CSS, checking each property
+against the XAML. List gaps in the response. Don't say "implemented per
+design" until that walk is complete.
+
+**Rule E2**: If user asks "ты всё сделал по дизайну?" — answer with
+an explicit table listing each design element vs implemented status.
+Honest gap-flagging is faster than silent partial fixes.
+
+### F. State sync across VM-list rebuilds
+
+**Rule F1**: Any time a VM ObservableCollection rebuild happens (e.g.
+`RebuildCustomRulesList`), every secondary view derived from it must
+also refresh: filtered list, grouped views (Read mode), counts
+(`RulesFilterCountAll/Direct/Proxy/Block`). Wire these into the rebuild
+chain so they can't desync.
+
+**Rule F2**: If a setter like `_settings.Vless.Servers = aggregated`
+mutates settings in-memory inside the Engine layer, the next call to
+`SettingsLoader.Save(settings)` will persist the mutation. Either
+reload-fresh-then-mutate-only-needed-field-then-save, or refactor the
+mutation to a returned value (don't mutate in place). v2.30.0-r8
+subscription leak fits this.
+
 ## Тесты
 
 Тесты ViewModel'ов отсутствуют (headless Avalonia harness — backlog).

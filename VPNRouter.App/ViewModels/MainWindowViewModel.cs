@@ -1091,6 +1091,31 @@ public partial class MainWindowViewModel : ViewModelBase
         foreach (var vm in CustomRulesList) vm.Enabled = false;
     }
 
+    /// <summary>v2.30.0-r14 — bulk-pop "Sort by type" action per design
+    /// `.bulk-pop`. Stable-sorts CustomRulesList by Type alphabetically;
+    /// preserves Enabled / Comment fields. Equal-type rules retain their
+    /// original relative order (LINQ's OrderBy is stable). After sort,
+    /// FlushCustomRulesListToSettings persists the new order to YAML +
+    /// rebuilds the textbox view + Read-mode groups.</summary>
+    [RelayCommand]
+    private void SortCustomRulesByType()
+    {
+        if (CustomRulesList.Count <= 1) return;
+        var sorted = CustomRulesList
+            .OrderBy(r => r.Type, System.StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.Action, System.StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _isSyncingCustomRules = true;
+        try
+        {
+            CustomRulesList.Clear();
+            foreach (var r in sorted) CustomRulesList.Add(r);
+        }
+        finally { _isSyncingCustomRules = false; }
+        FlushCustomRulesListToSettings();
+        RebuildFilteredCustomRulesList();
+    }
+
     /// <summary>v2.30.0-r2 — re-emit settings + textbox sync after
     /// a structured-row property change (Action / Type / Value / Comment
     /// / Enabled). Avoids RebuildCustomRulesList loop because the row
