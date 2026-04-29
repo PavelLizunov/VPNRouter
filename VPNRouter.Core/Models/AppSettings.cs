@@ -11,7 +11,7 @@ public class AppSettings
     /// <see cref="VPNRouter.Core.Services.SettingsMigrator"/> and
     /// rewritten to the current schema on load.
     /// </summary>
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     [YamlMember(Alias = "schema_version")]
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -165,20 +165,36 @@ public class AppConfig
     /// <summary>
     /// v2.29.0: user-defined direct-routing rules. Each rule matches a
     /// destination (domain / IP / CIDR / port) and routes it OUT of the
-    /// VPN tunnel (action: direct). Use cases:
-    /// <list type="bullet">
-    /// <item>Running another VPN alongside (e.g. WireGuard) and wanting
-    /// its tunnel-IPs to bypass VPNRouter.</item>
-    /// <item>Excluding LAN ranges (10.0.0.0/8, 192.168.0.0/16) from the
-    /// tunnel.</item>
-    /// <item>Whitelisting internal corp domains.</item>
-    /// </list>
-    /// Inserted in <see cref="ConfigGenerator"/>'s route rules BEFORE
-    /// auto-generated process_name and BEFORE the geo bypass / final
-    /// route. Empty list ⇒ no extra rules in the generated sing-box JSON.
+    /// VPN tunnel (action: direct).
+    ///
+    /// <para>v2.30.0 SUPERSEDED by <see cref="CustomRules"/> which
+    /// supports direct + proxy + block actions. <see cref="CustomDirectRules"/>
+    /// remains in schema for back-compat with v2.29.0-r4..r8 configs;
+    /// <see cref="SettingsMigrator"/> auto-migrates to <see cref="CustomRules"/>
+    /// on first run after upgrade. After migration the field is left empty
+    /// but kept (drop in v2.32+ once enough users have upgraded past).</para>
     /// </summary>
     [YamlMember(Alias = "custom_direct_rules")]
     public List<CustomDirectRule> CustomDirectRules { get; set; } = new();
+
+    /// <summary>
+    /// v2.30.0: full custom-rules engine. Each rule has an Action
+    /// (direct / proxy / block), a match type (domain / domain_suffix /
+    /// domain_keyword / ip_cidr / port / port_range / network /
+    /// process_name / geosite / geoip), a value (comma-separated for
+    /// multi-value), an optional comment, and an enabled flag.
+    ///
+    /// <para>Rule order matters — sing-box uses first-match-wins. The
+    /// generator inserts these rules AFTER built-in always-on rules
+    /// (sniff, hijack-dns, ip_is_private) and AFTER toggle-driven rules
+    /// (BypassRussianTraffic, BlockAds — both higher priority per user
+    /// direction 2026-04-29 «toggles остаются и всегда приоритетнее»),
+    /// but BEFORE auto-generated process_name → proxy and the final
+    /// route. So a user direct rule wins over app-selection proxy
+    /// routing, but loses to BypassRussianTraffic if both match.</para>
+    /// </summary>
+    [YamlMember(Alias = "custom_rules")]
+    public List<CustomRule> CustomRules { get; set; } = new();
 
     /// <summary>
     /// When true, force IPv4-only DNS resolution to prevent IPv6 leaks
@@ -324,10 +340,73 @@ public class CustomCategory
 }
 
 /// <summary>
+/// v2.30.0: user-defined custom routing rule with explicit Action
+/// (direct / proxy / block). Replaces the v2.29.0
+/// <see cref="CustomDirectRule"/> which was direct-only.
+///
+/// <para>Mapping to sing-box rule actions:</para>
+/// <list type="bullet">
+/// <item><c>direct</c> ⇒ <c>action="route"</c>, <c>outbound="direct"</c></item>
+/// <item><c>proxy</c> ⇒ <c>action="route"</c>, <c>outbound="proxy"</c>
+/// (or <c>"proxy-udp"</c> when network=udp + UDP-split servers exist)</item>
+/// <item><c>block</c> ⇒ <c>action="reject"</c>, <c>method="default"</c>
+/// (RST — fast-fail signal to apps). For domain-type matches we ALSO
+/// insert a DNS-level reject so the lookup itself fails — saves a
+/// round-trip and matches user expectation of "blocked = invisible".</item>
+/// </list>
+///
+/// <para>For <c>geosite</c> / <c>geoip</c> match types, the rule_set
+/// must be downloaded + registered. v2.30 ships with <c>ru</c> already
+/// bundled (via <see cref="GeoDataDownloader"/>); other rule_set names
+/// (<c>cn</c>, <c>us</c>, <c>ads</c>, etc.) auto-download on first use
+/// from <c>raw.githubusercontent.com/SagerNet/sing-{geosite,geoip}/rule-set/</c>.</para>
+/// </summary>
+public class CustomRule
+{
+    /// <summary>"direct" | "proxy" | "block".</summary>
+    [YamlMember(Alias = "action")]
+    public string Action { get; set; } = "direct";
+
+    /// <summary>
+    /// Match type. v2.30 supported types:
+    /// <list type="bullet">
+    /// <item><c>domain</c> — exact FQDN match</item>
+    /// <item><c>domain_suffix</c> — destination FQDN ends with value</item>
+    /// <item><c>domain_keyword</c> — substring anywhere</item>
+    /// <item><c>ip_cidr</c> — IPv4/IPv6 CIDR</item>
+    /// <item><c>port</c> — single dest port (1-65535)</item>
+    /// <item><c>port_range</c> — "min-max" range</item>
+    /// <item><c>network</c> — "tcp" or "udp"</item>
+    /// <item><c>process_name</c> — case-sensitive process executable name</item>
+    /// <item><c>geosite</c> — sing-geosite preset (ru/cn/us/ads/etc.)</item>
+    /// <item><c>geoip</c> — sing-geoip preset (same naming)</item>
+    /// </list>
+    /// </summary>
+    [YamlMember(Alias = "type")]
+    public string Type { get; set; } = "domain_suffix";
+
+    /// <summary>Comma-separated multi-value (single-value for geosite/geoip).</summary>
+    [YamlMember(Alias = "value")]
+    public string Value { get; set; } = string.Empty;
+
+    /// <summary>Optional human label for the UI rule list.</summary>
+    [YamlMember(Alias = "comment")]
+    public string Comment { get; set; } = string.Empty;
+
+    /// <summary>True ⇒ rule active. Allows toggling without deleting.</summary>
+    [YamlMember(Alias = "enabled")]
+    public bool Enabled { get; set; } = true;
+}
+
+/// <summary>
 /// v2.29.0: user-defined direct-routing rule. Each entry matches a
 /// destination (domain / IP / CIDR / port) and routes it OUT of the
 /// VPN tunnel (action: direct). See <see cref="AppConfig.CustomDirectRules"/>
 /// for context.
+///
+/// <para>v2.30.0: superseded by <see cref="CustomRule"/>. Kept for
+/// back-compat with v2.29 configs; <see cref="SettingsMigrator"/>
+/// migrates instances on first run.</para>
 /// </summary>
 public class CustomDirectRule
 {

@@ -3122,3 +3122,400 @@ public class FreeConfigDeepVerifyCheckpointTests
             && cfg.LatencyMs > 0;
     }
 }
+
+/// <summary>v2.30.0: tests for the new full custom rules engine
+/// (direct/proxy/block actions). Covers parser, ConfigGenerator, and
+/// migration from v2.29.0-r4 CustomDirectRule schema.</summary>
+public class CustomRulesV2_30_ParserTests
+{
+    [Fact]
+    public void Parse_Empty_ReturnsEmpty()
+    {
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("");
+        Assert.Empty(r.Rules);
+        Assert.Empty(r.Errors);
+    }
+
+    [Fact]
+    public void Parse_DirectRule_WithIpCidr()
+    {
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("direct ip_cidr 10.0.0.0/8");
+        Assert.Single(r.Rules);
+        Assert.Equal("direct", r.Rules[0].Action);
+        Assert.Equal("ip_cidr", r.Rules[0].Type);
+        Assert.Equal("10.0.0.0/8", r.Rules[0].Value);
+    }
+
+    [Fact]
+    public void Parse_ProxyRule_WithDomainSuffix()
+    {
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("proxy domain_suffix .corp.example");
+        Assert.Single(r.Rules);
+        Assert.Equal("proxy", r.Rules[0].Action);
+        Assert.Equal("domain_suffix", r.Rules[0].Type);
+    }
+
+    [Fact]
+    public void Parse_BlockRule_WithGeosite()
+    {
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("block geosite ads");
+        Assert.Single(r.Rules);
+        Assert.Equal("block", r.Rules[0].Action);
+        Assert.Equal("geosite", r.Rules[0].Type);
+    }
+
+    [Fact]
+    public void Parse_AllThreeActions_InOneText()
+    {
+        var text = "direct ip_cidr 10.0.0.0/8\nproxy domain_suffix .corp\nblock geosite ads\n";
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText(text);
+        Assert.Equal(3, r.Rules.Count);
+        Assert.Equal("direct", r.Rules[0].Action);
+        Assert.Equal("proxy", r.Rules[1].Action);
+        Assert.Equal("block", r.Rules[2].Action);
+    }
+
+    [Fact]
+    public void Parse_UnknownAction_RaisesError()
+    {
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("forward domain example.com");
+        Assert.Empty(r.Rules);
+        Assert.Single(r.Errors);
+        Assert.Contains("Unknown action", r.Errors[0].Reason);
+    }
+
+    [Fact]
+    public void Parse_NewType_PortRange()
+    {
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("proxy port_range 1024-5000");
+        Assert.Single(r.Rules);
+        Assert.Equal("port_range", r.Rules[0].Type);
+        Assert.Equal("1024-5000", r.Rules[0].Value);
+    }
+
+    [Fact]
+    public void Parse_NewType_Network()
+    {
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("direct network udp");
+        Assert.Single(r.Rules);
+        Assert.Equal("network", r.Rules[0].Type);
+        Assert.Equal("udp", r.Rules[0].Value);
+    }
+
+    [Fact]
+    public void Parse_InvalidPortRange_RaisesError()
+    {
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("proxy port_range 5000-1024");
+        Assert.Empty(r.Rules);
+        Assert.Single(r.Errors);
+        Assert.Contains("port range", r.Errors[0].Reason);
+    }
+
+    [Fact]
+    public void Parse_InvalidNetwork_RaisesError()
+    {
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("proxy network icmp");
+        Assert.Empty(r.Rules);
+        Assert.Single(r.Errors);
+        Assert.Contains("network", r.Errors[0].Reason);
+    }
+
+    [Fact]
+    public void Parse_GeositeName_Valid()
+    {
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("direct geosite category-news-ru");
+        Assert.Single(r.Rules);
+        Assert.Empty(r.Errors);
+    }
+
+    [Fact]
+    public void Parse_GeositeName_RejectsUppercase()
+    {
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("direct geosite Category-News-RU");
+        Assert.Empty(r.Rules);
+        Assert.Single(r.Errors);
+    }
+
+    [Fact]
+    public void Parse_DisabledRule_PrefixBang()
+    {
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("!block port 53");
+        Assert.Single(r.Rules);
+        Assert.False(r.Rules[0].Enabled);
+        Assert.Equal("block", r.Rules[0].Action);
+    }
+
+    [Fact]
+    public void Parse_InlineComment_Captured()
+    {
+        var r = VPNRouter.Core.Services.CustomRulesParser.ParseFromText("direct ip_cidr 10.0.0.0/8  # LAN range");
+        Assert.Single(r.Rules);
+        Assert.Equal("LAN range", r.Rules[0].Comment);
+    }
+
+    [Fact]
+    public void Serialize_Roundtrip_PreservesAll()
+    {
+        var input = new List<VPNRouter.Core.Models.CustomRule>
+        {
+            new() { Action = "direct", Type = "ip_cidr", Value = "10.0.0.0/8", Comment = "LAN", Enabled = true },
+            new() { Action = "proxy", Type = "domain_suffix", Value = ".corp", Enabled = true },
+            new() { Action = "block", Type = "geosite", Value = "ads", Enabled = false },
+        };
+        var text = VPNRouter.Core.Services.CustomRulesParser.SerializeToText(input);
+        var roundTrip = VPNRouter.Core.Services.CustomRulesParser.ParseFromText(text);
+        Assert.Empty(roundTrip.Errors);
+        Assert.Equal(3, roundTrip.Rules.Count);
+        Assert.Equal("direct", roundTrip.Rules[0].Action);
+        Assert.Equal("LAN", roundTrip.Rules[0].Comment);
+        Assert.Equal("proxy", roundTrip.Rules[1].Action);
+        Assert.Equal("block", roundTrip.Rules[2].Action);
+        Assert.False(roundTrip.Rules[2].Enabled);
+    }
+
+    [Fact]
+    public void DetectConflicts_CatchAllIpCidr_Flagged()
+    {
+        var rules = new List<VPNRouter.Core.Models.CustomRule>
+        {
+            new() { Action = "direct", Type = "ip_cidr", Value = "0.0.0.0/0", Enabled = true },
+            new() { Action = "block", Type = "geosite", Value = "ads", Enabled = true },
+        };
+        var conflicts = VPNRouter.Core.Services.CustomRulesParser.DetectConflicts(rules);
+        Assert.Single(conflicts);
+        Assert.Contains("matches everything", conflicts[0]);
+    }
+
+    [Fact]
+    public void DetectConflicts_NoCatchAll_Empty()
+    {
+        var rules = new List<VPNRouter.Core.Models.CustomRule>
+        {
+            new() { Action = "direct", Type = "ip_cidr", Value = "10.0.0.0/8", Enabled = true },
+        };
+        Assert.Empty(VPNRouter.Core.Services.CustomRulesParser.DetectConflicts(rules));
+    }
+}
+
+public class CustomRulesV2_30_GeneratorTests
+{
+    [Fact]
+    public void BuildRule_DirectAction_ProducesRouteDirect()
+    {
+        var rule = new VPNRouter.Core.Models.CustomRule
+        {
+            Action = "direct", Type = "ip_cidr", Value = "10.0.0.0/8", Enabled = true,
+        };
+        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomRouteRule(rule);
+        Assert.NotNull(route);
+        Assert.Equal("route", route!.Action);
+        Assert.Equal("direct", route.Outbound);
+    }
+
+    [Fact]
+    public void BuildRule_ProxyAction_ProducesRouteProxy()
+    {
+        var rule = new VPNRouter.Core.Models.CustomRule
+        {
+            Action = "proxy", Type = "domain_suffix", Value = ".corp", Enabled = true,
+        };
+        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomRouteRule(rule);
+        Assert.NotNull(route);
+        Assert.Equal("route", route!.Action);
+        Assert.Equal("proxy", route.Outbound);
+    }
+
+    [Fact]
+    public void BuildRule_BlockAction_ProducesReject()
+    {
+        var rule = new VPNRouter.Core.Models.CustomRule
+        {
+            Action = "block", Type = "domain_keyword", Value = "tracker", Enabled = true,
+        };
+        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomRouteRule(rule);
+        Assert.NotNull(route);
+        Assert.Equal("reject", route!.Action);
+        Assert.Null(route.Outbound);
+    }
+
+    [Fact]
+    public void BuildRule_Geosite_TaggedAsUserPrefix()
+    {
+        var rule = new VPNRouter.Core.Models.CustomRule
+        {
+            Action = "direct", Type = "geosite", Value = "ru", Enabled = true,
+        };
+        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomRouteRule(rule);
+        Assert.NotNull(route);
+        Assert.NotNull(route!.RuleSet);
+        Assert.Single(route.RuleSet!);
+        Assert.Equal("user-geosite-ru", route.RuleSet![0]);
+    }
+
+    [Fact]
+    public void BuildRule_Geoip_TaggedAsUserPrefix()
+    {
+        var rule = new VPNRouter.Core.Models.CustomRule
+        {
+            Action = "block", Type = "geoip", Value = "cn", Enabled = true,
+        };
+        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomRouteRule(rule);
+        Assert.NotNull(route);
+        Assert.Equal("user-geoip-cn", route!.RuleSet![0]);
+    }
+
+    [Fact]
+    public void BuildRule_PortRange_ExpandedToPortList()
+    {
+        var rule = new VPNRouter.Core.Models.CustomRule
+        {
+            Action = "proxy", Type = "port_range", Value = "1024-1029", Enabled = true,
+        };
+        var route = VPNRouter.Core.Services.ConfigGenerator.BuildCustomRouteRule(rule);
+        Assert.NotNull(route);
+        Assert.NotNull(route!.Port);
+        Assert.True(route.Port!.Count >= 2);
+        Assert.Contains(1024, route.Port!);
+        Assert.Contains(1029, route.Port!);
+    }
+
+    [Fact]
+    public void Apply_AllThreeActions_OrderPreserved()
+    {
+        var config = NewConfigWithEmptyRoutes();
+        var rules = new List<VPNRouter.Core.Models.CustomRule>
+        {
+            new() { Action = "direct", Type = "ip_cidr", Value = "10.0.0.0/8", Enabled = true },
+            new() { Action = "proxy", Type = "domain_suffix", Value = ".corp", Enabled = true },
+            new() { Action = "block", Type = "domain_keyword", Value = "tracker", Enabled = true },
+        };
+        VPNRouter.Core.Services.ConfigGenerator.ApplyCustomRules(config, rules);
+        Assert.Equal(3, config.Route.Rules.Count);
+        Assert.Equal("direct", config.Route.Rules[0].Outbound);
+        Assert.Equal("proxy", config.Route.Rules[1].Outbound);
+        Assert.Equal("reject", config.Route.Rules[2].Action);
+    }
+
+    [Fact]
+    public void Apply_BlockDomainRule_AlsoCreatesDnsReject()
+    {
+        var config = NewConfigWithEmptyRoutes();
+        var rules = new List<VPNRouter.Core.Models.CustomRule>
+        {
+            new() { Action = "block", Type = "domain_keyword", Value = "tracker", Enabled = true },
+        };
+        VPNRouter.Core.Services.ConfigGenerator.ApplyCustomRules(config, rules);
+        Assert.Single(config.Route.Rules);
+        Assert.Single(config.Dns.Rules);
+        Assert.Equal("reject", config.Dns.Rules[0].Action);
+        Assert.NotNull(config.Dns.Rules[0].DomainKeyword);
+    }
+
+    [Fact]
+    public void Apply_BlockIpCidr_DoesNotCreateDnsReject()
+    {
+        var config = NewConfigWithEmptyRoutes();
+        var rules = new List<VPNRouter.Core.Models.CustomRule>
+        {
+            new() { Action = "block", Type = "ip_cidr", Value = "203.0.113.0/24", Enabled = true },
+        };
+        VPNRouter.Core.Services.ConfigGenerator.ApplyCustomRules(config, rules);
+        Assert.Single(config.Route.Rules);
+        Assert.Empty(config.Dns.Rules);
+    }
+
+    [Fact]
+    public void Apply_GeositeRule_RegistersRuleSetEntry()
+    {
+        var config = NewConfigWithEmptyRoutes();
+        var rules = new List<VPNRouter.Core.Models.CustomRule>
+        {
+            new() { Action = "block", Type = "geosite", Value = "ads", Enabled = true },
+        };
+        VPNRouter.Core.Services.ConfigGenerator.ApplyCustomRules(config, rules);
+        Assert.NotNull(config.Route.RuleSet);
+        Assert.Single(config.Route.RuleSet!);
+        Assert.Equal("user-geosite-ads", config.Route.RuleSet![0].Tag);
+        Assert.Contains("sing-geosite", config.Route.RuleSet![0].Url);
+    }
+
+    [Fact]
+    public void Apply_DisabledRule_Skipped()
+    {
+        var config = NewConfigWithEmptyRoutes();
+        var rules = new List<VPNRouter.Core.Models.CustomRule>
+        {
+            new() { Action = "direct", Type = "domain", Value = "active.example", Enabled = true },
+            new() { Action = "block", Type = "domain", Value = "skipped.example", Enabled = false },
+        };
+        VPNRouter.Core.Services.ConfigGenerator.ApplyCustomRules(config, rules);
+        Assert.Single(config.Route.Rules);
+        Assert.Equal("active.example", config.Route.Rules[0].Domain![0]);
+    }
+
+    private static VPNRouter.Core.Models.SingBoxConfig NewConfigWithEmptyRoutes() =>
+        new VPNRouter.Core.Models.SingBoxConfig
+        {
+            Route = new VPNRouter.Core.Models.SingBoxRoute
+            {
+                Rules = new List<VPNRouter.Core.Models.RouteRule>(),
+            },
+            Dns = new VPNRouter.Core.Models.SingBoxDns
+            {
+                Rules = new List<VPNRouter.Core.Models.DnsRule>(),
+            },
+        };
+}
+
+public class CustomRulesV2_30_MigrationTests
+{
+    [Fact]
+    public void Migration_v1_to_v2_ConvertsLegacyDirectRules()
+    {
+        var settings = new VPNRouter.Core.Models.AppSettings { SchemaVersion = 1 };
+        settings.App.CustomDirectRules = new List<VPNRouter.Core.Models.CustomDirectRule>
+        {
+            new() { Type = "ip_cidr", Value = "10.0.0.0/8", Comment = "LAN", Enabled = true },
+            new() { Type = "domain_suffix", Value = ".internal", Enabled = false },
+        };
+
+        var migrated = VPNRouter.Core.Services.SettingsMigrator.Migrate(settings, 1, 2);
+
+        Assert.Equal(2, migrated.App.CustomRules.Count);
+        Assert.All(migrated.App.CustomRules, r => Assert.Equal("direct", r.Action));
+        Assert.Equal("ip_cidr", migrated.App.CustomRules[0].Type);
+        Assert.Equal("LAN", migrated.App.CustomRules[0].Comment);
+        Assert.False(migrated.App.CustomRules[1].Enabled);
+        Assert.Empty(migrated.App.CustomDirectRules);
+    }
+
+    [Fact]
+    public void Migration_v1_to_v2_Idempotent_WhenCustomRulesPopulated()
+    {
+        var settings = new VPNRouter.Core.Models.AppSettings { SchemaVersion = 1 };
+        settings.App.CustomRules.Add(new VPNRouter.Core.Models.CustomRule
+        {
+            Action = "proxy", Type = "domain", Value = "manual.example", Enabled = true,
+        });
+        settings.App.CustomDirectRules.Add(new VPNRouter.Core.Models.CustomDirectRule
+        {
+            Type = "ip_cidr", Value = "10.0.0.0/8", Enabled = true,
+        });
+
+        var migrated = VPNRouter.Core.Services.SettingsMigrator.Migrate(settings, 1, 2);
+
+        Assert.Single(migrated.App.CustomRules);
+        Assert.Equal("proxy", migrated.App.CustomRules[0].Action);
+        Assert.Single(migrated.App.CustomDirectRules);
+    }
+
+    [Fact]
+    public void Migration_v1_to_v2_NoLegacyData_NoOp()
+    {
+        var settings = new VPNRouter.Core.Models.AppSettings { SchemaVersion = 1 };
+        var migrated = VPNRouter.Core.Services.SettingsMigrator.Migrate(settings, 1, 2);
+        Assert.Empty(migrated.App.CustomRules);
+        Assert.Empty(migrated.App.CustomDirectRules);
+        Assert.Equal(2, migrated.SchemaVersion);
+    }
+}

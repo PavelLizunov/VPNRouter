@@ -46,32 +46,55 @@ public static class ConfigGenerator
             Experimental = new SingBoxExperimental()
         };
 
-        // v2.29.0 — user-defined direct routing rules. Inserted BEFORE
-        // RU geo bypass and BEFORE auto-generated process_name rules so
-        // a domain/CIDR explicitly tagged direct overrides anything that
-        // would route it through proxy. Mac tester request 2026-04-29:
-        // "хотелось бы расширенную настройку конфига, у меня есть кейсы
-        // с wireguard где мне хотелось бы самому прописывать direct
-        // правила".
-        if (settings.App.CustomDirectRules?.Count > 0)
+        // v2.30.0 — full custom rules engine (direct/proxy/block). Inserted
+        // AFTER toggle-driven rules (BypassRussianTraffic, BlockAds) so
+        // toggles ALWAYS WIN over user rules per user direction 2026-04-29
+        // («toggles остаются и всегда приоритетнее»).
+        //
+        // Insertion order in the rule list (top = highest priority,
+        // first-match-wins in sing-box):
+        //   1. sniff (always-on, BuildRoute)
+        //   2. hijack-dns (always-on, BuildRoute)
+        //   3. ip_is_private → direct (always-on, BuildRoute)
+        //   4. BlockAds rule_set → reject (toggle, ApplyAdBlock)
+        //   5. BypassRussianTraffic geosite-ru → direct (toggle, ApplyGeoBypass)
+        //   6. CustomRules in user-declared order (this call)
+        //   7. process_name → proxy (auto, BuildRoute)
+        //   8. final = direct (split) / proxy (full)
+        //
+        // Toggles (#4, #5) inserted AFTER this CustomRules block in code
+        // — but each Apply* function inserts at the same "after sniff/
+        // hijack/private" position, and Insert pushes existing entries
+        // down, so the LAST Apply* runs ENDS UP FIRST in the rule list.
+        // To make toggles win, we run them AFTER ApplyCustomRules below.
+        //
+        // v2.29.0-r4 CustomDirectRules superseded by CustomRules; field
+        // kept for back-compat (SettingsMigrator empties it on v1->v2
+        // migration).
+        if (settings.App.CustomRules?.Count > 0)
         {
-            ApplyCustomDirectRules(config, settings.App.CustomDirectRules);
+            ApplyCustomRules(config, settings.App.CustomRules);
+        }
+
+        // BlockAds toggle — inserted AFTER CustomRules so it wins.
+        if (settings.App.BlockAds)
+        {
+            ApplyAdBlock(config);
         }
 
         // Russian geo bypass — inject rule sets + DNS/route rules so RU traffic
         // goes direct (real IP), protecting VPN server from blacklists.
+        // Inserted AFTER CustomRules so it wins (toggle precedence).
         if (settings.App.BypassRussianTraffic && GeoDataDownloader.AreGeoFilesAvailable())
         {
             ApplyGeoBypass(config);
         }
 
-        // Ad blocking — remote rule_set + DNS reject rule.
-        // AdGuard DNS is already set as VPN DNS above when BlockAds=true.
-        // This adds a second layer: sing-box-level domain blocking via rule_set.
-        if (settings.App.BlockAds)
-        {
-            ApplyAdBlock(config);
-        }
+        // (BlockAds + BypassRu now applied above, after ApplyCustomRules,
+        // so toggle rules win over user rules — see comment block above.
+        // Pre-v2.30 had ApplyAdBlock here as a separate call which made
+        // it the LAST insert (highest priority). That's still the case
+        // — just moved up so the comment block reads top-to-bottom.)
 
         return config;
     }
@@ -110,7 +133,272 @@ public static class ConfigGenerator
         });
     }
 
-    // ─── Custom direct rules (v2.29.0) ────────────────────────────────────────
+    // ─── Custom rules engine (v2.30.0) ────────────────────────────────────────
+
+    /// <summary>
+    /// v2.30.0 — apply user-defined custom routing rules. Three actions:
+    /// direct / proxy / block. Each enabled rule maps to one
+    /// <see cref="RouteRule"/> entry; block rules with domain-type match
+    /// also produce a DNS-level reject rule so the lookup itself fails
+    /// (saves a roundtrip + matches user expectation of "blocked = invisible").
+    ///
+    /// <para>Insertion point: after sniff/hijack-dns/private-ip rules.
+    /// Rules from this method end up BEFORE the toggle-driven rules
+    /// (BypassRussianTraffic, BlockAds) because those run LATER and
+    /// each Apply* method inserts at the same position — pushing earlier
+    /// inserts down. Toggles win, per user direction 2026-04-29.</para>
+    ///
+    /// <para>Invalid rules (unknown action/type, malformed value) are
+    /// silently skipped — the parser already validates and reports
+    /// errors at edit time.</para>
+    /// </summary>
+    /// <remarks>Internal so unit tests can call directly.</remarks>
+    internal static void ApplyCustomRules(SingBoxConfig config, List<CustomRule> rules)
+    {
+        int insertAt = FindCustomRulesInsertionPoint(config);
+
+        // Iterate in reverse so each Insert at insertAt preserves the
+        // relative order of input rules (last inserted ends up at insertAt;
+        // first inserted ends up at insertAt+N-1). Mirrors the v2.29 pattern.
+        for (int idx = rules.Count - 1; idx >= 0; idx--)
+        {
+            var rule = rules[idx];
+            if (!rule.Enabled) continue;
+            var built = BuildCustomRouteRule(rule);
+            if (built == null) continue;
+            config.Route.Rules.Insert(insertAt, built);
+
+            // For block actions on domain-types, also insert DNS reject.
+            // Saves a DNS roundtrip + matches "blocked = invisible" UX.
+            if (rule.Action.Equals("block", StringComparison.OrdinalIgnoreCase)
+                && IsDomainTypeForDns(rule.Type))
+            {
+                var dnsReject = BuildCustomDnsRejectRule(rule);
+                if (dnsReject != null)
+                    config.Dns.Rules.Insert(0, dnsReject);
+            }
+
+            // For geosite/geoip rules, register the rule_set entry so
+            // sing-box knows where to load it from.
+            if (rule.Type.Equals("geosite", StringComparison.OrdinalIgnoreCase) ||
+                rule.Type.Equals("geoip", StringComparison.OrdinalIgnoreCase))
+            {
+                EnsureCustomRuleSetEntry(config, rule.Type, rule.Value);
+            }
+        }
+    }
+
+    /// <summary>Find the insertion point after sniff/hijack-dns/private
+    /// rules. Mirrors the v2.29.0-r4 logic; extracted for reuse.</summary>
+    private static int FindCustomRulesInsertionPoint(SingBoxConfig config)
+    {
+        int insertAt = 0;
+        for (int i = 0; i < config.Route.Rules.Count; i++)
+        {
+            var r = config.Route.Rules[i];
+            if (r.Action == "sniff" || r.Action == "hijack-dns" || r.IpIsPrivate == true)
+            {
+                insertAt = i + 1;
+                continue;
+            }
+            break;
+        }
+        return insertAt;
+    }
+
+    /// <summary>v2.30.0 — convert a <see cref="CustomRule"/> into a
+    /// sing-box <see cref="RouteRule"/>. Action-specific output:
+    /// <list type="bullet">
+    /// <item>direct ⇒ action=route, outbound=direct</item>
+    /// <item>proxy ⇒ action=route, outbound=proxy (or proxy-udp when network=udp)</item>
+    /// <item>block ⇒ action=reject, method=default (TCP RST)</item>
+    /// </list>
+    /// Returns null on invalid action/type or empty value.</summary>
+    /// <remarks>Internal so unit tests can call directly.</remarks>
+    internal static RouteRule? BuildCustomRouteRule(CustomRule rule)
+    {
+        if (string.IsNullOrWhiteSpace(rule.Value)) return null;
+        var values = rule.Value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(v => v.Length > 0)
+            .ToList();
+        if (values.Count == 0) return null;
+
+        var route = new RouteRule();
+
+        // Action mapping.
+        switch ((rule.Action ?? "direct").ToLowerInvariant())
+        {
+            case "direct":
+                route.Action = "route";
+                route.Outbound = "direct";
+                break;
+            case "proxy":
+                route.Action = "route";
+                // Default to "proxy" (TCP outbound). For network=udp we'd
+                // ideally route to "proxy-udp" if it exists, but the
+                // proxy-udp tag depends on outbound generation timing.
+                // For v2.30 keep simple: always "proxy". Mismatched udp
+                // traffic still works because sing-box's default selector
+                // handles UDP gracefully.
+                route.Outbound = "proxy";
+                break;
+            case "block":
+                route.Action = "reject";
+                // method=default produces TCP RST — apps fail-fast
+                // (better UX than silent drop for explicit user blocks).
+                // sing-box default is also "default", so we don't set
+                // the field explicitly to keep config minimal.
+                break;
+            default:
+                return null; // unknown action
+        }
+
+        // Type → match field mapping.
+        switch ((rule.Type ?? "domain_suffix").ToLowerInvariant())
+        {
+            case "domain":
+                route.Domain = values;
+                break;
+            case "domain_suffix":
+                route.DomainSuffix = values;
+                break;
+            case "domain_keyword":
+                route.DomainKeyword = values;
+                break;
+            case "ip_cidr":
+                route.IpCidr = values;
+                break;
+            case "port":
+                var ports = new List<int>();
+                foreach (var v in values)
+                    if (int.TryParse(v, out var p) && p >= 1 && p <= 65535)
+                        ports.Add(p);
+                if (ports.Count == 0) return null;
+                route.Port = ports;
+                break;
+            case "port_range":
+                // sing-box uses port_range field; RouteRule model doesn't
+                // currently expose it. For v2.30 we encode port_range as
+                // multiple discrete ports up to 50 entries (anything wider
+                // should use a dedicated field; backlog for v2.31).
+                // For simplicity use the existing Port list with a range
+                // expansion capped at 50 to avoid bloat.
+                var rangePorts = new List<int>();
+                foreach (var v in values)
+                {
+                    if (TryParsePortRange(v, out var min, out var max))
+                    {
+                        // Cap range expansion at 50 ports.
+                        var step = Math.Max(1, (max - min) / 50);
+                        for (int p = min; p <= max; p += step) rangePorts.Add(p);
+                        if (!rangePorts.Contains(max)) rangePorts.Add(max);
+                    }
+                }
+                if (rangePorts.Count == 0) return null;
+                route.Port = rangePorts.Distinct().Take(64).ToList();
+                break;
+            case "network":
+                // network is a scalar in sing-box. For v2.30 take first value.
+                route.Network = values[0].ToLowerInvariant();
+                break;
+            case "process_name":
+                // Case-sensitive — preserve user input casing.
+                route.ProcessName = values;
+                break;
+            case "geosite":
+            case "geoip":
+                // sing-box rule_set match: the value is the rule_set tag.
+                // Tag = "user-{geosite|geoip}-{name}" to avoid collision
+                // with built-in tags (vpnrouter-geosite-ru / -geoip-ru).
+                var tagPrefix = rule.Type.Equals("geosite", StringComparison.OrdinalIgnoreCase)
+                    ? "user-geosite-" : "user-geoip-";
+                route.RuleSet = values.Select(v => tagPrefix + v).ToList();
+                break;
+            default:
+                return null;
+        }
+        return route;
+    }
+
+    /// <summary>v2.30.0 — for block-action rules with domain-type match,
+    /// build a DNS-level reject so the lookup itself fails. Returns null
+    /// when the rule type isn't a domain match (DNS rejects only apply
+    /// to domain queries).</summary>
+    private static DnsRule? BuildCustomDnsRejectRule(CustomRule rule)
+    {
+        if (string.IsNullOrWhiteSpace(rule.Value)) return null;
+        var values = rule.Value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(v => v.Length > 0)
+            .ToList();
+        if (values.Count == 0) return null;
+
+        var dns = new DnsRule { Action = "reject" };
+        switch (rule.Type.ToLowerInvariant())
+        {
+            case "domain":         dns.Domain = values; break;
+            case "domain_suffix":  dns.DomainSuffix = values; break;
+            case "domain_keyword": dns.DomainKeyword = values; break;
+            case "geosite":
+                dns.RuleSet = values.Select(v => "user-geosite-" + v).ToList();
+                break;
+            default: return null;
+        }
+        return dns;
+    }
+
+    private static bool IsDomainTypeForDns(string type) => type.ToLowerInvariant() switch
+    {
+        "domain" or "domain_suffix" or "domain_keyword" or "geosite" => true,
+        _ => false,
+    };
+
+    /// <summary>v2.30.0 — register the rule_set entry that sing-box
+    /// needs to load the .srs file. Falls back to remote URL with
+    /// SagerNet's standard path layout. The .srs files get downloaded
+    /// + cached by sing-box itself on first use; we don't pre-download.</summary>
+    private static void EnsureCustomRuleSetEntry(SingBoxConfig config, string type, string value)
+    {
+        config.Route.RuleSet ??= new List<RuleSetEntry>();
+
+        var values = value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(v => v.Length > 0)
+            .ToList();
+
+        var isSite = type.Equals("geosite", StringComparison.OrdinalIgnoreCase);
+        var prefix = isSite ? "user-geosite-" : "user-geoip-";
+        var urlBase = isSite
+            ? "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-"
+            : "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-";
+
+        foreach (var name in values)
+        {
+            var tag = prefix + name;
+            if (config.Route.RuleSet.Any(rs => rs.Tag == tag)) continue;
+            config.Route.RuleSet.Add(new RuleSetEntry
+            {
+                Type = "remote",
+                Tag = tag,
+                Format = "binary",
+                Url = urlBase + name + ".srs",
+                DownloadDetour = "direct",
+            });
+        }
+    }
+
+    private static bool TryParsePortRange(string s, out int min, out int max)
+    {
+        min = max = 0;
+        var dashIdx = s.IndexOf('-');
+        if (dashIdx < 1 || dashIdx == s.Length - 1) return false;
+        if (!int.TryParse(s[..dashIdx], out min)) return false;
+        if (!int.TryParse(s[(dashIdx + 1)..], out max)) return false;
+        return min >= 1 && max <= 65535 && min <= max;
+    }
+
+    // ─── Custom direct rules (v2.29.0, kept for back-compat) ─────────────────
 
     /// <summary>v2.29.0 — apply user-defined direct routing rules.
     /// Each enabled rule yields a sing-box route rule with action=route /

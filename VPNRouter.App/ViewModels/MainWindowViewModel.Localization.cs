@@ -43,11 +43,17 @@ public partial class MainWindowViewModel
     // disable, see ApplicationsPage.axaml).
     public string L_AppsFullTunnelBanner => Strings.AppsFullTunnelBanner;
     public string L_AppsFullTunnelBannerAction => Strings.AppsFullTunnelBannerAction;
-    // v2.29.0 — Custom direct rules (Network → Routing → expander).
-    public string L_CustomDirectRulesTitle => Strings.CustomDirectRulesTitle;
-    public string L_CustomDirectRulesDescription => Strings.CustomDirectRulesDescription;
-    public string L_CustomDirectRulesPlaceholder => Strings.CustomDirectRulesPlaceholder;
-    public string L_CustomDirectRulesErrorHeader => Strings.CustomDirectRulesErrorHeader;
+    // v2.30.0 — Custom rules engine (direct/proxy/block).
+    public string L_CustomRulesTitle => Strings.CustomRulesTitle;
+    public string L_CustomRulesDescription => Strings.CustomRulesDescription;
+    public string L_CustomRulesPlaceholder => Strings.CustomRulesPlaceholder;
+    public string L_CustomRulesErrorHeader => Strings.CustomRulesErrorHeader;
+    public string L_CustomRulesConflictHeader => Strings.CustomRulesConflictHeader;
+    // Legacy v2.29.0 aliases (kept for cached XAML).
+    public string L_CustomDirectRulesTitle => L_CustomRulesTitle;
+    public string L_CustomDirectRulesDescription => L_CustomRulesDescription;
+    public string L_CustomDirectRulesPlaceholder => L_CustomRulesPlaceholder;
+    public string L_CustomDirectRulesErrorHeader => L_CustomRulesErrorHeader;
     public string L_AutoUpdateCheckLabel => Strings.AutoUpdateCheckLabel;
     public string L_AutostartPlatformNotice => Strings.AutostartPlatformNotice;
     public string L_AutostartSection => Strings.AutostartSection;

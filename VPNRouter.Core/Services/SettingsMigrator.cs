@@ -36,8 +36,7 @@ public static class SettingsMigrator
             settings = v switch
             {
                 0 => Migrate_0_to_1(settings),
-                // Future: 1 => Migrate_1_to_2(settings),
-                //         2 => Migrate_2_to_3(settings),
+                1 => Migrate_1_to_2(settings, logger),
                 _ => throw new InvalidOperationException(
                     $"No SettingsMigrator step defined for schema v{v} -> v{v + 1}. " +
                     $"This means the config file schema is newer than the running app — " +
@@ -59,6 +58,60 @@ public static class SettingsMigrator
     /// </summary>
     private static AppSettings Migrate_0_to_1(AppSettings s)
     {
+        return s;
+    }
+
+    /// <summary>
+    /// v2.30.0: migrate <see cref="AppConfig.CustomDirectRules"/>
+    /// (v2.29.0-r4..r8 schema) to <see cref="AppConfig.CustomRules"/>
+    /// with explicit Action="direct". Preserves Type, Value, Comment,
+    /// Enabled. After migration the legacy field is left empty in
+    /// memory but the property is retained on the AppConfig class for
+    /// back-compat with v2.29 binaries that may share the same yaml
+    /// file (no-op for them).
+    ///
+    /// <para>Idempotent: if <see cref="AppConfig.CustomRules"/> is
+    /// already populated (v2.30+ user already migrated), skips. If
+    /// <see cref="AppConfig.CustomDirectRules"/> is empty, also skips.</para>
+    /// </summary>
+    private static AppSettings Migrate_1_to_2(AppSettings s, ILogger? logger)
+    {
+        if (s.App.CustomRules.Count > 0)
+        {
+            logger?.Information(
+                "[SettingsMigrator] v1->v2: CustomRules already populated ({Count}), " +
+                "skipping migration of CustomDirectRules", s.App.CustomRules.Count);
+            return s;
+        }
+
+        if (s.App.CustomDirectRules.Count == 0)
+        {
+            // Nothing to migrate — first-run / clean install.
+            return s;
+        }
+
+        var migrated = s.App.CustomDirectRules
+            .Select(legacy => new CustomRule
+            {
+                Action = "direct",  // legacy CustomDirectRule was direct-only
+                Type = legacy.Type,
+                Value = legacy.Value,
+                Comment = string.IsNullOrEmpty(legacy.Comment)
+                    ? string.Empty
+                    : legacy.Comment,
+                Enabled = legacy.Enabled,
+            })
+            .ToList();
+
+        s.App.CustomRules = migrated;
+        // Empty the legacy list so future loads don't double-migrate.
+        // Keep the property on AppConfig (class shape stays); just clear
+        // the data.
+        s.App.CustomDirectRules = new List<CustomDirectRule>();
+
+        logger?.Information(
+            "[SettingsMigrator] v1->v2: migrated {Count} CustomDirectRules to CustomRules",
+            migrated.Count);
         return s;
     }
 }

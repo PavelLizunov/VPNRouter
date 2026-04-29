@@ -707,18 +707,29 @@ public static class Strings
     // Mac tester request 2026-04-29: «хотелось бы расширенную настройку
     // конфига, у меня есть кейсы с wireguard где мне хотелось бы самому
     // прописывать direct правила».
-    public static string CustomDirectRulesTitle => Ru
-        ? "Свои правила direct (расширенно)"
-        : "Custom direct rules (advanced)";
-    public static string CustomDirectRulesDescription => Ru
-        ? "Маршрутизировать определённые домены, IP/CIDR или порты НАПРЯМУЮ, минуя VPN. ⓘ Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) и стандартные WireGuard/AmneziaWG-диапазоны УЖЕ идут direct автоматически — здесь только дополнительные правила (свои домены, нестандартные подсети, конкретные порты)."
-        : "Route specific domains, IPs/CIDRs or ports DIRECTLY, bypassing the VPN. ⓘ Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) and standard WireGuard/AmneziaWG subnets ALREADY go direct automatically — this section is only for ADDITIONAL rules (custom domains, non-standard subnets, specific ports).";
-    public static string CustomDirectRulesPlaceholder => Ru
-        ? "# Одно правило на строку. Типы: domain / domain_suffix / domain_keyword / ip_cidr / port / process_name\n# Несколько значений через запятую. Комментарий — после '#'. Отключить — '!' в начале.\n\nip_cidr 10.0.0.0/8, 192.168.0.0/16    # Локальные сети\ndomain_suffix .lan.local\nport 22"
-        : "# One rule per line. Types: domain / domain_suffix / domain_keyword / ip_cidr / port / process_name\n# Multiple values separated by ','. Inline comment after '#'. Prefix '!' to disable.\n\nip_cidr 10.0.0.0/8, 192.168.0.0/16    # Local LANs\ndomain_suffix .lan.local\nport 22";
-    public static string CustomDirectRulesErrorHeader => Ru
+    // v2.30.0 — full custom rules engine (direct/proxy/block actions).
+    // Replaces v2.29.0-r4 CustomDirectRules* strings.
+    public static string CustomRulesTitle => Ru
+        ? "Свои правила маршрутизации (расширенно)"
+        : "Custom routing rules (advanced)";
+    public static string CustomRulesDescription => Ru
+        ? "Свои правила для определённых доменов / IP / портов / процессов. Действия: direct (мимо VPN), proxy (через VPN), block (блокировать). ⓘ Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» имеют ВЫСШИЙ приоритет — если они включены, их правила сработают раньше ваших. Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически."
+        : "Custom rules for specific domains / IPs / ports / processes. Actions: direct (bypass VPN), proxy (force through VPN), block (drop). ⓘ The toggles «Russian traffic via real IP» and «Block ads» have HIGHEST priority — if enabled, their rules fire before yours. Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.";
+    public static string CustomRulesPlaceholder => Ru
+        ? "# Одно правило на строку. Формат: <action> <type> <value> [# комментарий]\n# Actions: direct / proxy / block\n# Types: domain / domain_suffix / domain_keyword / ip_cidr / port / port_range / network / process_name / geosite / geoip\n# Несколько значений через запятую. Отключить — '!' в начале строки.\n\ndirect ip_cidr 10.0.0.0/8, 192.168.0.0/16    # LAN\nproxy domain_suffix .corp.example            # форсировать через VPN\nblock geosite ads                            # блокировать рекламу\n!block port 53                               # отключённое правило"
+        : "# One rule per line. Format: <action> <type> <value> [# comment]\n# Actions: direct / proxy / block\n# Types: domain / domain_suffix / domain_keyword / ip_cidr / port / port_range / network / process_name / geosite / geoip\n# Multi-value: comma-separated. Disable: prefix '!'.\n\ndirect ip_cidr 10.0.0.0/8, 192.168.0.0/16    # LAN\nproxy domain_suffix .corp.example            # force through VPN\nblock geosite ads                            # block ad domains\n!block port 53                               # disabled rule";
+    public static string CustomRulesErrorHeader => Ru
         ? "Ошибки парсинга:"
         : "Parse errors:";
+    public static string CustomRulesConflictHeader => Ru
+        ? "Предупреждения о конфликтах:"
+        : "Conflict warnings:";
+
+    // ── Legacy v2.29.0-r4 names (kept for back-compat with cached XAML) ──
+    public static string CustomDirectRulesTitle => CustomRulesTitle;
+    public static string CustomDirectRulesDescription => CustomRulesDescription;
+    public static string CustomDirectRulesPlaceholder => CustomRulesPlaceholder;
+    public static string CustomDirectRulesErrorHeader => CustomRulesErrorHeader;
     public static string SelectCategoryHint => Ru
         ? "← Выберите категорию"
         : "← Select a category";

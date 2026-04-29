@@ -288,17 +288,44 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _bypassRussianTraffic = true;
 
     /// <summary>
-    /// v2.29.0 — text-format mirror of <see cref="AppSettings.App.CustomDirectRules"/>.
+    /// v2.30.0 — text-format mirror of <see cref="AppSettings.App.CustomRules"/>.
     /// User edits this multi-line string in the Network → Routing →
-    /// "Custom direct rules" textbox; SaveSettings parses it back to the
-    /// structured list. Errors during parse populate
-    /// <see cref="CustomDirectRulesErrorText"/>.
+    /// "Custom rules (advanced)" textbox; SaveSettings parses it back
+    /// to the structured list via <see cref="CustomRulesParser"/>.
+    /// Errors during parse populate <see cref="CustomRulesErrorText"/>;
+    /// catch-all rule warnings populate <see cref="CustomRulesConflictText"/>.
+    ///
+    /// <para>v2.29.0 only had direct rules; v2.30 adds proxy + block.
+    /// CustomDirectRulesText kept as alias on first run after upgrade
+    /// — read once during cache load, then SaveSettings persists to
+    /// CustomRulesText.</para>
     /// </summary>
-    [ObservableProperty] private string _customDirectRulesText = string.Empty;
+    [ObservableProperty] private string _customRulesText = string.Empty;
 
-    /// <summary>v2.29.0 — error diagnostic shown below the textbox; empty
+    /// <summary>v2.30.0 — error diagnostic shown below the textbox; empty
     /// when all lines parsed cleanly.</summary>
-    [ObservableProperty] private string _customDirectRulesErrorText = string.Empty;
+    [ObservableProperty] private string _customRulesErrorText = string.Empty;
+
+    /// <summary>v2.30.0 — conflict warning (e.g. catch-all rule shadows
+    /// subsequent rules). Surfaced in a separate diagnostic block below
+    /// the parse-error block.</summary>
+    [ObservableProperty] private string _customRulesConflictText = string.Empty;
+
+    // ─── Legacy v2.29.0 properties (deprecated, kept for binding back-compat) ───
+    /// <summary>v2.29.0-r4 legacy. Kept as a thin alias to CustomRulesText
+    /// so v2.29.0-r4..r8 cached XAML bindings still resolve. New UI binds
+    /// to CustomRulesText / CustomRulesErrorText. This alias is read-only
+    /// post-migration.</summary>
+    public string CustomDirectRulesText
+    {
+        get => CustomRulesText;
+        set => CustomRulesText = value;
+    }
+    public string CustomDirectRulesErrorText
+    {
+        get => CustomRulesErrorText;
+        set => CustomRulesErrorText = value;
+    }
     [ObservableProperty] private bool _strictMode = false;
     [ObservableProperty] private bool _forceIpv4Only = true;
     [ObservableProperty] private bool _flushDnsOnStart = true;
@@ -380,13 +407,21 @@ public partial class MainWindowViewModel : ViewModelBase
     /// commit (focus loss / Enter), so we don't spam SaveSettings on
     /// every keystroke. Errors during parse populate the inline error
     /// box but don't block save (valid lines persist).</summary>
-    partial void OnCustomDirectRulesTextChanged(string value)
+    /// <summary>v2.30.0 — auto-save when user edits the Custom Rules
+    /// textbox. Throttled by Avalonia's TextBox change-on-commit
+    /// (focus loss / Enter), so we don't spam SaveSettings on every
+    /// keystroke. Errors during parse populate the inline diagnostic
+    /// boxes but don't block save (valid lines persist).</summary>
+    partial void OnCustomRulesTextChanged(string value)
     {
         if (_isLoadingUI) return;
         SaveSettings();
-        // The settings round-trip writes parse errors into
-        // CustomDirectRulesErrorText. Notify so the UI re-binds the
-        // diagnostic block visibility.
+        // SaveSettings writes parse errors + conflict warnings.
+        // Notify so the UI re-binds diagnostic blocks.
+        OnPropertyChanged(nameof(CustomRulesErrorText));
+        OnPropertyChanged(nameof(CustomRulesConflictText));
+        // Legacy aliases too — for any v2.29 cached XAML still binding to them.
+        OnPropertyChanged(nameof(CustomDirectRulesText));
         OnPropertyChanged(nameof(CustomDirectRulesErrorText));
     }
 
@@ -1084,11 +1119,14 @@ public partial class MainWindowViewModel : ViewModelBase
         // Russian geo bypass
         BypassRussianTraffic = _settings.App.BypassRussianTraffic;
 
-        // v2.29.0 — custom direct rules (text format for the textbox).
-        // Round-trip: SaveSettings serialises CustomDirectRulesText back to
-        // _settings.App.CustomDirectRules.
-        CustomDirectRulesText = VPNRouter.Core.Services.CustomDirectRulesParser
-            .SerializeToText(_settings.App.CustomDirectRules);
+        // v2.30.0 — full custom rules (direct/proxy/block) text format.
+        // Round-trip: SaveSettings serialises CustomRulesText back to
+        // _settings.App.CustomRules.
+        // Migration from v2.29 CustomDirectRules already happened in
+        // SettingsMigrator.Migrate_1_to_2 — at this point CustomRules
+        // holds whatever the user has, CustomDirectRules is empty.
+        CustomRulesText = VPNRouter.Core.Services.CustomRulesParser
+            .SerializeToText(_settings.App.CustomRules);
 
         // Strict mode
         StrictMode = _settings.App.StrictMode;
@@ -1715,23 +1753,30 @@ public partial class MainWindowViewModel : ViewModelBase
         // Routing mode
         _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
 
-        // v2.29.0 — custom direct rules. Parse the textbox content and
-        // persist the structured list. Errors are reported in
-        // CustomDirectRulesErrorText (UI subtitle below the textbox);
-        // valid lines still save even if some lines errored.
+        // v2.30.0 — full custom rules (direct/proxy/block). Parse the
+        // textbox + persist the structured list + populate two diagnostic
+        // boxes (parse errors, conflict warnings). Valid lines still save
+        // even if some lines errored.
+        // CustomDirectRules legacy field is left empty; the migrator
+        // already moved any v2.29 entries to CustomRules.
         try
         {
-            var parsed = VPNRouter.Core.Services.CustomDirectRulesParser
-                .ParseFromText(CustomDirectRulesText);
-            _settings.App.CustomDirectRules = parsed.Rules;
-            CustomDirectRulesErrorText = parsed.Errors.Count == 0
+            var parsed = VPNRouter.Core.Services.CustomRulesParser
+                .ParseFromText(CustomRulesText);
+            _settings.App.CustomRules = parsed.Rules;
+            CustomRulesErrorText = parsed.Errors.Count == 0
                 ? string.Empty
                 : string.Join("\n", parsed.Errors.Select(e =>
                     $"line {e.LineNumber}: {e.Reason}"));
+            var conflicts = VPNRouter.Core.Services.CustomRulesParser
+                .DetectConflicts(parsed.Rules);
+            CustomRulesConflictText = conflicts.Count == 0
+                ? string.Empty
+                : string.Join("\n", conflicts);
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "[VM] CustomDirectRules parse failed");
+            _logger.Error(ex, "[VM] CustomRules parse failed");
         }
 
         // Russian geo bypass

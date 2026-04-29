@@ -107,6 +107,22 @@ public class DnsRule
     /// <summary>Match by rule set tags (geosite-ru, etc).</summary>
     [JsonProperty("rule_set", NullValueHandling = NullValueHandling.Ignore)]
     public List<string>? RuleSet { get; set; }
+
+    // v2.30.0 — fields for custom block rules with domain-type match.
+    // Block rules with these match types produce a DNS-level reject so
+    // the lookup itself fails (no-traffic UX for "blocked = invisible").
+
+    /// <summary>Match by exact FQDN(s) — used by custom block rules.</summary>
+    [JsonProperty("domain", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? Domain { get; set; }
+
+    /// <summary>Match by domain suffix(es) — used by custom block rules.</summary>
+    [JsonProperty("domain_suffix", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? DomainSuffix { get; set; }
+
+    /// <summary>Match by substring — used by custom block rules.</summary>
+    [JsonProperty("domain_keyword", NullValueHandling = NullValueHandling.Ignore)]
+    public List<string>? DomainKeyword { get; set; }
 }
 
 // ─── Inbounds ─────────────────────────────────────────────────────────────────
