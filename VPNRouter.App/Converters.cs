@@ -102,6 +102,60 @@ public class ActionToChipColorConverter : IValueConverter
 }
 
 /// <summary>
+/// v2.30.0-r9 — action-chip semantic-token brush lookup. Maps an action
+/// string ("direct" / "proxy" / "block") + a role parameter ("Bg" / "Fg"
+/// / "Border") to the corresponding theme brush from
+/// <see cref="Avalonia.Application.Current"/>'s resources.
+/// <para>Used by the Cards view in Network → Rules so chips match the
+/// claude.ai/design handoff exactly: light bg + semantic fg + 1px
+/// matching-tone border, NOT solid dark bg + white fg (which was the
+/// pre-r9 hardcoded look). Theme-aware: each role lookup respects the
+/// active <see cref="Avalonia.Styling.ThemeVariant"/> automatically.</para>
+/// <para>Mapping:
+/// <list type="bullet">
+/// <item>direct → SurfaceSunken / TextSecondary / BorderDefault</item>
+/// <item>proxy → AccentBgSubtle / AccentFg / AccentBorder</item>
+/// <item>block → DangerBg / DangerFg / DangerBorder</item>
+/// </list>
+/// </para>
+/// </summary>
+public class ActionToTokenBrushConverter : IValueConverter
+{
+    public static readonly ActionToTokenBrushConverter Instance = new();
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var action = (value as string ?? "direct").ToLowerInvariant();
+        var role = parameter as string ?? "Bg";
+
+        var key = (action, role) switch
+        {
+            ("direct", "Bg")     => "SurfaceSunkenBrush",
+            ("direct", "Fg")     => "TextSecondaryBrush",
+            ("direct", "Border") => "BorderDefaultBrush",
+            ("proxy", "Bg")      => "AccentBgSubtleBrush",
+            ("proxy", "Fg")      => "AccentFgBrush",
+            ("proxy", "Border")  => "AccentBorderBrush",
+            ("block", "Bg")      => "DangerBgBrush",
+            ("block", "Fg")      => "DangerFgBrush",
+            ("block", "Border")  => "DangerBorderBrush",
+            _ => (string?)null,
+        };
+        if (key == null) return Avalonia.AvaloniaProperty.UnsetValue;
+
+        var app = Avalonia.Application.Current;
+        if (app != null
+            && app.TryGetResource(key, app.ActualThemeVariant, out var res)
+            && res is IBrush brush)
+            return brush;
+        return Avalonia.AvaloniaProperty.UnsetValue;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
 /// v2.30.0-r7 — segmented-toggle background/foreground swap for the
 /// Cards / Edit view-mode selector in Network → Rules. Takes a bool
 /// (IsActive) and a <c>ConverterParameter</c> of the form

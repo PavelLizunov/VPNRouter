@@ -435,13 +435,26 @@
                      Foreground="{DynamicResource TextMutedBrush}"
                      IsVisible="{Binding !CustomRulesList.Count}"/>
 
-          <!-- ListBox: virtualized, MaxHeight=360 (slight bump from r4
-               since it's now the dominant lower section). -->
+          <!-- ListBox: virtualized, MaxHeight=480 (bumped from r5's 360
+               in r9). User report 2026-04-29: «последний пункт в списке
+               существующих правил не помещается».
+               r9 fixes:
+               1. Removed double margin (was Margin=0,0,0,4 on BOTH
+                  ListBoxItem container AND inner Border = 8px gap).
+                  Now: 6px gap on inner Border only — matches design's
+                  `.rules { gap:6px }` exactly.
+               2. Bumped MaxHeight 360 → 480 so 10+ rules fit before the
+                  internal scrollbar engages, reducing the chance of a
+                  half-cut bottom row.
+               3. Added 4px ListBox bottom Padding so the last card
+                  always has visual breathing room before any clip
+                  boundary. -->
           <ListBox ItemsSource="{Binding FilteredCustomRulesList}"
                    IsVisible="{Binding CustomRulesList.Count}"
-                   MaxHeight="360"
+                   MaxHeight="480"
                    Background="Transparent"
                    BorderThickness="0"
+                   Padding="0,0,0,4"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                    ScrollViewer.VerticalScrollBarVisibility="Auto">
             <ListBox.ItemContainerTheme>
@@ -449,49 +462,89 @@
                             BasedOn="{StaticResource {x:Type ListBoxItem}}">
                 <Setter Property="Padding" Value="0"/>
                 <Setter Property="MinHeight" Value="0"/>
-                <Setter Property="Margin" Value="0,0,0,4"/>
+                <Setter Property="Margin" Value="0"/>
               </ControlTheme>
             </ListBox.ItemContainerTheme>
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:CustomRuleViewModel">
-                <Border Margin="0,0,0,4"
-                        Padding="8,6"
+                <!-- Rule card — v2.30.0-r9 design-handoff alignment.
+                     Per RulesPage.html `.rule`:
+                       background: surface-base    (was: surface-sunken)
+                       border:     1px subtle      (was: 1px default)
+                       padding:    10,12           (was: 8,6)
+                       gap:        12 ColumnSpacing (was: 6)
+                       columns:    74 110 1fr Auto Auto Auto
+                                   (was: 68 Auto * Auto Auto — missing comment) -->
+                <Border Margin="0,0,0,6"
+                        Padding="12,10"
                         CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource SurfaceSunkenBrush}"
-                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        Background="{DynamicResource SurfaceBaseBrush}"
+                        BorderBrush="{DynamicResource BorderSubtleBrush}"
                         BorderThickness="1"
                         Opacity="{Binding RowOpacity}">
-                  <Grid ColumnDefinitions="68,Auto,*,Auto,Auto" ColumnSpacing="6" VerticalAlignment="Center">
-                    <!-- Action chip — colored badge.
-                         r5: shrunk 78→68 to give value column more room. -->
+                  <Grid ColumnDefinitions="74,110,*,Auto,Auto,Auto"
+                        ColumnSpacing="12" VerticalAlignment="Center">
+                    <!-- Action chip — semantic light bg + matching fg +
+                         1px matching-tone border. r9: switched from
+                         hardcoded solid-color converter (blue/orange/red
+                         + white text) to ActionToTokenBrushConverter
+                         which looks up theme brushes per (action, role).
+                         Width pinned 74 to match design `.pill`. -->
                     <Border Grid.Column="0"
-                            CornerRadius="3"
-                            Padding="5,2"
+                            CornerRadius="{StaticResource RadiusXs}"
+                            Padding="0,3"
+                            Width="74"
+                            BorderThickness="1"
                             HorizontalAlignment="Left"
-                            Background="{Binding Action, Converter={x:Static conv:ActionToChipColorConverter.Instance}}">
+                            Background="{Binding Action,
+                                         Converter={x:Static conv:ActionToTokenBrushConverter.Instance},
+                                         ConverterParameter=Bg}"
+                            BorderBrush="{Binding Action,
+                                         Converter={x:Static conv:ActionToTokenBrushConverter.Instance},
+                                         ConverterParameter=Border}">
                       <TextBlock Text="{Binding Action}"
-                                 FontSize="9"
-                                 FontWeight="SemiBold"
-                                 Foreground="White"
-                                 HorizontalAlignment="Center"/>
+                                 FontSize="10"
+                                 FontWeight="Bold"
+                                 HorizontalAlignment="Center"
+                                 Foreground="{Binding Action,
+                                              Converter={x:Static conv:ActionToTokenBrushConverter.Instance},
+                                              ConverterParameter=Fg}"/>
                     </Border>
                     <TextBlock Grid.Column="1"
                                Text="{Binding Type}"
                                FontSize="10"
                                FontFamily="Consolas, 'SF Mono', monospace"
                                Foreground="{DynamicResource TextMutedBrush}"
-                               VerticalAlignment="Center"/>
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
                     <TextBlock Grid.Column="2"
                                Text="{Binding Value}"
                                FontSize="11"
+                               FontWeight="SemiBold"
+                               FontFamily="Consolas, 'SF Mono', monospace"
                                TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center"
                                ToolTip.Tip="{Binding Comment}"/>
-                    <CheckBox Grid.Column="3"
+                    <!-- Comment column — v2.30.0-r9: was missing entirely
+                         pre-r9. Design has italic muted comment after the
+                         value, max-width 200 to avoid eating value column
+                         on long comments. Empty comments collapse via
+                         IsVisible, so the row reads as 5-col when there's
+                         no comment. -->
+                    <TextBlock Grid.Column="3"
+                               Text="{Binding Comment}"
+                               FontSize="10"
+                               FontStyle="Italic"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="200"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding Comment, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    <CheckBox Grid.Column="4"
                               IsChecked="{Binding Enabled}"
                               MinHeight="0" Padding="0"
                               VerticalAlignment="Center"/>
-                    <Button Grid.Column="4"
+                    <Button Grid.Column="5"
                             Content="✕"
                             Command="{Binding RemoveCommand}"
                             FontSize="10"
