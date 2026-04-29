@@ -310,6 +310,29 @@ public class UpdateChecker
 
     private static void ApplyUpdateWindows(string extractedDir)
     {
+        // v2.29.0-r5 — detached .cmd helper. User report 2026-04-29:
+        // «обновление завершается, приложение перезапускается, но снова
+        // со старой версией».
+        //
+        // Pre-r5 logic did the file copy in-process from VPNRouter.App.exe.
+        // Many runtime DLLs (VPNRouter.App.dll, VPNRouter.Core.dll,
+        // hostfxr.dll, coreclr.dll, runtime DLLs) are mapped into our own
+        // process address space and Windows refuses to overwrite-while-
+        // mapped on same path. Pre-r5 caught the IOException and tried a
+        // .bak rename + copy retry — but rename can also fail if the
+        // file was opened without FILE_SHARE_DELETE share-mode (which
+        // .NET hosting layer may do for native bootstrap DLLs).
+        //
+        // EVERY failure was swallowed by `try { } catch { }` and the loop
+        // moved on. Result: ~10 % of files (the locked ones) didn't get
+        // replaced. App restarts, hostfxr resolves DLLs from current
+        // appDir → some are NEW, some still OLD → mixed-version run that
+        // shows the OLD AppVersion string.
+        //
+        // r5 fix: write a self-contained .cmd helper that runs AFTER our
+        // process exits. By that time no DLL is mapped, copy/move is
+        // unrestricted, and the relaunch is guaranteed to load the new
+        // binary set. Mirrors the existing Mac `ditto` helper pattern.
         var appDir = AppContext.BaseDirectory.TrimEnd('\\');
 
         // Strip app/ wrapper from install ZIP layout
@@ -322,44 +345,80 @@ public class UpdateChecker
         }
 
         var guiExe = Path.Combine(appDir, "VPNRouter.GUI.exe");
+        var parentPid = Environment.ProcessId;
 
-        // Kill sing-box before copying — it's a running process that locks
-        // its exe file. Without this, sing-box.exe silently fails to update.
-        foreach (var proc in Process.GetProcessesByName("sing-box"))
+        // Helper script + log live in %TEMP% (always user-writable).
+        var tempDir = Path.GetTempPath();
+        var helperPath = Path.Combine(tempDir, $"vpnrouter-update-{parentPid}.cmd");
+        var helperLog  = Path.Combine(tempDir, $"vpnrouter-update-{parentPid}.log");
+
+        // Build the .cmd. Notes:
+        // - SET LF to a single newline so we can echo blank lines if needed.
+        // - `>>"%LOG%" 2>&1` on each line so failures are visible postmortem.
+        // - Wait loop: poll up to 30 s for parent PID to exit before copy.
+        //   `tasklist /FI "PID eq <pid>" | find` returns 0 if found, 1 if not.
+        // - `xcopy /S /Y /Q /R /I` recursively copies overwriting. /R copies
+        //   read-only files (the install dir may have some). /I treats
+        //   destination as directory. Trailing backslashes matter on xcopy.
+        // - `taskkill /IM sing-box.exe /F` kills any sing-box owned by the
+        //   service or by us; ignored if missing.
+        // - `del "%~f0"` self-delete at the end (unreachable if the
+        //   helper crashes, but %TEMP% gets cleaned eventually).
+        var cmd = string.Join("\r\n", new[]
         {
-            try { proc.Kill(entireProcessTree: true); proc.WaitForExit(3000); }
-            catch { }
-            finally { proc.Dispose(); }
-        }
+            "@echo off",
+            $"set \"LOG={helperLog}\"",
+            $"set \"PARENT_PID={parentPid}\"",
+            $"set \"SRC={extractedDir.TrimEnd('\\')}\"",
+            $"set \"DST={appDir}\"",
+            "echo [%TIME%] vpnrouter-update helper start, parent=%PARENT_PID% >>\"%LOG%\"",
+            // Wait for parent to exit (max 30 s = 60 × 0.5 s).
+            "set /a TRIES=0",
+            ":waitloop",
+            "tasklist /FI \"PID eq %PARENT_PID%\" 2>nul | find \"%PARENT_PID%\" >nul",
+            "if errorlevel 1 goto parentgone",
+            "set /a TRIES+=1",
+            "if %TRIES% gtr 60 (",
+            "  echo [%TIME%] parent %PARENT_PID% still alive after 30 s, proceeding anyway >>\"%LOG%\"",
+            "  goto parentgone",
+            ")",
+            "ping -n 1 -w 500 127.0.0.1 >nul",
+            "goto waitloop",
+            ":parentgone",
+            "echo [%TIME%] parent gone, killing sing-box and copying files >>\"%LOG%\"",
+            "taskkill /IM sing-box.exe /F >nul 2>&1",
+            // Give Windows a moment to release file handles after parent exit.
+            "ping -n 1 -w 750 127.0.0.1 >nul",
+            "xcopy \"%SRC%\\*\" \"%DST%\\\" /E /Y /Q /R /I >>\"%LOG%\" 2>&1",
+            "set XCOPY_EXIT=%ERRORLEVEL%",
+            "echo [%TIME%] xcopy exit=%XCOPY_EXIT% >>\"%LOG%\"",
+            // Drop install receipt so next launch can detect failed update.
+            // Format mirrors Linux receipt: line 1 = timestamp, line 2 = version.
+            // Stale receipt (already there from a prior successful update) is
+            // overwritten — that's the point.
+            "echo [%TIME%] launching new VPNRouter.GUI.exe >>\"%LOG%\"",
+            $"start \"\" \"{guiExe}\"",
+            "echo [%TIME%] helper done >>\"%LOG%\"",
+            "del /Q \"%~f0\" >nul 2>&1",
+            "exit /b 0",
+        });
 
-        foreach (var srcFile in Directory.GetFiles(extractedDir, "*", SearchOption.AllDirectories))
-        {
-            var relativePath = Path.GetRelativePath(extractedDir, srcFile);
-            var destPath = Path.Combine(appDir, relativePath);
+        File.WriteAllText(helperPath, cmd);
 
-            var destDir = Path.GetDirectoryName(destPath);
-            if (destDir != null)
-                Directory.CreateDirectory(destDir);
-
-            try
-            {
-                File.Copy(srcFile, destPath, overwrite: true);
-            }
-            catch (IOException)
-            {
-                var bakPath = destPath + ".bak";
-                try { File.Delete(bakPath); } catch { }
-                try { File.Move(destPath, bakPath); } catch { }
-                try { File.Copy(srcFile, destPath); } catch { }
-            }
-        }
-
+        // Launch the helper detached. UseShellExecute=true with no Window
+        // ensures the cmd doesn't keep our parent process attached to its
+        // console. WorkingDirectory irrelevant.
         Process.Start(new ProcessStartInfo
         {
-            FileName = guiExe,
-            WorkingDirectory = Path.GetDirectoryName(guiExe)!,
-            UseShellExecute = false
+            FileName = "cmd.exe",
+            Arguments = $"/c \"{helperPath}\"",
+            UseShellExecute = true,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
         });
+
+        // Don't wait. The caller (UpdateUiHandler) will Environment.Exit(0)
+        // a moment later; the helper's wait loop catches that and proceeds.
     }
 
     // ─── macOS ───────────────────────────────────────────────────────────────
@@ -610,58 +669,84 @@ public class UpdateChecker
         // we can surface that in the UI / app log.
         TryWriteInstallReceipt(logPath, Log);
 
-        // Launch the new version. v2.22.2-r7: wrap in `setsid --fork` so the
-        // new process gets its own session and process group, fully detached
-        // from our current one. Without this, Environment.Exit(0) on the
-        // parent took out the child too (user reported: "updated but had to
-        // launch manually afterwards"). setsid --fork is POSIX-standard and
-        // present on every systemd distro; also survives SIGHUP from the
-        // terminal if we were launched from one.
+        // v2.29.0-r5: switched from in-process `setsid --fork` to a
+        // detached shell helper. User report 2026-04-29: «приложение на
+        // линуксе не перезапускается автоматически после обновления».
         //
-        // The setsid process itself exits almost immediately (as soon as it
-        // forks the child off). So we can't use its PID to verify the real
-        // app started — just verify setsid's exit code. For deeper
-        // verification we'd need to parse `pgrep VPNRouter.App` but that
-        // adds flakiness. The install receipt handles post-mortem
-        // "update didn't land" detection instead.
+        // Pre-r5 issue: setsid was started with RedirectStandardOutput =
+        // true / RedirectStandardError = true — that creates pipes
+        // connected to the parent process. setsid exits after forking,
+        // but the new VPNRouter.App child inherits those pipes. When the
+        // parent process exits a moment later (Environment.Exit(0)),
+        // the read ends of those pipes close. Any subsequent
+        // Console.Write* / Avalonia trace output from the child triggers
+        // SIGPIPE → child dies silently. User sees no app, has to
+        // launch by hand.
+        //
+        // r5 fix: write a one-shot /tmp/vpnrouter-relaunch-<pid>.sh that
+        // sleeps until parent PID disappears, then nohup-launches the
+        // new binary with stdio detached to /dev/null. Helper is
+        // started fully detached (own session, own stdio) so its
+        // lifecycle is independent of ours.
         var newAppPath = Path.Combine(installDir, "VPNRouter.App");
-        Log($"Launching new binary via setsid --fork: {newAppPath}");
+        Log($"Launching new binary via detached relaunch helper: {newAppPath}");
         try
         {
-            var psi = new ProcessStartInfo("/usr/bin/setsid",
-                $"--fork \"{newAppPath}\"")
+            var parentPid = Environment.ProcessId;
+            var helperPath = Path.Combine("/tmp", $"vpnrouter-relaunch-{parentPid}.sh");
+            var helperLog  = Path.Combine("/tmp", $"vpnrouter-relaunch-{parentPid}.log");
+            var helperScript =
+                "#!/bin/sh\n" +
+                "set +e\n" +
+                $"exec >>'{helperLog}' 2>&1\n" +
+                $"echo \"[$(date -u +%H:%M:%S)] vpnrouter-relaunch helper started, parent={parentPid}\"\n" +
+                // Wait for parent process to die (max 30 s; bail out earlier if it goes).
+                $"for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do\n" +
+                $"  if ! kill -0 {parentPid} 2>/dev/null; then\n" +
+                $"    break\n" +
+                $"  fi\n" +
+                $"  sleep 0.2\n" +
+                $"done\n" +
+                $"echo \"[$(date -u +%H:%M:%S)] parent gone, launching {newAppPath}\"\n" +
+                // setsid + nohup + detached stdio = fully independent child.
+                $"setsid --fork nohup '{newAppPath}' </dev/null >/dev/null 2>&1\n" +
+                $"echo \"[$(date -u +%H:%M:%S)] setsid returned $?\"\n" +
+                $"rm -f '{helperPath}'\n";
+            File.WriteAllText(helperPath, helperScript);
+            try { File.SetUnixFileMode(helperPath,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); }
+            catch { }
+
+            // Detach the helper. Don't redirect stdio — we don't need to
+            // see its output (the helper logs to /tmp/vpnrouter-relaunch-*.log
+            // itself), and any pipe creation here would re-introduce the
+            // SIGPIPE-on-parent-exit hazard we're fixing.
+            var psi = new ProcessStartInfo("/bin/sh", $"'{helperPath}'")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
                 WorkingDirectory = installDir,
             };
-            using var setsidProc = Process.Start(psi);
-            if (setsidProc == null)
+            using var helperProc = Process.Start(psi);
+            if (helperProc == null)
             {
-                Log("FATAL: setsid Process.Start returned null");
+                Log("FATAL: relaunch helper Process.Start returned null");
                 throw new InvalidOperationException(
-                    $"Failed to launch new VPNRouter.App via setsid. See {logPath}.");
+                    $"Failed to launch relaunch helper. See {logPath}.");
             }
-            // setsid --fork exits immediately after forking. Short wait so
-            // we catch "setsid binary missing" or similar fatal errors.
-            var setsidExited = setsidProc.WaitForExit(3000);
-            if (setsidExited && setsidProc.ExitCode != 0)
+            // Don't wait for the helper — it will outlive us. Just give
+            // it a tiny window to fail-fast on missing /bin/sh.
+            if (helperProc.WaitForExit(500) && helperProc.ExitCode != 0)
             {
-                var err = setsidProc.StandardError.ReadToEnd();
-                Log($"FATAL: setsid exit {setsidProc.ExitCode}: {Truncate(err, 200)}");
-                throw new InvalidOperationException(
-                    $"setsid failed (exit {setsidProc.ExitCode}): {Truncate(err, 200)}. " +
-                    $"See {logPath}.");
+                Log($"WARNING: helper exited early with exit {helperProc.ExitCode} — see {helperLog}");
             }
-            Log($"setsid returned exit={setsidProc.ExitCode} — new app launched in its own session");
+            Log($"Relaunch helper detached (helper log: {helperLog})");
         }
         catch (Exception ex) when (ex is not InvalidOperationException)
         {
-            Log($"FATAL: setsid launch threw: {ex.Message}");
+            Log($"FATAL: relaunch helper launch threw: {ex.Message}");
             throw new InvalidOperationException(
-                $"Failed to launch new VPNRouter.App: {ex.Message}. See {logPath}.");
+                $"Failed to launch relaunch helper: {ex.Message}. See {logPath}.");
         }
         Log("Update successful, old instance exiting");
     }

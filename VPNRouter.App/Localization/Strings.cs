@@ -711,8 +711,8 @@ public static class Strings
         ? "Свои правила direct (расширенно)"
         : "Custom direct rules (advanced)";
     public static string CustomDirectRulesDescription => Ru
-        ? "Маршрутизировать определённые домены, IP/CIDR или порты НАПРЯМУЮ, минуя VPN. Полезно когда параллельно работает другой туннель (например, WireGuard) или нужно исключить локальную сеть из VPN."
-        : "Route specific domains, IPs/CIDRs or ports DIRECTLY, bypassing the VPN. Useful when running another tunnel alongside (e.g. WireGuard) or excluding LAN ranges from the tunnel.";
+        ? "Маршрутизировать определённые домены, IP/CIDR или порты НАПРЯМУЮ, минуя VPN. ⓘ Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) и стандартные WireGuard/AmneziaWG-диапазоны УЖЕ идут direct автоматически — здесь только дополнительные правила (свои домены, нестандартные подсети, конкретные порты)."
+        : "Route specific domains, IPs/CIDRs or ports DIRECTLY, bypassing the VPN. ⓘ Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) and standard WireGuard/AmneziaWG subnets ALREADY go direct automatically — this section is only for ADDITIONAL rules (custom domains, non-standard subnets, specific ports).";
     public static string CustomDirectRulesPlaceholder => Ru
         ? "# Одно правило на строку. Типы: domain / domain_suffix / domain_keyword / ip_cidr / port / process_name\n# Несколько значений через запятую. Комментарий — после '#'. Отключить — '!' в начале.\n\nip_cidr 10.0.0.0/8, 192.168.0.0/16    # Локальные сети\ndomain_suffix .lan.local\nport 22"
         : "# One rule per line. Types: domain / domain_suffix / domain_keyword / ip_cidr / port / process_name\n# Multiple values separated by ','. Inline comment after '#'. Prefix '!' to disable.\n\nip_cidr 10.0.0.0/8, 192.168.0.0/16    # Local LANs\ndomain_suffix .lan.local\nport 22";

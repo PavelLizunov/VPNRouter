@@ -56,10 +56,16 @@ public static class AutostartHelper
             var plistPath = MacPlistPath();
             Directory.CreateDirectory(Path.GetDirectoryName(plistPath)!);
             File.WriteAllText(plistPath, BuildMacPlist(exePath));
-            // Try to load immediately so the agent is "live" without re-login.
-            // Failure is non-fatal — the next login will pick the .plist up
-            // anyway via launchd's directory scan.
-            TryLaunchctl("load", "-w", plistPath);
+            // v2.29.0-r5 fix: do NOT call `launchctl load -w` here. The
+            // .plist has RunAtLoad=true, and `launchctl load` triggers
+            // RunAtLoad → a SECOND VPNRouter process spawns while the
+            // current one (the user just toggled the checkbox in) is
+            // still running. User report 2026-04-29: "когда я в маке
+            // включил авто запуск открылась копия приложения".
+            //
+            // The agent file on disk is enough — launchd's directory
+            // scan picks it up automatically on the next user login,
+            // which is what the user expects from "autostart".
             return;
         }
 
@@ -171,10 +177,12 @@ public static class AutostartHelper
                 if (!File.Exists(plistPath)) return false;
                 var existing = File.ReadAllText(plistPath);
                 if (existing.Contains(currentExePath, StringComparison.Ordinal)) return false;
-                // Rewrite + reload so launchd picks the new path right away.
+                // v2.29.0-r5: rewrite the plist, but do NOT unload+load —
+                // that triggers RunAtLoad and would spawn a duplicate
+                // VPNRouter while the current self-heal-running instance
+                // is still alive. launchd reads the .plist fresh on next
+                // login; that's enough for self-heal.
                 File.WriteAllText(plistPath, BuildMacPlist(currentExePath));
-                TryLaunchctl("unload", "-w", plistPath);
-                TryLaunchctl("load",   "-w", plistPath);
                 return true;
             }
             catch { return false; }

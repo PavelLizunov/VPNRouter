@@ -167,18 +167,32 @@ public class SingBoxManager : IDisposable
             }
 
             // pkexec path (pre-v2.28 behaviour on Linux + always on macOS).
-            var elevator = OperatingSystem.IsLinux() ? "/usr/bin/pkexec" : "/usr/bin/sudo";
+            //
+            // v2.29.0-r5: stop became unreliable on Linux. User report
+            // 2026-04-29: «не могу остановить vpn ... кнопа stop не убивает
+            // sing-box». Pre-r5 the code fired ONE pkexec pkill and trusted
+            // its WaitForExit without checking the exit code or whether
+            // sing-box actually died. Failure modes that silently presented
+            // as "Stopped" in the UI:
+            //   - User dismissed the pkexec password prompt → exit 126,
+            //     sing-box still alive.
+            //   - Polkit agent not running (minimal WMs) → exit 127.
+            //   - pkill matched the wrong PID list (sing-box killed via
+            //     unexpected signal handler / refused).
+            // r5 escalation chain:
+            //   1. Try plain user pkill (works in capability mode + .deb
+            //      installs that drop us into the cgroup as the owner).
+            //   2. If still alive, pkexec pkill -KILL (SIGKILL — survives
+            //      most signal masks).
+            //   3. If still alive, sudo pkill -KILL (NOPASSWD if the
+            //      sudoers entry was set up at first connect).
+            //   4. Verify after each step that sing-box is gone (no
+            //      Clash API + no pgrep hit). Log each step's outcome.
+            if (_process != null) _process.EnableRaisingEvents = false;
+
             try
             {
-                if (_process != null) _process.EnableRaisingEvents = false;
-
-                var psi = new ProcessStartInfo(elevator, "pkill -f sing-box")
-                {
-                    UseShellExecute = false, CreateNoWindow = true,
-                    RedirectStandardOutput = true, RedirectStandardError = true
-                };
-                using var killProc = Process.Start(psi);
-                killProc?.WaitForExit(5000);
+                LinuxStopEscalationChain();
             }
             catch (Exception ex)
             {
@@ -599,6 +613,140 @@ public class SingBoxManager : IDisposable
         _disposed = true;
         Stop();
         _process?.Dispose();
+    }
+
+    /// <summary>
+    /// v2.29.0-r5 — Linux stop escalation chain. Tries kill methods from
+    /// least-privileged to most-privileged, verifying after each step that
+    /// sing-box is actually gone. Mac uses a separate sudo path; this method
+    /// is Linux-only.
+    ///
+    /// <para>Steps:</para>
+    /// <list type="number">
+    /// <item>Plain user pkill (works in capability mode + .deb installs
+    ///   where sing-box runs as user via setcap CAP_NET_ADMIN).</item>
+    /// <item>pkexec pkill -KILL (polkit GUI prompt; SIGKILL bypasses any
+    ///   signal mask sing-box might have set).</item>
+    /// <item>sudo pkill -KILL (NOPASSWD if sudoers entry was set up at
+    ///   first Connect; falls through if not configured).</item>
+    /// </list>
+    ///
+    /// <para>Each attempt is followed by IsSingBoxAlive() check (Clash API
+    /// probe + pgrep) so we know immediately if it worked. Logs each step
+    /// for postmortem.</para>
+    /// </summary>
+    private void LinuxStopEscalationChain()
+    {
+        // Step 1: plain user pkill. Cheap and works in capability mode.
+        if (TrySpawnAndWait("/usr/bin/pkill", "-TERM -f sing-box", 3000, "user pkill -TERM"))
+        {
+            // Wait briefly for graceful exit (sing-box on SIGTERM should
+            // tear down TUN cleanly within ~1 s).
+            System.Threading.Thread.Sleep(800);
+            if (!IsSingBoxAlive())
+            {
+                _logger.Information("[SingBoxManager] Linux stop: user pkill -TERM succeeded");
+                return;
+            }
+        }
+
+        _logger.Information("[SingBoxManager] Linux stop: user pkill didn't kill sing-box, escalating to pkexec");
+
+        // Step 2: pkexec with SIGKILL. GUI prompt — user might dismiss.
+        if (TrySpawnAndWait("/usr/bin/pkexec", "pkill -KILL -f sing-box", 30000, "pkexec pkill -KILL"))
+        {
+            System.Threading.Thread.Sleep(500);
+            if (!IsSingBoxAlive())
+            {
+                _logger.Information("[SingBoxManager] Linux stop: pkexec pkill -KILL succeeded");
+                return;
+            }
+        }
+
+        _logger.Warning("[SingBoxManager] Linux stop: pkexec didn't kill sing-box, trying sudo");
+
+        // Step 3: sudo with -n (non-interactive — fail if password needed
+        // rather than block forever). If user set up NOPASSWD sudoers, this
+        // works without prompt; otherwise it fails fast and we give up
+        // (better to surface the failure than hang forever).
+        if (TrySpawnAndWait("/usr/bin/sudo", "-n pkill -KILL -f sing-box", 5000, "sudo -n pkill -KILL"))
+        {
+            System.Threading.Thread.Sleep(500);
+            if (!IsSingBoxAlive())
+            {
+                _logger.Information("[SingBoxManager] Linux stop: sudo -n pkill -KILL succeeded");
+                return;
+            }
+        }
+
+        if (IsSingBoxAlive())
+        {
+            _logger.Error("[SingBoxManager] Linux stop: ALL escalation steps failed — sing-box still alive. " +
+                          "Manual intervention required: `sudo pkill -KILL -f sing-box`. " +
+                          "Possible causes: pkexec/polkit agent not installed; sudoers NOPASSWD not set up; " +
+                          "sing-box running under a different uid we can't kill.");
+        }
+    }
+
+    /// <summary>v2.29.0-r5: spawn an external process, wait, return true
+    /// iff exit code 0. Used by Linux stop escalation chain. Errors logged
+    /// but never thrown.</summary>
+    private bool TrySpawnAndWait(string fileName, string args, int timeoutMs, string label)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo(fileName, args)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            using var p = Process.Start(psi);
+            if (p == null)
+            {
+                _logger.Warning("[SingBoxManager] Linux stop: {Label} — Process.Start returned null", label);
+                return false;
+            }
+            if (!p.WaitForExit(timeoutMs))
+            {
+                _logger.Warning("[SingBoxManager] Linux stop: {Label} timed out after {Ms} ms", label, timeoutMs);
+                try { p.Kill(true); } catch { }
+                return false;
+            }
+            _logger.Information("[SingBoxManager] Linux stop: {Label} exit={Code}", label, p.ExitCode);
+            return p.ExitCode == 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[SingBoxManager] Linux stop: {Label} threw", label);
+            return false;
+        }
+    }
+
+    /// <summary>v2.29.0-r5: check if sing-box is still running.
+    /// Two-signal test: Clash API at 127.0.0.1:9090 + pgrep -f sing-box.
+    /// Returns true if EITHER signal says alive (defensive — false
+    /// negative on Clash API alone could leave a zombie).</summary>
+    private bool IsSingBoxAlive()
+    {
+        if (IsClashApiAlive()) return true;
+        try
+        {
+            var psi = new ProcessStartInfo("/usr/bin/pgrep", "-f sing-box")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            using var p = Process.Start(psi);
+            if (p == null) return false;
+            if (!p.WaitForExit(2000)) { try { p.Kill(true); } catch { } return false; }
+            // pgrep exit 0 = found at least one process; 1 = none.
+            return p.ExitCode == 0;
+        }
+        catch { return false; }
     }
 }
 
