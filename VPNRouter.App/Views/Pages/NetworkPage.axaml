@@ -122,6 +122,21 @@
       <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
     </Style>
 
+    <!-- v2.30.0-r15 — FlyoutPresenter chrome override for the bulk-pop.
+         User report after r14: «В .bulk-pop остался задний фон».
+         Avalonia's Flyout wraps content in a FlyoutPresenter that has
+         its own default background + padding + shadow, which bled
+         through behind our designed Border. Targeting the .bulk-pop-host
+         class on the FlyoutPresenter strips its chrome so only our
+         designed Border is visible.
+         Hooked up via Flyout.FlyoutPresenterClasses="bulk-pop-host". -->
+    <Style Selector="FlyoutPresenter.bulk-pop-host">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+
     <!-- Radio card: full-width clickable block with title + sub -->
     <Style Selector="Border.radio-card">
       <Setter Property="BorderThickness" Value="1"/>
@@ -485,16 +500,17 @@
                          Foreground="{DynamicResource TextMutedBrush}"
                          TextTrimming="CharacterEllipsis"/>
               <!-- Add-row: 5-col grid per design `.add-row` 130/160/1fr/
-                   1fr/Auto. v2.30.0-r14: explicit ColumnDefinitions with
-                   MinWidth=80 on the two star cols to keep value+comment
-                   from overlapping if the breakpoint hasn't kicked in
-                   yet (race during resize). -->
+                   1fr/Auto. v2.30.0-r15: MinWidth on * cols relaxed
+                   80 → 60 to give the breakpoint headroom. With the
+                   r15 breakpoint bumped 620 → 660, this is defense-
+                   in-depth only (narrow mode kicks in before any
+                   overflow risk). -->
               <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="130"/>
                   <ColumnDefinition Width="160"/>
-                  <ColumnDefinition Width="*" MinWidth="80"/>
-                  <ColumnDefinition Width="*" MinWidth="80"/>
+                  <ColumnDefinition Width="*" MinWidth="60"/>
+                  <ColumnDefinition Width="*" MinWidth="60"/>
                   <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <!-- Action -->
@@ -802,19 +818,36 @@
                  user has to deliberately open the menu. -->
             <Button Grid.Column="2"
                     Name="BulkBtnWide"
-                    Content="⋯"
                     Width="28" Height="28" Padding="0" MinHeight="0"
-                    FontSize="14"
+                    HorizontalContentAlignment="Center"
+                    VerticalContentAlignment="Center"
                     BorderThickness="1"
                     BorderBrush="{DynamicResource BorderDefaultBrush}"
                     Background="{DynamicResource SurfaceBaseBrush}"
                     CornerRadius="{StaticResource RadiusSm}"
                     ToolTip.Tip="{Binding L_RulesBulkActions}">
+              <!-- v2.30.0-r15: ⋯ rendered as inner TextBlock with explicit
+                   centering. User report after r14: «Три точки стоят не
+                   ровно». Direct Content="⋯" on Button rendered the
+                   character at its natural baseline (visually below
+                   center) even with HorizontalContentAlignment=Center.
+                   TextBlock with TextAlignment=Center + VerticalAlignment
+                   =Center + LineHeight tied to FontSize anchors the
+                   glyph to the button's geometric center. -->
+              <TextBlock Text="⋯"
+                         FontSize="16"
+                         FontWeight="Bold"
+                         LineHeight="16"
+                         TextAlignment="Center"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Foreground="{DynamicResource TextSecondaryBrush}"/>
               <Button.Flyout>
                 <!-- v2.30.0-r14 — custom Flyout per design `.bulk-pop`.
                      Replaces the OS-default MenuFlyout to fully control
                      surface/border/shadow/padding/icons. -->
-                <Flyout Placement="BottomEdgeAlignedRight">
+                <Flyout Placement="BottomEdgeAlignedRight"
+                        FlyoutPresenterClasses="bulk-pop-host">
                   <Border Background="{DynamicResource SurfaceBaseBrush}"
                           BorderBrush="{DynamicResource BorderDefaultBrush}"
                           BorderThickness="1"
@@ -953,19 +986,28 @@
               </Border>
               <Button Grid.Column="1"
                       Name="BulkBtnNarrow"
-                      Content="⋯"
                       Width="28" Height="28" Padding="0" MinHeight="0"
-                      FontSize="14"
+                      HorizontalContentAlignment="Center"
+                      VerticalContentAlignment="Center"
                       BorderThickness="1"
                       BorderBrush="{DynamicResource BorderDefaultBrush}"
                       Background="{DynamicResource SurfaceBaseBrush}"
                       CornerRadius="{StaticResource RadiusSm}"
                       ToolTip.Tip="{Binding L_RulesBulkActions}">
+                <TextBlock Text="⋯"
+                           FontSize="16"
+                           FontWeight="Bold"
+                           LineHeight="16"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextSecondaryBrush}"/>
                 <Button.Flyout>
                   <!-- v2.30.0-r14 — same design `.bulk-pop` content as
                        wide toolbar; duplicated because Flyout instances
                        can't be shared across parents. -->
-                  <Flyout Placement="BottomEdgeAlignedRight">
+                  <Flyout Placement="BottomEdgeAlignedRight"
+                          FlyoutPresenterClasses="bulk-pop-host">
                     <Border Background="{DynamicResource SurfaceBaseBrush}"
                             BorderBrush="{DynamicResource BorderDefaultBrush}"
                             BorderThickness="1"
@@ -1150,14 +1192,21 @@
                          actions one-tap away rather than directly on the
                          row surface. -->
                     <Button Grid.Column="5"
-                            Content="⋯"
                             Width="24" Height="24"
                             Padding="0" MinHeight="0"
-                            FontSize="14"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
                             Background="Transparent"
                             BorderThickness="0"
-                            Foreground="{DynamicResource TextMutedBrush}"
                             ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_RulesBulkActions}">
+                      <TextBlock Text="⋯"
+                                 FontSize="14"
+                                 FontWeight="Bold"
+                                 LineHeight="14"
+                                 TextAlignment="Center"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"
+                                 Foreground="{DynamicResource TextMutedBrush}"/>
                       <Button.Flyout>
                         <MenuFlyout>
                           <MenuItem Header="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_CustomRulesDelete}"
@@ -1235,14 +1284,21 @@
                               VerticalAlignment="Center"/>
                     <!-- Row 1, col 3: ⋯ menu -->
                     <Button Grid.Row="0" Grid.Column="3"
-                            Content="⋯"
                             Width="24" Height="24"
                             Padding="0" MinHeight="0"
-                            FontSize="14"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
                             Background="Transparent"
                             BorderThickness="0"
-                            Foreground="{DynamicResource TextMutedBrush}"
                             ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_RulesBulkActions}">
+                      <TextBlock Text="⋯"
+                                 FontSize="14"
+                                 FontWeight="Bold"
+                                 LineHeight="14"
+                                 TextAlignment="Center"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"
+                                 Foreground="{DynamicResource TextMutedBrush}"/>
                       <Button.Flyout>
                         <MenuFlyout>
                           <MenuItem Header="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_CustomRulesDelete}"

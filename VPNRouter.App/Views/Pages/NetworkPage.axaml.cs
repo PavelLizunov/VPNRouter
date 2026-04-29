@@ -9,17 +9,21 @@ namespace VPNRouter.App.Views.Pages;
 public partial class NetworkPage : UserControl
 {
     /// <summary>
-    /// v2.30.0-r13 → r14: narrow-window breakpoint for the Rules section.
-    /// Bumped 540 → 620 px after r13 user feedback: «при сужении и
-    /// расширении value и comment накладываются друг на друга». The wide
-    /// Add-form's 5-col grid (130 + 160 + 2×* + Auto button ~80 + 8×4
-    /// spacing = 402 px fixed/spacing) needs at least 562 px content
-    /// area for the two * cols to each have ~80 px (enough for
-    /// placeholders without overlap). 620 px window width gives ~580 px
-    /// content area after our padding, leaving ~178 px for the 2 stars
-    /// = ~89 px each — comfortable.
+    /// v2.30.0-r13 → r14 → r15: narrow-window breakpoint for the Rules
+    /// section.
+    /// Bumped to 660 px after r14 user feedback: «теперь кнопки не
+    /// залазиют друг на друга а вылазиют за экран». r14 used 620 px +
+    /// MinWidth=80 on each * col, but at container widths between
+    /// 580–620 (when SizeChanged hadn't yet promoted to narrow) the
+    /// MinWidths forced the wide grid to its minimum 560 + padding ≈
+    /// 590 px = visible right-edge overflow.
+    /// r15: relax MinWidth 80 → 60, raise breakpoint 620 → 660. New
+    /// math: wide form fixed = 130 + 160 + 8×4 + button ~80 = 402.
+    /// Plus 2 × MinWidth(60) = 120. Total ≈ 522 px content. With
+    /// Border padding 14×2 = 28, container ≥ 550 px renders cleanly.
+    /// 660 breakpoint gives 110 px buffer — overflow-proof.
     /// </summary>
-    private const double NarrowBreakpoint = 620.0;
+    private const double NarrowBreakpoint = 660.0;
 
     public NetworkPage()
     {
