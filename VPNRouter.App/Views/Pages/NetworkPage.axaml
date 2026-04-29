@@ -369,94 +369,83 @@
           </Border>
 
           <!-- ═══ Existing rules section ═══
-               r5: separated visually from add-form via a header row,
-               and bulk actions moved to their own row below search
-               (was crammed into one 4-col row in r4). -->
+               v2.30.0-r10 — wrapped in its own bordered card per user
+               request «Внутри правил, список существующих правил тоже
+               обведи в окно, как сделано с добавлением правил, грубо
+               говоря окно в окне ... в таком случае нет проблемы с тем
+               что что-то не умещается».
+               Mirrors the Add-rule form's Border styling (SurfaceRaised
+               + BorderDefault + RadiusSm + 10 px padding). The visual
+               boundary makes it clear the list is its own scrollable
+               container — last-row clipping no longer feels like a
+               layout bug, it reads as the intended container edge. -->
+          <Border Padding="10"
+                  CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource SurfaceRaisedBrush}"
+                  BorderBrush="{DynamicResource BorderDefaultBrush}"
+                  BorderThickness="1"
+                  IsVisible="{Binding CustomRulesList.Count}">
+            <StackPanel Spacing="8">
+              <!-- Section header: title + count -->
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding L_CustomRulesExistingHeader}"
+                           FontSize="11" FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding CustomRulesCountText}"
+                           FontSize="10"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           VerticalAlignment="Center"/>
+              </Grid>
 
-          <!-- Section header: title + count -->
-          <Grid ColumnDefinitions="*,Auto"
-                IsVisible="{Binding CustomRulesList.Count}"
-                Margin="0,4,0,0">
-            <TextBlock Grid.Column="0"
-                       Text="{Binding L_CustomRulesExistingHeader}"
-                       FontSize="11" FontWeight="SemiBold"
-                       Foreground="{DynamicResource TextSecondaryBrush}"
-                       VerticalAlignment="Center"/>
-            <TextBlock Grid.Column="1"
-                       Text="{Binding CustomRulesCountText}"
-                       FontSize="10"
-                       Foreground="{DynamicResource TextMutedBrush}"
-                       VerticalAlignment="Center"/>
-          </Grid>
+              <!-- Search bar (full width — no width competition with
+                   bulk buttons). -->
+              <TextBox Text="{Binding CustomRulesSearchText}"
+                       Watermark="{Binding L_CustomRulesSearchPlaceholder}"
+                       FontSize="11" Padding="6,3" MinHeight="0"/>
 
-          <!-- Search bar (full width on its own row — no width competition
-               with bulk buttons, so search field can be sized comfortably
-               even on narrow windows). -->
-          <TextBox Text="{Binding CustomRulesSearchText}"
-                   Watermark="{Binding L_CustomRulesSearchPlaceholder}"
-                   FontSize="11" Padding="6,3" MinHeight="0"
-                   IsVisible="{Binding CustomRulesList.Count}"/>
+              <!-- Bulk action chips: own row, right-aligned. Compact
+                   (FontSize 9, tight padding) so all three fit even at
+                   ~360 px window width. -->
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding ClearAllConfirmText}"
+                           FontSize="10" FontWeight="SemiBold"
+                           Foreground="{DynamicResource DangerFgBrush}"
+                           IsVisible="{Binding ClearAllConfirmText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                           VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                  <Button Content="{Binding L_CustomRulesEnableAll}"
+                          Command="{Binding EnableAllCustomRulesCommand}"
+                          FontSize="9" Padding="6,2" MinHeight="0"
+                          ToolTip.Tip="{Binding L_CustomRulesEnableAllTooltip}"/>
+                  <Button Content="{Binding L_CustomRulesDisableAll}"
+                          Command="{Binding DisableAllCustomRulesCommand}"
+                          FontSize="9" Padding="6,2" MinHeight="0"
+                          ToolTip.Tip="{Binding L_CustomRulesDisableAllTooltip}"/>
+                  <Button Content="{Binding L_CustomRulesClearAll}"
+                          Command="{Binding ClearAllCustomRulesCommand}"
+                          FontSize="9" Padding="6,2" MinHeight="0"
+                          Background="{DynamicResource DangerBgBrush}"
+                          Foreground="{DynamicResource DangerFgBrush}"
+                          ToolTip.Tip="{Binding L_CustomRulesClearAllTooltip}"/>
+                </StackPanel>
+              </Grid>
 
-          <!-- Bulk action chips: own row, right-aligned. Each button is
-               compact (FontSize 9, tight padding) so all three fit even
-               at ~360px window width. r5: separated from search row to
-               eliminate width competition. -->
-          <Grid ColumnDefinitions="*,Auto"
-                IsVisible="{Binding CustomRulesList.Count}">
-            <TextBlock Grid.Column="0"
-                       Text="{Binding ClearAllConfirmText}"
-                       FontSize="10" FontWeight="SemiBold"
-                       Foreground="{DynamicResource DangerFgBrush}"
-                       IsVisible="{Binding ClearAllConfirmText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                       VerticalAlignment="Center"/>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-              <Button Content="{Binding L_CustomRulesEnableAll}"
-                      Command="{Binding EnableAllCustomRulesCommand}"
-                      FontSize="9" Padding="6,2" MinHeight="0"
-                      ToolTip.Tip="{Binding L_CustomRulesEnableAllTooltip}"/>
-              <Button Content="{Binding L_CustomRulesDisableAll}"
-                      Command="{Binding DisableAllCustomRulesCommand}"
-                      FontSize="9" Padding="6,2" MinHeight="0"
-                      ToolTip.Tip="{Binding L_CustomRulesDisableAllTooltip}"/>
-              <Button Content="{Binding L_CustomRulesClearAll}"
-                      Command="{Binding ClearAllCustomRulesCommand}"
-                      FontSize="9" Padding="6,2" MinHeight="0"
-                      Background="{DynamicResource DangerBgBrush}"
-                      Foreground="{DynamicResource DangerFgBrush}"
-                      ToolTip.Tip="{Binding L_CustomRulesClearAllTooltip}"/>
-            </StackPanel>
-          </Grid>
-
-          <!-- empty-state hint when list itself is empty -->
-          <TextBlock Text="{Binding L_CustomRulesEmpty}"
-                     FontSize="11"
-                     FontStyle="Italic"
-                     TextWrapping="Wrap"
-                     Foreground="{DynamicResource TextMutedBrush}"
-                     IsVisible="{Binding !CustomRulesList.Count}"/>
-
-          <!-- ListBox: virtualized, MaxHeight=480 (bumped from r5's 360
-               in r9). User report 2026-04-29: «последний пункт в списке
-               существующих правил не помещается».
-               r9 fixes:
-               1. Removed double margin (was Margin=0,0,0,4 on BOTH
-                  ListBoxItem container AND inner Border = 8px gap).
-                  Now: 6px gap on inner Border only — matches design's
-                  `.rules { gap:6px }` exactly.
-               2. Bumped MaxHeight 360 → 480 so 10+ rules fit before the
-                  internal scrollbar engages, reducing the chance of a
-                  half-cut bottom row.
-               3. Added 4px ListBox bottom Padding so the last card
-                  always has visual breathing room before any clip
-                  boundary. -->
-          <ListBox ItemsSource="{Binding FilteredCustomRulesList}"
-                   IsVisible="{Binding CustomRulesList.Count}"
-                   MaxHeight="480"
-                   Background="Transparent"
-                   BorderThickness="0"
-                   Padding="0,0,0,4"
-                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                   ScrollViewer.VerticalScrollBarVisibility="Auto">
+              <!-- ListBox: virtualized. v2.30.0-r10 reduces MaxHeight
+                   360 → 320 inside the wrapper Border (was 480 in r9).
+                   Now that the list lives in its own visually-bounded
+                   container, the scroll edge reads as the container's
+                   intentional limit, not a clipped row. -->
+              <ListBox ItemsSource="{Binding FilteredCustomRulesList}"
+                       MaxHeight="320"
+                       Background="Transparent"
+                       BorderThickness="0"
+                       Padding="0,0,0,2"
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                       ScrollViewer.VerticalScrollBarVisibility="Auto">
             <ListBox.ItemContainerTheme>
               <ControlTheme TargetType="ListBoxItem"
                             BasedOn="{StaticResource {x:Type ListBoxItem}}">
@@ -558,6 +547,20 @@
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
+            </StackPanel>
+          </Border>
+          <!-- ↑ End Existing-rules wrapper Border (v2.30.0-r10) -->
+
+          <!-- empty-state hint when list itself is empty. Sits OUTSIDE
+               the wrapper Border so it shows up cleanly when there are
+               no rules yet (the Border's IsVisible binding hides the
+               whole list section). -->
+          <TextBlock Text="{Binding L_CustomRulesEmpty}"
+                     FontSize="11"
+                     FontStyle="Italic"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextMutedBrush}"
+                     IsVisible="{Binding !CustomRulesList.Count}"/>
 
           </StackPanel>
           <!-- ↑ End Cards view -->
