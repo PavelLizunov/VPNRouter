@@ -176,7 +176,41 @@
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+        <!-- ═══ v2.29.0-r7+ Layer 7: update receipt warning banner ═══
+             Surfaces "Last update attempt did not take effect" warning
+             that pre-r7 was log-only (and missed by users). Visible only
+             when MainWindowViewModel.HasUpdateWarning. Dismissible
+             without persisting — re-checks on every app start because
+             a stale receipt means the update genuinely didn't land. -->
+        <Border Grid.Row="0"
+                IsVisible="{Binding HasUpdateWarning}"
+                Background="{DynamicResource WarningBgBrush}"
+                BorderBrush="{DynamicResource WarningBorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="12,8">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                <TextBlock Grid.Column="0"
+                           Text="⚠"
+                           FontSize="14"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource WarningFgBrush}"/>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding UpdateWarningText}"
+                           FontSize="11"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource WarningFgBrush}"/>
+                <Button Grid.Column="2"
+                        Content="✕"
+                        Command="{Binding DismissUpdateWarningCommand}"
+                        Padding="8,2" MinHeight="0" FontSize="11"
+                        Background="Transparent" BorderThickness="0"
+                        Foreground="{DynamicResource WarningFgBrush}"
+                        ToolTip.Tip="Dismiss"/>
+            </Grid>
+        </Border>
+
         <!-- ═══ Compact header (v2.25.0 redesign) ═══
              One-row header, tight grid:
                  [28 px logo] [brand name + status badges] [◂ Simple] [⋯]
@@ -194,7 +228,7 @@
                  badge row reads as the primary visual anchor
                • "О приложении" menu item added, opens AboutWindow dialog
              -->
-        <Border Grid.Row="0" Padding="12,8" BorderThickness="0,0,0,1"
+        <Border Grid.Row="1" Padding="12,8" BorderThickness="0,0,0,1"
                 BorderBrush="{DynamicResource BorderDefaultBrush}"
                 Background="{DynamicResource SurfaceBaseBrush}">
             <Grid ColumnDefinitions="28,*,Auto,Auto" ColumnSpacing="10">
@@ -485,7 +519,7 @@
         </Border>
 
         <!-- ═══ Update Notification ═══ -->
-        <Border Grid.Row="1"
+        <Border Grid.Row="2"
                 IsVisible="{Binding UpdateVm.IsVisible}"
                 Background="{DynamicResource WarningBgBrush}"
                 BorderBrush="{DynamicResource WarningBorderBrush}"
@@ -513,7 +547,7 @@
         </Border>
 
         <!-- ═══ ADVANCED: Tab strip + page area (no TabControl — direct Grid layout) ═══ -->
-        <Grid Grid.Row="2" RowDefinitions="Auto,*"
+        <Grid Grid.Row="3" RowDefinitions="Auto,*"
               IsVisible="{Binding !IsSimpleMode}">
             <!-- v2.25.0 — tabbar wrapped in a horizontal ScrollViewer.
                  At 520 px window width the six tabs fit comfortably, but
@@ -567,7 +601,7 @@
         </Grid>
 
         <!-- ═══ SIMPLE: one-page onboarding (v2.17+) ═══ -->
-        <pages:SimplePage Grid.Row="2" IsVisible="{Binding IsSimpleMode}"/>
+        <pages:SimplePage Grid.Row="3" IsVisible="{Binding IsSimpleMode}"/>
 
         <!-- ═══ Footer (v2.25.0 unified) ═══
              Single-row status bar + inline compact connect button. Replaces
@@ -586,7 +620,7 @@
                • Full-width Start/Stop button was visually overwhelming; the
                  compact version matches the Arctic design language and
                  leaves more vertical room for page content. -->
-        <Border Grid.Row="3" Padding="12,7" BorderThickness="0,1,0,0"
+        <Border Grid.Row="4" Padding="12,7" BorderThickness="0,1,0,0"
                 IsVisible="{Binding !IsSimpleMode}"
                 BorderBrush="{DynamicResource BorderDefaultBrush}"
                 Background="{DynamicResource SurfaceRaisedBrush}">

@@ -45,13 +45,20 @@ public partial class App : Application
                 BindingPlugins.DataValidators.Remove(plugin);
 
             // v2.22.0-r1: detect "update attempted but didn't land".
-            // Logs a warning to the app log; UI banner wiring can follow.
+            // Logs a warning to the app log + (v2.29.0-r7+) hands it to
+            // MainWindowViewModel via Program.PendingUpdateWarning so the
+            // UI surfaces it as a dismissible banner. Pre-r7 was log-only
+            // and got missed by users — failed updates went unnoticed
+            // until the next attempted update also failed.
             try
             {
                 var receiptWarn = VPNRouter.Core.Services.UpdateChecker
                     .CheckInstallReceipt(VPNRouter.Core.AppVersion.Version);
                 if (!string.IsNullOrEmpty(receiptWarn))
+                {
                     Serilog.Log.Warning("[Startup] {Warning}", receiptWarn);
+                    Program.PendingUpdateWarning = receiptWarn;
+                }
             }
             catch { /* non-fatal */ }
 

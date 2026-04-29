@@ -153,6 +153,28 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private bool _isRussian;
 
     /// <summary>
+    /// v2.29.0+ Layer 7 (UI surface for update receipt warning).
+    /// Populated at app startup from
+    /// <see cref="VPNRouter.Core.Services.UpdateChecker.CheckInstallReceipt"/>.
+    /// Non-empty value surfaces a dismissible banner at the top of
+    /// MainWindow. Empty when the previous update landed correctly OR
+    /// no update was attempted recently.
+    ///
+    /// <para>Catches the failure mode where the auto-update flow
+    /// completes (download + apply + restart) but the running binary
+    /// is not actually newer than before. Pre-r7 was logged via Serilog
+    /// only; users who don't tail the log never saw it.</para>
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasUpdateWarning))]
+    private string _updateWarningText = string.Empty;
+
+    public bool HasUpdateWarning => !string.IsNullOrWhiteSpace(UpdateWarningText);
+
+    [RelayCommand]
+    private void DismissUpdateWarning() => UpdateWarningText = string.Empty;
+
+    /// <summary>
     /// True when the window should render the one-page SimplePage instead of
     /// the full tabbed Advanced layout. Persisted via AppSettings.App.UiMode.
     /// </summary>
@@ -861,6 +883,16 @@ public partial class MainWindowViewModel : ViewModelBase
                 retainedFileCountLimit: 7)
             .WriteTo.Console()
             .CreateLogger();
+
+        // v2.29.0-r7+ Layer 7 — pick up receipt-derived "previous update
+        // didn't land" warning that App.axaml.cs OnFrameworkInitialization
+        // stored before this VM was constructed. The HasUpdateWarning
+        // banner becomes visible immediately on first window paint.
+        if (!string.IsNullOrWhiteSpace(Program.PendingUpdateWarning))
+        {
+            UpdateWarningText = Program.PendingUpdateWarning!;
+            Program.PendingUpdateWarning = null; // consume — don't re-set on hot-reload
+        }
 
         AppPaths.EnsureDirectories();
         DeployBundledProfiles();

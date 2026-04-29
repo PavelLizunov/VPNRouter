@@ -14,6 +14,12 @@ sealed class Program
     /// <summary>True when launched with --minimized (autostart, starts hidden in tray).</summary>
     public static bool StartMinimized { get; private set; }
 
+    /// <summary>v2.29.0-r7+ Layer 7 — receipt-derived "previous update
+    /// didn't take effect" warning, picked up by MainWindowViewModel
+    /// constructor and bound to a dismissible banner. Empty / null when
+    /// the previous update applied correctly.</summary>
+    public static string? PendingUpdateWarning { get; set; }
+
     /// <summary>
     /// True when launched with --safe. Bypasses user overrides entirely:
     /// yaml ProfileSources, CustomCategories, CustomGroupApps, CustomApps,
