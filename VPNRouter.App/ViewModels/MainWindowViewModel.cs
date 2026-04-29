@@ -736,6 +736,12 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsRulesViewEdit))]
     private string _rulesViewMode = "cards";
 
+    /// <summary>v2.30.0-r13 — true when the Rules pane is rendered in a
+    /// narrow viewport (&lt;540 px). Drives responsive template swaps:
+    /// Add-form 5-col -> 4-row stack, toolbar 3-col -> 2-row, etc.
+    /// Fed by NetworkPage.axaml.cs SizeChanged handler.</summary>
+    [ObservableProperty] private bool _isRulesNarrow;
+
     /// <summary>True when Cards view is active (default).</summary>
     public bool IsRulesViewCards => RulesViewMode == "cards";
 

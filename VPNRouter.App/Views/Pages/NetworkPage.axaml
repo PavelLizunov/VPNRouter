@@ -443,17 +443,13 @@
                toggle is flipped to Text. -->
           <StackPanel Spacing="10" IsVisible="{Binding IsRulesViewCards}">
 
-          <!-- ═══ Add-rule form ═══
-               v2.30.0-r11 — strict design alignment per RulesPage.html
-               `.add-card` + `.add-row`. One-row grid (130 / 160 / 1fr /
-               1fr / Auto) with per-field uppercase mini-label above and
-               live-validation hint below the Value cell.
-               Pre-r11 used a 3-row vertical stack which was added in r3
-               for narrow-window safety; the user's strict-design prompt
-               requires the one-row layout from the mock. Narrow-window
-               adaptation deferred to v2.30.1 (would need a width-aware
-               style swap). -->
-          <Border Padding="14"
+          <!-- ═══ Add-rule form (WIDE — ≥540 px) ═══
+               v2.30.0-r11/r13 — strict design `.add-row` 5-col grid
+               (130 / 160 / 1fr / 1fr / Auto). Visible only when
+               IsRulesNarrow=false; the narrow sibling below stacks
+               vertically when the viewport shrinks. -->
+          <Border IsVisible="{Binding !IsRulesNarrow}"
+                  Padding="14"
                   CornerRadius="{StaticResource RadiusMd}"
                   Background="{DynamicResource SurfaceBaseBrush}"
                   BorderBrush="{DynamicResource BorderDefaultBrush}"
@@ -552,6 +548,77 @@
             </StackPanel>
           </Border>
 
+          <!-- ═══ Add-rule form (NARROW — <540 px) ═══
+               v2.30.0-r13 — vertical-stack version. Per design
+               RulesExplorations.html `narrow-form`:
+                 row 1: action + type (50/50)
+                 row 2: value (full width)
+                 row 3: comment (full width)
+                 row 4: + Add button (full width)
+               Per-field labels and live-validation hints retained. -->
+          <Border IsVisible="{Binding IsRulesNarrow}"
+                  Padding="12"
+                  CornerRadius="{StaticResource RadiusMd}"
+                  Background="{DynamicResource SurfaceBaseBrush}"
+                  BorderBrush="{DynamicResource BorderDefaultBrush}"
+                  BorderThickness="1">
+            <StackPanel Spacing="7">
+              <TextBlock Text="{Binding L_CustomRulesAddTitle}"
+                         FontSize="9" FontWeight="SemiBold"
+                         Foreground="{DynamicResource TextMutedBrush}"/>
+              <!-- Row 1: action + type (50/50) -->
+              <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                <ComboBox Grid.Column="0"
+                          ItemsSource="{Binding AvailableRuleActions}"
+                          SelectedItem="{Binding NewRuleAction}"
+                          HorizontalAlignment="Stretch"
+                          FontSize="11" Padding="6,3" MinHeight="0"
+                          ToolTip.Tip="{Binding L_CustomRulesActionLabel}"/>
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding AvailableRuleTypes}"
+                          SelectedItem="{Binding NewRuleType}"
+                          HorizontalAlignment="Stretch"
+                          FontSize="11" Padding="6,3" MinHeight="0"
+                          ToolTip.Tip="{Binding L_CustomRulesTypeLabel}"/>
+              </Grid>
+              <!-- Row 2: value (full width with live-validation) -->
+              <TextBox Text="{Binding NewRuleValue}"
+                       Watermark="{Binding NewRuleValuePlaceholder}"
+                       FontSize="11" Padding="6,3" MinHeight="0"
+                       FontFamily="Consolas, 'SF Mono', monospace"
+                       BorderBrush="{Binding NewRuleValueBorderColor,
+                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                     ConverterParameter=DangerBorderBrush|SuccessBorderBrush}"/>
+              <TextBlock Text="{Binding NewRuleValueHint}"
+                         FontSize="9"
+                         FontFamily="Consolas, 'SF Mono', monospace"
+                         MinHeight="11" TextTrimming="CharacterEllipsis"
+                         Foreground="{Binding NewRuleValueIsValid,
+                                      Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                      ConverterParameter=SuccessFgBrush|DangerFgBrush}"/>
+              <!-- Row 3: comment (full width) -->
+              <TextBox Text="{Binding NewRuleComment}"
+                       Watermark="{Binding L_CustomRulesCommentLabel}"
+                       FontSize="11" Padding="6,3" MinHeight="0"/>
+              <!-- Row 4: + Add (full width) -->
+              <Button Content="{Binding L_CustomRulesAddBtn}"
+                      Command="{Binding AddCustomRuleFromFormCommand}"
+                      FontSize="11" FontWeight="SemiBold"
+                      Padding="14,5" MinHeight="0"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Center"
+                      Background="{DynamicResource AccentSolidBrush}"
+                      Foreground="{DynamicResource AccentOnSolidBrush}"
+                      CornerRadius="{StaticResource RadiusSm}"
+                      BorderThickness="0"/>
+              <TextBlock Text="{Binding NewRuleValidationError}"
+                         FontSize="10"
+                         TextWrapping="Wrap"
+                         Foreground="{DynamicResource DangerFgBrush}"
+                         IsVisible="{Binding NewRuleValidationError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+            </StackPanel>
+          </Border>
+
           <!-- ═══ Existing rules section ═══
                v2.30.0-r11 — strict design adherence per user prompt
                «Нужно привести UI к макету строго, без отсебятины».
@@ -577,14 +644,17 @@
                        VerticalAlignment="Center"/>
           </Grid>
 
-          <!-- ═══ List toolbar: search + filter chips + ⋯ bulk menu ═══
-               Per design RulesPage.html `.list-toolbar` (3-col grid).
-               Filter chips show per-action counts and filter the list
-               in place. Bulk actions (Enable all / Disable all / Clear
-               all) live in the ⋯ button to the right. -->
+          <!-- ═══ List toolbar (responsive wrapper) ═══
+               Per design RulesPage.html `.list-toolbar`. Wide (≥540 px)
+               uses 3-col grid; narrow (<540 px) stacks into 2 rows
+               (search above, chips + ⋯ below).
+               Outer StackPanel handles the "no rules → hide toolbar"
+               IsVisible check; each inner block flips based on
+               IsRulesNarrow. -->
+        <StackPanel IsVisible="{Binding CustomRulesList.Count}" Spacing="6">
           <Grid ColumnDefinitions="*,Auto,Auto"
                 ColumnSpacing="6"
-                IsVisible="{Binding CustomRulesList.Count}">
+                IsVisible="{Binding !IsRulesNarrow}">
             <!-- Search input -->
             <TextBox Grid.Column="0"
                      Text="{Binding CustomRulesSearchText}"
@@ -715,6 +785,107 @@
               </Button.Flyout>
             </Button>
           </Grid>
+
+          <!-- ═══ List toolbar (NARROW — <540 px) ═══
+               2-row stack per design narrow-mode: search above, then a
+               second row with chips (left, fills available) + ⋯ (right).
+               Filter chips collapse equally (each chip Stretches via
+               StackPanel) so the row never overflows. -->
+          <StackPanel IsVisible="{Binding IsRulesNarrow}" Spacing="6">
+            <TextBox Text="{Binding CustomRulesSearchText}"
+                     Watermark="{Binding L_CustomRulesSearchPlaceholder}"
+                     FontSize="11" Padding="6,3" MinHeight="0"/>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+              <Border Grid.Column="0"
+                      Padding="2"
+                      CornerRadius="{StaticResource RadiusSm}"
+                      Background="{DynamicResource SurfaceSunkenBrush}">
+                <UniformGrid Columns="4" Rows="1">
+                  <Button Command="{Binding SetRulesActionFilterCommand}"
+                          CommandParameter="all"
+                          FontSize="10" FontWeight="SemiBold"
+                          Padding="4,3" MinHeight="0"
+                          BorderThickness="0"
+                          CornerRadius="{StaticResource RadiusXs}"
+                          HorizontalContentAlignment="Center"
+                          Background="{Binding IsRulesFilterAll,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=SurfaceBaseBrush|Transparent}"
+                          Foreground="{Binding IsRulesFilterAll,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=AccentFgBrush|TextSecondaryBrush}"
+                          Content="{Binding L_RulesFilterAll}"/>
+                  <Button Command="{Binding SetRulesActionFilterCommand}"
+                          CommandParameter="direct"
+                          FontSize="10" FontWeight="SemiBold"
+                          Padding="4,3" MinHeight="0"
+                          BorderThickness="0"
+                          CornerRadius="{StaticResource RadiusXs}"
+                          HorizontalContentAlignment="Center"
+                          Background="{Binding IsRulesFilterDirect,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=SurfaceBaseBrush|Transparent}"
+                          Foreground="{Binding IsRulesFilterDirect,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=AccentFgBrush|TextSecondaryBrush}"
+                          Content="direct"/>
+                  <Button Command="{Binding SetRulesActionFilterCommand}"
+                          CommandParameter="proxy"
+                          FontSize="10" FontWeight="SemiBold"
+                          Padding="4,3" MinHeight="0"
+                          BorderThickness="0"
+                          CornerRadius="{StaticResource RadiusXs}"
+                          HorizontalContentAlignment="Center"
+                          Background="{Binding IsRulesFilterProxy,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=SurfaceBaseBrush|Transparent}"
+                          Foreground="{Binding IsRulesFilterProxy,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=AccentFgBrush|TextSecondaryBrush}"
+                          Content="proxy"/>
+                  <Button Command="{Binding SetRulesActionFilterCommand}"
+                          CommandParameter="block"
+                          FontSize="10" FontWeight="SemiBold"
+                          Padding="4,3" MinHeight="0"
+                          BorderThickness="0"
+                          CornerRadius="{StaticResource RadiusXs}"
+                          HorizontalContentAlignment="Center"
+                          Background="{Binding IsRulesFilterBlock,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=SurfaceBaseBrush|Transparent}"
+                          Foreground="{Binding IsRulesFilterBlock,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=AccentFgBrush|TextSecondaryBrush}"
+                          Content="block"/>
+                </UniformGrid>
+              </Border>
+              <Button Grid.Column="1"
+                      Content="⋯"
+                      Width="28" Height="28" Padding="0" MinHeight="0"
+                      FontSize="14"
+                      BorderThickness="1"
+                      BorderBrush="{DynamicResource BorderDefaultBrush}"
+                      Background="{DynamicResource SurfaceBaseBrush}"
+                      CornerRadius="{StaticResource RadiusSm}"
+                      ToolTip.Tip="{Binding L_RulesBulkActions}">
+                <Button.Flyout>
+                  <MenuFlyout>
+                    <MenuItem Header="{Binding L_CustomRulesEnableAll}"
+                              Command="{Binding EnableAllCustomRulesCommand}"/>
+                    <MenuItem Header="{Binding L_CustomRulesDisableAll}"
+                              Command="{Binding DisableAllCustomRulesCommand}"/>
+                    <Separator/>
+                    <MenuItem Header="{Binding L_CustomRulesClearAll}"
+                              Command="{Binding ClearAllCustomRulesCommand}"
+                              Foreground="{DynamicResource DangerFgBrush}"/>
+                  </MenuFlyout>
+                </Button.Flyout>
+              </Button>
+            </Grid>
+          </StackPanel>
+        </StackPanel>
+        <!-- ↑ End responsive toolbar wrapper -->
+
           <!-- Confirm prompt for two-click Clear All — surfaces above
                the list when the first click is registered. -->
           <TextBlock Text="{Binding ClearAllConfirmText}"
@@ -723,12 +894,17 @@
                      IsVisible="{Binding ClearAllConfirmText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                      HorizontalAlignment="Right"/>
 
-          <!-- ListBox: virtualized. v2.30.0-r11 reverts to flat layout
-               per design (no wrapper Border). MaxHeight 360 keeps
-               virtualization viable for 100+ rules; the bottom 4px
-               Padding avoids cutting at the boundary. -->
+          <!-- ═══ Rule list (responsive wrapper) ═══
+               Wide (≥540 px): 6-col flat row template per design `.rule`.
+               Narrow (<540 px): 3-row stacked card per design
+               `.rule-narrow` — pill+type+toggle+menu on row 1, value on
+               row 2, comment on row 3. Each ListBox is visibility-bound
+               to its breakpoint; outer StackPanel holds the no-rules
+               IsVisible check. -->
+        <StackPanel IsVisible="{Binding CustomRulesList.Count}" Spacing="0">
+          <!-- WIDE list (≥540 px) — current 6-col template -->
           <ListBox ItemsSource="{Binding FilteredCustomRulesList}"
-                   IsVisible="{Binding CustomRulesList.Count}"
+                   IsVisible="{Binding !IsRulesNarrow}"
                    MaxHeight="360"
                    Background="Transparent"
                    BorderThickness="0"
@@ -850,6 +1026,109 @@
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
+
+          <!-- NARROW list (<540 px) — 3-row stacked card per design
+               `.rule-narrow`. Row 1 = pill + type + toggle + menu;
+               row 2 = value (full width); row 3 = comment (full width,
+               IsVisible-collapsed when empty). -->
+          <ListBox ItemsSource="{Binding FilteredCustomRulesList}"
+                   IsVisible="{Binding IsRulesNarrow}"
+                   MaxHeight="360"
+                   Background="Transparent"
+                   BorderThickness="0"
+                   Padding="0,0,0,4"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ListBox.ItemContainerTheme>
+              <ControlTheme TargetType="ListBoxItem"
+                            BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="MinHeight" Value="0"/>
+                <Setter Property="Margin" Value="0"/>
+              </ControlTheme>
+            </ListBox.ItemContainerTheme>
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:CustomRuleViewModel">
+                <Border Classes="rule-card"
+                        Opacity="{Binding RowOpacity}">
+                  <Grid ColumnDefinitions="Auto,*,Auto,Auto"
+                        RowDefinitions="Auto,Auto,Auto"
+                        ColumnSpacing="10" RowSpacing="3">
+                    <!-- Row 1, col 0: action chip -->
+                    <Border Grid.Row="0" Grid.Column="0"
+                            CornerRadius="{StaticResource RadiusXs}"
+                            Padding="10,5"
+                            Width="74"
+                            BorderThickness="1"
+                            HorizontalAlignment="Left"
+                            Background="{Binding Action,
+                                         Converter={x:Static conv:ActionToTokenBrushConverter.Instance},
+                                         ConverterParameter=Bg}"
+                            BorderBrush="{Binding Action,
+                                         Converter={x:Static conv:ActionToTokenBrushConverter.Instance},
+                                         ConverterParameter=Border}">
+                      <TextBlock Text="{Binding Action}"
+                                 FontSize="10"
+                                 FontWeight="Bold"
+                                 HorizontalAlignment="Center"
+                                 Foreground="{Binding Action,
+                                              Converter={x:Static conv:ActionToTokenBrushConverter.Instance},
+                                              ConverterParameter=Fg}"/>
+                    </Border>
+                    <!-- Row 1, col 1: type label -->
+                    <TextBlock Grid.Row="0" Grid.Column="1"
+                               Text="{Binding Type}"
+                               FontSize="10"
+                               FontFamily="Consolas, 'SF Mono', monospace"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
+                    <!-- Row 1, col 2: iOS toggle -->
+                    <CheckBox Grid.Row="0" Grid.Column="2"
+                              Theme="{StaticResource IosToggleCheckBox}"
+                              IsChecked="{Binding Enabled}"
+                              VerticalAlignment="Center"/>
+                    <!-- Row 1, col 3: ⋯ menu -->
+                    <Button Grid.Row="0" Grid.Column="3"
+                            Content="⋯"
+                            Width="24" Height="24"
+                            Padding="0" MinHeight="0"
+                            FontSize="14"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="{DynamicResource TextMutedBrush}"
+                            ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_RulesBulkActions}">
+                      <Button.Flyout>
+                        <MenuFlyout>
+                          <MenuItem Header="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_CustomRulesDelete}"
+                                    Command="{Binding RemoveCommand}"
+                                    Foreground="{DynamicResource DangerFgBrush}"/>
+                        </MenuFlyout>
+                      </Button.Flyout>
+                    </Button>
+                    <!-- Row 2, cols 0-3: value (full width, mono) -->
+                    <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+                               Text="{Binding Value}"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               FontFamily="Consolas, 'SF Mono', monospace"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding Comment}"/>
+                    <!-- Row 3, cols 0-3: comment (italic, muted, hides when empty) -->
+                    <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4"
+                               Text="{Binding Comment}"
+                               FontSize="10"
+                               FontStyle="Italic"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               IsVisible="{Binding Comment, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </StackPanel>
+        <!-- ↑ End responsive list wrapper -->
 
           <!-- empty-state hint when list itself is empty -->
           <TextBlock Text="{Binding L_CustomRulesEmpty}"
