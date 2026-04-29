@@ -412,14 +412,43 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 ProgressDone = 0;
             });
 
-            // ── Stage 2: batched test+verify loop ──
-            // Limit deep-verify concurrency. Each verify spawns a sing-box
-            // process so unbounded would be too heavy — 5 is a safe default
-            // matching the previous DeepVerifyTopAsync semaphore.
-            var deepSem = new SemaphoreSlim(5);
+            // ── Stage 2: cross-batch overlapping pipeline (v2.29.0-r3) ──
+            // Pre-r3 each batch ran TCP+TLS → deep-verify sequentially, with
+            // batch N+1 starting only after batch N finished. With cross-
+            // batch overlap, batch N+1's TCP+TLS runs in parallel with batch
+            // N's deep-verify (TCP is network-IO-light; deep-verify spawns
+            // sing-box). Hides ~10s of TCP wall-clock per batch behind the
+            // already-running deep-verify. Mac tester request 2026-04-29:
+            // "вот это можно делать ассинхронно — не последовательно
+            // отправлять по 1 запросу а хуярить сразу пачку запросов".
+            //
+            // v2.29.0-r3 (5c): adaptive deep-verify concurrency cap.
+            // Pre-r3: hardcoded 5 sing-box spawns. On 8+core machines that
+            // leaves ~60% CPU idle during deep-verify. Now scales with
+            // Environment.ProcessorCount: 1-3 cores=3, 4-7=5, 8+=8.
+            var deepCap = ComputeAdaptiveDeepCap();
+            _logger.Information("[FreeConfigs] adaptive deep-verify cap = {cap} (CPU cores: {cpu})",
+                deepCap, Environment.ProcessorCount);
+            var deepSem = new SemaphoreSlim(deepCap);
             var batchSize = FreeConfigAggregator.DefaultBatchSize;
             var processedCount = 0;
             var totalBatches = (queue.Count + batchSize - 1) / batchSize;
+
+            // In-flight deep-verify tracking, ACROSS batches. Each entry is
+            // the task that completes when batch K's deep-verify wave is
+            // fully drained (all sub-tasks drained or cancellation observed).
+            var inFlightBatches = new List<Task>();
+            // Cap on how many batches are simultaneously in any phase
+            // (TCP+TLS or deep-verify). 2 is enough to hide TCP wall-clock
+            // behind deep-verify; 3+ would put more sing-box pressure
+            // without much extra wall-clock saving (deep-verify dominates).
+            const int MaxBatchesInFlight = 2;
+
+            // Pre-test result of the next batch's TCP+TLS, executed in
+            // parallel with the previous batch's deep-verify. Nullable —
+            // first iteration has no prefetch; following iterations use
+            // it instead of running TCP synchronously.
+            Task<List<FreeConfigEntry>>? prefetchedTcp = null;
 
             for (int i = 0; i < queue.Count; i += batchSize)
             {
@@ -427,54 +456,60 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 
                 var currentBatchNum = (i / batchSize) + 1;
 
-                // Slice the next batch. ToList() materialises a fresh list so
-                // the rest of `queue` is still referenced — but the batch
-                // testers operate on this small slice only.
-                var batch = queue.Skip(i).Take(batchSize).ToList();
-
-                await Dispatcher.UIThread.InvokeAsync(() =>
+                // Acquire batch — either from prefetch or run TCP synchronously.
+                List<FreeConfigEntry> batch;
+                if (prefetchedTcp != null)
                 {
-                    StatusText = Strings.FcStatusBatchedTcpTls(
-                        verifiedList.Count, target, currentBatchNum, totalBatches);
-                });
-
-                // 2a: TCP + TLS test the batch (semaphore-capped, parallel).
-                // v2.28.5-r4: pass a progress callback so the status line
-                // updates while TCP+TLS is in flight (200-500 entries take
-                // ~5-15 s; without progress feedback the bar appears frozen).
-                var tcpDone = 0;
-                var tcpTotal = batch.Count;
-                var lastStatusUpdate = DateTime.MinValue;
-                var batchProgress = new Progress<(int done, int total)>(p =>
-                {
-                    Interlocked.Exchange(ref tcpDone, p.done);
-                    // Throttle UI updates to ~5/sec so we don't spam the
-                    // dispatcher when 80 parallel TCP probes finish at once.
-                    var now = DateTime.UtcNow;
-                    if ((now - lastStatusUpdate).TotalMilliseconds < 200) return;
-                    lastStatusUpdate = now;
-                    Dispatcher.UIThread.Post(() =>
+                    try { batch = await prefetchedTcp; }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
                     {
-                        StatusText = Strings.FcStatusBatchedTcpTlsProgress(
-                            verifiedList.Count, target, currentBatchNum, totalBatches,
-                            p.done, p.total);
-                    });
-                });
-
-                try
-                {
-                    await _aggregator.Tester.TestAllAsync(batch, batchProgress, ct);
+                        _logger.Warning(ex, "[FreeConfigs] Prefetched TCP+TLS threw — skipping batch {n}", currentBatchNum);
+                        prefetchedTcp = null;
+                        continue;
+                    }
+                    prefetchedTcp = null;
                 }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception ex)
+                else
                 {
-                    _logger.Warning(ex, "[FreeConfigs] Batch TCP+TLS test threw — skipping");
-                    continue;
+                    var slice = queue.Skip(i).Take(batchSize).ToList();
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        StatusText = Strings.FcStatusBatchedTcpTls(
+                            verifiedList.Count, target, currentBatchNum, totalBatches);
+                    });
+                    try { batch = await RunTcpTlsBatchAsync(slice, currentBatchNum, totalBatches, target, verifiedList, ct); }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning(ex, "[FreeConfigs] Batch TCP+TLS test threw — skipping");
+                        continue;
+                    }
                 }
 
                 if (ct.IsCancellationRequested) break;
 
-                // 2b: deep-verify the Ok subset of this batch.
+                // Kick off the NEXT batch's TCP+TLS now (cross-batch overlap).
+                // Don't await; deep-verify of THIS batch will run in parallel.
+                var nextStart = i + batchSize;
+                if (nextStart < queue.Count && verifiedList.Count < target)
+                {
+                    var nextSlice = queue.Skip(nextStart).Take(batchSize).ToList();
+                    var nextBatchNum = (nextStart / batchSize) + 1;
+                    prefetchedTcp = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            return await RunTcpTlsBatchAsync(
+                                nextSlice, nextBatchNum, totalBatches,
+                                target, verifiedList, ct);
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        // Logged inside RunTcpTlsBatchAsync; re-throw bubbles to await above.
+                    }, ct);
+                }
+
+                // Deep-verify Ok subset of THIS batch.
                 var okSubset = batch
                     .Where(c => c.Status == FreeConfigStatus.Ok
                              || c.Status == FreeConfigStatus.Verified)
@@ -488,34 +523,55 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                         okSubset.Count);
                 });
 
-                var deepTasks = new List<Task>();
-                foreach (var cfg in okSubset)
-                {
-                    if (ct.IsCancellationRequested || verifiedList.Count >= target) break;
-
-                    deepTasks.Add(VerifyOneAndAppendAsync(
-                        cfg, verifiedList, deepSem, target, maxPing, ct));
-
-                    // Cap in-flight deep verifies so we don't queue all 500
-                    // candidate verifies at once. WhenAny releases as each
-                    // finishes; we only refill up to 5 in-flight.
-                    if (deepTasks.Count >= 5)
-                    {
-                        var done = await Task.WhenAny(deepTasks);
-                        deepTasks.Remove(done);
-                    }
-                }
-
-                if (deepTasks.Count > 0)
-                    await Task.WhenAll(deepTasks);
-
+                // Wrap the entire batch's deep-verify wave in a single Task
+                // so we can track "batch N is still in flight" at the outer
+                // level. Inner tasks share `deepSem` across batches — the
+                // adaptive cap is GLOBAL, not per-batch.
+                var batchVerifyTask = DeepVerifyBatchAsync(
+                    okSubset, verifiedList, deepSem, target, maxPing, ct);
+                inFlightBatches.Add(batchVerifyTask);
                 processedCount += batch.Count;
 
-                // 2c: explicit drop of intermediate references so the GC
-                // can reclaim batch + okSubset between iterations.
+                // Drop refs ASAP so GC can reclaim. The batchVerifyTask owns
+                // its own copy of okSubset; original list refs are dropped here.
                 batch = null!;
                 okSubset = null!;
-                deepTasks.Clear();
+
+                // Cap in-flight batches. Wait for one to finish before
+                // queueing more. With MaxBatchesInFlight=2 we have at most
+                // 2 batches' worth of deep-verify tasks queued (each gated
+                // by deepSem so total sing-box concurrency = deepCap, NOT
+                // 2 * deepCap).
+                if (inFlightBatches.Count >= MaxBatchesInFlight)
+                {
+                    var finished = await Task.WhenAny(inFlightBatches);
+                    inFlightBatches.Remove(finished);
+                    // If it threw inside, the await on Task.WhenAny doesn't
+                    // observe — observe explicitly so we don't lose errors.
+                    try { await finished; }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning(ex, "[FreeConfigs] Batch deep-verify wave threw");
+                    }
+                }
+            }
+
+            // Drain any remaining in-flight batch waves.
+            if (inFlightBatches.Count > 0)
+            {
+                try { await Task.WhenAll(inFlightBatches); }
+                catch (OperationCanceledException) { throw; }
+                catch { /* per-task warnings already logged */ }
+            }
+            inFlightBatches.Clear();
+
+            // Cancel and observe any prefetch we left in flight (best-effort).
+            if (prefetchedTcp != null)
+            {
+                try { await prefetchedTcp; }
+                catch { /* ignored on cancel/error */ }
+                prefetchedTcp = null;
             }
 
             // ── Stage 3: finalise ──
@@ -592,6 +648,107 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             IsBusy = false;
             ProgressTotal = 0;
             ProgressDone = 0;
+        }
+    }
+
+    /// <summary>v2.29.0-r3: adaptive deep-verify concurrency cap based on
+    /// CPU count. Pre-r3 was hardcoded 5 (matching the original sing-box
+    /// spawn cost on a quad-core dev box). On 8+ core machines that
+    /// leaves ~60% CPU idle during deep-verify; on 1-2 core VMs
+    /// 5 simultaneous sing-box can starve the OS scheduler.
+    ///
+    /// <list type="bullet">
+    /// <item>1-3 cores: cap = 3 (conservative — sing-box spawn + Reality
+    /// TLS handshake is CPU-heavy).</item>
+    /// <item>4-7 cores: cap = 5 (pre-r3 default — proven safe).</item>
+    /// <item>8+ cores: cap = 8 (room to scale on modern desktops).</item>
+    /// </list>
+    ///
+    /// <para>Each sing-box instance uses ~50 MB RSS + 2 ports (SOCKS local
+    /// + Clash API) + outgoing TLS connections. cap=8 ⇒ ~400 MB peak
+    /// memory + ~30+ ephemeral sockets per instance — well within the
+    /// 16 k ephemeral-port pool on Windows / Linux / Mac.</para>
+    /// </summary>
+    private static int ComputeAdaptiveDeepCap()
+    {
+        var cpu = Environment.ProcessorCount;
+        if (cpu <= 3) return 3;
+        if (cpu <= 7) return 5;
+        return 8;
+    }
+
+    /// <summary>v2.29.0-r3: extracted from inline in the batched RefreshAsync
+    /// loop so it can be called synchronously OR via Task.Run (cross-batch
+    /// prefetch). Performs TCP+TLS test of the slice with throttled UI
+    /// status updates (~5/sec).</summary>
+    private async Task<List<FreeConfigEntry>> RunTcpTlsBatchAsync(
+        List<FreeConfigEntry> slice,
+        int batchNum,
+        int totalBatches,
+        int target,
+        List<FreeConfigEntry> verifiedList,
+        CancellationToken ct)
+    {
+        var lastStatusUpdate = DateTime.MinValue;
+        var batchProgress = new Progress<(int done, int total)>(p =>
+        {
+            // Throttle UI updates to ~5/sec so we don't spam the dispatcher
+            // when 80 parallel TCP probes finish at once.
+            var now = DateTime.UtcNow;
+            if ((now - lastStatusUpdate).TotalMilliseconds < 200) return;
+            lastStatusUpdate = now;
+            int found;
+            lock (verifiedList) found = verifiedList.Count;
+            Dispatcher.UIThread.Post(() =>
+            {
+                StatusText = Strings.FcStatusBatchedTcpTlsProgress(
+                    found, target, batchNum, totalBatches, p.done, p.total);
+            });
+        });
+
+        await _aggregator.Tester.TestAllAsync(slice, batchProgress, ct);
+        return slice;
+    }
+
+    /// <summary>v2.29.0-r3: extracted from inline in the batched RefreshAsync
+    /// loop so cross-batch overlap can wrap each batch's deep-verify wave
+    /// in a single Task. Internal cap-of-deepCap (semaphore-shared with
+    /// other in-flight batches) on simultaneous sing-box spawns.</summary>
+    private async Task DeepVerifyBatchAsync(
+        List<FreeConfigEntry> okSubset,
+        List<FreeConfigEntry> verifiedList,
+        SemaphoreSlim deepSem,
+        int target,
+        int maxPing,
+        CancellationToken ct)
+    {
+        var deepTasks = new List<Task>();
+        var deepCap = deepSem.CurrentCount > 0 ? deepSem.CurrentCount + 1 : 5;
+        // Use a slightly wider in-flight cap than the semaphore itself so
+        // the loop can keep queuing while waiters drain — semaphore handles
+        // the actual ceiling. Use the adaptive deepCap as the headroom.
+        var inFlightCap = ComputeAdaptiveDeepCap();
+        foreach (var cfg in okSubset)
+        {
+            if (ct.IsCancellationRequested) break;
+            int found;
+            lock (verifiedList) found = verifiedList.Count;
+            if (found >= target) break;
+
+            deepTasks.Add(VerifyOneAndAppendAsync(
+                cfg, verifiedList, deepSem, target, maxPing, ct));
+
+            if (deepTasks.Count >= inFlightCap)
+            {
+                var done = await Task.WhenAny(deepTasks);
+                deepTasks.Remove(done);
+            }
+        }
+        if (deepTasks.Count > 0)
+        {
+            try { await Task.WhenAll(deepTasks); }
+            catch (OperationCanceledException) { throw; }
+            catch { /* per-verify failures are non-fatal at the batch level */ }
         }
     }
 
