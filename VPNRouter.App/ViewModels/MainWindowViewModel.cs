@@ -287,6 +287,22 @@ public partial class MainWindowViewModel : ViewModelBase
     }
     [ObservableProperty] private bool _bypassRussianTraffic = true;
 
+    /// <summary>v2.30.0-r17 — when true, custom rules win over global
+    /// toggles (BypassRussianTraffic + BlockAds). Default false (toggles
+    /// first, same as r1-r16). Mirrors AppSettings.App.CustomRulesPriority
+    /// "custom_first" / "toggles_first". User report 2026-04-29: «хочу
+    /// чтоб кастомные правила были выше или переключатель что брать в
+    /// приоритет».</summary>
+    [ObservableProperty] private bool _customRulesAboveToggles;
+
+    partial void OnCustomRulesAboveTogglesChanged(bool value)
+    {
+        if (_isLoadingUI) return;
+        _settings.App.CustomRulesPriority = value ? "custom_first" : "toggles_first";
+        SaveSettings();
+        if (IsConnected) HasPendingAppChanges = true;
+    }
+
     /// <summary>
     /// v2.30.0 — text-format mirror of <see cref="AppSettings.App.CustomRules"/>.
     /// User edits this multi-line string in the Network → Routing →
@@ -480,7 +496,13 @@ public partial class MainWindowViewModel : ViewModelBase
         ["port"]           = new(@"^\d{1,5}(\s*,\s*\d{1,5})*$", System.Text.RegularExpressions.RegexOptions.Compiled),
         ["port_range"]     = new(@"^\d{1,5}-\d{1,5}$", System.Text.RegularExpressions.RegexOptions.Compiled),
         ["network"]        = new(@"^(tcp|udp)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
-        ["process_name"]   = new(@"^[\w.\-]+(\.exe)?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        // r17: process_name accepts both with and without .exe (Mac/Linux
+        // process names are bare like "chrome", "discord"; Windows can be
+        // "chrome.exe" or "chrome"). sing-box matches case-sensitively
+        // against the executable file basename.
+        ["process_name"]   = new(@"^[\w.\-]+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        // r17: process_path accepts Windows (C:\), Mac/Linux (/), and
+        // arbitrary segment characters (.app bundles need spaces).
         ["process_path"]   = new(@"^([A-Z]:\\|/).+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
         ["geosite"]        = new(@"^[a-z][a-z0-9_-]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
         ["geoip"]          = new(@"^[a-z][a-z0-9_-]*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
@@ -488,6 +510,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
     /// <summary>Per-type Value-input placeholder. Updates when user
     /// changes Type. From RulesPage.html `typeMeta[type].ph`.</summary>
+    /// <summary>v2.30.0-r17 — OS-aware placeholders. process_name and
+    /// process_path differ between Windows and Mac/Linux (no .exe
+    /// extension on Unix; different path conventions). User report:
+    /// «пункт process_name предлагает .exe даже на Mac в примере».</summary>
     private string ResolveValuePlaceholder(string type) => type switch
     {
         "domain"         => "mail.example.com",
@@ -497,8 +523,12 @@ public partial class MainWindowViewModel : ViewModelBase
         "port"           => "443  or  80, 443",
         "port_range"     => "1000-2000",
         "network"        => "tcp",
-        "process_name"   => "chrome.exe",
-        "process_path"   => "C:\\Program Files\\app\\app.exe",
+        "process_name"   => System.OperatingSystem.IsWindows() ? "chrome.exe" : "chrome",
+        "process_path"   => System.OperatingSystem.IsWindows()
+            ? "C:\\Program Files\\app\\app.exe"
+            : System.OperatingSystem.IsMacOS()
+                ? "/Applications/App.app/Contents/MacOS/App"
+                : "/usr/bin/app",
         "geosite"        => "cn",
         "geoip"          => "cn",
         _                => string.Empty,
@@ -710,6 +740,10 @@ public partial class MainWindowViewModel : ViewModelBase
         // view is active. Apply commits EditedCustomRulesText → CustomRulesText
         // which lands here, so dirty must clear naturally.
         OnPropertyChanged(nameof(RulesEditorIsDirty));
+
+        // v2.30.0-r17: rules-change-while-running surface (same as
+        // FlushCustomRulesListToSettings). Edit-mode Apply lands here.
+        if (IsConnected) HasPendingAppChanges = true;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -1091,20 +1125,36 @@ public partial class MainWindowViewModel : ViewModelBase
         foreach (var vm in CustomRulesList) vm.Enabled = false;
     }
 
-    /// <summary>v2.30.0-r14 — bulk-pop "Sort by type" action per design
-    /// `.bulk-pop`. Stable-sorts CustomRulesList by Type alphabetically;
-    /// preserves Enabled / Comment fields. Equal-type rules retain their
-    /// original relative order (LINQ's OrderBy is stable). After sort,
-    /// FlushCustomRulesListToSettings persists the new order to YAML +
-    /// rebuilds the textbox view + Read-mode groups.</summary>
+    /// <summary>v2.30.0-r14/r17 — bulk-pop "Sort by type" action.
+    /// Stable-sorts CustomRulesList by Type alphabetically.
+    /// r17 fix: user report «сортировка непонятно работает». Two changes:
+    /// 1. Compare ALL items pre/post; if order is unchanged after sort,
+    ///    show a "уже отсортировано" toast instead of silently re-shuffling.
+    /// 2. Show a "✓ Sorted: N rules" toast for ~2 s on success so the
+    ///    user gets visible feedback that the action ran.</summary>
     [RelayCommand]
     private void SortCustomRulesByType()
     {
-        if (CustomRulesList.Count <= 1) return;
+        if (CustomRulesList.Count <= 1)
+        {
+            ShowRulesToast(IsRussian
+                ? "Нечего сортировать"
+                : "Nothing to sort");
+            return;
+        }
+
+        var preOrder = CustomRulesList
+            .Select(r => $"{r.Type}|{r.Action}|{r.Value}")
+            .ToList();
+
         var sorted = CustomRulesList
             .OrderBy(r => r.Type, System.StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Action, System.StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        var postOrder = sorted.Select(r => $"{r.Type}|{r.Action}|{r.Value}").ToList();
+        bool changed = !preOrder.SequenceEqual(postOrder);
+
         _isSyncingCustomRules = true;
         try
         {
@@ -1114,6 +1164,34 @@ public partial class MainWindowViewModel : ViewModelBase
         finally { _isSyncingCustomRules = false; }
         FlushCustomRulesListToSettings();
         RebuildFilteredCustomRulesList();
+
+        ShowRulesToast(changed
+            ? (IsRussian ? $"✓ Отсортировано по типу ({sorted.Count})"
+                         : $"✓ Sorted by type ({sorted.Count})")
+            : (IsRussian ? "Уже отсортировано" : "Already sorted"));
+    }
+
+    /// <summary>v2.30.0-r17 — transient toast string shown above the
+    /// rule list for ~2 s after a bulk action (sort, etc.). Empty
+    /// string = no toast.</summary>
+    [ObservableProperty] private string _rulesToastText = string.Empty;
+
+    private System.Threading.CancellationTokenSource? _rulesToastCts;
+
+    private void ShowRulesToast(string text)
+    {
+        RulesToastText = text;
+        _rulesToastCts?.Cancel();
+        _rulesToastCts = new System.Threading.CancellationTokenSource();
+        var token = _rulesToastCts.Token;
+        _ = System.Threading.Tasks.Task.Delay(2000, token).ContinueWith(t =>
+        {
+            if (t.IsCanceled) return;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!token.IsCancellationRequested) RulesToastText = string.Empty;
+            });
+        }, System.Threading.Tasks.TaskScheduler.Default);
     }
 
     /// <summary>v2.30.0-r2 — re-emit settings + textbox sync after
@@ -1166,6 +1244,12 @@ public partial class MainWindowViewModel : ViewModelBase
         finally { _isSyncingCustomRules = false; }
         RebuildFilteredCustomRulesList();
         SaveSettings();
+        // v2.30.0-r17: rules-change-while-running surface. User report
+        // «мне нужно делать полный перезапуск VPN чтоб правило сработало,
+        // тут не очень понятно». While the VPN is running, mark the
+        // change as pending so the Apply button + indicator surface
+        // (existing pattern from other settings).
+        if (IsConnected) HasPendingAppChanges = true;
     }
 
     /// <summary>v2.30.0-r3 — import rules from a CSV / JSON / sing-box-
@@ -2052,6 +2136,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Russian geo bypass
         BypassRussianTraffic = _settings.App.BypassRussianTraffic;
+        // v2.30.0-r17: Custom-rules-priority. "custom_first" → checkbox on.
+        CustomRulesAboveToggles = string.Equals(
+            _settings.App.CustomRulesPriority,
+            "custom_first",
+            System.StringComparison.OrdinalIgnoreCase);
 
         // v2.30.0 — full custom rules (direct/proxy/block) text format.
         // Round-trip: SaveSettings serialises CustomRulesText back to
@@ -2724,6 +2813,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Russian geo bypass
         _settings.App.BypassRussianTraffic = BypassRussianTraffic;
+        // v2.30.0-r17: persist priority too (set by OnCustomRulesAboveTogglesChanged
+        // already, but mirror here for safety in case the OnChanged didn't fire
+        // — e.g. during a programmatic load + immediate save).
+        _settings.App.CustomRulesPriority = CustomRulesAboveToggles ? "custom_first" : "toggles_first";
 
         // Strict mode
         _settings.App.StrictMode = StrictMode;

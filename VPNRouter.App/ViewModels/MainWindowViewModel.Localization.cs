@@ -94,6 +94,9 @@ public partial class MainWindowViewModel
     public string L_RulesBulkActions => Strings.RulesBulkActions;
     // v2.30.0-r14 — bulk-actions popover localizations.
     public string L_RulesSortByType => Strings.RulesSortByType;
+    // v2.30.0-r17 — Custom-rules-priority CheckBox.
+    public string L_RulesCustomAboveToggles => Strings.RulesCustomAboveToggles;
+    public string L_RulesCustomAboveTogglesHint => Strings.RulesCustomAboveTogglesHint;
     public string L_RulesAddLabelAction  => Strings.RulesAddLabelAction;
     public string L_RulesAddLabelType    => Strings.RulesAddLabelType;
     public string L_RulesAddLabelValue   => Strings.RulesAddLabelValue;

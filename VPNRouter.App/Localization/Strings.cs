@@ -844,6 +844,14 @@ public static class Strings
     // v2.30.0-r14 — Sort-by-type bulk action (per design `.bulk-pop`).
     public static string RulesSortByType => Ru ? "Сортировать по типу" : "Sort by type";
 
+    // v2.30.0-r17 — Custom-rules-priority CheckBox label + tooltip.
+    public static string RulesCustomAboveToggles => Ru
+        ? "Свои правила важнее тумблеров"
+        : "Custom rules above toggles";
+    public static string RulesCustomAboveTogglesHint => Ru
+        ? "По умолчанию «Российский трафик» и «Блокировать рекламу» срабатывают раньше ваших правил. Включите чтобы ваши правила побеждали."
+        : "By default «Russian traffic» and «Block ads» fire before your rules. Enable to make your rules win.";
+
     // v2.30.0-r14 — Add-form mini-labels (uppercase, per design `.field .ftitle`).
     // Localized so the UI is single-language end-to-end (matches user's
     // "не использовать микс" rule).

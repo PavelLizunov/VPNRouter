@@ -1,0 +1,19 @@
+{
+  "$schema": "VPNRouter custom rules v1",
+  "rules": [
+    { "action": "direct", "type": "domain_suffix",  "value": ".corp.local",       "comment": "Internal company domain",       "enabled": true },
+    { "action": "direct", "type": "ip_cidr",        "value": "100.64.0.0/10",     "comment": "CGNAT (must bypass VPN)",       "enabled": true },
+    { "action": "direct", "type": "domain_keyword", "value": "sberbank",          "comment": "Bank doesn't like VPN",         "enabled": true },
+    { "action": "direct", "type": "domain_suffix",  "value": ".gosuslugi.ru",     "comment": "Russian government services",   "enabled": true },
+
+    { "action": "proxy",  "type": "domain_suffix",  "value": ".youtube.com",      "comment": "Always through VPN",            "enabled": true },
+    { "action": "proxy",  "type": "domain_suffix",  "value": ".telegram.org",     "comment": "Forced VPN routing",            "enabled": true },
+    { "action": "proxy",  "type": "process_name",   "value": "discord",           "comment": "Discord voice through VPN",     "enabled": true },
+    { "action": "proxy",  "type": "domain_suffix",  "value": ".openai.com",       "comment": "Geo-block bypass",              "enabled": true },
+
+    { "action": "block",  "type": "domain_keyword", "value": "doubleclick",       "comment": "Google ad network",             "enabled": true },
+    { "action": "block",  "type": "domain_keyword", "value": "googlesyndication", "comment": "Google ad network",             "enabled": true },
+    { "action": "block",  "type": "geosite",        "value": "ads",               "comment": "Generic ad blocklist",          "enabled": true },
+    { "action": "block",  "type": "domain_regex",   "value": "^ads?\\..*\\.com$", "comment": "Regex example: ads/ad subdomains", "enabled": false }
+  ]
+}

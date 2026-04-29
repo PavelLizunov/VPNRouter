@@ -71,30 +71,43 @@ public static class ConfigGenerator
         // v2.29.0-r4 CustomDirectRules superseded by CustomRules; field
         // kept for back-compat (SettingsMigrator empties it on v1->v2
         // migration).
-        if (settings.App.CustomRules?.Count > 0)
-        {
-            ApplyCustomRules(config, settings.App.CustomRules);
-        }
+        // v2.30.0-r17 — CustomRulesPriority toggle. Two orderings:
+        //   "toggles_first" (default, r1-r16 behavior):
+        //      Apply order: CustomRules → BlockAds → BypassRu
+        //      → final list: BypassRu, BlockAds, CustomRules, ...
+        //      → toggles win.
+        //   "custom_first" (user opt-in):
+        //      Apply order: BlockAds → BypassRu → CustomRules
+        //      → final list: CustomRules, BypassRu, BlockAds, ...
+        //      → custom rules win.
+        //
+        // The mechanism: each Apply* inserts at the same "after sniff/
+        // hijack/private" slot, pushing existing entries down. So the
+        // Apply* called LAST ends up FIRST in the rule list (highest
+        // priority).
+        var customFirst = string.Equals(
+            settings.App.CustomRulesPriority,
+            "custom_first",
+            StringComparison.OrdinalIgnoreCase);
 
-        // BlockAds toggle — inserted AFTER CustomRules so it wins.
-        if (settings.App.BlockAds)
+        if (customFirst)
         {
-            ApplyAdBlock(config);
+            // BlockAds + BypassRu first → CustomRules last → CustomRules wins.
+            if (settings.App.BlockAds) ApplyAdBlock(config);
+            if (settings.App.BypassRussianTraffic && GeoDataDownloader.AreGeoFilesAvailable())
+                ApplyGeoBypass(config);
+            if (settings.App.CustomRules?.Count > 0)
+                ApplyCustomRules(config, settings.App.CustomRules);
         }
-
-        // Russian geo bypass — inject rule sets + DNS/route rules so RU traffic
-        // goes direct (real IP), protecting VPN server from blacklists.
-        // Inserted AFTER CustomRules so it wins (toggle precedence).
-        if (settings.App.BypassRussianTraffic && GeoDataDownloader.AreGeoFilesAvailable())
+        else
         {
-            ApplyGeoBypass(config);
+            // Default: CustomRules first → BlockAds + BypassRu last → toggles win.
+            if (settings.App.CustomRules?.Count > 0)
+                ApplyCustomRules(config, settings.App.CustomRules);
+            if (settings.App.BlockAds) ApplyAdBlock(config);
+            if (settings.App.BypassRussianTraffic && GeoDataDownloader.AreGeoFilesAvailable())
+                ApplyGeoBypass(config);
         }
-
-        // (BlockAds + BypassRu now applied above, after ApplyCustomRules,
-        // so toggle rules win over user rules — see comment block above.
-        // Pre-v2.30 had ApplyAdBlock here as a separate call which made
-        // it the LAST insert (highest priority). That's still the case
-        // — just moved up so the comment block reads top-to-bottom.)
 
         return config;
     }

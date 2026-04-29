@@ -1,0 +1,13 @@
+action,type,value,comment,enabled
+direct,domain_suffix,.corp.local,Internal company domain,true
+direct,ip_cidr,100.64.0.0/10,CGNAT (must bypass VPN),true
+direct,domain_keyword,sberbank,Bank doesn't like VPN,true
+direct,domain_suffix,.gosuslugi.ru,Russian government services,true
+proxy,domain_suffix,.youtube.com,Always through VPN,true
+proxy,domain_suffix,.telegram.org,Forced VPN routing,true
+proxy,process_name,discord,Discord voice through VPN,true
+proxy,domain_suffix,.openai.com,Geo-block bypass,true
+block,domain_keyword,doubleclick,Google ad network,true
+block,domain_keyword,googlesyndication,Google ad network,true
+block,geosite,ads,Generic ad blocklist,true
+block,domain_regex,^ads?\..*\.com$,Regex example: ads/ad subdomains,false

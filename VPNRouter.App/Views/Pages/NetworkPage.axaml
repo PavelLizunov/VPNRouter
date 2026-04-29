@@ -483,6 +483,34 @@
                toggle is flipped to Text. -->
           <StackPanel Spacing="10" IsVisible="{Binding IsRulesViewCards}">
 
+          <!-- v2.30.0-r17 — Custom-rules-priority toggle. User direction
+               2026-04-29: «хочу чтоб кастомные правила были выше или
+               переключатель что брать в приоритет». Default off =
+               toggles win (BypassRu + BlockAds before custom rules).
+               On = custom rules win, can override BypassRu/BlockAds for
+               specific domains (e.g. block .sberbank.ru even though
+               BypassRu would otherwise route ru-domains direct). -->
+          <Border Padding="10,8"
+                  CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource SurfaceSunkenBrush}"
+                  BorderBrush="{DynamicResource BorderDefaultBrush}"
+                  BorderThickness="1">
+            <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
+              <CheckBox Grid.Column="0"
+                        IsChecked="{Binding CustomRulesAboveToggles}"
+                        MinHeight="0" Padding="0"
+                        VerticalAlignment="Center"/>
+              <StackPanel Grid.Column="1" Spacing="2">
+                <TextBlock Text="{Binding L_RulesCustomAboveToggles}"
+                           FontSize="11" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding L_RulesCustomAboveTogglesHint}"
+                           FontSize="10"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           TextWrapping="Wrap"/>
+              </StackPanel>
+            </Grid>
+          </Border>
+
           <!-- ═══ Add-rule form (WIDE — ≥540 px) ═══
                v2.30.0-r11/r13 — strict design `.add-row` 5-col grid
                (130 / 160 / 1fr / 1fr / Auto). Visible only when
@@ -1095,6 +1123,21 @@
                      Foreground="{DynamicResource DangerFgBrush}"
                      IsVisible="{Binding ClearAllConfirmText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                      HorizontalAlignment="Right"/>
+
+          <!-- v2.30.0-r17 — transient toast for bulk-action feedback
+               (sort, etc.). Auto-clears after 2 s via the
+               ShowRulesToast timer in MainWindowViewModel. -->
+          <Border IsVisible="{Binding RulesToastText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                  Padding="10,6"
+                  CornerRadius="{StaticResource RadiusSm}"
+                  Background="{DynamicResource SuccessBgBrush}"
+                  BorderBrush="{DynamicResource SuccessBorderBrush}"
+                  BorderThickness="1"
+                  HorizontalAlignment="Right">
+            <TextBlock Text="{Binding RulesToastText}"
+                       FontSize="10" FontWeight="SemiBold"
+                       Foreground="{DynamicResource SuccessFgBrush}"/>
+          </Border>
 
           <!-- ═══ Rule list (responsive wrapper) ═══
                Wide (≥540 px): 6-col flat row template per design `.rule`.

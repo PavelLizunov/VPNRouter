@@ -1,0 +1,37 @@
+{
+  "$comment": "sing-box-native rule format. Each rule is a route.rules entry. VPNRouter import auto-detects this shape and maps outbound -> action: direct/proxy/block.",
+  "rules": [
+    {
+      "domain_suffix": [".corp.local"],
+      "outbound": "direct"
+    },
+    {
+      "ip_cidr": ["100.64.0.0/10"],
+      "outbound": "direct"
+    },
+    {
+      "domain_keyword": ["sberbank"],
+      "outbound": "direct"
+    },
+    {
+      "domain_suffix": [".gosuslugi.ru"],
+      "outbound": "direct"
+    },
+    {
+      "domain_suffix": [".youtube.com", ".telegram.org", ".openai.com"],
+      "outbound": "proxy"
+    },
+    {
+      "process_name": ["discord", "discord.exe"],
+      "outbound": "proxy"
+    },
+    {
+      "domain_keyword": ["doubleclick", "googlesyndication"],
+      "outbound": "block"
+    },
+    {
+      "geosite": ["ads"],
+      "outbound": "block"
+    }
+  ]
+}

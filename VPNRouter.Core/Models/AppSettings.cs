@@ -197,6 +197,29 @@ public class AppConfig
     public List<CustomRule> CustomRules { get; set; } = new();
 
     /// <summary>
+    /// v2.30.0-r17 — priority order for custom rules vs global toggles.
+    /// User direction 2026-04-29: «block не работает на ru-домены
+    /// которые в правиле выше [BypassRu]; хочу чтоб кастомные правила
+    /// были выше или переключатель что брать в приоритет».
+    ///
+    /// <list type="bullet">
+    /// <item><c>"toggles_first"</c> (default) — global BypassRussianTraffic
+    /// + BlockAds toggles win over custom rules. Same as v2.30.0 r1-r16
+    /// behavior. Custom direct/proxy/block can be shadowed by toggles
+    /// if both match the same domain.</item>
+    /// <item><c>"custom_first"</c> — custom rules win over global toggles.
+    /// E.g. a custom <c>block .sberbank.ru</c> will fire even if
+    /// BypassRu has a generic geosite-RU rule pointing to direct.</item>
+    /// </list>
+    ///
+    /// <para>Implemented in <see cref="VPNRouter.Core.Services.ConfigGenerator"/>
+    /// by reordering the Apply* calls (each insert pushes earlier inserts
+    /// down, so the LAST Apply* ends up first in the rule list).</para>
+    /// </summary>
+    [YamlMember(Alias = "custom_rules_priority")]
+    public string CustomRulesPriority { get; set; } = "toggles_first";
+
+    /// <summary>
     /// When true, force IPv4-only DNS resolution to prevent IPv6 leaks
     /// when VPN tunnels only IPv4. Recommended unless you specifically need IPv6.
     /// </summary>
