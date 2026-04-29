@@ -486,11 +486,12 @@ maintenance period.
 
 ---
 
-## Phase 0 progress — 2026-04-29
+## Phase 0 — COMPLETE ✓ 2026-04-29
 
 User triggered start of implementation immediately after this research
 landed ("Можешь релизить и начинать реализацию для android"). Phase 0
-laid the foundation:
+laid the foundation and **completed end-to-end with the first signed
+APK building**:
 
 ### What's done
 
@@ -514,36 +515,263 @@ laid the foundation:
   - `README.md` — install steps for Android SDK + JDK, Phase 1
     breakdown with Kotlin/Java pseudocode.
 
-### Blocker hit
+### Toolchain bring-up (after initial choco failures)
 
-- **JDK install via choco fails on this VM** (jdk8 dependency MSI
-  rejects, Temurin 17 also fails — likely VirtualBox guest's choco
-  mirror cache or the MSI signature gate). Without JDK no Android SDK,
-  without Android SDK no Android compile.
-- **Workaround paths** (any one unblocks):
-  - Direct download Temurin 17 MSI from adoptium.net + run installer
-    by hand.
-  - Install Android Studio (~3 GB, bundles JDK).
-  - Switch to Linux VM where `apt install openjdk-17-jdk` is a one-liner.
-  - Build on the existing Mac host (`slovn@192.168.0.246`) which already
-    has Xcode + likely a JDK. SSH in and run from there.
+choco install of jdk8 + Temurin 17 both rejected MSIs on this VM — environmental
+quirk, not code issue. Workaround that worked: direct download from
+adoptium.net + msiexec silent install. Documented for future VMs.
 
-### Next session — Phase 1 entry
+Final stack on this VM:
+- Temurin 17 JDK (94 MB, direct adoptium.net MSI)
+- Android cmdline-tools 11076708 → sdkmanager → installed:
+  - platforms;android-34
+  - build-tools;34.0.0
+  - platform-tools (~500 MB total)
+- ANDROID_HOME = `%LOCALAPPDATA%\Android\Sdk`
+- JAVA_HOME = `C:\Program Files\Eclipse Adoptium\jdk-17.0.17.10-hotspot`
+- Both env vars persistent at User scope
 
-When SDK ready:
+### First APK milestone (commit `b59d51d`)
 
-1. Verify `dotnet build VPNRouter.Core/VPNRouter.Core.csproj /p:EnableAndroidTarget=true`
-   succeeds. Identify all source files that need `#if PLATFORM_ANDROID`
-   guards (likely zero — most Windows-only code is already gated by
-   `#if PLATFORM_WINDOWS`).
-2. `dotnet build VPNRouter.Android/VPNRouter.Android.csproj` — should
-   succeed once SDK is found. Empty APK output expected (no Activity
-   yet).
-3. Add `MainActivity.cs` (Avalonia entry point) — see README's Phase 1
-   pseudocode.
-4. Build libbox.aar from sing-box-for-android upstream, drop into
-   `VPNRouter.Android/Lib/`.
-5. Add `VpnRouterService.kt` (Kotlin VpnService shim).
+```
+dotnet build VPNRouter.Android/VPNRouter.Android.csproj -c Release \
+  /p:EnableAndroidTarget=true \
+  /p:AndroidSdkDirectory=$ANDROID_HOME \
+  /p:JavaSdkDirectory=$JAVA_HOME
+```
 
-Estimated to first APK that actually starts a tunnel: 1-1.5 weeks of
-focused work after SDK ready.
+Output: `VPNRouter.Android/bin/Release/net8.0-android/com.ninitux.vpnrouter-Signed.apk`,
+**47.19 MB**, debug-key-signed, single-APK with all RIDs (arm64/arm/x64/x86)
+AOT-cross-compiled (89 .NET dlls → .so).
+
+Build time: 2:42 cold first run; ~30s incremental expected.
+
+What's IN the APK:
+- Avalonia 11.3 runtime + FluentTheme
+- VPNRouter.Core (subscription resolver, free-configs aggregator,
+  ConfigGenerator, etc. — same Core that ships on desktop)
+- MainActivity stub showing TextBlock "VPNRouter v3.0-android Phase 0"
+- All required permissions in AndroidManifest (INTERNET,
+  FOREGROUND_SERVICE, POST_NOTIFICATIONS, QUERY_ALL_PACKAGES)
+
+What's NOT in the APK yet (Phase 1+):
+- libbox.aar (sing-box Go runtime)
+- VpnRouterService.kt (Kotlin VpnService shim)
+- Real Avalonia App.axaml (shared with desktop) — Phase 3
+- App icon + splash + Material themes
+
+---
+
+## Remaining Phases — backlog
+
+### Phase 1 — VpnService + libbox integration (~1.5 weeks)
+
+**Goal**: APK that establishes a working VPN tunnel through a sing-box
+config (subscribe URL → server → tunnel up → traffic flows).
+
+1. **Build libbox.aar from sagernet/sing-box-for-android** matching
+   our desktop sing-box version (currently 1.13.10):
+
+   ```bash
+   git clone https://github.com/SagerNet/sing-box-for-android
+   cd sing-box-for-android
+   git checkout v1.13.10  # or appropriate tag
+   ./gradlew :app:bundleLibboxAar
+   ```
+
+   Drop `libbox.aar` (~30 MB) into `VPNRouter.Android/Lib/libbox.aar`.
+   Uncomment the `<AndroidLibrary>` ItemGroup in csproj.
+
+2. **Add VpnRouterService.kt** — Kotlin native shim extending
+   `android.net.VpnService`. Bridges Builder → libbox via
+   `Libbox.newService(configJson, platformInterface)`. Pattern from
+   `sagernet/sing-box-for-android/app/src/main/java/io/nekohasekai/sfa/bg/BoxService.kt`.
+
+   Key responsibilities:
+   - `onStartCommand` → build VpnService.Builder, set address +
+     route + allowed-applications + MTU → `establish()` → start
+     libbox service with config JSON.
+   - Foreground notification (mandatory for VpnService API 26+).
+   - Crash callbacks → propagate to MainActivity / VPNRouter.Core.
+   - Stop intent / always-on disconnect handling.
+
+3. **Add AndroidSingBoxRuntime.cs** in `VPNRouter.Core/Platform/Android/`
+   (gated by `#if PLATFORM_ANDROID`). Implements the same public
+   surface as desktop's `SingBoxManager`:
+   - `Start(string configJson)` — sends start intent to VpnRouterService
+   - `Stop()` — sends stop intent
+   - `IsRunning` — query VpnService state
+   - `Restart` — stop + start
+   - `Crashed` event — bridged from Kotlin via JNI callback
+   - `IsHealthy()` — Clash API at `127.0.0.1:9090` (libbox exposes
+     same endpoint as desktop sing-box)
+
+4. **Wire `VpnEngine.StartAsync` / `Stop` to AndroidSingBoxRuntime
+   on PLATFORM_ANDROID** instead of process-spawn-based SingBoxManager.
+
+5. **Generate sing-box config without process_name rules**:
+   `ConfigGenerator.cs` already has the per-platform branching
+   pattern; add `if (PLATFORM_ANDROID) skip process_name rules`
+   block. Apps filtering happens at VpnService.Builder layer
+   instead.
+
+6. **Write `Profile.android_packages: List<string>` schema field**.
+   Migrate `default-android.json` (similar to existing
+   `default-macos.json` / `default-linux.json`):
+
+   | Desktop process | Android package |
+   |---|---|
+   | Discord.exe | com.discord |
+   | Telegram.exe | org.telegram.messenger |
+   | WhatsApp.exe | com.whatsapp |
+   | Steam.exe | com.valvesoftware.android.steam.community |
+   | Spotify.exe | com.spotify.music |
+   | (full table in research §"Mapping table" above)
+
+7. **Bridge profile.android_packages → VpnService.Builder.addAllowedApplication()**
+   at tunnel-establish time.
+
+8. **Smoke test**: install APK on emulator (or device via adb), enter
+   subscription URL, click Connect. Verify:
+   - osascript-style consent dialog appears (first run only)
+   - VPN icon appears in status bar
+   - Notification persists
+   - `curl -x ifconfig.me` (from Termux) shows proxy IP
+   - Disconnect → traffic returns direct
+
+### Phase 2 — UI shell mobile-friendly (~1.5 weeks)
+
+**Goal**: real Avalonia UI, Material-feeling, touch-friendly, sharing
+maximum XAML with desktop App.
+
+1. **Share Tokens.axaml + Localization/Strings.cs** between desktop
+   and Android via linked files in csproj:
+
+   ```xml
+   <ItemGroup>
+     <Compile Include="..\VPNRouter.App\Localization\Strings.cs"
+              Link="Localization\Strings.cs" />
+     <AvaloniaXaml Include="..\VPNRouter.App\Styles\Tokens.axaml"
+                   Link="Styles\Tokens.axaml" />
+   </ItemGroup>
+   ```
+
+2. **Mobile shell** — replace top-tab navigation with bottom nav
+   (Material-style). Phone-first layout:
+   ```
+   ┌─────────────────────────┐
+   │  Status: Connected   ⚙  │  ← top app bar (compact)
+   ├─────────────────────────┤
+   │                         │
+   │      Active page        │  ← content area
+   │                         │
+   ├─────────────────────────┤
+   │ 🏠Home 🌐Servers 📱Apps │  ← bottom nav
+   └─────────────────────────┘
+   ```
+
+3. **Adapt SimplePage.axaml** to share with Android with `<OnPlatform>`
+   tweaks for touch targets (48px minimum), font sizes, spacing.
+
+4. **Rewrite ApplicationsPage.axaml** for Android — instead of
+   process-name list, show installed apps via PackageManager
+   (icon + label + checkbox). Use `Java.Interop` to query
+   `ApplicationInfo` list filtered by launcher intent.
+
+5. **Adapt FreeConfigsPage.axaml** — master-detail at desktop
+   becomes sequential pages on phone (list → tap → detail).
+
+6. **Hide Zapret / TgProxy / Service tabs** on Android (Windows-only
+   features, already conditionally compiled in Core).
+
+### Phase 3 — Polish (~0.5 weeks)
+
+1. App icon (adaptive icon — foreground penguin mascot + green
+   background) generated from existing `Assets/penguin_mascot.png`.
+2. Splash screen.
+3. Notification UX (action buttons: Disconnect, Switch server).
+4. Always-on VPN: manifest already has `supports-always-on=true`;
+   verify in Android Settings → Network → VPN → VPNRouter →
+   Always-on toggle works.
+5. Doze mode / battery optimisation — verify tunnel survives 30 min
+   idle screen-off.
+6. IPv6 leak protection — `addRoute("::", 0)` in builder.
+7. Theme (Light/Dark + Material You where available — API 31+).
+
+### Phase 4 — Cleanup + warnings (~0.5 weeks)
+
+1. Add `#if !PLATFORM_ANDROID` guards on the 20 CA1416 warnings
+   we currently have:
+   - `Services/ZapretActions.cs` — Registry.CurrentUser
+   - `Services/RuntimeStatusDetector.cs` —
+     IPGlobalProperties.GetActiveTcpListeners
+   - `Services/TgProxyManager.cs` — same TCP listener API
+   - `Services/UpdateChecker.cs` — minor null-ref warnings
+2. Remove unused references (Mono.Android.dll, etc. that the Avalonia
+   Android target pulls in).
+3. APK size optimisation — current is ~47 MB unsigned. Targets:
+   - <50 MB single APK (acceptable for direct distribution)
+   - Per-RID APKs ~15-20 MB each via `<AndroidPackageFormats>aab</AndroidPackageFormats>`
+     for Play Store
+4. Headless smoke test on `Build Android APK` workflow in GitHub Actions.
+
+### Phase 5 — Distribution (~0.5 weeks)
+
+1. **Direct APK** from `vpn.ninitux.com/android/`:
+   - GitHub Actions workflow `.github/workflows/build-android.yml`
+     (mirror of desktop .github/workflows/build-windows.yml).
+   - Upload APK to gh-pages branch under `/android/`.
+   - Add Android download tile to `ninitux-landing` index.html.
+2. **F-Droid metadata** — submit PR to fdroiddata repo:
+   - `metadata/com.ninitux.vpnrouter.yml` with build recipe.
+   - Self-hosted F-Droid repo at `vpn.ninitux.com/fdroid/` as fast lane.
+3. **Signing key** — generate Android release keystore, store in
+   GitHub repo secrets (NOT in repo).
+4. Tag `v3.0.0-android-beta` and ship.
+
+### Phase 6 — Future (post-beta)
+
+- Live app list editing without tunnel restart (filter by uid in
+  packet handler, see research §"Tunnel reset" option (b))
+- Always-on + start-on-boot
+- Per-DNS-server selection UI
+- Tasker / automation intents
+- Wear OS / Android TV variants
+- Google Play submission (after UX stable on real devices for
+  ~2 weeks)
+
+---
+
+## Effort estimate update
+
+| Phase | Status | Wks |
+|---|---|---|
+| Phase 0 — toolchain + first APK | ✅ DONE 2026-04-29 | 0.5 → actual ~3h |
+| Phase 1 — VpnService + libbox + tunnel works | TODO | 1.5 |
+| Phase 2 — UI shell mobile-friendly | TODO | 1.5 |
+| Phase 3 — Polish | TODO | 0.5 |
+| Phase 4 — Cleanup + warnings | TODO | 0.5 |
+| Phase 5 — Distribution | TODO | 0.5 |
+| Buffer | TODO | 0.5 |
+| **TOTAL remaining** | | **5 weeks to v3.0.0-android-beta** |
+
+Phase 0 came in significantly under estimate (0.5w → ~3h actual)
+because the bulk was tooling + scaffolding, not code. Phase 1 is the
+real cost — JNI bridge to libbox, VpnService Kotlin shim, ConfigGenerator
+Android branch, profile schema migration. Estimate stands.
+
+## Build cmd reference (for future sessions)
+
+```powershell
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.17.10-hotspot"
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+
+dotnet build VPNRouter.Android/VPNRouter.Android.csproj -c Release `
+  /p:EnableAndroidTarget=true `
+  /p:AndroidSdkDirectory="$env:ANDROID_HOME" `
+  /p:JavaSdkDirectory="$env:JAVA_HOME"
+```
+
+ANDROID_HOME and JAVA_HOME are persisted at User scope on this VM, so
+fresh shell sessions get them automatically.
