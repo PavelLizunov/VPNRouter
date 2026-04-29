@@ -229,140 +229,27 @@
                      TextWrapping="Wrap"
                      Foreground="{DynamicResource TextSecondaryBrush}"/>
 
-          <!-- v2.30.0-r4: search bar + bulk actions row. Visible only
-               when list has rules (no point searching an empty list). -->
-          <Grid ColumnDefinitions="*,Auto,Auto,Auto"
-                ColumnSpacing="6"
-                IsVisible="{Binding CustomRulesList.Count}">
-            <TextBox Grid.Column="0"
-                     Text="{Binding CustomRulesSearchText}"
-                     Watermark="{Binding L_CustomRulesSearchPlaceholder}"
-                     FontSize="11" Padding="6,3" MinHeight="0"/>
-            <Button Grid.Column="1"
-                    Content="{Binding L_CustomRulesEnableAll}"
-                    Command="{Binding EnableAllCustomRulesCommand}"
-                    FontSize="10" Padding="8,3" MinHeight="0"
-                    ToolTip.Tip="{Binding L_CustomRulesEnableAllTooltip}"/>
-            <Button Grid.Column="2"
-                    Content="{Binding L_CustomRulesDisableAll}"
-                    Command="{Binding DisableAllCustomRulesCommand}"
-                    FontSize="10" Padding="8,3" MinHeight="0"
-                    ToolTip.Tip="{Binding L_CustomRulesDisableAllTooltip}"/>
-            <Button Grid.Column="3"
-                    Content="{Binding L_CustomRulesClearAll}"
-                    Command="{Binding ClearAllCustomRulesCommand}"
-                    FontSize="10" Padding="8,3" MinHeight="0"
-                    Background="{DynamicResource DangerBgBrush}"
-                    Foreground="{DynamicResource DangerFgBrush}"
-                    ToolTip.Tip="{Binding L_CustomRulesClearAllTooltip}"/>
-          </Grid>
+          <!-- ═══ v2.30.0-r5 layout reorder ═══
+               User report 2026-04-29: «теперь не умещается, давай сделаем
+               чтоб правила были ниже, подумай как переработать чтоб всё
+               умещалось».
+               Pre-r5 had: description → search/bulk-buttons row →
+               count → list → add-form → advanced. The list was sandwiched
+               between header content and add-form, which on narrower
+               windows pushed the bulk-action buttons off-screen and
+               hid the add-form below the fold.
+               r5 reorder:
+                 1. Description
+                 2. Add-form (PRIMARY ACTION — user wants to add rules)
+                 3. Section divider with search bar (full width)
+                 4. Bulk action chips on their own row (don't compete
+                    with search for width)
+                 5. Count display
+                 6. ListBox of rules (LOWER, takes remaining space)
+                 7. Advanced (text mode) expander at bottom
+               -->
 
-          <!-- Count + clear-all confirm prompt -->
-          <Grid ColumnDefinitions="*,Auto"
-                IsVisible="{Binding CustomRulesList.Count}">
-            <TextBlock Grid.Column="0"
-                       Text="{Binding CustomRulesCountText}"
-                       FontSize="10"
-                       Foreground="{DynamicResource TextMutedBrush}"
-                       VerticalAlignment="Center"/>
-            <TextBlock Grid.Column="1"
-                       Text="{Binding ClearAllConfirmText}"
-                       FontSize="10" FontWeight="SemiBold"
-                       Foreground="{DynamicResource DangerFgBrush}"
-                       IsVisible="{Binding ClearAllConfirmText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                       VerticalAlignment="Center"/>
-          </Grid>
-
-          <!-- empty-state hint when list itself is empty -->
-          <TextBlock Text="{Binding L_CustomRulesEmpty}"
-                     FontSize="11"
-                     FontStyle="Italic"
-                     TextWrapping="Wrap"
-                     Foreground="{DynamicResource TextMutedBrush}"
-                     IsVisible="{Binding !CustomRulesList.Count}"/>
-
-          <!-- v2.30.0-r4: ListBox with default VirtualizingStackPanel.
-               Capped height so adding 200+ rules doesn't push the form
-               off-screen. ScrollViewer kicks in inside the ListBox. -->
-          <ListBox ItemsSource="{Binding FilteredCustomRulesList}"
-                   IsVisible="{Binding CustomRulesList.Count}"
-                   MaxHeight="320"
-                   Background="Transparent"
-                   BorderThickness="0"
-                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                   ScrollViewer.VerticalScrollBarVisibility="Auto">
-            <ListBox.ItemContainerTheme>
-              <ControlTheme TargetType="ListBoxItem"
-                            BasedOn="{StaticResource {x:Type ListBoxItem}}">
-                <Setter Property="Padding" Value="0"/>
-                <Setter Property="MinHeight" Value="0"/>
-                <Setter Property="Margin" Value="0,0,0,4"/>
-              </ControlTheme>
-            </ListBox.ItemContainerTheme>
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:CustomRuleViewModel">
-                <Border Margin="0,0,0,4"
-                        Padding="8,6"
-                        CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource SurfaceSunkenBrush}"
-                        BorderBrush="{DynamicResource BorderDefaultBrush}"
-                        BorderThickness="1"
-                        Opacity="{Binding RowOpacity}">
-                  <Grid ColumnDefinitions="78,Auto,*,Auto,Auto" ColumnSpacing="8" VerticalAlignment="Center">
-                    <!-- Action chip — colored badge via ActionToChipColorConverter.
-                         direct=blue, proxy=orange, block=red. -->
-                    <Border Grid.Column="0"
-                            CornerRadius="3"
-                            Padding="6,2"
-                            HorizontalAlignment="Left"
-                            Background="{Binding Action, Converter={x:Static conv:ActionToChipColorConverter.Instance}}">
-                      <TextBlock Text="{Binding Action}"
-                                 FontSize="10"
-                                 FontWeight="SemiBold"
-                                 Foreground="White"
-                                 HorizontalAlignment="Center"/>
-                    </Border>
-                    <!-- Type label, monospace -->
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding Type}"
-                               FontSize="10"
-                               FontFamily="Consolas, 'SF Mono', monospace"
-                               Foreground="{DynamicResource TextMutedBrush}"
-                               VerticalAlignment="Center"/>
-                    <!-- Value, ellide on overflow -->
-                    <TextBlock Grid.Column="2"
-                               Text="{Binding Value}"
-                               FontSize="11"
-                               TextTrimming="CharacterEllipsis"
-                               VerticalAlignment="Center"
-                               ToolTip.Tip="{Binding Comment}"/>
-                    <!-- Enabled toggle -->
-                    <CheckBox Grid.Column="3"
-                              IsChecked="{Binding Enabled}"
-                              MinHeight="0" Padding="0"
-                              VerticalAlignment="Center"/>
-                    <!-- Delete -->
-                    <Button Grid.Column="4"
-                            Content="✕"
-                            Command="{Binding RemoveCommand}"
-                            FontSize="10"
-                            Padding="6,0" MinHeight="0"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Foreground="{DynamicResource TextMutedBrush}"
-                            ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_CustomRulesDelete}"/>
-                  </Grid>
-                </Border>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
-
-          <!-- Add-rule form. v2.30.0-r3: vertical-stack layout (was a 3-col
-               Grid 100/140/* in r2). User report: «при сужении окна
-               проблемы — дропдавн на дропдавн накладывается». Fixed-
-               width ComboBoxes overflowed on narrow windows + their open
-               popups visually clashed. Now each row owns full width or
-               splits 50/50 — no overlap regardless of window width. -->
+          <!-- ═══ Add-rule form (primary action, top of section) ═══ -->
           <Border Padding="10"
                   CornerRadius="{StaticResource RadiusSm}"
                   Background="{DynamicResource SurfaceRaisedBrush}"
@@ -388,15 +275,12 @@
                           FontSize="11" Padding="6,3" MinHeight="0"
                           ToolTip.Tip="{Binding L_CustomRulesTypeLabel}"/>
               </Grid>
-              <!-- Row 2: Value full width — most rules need more chars
-                   than 50% of a 500px window allows. -->
+              <!-- Row 2: Value full width. -->
               <TextBox Text="{Binding NewRuleValue}"
                        Watermark="{Binding L_CustomRulesValuePlaceholder}"
                        FontSize="11" Padding="6,3" MinHeight="0"
                        FontFamily="Consolas, 'SF Mono', monospace"/>
-              <!-- Row 3: Comment + Add button. Comment flexes, button
-                   auto-sizes — on very narrow windows the button stays
-                   readable while comment shrinks. -->
+              <!-- Row 3: Comment + Add button. -->
               <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                 <TextBox Grid.Column="0"
                          Text="{Binding NewRuleComment}"
@@ -419,6 +303,144 @@
                          IsVisible="{Binding NewRuleValidationError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
             </StackPanel>
           </Border>
+
+          <!-- ═══ Existing rules section ═══
+               r5: separated visually from add-form via a header row,
+               and bulk actions moved to their own row below search
+               (was crammed into one 4-col row in r4). -->
+
+          <!-- Section header: title + count -->
+          <Grid ColumnDefinitions="*,Auto"
+                IsVisible="{Binding CustomRulesList.Count}"
+                Margin="0,4,0,0">
+            <TextBlock Grid.Column="0"
+                       Text="{Binding L_CustomRulesExistingHeader}"
+                       FontSize="11" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
+                       VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="1"
+                       Text="{Binding CustomRulesCountText}"
+                       FontSize="10"
+                       Foreground="{DynamicResource TextMutedBrush}"
+                       VerticalAlignment="Center"/>
+          </Grid>
+
+          <!-- Search bar (full width on its own row — no width competition
+               with bulk buttons, so search field can be sized comfortably
+               even on narrow windows). -->
+          <TextBox Text="{Binding CustomRulesSearchText}"
+                   Watermark="{Binding L_CustomRulesSearchPlaceholder}"
+                   FontSize="11" Padding="6,3" MinHeight="0"
+                   IsVisible="{Binding CustomRulesList.Count}"/>
+
+          <!-- Bulk action chips: own row, right-aligned. Each button is
+               compact (FontSize 9, tight padding) so all three fit even
+               at ~360px window width. r5: separated from search row to
+               eliminate width competition. -->
+          <Grid ColumnDefinitions="*,Auto"
+                IsVisible="{Binding CustomRulesList.Count}">
+            <TextBlock Grid.Column="0"
+                       Text="{Binding ClearAllConfirmText}"
+                       FontSize="10" FontWeight="SemiBold"
+                       Foreground="{DynamicResource DangerFgBrush}"
+                       IsVisible="{Binding ClearAllConfirmText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                       VerticalAlignment="Center"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+              <Button Content="{Binding L_CustomRulesEnableAll}"
+                      Command="{Binding EnableAllCustomRulesCommand}"
+                      FontSize="9" Padding="6,2" MinHeight="0"
+                      ToolTip.Tip="{Binding L_CustomRulesEnableAllTooltip}"/>
+              <Button Content="{Binding L_CustomRulesDisableAll}"
+                      Command="{Binding DisableAllCustomRulesCommand}"
+                      FontSize="9" Padding="6,2" MinHeight="0"
+                      ToolTip.Tip="{Binding L_CustomRulesDisableAllTooltip}"/>
+              <Button Content="{Binding L_CustomRulesClearAll}"
+                      Command="{Binding ClearAllCustomRulesCommand}"
+                      FontSize="9" Padding="6,2" MinHeight="0"
+                      Background="{DynamicResource DangerBgBrush}"
+                      Foreground="{DynamicResource DangerFgBrush}"
+                      ToolTip.Tip="{Binding L_CustomRulesClearAllTooltip}"/>
+            </StackPanel>
+          </Grid>
+
+          <!-- empty-state hint when list itself is empty -->
+          <TextBlock Text="{Binding L_CustomRulesEmpty}"
+                     FontSize="11"
+                     FontStyle="Italic"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource TextMutedBrush}"
+                     IsVisible="{Binding !CustomRulesList.Count}"/>
+
+          <!-- ListBox: virtualized, MaxHeight=360 (slight bump from r4
+               since it's now the dominant lower section). -->
+          <ListBox ItemsSource="{Binding FilteredCustomRulesList}"
+                   IsVisible="{Binding CustomRulesList.Count}"
+                   MaxHeight="360"
+                   Background="Transparent"
+                   BorderThickness="0"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto">
+            <ListBox.ItemContainerTheme>
+              <ControlTheme TargetType="ListBoxItem"
+                            BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="MinHeight" Value="0"/>
+                <Setter Property="Margin" Value="0,0,0,4"/>
+              </ControlTheme>
+            </ListBox.ItemContainerTheme>
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:CustomRuleViewModel">
+                <Border Margin="0,0,0,4"
+                        Padding="8,6"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        Background="{DynamicResource SurfaceSunkenBrush}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        BorderThickness="1"
+                        Opacity="{Binding RowOpacity}">
+                  <Grid ColumnDefinitions="68,Auto,*,Auto,Auto" ColumnSpacing="6" VerticalAlignment="Center">
+                    <!-- Action chip — colored badge.
+                         r5: shrunk 78→68 to give value column more room. -->
+                    <Border Grid.Column="0"
+                            CornerRadius="3"
+                            Padding="5,2"
+                            HorizontalAlignment="Left"
+                            Background="{Binding Action, Converter={x:Static conv:ActionToChipColorConverter.Instance}}">
+                      <TextBlock Text="{Binding Action}"
+                                 FontSize="9"
+                                 FontWeight="SemiBold"
+                                 Foreground="White"
+                                 HorizontalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Type}"
+                               FontSize="10"
+                               FontFamily="Consolas, 'SF Mono', monospace"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding Value}"
+                               FontSize="11"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"
+                               ToolTip.Tip="{Binding Comment}"/>
+                    <CheckBox Grid.Column="3"
+                              IsChecked="{Binding Enabled}"
+                              MinHeight="0" Padding="0"
+                              VerticalAlignment="Center"/>
+                    <Button Grid.Column="4"
+                            Content="✕"
+                            Command="{Binding RemoveCommand}"
+                            FontSize="10"
+                            Padding="6,0" MinHeight="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="{DynamicResource TextMutedBrush}"
+                            ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_CustomRulesDelete}"/>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
 
           <!-- Advanced (text-format) fallback -->
           <Expander Header="{Binding L_CustomRulesAdvancedMode}"

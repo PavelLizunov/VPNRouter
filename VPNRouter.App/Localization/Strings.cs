@@ -803,6 +803,10 @@ public static class Strings
         ? "По запросу ничего не найдено."
         : "No rules match the search.";
 
+    public static string CustomRulesExistingHeader => Ru
+        ? "Существующие правила"
+        : "Existing rules";
+
     // ── Legacy v2.29.0-r4 names (kept for back-compat with cached XAML) ──
     public static string CustomDirectRulesTitle => CustomRulesTitle;
     public static string CustomDirectRulesDescription => CustomRulesDescription;

@@ -77,6 +77,7 @@ public partial class MainWindowViewModel
     public string L_CustomRulesEnableAllTooltip => Strings.CustomRulesEnableAllTooltip;
     public string L_CustomRulesDisableAllTooltip => Strings.CustomRulesDisableAllTooltip;
     public string L_CustomRulesNoMatchHint => Strings.CustomRulesNoMatchHint;
+    public string L_CustomRulesExistingHeader => Strings.CustomRulesExistingHeader;
     public string LblSettingsRules => Strings.SectionRules;
     // Legacy v2.29.0 aliases (kept for cached XAML).
     public string L_CustomDirectRulesTitle => L_CustomRulesTitle;
