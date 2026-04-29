@@ -1,5 +1,21 @@
 # v2.29 — Mac UX feedback + custom direct rules
 
+> **Status (2026-04-29):** все 5 items from this plan are shipped through
+> the rolling-rN cycle. Stable cut pending verification gate (build +
+> tests + Mac/Linux CI green + 12 assets + 24h no-regression).
+>
+> | Item | Status | Release |
+> |---|---|---|
+> | 1. Hardcoded "Windows" → dynamic OS | shipped | r1 |
+> | 2a. Mac autostart (LaunchAgent) | shipped | r2 |
+> | 2b. Linux autostart (XDG) | shipped | r2 |
+> | 3. Apps page full-tunnel banner | shipped | r1 |
+> | 4. Custom direct rules | shipped | r4 |
+> | 5a. Pool fetch parallel | already done (verified r1) | n/a |
+> | 5b. Cross-batch overlap | shipped | r3 |
+> | 5c. Adaptive deep-verify cap | shipped | r3 |
+
+
 ## Триггер
 
 User report (Mac тестер, 2026-04-29) — 4 пункта от живого использования
