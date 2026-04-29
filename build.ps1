@@ -342,7 +342,7 @@ New-Item -ItemType Directory -Force -Path $UpdateDir | Out-Null
 # Top-level: ONLY the Go stub. This is the bootstrap entry point.
 $updateGuiStub = Join-Path $DistDir "VPNRouter.GUI.exe"
 if (-not (Test-Path $updateGuiStub)) {
-    throw "Update ZIP build: VPNRouter.GUI.exe missing from $DistDir — Go stub not built?"
+    throw "Update ZIP build: VPNRouter.GUI.exe missing from $DistDir - Go stub not built?"
 }
 Copy-Item $updateGuiStub $UpdateDir
 Write-Host "       VPNRouter.GUI.exe -> ROOT (bootstrap entry)" -ForegroundColor Gray
