@@ -84,30 +84,84 @@ public static class LeakProtection
             var proxyOutbound = config.Outbounds.FirstOrDefault(o => o.Tag == proxyTag);
             if (proxyOutbound == null) continue;
 
-            if (proxyOutbound.Type == "vless")
-            {
-                ValidateVlessOutbound(proxyOutbound, errors);
-            }
-            else if (proxyOutbound.Type == "urltest")
-            {
-                if (proxyOutbound.Outbounds == null || proxyOutbound.Outbounds.Count < 2)
-                    errors.Add($"urltest outbound '{proxyTag}': must have at least 2 child outbounds");
-
-                var outboundTags = config.Outbounds.Select(o => o.Tag).ToHashSet();
-                foreach (var childTag in proxyOutbound.Outbounds ?? new())
-                {
-                    if (!outboundTags.Contains(childTag))
-                    {
-                        errors.Add($"urltest '{proxyTag}' references non-existent outbound '{childTag}'");
-                        continue;
-                    }
-                    var child = config.Outbounds.First(o => o.Tag == childTag);
-                    ValidateVlessOutbound(child, errors);
-                }
-            }
+            // v2.30.1-r4: dispatch validation by outbound type — VLESS,
+            // Hysteria2, TUIC, Shadowsocks have different "well-formed"
+            // schemas (e.g. Hysteria2 has no uuid, Shadowsocks has no
+            // uuid + needs method+password). Pre-r4 the validator
+            // unconditionally called ValidateVlessOutbound on every
+            // urltest child, which rejected valid Hysteria2 / TUIC / SS
+            // entries with "uuid is empty" errors.
+            //
+            // User report 2026-05-01: pasted hy2://… → Servers connect
+            // failed with "VLESS outbound 'vless-is-01-hy2-test':
+            // uuid is empty" because the Hysteria2 entry was a child of
+            // the urltest selector (multi-server proxy group) and the
+            // VLESS validator ran on it.
+            ValidateProxyOutbound(proxyOutbound, config, errors, proxyTag);
         }
 
         return new ValidationResult { Errors = errors, Warnings = warnings };
+    }
+
+    private static void ValidateProxyOutbound(
+        SingBoxOutbound outbound,
+        SingBoxConfig config,
+        List<string> errors,
+        string proxyTag)
+    {
+        if (outbound.Type == "urltest")
+        {
+            if (outbound.Outbounds == null || outbound.Outbounds.Count < 2)
+                errors.Add($"urltest outbound '{proxyTag}': must have at least 2 child outbounds");
+
+            var outboundTags = config.Outbounds.Select(o => o.Tag).ToHashSet();
+            foreach (var childTag in outbound.Outbounds ?? new())
+            {
+                if (!outboundTags.Contains(childTag))
+                {
+                    errors.Add($"urltest '{proxyTag}' references non-existent outbound '{childTag}'");
+                    continue;
+                }
+                var child = config.Outbounds.First(o => o.Tag == childTag);
+                ValidateConcreteOutbound(child, errors);
+            }
+            return;
+        }
+
+        ValidateConcreteOutbound(outbound, errors);
+    }
+
+    /// <summary>
+    /// Per-protocol "well-formed" check. Each branch validates the fields
+    /// sing-box requires for that outbound type. Unknown types pass
+    /// through silently — sing-box will reject them at startup if they're
+    /// truly malformed, which gives a clearer error than us guessing.
+    /// </summary>
+    private static void ValidateConcreteOutbound(SingBoxOutbound o, List<string> errors)
+    {
+        var type = (o.Type ?? string.Empty).ToLowerInvariant();
+        switch (type)
+        {
+            case "vless":
+                ValidateVlessOutbound(o, errors);
+                break;
+            case "hysteria2":
+                ValidateHysteria2Outbound(o, errors);
+                break;
+            case "tuic":
+                ValidateTuicOutbound(o, errors);
+                break;
+            case "shadowsocks":
+                ValidateShadowsocksOutbound(o, errors);
+                break;
+            default:
+                // Unknown / future protocol — basic sanity only.
+                if (string.IsNullOrWhiteSpace(o.Server))
+                    errors.Add($"{o.Type} outbound '{o.Tag}': server is empty");
+                if (o.ServerPort is null or <= 0)
+                    errors.Add($"{o.Type} outbound '{o.Tag}': server_port is invalid");
+                break;
+        }
     }
 
     private static void ValidateVlessOutbound(SingBoxOutbound vless, List<string> errors)
@@ -118,6 +172,44 @@ public static class LeakProtection
         if (string.IsNullOrWhiteSpace(vless.Uuid))
             errors.Add($"{label}: uuid is empty");
         if (vless.ServerPort is null or <= 0)
+            errors.Add($"{label}: server_port is invalid");
+    }
+
+    private static void ValidateHysteria2Outbound(SingBoxOutbound hy2, List<string> errors)
+    {
+        var label = $"Hysteria2 outbound '{hy2.Tag}'";
+        if (string.IsNullOrWhiteSpace(hy2.Server))
+            errors.Add($"{label}: server is empty");
+        if (string.IsNullOrWhiteSpace(hy2.Password))
+            errors.Add($"{label}: password is empty");
+        if (hy2.ServerPort is null or <= 0)
+            errors.Add($"{label}: server_port is invalid");
+    }
+
+    private static void ValidateTuicOutbound(SingBoxOutbound tuic, List<string> errors)
+    {
+        var label = $"TUIC outbound '{tuic.Tag}'";
+        if (string.IsNullOrWhiteSpace(tuic.Server))
+            errors.Add($"{label}: server is empty");
+        if (string.IsNullOrWhiteSpace(tuic.Uuid))
+            errors.Add($"{label}: uuid is empty");
+        // TUIC v5 password is sometimes empty — only warn if the server
+        // explicitly required it via the share-link, which we don't
+        // currently track. So no password check.
+        if (tuic.ServerPort is null or <= 0)
+            errors.Add($"{label}: server_port is invalid");
+    }
+
+    private static void ValidateShadowsocksOutbound(SingBoxOutbound ss, List<string> errors)
+    {
+        var label = $"Shadowsocks outbound '{ss.Tag}'";
+        if (string.IsNullOrWhiteSpace(ss.Server))
+            errors.Add($"{label}: server is empty");
+        if (string.IsNullOrWhiteSpace(ss.Method))
+            errors.Add($"{label}: method (cipher) is empty");
+        if (string.IsNullOrWhiteSpace(ss.Password))
+            errors.Add($"{label}: password is empty");
+        if (ss.ServerPort is null or <= 0)
             errors.Add($"{label}: server_port is invalid");
     }
 }
