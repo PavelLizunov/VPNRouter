@@ -1,0 +1,46 @@
+// VpnRouterCommandServerHandler — minimal CommandServer callback handler.
+// Phase 1.C (2026-04-30).
+//
+// libbox's CommandServer fires callbacks at this handler when something
+// from the Clash API side wants to control the runtime — e.g. the user
+// hits "reload config" via the dashboard, or asks to enable system proxy.
+// For Phase 1.C we don't expose any of that — every callback is either
+// a no-op or delegates back to the VpnRouterService.
+
+using IO.Nekohasekai.Libbox;
+
+namespace VPNRouter.Android;
+
+public sealed class VpnRouterCommandServerHandler
+    : Java.Lang.Object, ICommandServerHandler
+{
+    private readonly VpnRouterService _service;
+
+    public VpnRouterCommandServerHandler(VpnRouterService service)
+    {
+        _service = service;
+    }
+
+    /// <summary>Stop the tunnel via the CommandServer side.</summary>
+    public void ServiceStop()
+    {
+        _service.StopFromLibbox();
+    }
+
+    /// <summary>Reload the active config without restarting the tunnel.</summary>
+    public void ServiceReload()
+    {
+        // Phase 1.C: no-op. We don't currently support hot reload from
+        // the Clash API side; all reloads come through Apply on the
+        // desktop / host process.
+    }
+
+    public SystemProxyStatus? SystemProxyStatus => null;
+
+    public void SetSystemProxyEnabled(bool enabled) { /* no-op */ }
+
+    public void WriteDebugMessage(string message)
+    {
+        global::Android.Util.Log.Debug("Libbox", message ?? "");
+    }
+}

@@ -1,0 +1,188 @@
+// VpnRouterPlatformInterface — minimal C# implementation of libbox's
+// PlatformInterface. Phase 1.C (2026-04-30).
+//
+// libbox calls back into us for things it can't do from Go alone on
+// Android: opening the TUN file descriptor, listing network interfaces,
+// resolving DNS through the OS resolver, looking up which app owns a
+// connection (for process_name routing).
+//
+// MINIMAL impl — many callbacks return stubs / no-ops / throw. Enough
+// to start a tunnel; will be hardened across Phase 1.D as we hit corner
+// cases on real configs.
+//
+// Reference impl: sagernet/sing-box-for-android —
+// app/src/main/java/io/nekohasekai/sfa/bg/proxy/PlatformInterfaceImpl.kt
+
+using Android.Net;
+using IO.Nekohasekai.Libbox;
+
+namespace VPNRouter.Android;
+
+public sealed class VpnRouterPlatformInterface : Java.Lang.Object, IPlatformInterface
+{
+    private readonly VpnRouterService _service;
+
+    public VpnRouterPlatformInterface(VpnRouterService service)
+    {
+        _service = service;
+    }
+
+    /// <summary>
+    /// Open the TUN device. libbox passes us TunOptions describing the
+    /// addresses / routes / MTU it wants; we translate those into a
+    /// VpnService.Builder call and return the underlying file descriptor.
+    /// </summary>
+    public int OpenTun(ITunOptions? options)
+    {
+        if (options is null)
+        {
+            throw new Java.Lang.Exception("OpenTun: TunOptions is null");
+        }
+
+        var builder = new VpnService.Builder(_service)
+            .SetSession("VPNRouter")!
+            .SetMtu(options.MTU);
+
+        // IPv4 + IPv6 addresses.
+        AddPrefixesAsAddresses(builder, options.Inet4Address);
+        AddPrefixesAsAddresses(builder, options.Inet6Address);
+
+        // Routes — fall back to full-tunnel if no specific routes given.
+        if (!AddPrefixesAsRoutes(builder, options.Inet4RouteAddress))
+        {
+            builder.AddRoute("0.0.0.0", 0);
+        }
+        if (!AddPrefixesAsRoutes(builder, options.Inet6RouteAddress))
+        {
+            builder.AddRoute("::", 0);
+        }
+
+        // DNS server from libbox config.
+        var dnsAdded = false;
+        try
+        {
+            var dnsAddr = options.DNSServerAddress?.Value;
+            if (!string.IsNullOrEmpty(dnsAddr))
+            {
+                builder.AddDnsServer(dnsAddr);
+                dnsAdded = true;
+            }
+        }
+        catch { /* fallthrough */ }
+        if (!dnsAdded)
+        {
+            builder.AddDnsServer("1.1.1.1");
+        }
+
+        // Per-app routing (allow/disallow).
+        AddIncludePackages(builder, options.IncludePackage);
+        AddExcludePackages(builder, options.ExcludePackage);
+
+        // CRITICAL: exclude self so we don't loop our own traffic back
+        // through the TUN.
+        try
+        {
+            builder.AddDisallowedApplication(_service.PackageName!);
+        }
+        catch { /* swallow */ }
+
+        var pfd = builder.Establish()
+            ?? throw new Java.Lang.Exception("VpnService.Builder.establish returned null");
+
+        return pfd.DetachFd();
+    }
+
+    private static void AddPrefixesAsAddresses(VpnService.Builder builder, IRoutePrefixIterator? iter)
+    {
+        if (iter is null) return;
+        while (iter.HasNext)
+        {
+            var prefix = iter.Next();
+            if (prefix is null) continue;
+            var addr = prefix.Address();
+            if (!string.IsNullOrEmpty(addr))
+            {
+                builder.AddAddress(addr, prefix.Prefix());
+            }
+        }
+    }
+
+    private static bool AddPrefixesAsRoutes(VpnService.Builder builder, IRoutePrefixIterator? iter)
+    {
+        if (iter is null) return false;
+        var any = false;
+        while (iter.HasNext)
+        {
+            var prefix = iter.Next();
+            if (prefix is null) continue;
+            var addr = prefix.Address();
+            if (!string.IsNullOrEmpty(addr))
+            {
+                builder.AddRoute(addr, prefix.Prefix());
+                any = true;
+            }
+        }
+        return any;
+    }
+
+    private static void AddIncludePackages(VpnService.Builder builder, IStringIterator? iter)
+    {
+        if (iter is null) return;
+        while (iter.HasNext)
+        {
+            var pkg = iter.Next();
+            if (string.IsNullOrEmpty(pkg)) continue;
+            try { builder.AddAllowedApplication(pkg); } catch { /* skip missing */ }
+        }
+    }
+
+    private static void AddExcludePackages(VpnService.Builder builder, IStringIterator? iter)
+    {
+        if (iter is null) return;
+        while (iter.HasNext)
+        {
+            var pkg = iter.Next();
+            if (string.IsNullOrEmpty(pkg)) continue;
+            try { builder.AddDisallowedApplication(pkg); } catch { /* skip missing */ }
+        }
+    }
+
+    public void WriteLog(string? message)
+    {
+        global::Android.Util.Log.Info("Libbox", message ?? "");
+    }
+
+    public void SendNotification(global::IO.Nekohasekai.Libbox.Notification? notification)
+    {
+        global::Android.Util.Log.Info("Libbox",
+            $"Notification: type={notification?.TypeName} title={notification?.Title}");
+    }
+
+    public bool UseProcFS() => false;
+    public bool UnderNetworkExtension() => false;
+    public bool IncludeAllNetworks() => false;
+    public bool UsePlatformAutoDetectInterfaceControl() => true;
+
+    public void StartDefaultInterfaceMonitor(IInterfaceUpdateListener? listener) { }
+    public void CloseDefaultInterfaceMonitor(IInterfaceUpdateListener? listener) { }
+
+    public void AutoDetectInterfaceControl(int fd) { }
+
+    public ConnectionOwner? FindConnectionOwner(
+        int ipProtocol,
+        string? sourceAddress, int sourcePort,
+        string? destinationAddress, int destinationPort)
+    {
+        throw new Java.Lang.Exception("findConnectionOwner not implemented on Android");
+    }
+
+    public INetworkInterfaceIterator? Interfaces => null;
+
+    public IStringIterator? SystemCertificates() => null;
+
+    public ILocalDNSTransport? LocalDNSTransport() => null;
+
+    public WIFIState? ReadWIFIState() => null;
+
+    public void ClearDNSCache() { }
+}

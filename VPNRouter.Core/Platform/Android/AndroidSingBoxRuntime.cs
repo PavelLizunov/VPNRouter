@@ -12,21 +12,15 @@ using Serilog;
 
 namespace VPNRouter.Core.Platform.Android;
 
-/// <summary>
-/// JNI handle for the Kotlin <c>VpnRouterService</c> class. Mono.Android
-/// resolves the <c>Intent(Context, Class)</c> overload via this Java type
-/// reference; the <c>[Register]</c> attribute tells the bridge which JNI
-/// class name to bind to without requiring a generated C# binding from
-/// the libbox.aar (we set <c>Bind="false"</c> on the AAR to skip the
-/// ~20 MB binding overhead).
-/// </summary>
-[Register("com/ninitux/vpnrouter/VpnRouterService")]
-internal sealed class VpnRouterServiceRef : Java.Lang.Object
-{
-    public VpnRouterServiceRef() { }
-    protected VpnRouterServiceRef(IntPtr javaReference, JniHandleOwnership transfer)
-        : base(javaReference, transfer) { }
-}
+// Earlier iterations defined a [Register]-annotated VpnRouterServiceRef
+// here so we could write `typeof(VpnRouterServiceRef)` for Intent
+// dispatch. Once VpnRouterService.cs landed in VPNRouter.Android with
+// [Service(Name = "com.ninitux.vpnrouter.VpnRouterService")], that
+// duplicate JNI class name caused a Mono GC-bridge abort on app startup
+// ("asked if a class System.Object is a bridge before we inited
+// java.lang.Object"). The fix: drop VpnRouterServiceRef entirely and
+// let VPNRouter.Android pass the real Service Type via the public
+// SetServiceType() entry point below.
 
 /// <summary>
 /// v3.0 Android Phase 1 (2026-04-30).
@@ -66,6 +60,16 @@ public sealed class AndroidSingBoxRuntime
 
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(2) };
 
+    /// <summary>
+    /// VPNRouter.Android registers its concrete Service type here at app
+    /// startup, so this Core layer can build the dispatch Intent without
+    /// taking a hard reference on VPNRouter.Android (which would require
+    /// a circular ProjectReference).
+    /// </summary>
+    private static Type? _serviceType;
+
+    public static void RegisterServiceType(Type serviceType) => _serviceType = serviceType;
+
     private readonly ILogger _logger;
 
     public AndroidSingBoxRuntime(ILogger logger)
@@ -98,7 +102,10 @@ public sealed class AndroidSingBoxRuntime
             pkgArray[i] = allowedPackages[i];
         }
 
-        using var intent = new Intent(context, typeof(VpnRouterServiceRef))
+        var serviceType = _serviceType ?? throw new InvalidOperationException(
+            "AndroidSingBoxRuntime.RegisterServiceType must be called before Start.");
+
+        using var intent = new Intent(context, serviceType)
             .SetAction(ActionStart)
             .PutExtra(ExtraConfigJson, configJson)
             .PutExtra(ExtraAllowedPackages, pkgArray);
@@ -135,7 +142,12 @@ public sealed class AndroidSingBoxRuntime
             return;
         }
 
-        using var intent = new Intent(context, typeof(VpnRouterServiceRef))
+        if (_serviceType is null)
+        {
+            return;
+        }
+
+        using var intent = new Intent(context, _serviceType)
             .SetAction(ActionStop);
 
         // For STOP we use plain StartService (even on API 26+) — the

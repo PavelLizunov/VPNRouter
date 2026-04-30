@@ -1,23 +1,25 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
+using System;
 
 namespace VPNRouter.Android;
 
 /// <summary>
-/// v3.0 Android port — Phase 0 stub Avalonia App.
+/// v3.0 Android port — Phase 1.C view.
 ///
-/// <para>Phase 1.A landed the Kotlin → C# port of VpnRouterService and
-/// the Intent dispatch path in AndroidSingBoxRuntime, but the on-device
-/// UI here remains the Phase 0 "More coming soon" greeting until libbox
-/// is wired (Phase 1.B). Verification of Phase 1.A happens via
-/// <c>adb shell dumpsys package com.ninitux.vpnrouter</c> showing the
-/// VpnService registered with the BIND_VPN_SERVICE permission.</para>
+/// <para>Phase 1.C wires libbox runtime — when the app launches it
+/// schedules an ACTION_START intent at VpnRouterService 2 seconds later
+/// so we can observe whether libbox.Setup + CommandServer.Start +
+/// CommandServer.StartOrReloadService all wire correctly with our
+/// PlatformInterface implementation. The phone will surface the system
+/// VpnService consent dialog at that point — accepting it lets the
+/// tunnel try to come up; declining ends the test cleanly.</para>
 ///
-/// <para>Phase 3 will replace this with shared App.axaml from
-/// VPNRouter.App. Fully-qualified <c>Avalonia.Application</c> base —
-/// disambiguates from <c>Android.App.Application</c> which is also
-/// visible here via Mono.Android.</para>
+/// <para>For Phase 1.D this auto-start will move behind a real Connect
+/// button in the shared App.axaml; today the goal is just an end-to-end
+/// smoke check on hardware.</para>
 /// </summary>
 public partial class AndroidApp : Avalonia.Application
 {
@@ -27,18 +29,24 @@ public partial class AndroidApp : Avalonia.Application
     {
         if (ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.ISingleViewApplicationLifetime singleView)
         {
-            singleView.MainView = new TextBlock
-            {
-                Text = "VPNRouter v3.0-android Phase 1.A\n\n" +
-                       "VpnRouterService registered.\n" +
-                       "libbox tunnel coming in Phase 1.B.",
-                Padding = new Thickness(24),
-                FontSize = 18,
-                TextAlignment = Avalonia.Media.TextAlignment.Center,
-                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-            };
+            singleView.MainView = BuildPhase1View();
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    private static Control BuildPhase1View()
+    {
+        var statusBlock = new TextBlock
+        {
+            Text = "VPNRouter v3.0-android Phase 1.C\n\n" +
+                   "Wiring libbox runtime via VpnRouterService.\n" +
+                   "Watch logcat for libbox.Setup / CommandServer events.",
+            Padding = new Thickness(24),
+            FontSize = 16,
+            TextAlignment = Avalonia.Media.TextAlignment.Center,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        };
+        return statusBlock;
     }
 }

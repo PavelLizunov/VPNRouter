@@ -1,33 +1,30 @@
 // VpnRouterService — Android-native service that owns the VpnService
 // lifecycle and hosts the libbox.aar runtime.
 //
-// v3.0 Android Phase 1 (2026-04-30) — C# port of the original Kotlin
-// skeleton (VpnRouterService.kt is now a forward-declaration / docs-only
-// file kept for cross-language reference). Mono.Android lets us derive
-// from android.net.VpnService directly in C# and emits the Java callable
-// wrapper at build time — no Kotlin compiler in the toolchain.
+// v3.0 Android Phase 1.C (2026-04-30).
 //
-// Intent contract (paired with Core/Platform/Android/AndroidSingBoxRuntime.cs):
-//   Start: ACTION_START + EXTRA_CONFIG_JSON (string) + EXTRA_ALLOWED_PACKAGES (string[])
-//   Stop:  ACTION_STOP
+// libbox owns the actual TUN: it calls back into VpnRouterPlatformInterface.OpenTun
+// when it wants the file descriptor, and we use VpnService.Builder there
+// (NOT here) to obtain it. The flow:
 //
-// libbox.aar wiring is gated on the file actually being present at
-// build time. When libbox.aar lands in VPNRouter.Android/Lib/ and the
-// csproj's <AndroidLibrary> ItemGroup is uncommented, we'll add a
-// matching using directive + Libbox.NewService(...) call inside
-// StartTunnel(). For now StartTunnel obtains the TUN file descriptor
-// from VpnService.Builder, then closes it (no-op tunnel) — this lets us
-// exercise the OS-level consent + foreground flow on hardware without
-// crashing on missing classes.
+//   ACTION_START → libbox.Setup(SetupOptions{base_path, working_path})
+//                → new CommandServer(handler, platformInterface)
+//                → server.Start()
+//                → server.StartOrReloadService(configJson, null)
+//                  ↳ libbox calls back into platformInterface.OpenTun()
+//                    which builds VpnService → returns file descriptor
+//                  ↳ libbox spins up sing-box on top of that fd
 //
-// Reference impl (Kotlin equivalent in upstream SFA):
-//   sagernet/sing-box-for-android — app/src/main/java/io/nekohasekai/sfa/bg/BoxService.kt
+// Reference impl: sagernet/sing-box-for-android — app/src/main/java/io/nekohasekai/sfa/bg/BoxService.kt
 
+using System;
+using System.IO;
 using Android.App;
 using Android.Content;
 using Android.Net;
 using Android.OS;
 using AndroidX.Core.App;
+// using IO.Nekohasekai.Libbox;  // Phase 1.C bisect: disabled
 
 namespace VPNRouter.Android;
 
@@ -46,10 +43,12 @@ public sealed class VpnRouterService : VpnService
 
     private const int NotificationId = 100;
     private const string NotificationChannelId = "vpnrouter_tunnel";
+    private const string LogTag = "VpnRouter";
 
     private string? _pendingConfigJson;
     private string[]? _pendingAllowedPackages;
-    // private Libbox.IService? _libboxService;  // Phase 1.B — once libbox.aar is present.
+    // private CommandServer? _commandServer;  // Phase 1.C bisect: parked
+    private bool _libboxSetupDone;
 
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
@@ -73,84 +72,84 @@ public sealed class VpnRouterService : VpnService
 
     public override IBinder? OnBind(Intent? intent) => null;
 
+    /// <summary>
+    /// Called from VpnRouterCommandServerHandler.ServiceStop when libbox
+    /// itself wants the service shut down (e.g. fatal config error).
+    /// </summary>
+    internal void StopFromLibbox()
+    {
+        StopTunnel();
+        StopSelf();
+    }
+
     private void StartTunnel()
     {
-        // Foreground notification — mandatory for VpnService on API 26+.
         StartForeground(NotificationId, BuildNotification());
 
-        // Build the VpnService configuration. Address space mirrors
-        // sing-box's default TUN inbound (172.19.0.1/30) so libbox's
-        // TunService finds the right interface on FD handoff.
-        var builder = new Builder(this)
-            .SetSession("VPNRouter")
-            !.SetMtu(1500)
-            !.AddAddress("172.19.0.1", 30)
-            !.AddAddress("fdfe:dcba:9876::1", 126)  // IPv6 leak protection.
-            !.AddRoute("0.0.0.0", 0)
-            !.AddRoute("::", 0)
-            // Default DNS — libbox can override per-config.
-            !.AddDnsServer("1.1.1.1")
-            !.AddDnsServer("1.0.0.1");
-
-        // Per-app routing: only route the listed packages through TUN.
-        // Empty list = full-tunnel (everything routes).
-        if (_pendingAllowedPackages is { Length: > 0 } pkgs)
-        {
-            foreach (var pkg in pkgs)
-            {
-                try
-                {
-                    builder.AddAllowedApplication(pkg);
-                }
-                catch (global::Android.Content.PM.PackageManager.NameNotFoundException)
-                {
-                    global::Android.Util.Log.Warn("VpnRouter", $"Package not found: {pkg}");
-                }
-            }
-        }
-
-        // CRITICAL: exclude OUR OWN package — otherwise the OS would
-        // route our own SOCKS / DNS queries back through the TUN, which
-        // would loop infinitely into libbox and collapse the tunnel.
         try
         {
-            builder.AddDisallowedApplication(PackageName!);
+            EnsureLibboxSetup();
+            StartLibboxService();
         }
-        catch (global::Android.Content.PM.PackageManager.NameNotFoundException ex)
+        catch (Java.Lang.Exception jex)
         {
-            global::Android.Util.Log.Error("VpnRouter", $"FATAL: cannot exclude self: {ex.Message}");
+            global::Android.Util.Log.Error(LogTag, $"libbox start failed: {jex.GetType().Name}: {jex.Message}");
+            StopSelf();
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error(LogTag, $"libbox start failed: {ex.GetType().Name}: {ex.Message}");
+            StopSelf();
+        }
+    }
+
+    /// <summary>
+    /// Initialise libbox once per-process. Sets up the working / base /
+    /// temp paths so the Go side can write its caches and logs.
+    /// </summary>
+    private void EnsureLibboxSetup()
+    {
+        if (_libboxSetupDone)
+        {
+            return;
         }
 
-        var pfd = builder.Establish();
-        if (pfd is null)
+        var basePath = FilesDir!.AbsolutePath;
+        var workingPath = new Java.IO.File(FilesDir, "data").AbsolutePath;
+        var tempPath = CacheDir!.AbsolutePath;
+
+        Directory.CreateDirectory(workingPath);
+        Directory.CreateDirectory(tempPath);
+
+        // Phase 1.C bisect: Libbox.Setup parked
+        _libboxSetupDone = true;
+
+        global::Android.Util.Log.Info(LogTag,
+            $"libbox setup OK (base={basePath} working={workingPath} temp={tempPath})");
+    }
+
+    private void StartLibboxService()
+    {
+        if (string.IsNullOrEmpty(_pendingConfigJson))
         {
-            global::Android.Util.Log.Error("VpnRouter",
-                "VpnService.Builder.establish returned null — user denied or system rejected");
+            global::Android.Util.Log.Error(LogTag, "config_json missing — cannot start tunnel");
             StopSelf();
             return;
         }
 
-        // Phase 1.A — TUN obtained, but libbox not yet wired in. Close
-        // the FD immediately so we don't leave a half-configured tunnel
-        // dangling. Phase 1.B replaces this with the libbox handoff:
-        //
-        //   var tunFd = pfd.Fd;
-        //   _libboxService = Libbox.NewService(_pendingConfigJson, new VpnRouterPlatformInterface(this));
-        //   _libboxService.Start(tunFd);
-        //
-        try { pfd.Close(); } catch { /* swallow */ }
+        global::Android.Util.Log.Info(LogTag,
+            "Phase 1.C bisect: VpnRouterService received START intent (libbox path parked)");
     }
 
     private void StopTunnel()
     {
-        // _libboxService?.Close(); _libboxService = null;
         StopForeground(StopForegroundFlags.Remove);
     }
 
     public override void OnRevoke()
     {
         // System-initiated revoke (user toggled VPN off in Settings, or
-        // another VPN app took over). libbox should clean up gracefully.
+        // another VPN app took over).
         StopTunnel();
         base.OnRevoke();
     }
@@ -161,7 +160,7 @@ public sealed class VpnRouterService : VpnService
         base.OnDestroy();
     }
 
-    private Notification BuildNotification()
+    private global::Android.App.Notification BuildNotification()
     {
         if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
         {
@@ -187,7 +186,7 @@ public sealed class VpnRouterService : VpnService
         return new NotificationCompat.Builder(this, NotificationChannelId)
             .SetContentTitle("VPNRouter")!
             .SetContentText("Tunnel active")!
-            .SetSmallIcon(global::Android.Resource.Drawable.IcLockIdleLock)!  // TODO: brand icon.
+            .SetSmallIcon(global::Android.Resource.Drawable.IcLockIdleLock)!
             .SetOngoing(true)!
             .AddAction(global::Android.Resource.Drawable.IcMenuCloseClearCancel, "Disconnect", stopPi)!
             .Build();

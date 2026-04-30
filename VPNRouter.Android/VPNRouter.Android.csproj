@@ -65,6 +65,13 @@
        calls into libbox via raw JNI through the [Register] attributed
        handle in VPNRouter.Core/Platform/Android/AndroidSingBoxRuntime.cs. -->
   <ItemGroup>
+    <!-- Bind="false" — skip C# binding generation for libbox.aar's Java
+         types. Phase 1.B foundation was happy with this; switching to
+         Bind="true" mid-Phase-1.C surfaced a Mono GC-bridge abort during
+         app init ("asked if a class System.Object is a bridge before we
+         inited java.lang.Object"). Phase 1.D will revisit either by
+         resolving that crash or by switching to raw JNI calls into
+         libbox via Java.Interop.JniEnvironment. -->
     <AndroidLibrary Include="Lib\libbox.aar" Bind="false" />
   </ItemGroup>
 
