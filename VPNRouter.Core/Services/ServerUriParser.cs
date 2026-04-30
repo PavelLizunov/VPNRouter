@@ -1,0 +1,303 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Web;
+using VPNRouter.Core.Models;
+
+namespace VPNRouter.Core.Services;
+
+/// <summary>
+/// Multi-protocol share-link URI parser. v2.30.1-r3.
+///
+/// <para>Dispatches by scheme to per-protocol parsers and produces a
+/// populated <see cref="VlessServerEntry"/> with the correct
+/// <see cref="VlessServerEntry.Protocol"/> discriminator. Subscription
+/// fetchers and Simple-mode paste both call into this entry point so a
+/// pasted Hysteria2 / TUIC / Shadowsocks URI ends up as a regular row
+/// in the Servers list, just like a VLESS URI.</para>
+///
+/// <para>Supported schemes:</para>
+/// <list type="bullet">
+/// <item><c>vless://</c> — delegates to <see cref="VlessUriParser"/></item>
+/// <item><c>hysteria2://</c> (also <c>hy2://</c>) — Hysteria2 with optional Salamander obfs</item>
+/// <item><c>tuic://</c> — TUIC v5 (uuid:password userinfo)</item>
+/// <item><c>ss://</c> — Shadowsocks (incl. 2022 ciphers + ShadowTLS plugin opts)</item>
+/// </list>
+/// </summary>
+public static class ServerUriParser
+{
+    /// <summary>Parse any supported share-link URI. Throws <see cref="FormatException"/> on unsupported scheme or malformed input.</summary>
+    public static VlessServerEntry Parse(string uri)
+    {
+        uri = (uri ?? string.Empty).Trim();
+        if (uri.Length == 0)
+            throw new FormatException("Empty URI");
+
+        if (uri.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
+            return VlessUriParser.Parse(uri);
+
+        if (uri.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
+            uri.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase))
+            return ParseHysteria2(uri);
+
+        if (uri.StartsWith("tuic://", StringComparison.OrdinalIgnoreCase))
+            return ParseTuic(uri);
+
+        if (uri.StartsWith("ss://", StringComparison.OrdinalIgnoreCase))
+            return ParseShadowsocks(uri);
+
+        throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss://. Got: {Truncate(uri, 40)}");
+    }
+
+    /// <summary>Try variant — returns null on any error.</summary>
+    public static VlessServerEntry? TryParse(string uri)
+    {
+        try { return Parse(uri); }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Parse multiple URIs from a multi-line blob. Skips empty lines and
+    /// any line that doesn't start with one of the supported schemes.
+    /// Per-line parse failures are silently dropped — the same forgiving
+    /// behaviour as <see cref="VlessUriParser.ParseMultiple"/>.
+    /// </summary>
+    public static List<VlessServerEntry> ParseMultiple(string text)
+    {
+        var result = new List<VlessServerEntry>();
+        foreach (var line in (text ?? string.Empty).Split('\n', '\r'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0) continue;
+            if (!IsSupportedScheme(trimmed)) continue;
+            try { result.Add(Parse(trimmed)); } catch { /* skip malformed */ }
+        }
+        return result;
+    }
+
+    /// <summary>Cheap scheme-prefix probe — used by SubscriptionFetcher's per-line filter.</summary>
+    public static bool IsSupportedScheme(string line)
+    {
+        return line.StartsWith("vless://",     StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith("hy2://",       StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith("tuic://",      StringComparison.OrdinalIgnoreCase) ||
+               line.StartsWith("ss://",        StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ─── Hysteria2 ─────────────────────────────────────────────────────────
+    //
+    // Spec: https://v2.hysteria.network/docs/developers/URI-Scheme/
+    //   hysteria2://password@host:port/?sni=...&insecure=0&obfs=salamander
+    //                       &obfs-password=...&pinSHA256=...#name
+    //
+    // The password is the URL userinfo (NO username, just the password).
+    // Reality is not used — Hysteria2 has its own QUIC + TLS layer with
+    // optional Salamander obfuscation. ALPN defaults to ["h3"] which we
+    // emit at outbound-generation time.
+
+    private static VlessServerEntry ParseHysteria2(string uri)
+    {
+        // Normalize hy2:// -> hysteria2:// then swap to https:// so System.Uri can parse.
+        var normalized = uri;
+        if (normalized.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase))
+            normalized = "hysteria2://" + normalized.Substring("hy2://".Length);
+        var fake = "https://" + normalized.Substring("hysteria2://".Length);
+
+        if (!Uri.TryCreate(fake, UriKind.Absolute, out var parsed))
+            throw new FormatException("Invalid hysteria2 URI: cannot parse");
+
+        var password = Uri.UnescapeDataString(parsed.UserInfo);
+        if (password.Length == 0)
+            throw new FormatException("Invalid hysteria2 URI: password missing (expected hysteria2://password@host:port)");
+
+        var server = parsed.Host;
+        var port = parsed.Port > 0 ? parsed.Port : 443;
+        if (server.Length == 0)
+            throw new FormatException("Invalid hysteria2 URI: host missing");
+
+        var query = HttpUtility.ParseQueryString(parsed.Query);
+        var name = Uri.UnescapeDataString(parsed.Fragment.TrimStart('#'));
+
+        var entry = new VlessServerEntry
+        {
+            Name = name.Length > 0 ? name : $"hysteria2-{server}-{port}",
+            Protocol = "hysteria2",
+            Server = server,
+            Port = port,
+            Password = password,
+            Tls = new VlessTlsConfig
+            {
+                Enabled = true,
+                ServerName = query["sni"] ?? server,
+                Insecure = query["insecure"] == "1",
+            },
+        };
+
+        var obfs = query["obfs"];
+        if (!string.IsNullOrEmpty(obfs))
+        {
+            entry.ObfsType = obfs;
+            entry.ObfsPassword = query["obfs-password"] ?? string.Empty;
+        }
+
+        return entry;
+    }
+
+    // ─── TUIC v5 ───────────────────────────────────────────────────────────
+    //
+    // Common community URI form (sing-box / NekoBox compatible):
+    //   tuic://uuid:password@host:port?sni=...&congestion_control=bbr
+    //                                  &udp_relay_mode=native&alpn=h3#name
+
+    private static VlessServerEntry ParseTuic(string uri)
+    {
+        var fake = "https://" + uri.Substring("tuic://".Length);
+
+        if (!Uri.TryCreate(fake, UriKind.Absolute, out var parsed))
+            throw new FormatException("Invalid tuic URI: cannot parse");
+
+        var userinfo = Uri.UnescapeDataString(parsed.UserInfo);
+        if (userinfo.Length == 0)
+            throw new FormatException("Invalid tuic URI: uuid:password missing");
+
+        // Split uuid:password — exactly one colon. If no colon, treat the
+        // whole userinfo as uuid (some servers issue passwordless TUIC).
+        string uuid;
+        string password;
+        var colon = userinfo.IndexOf(':');
+        if (colon < 0)
+        {
+            uuid = userinfo;
+            password = string.Empty;
+        }
+        else
+        {
+            uuid = userinfo.Substring(0, colon);
+            password = userinfo.Substring(colon + 1);
+        }
+
+        var server = parsed.Host;
+        var port = parsed.Port > 0 ? parsed.Port : 443;
+        if (server.Length == 0)
+            throw new FormatException("Invalid tuic URI: host missing");
+
+        var query = HttpUtility.ParseQueryString(parsed.Query);
+        var name = Uri.UnescapeDataString(parsed.Fragment.TrimStart('#'));
+
+        return new VlessServerEntry
+        {
+            Name = name.Length > 0 ? name : $"tuic-{server}-{port}",
+            Protocol = "tuic",
+            Server = server,
+            Port = port,
+            Uuid = uuid,
+            Password = password,
+            CongestionControl = query["congestion_control"] ?? "bbr",
+            UdpRelayMode = query["udp_relay_mode"] ?? "native",
+            Tls = new VlessTlsConfig
+            {
+                Enabled = true,
+                ServerName = query["sni"] ?? server,
+                Insecure = query["allowInsecure"] == "1",
+                Alpn = query["alpn"] ?? "h3",
+            },
+        };
+    }
+
+    // ─── Shadowsocks (incl. 2022 + ShadowTLS v3) ──────────────────────────
+    //
+    // Two URL forms in the wild:
+    //   1. Modern (RFC 8089-style):
+    //        ss://method:password@host:port?plugin=...#name
+    //   2. Legacy (base64-encoded userinfo):
+    //        ss://BASE64(method:password)@host:port#name
+    // Both forms share query (?plugin=...) and fragment (#name) handling.
+    // sing-box understands plugin=shadow-tls;version=3;... directly.
+
+    private static VlessServerEntry ParseShadowsocks(string uri)
+    {
+        var fake = "https://" + uri.Substring("ss://".Length);
+
+        if (!Uri.TryCreate(fake, UriKind.Absolute, out var parsed))
+            throw new FormatException("Invalid ss URI: cannot parse");
+
+        var userinfo = parsed.UserInfo;
+        if (userinfo.Length == 0)
+            throw new FormatException("Invalid ss URI: userinfo missing");
+
+        // Try plain "method:password" first, then base64 fallback.
+        string method;
+        string password;
+        if (userinfo.Contains(':'))
+        {
+            var colon = userinfo.IndexOf(':');
+            method = Uri.UnescapeDataString(userinfo.Substring(0, colon));
+            password = Uri.UnescapeDataString(userinfo.Substring(colon + 1));
+        }
+        else
+        {
+            // base64 userinfo. Restore base64 padding if missing
+            // ("Shadowrocket"-style links sometimes drop trailing '=').
+            var padded = userinfo.PadRight(userinfo.Length + (4 - userinfo.Length % 4) % 4, '=');
+            string decoded;
+            try { decoded = Encoding.UTF8.GetString(Convert.FromBase64String(padded)); }
+            catch (Exception ex)
+            {
+                throw new FormatException($"Invalid ss URI: userinfo is neither plain method:password nor base64 ({ex.Message})");
+            }
+            var colon2 = decoded.IndexOf(':');
+            if (colon2 < 0)
+                throw new FormatException("Invalid ss URI: decoded userinfo missing colon separator");
+            method = decoded.Substring(0, colon2);
+            password = decoded.Substring(colon2 + 1);
+        }
+
+        var server = parsed.Host;
+        var port = parsed.Port > 0 ? parsed.Port : 443;
+        if (server.Length == 0)
+            throw new FormatException("Invalid ss URI: host missing");
+
+        var query = HttpUtility.ParseQueryString(parsed.Query);
+        var name = Uri.UnescapeDataString(parsed.Fragment.TrimStart('#'));
+
+        var entry = new VlessServerEntry
+        {
+            Name = name.Length > 0 ? name : $"ss-{server}-{port}",
+            Protocol = "shadowsocks",
+            Server = server,
+            Port = port,
+            Method = method,
+            Password = password,
+        };
+
+        // Shadowsocks plugin (e.g. ShadowTLS v3) — sing-box accepts the
+        // plugin string verbatim.
+        var plugin = query["plugin"];
+        if (!string.IsNullOrEmpty(plugin))
+        {
+            // Plugin syntax: "shadow-tls;version=3;password=...;host=..."
+            // The plugin NAME is the first ';'-separated token; the rest
+            // is plugin-specific options.
+            var firstSemi = plugin.IndexOf(';');
+            if (firstSemi < 0)
+            {
+                entry.Plugin = plugin;
+                entry.PluginOpts = string.Empty;
+            }
+            else
+            {
+                entry.Plugin = plugin.Substring(0, firstSemi);
+                entry.PluginOpts = plugin.Substring(firstSemi + 1);
+            }
+        }
+
+        return entry;
+    }
+
+    private static string Truncate(string s, int max)
+    {
+        if (s.Length <= max) return s;
+        return s.Substring(0, max) + "…";
+    }
+}

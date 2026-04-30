@@ -232,6 +232,46 @@ public class SingBoxOutbound
     /// </summary>
     [JsonProperty("udp_fragment", NullValueHandling = NullValueHandling.Ignore)]
     public bool? UdpFragment { get; set; }
+
+    // ── Non-VLESS protocol fields (v2.30.1-r3 multi-protocol support) ──────
+
+    /// <summary>Auth password — used by Hysteria2, TUIC, Shadowsocks outbounds.</summary>
+    [JsonProperty("password", NullValueHandling = NullValueHandling.Ignore)]
+    public string? Password { get; set; }
+
+    /// <summary>Shadowsocks cipher method (e.g. <c>2022-blake3-aes-256-gcm</c>).</summary>
+    [JsonProperty("method", NullValueHandling = NullValueHandling.Ignore)]
+    public string? Method { get; set; }
+
+    /// <summary>TUIC congestion-control (<c>bbr</c> | <c>cubic</c> | <c>new_reno</c>).</summary>
+    [JsonProperty("congestion_control", NullValueHandling = NullValueHandling.Ignore)]
+    public string? CongestionControl { get; set; }
+
+    /// <summary>TUIC UDP relay mode (<c>native</c> | <c>quic</c>).</summary>
+    [JsonProperty("udp_relay_mode", NullValueHandling = NullValueHandling.Ignore)]
+    public string? UdpRelayMode { get; set; }
+
+    /// <summary>Hysteria2 obfuscation block (Salamander).</summary>
+    [JsonProperty("obfs", NullValueHandling = NullValueHandling.Ignore)]
+    public Hysteria2Obfs? Obfs { get; set; }
+
+    /// <summary>Shadowsocks plugin name (e.g. <c>shadow-tls</c>).</summary>
+    [JsonProperty("plugin", NullValueHandling = NullValueHandling.Ignore)]
+    public string? Plugin { get; set; }
+
+    /// <summary>Shadowsocks plugin options (semicolon-delimited <c>key=value</c> pairs).</summary>
+    [JsonProperty("plugin_opts", NullValueHandling = NullValueHandling.Ignore)]
+    public string? PluginOpts { get; set; }
+}
+
+/// <summary>Hysteria2 Salamander obfuscation block.</summary>
+public class Hysteria2Obfs
+{
+    [JsonProperty("type")]
+    public string Type { get; set; } = "salamander";
+
+    [JsonProperty("password")]
+    public string Password { get; set; } = string.Empty;
 }
 
 public class TlsConfig

@@ -4145,12 +4145,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
         foreach (var line in lines)
         {
-            if (!line.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
+            // v2.30.1-r3: dispatch by scheme via ServerUriParser instead
+            // of hard-coded vless:// prefix check. Pasting Hysteria2 /
+            // TUIC / Shadowsocks links lands in the same Servers list.
+            if (!ServerUriParser.IsSupportedScheme(line))
                 continue;
 
             try
             {
-                var entry = VlessUriParser.Parse(line);
+                var entry = ServerUriParser.Parse(line);
                 // Check duplicate by name (same IP+port with different name/uuid is OK)
                 if (Servers.Any(s => s.Name == entry.Name && s.Server == entry.Server))
                     continue;
@@ -4159,7 +4162,7 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "Failed to parse VLESS URI: {Line}", line);
+                _logger.Warning(ex, "Failed to parse server URI: {Line}", line);
             }
         }
 

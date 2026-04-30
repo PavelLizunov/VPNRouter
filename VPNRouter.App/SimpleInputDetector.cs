@@ -8,10 +8,20 @@ public enum SmpInputKind
     /// <summary>Empty, whitespace, or unknown prefix.</summary>
     Invalid,
 
-    /// <summary>vless://uuid@server:port?... — single-server VLESS URI.</summary>
-    Vless,
+    /// <summary>
+    /// Single-server share-link URI in any supported scheme:
+    /// <c>vless://</c> / <c>hysteria2://</c> / <c>hy2://</c> /
+    /// <c>tuic://</c> / <c>ss://</c>.
+    /// (Renamed from <c>Vless</c> for v2.30.1-r3 multi-protocol support;
+    /// <c>Vless</c> kept as a back-compat alias below.)
+    /// </summary>
+    ServerUri,
 
-    /// <summary>http(s)://... — subscription URL returning base64 or newline-delimited VLESS URIs.</summary>
+    /// <summary>Back-compat alias for <see cref="ServerUri"/>.</summary>
+    [System.Obsolete("Use ServerUri — Simple input now accepts any share-link scheme, not only VLESS.")]
+    Vless = ServerUri,
+
+    /// <summary>http(s)://... — subscription URL returning base64 or newline-delimited share-link URIs.</summary>
     SubscriptionUrl,
 }
 
@@ -26,8 +36,15 @@ public static class SimpleInputDetector
         if (string.IsNullOrWhiteSpace(input)) return SmpInputKind.Invalid;
         var trimmed = input.Trim();
 
-        if (trimmed.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
-            return SmpInputKind.Vless;
+        // v2.30.1-r3: any supported share-link scheme — VLESS, Hysteria2,
+        // TUIC, Shadowsocks. Subscriber/Simple paths both delegate the
+        // actual parsing to ServerUriParser.
+        if (trimmed.StartsWith("vless://",     StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("hy2://",       StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("tuic://",      StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("ss://",        StringComparison.OrdinalIgnoreCase))
+            return SmpInputKind.ServerUri;
 
         if (trimmed.StartsWith("http://",  StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))

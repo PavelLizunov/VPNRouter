@@ -290,13 +290,47 @@ public partial class ServerViewModel : ViewModelBase
     {
         get
         {
-            var transport = _originalEntry?.Transport?.Type;
+            var protocol = (_originalEntry?.Protocol ?? "vless").ToLowerInvariant();
             var parts = new System.Collections.Generic.List<string>();
-            if (!string.IsNullOrWhiteSpace(transport))
-                parts.Add(transport!.ToLowerInvariant());
-            if (!string.IsNullOrWhiteSpace(Security) &&
-                !Security.Equals("none", System.StringComparison.OrdinalIgnoreCase))
-                parts.Add(Security.ToLowerInvariant());
+
+            // v2.30.1-r3: for non-VLESS protocols (Hysteria2 / TUIC / SS),
+            // the subtitle displays the protocol name plus its salient
+            // sub-feature (obfs / plugin / cipher) instead of the
+            // VLESS-specific "transport + security" pair.
+            switch (protocol)
+            {
+                case "hysteria2":
+                    parts.Add("hysteria2");
+                    if (!string.IsNullOrWhiteSpace(_originalEntry?.ObfsType))
+                        parts.Add(_originalEntry!.ObfsType.ToLowerInvariant());
+                    break;
+
+                case "tuic":
+                    parts.Add("tuic");
+                    if (!string.IsNullOrWhiteSpace(_originalEntry?.CongestionControl))
+                        parts.Add(_originalEntry!.CongestionControl.ToLowerInvariant());
+                    break;
+
+                case "shadowsocks":
+                case "ss":
+                    parts.Add("ss");
+                    if (!string.IsNullOrWhiteSpace(_originalEntry?.Method))
+                        parts.Add(_originalEntry!.Method.ToLowerInvariant());
+                    if (!string.IsNullOrWhiteSpace(_originalEntry?.Plugin))
+                        parts.Add(_originalEntry!.Plugin.ToLowerInvariant());
+                    break;
+
+                default:
+                    // VLESS — keep original "transport + security" format
+                    var transport = _originalEntry?.Transport?.Type;
+                    if (!string.IsNullOrWhiteSpace(transport))
+                        parts.Add(transport!.ToLowerInvariant());
+                    if (!string.IsNullOrWhiteSpace(Security) &&
+                        !Security.Equals("none", System.StringComparison.OrdinalIgnoreCase))
+                        parts.Add(Security.ToLowerInvariant());
+                    break;
+            }
+
             return string.Join(" + ", parts);
         }
     }

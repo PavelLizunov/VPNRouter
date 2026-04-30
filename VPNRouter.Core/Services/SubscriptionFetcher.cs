@@ -98,12 +98,16 @@ public static class SubscriptionFetcher
 
             foreach (var line in lines)
             {
-                if (!line.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
+                // v2.30.1-r3: accept any supported share-link scheme
+                // (vless://, hysteria2://, hy2://, tuic://, ss://). The
+                // ServerUriParser dispatches to the right per-protocol
+                // parser internally.
+                if (!ServerUriParser.IsSupportedScheme(line))
                     continue;
 
                 try
                 {
-                    var entry = VlessUriParser.Parse(line);
+                    var entry = ServerUriParser.Parse(line);
                     result.Add(entry);
                 }
                 catch (Exception ex)

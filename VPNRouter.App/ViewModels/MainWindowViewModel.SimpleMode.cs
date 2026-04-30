@@ -307,12 +307,12 @@ public partial class MainWindowViewModel
             else
             {
                 SmpErrorText = IsRussian
-                    ? "Вставь vless://-ссылку или URL подписки (http:// / https://)."
-                    : "Paste a vless:// link or a subscription URL (http:// / https://).";
+                    ? "Вставь ссылку (vless:// / hysteria2:// / tuic:// / ss://) или URL подписки (http:// / https://)."
+                    : "Paste a server link (vless:// / hysteria2:// / tuic:// / ss://) or a subscription URL (http:// / https://).";
                 return;
             }
         }
-        else if (kind == SmpInputKind.Vless)
+        else if (kind == SmpInputKind.ServerUri)
         {
             if (!TryApplyVless(_smpInput.Trim())) return;
         }
@@ -363,7 +363,8 @@ public partial class MainWindowViewModel
     {
         try
         {
-            var entry = VlessUriParser.Parse(uri);
+            // v2.30.1-r3: dispatch by scheme (vless / hysteria2 / hy2 / tuic / ss).
+            var entry = ServerUriParser.Parse(uri);
 
             // v2.30.1-r3 bug fix: write BOTH the settings model AND the VM
             // observable collection. SaveSettings rebuilds
@@ -396,10 +397,10 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "[Simple] VLESS URI parse failed");
+            _logger.Warning(ex, "[Simple] Server URI parse failed");
             SmpErrorText = IsRussian
-                ? "Некорректная vless-ссылка. Проверь что начинается на 'vless://' и заканчивается '#имя'."
-                : "Invalid VLESS link. Make sure it starts with 'vless://' and ends with '#name'.";
+                ? "Некорректная ссылка. Поддерживаются vless:// / hysteria2:// / tuic:// / ss://, должна заканчиваться '#имя'."
+                : "Invalid server link. Supported: vless:// / hysteria2:// / tuic:// / ss://, must end with '#name'.";
             return false;
         }
     }

@@ -605,14 +605,35 @@ public class VlessConfig
 }
 
 /// <summary>
-/// A single VLESS server entry with all connection parameters.
-/// Each server can have its own UUID, Reality keys, etc.
+/// A single proxy server entry with all connection parameters.
+///
+/// <para>Despite the legacy name <c>VlessServerEntry</c>, this type now
+/// holds entries for any supported protocol (VLESS+Reality, Hysteria2,
+/// TUIC v5, Shadowsocks 2022, optionally with ShadowTLS v3 plugin or
+/// Hysteria2 Salamander obfuscation). The <see cref="Protocol"/>
+/// discriminator controls which subset of fields is meaningful at
+/// outbound-generation time. The class name is preserved to avoid
+/// breaking the existing YAML alias mapping.</para>
 /// </summary>
 public class VlessServerEntry
 {
     /// <summary>Optional display name for logs (e.g. "main", "backup")</summary>
     [YamlMember(Alias = "name")]
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Protocol discriminator. One of:
+    /// <list type="bullet">
+    /// <item><c>vless</c> (default) — VLESS+Reality, optionally over TCP/WS/gRPC</item>
+    /// <item><c>hysteria2</c> — Hysteria2 (with optional Salamander obfs)</item>
+    /// <item><c>tuic</c> — TUIC v5</item>
+    /// <item><c>shadowsocks</c> — Shadowsocks 2022 (with optional ShadowTLS v3 plugin)</item>
+    /// </list>
+    /// New entries default to "vless" so legacy settings.yaml without
+    /// this field stays valid.
+    /// </summary>
+    [YamlMember(Alias = "protocol")]
+    public string Protocol { get; set; } = "vless";
 
     [YamlMember(Alias = "server")]
     public string Server { get; set; } = string.Empty;
@@ -637,6 +658,65 @@ public class VlessServerEntry
 
     [YamlMember(Alias = "transport")]
     public VlessTransportConfig Transport { get; set; } = new();
+
+    // ── Non-VLESS fields ────────────────────────────────────────────────────
+    // All optional. Populated only when Protocol != "vless".
+
+    /// <summary>
+    /// Authentication password.
+    /// <list type="bullet">
+    /// <item>Hysteria2 — auth password (URL userinfo)</item>
+    /// <item>TUIC — auth password (URL userinfo, paired with Uuid)</item>
+    /// <item>Shadowsocks — encryption key / password (paired with Method)</item>
+    /// </list>
+    /// </summary>
+    [YamlMember(Alias = "password")]
+    public string Password { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Shadowsocks cipher method (e.g. <c>2022-blake3-aes-256-gcm</c>,
+    /// <c>aes-256-gcm</c>, <c>chacha20-ietf-poly1305</c>). Ignored for
+    /// non-Shadowsocks protocols.
+    /// </summary>
+    [YamlMember(Alias = "method")]
+    public string Method { get; set; } = string.Empty;
+
+    /// <summary>
+    /// TUIC congestion-control algorithm. <c>bbr</c> | <c>cubic</c> |
+    /// <c>new_reno</c>. Default <c>bbr</c>.
+    /// </summary>
+    [YamlMember(Alias = "congestion_control")]
+    public string CongestionControl { get; set; } = "bbr";
+
+    /// <summary>
+    /// TUIC UDP relay mode. <c>native</c> | <c>quic</c>.
+    /// </summary>
+    [YamlMember(Alias = "udp_relay_mode")]
+    public string UdpRelayMode { get; set; } = "native";
+
+    /// <summary>
+    /// Hysteria2 Salamander obfuscation. Empty = obfs disabled.
+    /// </summary>
+    [YamlMember(Alias = "obfs_type")]
+    public string ObfsType { get; set; } = string.Empty;
+
+    /// <summary>Salamander password (paired with <see cref="ObfsType"/> = "salamander").</summary>
+    [YamlMember(Alias = "obfs_password")]
+    public string ObfsPassword { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Shadowsocks plugin name (e.g. <c>shadow-tls</c> for ShadowTLS v3).
+    /// Empty = no plugin.
+    /// </summary>
+    [YamlMember(Alias = "plugin")]
+    public string Plugin { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Shadowsocks plugin opts (semicolon-delimited <c>key=value</c> pairs:
+    /// <c>version=3;password=xxx;host=cdn.example.com</c>).
+    /// </summary>
+    [YamlMember(Alias = "plugin_opts")]
+    public string PluginOpts { get; set; } = string.Empty;
 }
 
 /// <summary>VLESS Reality settings (replaces TLS)</summary>

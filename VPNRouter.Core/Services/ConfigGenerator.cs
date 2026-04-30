@@ -848,10 +848,28 @@ public static class ConfigGenerator
     }
 
     /// <summary>
-    /// Build a single VLESS outbound from a server entry.
-    /// Flow is included only when entry.Flow is non-empty (auto-detect: no-flow servers → no flow in output).
+    /// Build a single proxy outbound from a server entry. v2.30.1-r3
+    /// dispatches on <see cref="VlessServerEntry.Protocol"/> to support
+    /// VLESS+Reality / Hysteria2 / TUIC v5 / Shadowsocks 2022 (with
+    /// optional ShadowTLS plugin) from a single entry-point. Existing
+    /// callers keep working — VLESS remains the default protocol when
+    /// the discriminator is empty or unset.
     /// </summary>
     private static SingBoxOutbound BuildVlessOutbound(VlessServerEntry entry, string tag)
+    {
+        var protocol = (entry.Protocol ?? "vless").ToLowerInvariant();
+        return protocol switch
+        {
+            "hysteria2"   => BuildHysteria2Outbound(entry, tag),
+            "tuic"        => BuildTuicOutbound(entry, tag),
+            "shadowsocks" => BuildShadowsocksOutbound(entry, tag),
+            "ss"          => BuildShadowsocksOutbound(entry, tag),
+            _             => BuildVlessOutboundCore(entry, tag),
+        };
+    }
+
+    /// <summary>VLESS+Reality outbound (the original implementation).</summary>
+    private static SingBoxOutbound BuildVlessOutboundCore(VlessServerEntry entry, string tag)
     {
         // Null-safe: YamlDotNet may leave nested objects null if YAML has empty keys
         var transport = entry.Transport ?? new VlessTransportConfig();
@@ -871,6 +889,101 @@ public static class ConfigGenerator
                 : BuildTransportConfig(transportType, transport),
             DomainResolver = "local-dns"
         };
+    }
+
+    /// <summary>
+    /// Hysteria2 outbound. ALPN defaults to <c>["h3"]</c> per Hysteria2
+    /// spec (it's QUIC-only). When <see cref="VlessServerEntry.ObfsType"/>
+    /// is "salamander", emits the obfs block.
+    /// </summary>
+    private static SingBoxOutbound BuildHysteria2Outbound(VlessServerEntry entry, string tag)
+    {
+        var tls = new TlsConfig
+        {
+            Enabled    = true,
+            ServerName = string.IsNullOrEmpty(entry.Tls?.ServerName) ? entry.Server : entry.Tls.ServerName,
+            Insecure   = entry.Tls?.Insecure ?? false,
+            Alpn       = new List<string> { "h3" },
+        };
+
+        var ob = new SingBoxOutbound
+        {
+            Type           = "hysteria2",
+            Tag            = tag,
+            Server         = entry.Server,
+            ServerPort     = entry.Port,
+            Password       = entry.Password,
+            Tls            = tls,
+            DomainResolver = "local-dns",
+        };
+
+        if (!string.IsNullOrEmpty(entry.ObfsType))
+        {
+            ob.Obfs = new Hysteria2Obfs
+            {
+                Type     = entry.ObfsType,
+                Password = entry.ObfsPassword,
+            };
+        }
+
+        return ob;
+    }
+
+    /// <summary>
+    /// TUIC v5 outbound. ALPN defaults to <c>["h3"]</c> per TUIC spec.
+    /// </summary>
+    private static SingBoxOutbound BuildTuicOutbound(VlessServerEntry entry, string tag)
+    {
+        var tls = new TlsConfig
+        {
+            Enabled    = true,
+            ServerName = string.IsNullOrEmpty(entry.Tls?.ServerName) ? entry.Server : entry.Tls.ServerName,
+            Insecure   = entry.Tls?.Insecure ?? false,
+            Alpn       = ParseAlpnList(entry.Tls?.Alpn) ?? new List<string> { "h3" },
+        };
+
+        return new SingBoxOutbound
+        {
+            Type              = "tuic",
+            Tag               = tag,
+            Server            = entry.Server,
+            ServerPort        = entry.Port,
+            Uuid              = entry.Uuid,
+            Password          = entry.Password,
+            CongestionControl = string.IsNullOrEmpty(entry.CongestionControl) ? "bbr" : entry.CongestionControl,
+            UdpRelayMode      = string.IsNullOrEmpty(entry.UdpRelayMode) ? "native" : entry.UdpRelayMode,
+            Tls               = tls,
+            DomainResolver    = "local-dns",
+        };
+    }
+
+    /// <summary>
+    /// Shadowsocks outbound. Supports SS 2022 ciphers natively via
+    /// <see cref="VlessServerEntry.Method"/>. When
+    /// <see cref="VlessServerEntry.Plugin"/> is "shadow-tls" (or any
+    /// other plugin name sing-box recognises), emits the plugin /
+    /// plugin_opts pair and lets sing-box wire it up.
+    /// </summary>
+    private static SingBoxOutbound BuildShadowsocksOutbound(VlessServerEntry entry, string tag)
+    {
+        return new SingBoxOutbound
+        {
+            Type           = "shadowsocks",
+            Tag            = tag,
+            Server         = entry.Server,
+            ServerPort     = entry.Port,
+            Method         = entry.Method,
+            Password       = entry.Password,
+            Plugin         = string.IsNullOrEmpty(entry.Plugin) ? null : entry.Plugin,
+            PluginOpts     = string.IsNullOrEmpty(entry.PluginOpts) ? null : entry.PluginOpts,
+            DomainResolver = "local-dns",
+        };
+    }
+
+    private static List<string>? ParseAlpnList(string? alpn)
+    {
+        if (string.IsNullOrWhiteSpace(alpn)) return null;
+        return alpn.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
     }
 
     // ─── Transport ────────────────────────────────────────────────────────────
