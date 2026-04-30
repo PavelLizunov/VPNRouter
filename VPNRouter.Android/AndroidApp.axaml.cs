@@ -6,9 +6,18 @@ namespace VPNRouter.Android;
 
 /// <summary>
 /// v3.0 Android port — Phase 0 stub Avalonia App.
-/// Phase 3 will replace with shared App.axaml from VPNRouter.App.
-/// Fully-qualified <c>Avalonia.Application</c> base — disambiguates from
-/// <c>Android.App.Application</c> which is also visible here.
+///
+/// <para>Phase 1.A landed the Kotlin → C# port of VpnRouterService and
+/// the Intent dispatch path in AndroidSingBoxRuntime, but the on-device
+/// UI here remains the Phase 0 "More coming soon" greeting until libbox
+/// is wired (Phase 1.B). Verification of Phase 1.A happens via
+/// <c>adb shell dumpsys package com.ninitux.vpnrouter</c> showing the
+/// VpnService registered with the BIND_VPN_SERVICE permission.</para>
+///
+/// <para>Phase 3 will replace this with shared App.axaml from
+/// VPNRouter.App. Fully-qualified <c>Avalonia.Application</c> base —
+/// disambiguates from <c>Android.App.Application</c> which is also
+/// visible here via Mono.Android.</para>
 /// </summary>
 public partial class AndroidApp : Avalonia.Application
 {
@@ -16,13 +25,13 @@ public partial class AndroidApp : Avalonia.Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        // Phase 0 stub. Phase 1 will instantiate MainView with
-        // VPNRouter.Core's MainWindowViewModel.
         if (ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.ISingleViewApplicationLifetime singleView)
         {
             singleView.MainView = new TextBlock
             {
-                Text = "VPNRouter v3.0-android Phase 0\n\nMore coming soon!",
+                Text = "VPNRouter v3.0-android Phase 1.A\n\n" +
+                       "VpnRouterService registered.\n" +
+                       "libbox tunnel coming in Phase 1.B.",
                 Padding = new Thickness(24),
                 FontSize = 18,
                 TextAlignment = Avalonia.Media.TextAlignment.Center,
