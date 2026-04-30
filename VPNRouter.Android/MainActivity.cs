@@ -23,7 +23,13 @@ namespace VPNRouter.Android;
 [Activity(
     Label = "VPNRouter",
     MainLauncher = true,
-    Theme = "@android:style/Theme.Material.Light.NoActionBar",
+    // AppCompat theme required: Avalonia.AvaloniaActivity inherits from
+    // AppCompatActivity, which crashes with IllegalStateException at
+    // setContentView() unless the active theme is a Theme.AppCompat
+    // descendant. Discovered via on-device Phase 0 test on KYOCERA A101BM
+    // (Android 12, arm64) — Material theme launched OK on Activity Manager
+    // but `am_proc_died: SIG 9` immediately after AvaloniaActivity.OnCreate.
+    Theme = "@style/Theme.AppCompat.Light.NoActionBar",
     LaunchMode = LaunchMode.SingleTask,
     ConfigurationChanges =
         ConfigChanges.ScreenSize |
