@@ -174,6 +174,74 @@ public class ConfigGeneratorTests
         Assert.Equal("1.2.3.4", proxy.Server);
     }
 
+    /// <summary>
+    /// Regression pin for the v2.30.1 ordering bug.
+    ///
+    /// Bug: when both <c>BypassRussianTraffic</c> AND <c>BlockAds</c> were
+    /// enabled, <c>ApplyAdBlock</c> used <c>route.rules.Insert(0, ...)</c>
+    /// which placed the adblock rule AHEAD OF SNIFF. The subsequent
+    /// <c>ApplyGeoBypass</c> used a sniff/hijack/private-prefix scan to
+    /// pick its insertion slot — but that scan stopped at the adblock
+    /// rule and returned 0, so the geo-bypass rule was inserted at the
+    /// very top, also ahead of sniff.
+    ///
+    /// Result: the rules list looked like
+    ///   [BypassRu, AdBlock, sniff, hijack-dns, private, ..., final=proxy]
+    ///
+    /// In sing-box, rule_set matching against <c>geosite-ru</c> requires
+    /// a destination domain. Without sniff having run, the destination
+    /// is just an IP — so the BypassRu rule never matched, and all
+    /// Russian-domain traffic fell through to <c>final=proxy</c>.
+    ///
+    /// User-visible symptom (2026-04-30): "Full Tunnel + RU bypass
+    /// enabled, but 2ip.ru / Avito show non-Russian IP." The fix forces
+    /// both ApplyAdBlock and ApplyGeoBypass to insert AFTER the
+    /// sniff/hijack-dns/private prefix, so the rule order becomes
+    ///   [sniff, hijack-dns, private, BypassRu, AdBlock, ..., final=proxy]
+    /// and BypassRu has a sniffed domain to match against.
+    /// </summary>
+    [Fact]
+    public void FullTunnel_BypassRuAndBlockAds_PreservesSniffPrefix()
+    {
+        var settings = CreateSettings();
+        settings.App.RoutingMode = "full";
+        settings.App.BypassRussianTraffic = true;
+        settings.App.BlockAds = true;
+
+        // Skip if geo files aren't on this CI host — BypassRu silently
+        // disables itself in that case (the gate is intentional, not a
+        // bug). Localhost dev VMs typically have them.
+        if (!GeoDataDownloader.AreGeoFilesAvailable())
+        {
+            return;
+        }
+
+        var profile = CreateProfile();
+        var processes = new[] { "Discord.exe", "firefox.exe" };
+
+        var config = ConfigGenerator.Generate(profile, processes, settings);
+
+        var rules = config.Route.Rules;
+        Assert.True(rules.Count >= 5, $"expected ≥5 rules, got {rules.Count}");
+        Assert.Equal("sniff", rules[0].Action);
+        Assert.Equal("hijack-dns", rules[1].Action);
+        Assert.True(rules[2].IpIsPrivate, "rule[2] should be the private-ip → direct rule");
+
+        // BypassRu and AdBlock must come AFTER the sniff/hijack/private
+        // prefix — search the tail and assert they exist there.
+        var tail = rules.Skip(3).ToList();
+        Assert.Contains(tail, r =>
+            r.RuleSet != null
+            && r.RuleSet.Contains("vpnrouter-geosite-ru")
+            && r.Action == "route"
+            && r.Outbound == "direct");
+        Assert.Contains(tail, r =>
+            r.RuleSet != null
+            && r.RuleSet.Contains("vpnrouter-adblock")
+            && r.Action == "reject");
+        Assert.Equal("proxy", config.Route.Final);
+    }
+
     // TODO(post-subscription-refactor): these two tests assume the pre-subscription
     // multi-server generator that emitted a urltest parent outbound with child
     // vless-main/vless-backup entries. ConfigGenerator now selects a single

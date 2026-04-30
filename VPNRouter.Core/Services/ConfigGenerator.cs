@@ -138,8 +138,25 @@ public static class ConfigGenerator
             Action = "reject"
         });
 
-        // 3. Route rule — reject connections to ad domains (before other rules)
-        config.Route.Rules.Insert(0, new RouteRule
+        // 3. Route rule — reject connections to ad domains (after sniff/
+        // hijack-dns/ip_is_private, before any user/process rules).
+        //
+        // v2.30.1 regression fix: previously Insert(0, ...) which placed
+        // adblock AT THE TOP — before sniff. That left destination domains
+        // unset when matching, so the subsequent ApplyGeoBypass loop —
+        // which scans `for sniff/hijack-dns/private prefix` — broke on
+        // adblock's `action=reject` and gave up at insertAt=0. Net result:
+        //   [BypassRu, AdBlock, sniff, hijack-dns, private, ..., final=proxy]
+        // BypassRu's `geosite-ru → direct` then never matched because
+        // sniff hadn't run, so all `.ru` traffic fell through to the
+        // `final=proxy` outbound — exactly the symptom user reported
+        // 2026-04-30 ("Full Tunnel + RU bypass enabled, but 2ip.ru / Avito
+        // show non-Russian IP").
+        //
+        // Correct ordering — keep sniff/hijack/private first, then
+        // toggles + custom rules behind:
+        //   [sniff, hijack-dns, private, BypassRu, AdBlock, ...custom, final]
+        config.Route.Rules.Insert(FindCustomRulesInsertionPoint(config), new RouteRule
         {
             RuleSet = new List<string> { AdBlockRuleSetTag },
             Action = "reject"
