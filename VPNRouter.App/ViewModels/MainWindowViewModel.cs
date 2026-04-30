@@ -2782,17 +2782,51 @@ public partial class MainWindowViewModel : ViewModelBase
         var hasCustomConfig = !string.IsNullOrWhiteSpace(_settings.App.ActiveCustomConfig)
                               || !string.IsNullOrWhiteSpace(_settings.App.CustomConfig)
                               || (_settings.App.CustomConfigs?.Count ?? 0) > 0;
+        var hasActiveSubscription = (_settings.App.Subscriptions?.Any(s => s != null && s.Enabled) ?? false)
+                                    || !string.IsNullOrWhiteSpace(_settings.App.SubscriptionUrl);
 
-        if (wantsCustomMode && !hasCustomConfig)
+        if (wantsCustomMode && hasActiveSubscription)
         {
-            // No custom config ready → don't lock the user into a mode that
-            // can't start. Pick the next best persistable mode.
-            var hasSubscription = (_settings.App.Subscriptions?.Any(s => s != null && s.Enabled) ?? false)
-                                  || !string.IsNullOrWhiteSpace(_settings.App.SubscriptionUrl);
-            _settings.App.ConfigMode = hasSubscription ? "subscribe" : "generated";
+            // v2.30.1-r2 regression fix: subscription wins over peeking
+            // at Custom sub-tab.
+            //
+            // The previous logic only fell back to "subscribe" when
+            // hasCustomConfig was false. If the user had EVER imported
+            // a custom config (so hasCustomConfig=true) AND was running
+            // a subscription, the sequence:
+            //
+            //   Subscribe tab (IsSubscribeMode=true) → Servers tab
+            //     (OnSelectedTabIndexChanged flips IsSubscribeMode=false,
+            //      IsVlessMode=true) → Custom sub-tab
+            //     (OnSelectedServerModeIndexChanged flips IsVlessMode=false
+            //      + calls SaveSettings)
+            //
+            // would persist ConfigMode="custom" — even though the user
+            // never explicitly chose to swap modes. The next Apply (e.g.
+            // from Rules / Network page) would then reconnect using the
+            // custom config branch instead of subscription.
+            //
+            // User report 2026-04-30: "я применил настройки и буд-то
+            // переподключилось не на подписку а на конфиг".
+            //
+            // Fix: when an active subscription exists, peeking at sub-
+            // tabs cannot flip ConfigMode away from "subscribe". To
+            // genuinely switch to custom mode, the user must disable
+            // every subscription first (the explicit Enabled checkbox
+            // on each subscription entry).
+            _settings.App.ConfigMode = "subscribe";
             _logger?.Information(
-                "[Settings] User clicked Custom sub-tab but no custom config is configured — keeping ConfigMode={Mode} instead of 'custom'",
-                _settings.App.ConfigMode);
+                "[Settings] Subscription is active — keeping ConfigMode=subscribe " +
+                "even though Custom sub-tab is selected (user is peeking, not switching)");
+        }
+        else if (wantsCustomMode && !hasCustomConfig)
+        {
+            // No custom config ready and no subscription either → pick
+            // the next best persistable mode so VPN can still start on
+            // restart.
+            _settings.App.ConfigMode = "generated";
+            _logger?.Information(
+                "[Settings] User clicked Custom sub-tab but no custom config is configured — keeping ConfigMode=generated instead of 'custom'");
         }
         else
         {
