@@ -66,21 +66,23 @@
        handle in VPNRouter.Core/Platform/Android/AndroidSingBoxRuntime.cs. -->
   <ItemGroup>
     <!-- Bind="false" — skip C# binding generation for libbox.aar's Java
-         types. Phase 1.B foundation was happy with this; switching to
-         Bind="true" mid-Phase-1.C surfaced a Mono GC-bridge abort during
-         app init ("asked if a class System.Object is a bridge before we
-         inited java.lang.Object"). Phase 1.D will revisit either by
-         resolving that crash or by switching to raw JNI calls into
-         libbox via Java.Interop.JniEnvironment. -->
+         types. The Mono.Android binding generator triggers a GC-bridge
+         abort on libbox's ~80 gomobile-generated proxy classes ("asked
+         if a class System.Object is a bridge before we inited
+         java.lang.Object"); we work around it by keeping all libbox-
+         touching code in Java (VpnRouterService.java) where the
+         libbox.aar classpath is consumed natively without any C#
+         translation layer. -->
     <AndroidLibrary Include="Lib\libbox.aar" Bind="false" />
   </ItemGroup>
 
-  <!-- VpnRouterService.cs lives in this project (compiled directly). The
-       legacy VpnRouterService.kt sibling is kept for documentation only —
-       it remains outside the build (no <AndroidJavaSource> entry) until
-       we add a Kotlin compile step (currently not part of .NET Android
-       toolchain). -->
+  <!-- Java service implementation. .NET Android compiles AndroidJavaSource
+       items via javac and merges the resulting .class files into the
+       APK; the [Service]-attributed C# Java callable wrapper pattern
+       isn't needed because this Java class registers itself in
+       AndroidManifest.xml directly. -->
   <ItemGroup>
+    <AndroidJavaSource Include="VpnRouterService.java" />
     <None Include="VpnRouterService.kt" />
   </ItemGroup>
 

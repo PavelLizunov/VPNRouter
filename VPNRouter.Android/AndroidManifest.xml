@@ -22,27 +22,22 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
                      tools:ignore="QueryAllPackagesPermission" />
 
-    <!--
-      VpnService class — added in Phase 1 as a Kotlin/Java native shim
-      extending android.net.VpnService. Once we have the class file,
-      uncomment:
-
-      <service android:name=".VpnRouterService"
-               android:permission="android.permission.BIND_VPN_SERVICE"
-               android:foregroundServiceType="systemExempted"
-               android:exported="false">
-          <intent-filter>
-              <action android:name="android.net.VpnService" />
-          </intent-filter>
-          <meta-data
-              android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"
-              android:value="true" />
-      </service>
-    -->
-
     <application android:label="VPNRouter"
                  android:supportsRtl="true">
-        <!-- Avalonia MainActivity auto-generated from [Activity] attribute. -->
+        <!-- Avalonia MainActivity auto-generated from C# [Activity] attribute. -->
+
+        <!-- VpnRouterService is a Java class (VpnRouterService.java)
+             compiled into the APK via <AndroidJavaSource>. Because it's
+             not generated from a C# [Service] attribute, we register it
+             in this manifest directly. -->
+        <service android:name=".VpnRouterService"
+                 android:permission="android.permission.BIND_VPN_SERVICE"
+                 android:foregroundServiceType="systemExempted"
+                 android:exported="false">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

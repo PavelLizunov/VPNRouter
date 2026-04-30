@@ -16,17 +16,15 @@ namespace VPNRouter.Android;
 /// Avalonia framework spins up our XAML-driven UI inside this Activity's
 /// lifecycle. The <c>[Activity]</c> attribute is what .NET Android uses
 /// to auto-generate the corresponding <c>&lt;activity&gt;</c> entry inside
-/// <c>AndroidManifest.xml</c> — so we don't have to duplicate the
-/// registration there.</para>
+/// <c>AndroidManifest.xml</c>.</para>
 ///
 /// <para>Phase 1.C wires VpnService consent + ACTION_START dispatch:
 /// 3 seconds after launch we call <see cref="VpnService.Prepare"/>; if
 /// consent is needed we present the system dialog via
 /// <see cref="StartActivityForResult(Intent?, int)"/>; once granted we
-/// fire ACTION_START at <see cref="VpnRouterService"/> with a minimal
-/// direct-routing test config to exercise the libbox runtime end-to-end
-/// on hardware. Phase 1.D will move this behind a real Connect button
-/// in the shared App.axaml.</para>
+/// fire ACTION_START at the (Java) <c>VpnRouterService</c> with a
+/// minimal direct-routing test config to exercise the libbox runtime
+/// end-to-end on hardware.</para>
 /// </summary>
 [Activity(
     Label = "VPNRouter",
@@ -34,9 +32,7 @@ namespace VPNRouter.Android;
     // AppCompat theme required: Avalonia.AvaloniaActivity inherits from
     // AppCompatActivity, which crashes with IllegalStateException at
     // setContentView() unless the active theme is a Theme.AppCompat
-    // descendant. Discovered via on-device Phase 0 test on KYOCERA A101BM
-    // (Android 12, arm64) — Material theme launched OK on Activity Manager
-    // but `am_proc_died: SIG 9` immediately after AvaloniaActivity.OnCreate.
+    // descendant.
     Theme = "@style/Theme.AppCompat.Light.NoActionBar",
     LaunchMode = LaunchMode.SingleTask,
     ConfigurationChanges =
@@ -57,9 +53,9 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
 
     /// <summary>
     /// Phase 1.C smoke-test config: TUN inbound + direct outbound +
-    /// minimal log. No proxy server — the goal is just to verify libbox
-    /// initialises, opens the TUN, and routes packets out via direct.
-    /// Phase 1.D replaces this with config from Settings UI.
+    /// minimal log + Clash API. No proxy server — the goal is to
+    /// verify libbox initialises, opens the TUN, and routes packets out
+    /// via direct.
     /// </summary>
     private const string Phase1cTestConfig = """
 {
@@ -72,8 +68,7 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
       "address": ["172.19.0.1/30", "fdfe:dcba:9876::1/126"],
       "mtu": 1500,
       "auto_route": true,
-      "stack": "system",
-      "endpoint_independent_nat": true
+      "stack": "system"
     }
   ],
   "outbounds": [
@@ -87,9 +82,81 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
 }
 """;
 
+    // Mirrors VpnRouterService.java's intent contract.
+    private const string ActionStart = "com.ninitux.vpnrouter.START";
+    private const string ExtraConfigJson = "config_json";
+    private const string ExtraAllowedPackages = "allowed_packages";
+
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder)
     {
         return base.CustomizeAppBuilder(builder)
             .WithInterFont();
+    }
+
+    protected override void OnCreate(Bundle? savedInstanceState)
+    {
+        base.OnCreate(savedInstanceState);
+
+        // Schedule the libbox start ~3 seconds after onCreate so the
+        // Activity is fully attached + Avalonia surface visible before
+        // the system VpnService consent dialog appears.
+        new Handler(Looper.MainLooper!).PostDelayed(SchedulePhase1cStart, 3000);
+    }
+
+    private void SchedulePhase1cStart()
+    {
+        global::Android.Util.Log.Info("VpnRouter", "Phase 1.C: requesting VPN consent");
+        var prepareIntent = VpnService.Prepare(this);
+        if (prepareIntent is null)
+        {
+            global::Android.Util.Log.Info("VpnRouter", "Phase 1.C: consent already granted, starting service");
+            StartTunnelService();
+        }
+        else
+        {
+            global::Android.Util.Log.Info("VpnRouter", "Phase 1.C: presenting system VPN consent dialog");
+            StartActivityForResult(prepareIntent, RequestVpnConsent);
+        }
+    }
+
+    protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
+    {
+        base.OnActivityResult(requestCode, resultCode, data);
+        if (requestCode != RequestVpnConsent)
+        {
+            return;
+        }
+
+        if (resultCode == Result.Ok)
+        {
+            global::Android.Util.Log.Info("VpnRouter", "Phase 1.C: consent granted");
+            StartTunnelService();
+        }
+        else
+        {
+            global::Android.Util.Log.Warn("VpnRouter",
+                $"Phase 1.C: consent denied (resultCode={resultCode})");
+        }
+    }
+
+    private void StartTunnelService()
+    {
+        // VpnRouterService is a Java class (VpnRouterService.java) — we
+        // address it via fully-qualified component name rather than
+        // typeof() because the .NET Android side has no C# binding for it.
+        var intent = new Intent()
+            .SetClassName(PackageName!, "com.ninitux.vpnrouter.VpnRouterService")
+            .SetAction(ActionStart)
+            .PutExtra(ExtraConfigJson, Phase1cTestConfig)
+            .PutExtra(ExtraAllowedPackages, Array.Empty<string>());
+
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
+        {
+            StartForegroundService(intent);
+        }
+        else
+        {
+            StartService(intent);
+        }
     }
 }
