@@ -13,18 +13,15 @@ namespace VPNRouter.Core.Services;
 ///
 /// <para>v2.27.2: introduced as a passive data-gathering step so we can
 /// see — in production logs — whether our "orphan sing-box kill" path
-/// actually leaves dangling <c>VPNRouter-TUN</c> adapters behind. The
-/// hypothesis (plans/vpnrouter-core-stability-audit.md §B1) is that
-/// force-killing sing-box without a graceful shutdown can leak the
-/// wintun adapter; a fresh start then either fails to open the name
-/// or inherits stale route table state. We don't have a confirmed
-/// repro yet — this helper just logs the current adapter inventory
-/// so we can correlate with user bug reports.</para>
+/// actually leaves dangling <c>VPNRouter-TUN</c> adapters behind.</para>
 ///
-/// <para>Deliberately non-invasive: no deletes, no netsh mutations.
-/// If the data confirms a leak pattern, a later PR can add an active
-/// cleanup step conditional on <see cref="TunOwnershipLock.IsOwnedByAnyone"/>
-/// being false.</para>
+/// <para>v2.30.1-r5: hypothesis confirmed by user reports
+/// ("periodically the network interface doesn't die and Windows reboot
+/// is required"). Added active cleanup via
+/// <see cref="DisableOrphanedAdapter"/> — disables the wintun adapter
+/// in the device manager when sing-box exits without releasing it,
+/// freeing the OS network stack from the dangling routes / DNS that
+/// were keeping the user's network state stuck.</para>
 /// </summary>
 public static class TunAdapterDiagnostics
 {
@@ -84,6 +81,90 @@ public static class TunAdapterDiagnostics
         catch (Exception ex)
         {
             logger?.Debug(ex, "[TunDiag] {Ctx}: inventory query failed (non-fatal)", context);
+        }
+    }
+
+    /// <summary>
+    /// v2.30.1-r5: aggressive cleanup for orphaned wintun adapters.
+    /// Called when sing-box exits unexpectedly (crash, silent kill on
+    /// Windows wake, etc.) to disable the dangling network interface
+    /// so the OS releases the cached routes / DNS / TUN handle.
+    ///
+    /// <para>Without this, users hit "the network interface doesn't
+    /// die and I have to reboot Windows" after sing-box silent-kill —
+    /// the wintun adapter stays in the netsh inventory in a half-alive
+    /// state, holding TUN-routed default routes that the network stack
+    /// can't easily flush. Disabling the adapter via netsh forces
+    /// Windows to drop those routes immediately.</para>
+    ///
+    /// <para>Non-fatal: any error is swallowed and logged at Warning
+    /// level. Cleanup is idempotent — disabling an already-disabled or
+    /// already-deleted adapter is a no-op (with a "not found" stderr
+    /// from netsh that we ignore).</para>
+    ///
+    /// <para>Intentionally uses <c>netsh interface set interface ...
+    /// admin=disabled</c> instead of <c>Remove-NetAdapter</c> because:
+    /// (a) PowerShell isn't always on PATH inside our service-managed
+    /// process tree, (b) wintun adapters refuse Remove-NetAdapter when
+    /// the underlying handle is still open by sing-box's GC-pending
+    /// cleanup, but disable always succeeds. After disable, sing-box's
+    /// next start will re-enable the adapter automatically.</para>
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    public static void DisableOrphanedAdapter(ILogger? logger, string interfaceName, string context)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        if (string.IsNullOrWhiteSpace(interfaceName)) return;
+
+        try
+        {
+            var psi = new ProcessStartInfo("netsh",
+                $"interface set interface name=\"{interfaceName}\" admin=disabled")
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc == null)
+            {
+                logger?.Warning("[TunDiag] {Ctx}: failed to spawn netsh for adapter disable", context);
+                return;
+            }
+
+            var stdout = proc.StandardOutput.ReadToEnd();
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(3000);
+
+            // netsh exit codes: 0 = success, 1 = "element not found"
+            // (adapter already gone — fine), other = real failure.
+            if (proc.ExitCode == 0)
+            {
+                logger?.Information(
+                    "[TunDiag] {Ctx}: disabled orphaned adapter '{Iface}' (network stack should release routes)",
+                    context, interfaceName);
+            }
+            else if (proc.ExitCode == 1
+                     || stdout.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0
+                     || stderr.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                logger?.Debug(
+                    "[TunDiag] {Ctx}: adapter '{Iface}' already gone — nothing to clean up",
+                    context, interfaceName);
+            }
+            else
+            {
+                logger?.Warning(
+                    "[TunDiag] {Ctx}: netsh disable for '{Iface}' returned exit {Code}: stdout='{Out}' stderr='{Err}'",
+                    context, interfaceName, proc.ExitCode, stdout.Trim(), stderr.Trim());
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.Warning(ex, "[TunDiag] {Ctx}: disable orphaned adapter '{Iface}' failed (non-fatal)", context, interfaceName);
         }
     }
 }

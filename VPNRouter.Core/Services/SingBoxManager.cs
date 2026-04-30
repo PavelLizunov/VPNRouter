@@ -211,8 +211,34 @@ public class SingBoxManager : IDisposable
 
         if (_process == null || _process.HasExited)
         {
+            // v2.30.1-r5: log this branch — pre-r5 it was silent, which
+            // made the user-reported "Stop pressed but no log lines and
+            // adapter remained" problem hard to diagnose. Explicitly
+            // mark that we're in the post-crash cleanup path.
+            _logger.Information(
+                "[SingBoxManager] Stop called but sing-box already exited (process={ProcState}) — running cleanup-only path",
+                _process == null ? "null" : "HasExited");
             State = SingBoxState.Stopped;
             if (releaseLock) _tunLock.Release();
+
+            // v2.30.1-r5: belt-and-braces orphan cleanup. OnProcessExited
+            // (above) already does this when the Exited callback fires,
+            // but if the process was force-killed AND the callback was
+            // suppressed (EnableRaisingEvents=false from a prior Stop),
+            // we'd skip the disable. Run it again here so the orphan
+            // can't slip through.
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    TunAdapterDiagnostics.DisableOrphanedAdapter(
+                        _logger, "VPNRouter-TUN", "SingBoxManager.StopInternal.early");
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
+                }
+            }
             return;
         }
 
@@ -596,6 +622,38 @@ public class SingBoxManager : IDisposable
 
         State = SingBoxState.Failed;
         Crashed?.Invoke(this, EventArgs.Empty);
+
+        // v2.30.1-r5: aggressive cleanup of the orphaned wintun adapter
+        // after silent crash. User report 2026-05-01: "у пользователя
+        // периодически не убивается сетевой интерфейс и ему приходится
+        // перезагружать Windows". When sing-box dies via Windows
+        // TerminateProcess (e.g. on wake-from-sleep), it doesn't get
+        // a chance to release the wintun handle cleanly. The adapter
+        // hangs around in netsh inventory holding the default routes
+        // and DNS settings, so the user's network stays "stuck". Disable
+        // the adapter explicitly so Windows drops those routes; the
+        // adapter will be re-enabled on next sing-box start.
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                // The interface name is set in ConfigGenerator from
+                // settings.Tun.InterfaceName which defaults to
+                // "VPNRouter-TUN". Hard-coding the default here keeps
+                // the SingBoxManager API surface unchanged (it knows
+                // only SingBoxSettings, not AppSettings.Tun); on the
+                // off-chance a user customised it, the netsh disable
+                // simply returns "not found" and we skip the cleanup
+                // — the worst case is the same orphan-adapter problem
+                // the user already sees today.
+                TunAdapterDiagnostics.DisableOrphanedAdapter(
+                    _logger, "VPNRouter-TUN", "SingBoxManager.OnProcessExited");
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
+            }
+        }
     }
 
     private static string WriteJsonToDisk(string json)
