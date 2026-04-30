@@ -144,12 +144,12 @@ Release build + packaging:
 
 ```powershell
 # Windows (PowerShell) — produces both full + update ZIPs plus their .sha256
-powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.29.0-r4"
+powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.30.0"
 ```
 
 ```bash
 # macOS DMG — runs on any Mac with .NET 8 SDK
-./build-mac.sh 2.29.0-r4
+./build-mac.sh 2.30.0
 ```
 
 ```bash
