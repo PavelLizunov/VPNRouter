@@ -50,13 +50,30 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
   </ItemGroup>
 
-  <!-- libbox.aar — sing-box Android binding from sagernet/sing-box-for-android.
-       Once we have the SDK + a real keystore, drop libbox.aar into Lib/ and
-       reference here. For Phase 0 scaffold, this is a placeholder include. -->
+  <!-- libbox.aar — sing-box gomobile binding. Built locally via:
+         cd tools/sing-box-upstream && export ANDROID_NDK_HOME=...
+         go run ./cmd/internal/build_libbox -target android
+       (Requires SagerNet's gomobile fork at $GOPATH/bin — installed via
+       `go install github.com/sagernet/gomobile/cmd/{gomobile,gobind}@latest`.)
+
+       Drop the resulting libbox.aar into VPNRouter.Android/Lib/ and
+       uncomment the AndroidLibrary item below. We use Bind="false" to
+       skip the ~20 MB Java→C# binding overhead — VpnRouterService.cs
+       calls into libbox via raw JNI through the [Register] attributed
+       handle in VPNRouter.Core/Platform/Android/AndroidSingBoxRuntime.cs. -->
   <!--
   <ItemGroup>
-    <AndroidLibrary Include="Lib\libbox.aar" />
+    <AndroidLibrary Include="Lib\libbox.aar" Bind="false" />
   </ItemGroup>
   -->
+
+  <!-- VpnRouterService.cs lives in this project (compiled directly). The
+       legacy VpnRouterService.kt sibling is kept for documentation only —
+       it remains outside the build (no <AndroidJavaSource> entry) until
+       we add a Kotlin compile step (currently not part of .NET Android
+       toolchain). -->
+  <ItemGroup>
+    <None Include="VpnRouterService.kt" />
+  </ItemGroup>
 
 </Project>
