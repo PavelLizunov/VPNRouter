@@ -1,4 +1,11 @@
-# Phase 1.C drafts — libbox runtime wiring
+# Phase 1.C drafts — libbox runtime wiring (HISTORICAL)
+
+> **STATUS 2026-04-30**: superseded by `VPNRouter.Android/VpnRouterService.java`
+> which solved the Mono GC-bridge crash by keeping all libbox-touching
+> code in Java rather than fighting the C# binding generator. See
+> `plans/session-android-phase1c-2026-04-30.md` for the resolution.
+> The drafts here remain as a record of the C#-with-Bind="true" attempt
+> in case future sessions want to revisit that path.
 
 These two C# files implement libbox's `PlatformInterface` and
 `CommandServerHandler` callback interfaces against Mono.Android's

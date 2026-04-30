@@ -40,8 +40,9 @@ public partial class AndroidApp : Avalonia.Application
         var statusBlock = new TextBlock
         {
             Text = "VPNRouter v3.0-android Phase 1.C\n\n" +
-                   "Wiring libbox runtime via VpnRouterService.\n" +
-                   "Watch logcat for libbox.Setup / CommandServer events.",
+                   "VpnRouterService + libbox tunnel verified.\n\n" +
+                   "Phase 1.D will replace this auto-start with\n" +
+                   "shared App.axaml Connect / Disconnect UI.",
             Padding = new Thickness(24),
             FontSize = 16,
             TextAlignment = Avalonia.Media.TextAlignment.Center,
