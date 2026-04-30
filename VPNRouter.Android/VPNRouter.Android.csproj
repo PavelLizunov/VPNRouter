@@ -13,7 +13,10 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0-android</TargetFramework>
-    <SupportedOSPlatformVersion>21.0</SupportedOSPlatformVersion>
+    <!-- libbox.aar requires API 23+ (Android 6.0 Marshmallow). Practically
+         universal at this point; KYOCERA A101BM Phase 1.A test runs Android
+         12 (API 31). We bumped from 21 → 23 to satisfy libbox's minSdk. -->
+    <SupportedOSPlatformVersion>23.0</SupportedOSPlatformVersion>
     <TargetPlatformVersion>34</TargetPlatformVersion>
     <OutputType>Exe</OutputType>
     <ApplicationId>com.ninitux.vpnrouter</ApplicationId>
@@ -61,11 +64,9 @@
        skip the ~20 MB Java→C# binding overhead — VpnRouterService.cs
        calls into libbox via raw JNI through the [Register] attributed
        handle in VPNRouter.Core/Platform/Android/AndroidSingBoxRuntime.cs. -->
-  <!--
   <ItemGroup>
     <AndroidLibrary Include="Lib\libbox.aar" Bind="false" />
   </ItemGroup>
-  -->
 
   <!-- VpnRouterService.cs lives in this project (compiled directly). The
        legacy VpnRouterService.kt sibling is kept for documentation only —

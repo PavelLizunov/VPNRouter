@@ -73,3 +73,6 @@ VPNRouter.Tests/screenshots/
 # team-wide config; settings.local.json is for "I trust these commands
 # on my machine".
 .claude/settings.local.json
+
+# v3.0 Android Phase 1.B — libbox.aar built locally (92 MB Go cross-compile)
+VPNRouter.Android/Lib/libbox*.aar
