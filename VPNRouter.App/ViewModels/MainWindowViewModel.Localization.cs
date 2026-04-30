@@ -457,6 +457,7 @@ public partial class MainWindowViewModel
     public string L_TipClearAllCache => Strings.TipClearAllCache;
     public string L_TipClearFailed => Strings.TipClearFailed;
     public string L_TipCloseServerDetail => Strings.TipCloseServerDetail;
+    public string L_TipDeleteServer => Strings.TipDeleteServer;
     public string L_TipDeepVerifyServers => Strings.TipDeepVerifyServers;
     public string L_TipFcFastScan => Strings.TipFcFastScan;
     public string L_TipFcSkipRu => Strings.TipFcSkipRu;

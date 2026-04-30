@@ -27,7 +27,11 @@ public static class Strings
     public static string TabTgWsProxy => "TgProxy";
 
     // ── Config mode ──
-    public static string VlessServers => Ru ? "VLESS Серверы" : "VLESS Servers";
+    // v2.30.1-r3: was "VLESS Серверы" / "VLESS Servers". Renamed to plain
+    // "Серверы" / "Servers" — the sub-tab is no longer VLESS-specific
+    // conceptually; future protocol support (Hysteria2, TUIC, SS2022)
+    // would also live here, so the VLESS prefix would be misleading.
+    public static string VlessServers => Ru ? "Серверы" : "Servers";
     public static string CustomConfigJson => Ru ? "Свой конфиг (JSON)" : "Custom Config (JSON)";
     public static string ModeManual => Ru ? "Ручной" : "Manual";
     public static string ModeSubscribe => Ru ? "Подписка" : "Subscribe";
@@ -1151,6 +1155,7 @@ public static class Strings
     public static string TipTcpTlsPing       => Ru ? "Пинг через TCP + TLS" : "TCP + TLS ping";
     public static string TipTestTcpTls       => Ru ? "Проверить TCP + TLS" : "Test TCP + TLS";
     public static string TipCloseServerDetail => Ru ? "Закрыть" : "Close";
+    public static string TipDeleteServer     => Ru ? "Удалить сервер" : "Delete server";
     public static string TipTestAllServers   => Ru
         ? "TCP + TLS проверка всех серверов"
         : "TCP + TLS probe to all servers";

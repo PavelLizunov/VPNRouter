@@ -2030,18 +2030,34 @@ public partial class MainWindowViewModel : ViewModelBase
     private void RefreshActiveIndicator()
     {
         var activeIp = _engine?.ActiveServerAddress;
+
+        // v2.30.1-r3 fix: gate the active dot by ConfigMode so a manual
+        // VLESS entry that happens to share an IP with a subscription
+        // server doesn't light up alongside the subscription one.
+        // User report 2026-05-01: "конфик с тем же ip также загорелся
+        // как активный".
+        var configMode = _settings?.App?.ConfigMode ?? "generated";
+        var isManualMode = configMode.Equals("generated", StringComparison.OrdinalIgnoreCase);
+        var isSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
+
         ServerViewModel? active = null;
 
         foreach (var s in Servers)
         {
-            var isActive = IsConnected && !string.IsNullOrEmpty(activeIp) && s.Server == activeIp;
+            var isActive = isManualMode
+                && IsConnected
+                && !string.IsNullOrEmpty(activeIp)
+                && s.Server == activeIp;
             s.IsActive = isActive;
             if (isActive) active = s;
         }
 
         foreach (var s in SubscriptionServers)
         {
-            var isActive = IsConnected && !string.IsNullOrEmpty(activeIp) && s.Server == activeIp;
+            var isActive = isSubscribeMode
+                && IsConnected
+                && !string.IsNullOrEmpty(activeIp)
+                && s.Server == activeIp;
             s.IsActive = isActive;
             if (isActive) active = s;
         }
@@ -4155,6 +4171,29 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (SelectedServer != null)
             Servers.Remove(SelectedServer);
+    }
+
+    /// <summary>
+    /// Per-row delete (the × button on each VLESS server row). Removes
+    /// the specific entry passed as the parameter without changing
+    /// selection — clicking the × on row N must NOT trigger
+    /// OnSelectedServerChanged (which would auto-reconnect to row N
+    /// when VPN is running). v2.30.1-r3 fix: user reported "при каждом
+    /// клике на другие конфиги для удаления, оно запускались, так как
+    /// я на них кликал, только потом я их удалял".
+    /// </summary>
+    [RelayCommand]
+    private void RemoveServerByEntry(ServerViewModel? entry)
+    {
+        if (entry == null) return;
+        // Don't change SelectedServer — the row's × button removes the
+        // row directly. If the entry being removed is the active one,
+        // clear SelectedServer too so the now-empty radio doesn't
+        // dangle on a freed row.
+        var wasSelected = ReferenceEquals(SelectedServer, entry);
+        Servers.Remove(entry);
+        if (wasSelected)
+            SelectedServer = Servers.FirstOrDefault();
     }
 
     [RelayCommand]

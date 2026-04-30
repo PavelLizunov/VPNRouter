@@ -175,7 +175,15 @@
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:ServerViewModel">
             <Border Classes="srv-row" Classes.active="{Binding IsActive}">
-              <Grid ColumnDefinitions="14,*,100,42,40,24" ColumnSpacing="8">
+              <!-- v2.30.1-r3: added per-row × delete button (column 6) so
+                   user can remove a row without first clicking it.
+                   Selecting a row auto-reconnects when VPN is running
+                   (intentional UX: "click server = switch"), but
+                   clicking the row JUST to delete it triggered an
+                   unwanted reconnect through the about-to-be-deleted
+                   server before the click reached the Remove button.
+                   Reported 2026-05-01. -->
+              <Grid ColumnDefinitions="14,*,100,42,40,24,24" ColumnSpacing="8">
 
                 <!-- Radio -->
                 <Border Grid.Column="0" Classes="rbx" Classes.active="{Binding IsActive}">
@@ -215,6 +223,13 @@
                         CommandParameter="{Binding}"
                         IsEnabled="{Binding !IsTesting}"
                         ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipTestTcpTls}"/>
+
+                <!-- Per-row delete (× ) — does NOT change SelectedServer -->
+                <Button Grid.Column="6" Classes="srv-refresh"
+                        Content="✕"
+                        Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).RemoveServerByEntryCommand}"
+                        CommandParameter="{Binding}"
+                        ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipDeleteServer}"/>
               </Grid>
             </Border>
           </DataTemplate>

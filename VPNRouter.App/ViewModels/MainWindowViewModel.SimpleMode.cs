@@ -364,8 +364,30 @@ public partial class MainWindowViewModel
         try
         {
             var entry = VlessUriParser.Parse(uri);
+
+            // v2.30.1-r3 bug fix: write BOTH the settings model AND the VM
+            // observable collection. SaveSettings rebuilds
+            // _settings.Vless.Servers from VM Servers (line 2912) right
+            // before the YAML write — so mutating only the settings side
+            // gets immediately undone, and the just-pasted server is
+            // wiped out. The next ToggleConnectionAsync then connects
+            // with whatever was in the OLD Servers list, and the user's
+            // pasted URL never surfaces in settings.yaml. Mirrors the
+            // pattern in TryApplySubscriptionUrl.
+            //
+            // User report 2026-05-01: "вставил vless ссылку … но у меня
+            // запустилась не она, а какой-то влесс конфиг из уже
+            // сохраненных. а она даже не сохранилась".
             _settings.Vless.Servers = new List<VlessServerEntry> { entry };
             _settings.Vless.ActiveServer = entry.Name ?? string.Empty;
+
+            // Replace VM Servers collection so SaveSettings persists the
+            // freshly-pasted entry.
+            Servers.Clear();
+            var vm = new ServerViewModel(entry);
+            Servers.Add(vm);
+            SelectedServer = vm;
+
             _settings.App.ConfigMode = "generated";
             _settings.App.ActiveSubscriptionServer = string.Empty;
             IsSubscribeMode = false;
