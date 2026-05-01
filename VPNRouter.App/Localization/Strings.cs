@@ -361,17 +361,23 @@ public static class Strings
     public static string IpSetFilter => Ru ? "IPSet фильтр" : "IPSet filter";
     public static string IpSetAny => Ru ? "Any (весь трафик)" : "Any (all traffic)";
     public static string IpSetLoaded => Ru ? "Loaded (список из файла)" : "Loaded (from list file)";
-    public static string IpSetNone => Ru ? "None (отключено)" : "None (disabled)";
+    // v2.30.4-r1 (UX-51 fix): align off-state copy with GameFilterOff
+    // ("Выкл" / "Off"). Pre-r1 had "None (отключено)" inconsistent with
+    // the dropdown sibling.
+    public static string IpSetNone => Ru ? "Выкл" : "Off";
 
     // Updates
     public static string UpdateIpSet => Ru ? "Обновить IPSet список" : "Update IPSet list";
+    // v2.30.4-r1 (UX-52 fix): align case with the sub-tab name "Zapret"
+    // (capitalized). Pre-r1 had "zapret" lowercase here while everywhere
+    // else it's "Zapret" — inconsistent.
     public static string AutoUpdateCheckLabel => Ru
-        ? "Авто-проверка обновлений zapret"
-        : "Auto-check zapret updates";
+        ? "Авто-проверка обновлений Zapret"
+        : "Auto-check Zapret updates";
 
     // Advanced
     public static string RunTestsLabel => Ru ? "Запустить тесты сети" : "Run network tests";
-    public static string RemoveServiceLabel => Ru ? "Удалить службу zapret" : "Remove zapret service";
+    public static string RemoveServiceLabel => Ru ? "Удалить службу Zapret" : "Remove Zapret service";
 
     public static string ApplyChanges => Ru ? "↻  Применить изменения" : "↻  Apply changes";
     public static string ChangesApplied => Ru ? "Изменения применены" : "Changes applied";
@@ -383,11 +389,21 @@ public static class Strings
     public static string AddAppHint => Ru ? "имя процесса (например Discord)" : "process name (e.g. Discord)";
 
     // ── App group display names ──
+    // v2.30.4-r1 (UX-37/38 fix): all profile keys now have user-facing
+    // display names. Pre-r1 only 5 of 9 categories were translated;
+    // others leaked snake_case JSON keys ("AI_Tools", "Privacy_Shell",
+    // "Messengers") into the UI.
     public static string GroupDisplayName(string internalName) => internalName switch
     {
         "Discord_Privacy" => "Discord",
-        "Work_Suite"      => Ru ? "Работа" : "Work",
+        "Messengers"      => Ru ? "Мессенджеры" : "Messengers",
+        "AI_Tools"        => Ru ? "AI-инструменты" : "AI tools",
         "Browsers"        => Ru ? "Браузеры" : "Browsers",
+        "Work_Suite"      => Ru ? "Работа" : "Work",
+        "Streaming"       => Ru ? "Стриминг" : "Streaming",
+        "Gaming"          => Ru ? "Игры" : "Gaming",
+        "Virtualization"  => Ru ? "Виртуализация" : "Virtualization",
+        "Privacy_Shell"   => Ru ? "Приватность" : "Privacy",
         "Terminal"        => Ru ? "Терминал" : "Terminal",
         "Custom Apps"     => Ru ? "Свои" : "Custom",
         _                 => internalName
@@ -466,9 +482,12 @@ public static class Strings
 
     public static string FcDeepTargetLabel => Ru ? "Цель:" : "Target:";
     public static string FcDeepExcludeRu   => Ru ? "Пропускать RU" : "Skip RU servers";
+    // v2.30.4-r1 (UX-66 fix): replaced literal "N" placeholder with
+    // copy that doesn't pretend to know an exact count. Pre-r1 said
+    // "Найдёт N рабочих" leaking the parameter symbol into the UI.
     public static string FcDeepHint        => Ru
-        ? "Скачает публичные VLESS-конфиги и проверит каждый реальной попыткой подключения. Найдёт N рабочих с пингом ниже порога."
-        : "Downloads public VLESS configs and tries each one with a real connection. Stops when N working ones meet your ping threshold.";
+        ? "Скачает публичные VLESS-конфиги и проверит каждый реальной попыткой подключения. Остановится когда наберётся достаточно рабочих с пингом ниже порога."
+        : "Downloads public VLESS configs and tries each one with a real connection. Stops once enough working ones meet your ping threshold.";
     public static string FcStatusMainVpnActive => Ru
         ? "⚠ Основной VPN активен — результаты проверки могут быть недостоверны. Отключите VPN перед глубокой проверкой."
         : "⚠ Main VPN is active — verification results may be unreliable. Disconnect VPN first.";
@@ -638,8 +657,8 @@ public static class Strings
         ? "Перепроверить все ранее найденные конфиги (игнорирует skip-recent). ~15 мин для 25k."
         : "Re-test every cached config (ignores skip-recent filter). ~15 min for 25k.";
     public static string FcDeepVerifyTooltip => Ru
-        ? "Скачивает свежие VLESS-конфиги из 14 источников и проверяет каждый реальным HTTPS-запросом через временный sing-box. Останавливается когда найдёт N рабочих с пингом ниже порога. ~1-3 минуты."
-        : "Fetches fresh VLESS configs from 14 sources and tests each with a real HTTPS request via a temporary sing-box. Stops when N working configs match the ping threshold. ~1-3 minutes.";
+        ? "Скачивает свежие VLESS-конфиги из 14 источников и проверяет каждый реальным HTTPS-запросом через временный sing-box. Останавливается когда наберётся достаточно рабочих с пингом ниже порога. ~1-3 минуты."
+        : "Fetches fresh VLESS configs from 14 sources and tests each with a real HTTPS request via a temporary sing-box. Stops once enough working configs match the ping threshold. ~1-3 minutes.";
 
     // v2.13.19 — Privacy warning on first Connect from Free Configs
     public static string FcSecWarnTitle => Ru
@@ -1203,11 +1222,19 @@ public static class Strings
 
     // Watermarks
     public static string WmZapretCustomArgs => "--wf-tcp=443 --dpi-desync=…";
-    public static string WmVlessUri         => "vless://uuid@server:443?…#name";
+    // v2.30.4-r1 (UX-26 fix): expand placeholder to advertise multi-protocol
+    // support shipped in v2.30.1 (vless/hysteria2/tuic/shadowsocks). Pre-r1
+    // users had no way to discover from the UI that hy2://, tuic:// or ss://
+    // are accepted in the same input.
+    public static string WmVlessUri         => "vless:// / hy2:// / tuic:// / ss://...#name";
     public static string WmTgProxyPort      => "1443";
     public static string WmTgProxySecret    => Ru ? "автоген" : "auto-generated";
 
     // Status init values
     public static string StatusStopped => Ru ? "Остановлен" : "Stopped";
     public static string StatusRunning => Ru ? "Работает"   : "Running";
+
+    // v2.30.4-r1 (SUGGEST-22 fix): manual update check inside Settings →
+    // Обновления tab.
+    public static string CurrentVersion => Ru ? "Текущая версия" : "Current version";
 }

@@ -1831,11 +1831,16 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         }
     }
 
+    // v2.30.4-r1 (UX-61 fix): localize the age string instead of hardcoding
+    // English. Pre-r1 the Free Configs subtitle said "Обновлено 1d ago" —
+    // mixing RU "Обновлено" with EN "1d ago". Now uses the same Lang
+    // signal as Strings to pick the matching locale.
     private static string FormatAge(TimeSpan t)
     {
-        if (t.TotalMinutes < 1)   return "just now";
-        if (t.TotalMinutes < 60)  return $"{(int)t.TotalMinutes}m ago";
-        if (t.TotalHours   < 24)  return $"{(int)t.TotalHours}h ago";
-        return $"{(int)t.TotalDays}d ago";
+        var ru = string.Equals(VPNRouter.App.Localization.Strings.Lang, "ru", StringComparison.OrdinalIgnoreCase);
+        if (t.TotalMinutes < 1)   return ru ? "только что" : "just now";
+        if (t.TotalMinutes < 60)  return ru ? $"{(int)t.TotalMinutes} мин назад" : $"{(int)t.TotalMinutes}m ago";
+        if (t.TotalHours   < 24)  return ru ? $"{(int)t.TotalHours} ч назад" : $"{(int)t.TotalHours}h ago";
+        return ru ? $"{(int)t.TotalDays} дн назад" : $"{(int)t.TotalDays}d ago";
     }
 }
