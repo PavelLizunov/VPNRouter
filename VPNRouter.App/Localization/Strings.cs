@@ -24,7 +24,11 @@ public static class Strings
     public static string TabNetwork => Ru ? "Сеть" : "Network";
     public static string TabSettings => Ru ? "Настройки" : "Settings";
     public static string TabZapret => "Zapret";
-    public static string TabTgWsProxy => "TgProxy";
+    // v2.30.6-r1 (UX-46 fix): sub-tab + every reference elsewhere in app
+    // ("Telegram-прокси" in Simple-mode hints, ServiceMasterSubtitle,
+    // AutostartBootSectionSub, etc.) used the user-friendly name. Sub-tab
+    // and all VM labels (LblTabTelegram / LblToolTgProxy) read from this.
+    public static string TabTgWsProxy => Ru ? "Telegram-прокси" : "Telegram proxy";
 
     // ── Config mode ──
     // v2.30.1-r3: was "VLESS Серверы" / "VLESS Servers". Renamed to plain
@@ -67,6 +71,10 @@ public static class Strings
     public static string CustomAppLabel => Ru
         ? "Добавить приложение (имя процесса):"
         : "Add custom app (process name):";
+    // v2.30.6-r1 (UX-41 fix): bilingual button label for the Apps tab
+    // "+ Add" button. Pre-r1 was hardcoded EN string in
+    // ApplicationsPage.axaml (D1 rule violation).
+    public static string AddCustomAppBtn => Ru ? "+ Добавить" : "+ Add";
 
     // ── Header ──
     public static string ThemeDark => Ru ? "\u25cf Тёмная" : "\u25cf Dark";
@@ -96,6 +104,11 @@ public static class Strings
     // v2.25.3 — extra column labels for the redesigned Servers / Subscribe rows
     public static string ColIp => "IP";
     public static string ColPing => "Ping";
+    // v2.30.6-r1 (UX-23/32 fix): tooltip on Ping column header — explains
+    // the "—" placeholder users see before any test has been run.
+    public static string ColPingTooltip => Ru
+        ? "Задержка в мс. «—» означает «не запускалось» — нажмите «Проверить все»."
+        : "Latency in ms. \"—\" means not measured — click \"Check all\".";
 
     // v2.25.4 — Settings/Routing radio-card descriptions (Phase 4 redesign).
     // Each tunnel mode gets a one-line subtitle under the title so the user
@@ -241,9 +254,12 @@ public static class Strings
     public static string AddCustomAppHint => Ru
         ? "Добавить приложение (имя процесса, например Discord, Chrome):"
         : "Add custom app (process name, e.g. Discord, Chrome):";
+    // v2.30.6-r1 (UX-25 fix): drop EN "Custom Config" + "outbound" inside
+    // the otherwise-Russian hint. Use natural RU "своим конфигом" +
+    // "исходящим" so the sentence reads cleanly in both languages.
     public static string TcpUdpHint => Ru
-        ? "VLESS+Reality маршрутизирует TCP. Для UDP (игры, QUIC) используйте Custom Config с TUIC или Hysteria2 outbound."
-        : "VLESS+Reality routes TCP only. For UDP (games, QUIC) use Custom Config with a TUIC or Hysteria2 outbound.";
+        ? "VLESS+Reality маршрутизирует TCP. Для UDP (игры, QUIC) используйте свой конфиг с TUIC- или Hysteria2-исходящим."
+        : "VLESS+Reality routes TCP only. For UDP (games, QUIC) use a custom config with a TUIC or Hysteria2 outbound.";
 
     // ── Bypass / Strict ──
     public static string BypassRussianTrafficLabel => Ru
@@ -1037,9 +1053,13 @@ public static class Strings
     public static string SmpSplitOption => Ru
         ? "Выбранные приложения"
         : "Selected apps";
+    // v2.30.6-r1 (UX-3 fix): old subtitle hardcoded specific apps ("Discord,
+    // браузеры, мессенджеры, рабочие") which doesn't always match actual
+    // selected profiles. Generic descriptor avoids the mismatch and lets
+    // the Apps tab list be the source of truth.
     public static string SmpSplitHint => Ru
-        ? "Discord, браузеры, мессенджеры, рабочие"
-        : "Discord, browsers, messengers, work apps";
+        ? "По списку выбранных приложений"
+        : "Based on your selected apps";
     public static string SmpFullOption => Ru ? "Весь трафик" : "All traffic";
     public static string SmpFullHint => Ru
         ? "Включая игры и банки"

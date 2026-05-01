@@ -271,7 +271,9 @@
             <TextBox Grid.Column="0" x:Name="CustomAppInput"
                      Watermark="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddAppHint}"
                      FontSize="11" Padding="6,4"/>
-            <Button Grid.Column="1" Content="+ Add"
+            <!-- v2.30.6-r1 (UX-41 fix): hardcoded "+ Add" → bilingual binding. -->
+            <Button Grid.Column="1"
+                    Content="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddCustomAppBtn}"
                     Command="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).AddCustomAppCommand}"
                     CommandParameter="{Binding #CustomAppInput.Text}"
                     Margin="6,0,0,0"

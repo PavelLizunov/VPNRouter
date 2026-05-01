@@ -143,8 +143,10 @@
                    Text="{Binding L_ColServer}"/>
         <TextBlock Grid.Column="2" Classes="srv-col-label"
                    Text="{Binding L_ColIp}"/>
+        <!-- v2.30.6-r1 (UX-23 fix): tooltip explains the "—" placeholder. -->
         <TextBlock Grid.Column="3" Classes="srv-col-label"
                    Text="{Binding L_ColPing}"
+                   ToolTip.Tip="{Binding L_ColPingTooltip}"
                    HorizontalAlignment="Center"/>
         <TextBlock Grid.Column="4" Classes="srv-col-label"
                    Text="{Binding L_ColPort}"

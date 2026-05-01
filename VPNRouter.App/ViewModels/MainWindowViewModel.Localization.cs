@@ -28,6 +28,7 @@ public partial class MainWindowViewModel
     public string L_AddAppHint => Strings.AddAppHint;
     public string L_AddCategory => Strings.AddCategory;
     public string L_AddConfig => Strings.AddConfig;
+    public string L_AddCustomAppBtn => Strings.AddCustomAppBtn;
     public string L_AddCustomAppHint => Strings.AddCustomAppHint;
     public string L_AddServerFirst => Strings.AddServerFirst;
     public string L_AddServers => Strings.AddServers;
@@ -165,6 +166,7 @@ public partial class MainWindowViewModel
     public string L_ColIp => Strings.ColIp;
     public string L_ColName => Strings.ColName;
     public string L_ColPing => Strings.ColPing;
+    public string L_ColPingTooltip => Strings.ColPingTooltip;
     public string L_ColPort => Strings.ColPort;
     public string L_ColSecurity => Strings.ColSecurity;
     public string L_ColServer => Strings.ColServer;

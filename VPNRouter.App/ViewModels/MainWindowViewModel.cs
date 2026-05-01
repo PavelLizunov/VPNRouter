@@ -479,30 +479,34 @@ public partial class MainWindowViewModel : ViewModelBase
     public bool NewRuleValueBorderColor => !NewRuleValueIsValid;
 
     /// <summary>Live "this action does X" hint shown under the Action
-    /// ComboBox in the Add-form. Per design `updateActionColor` JS handler.</summary>
+    /// ComboBox in the Add-form. Per design `updateActionColor` JS handler.
+    /// v2.30.6-r1 (UX-13): hints now spell out the concrete behavior so
+    /// users without sing-box background know what each action does.</summary>
     public string NewRuleActionHint => NewRuleAction switch
     {
-        "direct" => IsRussian ? "через VPN: нет" : "via VPN: no",
-        "proxy"  => IsRussian ? "через VPN: да"  : "via VPN: yes",
-        "block"  => IsRussian ? "трафик блокируется" : "traffic blocked",
+        "direct" => IsRussian ? "напрямую (мимо VPN)"     : "direct (bypass VPN)",
+        "proxy"  => IsRussian ? "через VPN-туннель"       : "through the VPN tunnel",
+        "block"  => IsRussian ? "блокировать соединение"  : "block the connection",
         _ => string.Empty,
     };
 
     /// <summary>Per-type guidance text shown under the Type ComboBox + as
-    /// the default Value-hint. From RulesPage.html `typeMeta[type].hint`.</summary>
+    /// the default Value-hint. From RulesPage.html `typeMeta[type].hint`.
+    /// v2.30.6-r1 (UX-13): every hint now embeds a concrete example so the
+    /// raw sing-box term ("domain_suffix") makes immediate sense.</summary>
     public string NewRuleTypeHint => NewRuleType switch
     {
-        "domain"         => IsRussian ? "полное доменное имя"          : "full domain name",
-        "domain_suffix"  => IsRussian ? "точное совпадение конца имени" : "exact suffix match",
-        "domain_keyword" => IsRussian ? "подстрока в имени"             : "substring match",
-        "ip_cidr"        => IsRussian ? "IPv4/IPv6 + маска /N"          : "IPv4/IPv6 + /N mask",
-        "port"           => IsRussian ? "один порт или список через запятую" : "single port or comma list",
-        "port_range"     => IsRussian ? "диапазон портов: 1000-2000"    : "port range: 1000-2000",
-        "network"        => IsRussian ? "tcp / udp"                     : "tcp / udp",
-        "process_name"   => IsRussian ? "имя исполняемого файла"        : "executable name",
-        "process_path"   => IsRussian ? "полный путь к .exe"            : "full .exe path",
-        "geosite"        => IsRussian ? "тег geosite (cn, ads, ...)"    : "geosite tag (cn, ads, ...)",
-        "geoip"          => IsRussian ? "тег geoip (cn, us, private)"   : "geoip tag (cn, us, private)",
+        "domain"         => IsRussian ? "точное имя (discord.com)"        : "exact match (discord.com)",
+        "domain_suffix"  => IsRussian ? "оканчивается на (.discord.com)"  : "ends with (.discord.com)",
+        "domain_keyword" => IsRussian ? "содержит (discord)"              : "contains (discord)",
+        "ip_cidr"        => IsRussian ? "IPv4/IPv6 + маска (10.0.0.0/8)"  : "IPv4/IPv6 + mask (10.0.0.0/8)",
+        "port"           => IsRussian ? "порт или список (53,853)"        : "port or list (53,853)",
+        "port_range"     => IsRussian ? "диапазон портов (1000-2000)"     : "port range (1000-2000)",
+        "network"        => IsRussian ? "tcp или udp"                     : "tcp or udp",
+        "process_name"   => IsRussian ? "имя процесса (Discord.exe)"      : "process name (Discord.exe)",
+        "process_path"   => IsRussian ? "полный путь к .exe"              : "full .exe path",
+        "geosite"        => IsRussian ? "тег geosite (cn, ads, …)"        : "geosite tag (cn, ads, …)",
+        "geoip"          => IsRussian ? "тег geoip (cn, us, private)"     : "geoip tag (cn, us, private)",
         _                => string.Empty,
     };
 

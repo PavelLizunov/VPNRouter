@@ -561,10 +561,14 @@
                   <TextBlock Text="{Binding L_RulesAddLabelAction}" FontSize="9"
                              FontWeight="SemiBold"
                              Foreground="{DynamicResource TextMutedBrush}"/>
+                  <!-- v2.30.6-r1 (UX-13 fix): ToolTip surfaces the live example
+                       on hover so users browsing the dropdown don't have to
+                       click each option to see what it does. -->
                   <ComboBox ItemsSource="{Binding AvailableRuleActions}"
                             SelectedItem="{Binding NewRuleAction}"
                             HorizontalAlignment="Stretch"
-                            FontSize="11" Padding="6,3" MinHeight="0"/>
+                            FontSize="11" Padding="6,3" MinHeight="0"
+                            ToolTip.Tip="{Binding NewRuleActionHint}"/>
                   <TextBlock Text="{Binding NewRuleActionHint}"
                              FontSize="9"
                              FontFamily="Consolas, 'SF Mono', monospace"
@@ -579,7 +583,8 @@
                   <ComboBox ItemsSource="{Binding AvailableRuleTypes}"
                             SelectedItem="{Binding NewRuleType}"
                             HorizontalAlignment="Stretch"
-                            FontSize="11" Padding="6,3" MinHeight="0"/>
+                            FontSize="11" Padding="6,3" MinHeight="0"
+                            ToolTip.Tip="{Binding NewRuleTypeHint}"/>
                   <TextBlock Text="{Binding NewRuleTypeHint}"
                              FontSize="9"
                              FontFamily="Consolas, 'SF Mono', monospace"
@@ -673,18 +678,20 @@
                          Foreground="{DynamicResource TextMutedBrush}"/>
               <!-- Row 1: action + type (50/50) -->
               <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                <!-- v2.30.6-r1 (UX-13 fix): tooltip carries concrete example
+                     instead of just the column header label. -->
                 <ComboBox Grid.Column="0"
                           ItemsSource="{Binding AvailableRuleActions}"
                           SelectedItem="{Binding NewRuleAction}"
                           HorizontalAlignment="Stretch"
                           FontSize="11" Padding="6,3" MinHeight="0"
-                          ToolTip.Tip="{Binding L_CustomRulesActionLabel}"/>
+                          ToolTip.Tip="{Binding NewRuleActionHint}"/>
                 <ComboBox Grid.Column="1"
                           ItemsSource="{Binding AvailableRuleTypes}"
                           SelectedItem="{Binding NewRuleType}"
                           HorizontalAlignment="Stretch"
                           FontSize="11" Padding="6,3" MinHeight="0"
-                          ToolTip.Tip="{Binding L_CustomRulesTypeLabel}"/>
+                          ToolTip.Tip="{Binding NewRuleTypeHint}"/>
               </Grid>
               <!-- Row 2: value (full width with live-validation) -->
               <TextBox Text="{Binding NewRuleValue}"
