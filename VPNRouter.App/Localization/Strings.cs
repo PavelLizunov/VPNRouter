@@ -37,7 +37,10 @@ public static class Strings
     public static string ModeSubscribe => Ru ? "Подписка" : "Subscribe";
     public static string ModeCustomConfig => Ru ? "Свой конфиг" : "Custom Config";
     public static string SubscribeMode => Ru ? "Подписка" : "Subscribe";
-    public static string SubscriptionUrlHint => Ru ? "URL подписки (subscription link)" : "Subscription URL";
+    // v2.30.5-r1 (UX-34 fix): drop the EN duplicate inside RU placeholder.
+    // Pre-r1 was "URL подписки (subscription link)" — same translation
+    // shown twice. Now just "URL подписки".
+    public static string SubscriptionUrlHint => Ru ? "URL подписки" : "Subscription URL";
     public static string SyncButton => Ru ? "Обновить" : "Sync";
     public static string Syncing => Ru ? "Синхронизация..." : "Syncing...";
     public static string SyncComplete(int count) => Ru ? $"Получено {count} серверов" : $"Fetched {count} servers";
@@ -259,7 +262,9 @@ public static class Strings
         ? "Health check каждые 5 секунд вместо 30. Уменьшает окно потенциальной утечки трафика при крахе sing-box."
         : "Health check every 5 seconds instead of 30. Reduces the leak window if sing-box silently hangs.";
     public static string ForceIpv4Label => Ru
-        ? "Только IPv4 (защита от IPv6 leak)"
+        // v2.30.5-r1 (UX-19 fix): drop the EN-RU mix "IPv6 leak" inside
+        // a Russian sentence. Use natural RU "IPv6-утечек".
+        ? "Только IPv4 (защита от IPv6-утечек)"
         : "Force IPv4 only (IPv6 leak protection)";
     public static string FlushDnsLabel => Ru
         ? "Очищать DNS кэш при подключении"
@@ -319,7 +324,8 @@ public static class Strings
     public static string TgProxyStop => Ru ? "Остановить Telegram Proxy" : "Stop Telegram Proxy";
     public static string TgProxyOpenInTelegram => Ru ? "Открыть в Telegram" : "Open in Telegram";
     public static string TgProxySetupOnce => Ru
-        ? "Нажмите 'Открыть в Telegram' один раз для настройки прокси. После этого просто Start/Stop."
+        // v2.30.5-r1 (UX-55 fix): EN "Start/Stop" inside RU sentence.
+        ? "Нажмите 'Открыть в Telegram' один раз для настройки прокси. После этого просто Запуск/Остановка."
         : "Click 'Open in Telegram' once to set up the proxy. After that just Start/Stop.";
     public static string OpenFolder => Ru ? "Открыть папку" : "Open folder";
     public static string OpenGitHub => "GitHub";
@@ -984,7 +990,7 @@ public static class Strings
 
     // Tooltips — Zapret / DPI
     public static string TipZapretAutoUpdate => Ru
-        ? "Каждые 24 часа проверять обновление zapret от Flowseal"
+        ? "Каждые 24 часа проверять обновление Zapret"
         : "Check for zapret updates from Flowseal every 24 hours";
 
     // Tooltips — Free Configs controls
@@ -1110,7 +1116,8 @@ public static class Strings
     public static string SmpMenuSwitchToAdv   => Ru ? "Перейти в Advanced"     : "Switch to Advanced";
     // v2.24.4 troubleshooting items (Level 2/3 self-healing)
     public static string SmpMenuHealthCheck   => Ru ? "Проверить состояние"    : "Run Health Check";
-    public static string SmpMenuSafeMode      => Ru ? "Перезапустить в Safe Mode" : "Restart in Safe Mode";
+    // v2.30.5-r1 (UX-68 fix): localize "Safe Mode" in Russian.
+    public static string SmpMenuSafeMode      => Ru ? "Перезапустить в безопасном режиме" : "Restart in Safe Mode";
     public static string SmpMenuResetConfig   => Ru ? "Сбросить настройки"     : "Reset config to defaults";
     public static string SmpMenuResetConfirm  => Ru ? "Нажмите ещё раз для сброса" : "Click again to confirm reset";
     public static string TipSmpMenuHealthCheck => Ru
@@ -1237,4 +1244,14 @@ public static class Strings
     // v2.30.4-r1 (SUGGEST-22 fix): manual update check inside Settings →
     // Обновления tab.
     public static string CurrentVersion => Ru ? "Текущая версия" : "Current version";
+
+    // v2.30.5-r1 (UX-29 fix): empty-state hero for the Custom Config
+    // (JSON) sub-tab. Pre-r1 was blank + a "Нажмите на конфиг для
+    // активации" hint with nothing to click; now explains the feature.
+    public static string CustomConfigsEmptyTitle => Ru
+        ? "У тебя пока нет своих конфигов"
+        : "No custom configs yet";
+    public static string CustomConfigsEmptyHint => Ru
+        ? "Свой конфиг — это готовый JSON-файл sing-box для нестандартных протоколов (TUIC, Hysteria2, Reality+gRPC и др.). Нажми «Добавить конфиг…» внизу чтобы импортировать."
+        : "A custom config is a ready sing-box JSON file for non-standard protocols (TUIC, Hysteria2, Reality+gRPC, etc.). Click «Add config…» below to import.";
 }

@@ -1709,7 +1709,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public string LblToolTgProxy => Strings.TabTgWsProxy;
     public string LblDpiBypassTab => Strings.TabZapret;
     public string LblDpiDescription => IsRussian
-        ? "Обход блокировок провайдера (zapret от Flowseal). Работает с Discord, YouTube, и другими заблокированными сервисами. Если стратегия не работает — пробуйте другую."
+        ? "Обход блокировок провайдера. Работает с Discord, YouTube, и другими заблокированными сервисами. Если стратегия не работает — пробуйте другую."
         : "Bypass ISP blocking (zapret by Flowseal). Works with Discord, YouTube, and other blocked services. If a strategy doesn't work — try another.";
     public string LblDpiStrategy => IsRussian ? "Стратегия" : "Strategy";
     public string LblUpdateZapret => IsRussian

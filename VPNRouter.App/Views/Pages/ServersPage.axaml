@@ -282,35 +282,58 @@
           IsVisible="{Binding !IsVlessMode}"
           RowDefinitions="*,Auto"
           Margin="10,8,10,4">
-      <ListBox Grid.Row="0"
-               ItemsSource="{Binding CustomConfigs}"
-               SelectedItem="{Binding SelectedCustomConfig}"
-               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-               ScrollViewer.VerticalScrollBarVisibility="Auto">
-        <ListBox.ItemsPanel>
-          <ItemsPanelTemplate>
-            <VirtualizingStackPanel/>
-          </ItemsPanelTemplate>
-        </ListBox.ItemsPanel>
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:CustomConfigViewModel">
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
-              <TextBlock Grid.Column="0" Text="●" Foreground="{DynamicResource SuccessSolidBrush}"
-                         IsVisible="{Binding IsActive}"
-                         VerticalAlignment="Center" Margin="0,0,6,0" FontSize="9"/>
-              <TextBlock Grid.Column="1" Text="{Binding Name}"
-                         FontWeight="{Binding IsActive, Converter={StaticResource ActiveFontConverter}}"
-                         VerticalAlignment="Center"/>
-              <TextBlock Grid.Column="3" Text="{Binding Protocols}"
-                         Opacity="0.6" Margin="8,0" VerticalAlignment="Center"/>
-              <TextBlock Grid.Column="4" Text="{Binding Server}"
-                         Opacity="0.4" VerticalAlignment="Center"/>
-            </Grid>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
+      <Grid Grid.Row="0">
+        <ListBox ItemsSource="{Binding CustomConfigs}"
+                 SelectedItem="{Binding SelectedCustomConfig}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+          <ListBox.ItemsPanel>
+            <ItemsPanelTemplate>
+              <VirtualizingStackPanel/>
+            </ItemsPanelTemplate>
+          </ListBox.ItemsPanel>
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:CustomConfigViewModel">
+              <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                <TextBlock Grid.Column="0" Text="●" Foreground="{DynamicResource SuccessSolidBrush}"
+                           IsVisible="{Binding IsActive}"
+                           VerticalAlignment="Center" Margin="0,0,6,0" FontSize="9"/>
+                <TextBlock Grid.Column="1" Text="{Binding Name}"
+                           FontWeight="{Binding IsActive, Converter={StaticResource ActiveFontConverter}}"
+                           VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="3" Text="{Binding Protocols}"
+                           Opacity="0.6" Margin="8,0" VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="4" Text="{Binding Server}"
+                           Opacity="0.4" VerticalAlignment="Center"/>
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- v2.30.5-r1 (UX-29 fix): empty-state hero shown when no
+             custom configs are present. Pre-r1 the area was blank
+             with only the "Нажмите на конфиг для активации" hint at
+             the bottom — implied an action that was impossible since
+             there was nothing to click. Now explains what custom
+             configs are + how to add one. -->
+        <StackPanel HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="8"
+                    MaxWidth="380"
+                    IsVisible="{Binding !CustomConfigs.Count}">
+          <TextBlock Text="{Binding L_CustomConfigsEmptyTitle}"
+                     FontSize="13" FontWeight="SemiBold"
+                     HorizontalAlignment="Center"
+                     Foreground="{DynamicResource TextSecondaryBrush}"/>
+          <TextBlock Text="{Binding L_CustomConfigsEmptyHint}"
+                     FontSize="11" Opacity="0.7"
+                     TextWrapping="Wrap"
+                     TextAlignment="Center"/>
+        </StackPanel>
+      </Grid>
       <TextBlock Grid.Row="1" Text="{Binding LblClickToActivateConfig}"
-                 FontSize="10" Opacity="0.5" Margin="0,4,0,0"/>
+                 FontSize="10" Opacity="0.5" Margin="0,4,0,0"
+                 IsVisible="{Binding CustomConfigs.Count}"/>
     </Grid>
 
     <!-- ═══ Bottom action bar ═══ -->

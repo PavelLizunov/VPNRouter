@@ -49,9 +49,10 @@ public partial class MainWindowViewModel
     private bool _isDeepTestingServers;
 
     /// <summary>"Deep verify" vs "Stop" text for the button.</summary>
+    /// v2.30.5-r1 (UX-24 fix): localize button label in Russian.
     public string ServerDeepButtonText => IsDeepTestingServers
         ? (IsRussian ? "Стоп" : "Stop")
-        : (IsRussian ? "Deep verify" : "Deep verify");
+        : (IsRussian ? "Глубокая проверка" : "Deep verify");
 
     // ── Single-server test (invoked per row) ──────────────────────────────
 

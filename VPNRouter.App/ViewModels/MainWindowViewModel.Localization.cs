@@ -374,6 +374,8 @@ public partial class MainWindowViewModel
     public string L_SmpMenuCheckLeaks => Strings.SmpMenuCheckLeaks;
     public string L_SmpMenuCheckUpdates => Strings.SmpMenuCheckUpdates;
     public string L_CurrentVersion => Strings.CurrentVersion;
+    public string L_CustomConfigsEmptyTitle => Strings.CustomConfigsEmptyTitle;
+    public string L_CustomConfigsEmptyHint => Strings.CustomConfigsEmptyHint;
     public string L_SmpMenuDiagnosticsSection => Strings.SmpMenuDiagnosticsSection;
     public string L_SmpMenuHealthCheck => Strings.SmpMenuHealthCheck;
     public string L_SmpMenuLanguage => Strings.SmpMenuLanguage;

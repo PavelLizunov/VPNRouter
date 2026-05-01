@@ -94,10 +94,12 @@
                     </Border>
                 </StackPanel>
 
-                <!-- ═══ Strategy ═══ -->
+                <!-- ═══ Strategy ═══
+                     v2.30.5-r1 (UX-47 fix): dropped redundant secondary
+                     "Стратегия" label below the page title — both showed
+                     the same word. Now only the page title remains. -->
                 <StackPanel Spacing="8" IsVisible="{Binding IsZapretStrategySection}">
                     <TextBlock Text="{Binding L_ZapretSecStrategy}" FontWeight="Bold" FontSize="13"/>
-                    <TextBlock Text="{Binding LblDpiStrategy}" FontWeight="SemiBold" Opacity="0.7" FontSize="10"/>
                     <ComboBox ItemsSource="{Binding ZapretStrategies}"
                               SelectedIndex="{Binding ZapretStrategyIndex}"
                               HorizontalAlignment="Stretch"
