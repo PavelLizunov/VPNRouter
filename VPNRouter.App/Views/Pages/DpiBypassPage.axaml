@@ -255,11 +255,17 @@
                             Command="{Binding RunZapretTestsCommand}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                             FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
+                    <!-- v2.30.3-r1 (UX-54 fix): destructive action gets
+                         Danger foreground so accidental clicks are less
+                         likely. Whole button is foreground-tinted; on
+                         hover the system Button hover bg keeps
+                         legibility. -->
                     <Button Content="{Binding L_RemoveServiceLabel}"
                             Command="{Binding RemoveZapretServiceCommand}"
                             IsEnabled="{Binding !IsZapretActionRunning}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
+                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"
+                            Foreground="{DynamicResource DangerSolidBrush}"/>
                     <Button Content="{Binding L_OpenServiceMenu}"
                             Command="{Binding OpenZapretServiceMenuCommand}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"

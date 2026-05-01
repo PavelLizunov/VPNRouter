@@ -9,7 +9,7 @@
         mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="680"
         x:Class="VPNRouter.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title=""
+        Title="VPNRouter"
         Width="520" Height="640"
         MinWidth="360" MinHeight="360"
         FontSize="10"
@@ -479,10 +479,15 @@
                                             Command="{Binding RestartInSafeModeCommand}"
                                             Content="{Binding L_SmpMenuSafeMode}"
                                             ToolTip.Tip="{Binding L_TipSmpMenuSafeMode}"/>
+                                    <!-- v2.30.3-r1 (UX-69 fix): destructive
+                                         "Reset config" item gets Danger
+                                         foreground tint so accidental clicks
+                                         are less likely. -->
                                     <Button Classes="menu-item"
                                             Command="{Binding ResetConfigCommand}"
                                             Content="{Binding ResetConfigMenuHeader}"
-                                            ToolTip.Tip="{Binding L_TipSmpMenuResetConfig}"/>
+                                            ToolTip.Tip="{Binding L_TipSmpMenuResetConfig}"
+                                            Foreground="{DynamicResource DangerSolidBrush}"/>
 
                                     <Border Classes="menu-divider"/>
 
@@ -576,16 +581,16 @@
                             <StackPanel Orientation="Horizontal" Spacing="4"/>
                         </ItemsPanelTemplate>
                     </ListBox.ItemsPanel>
-                    <ListBoxItem Content="{Binding LblTabManual}"      Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding LblTabSubscribe}"   Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding LblTabNetwork}"     Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding LblTabApps}"        Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding LblTabManual}"      Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding LblTabSubscribe}"   Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding LblTabNetwork}"     Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding LblTabApps}"        Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
                     <!-- v2.21.0: Tools tab hidden on Linux — its only sub-pages
                          are Zapret and TgProxy, both Windows-only. The tab
                          visibility uses IsZapretAvailable (same signal). -->
-                    <ListBoxItem Content="{Binding LblTabTools}"       Padding="12,6" FontSize="12" FontWeight="SemiBold"
+                    <ListBoxItem Content="{Binding LblTabTools}"       Padding="8,5" FontSize="12" FontWeight="SemiBold"
                                  IsVisible="{Binding IsZapretAvailable}"/>
-                    <ListBoxItem Content="{Binding LblTabFreeConfigs}" Padding="12,6" FontSize="12" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding LblTabFreeConfigs}" Padding="8,5" FontSize="12" FontWeight="SemiBold"/>
                 </ListBox>
             </ScrollViewer>
 

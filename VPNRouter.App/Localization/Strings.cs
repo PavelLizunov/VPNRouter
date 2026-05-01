@@ -100,11 +100,14 @@ public static class Strings
     public static string RoutingDescription => Ru
         ? "Определяет, какой трафик пойдёт через VPN."
         : "Determines which traffic goes through the VPN.";
-    public static string SplitTunnelTitle => Ru ? "Split Tunnel" : "Split Tunnel";
+    // v2.30.3-r1 (UX-9 D1 rule): localize tunnel mode titles. Previous
+    // pre-r1 used hardcoded English in both locales which violated the
+    // "no English in RU UI" project rule.
+    public static string SplitTunnelTitle => Ru ? "Раздельный туннель" : "Split Tunnel";
     public static string SplitTunnelSubtitle => Ru
         ? "Только выбранные приложения. Остальное идёт напрямую."
         : "Only selected apps. Everything else goes direct.";
-    public static string FullTunnelTitle => Ru ? "Full Tunnel" : "Full Tunnel";
+    public static string FullTunnelTitle => Ru ? "Полный туннель" : "Full Tunnel";
     public static string FullTunnelSubtitle => Ru
         ? "Весь трафик ОС через VPN, включая игры и банки."
         : "All OS traffic through VPN — games and banks included.";
@@ -281,12 +284,16 @@ public static class Strings
     public static string UpdateFailed => Ru ? "Ошибка обновления: {0}" : "Update failed: {0}";
 
     // ── Channel ──
+    // v2.30.3-r1 (BUG-7 fix): footer text shortened so it fits next to
+    // the Apply button at narrow window widths (510 px) without
+    // overlapping. Pre-r1 the auto-save hint was 44 chars + 38-char
+    // button = visible truncation behind the button background.
     public static string SettingsAutosaved => Ru
-        ? "✓ Настройки сохраняются автоматически при изменении"
-        : "✓ Settings are auto-saved on every change";
+        ? "Авто-сохранение"
+        : "Auto-saved";
     public static string ApplyNowReloadVpn => Ru
-        ? "↻ Применить сейчас (перезапустить VPN)"
-        : "↻ Apply now (reload VPN)";
+        ? "↻ Применить"
+        : "↻ Apply";
     public static string ApplyNowHint => Ru
         ? "Переприменить настройки к работающему VPN без переподключения (hot-reload через Clash API)"
         : "Re-apply settings to the running VPN without a reconnect (hot-reload via Clash API)";
@@ -701,11 +708,13 @@ public static class Strings
     // 2026-04-29: при RoutingMode=full весь content disabled без объяс-
     // нения; юзер думал что приложение сломано. Заменяем silent disable
     // на banner с объяснением + кнопка "Switch to split tunnel".
+    // v2.30.3-r1: tunnel name localized to match SplitTunnelTitle/
+    // FullTunnelTitle (Раздельный/Полный туннель).
     public static string AppsFullTunnelBanner => Ru
-        ? "Активен Full-tunnel — выбор приложений игнорируется, весь трафик идёт через VPN."
+        ? "Активен Полный туннель — выбор приложений игнорируется, весь трафик идёт через VPN."
         : "Full-tunnel mode is active. App selection is ignored — all traffic goes through VPN.";
     public static string AppsFullTunnelBannerAction => Ru
-        ? "Переключить на Split tunnel"
+        ? "Переключить на Раздельный туннель"
         : "Switch to split tunnel";
 
     // v2.29.0 — Custom direct rules (Network → Routing → expander).
@@ -720,9 +729,14 @@ public static class Strings
     public static string CustomRulesDescription => Ru
         ? "Свои правила для определённых доменов / IP / портов / процессов. Действия: direct (мимо VPN), proxy (через VPN), block (блокировать). ⓘ Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» имеют ВЫСШИЙ приоритет — если они включены, их правила сработают раньше ваших. Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически."
         : "Custom rules for specific domains / IPs / ports / processes. Actions: direct (bypass VPN), proxy (force through VPN), block (drop). ⓘ The toggles «Russian traffic via real IP» and «Block ads» have HIGHEST priority — if enabled, their rules fire before yours. Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.";
+    // v2.30.3-r1 (BUG-15 fix): broke long lines so the example template
+    // is readable at default ~510 px window width without horizontal
+    // scrolling. The pre-r1 placeholder had a 132-char Types comment
+    // line that was always cut off — users couldn't see the type list.
+    // Now wrapped across 3 short lines.
     public static string CustomRulesPlaceholder => Ru
-        ? "# Одно правило на строку. Формат: <action> <type> <value> [# комментарий]\n# Actions: direct / proxy / block\n# Types: domain / domain_suffix / domain_keyword / ip_cidr / port / port_range / network / process_name / geosite / geoip\n# Несколько значений через запятую. Отключить — '!' в начале строки.\n\ndirect ip_cidr 10.0.0.0/8, 192.168.0.0/16    # LAN\nproxy domain_suffix .corp.example            # форсировать через VPN\nblock geosite ads                            # блокировать рекламу\n!block port 53                               # отключённое правило"
-        : "# One rule per line. Format: <action> <type> <value> [# comment]\n# Actions: direct / proxy / block\n# Types: domain / domain_suffix / domain_keyword / ip_cidr / port / port_range / network / process_name / geosite / geoip\n# Multi-value: comma-separated. Disable: prefix '!'.\n\ndirect ip_cidr 10.0.0.0/8, 192.168.0.0/16    # LAN\nproxy domain_suffix .corp.example            # force through VPN\nblock geosite ads                            # block ad domains\n!block port 53                               # disabled rule";
+        ? "# Одно правило на строку.\n# Формат: <action> <type> <value> [# комментарий]\n# Actions: direct / proxy / block\n# Types: domain · domain_suffix · domain_keyword\n#        ip_cidr · port · port_range · network\n#        process_name · geosite · geoip\n# Несколько значений через запятую.\n# Отключить — '!' в начале строки.\n\ndirect ip_cidr 10.0.0.0/8, 192.168.0.0/16  # LAN\nproxy domain_suffix .corp.example          # через VPN\nblock geosite ads                          # реклама\n!block port 53                             # отключено"
+        : "# One rule per line.\n# Format: <action> <type> <value> [# comment]\n# Actions: direct / proxy / block\n# Types: domain · domain_suffix · domain_keyword\n#        ip_cidr · port · port_range · network\n#        process_name · geosite · geoip\n# Multi-value: comma-separated.\n# Disable: prefix '!'.\n\ndirect ip_cidr 10.0.0.0/8, 192.168.0.0/16  # LAN\nproxy domain_suffix .corp.example          # via VPN\nblock geosite ads                          # ads\n!block port 53                             # disabled";
     public static string CustomRulesErrorHeader => Ru
         ? "Ошибки парсинга:"
         : "Parse errors:";
@@ -834,9 +848,13 @@ public static class Strings
     public static string RulesEditorDirty => Ru
         ? "● несохранённые изменения"
         : "● unsaved changes";
+    // v2.30.3-r1 (UX-16 fix): the parser uses '!' as the disable
+    // prefix (CustomRulesParser line 85: StartsWith("!")), not "# off"
+    // which was a misleading documentation. Brought hint in line with
+    // the actual parser + the example placeholder ('!block port 53').
     public static string RulesEditorFormatHint => Ru
-        ? "Формат: action  type  value  # comment.   Выключить правило: # или # off в начале строки.   Пустые строки игнорируются."
-        : "Format: action  type  value  # comment.   Disable a rule: # or # off at start of line.   Empty lines are ignored.";
+        ? "Формат: action  type  value  # comment.   Выключить правило: '!' в начале строки.   Пустые строки игнорируются."
+        : "Format: action  type  value  # comment.   Disable a rule: '!' at start of line.   Empty lines are ignored.";
 
     // Help banner — replaces the dense single-paragraph description.
     // Bullet points highlight the toggle precedence + LAN auto-direct +

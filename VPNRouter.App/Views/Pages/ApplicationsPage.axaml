@@ -114,10 +114,17 @@
       </Grid>
     </Border>
 
+    <!-- v2.30.3-r1 (BUG-36 fix): when Full Tunnel is active the sidebar
+         category list looked clickable (low opacity but no cursor hint),
+         users clicked categories 5+ times before realizing it's no-op.
+         Now the disabled state is more pronounced + a not-allowed cursor
+         appears on hover so the visual disabled-ness matches the actual
+         IsHitTestVisible=false behaviour. -->
     <Grid Grid.Row="1"
           ColumnDefinitions="120,*"
           Opacity="{Binding IsSplitTunnel, Converter={x:Static conv:BoolTo10or05Converter.Instance}}"
-          IsHitTestVisible="{Binding IsSplitTunnel}">
+          IsHitTestVisible="{Binding IsSplitTunnel}"
+          Cursor="{Binding IsFullTunnel, Converter={x:Static conv:FullTunnelCursorConverter.Instance}}">
 
     <!-- ─── MASTER (left): category list + inline add ─── -->
     <Border Grid.Column="0"

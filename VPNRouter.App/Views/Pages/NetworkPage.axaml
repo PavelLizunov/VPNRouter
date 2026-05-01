@@ -323,77 +323,81 @@
                Import/Export. The toggle replaces the bottom Advanced
                expander; Cards is default friendly view, Edit is the
                power-user textarea. -->
-          <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="6">
-            <TextBlock Grid.Column="0"
-                       Text="{Binding LblSettingsRules}"
+          <!-- v2.30.3-r1 (BUG-10/11 fix): pre-r1 single-row layout
+               (*,Auto,Auto,Auto) caused the page title "Правила" to
+               truncate to "Прав" + Import/Export pills to ellipsize at
+               narrow window widths because the * column shrank below
+               its min-content. Now title is on its own row and all
+               buttons live in a second row with WrapPanel so they
+               wrap to a third visual line if needed. -->
+          <StackPanel Spacing="6">
+            <TextBlock Text="{Binding LblSettingsRules}"
                        FontWeight="Bold" FontSize="13"
                        VerticalAlignment="Center"/>
-            <!-- Segmented toggle (▦ Cards · ✎ Text). Each button is
-                 borderless when inactive, filled+accent when active.
-                 Sits in a Sunken-bg pill for visual grouping per
-                 the design's `.view-seg` pattern. -->
-            <Border Grid.Column="1"
-                    Padding="2"
-                    CornerRadius="{StaticResource RadiusSm}"
-                    Background="{DynamicResource SurfaceSunkenBrush}"
-                    BorderThickness="0"
-                    VerticalAlignment="Center">
-              <StackPanel Orientation="Horizontal" Spacing="2">
-                <Button Content="{Binding L_RulesViewCards}"
-                        Command="{Binding SetRulesViewCardsCommand}"
-                        FontSize="10" FontWeight="SemiBold"
-                        Padding="8,3" MinHeight="0"
-                        BorderThickness="0"
-                        CornerRadius="{StaticResource RadiusXs}"
-                        ToolTip.Tip="{Binding L_RulesViewCardsTooltip}"
-                        Background="{Binding IsRulesViewCards,
-                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
-                                     ConverterParameter=SurfaceBaseBrush|Transparent}"
-                        Foreground="{Binding IsRulesViewCards,
-                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
-                                     ConverterParameter=AccentFgBrush|TextSecondaryBrush}"/>
-                <!-- v2.30.0-r12 — third Read view-mode button per design
-                     RulesExplorations.html `▦ Cards · ☰ Read · ✎ Edit`.
-                     Read = grouped monospace display, no editing. -->
-                <Button Content="{Binding L_RulesViewRead}"
-                        Command="{Binding SetRulesViewReadCommand}"
-                        FontSize="10" FontWeight="SemiBold"
-                        Padding="8,3" MinHeight="0"
-                        BorderThickness="0"
-                        CornerRadius="{StaticResource RadiusXs}"
-                        ToolTip.Tip="{Binding L_RulesViewReadTooltip}"
-                        Background="{Binding IsRulesViewRead,
-                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
-                                     ConverterParameter=SurfaceBaseBrush|Transparent}"
-                        Foreground="{Binding IsRulesViewRead,
-                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
-                                     ConverterParameter=AccentFgBrush|TextSecondaryBrush}"/>
-                <Button Content="{Binding L_RulesViewEdit}"
-                        Command="{Binding SetRulesViewEditCommand}"
-                        FontSize="10" FontWeight="SemiBold"
-                        Padding="8,3" MinHeight="0"
-                        BorderThickness="0"
-                        CornerRadius="{StaticResource RadiusXs}"
-                        ToolTip.Tip="{Binding L_RulesViewEditTooltip}"
-                        Background="{Binding IsRulesViewEdit,
-                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
-                                     ConverterParameter=SurfaceBaseBrush|Transparent}"
-                        Foreground="{Binding IsRulesViewEdit,
-                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
-                                     ConverterParameter=AccentFgBrush|TextSecondaryBrush}"/>
-              </StackPanel>
-            </Border>
-            <Button Grid.Column="2"
-                    Content="{Binding L_CustomRulesImport}"
-                    Command="{Binding ImportCustomRulesCommand}"
-                    FontSize="10" Padding="8,3" MinHeight="0"
-                    ToolTip.Tip="{Binding L_CustomRulesImportTooltip}"/>
-            <Button Grid.Column="3"
-                    Content="{Binding L_CustomRulesExport}"
-                    Command="{Binding ExportCustomRulesCommand}"
-                    FontSize="10" Padding="8,3" MinHeight="0"
-                    ToolTip.Tip="{Binding L_CustomRulesExportTooltip}"/>
-          </Grid>
+            <WrapPanel Orientation="Horizontal" ItemHeight="0">
+              <!-- Segmented toggle (▦ Cards · ☰ Read · ✎ Edit). Each
+                   button is borderless when inactive, filled+accent
+                   when active. Sits in a Sunken-bg pill for visual
+                   grouping per the design's `.view-seg` pattern. -->
+              <Border Margin="0,0,6,0"
+                      Padding="2"
+                      CornerRadius="{StaticResource RadiusSm}"
+                      Background="{DynamicResource SurfaceSunkenBrush}"
+                      BorderThickness="0"
+                      VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                  <Button Content="{Binding L_RulesViewCards}"
+                          Command="{Binding SetRulesViewCardsCommand}"
+                          FontSize="10" FontWeight="SemiBold"
+                          Padding="8,3" MinHeight="0"
+                          BorderThickness="0"
+                          CornerRadius="{StaticResource RadiusXs}"
+                          ToolTip.Tip="{Binding L_RulesViewCardsTooltip}"
+                          Background="{Binding IsRulesViewCards,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=SurfaceBaseBrush|Transparent}"
+                          Foreground="{Binding IsRulesViewCards,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=AccentFgBrush|TextSecondaryBrush}"/>
+                  <Button Content="{Binding L_RulesViewRead}"
+                          Command="{Binding SetRulesViewReadCommand}"
+                          FontSize="10" FontWeight="SemiBold"
+                          Padding="8,3" MinHeight="0"
+                          BorderThickness="0"
+                          CornerRadius="{StaticResource RadiusXs}"
+                          ToolTip.Tip="{Binding L_RulesViewReadTooltip}"
+                          Background="{Binding IsRulesViewRead,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=SurfaceBaseBrush|Transparent}"
+                          Foreground="{Binding IsRulesViewRead,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=AccentFgBrush|TextSecondaryBrush}"/>
+                  <Button Content="{Binding L_RulesViewEdit}"
+                          Command="{Binding SetRulesViewEditCommand}"
+                          FontSize="10" FontWeight="SemiBold"
+                          Padding="8,3" MinHeight="0"
+                          BorderThickness="0"
+                          CornerRadius="{StaticResource RadiusXs}"
+                          ToolTip.Tip="{Binding L_RulesViewEditTooltip}"
+                          Background="{Binding IsRulesViewEdit,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=SurfaceBaseBrush|Transparent}"
+                          Foreground="{Binding IsRulesViewEdit,
+                                       Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                       ConverterParameter=AccentFgBrush|TextSecondaryBrush}"/>
+                </StackPanel>
+              </Border>
+              <Button Margin="0,0,6,0"
+                      Content="{Binding L_CustomRulesImport}"
+                      Command="{Binding ImportCustomRulesCommand}"
+                      FontSize="10" Padding="8,3" MinHeight="0"
+                      ToolTip.Tip="{Binding L_CustomRulesImportTooltip}"/>
+              <Button Content="{Binding L_CustomRulesExport}"
+                      Command="{Binding ExportCustomRulesCommand}"
+                      FontSize="10" Padding="8,3" MinHeight="0"
+                      ToolTip.Tip="{Binding L_CustomRulesExportTooltip}"/>
+            </WrapPanel>
+          </StackPanel>
 
           <!-- Help banner — v2.30.0-r12 structured per design `.help`:
                bold heading + 3 bullets with FontWeight=SemiBold for
@@ -2077,7 +2081,10 @@
             BorderThickness="0,1,0,0"
             BorderBrush="{DynamicResource BorderDefaultBrush}"
             Background="{DynamicResource SurfaceSunkenBrush}">
-      <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+      <!-- v2.30.3-r1 (BUG-7 fix): added TextTrimming="CharacterEllipsis"
+           so even if a future locale string is too long, it ellipsizes
+           cleanly instead of being painted over by the Apply button. -->
+      <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center" ColumnSpacing="8">
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
           <TextBlock Text="✓" FontSize="11"
                      Foreground="{DynamicResource SuccessSolidBrush}"
@@ -2085,7 +2092,8 @@
           <TextBlock Text="{Binding L_SettingsAutosaved}"
                      FontSize="10" FontWeight="SemiBold"
                      Foreground="{DynamicResource SuccessFgBrush}"
-                     VerticalAlignment="Center"/>
+                     VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis"/>
         </StackPanel>
         <Button Grid.Column="1"
                 Content="{Binding L_ApplyNowReloadVpn}"

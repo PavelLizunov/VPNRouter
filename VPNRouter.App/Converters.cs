@@ -66,6 +66,25 @@ public class BoolTo10or05Converter : IValueConverter
 }
 
 /// <summary>
+/// v2.30.3-r1 (BUG-36 fix) — converts <c>IsFullTunnel</c> bool into an
+/// Avalonia <c>Cursor</c> so disabled-but-visible UI shows a "not allowed"
+/// cursor on hover rather than the default arrow. Lets the user feel the
+/// disabled state in addition to seeing the opacity fade.
+/// </summary>
+public class FullTunnelCursorConverter : IValueConverter
+{
+    public static readonly FullTunnelCursorConverter Instance = new();
+    private static readonly Avalonia.Input.Cursor _no =
+        new(Avalonia.Input.StandardCursorType.No);
+    private static readonly Avalonia.Input.Cursor _arrow =
+        new(Avalonia.Input.StandardCursorType.Arrow);
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is bool b && b ? _no : _arrow;
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>
 /// v2.30.0-r2 — action chip color converter for the structured rules
 /// list in Network → Rules. Maps the rule action string to a colored
 /// SolidColorBrush:
