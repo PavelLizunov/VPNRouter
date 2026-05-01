@@ -4560,9 +4560,25 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 _settings.Vless.Servers = aggregated;
                 _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
-                _settings.App.ConfigMode = "generated";
+                // v2.30.2-r2 Bug 2A fix: do NOT force ConfigMode=generated
+                // here. The legacy code did this so VlessServersResolver
+                // wouldn't re-aggregate (since we already did). But it
+                // also broke RefreshActiveIndicator's ConfigMode gate —
+                // with ConfigMode=generated the indicator loop only paints
+                // the manual Servers list, leaving the Subscriptions list
+                // dot dark even after a successful subscribe-mode connect.
+                // User report 2026-05-01:
+                // «Зеленый кружочек в подписках не появляеться, хотя к
+                //  кликнутому конфигу есть подключение».
+                //
+                // Keeping ConfigMode="subscribe" is harmless to the engine:
+                // VlessServersResolver re-aggregates idempotently (same
+                // content as we just wrote into Vless.Servers), and the
+                // engine reads Vless.Servers + Vless.ActiveServer the same
+                // way regardless of ConfigMode. RefreshActiveIndicator can
+                // now correctly identify the active subscription row.
                 _logger?.Information(
-                    "[VM] ReconnectAsync.Subscription: aggregated {N} servers, ActiveServer={A}",
+                    "[VM] ReconnectAsync.Subscription: aggregated {N} servers, ActiveServer={A}, ConfigMode preserved=subscribe",
                     aggregated.Count, _settings.Vless.ActiveServer);
             }
 
