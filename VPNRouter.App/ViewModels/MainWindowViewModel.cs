@@ -3218,7 +3218,28 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 _settings.Vless.Servers = aggregatedServers;
                 _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
-                _settings.App.ConfigMode = "generated";
+                // v2.30.2-r3 Bug 2A fix #2: same fix as r2's
+                // ReconnectAsync.Subscription branch — do NOT force
+                // ConfigMode=generated. The initial-connect path here
+                // had the same bug-for-bug indicator gate problem:
+                // RefreshActiveIndicator() reads ConfigMode and gates
+                // SubscriptionServers list highlighting on
+                // ConfigMode=="subscribe". Forcing to "generated"
+                // killed the green dot on the Subscriptions list even
+                // though the engine connected correctly.
+                //
+                // Caught during in-app smoke test on r2 — clicking
+                // Запустить VPN button on a sub server connected fine
+                // ("Подключено [full] → de-01 443 main-brat") but the
+                // row indicator stayed dark. Same fix as r2 reconnect.
+                //
+                // Engine still uses Vless.Servers + Vless.ActiveServer
+                // we just wrote. Resolver re-aggregates idempotently
+                // when ConfigMode=subscribe — same content, same
+                // active. Net: identical engine behaviour, correct UI.
+                _logger?.Information(
+                    "[VM] ToggleConnectionAsync.Connect.Subscription: aggregated {N} servers, ActiveServer={A}, ConfigMode preserved=subscribe",
+                    aggregatedServers.Count, _settings.Vless.ActiveServer);
             }
 
             // macOS: ensure sudo access (one-time password prompt)
