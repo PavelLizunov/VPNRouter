@@ -334,7 +334,11 @@
             <TextBlock Text="{Binding LblSettingsRules}"
                        FontWeight="Bold" FontSize="13"
                        VerticalAlignment="Center"/>
-            <WrapPanel Orientation="Horizontal" ItemHeight="0">
+            <!-- v2.30.3-r2: дROPPED ItemHeight="0" - it forced all items
+                 to be 0px tall (invisible). User report: «А почему ты
+                 убрал кнопки Карточки Список Текст Импорт Экспорт».
+                 The buttons were there but with zero height. -->
+            <WrapPanel Orientation="Horizontal">
               <!-- Segmented toggle (▦ Cards · ☰ Read · ✎ Edit). Each
                    button is borderless when inactive, filled+accent
                    when active. Sits in a Sunken-bg pill for visual
