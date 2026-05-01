@@ -2034,11 +2034,26 @@ public partial class MainWindowViewModel : ViewModelBase
         // v2.30.1-r3 fix: gate the active dot by ConfigMode so a manual
         // VLESS entry that happens to share an IP with a subscription
         // server doesn't light up alongside the subscription one.
-        // User report 2026-05-01: "конфик с тем же ip также загорелся
-        // как активный".
+        // v2.30.1-r6 fix: also disambiguate WITHIN each list — when two
+        // entries share an IP (e.g. port 443 + port 8443 on the same
+        // host, or VLESS + Hysteria2 on the same host), the previous
+        // IP-only match lit BOTH up. User report 2026-05-01: "у меня
+        // 2 конфига на 1 ip и при включения одного из них подсвечиваются
+        // оба, будто я включил не 1 а 2".
+        //
+        // Match priority:
+        //   1. Name == settings.Vless.ActiveServer (manual mode) /
+        //      App.ActiveSubscriptionServer (subscribe mode) — the
+        //      authoritative "which entry was picked" signal.
+        //   2. Fallback to IP match when no name is set (legacy entries).
+        //
+        // The name path picks exactly one row even if many share an IP.
         var configMode = _settings?.App?.ConfigMode ?? "generated";
         var isManualMode = configMode.Equals("generated", StringComparison.OrdinalIgnoreCase);
         var isSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
+
+        var manualActiveName = _settings?.Vless?.ActiveServer;
+        var subscriptionActiveName = _settings?.App?.ActiveSubscriptionServer;
 
         ServerViewModel? active = null;
 
@@ -2047,7 +2062,7 @@ public partial class MainWindowViewModel : ViewModelBase
             var isActive = isManualMode
                 && IsConnected
                 && !string.IsNullOrEmpty(activeIp)
-                && s.Server == activeIp;
+                && IsRowActive(s, activeIp, manualActiveName);
             s.IsActive = isActive;
             if (isActive) active = s;
         }
@@ -2057,12 +2072,34 @@ public partial class MainWindowViewModel : ViewModelBase
             var isActive = isSubscribeMode
                 && IsConnected
                 && !string.IsNullOrEmpty(activeIp)
-                && s.Server == activeIp;
+                && IsRowActive(s, activeIp, subscriptionActiveName);
             s.IsActive = isActive;
             if (isActive) active = s;
         }
 
         ActiveServerChanged?.Invoke(active);
+    }
+
+    /// <summary>
+    /// v2.30.1-r6: disambiguate "active" rows when two entries share
+    /// the same IP. If we have a known active-name (from
+    /// <c>Vless.ActiveServer</c> or <c>App.ActiveSubscriptionServer</c>),
+    /// only the row whose <c>Name</c> matches lights up. Otherwise we
+    /// fall back to the legacy IP-only match so settings.yaml files
+    /// from before this change still work.
+    /// </summary>
+    private static bool IsRowActive(ServerViewModel row, string activeIp, string? activeName)
+    {
+        if (row.Server != activeIp)
+            return false;
+
+        // No active-name available → legacy IP-only behaviour.
+        if (string.IsNullOrWhiteSpace(activeName))
+            return true;
+
+        // Active-name available → require an exact name match. This
+        // prevents two entries with the same IP from both lighting up.
+        return string.Equals(row.Name, activeName, StringComparison.OrdinalIgnoreCase);
     }
 
     private void DetectServiceManagedVpn()
