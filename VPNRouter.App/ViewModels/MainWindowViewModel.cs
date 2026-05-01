@@ -228,10 +228,32 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnSelectedTabIndexChanged(int value)
     {
         if (_isLoadingUI || _isReconnecting) return;
+        // v2.30.2-r1 diag: log every tab transition so the next repro of
+        // "Servers tab opened in wrong sub-state" is unambiguous.
+        _logger?.Information(
+            "[VM] OnSelectedTabIndexChanged tab={Tab} (was IsVlessMode={V}, IsSubscribeMode={S}, ServerModeIndex={I})",
+            value, IsVlessMode, IsSubscribeMode, SelectedServerModeIndex);
         if (value == 0) // Manual tab
         {
             IsVlessMode = true;
             IsSubscribeMode = false;
+            // v2.30.2-r1 Bug 1 fix: when navigating into the Servers tab,
+            // the sub-tab visual selection must match what the page is
+            // actually showing. If the user previously had ConfigMode=
+            // "subscribe" → "custom" → "subscribe" (peeking) → switch to
+            // Servers tab, the SelectedServerModeIndex could be stuck on
+            // 1 (Custom) from the peek, while the page now wants to
+            // show VLESS rows. Re-sync to the data-driven default.
+            var hasManual = Servers.Count > 0;
+            var hasCustom = CustomConfigs.Count > 0;
+            var desiredSubTab = (hasManual || !hasCustom) ? 0 : 1;
+            if (SelectedServerModeIndex != desiredSubTab)
+            {
+                _logger?.Information(
+                    "[VM] OnSelectedTabIndexChanged: aligning sub-tab {From}->{To} (manual={M}, custom={C})",
+                    SelectedServerModeIndex, desiredSubTab, Servers.Count, CustomConfigs.Count);
+                SelectedServerModeIndex = desiredSubTab;
+            }
         }
         else if (value == 1) // Subscribe tab
         {
@@ -703,6 +725,11 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnSelectedServerModeIndexChanged(int value)
     {
         if (_isLoadingUI) return;
+        // v2.30.2-r1 diag: trace sub-tab clicks so the SaveSettings r2
+        // guard activations are auditable from a single VM event.
+        _logger?.Information(
+            "[VM] OnSelectedServerModeIndexChanged value={V} (was IsVlessMode={IV}, IsSubscribeMode={IS})",
+            value, IsVlessMode, IsSubscribeMode);
         // Sync IsVlessMode with sub-tab index (0=VLESS, 1=Custom)
         IsVlessMode = value == 0;
         SaveSettings();
@@ -2206,7 +2233,14 @@ public partial class MainWindowViewModel : ViewModelBase
         var configMode = _settings.App.ConfigMode ?? "generated";
         IsSubscribeMode = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
         IsVlessMode = !configMode.Equals("custom", StringComparison.OrdinalIgnoreCase) && !IsSubscribeMode;
-        SelectedServerModeIndex = IsVlessMode ? 0 : 1;
+        // v2.30.2-r1 Bug 1 fix: SelectedServerModeIndex init is now
+        // data-driven (defer to after Servers/CustomConfigs are populated
+        // — see section below). The legacy `IsVlessMode ? 0 : 1` mirror
+        // forced the Servers page to land on "Custom" sub-tab whenever
+        // the user was in Subscribe mode, even though the page would
+        // visually highlight "Custom" while the actual VLESS list was
+        // shown. User report 2026-05-01: «после открытия страницы
+        // сервер выделено Кастомные конфиги хотя открыто серверы».
         SubscriptionUrl = _settings.App.SubscriptionUrl ?? "";
         // Set initial tab: 0=Manual, 1=Subscribe, 2=Network, 3=Applications
         SelectedTabIndex = IsSubscribeMode ? 1 : 0;
@@ -2362,6 +2396,25 @@ public partial class MainWindowViewModel : ViewModelBase
             _settings.App.ActiveCustomConfig = activeConfig.Name;
         }
         SelectedCustomConfig = activeConfig;
+
+        // v2.30.2-r1 Bug 1 fix: data-driven sub-tab default. Now that
+        // both Servers + CustomConfigs are populated, pick the sub-tab
+        // that actually has content to show:
+        //   - Servers list non-empty (or CustomConfigs empty) → "Серверы" (0)
+        //   - Servers empty AND CustomConfigs non-empty → "Свои конфиги" (1)
+        //
+        // This matters because the Subscribe-mode user typically has zero
+        // CustomConfigs but does have manual VLESS rows in Servers — the
+        // pre-r1 logic mirrored ConfigMode and forced sub-tab=1 (Custom),
+        // which highlighted the wrong sub-tab visually while the page
+        // continued to render the VLESS list.
+        var subTabHasManual = Servers.Count > 0;
+        var subTabHasCustom = CustomConfigs.Count > 0;
+        var subTabIndex = (subTabHasManual || !subTabHasCustom) ? 0 : 1;
+        SelectedServerModeIndex = subTabIndex;
+        _logger?.Information(
+            "[VM] Sub-tab init: ServerModeIndex={Idx} (manual={M}, custom={C}, configMode={CM})",
+            subTabIndex, Servers.Count, CustomConfigs.Count, _settings.App.ConfigMode);
 
         // Load apps from profiles + custom apps
         LoadApps();
@@ -4338,14 +4391,38 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private bool _isReconnecting;
 
+    /// <summary>
+    /// v2.30.2-r1: tells <see cref="ReconnectAsync"/> which mode the
+    /// reconnect is FOR. The legacy single-arg call defaulted to "follow
+    /// VM flags", which could leave ConfigMode stuck on "subscribe" if
+    /// the user clicked a manual VLESS row after sub-tab peeking. The
+    /// explicit hint lets the reconnect path force the correct mode
+    /// regardless of stale flag state.
+    /// </summary>
+    private enum ReconnectIntent
+    {
+        /// <summary>Follow VM flags (legacy behaviour).</summary>
+        Follow,
+        /// <summary>User clicked a manual VLESS server in the Servers list.</summary>
+        ManualVless,
+        /// <summary>User clicked a subscription server in the Subscriptions tab.</summary>
+        Subscription,
+        /// <summary>User clicked a custom config in the Custom sub-tab.</summary>
+        CustomConfig
+    }
+
     // Subscribe: selecting a subscription server = choosing which to route through.
     partial void OnSelectedSubscriptionServerChanged(ServerViewModel? value)
     {
         if (_isLoadingUI || value == null || _isReconnecting) return;
+        // v2.30.2-r1 diag: trace every subscription-row selection.
+        _logger?.Information(
+            "[VM] OnSelectedSubscriptionServerChanged name={N} ip={Ip} IsConnected={C} IsSubscribeMode={S} IsConnecting={IC}",
+            value.DisplayName, value.Server, IsConnected, IsSubscribeMode, IsConnecting);
         if (IsConnected && IsSubscribeMode && !IsConnecting)
         {
             if (IsServiceManagedVpn) { WarnServiceManagedReconnect(value.DisplayName); return; }
-            _ = ReconnectAsync(value.DisplayName);
+            _ = ReconnectAsync(value.DisplayName, ReconnectIntent.Subscription);
         }
     }
 
@@ -4354,11 +4431,15 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (_isLoadingUI || value == null || _isReconnecting) return;
 
+        // v2.30.2-r1 diag: trace every manual-row selection.
+        _logger?.Information(
+            "[VM] OnSelectedServerChanged name={N} ip={Ip} IsConnected={C} IsVlessMode={V} IsSubscribeMode={S} IsConnecting={IC}",
+            value.DisplayName, value.Server, IsConnected, IsVlessMode, IsSubscribeMode, IsConnecting);
         // If connected in VLESS mode → reconnect with newly selected server
         if (IsConnected && IsVlessMode && !IsConnecting)
         {
             if (IsServiceManagedVpn) { WarnServiceManagedReconnect(value.DisplayName); return; }
-            _ = ReconnectAsync(value.DisplayName);
+            _ = ReconnectAsync(value.DisplayName, ReconnectIntent.ManualVless);
         }
     }
 
@@ -4376,7 +4457,7 @@ public partial class MainWindowViewModel : ViewModelBase
         if (IsConnected && !IsVlessMode && !IsConnecting)
         {
             if (IsServiceManagedVpn) { WarnServiceManagedReconnect(value.Name); return; }
-            _ = ReconnectAsync(value.Name);
+            _ = ReconnectAsync(value.Name, ReconnectIntent.CustomConfig);
         }
     }
 
@@ -4397,7 +4478,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _logger.Information("[VM] Service-managed VPN: selection '{Name}' saved; user must Stop+Start to apply", newServerName);
     }
 
-    private async Task ReconnectAsync(string configName)
+    private async Task ReconnectAsync(string configName, ReconnectIntent intent = ReconnectIntent.Follow)
     {
         if (_isReconnecting) return;
         _isReconnecting = true;
@@ -4406,25 +4487,83 @@ public partial class MainWindowViewModel : ViewModelBase
             ? $"Переключение на {configName}..."
             : $"Switching to {configName}...";
 
+        // v2.30.2-r1 diag: log every reconnect with full context so the
+        // next repro distinguishes a "should-be-manual but is-subscribe"
+        // vs other ordering bugs.
+        _logger?.Information(
+            "[VM] ReconnectAsync target={Target} intent={Intent} ConfigMode={CM} IsVlessMode={V} IsSubscribeMode={S}",
+            configName, intent,
+            _settings.App.ConfigMode, IsVlessMode, IsSubscribeMode);
+
         try
         {
             // Stop current VPN
             await Task.Run(() => _engine.Stop());
 
+            // v2.30.2-r1 Bug 2C fix: when the user explicitly clicked a
+            // manual VLESS row, force the VM flags to manual mode BEFORE
+            // SaveSettings so the on-disk ConfigMode persists as
+            // "generated" — even if a subscription is enabled (which the
+            // r2 guard would otherwise prefer to keep as "subscribe").
+            // The r2 guard's purpose is to defend against accidental
+            // sub-tab "peeks"; an explicit server-row click is NOT a peek.
+            if (intent == ReconnectIntent.ManualVless)
+            {
+                IsSubscribeMode = false;
+                IsVlessMode = true;
+            }
+            else if (intent == ReconnectIntent.Subscription)
+            {
+                IsSubscribeMode = true;
+                IsVlessMode = false;
+            }
+            else if (intent == ReconnectIntent.CustomConfig)
+            {
+                IsSubscribeMode = false;
+                IsVlessMode = false;
+            }
+
             // Save + reload settings with the new active config
             SaveSettings();
             _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+
+            // v2.30.2-r1 diag: log effective settings after Save+Reload
+            // so the engine-side decision is auditable from the VM log.
+            _logger?.Information(
+                "[VM] ReconnectAsync after Save+Reload: ConfigMode={CM} VlessActive={VA} SubActive={SA} VlessServers={N}",
+                _settings.App.ConfigMode,
+                _settings.Vless.ActiveServer,
+                _settings.App.ActiveSubscriptionServer,
+                _settings.Vless.Servers?.Count ?? 0);
 
             // Subscribe mode: aggregate enabled subscriptions → feed into engine
             var aggregated = _settings.App.Subscriptions
                 .Where(s => s.Enabled)
                 .SelectMany(s => s.Servers)
                 .ToList();
-            if (IsSubscribeMode && aggregated.Count > 0)
+
+            // v2.30.2-r1 Bug 2C fix: branch on caller intent, not just on
+            // VM flag state. ManualVless overrides any subscription
+            // pollution that may have leaked into _settings.Vless.Servers
+            // from a prior reconnect cycle.
+            if (intent == ReconnectIntent.ManualVless)
+            {
+                _settings.App.ConfigMode = "generated";
+                _settings.Vless.Servers = Servers.Select(s => s.ToEntry()).ToList();
+                _settings.Vless.ActiveServer = configName;
+                _logger?.Information(
+                    "[VM] ReconnectAsync.ManualVless: forced ConfigMode=generated, Vless.Servers={N}, ActiveServer={A}",
+                    _settings.Vless.Servers.Count, configName);
+            }
+            else if ((intent == ReconnectIntent.Subscription || (intent == ReconnectIntent.Follow && IsSubscribeMode))
+                     && aggregated.Count > 0)
             {
                 _settings.Vless.Servers = aggregated;
                 _settings.Vless.ActiveServer = _settings.App.ActiveSubscriptionServer;
                 _settings.App.ConfigMode = "generated";
+                _logger?.Information(
+                    "[VM] ReconnectAsync.Subscription: aggregated {N} servers, ActiveServer={A}",
+                    aggregated.Count, _settings.Vless.ActiveServer);
             }
 
             // Start with new config. Retry up to 3 times because Windows Service
@@ -4444,6 +4583,17 @@ public partial class MainWindowViewModel : ViewModelBase
                     await Task.Delay(2000); // wait for service to release
                 }
             }
+
+            // v2.30.2-r1 Bug 2A fix: refresh the active-row indicator
+            // after the engine has actually settled on a new ActiveServer.
+            // The legacy flow relied on RefreshActiveIndicator firing from
+            // some other status callback, but the timing was racy after a
+            // subscription→subscription click chain — the green dot would
+            // stay on the old row (or vanish entirely). Forcing a refresh
+            // here, with the just-applied _settings, makes the UI match
+            // the engine's view.
+            try { RefreshActiveIndicator(); }
+            catch (Exception ex) { _logger?.Debug(ex, "[VM] Reconnect: RefreshActiveIndicator failed"); }
         }
         catch (OperationCanceledException)
         {

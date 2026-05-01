@@ -537,6 +537,21 @@ public class VpnEngine : IDisposable
 
         // 8. Start sing-box
         OnStatus("Starting sing-box...");
+
+        // v2.30.2-r1: pre-enable any leftover wintun adapter from a prior
+        // r5 cleanup. If sing-box's previous run was killed and r5 left
+        // VPNRouter-TUN in admin=disabled state, the next sing-box start
+        // would FATAL with "configure tun interface: The device is not
+        // ready for use" because wintun can't open a disabled adapter.
+        // Re-enabling is idempotent and only takes effect on Windows.
+        if (OperatingSystem.IsWindows())
+        {
+            var tunName = string.IsNullOrWhiteSpace(settings.Tun.InterfaceName)
+                ? "VPNRouter-TUN"
+                : settings.Tun.InterfaceName;
+            TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent(_logger, tunName, "VpnEngine.pre-start");
+        }
+
         _singBox = new SingBoxManager(settings.SingBox, _logger);
         // Re-emit every successful launch (initial + any restart) so consumers
         // can keep persisted PID state in sync — the reason status/stop don't

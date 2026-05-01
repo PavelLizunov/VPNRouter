@@ -167,4 +167,82 @@ public static class TunAdapterDiagnostics
             logger?.Warning(ex, "[TunDiag] {Ctx}: disable orphaned adapter '{Iface}' failed (non-fatal)", context, interfaceName);
         }
     }
+
+    /// <summary>
+    /// v2.30.2-r1: re-enable a wintun adapter that may have been left in
+    /// "Admin disabled" state by a prior <see cref="DisableOrphanedAdapter"/>
+    /// cleanup. sing-box refuses to start with the FATAL message
+    /// <c>configure tun interface: The device is not ready for use</c>
+    /// when the named adapter exists but is administratively disabled —
+    /// it can't open the wintun handle.
+    ///
+    /// <para>Field log evidence (z:\vpnrouter20260501.log,
+    /// 14:15:42 → 14:16:30): r5 cleanup ran and disabled the adapter
+    /// after a TUN-recreation FATAL crash. ~30s later sing-box was
+    /// restarted by HealthMonitor, but the adapter row was still
+    /// "Disabled / Disconnected" in netsh, and the new sing-box hit
+    /// "device not ready" → second FATAL → second restart. Eventually
+    /// sing-box succeeded only because Windows finally finished tearing
+    /// down the disabled handle (~22s lag).</para>
+    ///
+    /// <para>Pre-emptively re-enabling the adapter before the new
+    /// sing-box launch lets the network stack open it immediately,
+    /// avoiding the bounce. Idempotent: re-enabling an already-enabled
+    /// adapter is a no-op; "not found" is treated as success.</para>
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    public static void EnsureAdapterEnabledOrAbsent(ILogger? logger, string interfaceName, string context)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        if (string.IsNullOrWhiteSpace(interfaceName)) return;
+
+        try
+        {
+            var psi = new ProcessStartInfo("netsh",
+                $"interface set interface name=\"{interfaceName}\" admin=enabled")
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc == null)
+            {
+                logger?.Debug("[TunDiag] {Ctx}: failed to spawn netsh for pre-enable check", context);
+                return;
+            }
+
+            var stdout = proc.StandardOutput.ReadToEnd();
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(3000);
+
+            if (proc.ExitCode == 0)
+            {
+                logger?.Information(
+                    "[TunDiag] {Ctx}: pre-enabled adapter '{Iface}' (was disabled or already enabled)",
+                    context, interfaceName);
+            }
+            else if (proc.ExitCode == 1
+                     || stdout.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0
+                     || stderr.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                logger?.Debug(
+                    "[TunDiag] {Ctx}: adapter '{Iface}' not present — sing-box will create it",
+                    context, interfaceName);
+            }
+            else
+            {
+                logger?.Debug(
+                    "[TunDiag] {Ctx}: netsh enable for '{Iface}' returned exit {Code}: stdout='{Out}' stderr='{Err}'",
+                    context, interfaceName, proc.ExitCode, stdout.Trim(), stderr.Trim());
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.Debug(ex, "[TunDiag] {Ctx}: pre-enable check for '{Iface}' failed (non-fatal)", context, interfaceName);
+        }
+    }
 }

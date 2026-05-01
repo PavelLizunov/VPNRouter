@@ -194,3 +194,93 @@ To repro в test session:
 - `MainWindowViewModel.cs:4274-4284` — OnSelectedServerChanged auto-reconnect
 - `MainWindowViewModel.cs:2030-2080` — RefreshActiveIndicator (post-r6)
 - `plans/release-notes-v2.30.1.md` — что shipped в stable
+
+## Update from user log (z:\vpnrouter20260501.log, v2.30.1 stable)
+
+User submitted production logs from 2026-05-01 running v2.30.1 stable. Key
+patterns confirmed:
+
+### r2 guard fires as designed (good news + bad news)
+
+```
+12:56:27 [INF] [Settings] Subscription is active — keeping ConfigMode=subscribe
+   even though Custom sub-tab is selected (user is peeking, not switching)
+14:16:18 [INF] [Settings] Subscription is active — keeping ConfigMode=subscribe
+   even though Custom sub-tab is selected (user is peeking, not switching)
+```
+
+Это ДОКАЗЫВАЕТ Bug 2 root cause B: r2 guard работает, но он-то и блокирует
+легитимный switch. Когда после peek user кликает на manual server в Servers
+list, ConfigMode остался `"subscribe"`, и Apply re-runs subscription server.
+
+### TUN adapter "device not ready" loop (NEW finding for v2.30.2)
+
+```
+14:15:41 [WRN] [sing-box] FATAL configure tun interface: Cannot create a file
+                          when that file already exists.
+14:15:42 [INF] HealthMonitor Restarting sing-box (attempt 1/5) in 5000ms
+14:15:42 [INF] [TunDiag] SingBoxManager.OnProcessExited: disabled orphaned
+               adapter 'VPNRouter-TUN' ← r5 cleanup fired
+14:15:44 [INF] netsh shows: Disabled Disconnected Dedicated VPNRouter-TUN
+                ← adapter persists в disabled state
+
+14:16:14 [INF] [VpnEngine] Starting sing-box...
+14:16:30 [WRN] [sing-box] FATAL configure tun interface:
+                          The device is not ready for use.
+14:16:30 [ERR] sing-box crashed (exit code: 1)
+14:16:31 [WRN] HealthMonitor Restarting sing-box (attempt 1/5) in 5000ms
+14:16:36 [INF] sing-box started (PID 8440)        ← finally succeeded после ~22s
+14:16:37 [INF] HealthMonitor sing-box restarted successfully
+```
+
+Анализ:
+- r5 cleanup CORRECTLY disable'ит adapter via netsh после crash.
+- Но Windows network stack долго (~22 секунд) держит handle в "Disabled +
+  Disconnected" состоянии прежде чем wintun сможет re-create.
+- Если user пытается start ВО ВРЕМЯ этого окна — sing-box получает "device
+  not ready for use" FATAL.
+
+### Fix idea для TUN adapter (v2.30.2 Bug 3 — new)
+
+В `VpnEngine.StartAsync()` ДО `_singBoxManager.StartAsync()`, добавить
+preflight check:
+
+```csharp
+// If VPNRouter-TUN exists in disabled state from previous crash cleanup,
+// re-enable it before sing-box tries to use it. Otherwise sing-box gets
+// "device not ready for use" FATAL.
+TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent(
+    _logger, "VPNRouter-TUN", "VpnEngine.pre-start");
+```
+
+`TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent`:
+1. `netsh interface show interface name="VPNRouter-TUN"` → check state
+2. If "Disabled" → `netsh interface set interface admin=enabled` → wait ~1s
+3. If "Enabled, Disconnected" → ОК, sing-box разберётся
+4. If not found → ОК, sing-box создаст fresh
+5. If timeout / error — log warning, продолжаем (sing-box попытается, упадёт,
+   HealthMonitor перезапустит — текущий fallback)
+
+### Bug 1 (sub-tab init) — log evidence
+
+Log не показывает напрямую state of `SelectedServerModeIndex` в момент load,
+но по структуре всех traces user был в subscribe mode большую часть сессии.
+Так что при load ConfigMode="subscribe" → IsVlessMode=false →
+SelectedServerModeIndex=1 (Custom). Это и есть наша гипотеза.
+
+### Final v2.30.2 scope
+
+- **Bug 1**: Sub-tab init не должен mirror ConfigMode. Вместо этого:
+  - Default = 0 ("Серверы") если `Servers.Count > 0` ИЛИ `CustomConfigs.Count == 0`
+  - Default = 1 ("Свои конфиги") если `Servers.Count == 0` AND `CustomConfigs.Count > 0`
+- **Bug 2A** (active indicator после subscription switch): RefreshActiveIndicator
+  должен вызываться в `ReconnectAsync` finally, после `engine.IsRunning` confirmed.
+- **Bug 2B** (subscription→manual switch flips ConfigMode): когда user clicks
+  server в Servers list под subscribe-mode, ЯВНО switch ConfigMode→"generated"
+  и IsSubscribeMode=false. r2 guard сохраняется для случая клика по sub-tab,
+  но не для клика по серверу.
+- **Bug 3** (NEW): TUN adapter pre-start re-enable.
+- **Diagnostic logging**: добавить trace в OnSelectedTabIndexChanged,
+  OnSelectedSubscriptionServerChanged, OnSelectedServerModeIndexChanged,
+  RefreshActiveIndicator, ReconnectAsync — чтобы следующий repro был
+  unambiguous.
