@@ -38,6 +38,12 @@ tools/*
 # Re-include: VpnRouterTestMcp (in-tree MCP server — Claude GUI testing).
 !tools/VpnRouterTestMcp/
 !tools/VpnRouterTestMcp/**
+# v2.31.1 follow-up: the recursive re-include above also pulled in this
+# project's bin/obj output (the global "bin/"+"obj/" rules at the top
+# of this file are overridden by the bang-include). Re-exclude them so
+# build artefacts don't show up as untracked / dirty.
+tools/VpnRouterTestMcp/bin/
+tools/VpnRouterTestMcp/obj/
 
 # Misc
 *.jpg
