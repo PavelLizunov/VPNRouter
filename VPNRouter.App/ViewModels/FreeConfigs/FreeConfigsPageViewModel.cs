@@ -202,7 +202,17 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 
     /// <summary>v2.28.6 Phase 2/3: count of saved entries that the user
     /// might want to bulk-recheck — older than 24 h since last verify, or
-    /// failed-last-check.</summary>
+    /// failed-last-check.
+    /// <para>v2.31.4-r1 (F-25 follow-up): also include Verified entries
+    /// with <c>LatencyMs &lt;= 0</c>. Those are the ones healed by the
+    /// v2.31.3 cache migration (<see cref="FreeConfigCache"/>) — their
+    /// <c>LastTestedAt</c> may still be recent so the time-based check
+    /// misses them, but the UI shows "— ✓✓" instead of a real ping and
+    /// the user wants to re-probe to get a real number. Without this
+    /// branch the "↻ Recheck" button hides immediately after a successful
+    /// recheck even though the displayed Saved tab is full of unverified
+    /// rows.</para>
+    /// </summary>
     public int StaleSavedCount
     {
         get
@@ -213,7 +223,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     (!c.LastTestedAt.HasValue ||
                         c.LastVerifyFailedAt.Value >= c.LastTestedAt.Value)) ||
                 (c.LastTestedAt.HasValue &&
-                    (now - c.LastTestedAt.Value).TotalHours > 24));
+                    (now - c.LastTestedAt.Value).TotalHours > 24) ||
+                (c.Status == VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified
+                    && c.LatencyMs <= 0));
         }
     }
 
@@ -1035,7 +1047,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
 
     /// <summary>v2.28.6 Phase 3: re-verify all saved entries that are stale
     /// (older than 24 h, or failed-last-check). 5-permit semaphore on
-    /// sing-box spawns matches the search-flow concurrency. Cancellable.</summary>
+    /// sing-box spawns matches the search-flow concurrency. Cancellable.
+    /// <para>v2.31.4-r1: also re-verify Verified entries with LatencyMs&lt;=0
+    /// (post-migration "needs re-verify" state) — keep the predicate in
+    /// sync with <see cref="StaleSavedCount"/> so the button label and the
+    /// command's actual work agree.</para>
+    /// </summary>
     [RelayCommand]
     private async Task RecheckAllStaleAsync()
     {
@@ -1046,7 +1063,9 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     (!c.LastTestedAt.HasValue ||
                         c.LastVerifyFailedAt.Value >= c.LastTestedAt.Value)) ||
                 (c.LastTestedAt.HasValue &&
-                    (DateTime.UtcNow - c.LastTestedAt.Value).TotalHours > 24))
+                    (DateTime.UtcNow - c.LastTestedAt.Value).TotalHours > 24) ||
+                (c.Status == VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified
+                    && c.LatencyMs <= 0))
             .ToList();
         if (stale.Count == 0) return;
 
