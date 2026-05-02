@@ -1176,20 +1176,12 @@
             </Grid>
           </Border>
 
-          <!-- v2.30.0-r17 — transient toast for bulk-action feedback
-               (sort, etc.). Auto-clears after 2 s via the
-               ShowRulesToast timer in MainWindowViewModel. -->
-          <Border IsVisible="{Binding RulesToastText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                  Padding="10,6"
-                  CornerRadius="{StaticResource RadiusSm}"
-                  Background="{DynamicResource SuccessBgBrush}"
-                  BorderBrush="{DynamicResource SuccessBorderBrush}"
-                  BorderThickness="1"
-                  HorizontalAlignment="Right">
-            <TextBlock Text="{Binding RulesToastText}"
-                       FontSize="10" FontWeight="SemiBold"
-                       Foreground="{DynamicResource SuccessFgBrush}"/>
-          </Border>
+          <!-- v2.31.0-r5 (F-26 follow-up): the per-page toast Border that
+               used to live here was promoted to MainWindow.axaml root grid
+               so HealthCheck + bulk-rule-action feedback shows up on any
+               page, not only when the user is on Настройки → Правила.
+               Same RulesToastText binding; container moved up one level. -->
+
 
           <!-- ═══ Rule list (responsive wrapper) ═══
                Wide (≥540 px): 6-col flat row template per design `.rule`.

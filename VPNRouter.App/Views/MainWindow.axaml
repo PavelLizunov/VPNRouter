@@ -679,5 +679,30 @@
                         CornerRadius="{StaticResource RadiusSm}"/>
             </Grid>
         </Border>
+
+        <!-- v2.31.0-r5 (F-26 follow-up): global toast overlay.
+             Pre-fix the toast Border lived on NetworkPage's Rules
+             sub-section, so HealthCheck/etc feedback was invisible
+             unless the user happened to be on Settings → Правила.
+             Moved here as the last child of the root Grid (highest
+             z-order) with RowSpan=5 + Right/Bottom alignment so it
+             floats above whatever page is shown. Same RulesToastText
+             binding — the rules-bulk-action feedback that used to
+             render here also benefits from the global scope. -->
+        <Border Grid.Row="0" Grid.RowSpan="5"
+                IsVisible="{Binding RulesToastText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                Padding="10,6"
+                Margin="0,0,16,72"
+                CornerRadius="{StaticResource RadiusSm}"
+                Background="{DynamicResource SuccessBgBrush}"
+                BorderBrush="{DynamicResource SuccessBorderBrush}"
+                BorderThickness="1"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                ZIndex="100">
+            <TextBlock Text="{Binding RulesToastText}"
+                       FontSize="11" FontWeight="SemiBold"
+                       Foreground="{DynamicResource SuccessFgBrush}"/>
+        </Border>
     </Grid>
 </Window>
