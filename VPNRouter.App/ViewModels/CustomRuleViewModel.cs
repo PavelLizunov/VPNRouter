@@ -104,4 +104,14 @@ public partial class CustomRuleViewModel : ObservableObject
 
     [RelayCommand]
     private void Remove() => _onRemoveRequested?.Invoke(this);
+
+    /// <summary>v2.30.7-r2 — accessible name for UIA/screen readers (was
+    /// leaking "VPNRouter.App.ViewModels.CustomRuleViewModel"). Compact
+    /// form mirrors the row layout: action + type + value [+ comment].</summary>
+    public override string ToString()
+    {
+        var commentSuffix = string.IsNullOrWhiteSpace(Comment) ? string.Empty : $" — {Comment}";
+        var enabledSuffix = Enabled ? string.Empty : " (off)";
+        return $"{Action} {Type} {Value}{commentSuffix}{enabledSuffix}";
+    }
 }

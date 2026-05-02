@@ -56,6 +56,17 @@ public partial class ServerViewModel : ViewModelBase
 
     // ── Computed display properties ──────────────────────────────────────
 
+    /// <summary>v2.30.7-r2 — accessible name for UIA/screen readers
+    /// (was leaking the fully-qualified class name "VPNRouter.App.ViewModels.ServerViewModel").
+    /// Gives the row a meaningful identification for keyboard navigation +
+    /// automation tools.</summary>
+    public override string ToString()
+    {
+        var portStr = Port > 0 ? $":{Port}" : string.Empty;
+        if (!string.IsNullOrEmpty(Name)) return $"{Name} ({Server}{portStr})";
+        return $"{Server}{portStr}";
+    }
+
     /// <summary>True once any probe has completed (TestStatus != Unknown).</summary>
     public bool HasTestResult => TestStatus != ServerProbeStatus.Unknown;
 

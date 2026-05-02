@@ -228,8 +228,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _selectedCountry = "All";
     partial void OnSelectedCountryChanged(string value) => ApplyFiltersAndStats();
 
-    /// <summary>How many Verified configs to hunt for in a deep-verify session.</summary>
-    [ObservableProperty] private int _deepVerifyTargetCount = 5;
+    /// <summary>How many Verified configs to hunt for in a deep-verify session.
+    /// v2.30.7-r2 (VM-6 audit fix): switched from int to int? to be NumericUpDown-safe
+    /// per CLAUDE.md "NumericUpDown bind to int" gotcha. The field isn't currently
+    /// bound in XAML but the planned design (free-configs-v2.14-roadmap.md) shows
+    /// a NumericUpDown — defensive rewrite ahead of that.</summary>
+    [ObservableProperty] private int? _deepVerifyTargetCount = 5;
 
     /// <summary>If true, skip Russian-country configs during deep-verify (user is bypassing RU blocks).</summary>
     [ObservableProperty] private bool _excludeRu = true;
@@ -268,10 +272,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(MeasureBandwidth))]
     private int _deepVerifyPresetIndex = 3; // BestEffort default
 
-    /// <summary>Custom preset: max acceptable ping in ms.</summary>
-    [ObservableProperty] private int _customMaxPingMs = 200;
-    /// <summary>Custom preset: min acceptable download throughput in Mbps.</summary>
-    [ObservableProperty] private int _customMinBandwidthMbps = 5;
+    /// <summary>Custom preset: max acceptable ping in ms.
+    /// v2.30.7-r2 (VM-6 audit fix): nullable for NumericUpDown safety.</summary>
+    [ObservableProperty] private int? _customMaxPingMs = 200;
+    /// <summary>Custom preset: min acceptable download throughput in Mbps.
+    /// v2.30.7-r2 (VM-7 audit fix): nullable for NumericUpDown safety.</summary>
+    [ObservableProperty] private int? _customMinBandwidthMbps = 5;
 
     public bool IsCustomPreset => DeepVerifyPresetIndex == 4;
 
@@ -289,7 +295,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         1 => (250, 10),  // Streaming
         2 => (300, 1),   // Chat / web
         3 => (null, null), // Best effort
-        4 => (CustomMaxPingMs, CustomMinBandwidthMbps), // Custom
+        4 => (CustomMaxPingMs ?? 200, CustomMinBandwidthMbps ?? 5), // Custom (?? fallback for nullable)
         _ => (null, null),
     };
 
@@ -1569,7 +1575,7 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            var target = Math.Max(1, DeepVerifyTargetCount);
+            var target = Math.Max(1, DeepVerifyTargetCount ?? 5);
             StatusText = Strings.FcStatusDeepVerifyStart(target);
 
             // v2.14.3 — apply preset's bandwidth measurement toggle + ping/bw goals

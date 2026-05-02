@@ -451,11 +451,12 @@ public static class Strings
         : $"Start UI on {OsDisplayName} logon";
 
     // ── Free Configs ──
-    // v2.30.7 — TabFreeConfigs was hardcoded "Free" in both languages.
-    // Tab strip is narrow (~520px @ default window) so a long RU
-    // translation like "Бесплатные конфиги" doesn't fit. Compromise:
-    // RU "Свободные" (9 chars) — short enough + native, EN "Free".
-    public static string TabFreeConfigs => Ru ? "Свободные" : "Free";
+    // v2.30.7-r2 — "Свободные" / "Free" was deemed unclear (user
+    // feedback). Renamed to "Публичные" / "Public" — describes the
+    // source (public free pools from 14 sources, server-side
+    // pre-aggregated via GH Actions) without sounding like
+    // "free trial" or "no-cost product". Fits narrow tab strip.
+    public static string TabFreeConfigs => Ru ? "Публичные" : "Public";
     public static string FcDashboardTotal     => Ru ? "Всего"         : "Total";
     public static string FcDashboardWorking   => Ru ? "Работают"      : "Working";
     public static string FcDashboardTimeout   => Ru ? "Timeout"       : "Timeout";

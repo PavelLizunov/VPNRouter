@@ -1910,8 +1910,13 @@
                 <TextBlock Text="{Binding AppVersionShortText}"
                            FontSize="12" FontWeight="SemiBold"/>
               </StackPanel>
+              <!-- v2.30.7-r2 (AU-11 fix): bind to CheckLinkText so the
+                   button gives feedback (Checking… / Up to date / etc).
+                   Was bound to static L_SmpMenuCheckUpdates so click
+                   appeared to do nothing — observable was set in code
+                   but never read by UI. -->
               <Button Grid.Column="1"
-                      Content="{Binding L_SmpMenuCheckUpdates}"
+                      Content="{Binding UpdateVm.CheckLinkText}"
                       Command="{Binding UpdateVm.CheckManuallyCommand}"
                       FontSize="10" Padding="10,5" MinHeight="0"
                       CornerRadius="{StaticResource RadiusSm}"

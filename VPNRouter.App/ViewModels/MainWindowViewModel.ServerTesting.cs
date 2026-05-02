@@ -196,11 +196,23 @@ public partial class MainWindowViewModel
 
             await Task.WhenAll(tasks);
 
-            // Summary
-            var ok = servers.Count(s => s.TestStatus is ServerProbeStatus.Ok or ServerProbeStatus.Slow);
+            // v2.30.7-r2 — AU-5 fix: previous copy "Working: 0/N" was
+            // misleading after Test-all. The "ok" count excluded
+            // Implausible servers (<5ms RTT — suspicious but the TCP+TLS
+            // handshake DID succeed), so users with subscription pools
+            // that resolve to local Reality fronts saw "Working: 0/7"
+            // even when all 7 servers responded. Now count anything that
+            // completed the handshake (Ok+Slow+Implausible) as "passed
+            // ping", and clarify that the Deep verify is needed for full
+            // validation. Failed buckets (TlsFailed/Timeout/Unreachable)
+            // still NOT counted.
+            var responded = servers.Count(s => s.TestStatus is
+                ServerProbeStatus.Ok or
+                ServerProbeStatus.Slow or
+                ServerProbeStatus.Implausible);
             ServerTestProgressText = IsRussian
-                ? $"Готово. Работают: {ok} / {total}"
-                : $"Done. Working: {ok} / {total}";
+                ? $"Готово. Пинг прошёл: {responded} / {total} · полная проверка — «Глубокая проверка»"
+                : $"Done. Pinged: {responded} / {total} · full check via Deep verify";
         }
         catch (OperationCanceledException)
         {

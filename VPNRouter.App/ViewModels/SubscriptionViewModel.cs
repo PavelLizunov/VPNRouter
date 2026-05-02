@@ -55,4 +55,13 @@ public partial class SubscriptionViewModel : ObservableObject
     }
 
     public SubscriptionEntry UnderlyingEntry => _entry;
+
+    /// <summary>v2.30.7-r2 — accessible name for UIA/screen readers (was
+    /// leaking "VPNRouter.App.ViewModels.SubscriptionViewModel").</summary>
+    public override string ToString()
+    {
+        var enabledTag = Enabled ? string.Empty : " (off)";
+        var countTag = LastServerCount > 0 ? $" — {LastServerCount} servers" : string.Empty;
+        return $"{Name}{enabledTag}{countTag}";
+    }
 }

@@ -28,6 +28,15 @@ public partial class FreeConfigItemViewModel : ObservableObject
     public string Transport   => Entry.Transport;
     public string Security    => Entry.Security;
 
+    /// <summary>v2.30.7-r2 — accessible name for UIA/screen readers (was
+    /// leaking "VPNRouter.App.ViewModels.FreeConfigs.FreeConfigItemViewModel").
+    /// Compact form: country + endpoint + latency.</summary>
+    public override string ToString()
+    {
+        var country = string.IsNullOrEmpty(Entry.CountryCode) ? string.Empty : $"{Entry.CountryCode} ";
+        return $"{country}{Endpoint} ({LatencyDisplay})";
+    }
+
     /// <summary>Country code like "RU" or "—".</summary>
     public string CountryCode => string.IsNullOrEmpty(Entry.CountryCode) ? "—" : Entry.CountryCode;
 

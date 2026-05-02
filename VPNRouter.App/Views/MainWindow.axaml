@@ -461,9 +461,16 @@
                                             Command="{Binding OpenLeakTestCommand}"
                                             Content="{Binding L_SmpMenuCheckLeaks}"
                                             ToolTip.Tip="{Binding L_TipIpLeak}"/>
+                                    <!-- v2.30.7-r2 (AU-11 fix): Content was bound to the
+                                         static L_SmpMenuCheckUpdates so users got NO feedback
+                                         after clicking — CheckLinkText observable on UpdateVm
+                                         already cycles "Checking…" → "Up to date" / "Update
+                                         available" / "Check failed" → reset to "Check for
+                                         updates" after 3s. Now: bind to that observable so the
+                                         click reflects in the menu label. -->
                                     <Button Classes="menu-item"
                                             Command="{Binding UpdateVm.CheckManuallyCommand}"
-                                            Content="{Binding L_SmpMenuCheckUpdates}"/>
+                                            Content="{Binding UpdateVm.CheckLinkText}"/>
 
                                     <Border Classes="menu-divider"/>
 

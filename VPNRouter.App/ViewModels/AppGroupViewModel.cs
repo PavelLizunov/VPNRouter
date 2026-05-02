@@ -42,4 +42,11 @@ public partial class AppGroupViewModel : ViewModelBase
 
     /// <summary>Force DisplayName to re-evaluate (call after Strings.Lang changes).</summary>
     public void NotifyDisplayNameChanged() => OnPropertyChanged(nameof(DisplayName));
+
+    /// <summary>v2.30.7-r2 — accessible name for UIA/screen readers + automation tools
+    /// (was leaking "VPNRouter.App.ViewModels.AppGroupViewModel").</summary>
+    public override string ToString()
+    {
+        return Apps.Count > 0 ? $"{DisplayName} ({Apps.Count})" : DisplayName;
+    }
 }

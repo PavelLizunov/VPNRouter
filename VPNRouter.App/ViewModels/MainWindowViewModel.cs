@@ -5139,8 +5139,13 @@ public partial class MainWindowViewModel : ViewModelBase
             // подключает а не к выбранному конфигу". Explicitly flipping both
             // mode flags so SaveSettings writes ConfigMode='generated' regardless
             // of which tab the user came from.
+            //
+            // v2.30.7-r2 (VM-3 audit fix): the explicit `_settings.App.ConfigMode
+            // = "generated"` line below was dead code — SaveSettings recomputes
+            // ConfigMode from VM flags (IsSubscribeMode/IsVlessMode) and overwrites
+            // any direct assignment. Only the flag flips below matter. Dropped
+            // the redundant assignment.
             SelectedServer = target;
-            _settings.App.ConfigMode = "generated";
             IsSubscribeMode = false;
             IsVlessMode = true;
             SelectedServerModeIndex = 0;
