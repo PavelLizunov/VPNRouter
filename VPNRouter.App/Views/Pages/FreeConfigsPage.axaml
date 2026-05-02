@@ -123,6 +123,7 @@
                                 <Grid ColumnDefinitions="20,*" ColumnSpacing="4">
                                     <CheckBox Grid.Column="0"
                                               IsChecked="{Binding FreeConfigsVm.ExcludeRu}"
+                                              AutomationProperties.Name="{Binding L_FcDeepExcludeRu}"
                                               ToolTip.Tip="{Binding L_TipFcSkipRu}"
                                               MinHeight="0" Padding="0"
                                               VerticalAlignment="Top"

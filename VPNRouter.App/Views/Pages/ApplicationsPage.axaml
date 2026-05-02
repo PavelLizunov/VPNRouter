@@ -197,6 +197,7 @@
       <!-- v2.28.3: TextWrapping fix for narrow-window overflow. -->
       <Border Grid.Row="1" Padding="14,4,14,8">
         <CheckBox IsChecked="{Binding IsChecked}"
+                  AutomationProperties.Name="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_EnableWholeGroup}"
                   FontWeight="SemiBold" FontSize="12"
                   MinHeight="0" Padding="4,0">
           <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_EnableWholeGroup}"
@@ -227,6 +228,7 @@
               <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding IsChecked}"
+                          AutomationProperties.Name="{Binding ProcessName}"
                           MinHeight="0" Padding="0"
                           VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1" Classes="app-name"

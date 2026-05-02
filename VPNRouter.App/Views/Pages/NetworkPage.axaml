@@ -290,6 +290,7 @@
             <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
               <CheckBox Grid.Column="0"
                         IsChecked="{Binding BypassRussianTraffic}"
+                        AutomationProperties.Name="{Binding BypassRuLabel}"
                         VerticalAlignment="Top"
                         MinWidth="0" MinHeight="0" Padding="0"
                         Margin="0,1,0,0"/>
@@ -506,6 +507,7 @@
             <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
               <CheckBox Grid.Column="0"
                         IsChecked="{Binding CustomRulesAboveToggles}"
+                        AutomationProperties.Name="{Binding L_RulesCustomAboveToggles}"
                         MinHeight="0" Padding="0"
                         VerticalAlignment="Center"/>
               <StackPanel Grid.Column="1" Spacing="2">
@@ -1292,6 +1294,7 @@
                     <CheckBox Grid.Column="4"
                               Theme="{StaticResource IosToggleCheckBox}"
                               IsChecked="{Binding Enabled}"
+                              AutomationProperties.Name="{Binding Value}"
                               VerticalAlignment="Center"/>
                     <!-- v2.30.0-r12: ⋯ context menu replaces direct ✕
                          button per design `.menu-btn`. Currently the menu
@@ -1389,6 +1392,7 @@
                     <CheckBox Grid.Row="0" Grid.Column="2"
                               Theme="{StaticResource IosToggleCheckBox}"
                               IsChecked="{Binding Enabled}"
+                              AutomationProperties.Name="{Binding Value}"
                               VerticalAlignment="Center"/>
                     <!-- Row 1, col 3: ⋯ menu -->
                     <Button Grid.Row="0" Grid.Column="3"
@@ -1814,6 +1818,7 @@
                     ToolTip.Tip="{Binding L_TipLeakStrictMode}">
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding StrictMode}"
+                          AutomationProperties.Name="{Binding StrictModeLabel}"
                           MinHeight="0" Padding="0"
                           VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1"
@@ -1825,6 +1830,7 @@
                     ToolTip.Tip="{Binding L_TipLeakForceIpv4}">
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding ForceIpv4Only}"
+                          AutomationProperties.Name="{Binding ForceIpv4Label}"
                           MinHeight="0" Padding="0"
                           VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1"
@@ -1836,6 +1842,7 @@
                     ToolTip.Tip="{Binding L_TipLeakFlushDns}">
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding FlushDnsOnStart}"
+                          AutomationProperties.Name="{Binding FlushDnsLabel}"
                           MinHeight="0" Padding="0"
                           VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1"
@@ -1847,6 +1854,7 @@
                     ToolTip.Tip="{Binding L_TipLeakStrictDns}">
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding StrictDns}"
+                          AutomationProperties.Name="{Binding StrictDnsLabel}"
                           MinHeight="0" Padding="0"
                           VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1"
@@ -1866,6 +1874,7 @@
             <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
               <CheckBox Grid.Column="0"
                         IsChecked="{Binding BlockAds}"
+                        AutomationProperties.Name="{Binding BlockAdsLabel}"
                         VerticalAlignment="Top"
                         MinWidth="0" MinHeight="0" Padding="0"
                         Margin="0,1,0,0"/>
@@ -1890,6 +1899,7 @@
                          TextWrapping="Wrap"/>
               <!-- v2.28.3: same TextWrapping fix as Section A's checkboxes. -->
               <CheckBox IsChecked="{Binding ReceivePrereleases}"
+                        AutomationProperties.Name="{Binding ReceivePrereleasesLabel}"
                         MinHeight="0" Padding="4,0">
                 <TextBlock Text="{Binding ReceivePrereleasesLabel}" TextWrapping="Wrap"/>
               </CheckBox>
@@ -1975,6 +1985,7 @@
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding ServiceVm.AutostartChecked}"
                           IsEnabled="{Binding !ServiceVm.IsBusy}"
+                          AutomationProperties.Name="{Binding L_ServiceMasterTitle}"
                           VerticalAlignment="Top"
                           MinWidth="0" MinHeight="0" Padding="0"
                           Margin="0,1,0,0"/>
@@ -2059,14 +2070,17 @@
                 <StackPanel Spacing="5"
                             IsEnabled="{Binding ServiceVm.IsInstalled}">
                   <CheckBox IsChecked="{Binding AutostartVpn}"
+                            AutomationProperties.Name="{Binding LblAutostartVpn}"
                             MinHeight="0" Padding="4,0">
                     <TextBlock Text="{Binding LblAutostartVpn}" TextWrapping="Wrap"/>
                   </CheckBox>
                   <CheckBox IsChecked="{Binding AutostartZapret}"
+                            AutomationProperties.Name="{Binding LblAutostartZapret}"
                             MinHeight="0" Padding="4,0">
                     <TextBlock Text="{Binding LblAutostartZapret}" TextWrapping="Wrap"/>
                   </CheckBox>
                   <CheckBox IsChecked="{Binding AutostartTgProxy}"
+                            AutomationProperties.Name="{Binding LblAutostartTgProxy}"
                             MinHeight="0" Padding="4,0">
                     <TextBlock Text="{Binding LblAutostartTgProxy}" TextWrapping="Wrap"/>
                   </CheckBox>
@@ -2097,6 +2111,7 @@
                     BorderThickness="1">
               <StackPanel Spacing="5">
                 <CheckBox IsChecked="{Binding AutostartUi}"
+                          AutomationProperties.Name="{Binding LblAutostartUi}"
                           MinHeight="0" Padding="4,0">
                   <TextBlock Text="{Binding LblAutostartUi}" TextWrapping="Wrap"/>
                 </CheckBox>

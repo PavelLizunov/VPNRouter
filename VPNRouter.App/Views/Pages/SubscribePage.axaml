@@ -260,6 +260,7 @@
                      root cause as the Settings → Routing radios). -->
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding Enabled}"
+                          AutomationProperties.Name="{Binding Name}"
                           MinHeight="0" MinWidth="0" Padding="0"
                           VerticalAlignment="Center"/>
 
