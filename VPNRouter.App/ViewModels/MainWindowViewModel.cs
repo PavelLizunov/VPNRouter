@@ -1240,9 +1240,17 @@ public partial class MainWindowViewModel : ViewModelBase
     private void ShowRulesToast(string text)
     {
         RulesToastText = text;
-        _rulesToastCts?.Cancel();
+        // v2.31.0-r3 (VM-10): swap+dispose pattern — cancelling without
+        // disposing leaked one CancellationTokenSource per toast. Cumulative
+        // when toasts flicker (e.g. user mass-toggles rules on Network page).
+        var oldCts = _rulesToastCts;
         _rulesToastCts = new System.Threading.CancellationTokenSource();
         var token = _rulesToastCts.Token;
+        if (oldCts != null)
+        {
+            try { oldCts.Cancel(); } catch (ObjectDisposedException) { }
+            oldCts.Dispose();
+        }
         _ = System.Threading.Tasks.Task.Delay(2000, token).ContinueWith(t =>
         {
             if (t.IsCanceled) return;
@@ -1905,6 +1913,13 @@ public partial class MainWindowViewModel : ViewModelBase
         catch { /* user can still launch with --safe from terminal */ }
     }
 
+    // v2.31.0-r3 (VM-11): track the auto-disarm task so multiple clicks
+    // don't stack stale Task.Delay continuations. Pre-fix every "arm" click
+    // queued a fresh disarm Task with no cancellation; if the user clicked
+    // arm-disarm-arm rapidly each disarm fired blindly later (mostly
+    // harmless because it re-set false=>false, but a leak nonetheless).
+    private System.Threading.CancellationTokenSource? _resetDisarmCts;
+
     [RelayCommand]
     private void ResetConfig()
     {
@@ -1912,14 +1927,31 @@ public partial class MainWindowViewModel : ViewModelBase
         if (!ResetConfigArmed)
         {
             ResetConfigArmed = true;
+            // Cancel any prior disarm task before queuing a new one.
+            var oldCts = _resetDisarmCts;
+            _resetDisarmCts = new System.Threading.CancellationTokenSource();
+            var token = _resetDisarmCts.Token;
+            if (oldCts != null)
+            {
+                try { oldCts.Cancel(); } catch (ObjectDisposedException) { }
+                oldCts.Dispose();
+            }
             // Auto-disarm after 5 seconds so a stale armed state can't
             // ambush a later click that was meant for something else.
-            _ = Task.Delay(5000).ContinueWith(_ =>
+            _ = Task.Delay(5000, token).ContinueWith(t =>
+            {
+                if (t.IsCanceled) return;
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                    ResetConfigArmed = false));
+                    ResetConfigArmed = false);
+            }, System.Threading.Tasks.TaskScheduler.Default);
             return;
         }
         ResetConfigArmed = false;
+        // Confirmed — cancel pending disarm; we're either resetting now
+        // (Environment.Exit below) or aborting via the catch.
+        _resetDisarmCts?.Cancel();
+        _resetDisarmCts?.Dispose();
+        _resetDisarmCts = null;
 
         try
         {
@@ -2454,6 +2486,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void LoadApps()
     {
+        // v2.31.0-r3 (VM-8): explicit unwiring before Clear(). ObservableCollection.Clear()
+        // raises CollectionChanged with action=Reset where both NewItems and OldItems are
+        // null, so the WireAppChangeTracking handler can't unsubscribe old PropertyChanged
+        // delegates. Without this, every RU↔EN toggle (which calls LoadApps) leaks one
+        // subscription per existing AppGroupViewModel + AppItemViewModel. Cumulative.
+        UnwireAllAppGroups();
         AppGroups.Clear();
 
         var activeProfileStr = _settings.ActiveProfile ?? "";
@@ -2600,6 +2638,23 @@ public partial class MainWindowViewModel : ViewModelBase
         if (_isLoadingUI) return;
         if (e.PropertyName == nameof(AppGroupViewModel.IsChecked))
             HasPendingAppChanges = IsConnected;
+    }
+
+    /// <summary>
+    /// v2.31.0-r3 (VM-8): unsubscribe PropertyChanged + CollectionChanged
+    /// from every AppGroup + its Apps before LoadApps() rebuilds the list.
+    /// Avalonia's ObservableCollection.Clear() emits a Reset CollectionChanged
+    /// without OldItems, so the wire-tracking handler can't unsubscribe.
+    /// </summary>
+    private void UnwireAllAppGroups()
+    {
+        foreach (var group in AppGroups)
+        {
+            group.PropertyChanged -= OnAppGroupPropertyChanged;
+            group.Apps.CollectionChanged -= OnAppsCollectionChanged;
+            foreach (var app in group.Apps)
+                app.PropertyChanged -= OnAppItemPropertyChanged;
+        }
     }
 
     private void OnAppsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
@@ -3545,7 +3600,15 @@ public partial class MainWindowViewModel : ViewModelBase
     private void StartSubRefreshTimer()
     {
         StopSubRefreshTimer();
-        if (!IsSubscribeMode || string.IsNullOrWhiteSpace(SubscriptionUrl)) return;
+        if (!IsSubscribeMode) return;
+        // v2.31.0-r3 (VM-1): multi-sub model uses Subscriptions[] — pre-fix
+        // condition only checked the legacy single SubscriptionUrl field, so
+        // users who had migrated to the multi-sub UI never got auto-refresh
+        // even when they had multiple working subs. Accept either source.
+        var hasLegacyUrl = !string.IsNullOrWhiteSpace(SubscriptionUrl);
+        var hasEnabledMultiSub = Subscriptions.Any(s =>
+            s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
+        if (!hasLegacyUrl && !hasEnabledMultiSub) return;
 
         _logger.Information("[SubRefresh] Starting timer (interval: {Sec}s)", SubRefreshIntervalMs / 1000);
         _subRefreshTimer = new System.Threading.Timer(
