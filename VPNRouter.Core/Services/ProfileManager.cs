@@ -11,6 +11,17 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public class ProfileManager
 {
+    /// <summary>v2.31.0-r1 (CO-4 audit fix): cap JSON nesting depth on
+    /// untrusted profile sources (GitHub URLs, local user-supplied files)
+    /// to prevent stack-overflow / DoS via deeply-nested arrays. Profiles
+    /// are flat objects with at most ~3 levels (collection→profile→
+    /// processes[]→rule); 32 leaves enormous head-room while neutralizing
+    /// adversarial input. Per Newtonsoft Json.NET MaxDepth guidance.</summary>
+    internal static readonly JsonSerializerSettings SafeJsonSettings = new()
+    {
+        MaxDepth = 32,
+    };
+
     private readonly List<IProfileSource> _sources;
     private readonly ILogger _logger;
     private ProfileCollection? _cache;
@@ -203,7 +214,10 @@ public class LocalProfileSource : IProfileSource
     public Task<ProfileCollection?> LoadAsync(CancellationToken ct = default)
     {
         var json = File.ReadAllText(_path);
-        var result = JsonConvert.DeserializeObject<ProfileCollection>(json);
+        // v2.31.0-r1 (CO-4): MaxDepth-capped deserialization on local files
+        // — user could place a malicious profiles.json that crashes the
+        // app or causes stack overflow via nested arrays.
+        var result = JsonConvert.DeserializeObject<ProfileCollection>(json, ProfileManager.SafeJsonSettings);
         return Task.FromResult(result);
     }
 }
@@ -233,7 +247,11 @@ public class GitHubProfileSource : IProfileSource
     public async Task<ProfileCollection?> LoadAsync(CancellationToken ct = default)
     {
         var json = await _http.GetStringAsync(_url, ct);
-        var result = JsonConvert.DeserializeObject<ProfileCollection>(json);
+        // v2.31.0-r1 (CO-4): MaxDepth-capped deserialization on the GitHub
+        // profile URL — the channel is HTTPS but a compromised tap or
+        // typosquatted URL could feed adversarial JSON. ProfileCollection
+        // is shallow (~3 levels), 32 leaves enormous head-room.
+        var result = JsonConvert.DeserializeObject<ProfileCollection>(json, ProfileManager.SafeJsonSettings);
 
         // Cache to disk for offline fallback
         if (result != null)

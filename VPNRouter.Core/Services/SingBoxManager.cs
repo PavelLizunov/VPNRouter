@@ -414,11 +414,22 @@ public class SingBoxManager : IDisposable
 
         try
         {
+            // v2.31.0-r1 (CO-3 audit fix): the previous sync-over-async pattern
+            // (`PutAsync(...).GetAwaiter().GetResult()` on a static HttpClient)
+            // is mitigated by HttpClient.Timeout=3s, but on saturated
+            // threadpools the awaiter's continuation could land on a starved
+            // worker, extending the wait beyond Timeout. Solutions:
+            //   1. Explicit CancellationToken with hard 3s deadline → enforces
+            //      cancellation at .NET layer, not HttpClient internals.
+            //   2. Future: convert to async signature and propagate awaits up
+            //      to HealthMonitor.OnDebounceElapsed / AttemptRestart.
+            // For now (1) is non-invasive and bounds the worst case explicitly.
             var url = $"http://{_settings.ClashApi}/configs?force=true";
             var body = $"{{\"path\":\"{_currentConfigPath.Replace("\\", "\\\\")}\"}}";
             var content = new StringContent(body, Encoding.UTF8, "application/json");
 
-            using var response = _http.PutAsync(url, content).GetAwaiter().GetResult();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            using var response = _http.PutAsync(url, content, cts.Token).GetAwaiter().GetResult();
 
             if (response.IsSuccessStatusCode)
             {
@@ -427,9 +438,14 @@ public class SingBoxManager : IDisposable
                 return true;
             }
 
-            var respBody = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            var respBody = response.Content.ReadAsStringAsync(cts.Token).GetAwaiter().GetResult();
             _logger.Warning("[SingBoxManager] Hot-reload HTTP {Code}: {Body}",
                 (int)response.StatusCode, respBody);
+            return false;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.Debug("[SingBoxManager] Hot-reload timed out after 3s");
             return false;
         }
         catch (Exception ex)
@@ -606,19 +622,39 @@ public class SingBoxManager : IDisposable
 
     private void OnProcessExited()
     {
+        // v2.31.0-r1 (CO-8 audit fix): the previous catch { } empty
+        // block swallowed any failure to read ExitCode — but the
+        // failure cause (process handle disposed, race with Stop, etc.)
+        // never reached the log. Worse, `exitCode == 0` and "couldn't
+        // read" both fell into the same null-display branch on the
+        // user-visible error path. Now we log the cause so post-mortems
+        // can distinguish "exited cleanly" vs "exit info unavailable".
         int? exitCode = null;
+        Exception? exitCodeError = null;
         try
         {
             if (_process is { HasExited: true } p)
                 exitCode = p.ExitCode;
         }
-        catch { }
+        catch (Exception ex)
+        {
+            exitCodeError = ex;
+        }
 
         if (exitCode == 0)
+        {
             _logger.Warning("[SingBoxManager] sing-box exited unexpectedly (exit code 0) — will attempt restart");
+        }
+        else if (exitCode.HasValue)
+        {
+            _logger.Error("[SingBoxManager] sing-box crashed (exit code: {Code})", exitCode.Value);
+        }
         else
-            _logger.Error("[SingBoxManager] sing-box crashed (exit code: {Code})",
-                exitCode?.ToString() ?? "unknown");
+        {
+            _logger.Error(exitCodeError,
+                "[SingBoxManager] sing-box exited but ExitCode could not be read ({ErrType})",
+                exitCodeError?.GetType().Name ?? "no exception");
+        }
 
         State = SingBoxState.Failed;
         Crashed?.Invoke(this, EventArgs.Empty);

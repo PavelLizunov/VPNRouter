@@ -21,6 +21,15 @@ public class EtwProcessMonitor : IProcessMonitor
     private Thread? _sessionThread;
     private bool _disposed;
 
+    /// <summary>v2.31.0-r1 (CO-6 audit fix): signals when RunSession has
+    /// finished assigning <see cref="_session"/>. Without it, a fast
+    /// Start()→Stop() race could read <c>_session=null</c> in Stop's
+    /// snapshot and skip <c>session.Stop()</c>, leaving the worker thread
+    /// blocked on <c>Source.Process()</c> forever (the using-disposal
+    /// won't run until Process returns, and Process returns only when
+    /// the session is stopped — classic deadlock).</summary>
+    private readonly ManualResetEventSlim _sessionReady = new(false);
+
     public event EventHandler<ProcessEventArgs>? ProcessStarted;
     public event EventHandler<ProcessEventArgs>? ProcessStopped;
 
@@ -54,7 +63,20 @@ public class EtwProcessMonitor : IProcessMonitor
         // RunSession's `using var session` already disposes deterministically
         // when Process() returns, and a second Dispose can throw on the
         // already-finalised session in some TraceEvent versions.
+        //
+        // v2.31.0-r1 (CO-6 audit fix): wait briefly for RunSession to have
+        // finished its `_session = session` assignment. Pre-fix, a fast
+        // Stop() right after Start() could read _session=null and skip the
+        // session.Stop() call entirely, leaving the worker thread blocked
+        // on Source.Process() forever. The wait is bounded (1s) so we
+        // don't hang if the session genuinely never came up.
         var thread = _sessionThread;
+        if (!_sessionReady.Wait(TimeSpan.FromSeconds(1)))
+        {
+            _logger.Warning("[ETW] session never became ready within 1s — skipping Stop");
+            _sessionThread = null;
+            return;
+        }
         var session = _session;
         _session = null;
         _sessionThread = null;
@@ -90,6 +112,7 @@ public class EtwProcessMonitor : IProcessMonitor
 
             using var session = new TraceEventSession(SessionName);
             _session = session;
+            _sessionReady.Set(); // CO-6: notify Stop() that _session is now non-null
 
             session.EnableKernelProvider(
                 KernelTraceEventParser.Keywords.Process,
@@ -135,6 +158,13 @@ public class EtwProcessMonitor : IProcessMonitor
         catch (Exception ex)
         {
             _logger.Error(ex, "[ETW] Session failed");
+        }
+        finally
+        {
+            // v2.31.0-r1 (CO-6): signal even on failure so Stop()'s wait
+            // returns immediately instead of timing out at 1s. _session
+            // will be null at this point so Stop will short-circuit.
+            _sessionReady.Set();
         }
     }
 

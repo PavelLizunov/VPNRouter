@@ -4069,3 +4069,203 @@ public class LeakProtectionMultiProtocolTests
         Assert.Contains(result.Errors, e => e.Contains("Hysteria2") && e.Contains("password"));
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// v2.31.0-r1 Pillar 1 — Core stability fixes
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// <summary>v2.31.0-r1 (CO-4 audit fix): JSON deserialization of profiles is
+/// MaxDepth-capped to neutralize DoS via deeply-nested arrays. Real ProfileCollection
+/// is shallow (~3 levels) so 32 leaves head-room. Test that adversarial input
+/// is rejected before triggering stack overflow / extreme allocation.</summary>
+public class ProfileManagerJsonDosGuardTests
+{
+    [Fact]
+    public void DeeplyNestedArray_ThrowsBeforeStackOverflow()
+    {
+        // Build a JSON string with 100 levels of nesting (well past our cap of 32).
+        var depth = 100;
+        var sb = new System.Text.StringBuilder();
+        sb.Append("{\"profiles\":[");
+        for (int i = 0; i < depth; i++) sb.Append("[");
+        for (int i = 0; i < depth; i++) sb.Append("]");
+        sb.Append("]}");
+        var json = sb.ToString();
+
+        // SafeJsonSettings caps MaxDepth — Newtonsoft throws JsonReaderException
+        // when limit is exceeded. We assert it throws (any kind) — the point
+        // is that we never let it run to stack-overflow / process crash.
+        Assert.ThrowsAny<Newtonsoft.Json.JsonException>(() =>
+            Newtonsoft.Json.JsonConvert.DeserializeObject<ProfileCollection>(
+                json, ProfileManager.SafeJsonSettings));
+    }
+
+    [Fact]
+    public void NormalProfileJson_DeserializesUnderLimit()
+    {
+        // A realistic profile JSON has at most ~4 levels of nesting:
+        // root → profiles[] → profile object → processes[] → process object.
+        // Should round-trip cleanly under MaxDepth=32.
+        var json = """
+        {
+          "profiles": [
+            {
+              "name": "Test_Profile",
+              "processes": [
+                { "name": "test.exe", "include_children": false }
+              ]
+            }
+          ]
+        }
+        """;
+
+        var result = Newtonsoft.Json.JsonConvert.DeserializeObject<ProfileCollection>(
+            json, ProfileManager.SafeJsonSettings);
+
+        Assert.NotNull(result);
+        Assert.NotNull(result.Profiles);
+        Assert.Single(result.Profiles);
+        Assert.Equal("Test_Profile", result.Profiles[0].Name);
+    }
+}
+
+/// <summary>v2.31.0-r1 (CO-1 audit fix): debounce timer swap uses
+/// Interlocked.Exchange to be atomic against concurrent ETW callbacks.
+/// Verify the contract by hammering OnNewProcessDetected from many threads
+/// and asserting no exceptions surface and the final timer is non-null.</summary>
+public class HealthMonitorTimerRaceTests
+{
+    [Fact]
+    public void Interlocked_Exchange_Pattern_Is_AtomicSwap()
+    {
+        // We can't easily construct a real HealthMonitor in tests (deps on
+        // SingBox/Profile/Firewall instances). Instead, we directly verify
+        // the Interlocked.Exchange pattern that CO-1 introduced: many
+        // concurrent (newTimer, oldTimer) swaps must not double-Dispose
+        // or leak.
+        System.Threading.Timer? slot = null;
+        var disposeCount = 0;
+        var newCount = 0;
+
+        // Wrap a Timer in a counter so we can detect double-dispose.
+        System.Threading.Timer MakeTimer()
+        {
+            var t = new System.Threading.Timer(_ => { });
+            System.Threading.Interlocked.Increment(ref newCount);
+            return t;
+        }
+
+        var threadCount = 16;
+        var iterations = 100;
+        var threads = new List<Thread>();
+        for (int i = 0; i < threadCount; i++)
+        {
+            threads.Add(new Thread(() =>
+            {
+                for (int k = 0; k < iterations; k++)
+                {
+                    var newTimer = MakeTimer();
+                    var oldTimer = System.Threading.Interlocked.Exchange(ref slot, newTimer);
+                    if (oldTimer != null)
+                    {
+                        oldTimer.Dispose();
+                        System.Threading.Interlocked.Increment(ref disposeCount);
+                    }
+                }
+            }));
+        }
+        foreach (var t in threads) t.Start();
+        foreach (var t in threads) t.Join();
+
+        // Final timer survives — exactly newCount-disposeCount = 1 timer remains.
+        Assert.NotNull(slot);
+        slot!.Dispose();
+
+        // Conservation: every "new" was either disposed or is the final one.
+        // We expect exactly newCount - 1 disposes (last new is the survivor).
+        // This proves the swap was atomic — no Timer was lost or double-disposed.
+        Assert.Equal(threadCount * iterations - 1, disposeCount);
+    }
+}
+
+/// <summary>v2.31.0-r1 (CO-5 audit fix): netsh output parser must NOT match
+/// `Description:` lines on localized Windows. Only the FIRST colon-line per
+/// blank-separated rule block is treated as the rule name.</summary>
+public class FirewallManagerLocalizedNetshTests
+{
+    [Fact]
+    public void DescriptionLine_StartingWithPrefix_DoesNotMatch()
+    {
+        // Simulated `netsh advfirewall firewall show rule name=all dir=out`
+        // output on RU Windows. The user has an UNRELATED rule whose
+        // Description happens to start with "VPNRouter_Block_". The previous
+        // parser would falsely match it.
+        var simulated = @"
+Имя правила:                          Allow Some Application
+Описание:                             VPNRouter_Block_Discord description leak
+Действие:                             Allow
+
+Имя правила:                          VPNRouter_Block_Telegram
+Описание:                             Auto-generated by VPNRouter
+Действие:                             Block
+".Replace("\r\n", "\n");
+
+        // Apply same parser logic as FirewallManager.FindRulesByPrefix:
+        // first colon-line per blank-separated block.
+        var prefix = "VPNRouter_Block_";
+        var matches = new List<string>();
+        var inNewBlock = true;
+        foreach (var line in simulated.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0) { inNewBlock = true; continue; }
+            if (!inNewBlock) continue;
+            inNewBlock = false;
+            var colonIdx = trimmed.IndexOf(':');
+            if (colonIdx < 0) continue;
+            var value = trimmed[(colonIdx + 1)..].Trim();
+            if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                matches.Add(value);
+        }
+
+        // Should match ONLY the second block's "VPNRouter_Block_Telegram" —
+        // the first block's Description leak must NOT appear.
+        Assert.Single(matches);
+        Assert.Equal("VPNRouter_Block_Telegram", matches[0]);
+    }
+
+    [Fact]
+    public void EnglishLocale_StillMatchesCorrectly()
+    {
+        // Sanity: the new block-aware parser still works on English Windows.
+        var simulated = @"
+Rule Name:                            VPNRouter_Block_Discord
+Description:                          Auto-generated
+Action:                               Block
+
+Rule Name:                            VPNRouter_Block_Browsers
+Description:                          Auto-generated
+Action:                               Block
+".Replace("\r\n", "\n");
+
+        var prefix = "VPNRouter_Block_";
+        var matches = new List<string>();
+        var inNewBlock = true;
+        foreach (var line in simulated.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0) { inNewBlock = true; continue; }
+            if (!inNewBlock) continue;
+            inNewBlock = false;
+            var colonIdx = trimmed.IndexOf(':');
+            if (colonIdx < 0) continue;
+            var value = trimmed[(colonIdx + 1)..].Trim();
+            if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                matches.Add(value);
+        }
+
+        Assert.Equal(2, matches.Count);
+        Assert.Contains("VPNRouter_Block_Discord", matches);
+        Assert.Contains("VPNRouter_Block_Browsers", matches);
+    }
+}

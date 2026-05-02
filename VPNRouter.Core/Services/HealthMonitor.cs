@@ -89,11 +89,22 @@ public class HealthMonitor : IDisposable
     public void Stop()
     {
         _isStopping = true;
-        _restartCts?.Cancel();
-        _healthTimer?.Dispose();
-        _debounceTimer?.Dispose();
-        _healthTimer = null;
-        _debounceTimer = null;
+        // v2.31.0-r1 (CO-2): also dispose the CTS — Cancel alone leaves the
+        // wait handle alive until the GC catches the finalizer. Symmetric
+        // with the AttemptRestart swap pattern.
+        var cts = _restartCts;
+        _restartCts = null;
+        if (cts != null)
+        {
+            try { cts.Cancel(); } catch (ObjectDisposedException) { }
+            cts.Dispose();
+        }
+        // v2.31.0-r1 (CO-1): atomic swap on shutdown so a late ETW callback
+        // racing OnNewProcessDetected can't observe a half-disposed state.
+        var ht = System.Threading.Interlocked.Exchange(ref _healthTimer, null);
+        var dt = System.Threading.Interlocked.Exchange(ref _debounceTimer, null);
+        ht?.Dispose();
+        dt?.Dispose();
         _logger.Information("[HealthMonitor] Stopped");
     }
 
@@ -120,12 +131,22 @@ public class HealthMonitor : IDisposable
 
         _logger.Debug("[HealthMonitor] New process detected: {Name} — debouncing", processName);
 
-        // Reset the debounce timer
-        _debounceTimer?.Dispose();
-        _debounceTimer = new System.Threading.Timer(
+        // v2.31.0-r1 (CO-1 audit fix): atomic-swap the debounce timer.
+        // Pre-fix this read+null+new sequence was non-atomic; ETW callbacks
+        // fire on multiple threadpool threads (EtwProcessMonitor.cs:98-130),
+        // so two concurrent calls could:
+        //   - both read the same _debounceTimer reference → both call
+        //     Dispose on the same instance (ObjectDisposedException) AND
+        //     leak the second new'd timer (assigned-then-overwritten),
+        //   - or fire two timers back-to-back, doubling the rescan storm.
+        // Now: Interlocked.Exchange swaps in the new timer atomically and
+        // returns the previous (or null), which we Dispose safely once.
+        var newTimer = new System.Threading.Timer(
             OnDebounceElapsed, null,
             (int)DebounceWindow.TotalMilliseconds,
             Timeout.Infinite); // fire once
+        var oldTimer = System.Threading.Interlocked.Exchange(ref _debounceTimer, newTimer);
+        oldTimer?.Dispose();
     }
 
     // ─── Private: Health check ────────────────────────────────────────────────
@@ -183,10 +204,20 @@ public class HealthMonitor : IDisposable
         _restartAttempts++;
         RestartAttempted?.Invoke(this, _restartAttempts);
 
-        // Cancel any previously scheduled restart — only the latest one matters
-        _restartCts?.Cancel();
+        // Cancel any previously scheduled restart — only the latest one matters.
+        // v2.31.0-r1 (CO-2 audit fix): the previous code reassigned _restartCts
+        // without disposing the old one — one CancellationTokenSource leaked
+        // per restart attempt. Long-running sessions with many crash-restart
+        // cycles accumulated CTS instances. Now: Cancel + Dispose the previous
+        // before swapping in the new one.
+        var oldCts = _restartCts;
         _restartCts = new CancellationTokenSource();
         var ct = _restartCts.Token;
+        if (oldCts != null)
+        {
+            try { oldCts.Cancel(); } catch (ObjectDisposedException) { /* already disposed elsewhere */ }
+            oldCts.Dispose();
+        }
 
         // Exponential backoff: 5s, 10s, 20s, 40s, 80s
         var delayMs = (int)Math.Pow(2, _restartAttempts - 1) * 5000;
