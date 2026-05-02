@@ -57,9 +57,18 @@ public partial class FreeConfigItemViewModel : ObservableObject
         ? $"{Entry.MeasuredBandwidthMbps} Mbps"
         : "—";
 
+    // v2.31.3-r1 (F-25 follow-up): treat LatencyMs=0 on a Verified entry as
+    // "needs re-verify" — used by the cache-load migration that heals old
+    // sub-threshold corruption (FreeConfigCache.HealCorruptedSubThresholdLatencies).
+    // Render "—" instead of "0 ms ✓✓" so the UI signals the missing value
+    // rather than confusing users with a bogus zero. SortKey pushes these
+    // entries below all Verified ones with real RTTs so the Saved tab's
+    // ascending-by-latency order surfaces the truly-fast configs first.
     public string LatencyDisplay => Entry.Status switch
     {
+        FreeConfigStatus.Verified when Entry.LatencyMs <= 0 => "— ✓✓",
         FreeConfigStatus.Verified    => $"{Entry.LatencyMs} ms ✓✓",
+        FreeConfigStatus.Ok when Entry.LatencyMs <= 0       => "— ✓",
         FreeConfigStatus.Ok          => $"{Entry.LatencyMs} ms ✓",
         FreeConfigStatus.Slow        => $"{Entry.LatencyMs} ms slow",
         FreeConfigStatus.Implausible => "fake (<5ms)",
@@ -72,6 +81,12 @@ public partial class FreeConfigItemViewModel : ObservableObject
 
     public int LatencySortKey => Entry.Status switch
     {
+        // v2.31.3-r1: Verified entries with LatencyMs<=0 (post-migration "needs
+        // re-verify" state) sort AFTER Verified entries with real RTTs but
+        // BEFORE Ok/Slow — keeps the "freshly verified, real ping" entries on
+        // top of the Saved tab while still showing the unmeasured ones above
+        // failed ones.
+        FreeConfigStatus.Verified when Entry.LatencyMs <= 0 => 90_000,
         FreeConfigStatus.Verified                     => Entry.LatencyMs, // best rank
         FreeConfigStatus.Ok when Entry.LatencyMs > 0 => Entry.LatencyMs + 100_000,
         FreeConfigStatus.Slow                         => Entry.LatencyMs + 200_000,

@@ -43,12 +43,37 @@ public sealed class FreeConfigCache
             if (!File.Exists(_path)) return new CacheFile();
             var json = File.ReadAllText(_path);
             var file = JsonSerializer.Deserialize<CacheFile>(json, JsonOptions);
-            return file ?? new CacheFile();
+            if (file == null) return new CacheFile();
+            HealCorruptedSubThresholdLatencies(file);
+            return file;
         }
         catch (Exception ex)
         {
             _logger.Warning("FreeConfigCache: load failed: {err}", ex.Message);
             return new CacheFile();
+        }
+    }
+
+    /// <summary>
+    /// v2.31.3-r1 (F-25 follow-up): heal old cache entries that picked up
+    /// implausibly low TCP-ping latency from the pre-v2.31.2 Recheck flow.
+    /// Recheck used to skip the <c>ImplausibleThresholdMs=5</c> gate and
+    /// silently overwrote Verified <c>LatencyMs</c> with sub-1 ms readings
+    /// (cached route + ARP made <c>TcpClient.ConnectAsync</c> return faster
+    /// than the physical floor of internet RTT). v2.31.2 fixed the new-write
+    /// path; this migration heals old corrupted entries on load by resetting
+    /// any sub-threshold <c>LatencyMs</c> to 0 — the UI renders 0 as "—",
+    /// signalling "needs re-verify" rather than displaying the bogus value.
+    /// </summary>
+    private static void HealCorruptedSubThresholdLatencies(CacheFile file)
+    {
+        const int ImplausibleThresholdMs = 5;
+        foreach (var entry in file.Configs)
+        {
+            if (entry.LatencyMs > 0 && entry.LatencyMs < ImplausibleThresholdMs)
+            {
+                entry.LatencyMs = 0;
+            }
         }
     }
 
