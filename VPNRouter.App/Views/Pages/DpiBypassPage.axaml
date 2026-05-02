@@ -126,6 +126,10 @@
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretHostsSection}">
                     <TextBlock Text="{Binding L_ZapretSecHosts}" FontWeight="Bold" FontSize="13"/>
 
+                    <!-- v2.30.7-r4 — F-12 fix: hosts buttons are toggle-state.
+                         When installed=true, click = REMOVE (destructive) →
+                         red foreground. When not installed, click = ADD →
+                         normal text colour. -->
                     <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Spacing="4">
@@ -133,7 +137,10 @@
                                     Command="{Binding ToggleDiscordHostsCommand}"
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Left"
-                                    FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
+                                    FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"
+                                    Foreground="{Binding DiscordHostsInstalled,
+                                                 Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                                 ConverterParameter=DangerSolidBrush|TextPrimaryBrush}"/>
                             <TextBlock Text="{Binding LblDiscordHostsDesc}"
                                        TextWrapping="Wrap" FontSize="9" Opacity="0.6"/>
                         </StackPanel>
@@ -146,7 +153,10 @@
                                     Command="{Binding ToggleFlowsealHostsCommand}"
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Left"
-                                    FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
+                                    FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"
+                                    Foreground="{Binding FlowsealHostsInstalled,
+                                                 Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                                 ConverterParameter=DangerSolidBrush|TextPrimaryBrush}"/>
                             <TextBlock TextWrapping="Wrap" FontSize="9" Opacity="0.6"
                                        Text="{Binding L_ZapretHostsHint}"/>
                         </StackPanel>

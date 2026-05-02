@@ -336,8 +336,12 @@ public static class Strings
     public static string TgProxyCopy => Ru ? "Копировать" : "Copy";
     public static string TgProxyCopied => Ru ? "Скопировано!" : "Copied!";
     public static string TgProxyRegenerate => Ru ? "Новый" : "New";
-    public static string TgProxyStart => Ru ? "Запустить Telegram Proxy" : "Start Telegram Proxy";
-    public static string TgProxyStop => Ru ? "Остановить Telegram Proxy" : "Stop Telegram Proxy";
+    // v2.30.7-r4 — F-16 fix: was "Запустить Telegram Proxy" / "Остановить Telegram Proxy"
+    // — mixed-case "Telegram Proxy" inside RU sentence (D1 violation) +
+    // inconsistent with the sub-tab name "Telegram-прокси" (with hyphen, lowercase).
+    // Aligned both labels with the canonical sub-tab name.
+    public static string TgProxyStart => Ru ? "Запустить Telegram-прокси" : "Start Telegram proxy";
+    public static string TgProxyStop  => Ru ? "Остановить Telegram-прокси" : "Stop Telegram proxy";
     public static string TgProxyOpenInTelegram => Ru ? "Открыть в Telegram" : "Open in Telegram";
     public static string TgProxySetupOnce => Ru
         // v2.30.5-r1 (UX-55 fix): EN "Start/Stop" inside RU sentence.
@@ -381,8 +385,12 @@ public static class Strings
     public static string GameFilterUdp => "UDP";
 
     public static string IpSetFilter => Ru ? "IPSet фильтр" : "IPSet filter";
-    public static string IpSetAny => Ru ? "Any (весь трафик)" : "Any (all traffic)";
-    public static string IpSetLoaded => Ru ? "Loaded (список из файла)" : "Loaded (from list file)";
+    // v2.30.7-r4 — F-13 fix: "Any" / "Loaded" were left as English in the
+    // RU dropdown, mixing inside an otherwise-Russian sub-section
+    // (D1 violation). Localized while keeping the parenthetical
+    // explainers intact.
+    public static string IpSetAny => Ru ? "Все (весь трафик)" : "Any (all traffic)";
+    public static string IpSetLoaded => Ru ? "Из файла (список загружен)" : "Loaded (from list file)";
     // v2.30.4-r1 (UX-51 fix): align off-state copy with GameFilterOff
     // ("Выкл" / "Off"). Pre-r1 had "None (отключено)" inconsistent with
     // the dropdown sibling.
@@ -1074,9 +1082,12 @@ public static class Strings
         ? "Включая игры и банки"
         : "Includes games and banking";
     public static string SmpAdvancedLink => Ru ? "Расширенные настройки ▸" : "Advanced settings ▸";
+    // v2.30.7-r4 — F-1 fix: was "Free Configs" in BOTH languages
+    // (D1 violation in RU + inconsistent with the new "Публичные"
+    // tab name shipped in r2). Aligned with the renamed tab.
     public static string SmpAdvancedHint => Ru
-        ? "Все вкладки: серверы, подписки, Zapret, Telegram-прокси, Free Configs и пр."
-        : "All tabs: servers, subscriptions, Zapret, Telegram proxy, Free Configs and more.";
+        ? "Все вкладки: серверы, подписки, Zapret, Telegram-прокси, публичные конфиги и пр."
+        : "All tabs: servers, subscriptions, Zapret, Telegram proxy, public configs and more.";
     public static string SmpChangeConfig => Ru ? "Сменить конфиг или режим ▾" : "Change config or mode ▾";
     public static string SmpConnectedTitle => Ru ? "VPN работает" : "VPN is running";
     public static string SmpDisconnectedTitle => Ru ? "VPN не запущен" : "VPN is off";
@@ -1132,9 +1143,12 @@ public static class Strings
 
     // Advanced card — new wording listing the feature surface
     public static string SmpAdvCardTitle    => Ru ? "Расширенные настройки" : "Advanced settings";
+    // v2.30.7-r4 — F-1 fix: align Simple-card subtitle with the new
+    // "Публичные" tab name (was "Free Configs" hardcoded EN in both
+    // languages, D1 + inconsistency).
     public static string SmpAdvCardSubtitle => Ru
-        ? "Серверы · Подписки · Zapret · Telegram-прокси · Free Configs"
-        : "Servers · Subscriptions · Zapret · Telegram proxy · Free configs";
+        ? "Серверы · Подписки · Zapret · Telegram-прокси · Публичные"
+        : "Servers · Subscriptions · Zapret · Telegram proxy · Public";
 
     // Mini-header menu items (⋯ flyout)
     public static string SmpMenuTheme         => Ru ? "Тема"                   : "Theme";

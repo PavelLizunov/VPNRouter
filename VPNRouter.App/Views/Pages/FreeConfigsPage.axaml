@@ -265,13 +265,18 @@
                             IsVisible="{Binding FreeConfigsVm.HasStaleSaved}"
                             FontSize="10" Padding="10,4"
                             CornerRadius="{StaticResource RadiusSm}"/>
+                    <!-- v2.30.7-r4 — F-23 fix: "✕ Удалить всё" is destructive
+                         (wipes all saved configs); align with the danger-style
+                         pattern used for "Сбросить настройки" / "Удалить службу
+                         Zapret". Foreground swapped from neutral grey to the
+                         Danger token. -->
                     <Button Grid.Column="2"
                             Content="{Binding L_FcSavedClearAllBtn}"
                             Command="{Binding FreeConfigsVm.ClearAllSavedCommand}"
                             IsEnabled="{Binding !FreeConfigsVm.IsBusy}"
                             FontSize="10" Padding="10,4"
                             CornerRadius="{StaticResource RadiusSm}"
-                            Foreground="{DynamicResource TextMutedBrush}"/>
+                            Foreground="{DynamicResource DangerSolidBrush}"/>
                 </Grid>
 
                 <!-- Compact column-header strip — matches Search tab pattern. -->

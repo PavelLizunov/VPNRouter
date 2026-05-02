@@ -1756,9 +1756,13 @@ public partial class MainWindowViewModel : ViewModelBase
     public string LblTgProxyDescription => Strings.TgProxyDescription;
     public string LblTgProxySetupHint => Strings.TgProxySetupHint;
     public string LblTgProxyToggle => TgProxyEnabled ? Strings.TgProxyStop : Strings.TgProxyStart;
+    // v2.30.7-r4 — F-17 fix: button label "Обновить" / "Update" alone
+    // is ambiguous — the page has multiple things that can be updated
+    // (binary version, secret, port). Prefix with "TgProxy" so the
+    // action is unambiguous: "Обновить TgProxy" / "Update TgProxy".
     public string LblUpdateTgProxy => IsRussian
-        ? (TgProxyUpdater.IsInstalled() ? "Обновить" : "Скачать")
-        : (TgProxyUpdater.IsInstalled() ? "Update" : "Download");
+        ? (TgProxyUpdater.IsInstalled() ? "Обновить TgProxy" : "Скачать TgProxy")
+        : (TgProxyUpdater.IsInstalled() ? "Update TgProxy" : "Download TgProxy");
 
 
     [RelayCommand]
