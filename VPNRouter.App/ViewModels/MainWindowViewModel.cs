@@ -5018,6 +5018,11 @@ public partial class MainWindowViewModel : ViewModelBase
         // Propagate to child view models — they have their own property notifiers
         foreach (var group in AppGroups)
             group.NotifyDisplayNameChanged();
+
+        // v2.30.7-r3 — UpdateVm.CheckLinkText is computed from Strings;
+        // it doesn't auto-refresh on lang change because OnPropertyChanged("")
+        // only fires on the parent VM, not on child VMs.
+        UpdateVm?.NotifyLangChanged();
     }
 
     // ── Helpers ──

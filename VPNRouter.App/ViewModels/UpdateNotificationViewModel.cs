@@ -26,7 +26,34 @@ public partial class UpdateNotificationViewModel : ObservableObject
     [ObservableProperty] private string _message = string.Empty;
     [ObservableProperty] private bool _isDownloading;
     [ObservableProperty] private int _downloadProgress;
-    [ObservableProperty] private string _checkLinkText;
+
+    /// <summary>v2.30.7-r3 — UpdateCheck state enum replaces the previous
+    /// `_checkLinkText` string field. Old design stored the localized
+    /// string verbatim, which meant the value was frozen at app start
+    /// and didn't refresh when the user toggled RU/EN. New: state is
+    /// language-agnostic; CheckLinkText is computed from current
+    /// Strings.X getters → re-evaluated on RefreshLocalization.</summary>
+    public enum UpdateCheckState { Default, Checking, UpToDate, Found, Failed }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CheckLinkText))]
+    private UpdateCheckState _checkState = UpdateCheckState.Default;
+
+    /// <summary>Localized button label for the manual check action.
+    /// Computed from <see cref="CheckState"/> + current Strings.Lang.</summary>
+    public string CheckLinkText => CheckState switch
+    {
+        UpdateCheckState.Checking => Strings.Checking,
+        UpdateCheckState.UpToDate => Strings.UpToDate,
+        UpdateCheckState.Found    => Strings.UpdateAvailableShort,
+        UpdateCheckState.Failed   => Strings.CheckFailed,
+        _                         => Strings.CheckForUpdates,
+    };
+
+    /// <summary>Re-fire CheckLinkText when language flips. Called from
+    /// MainWindowViewModel.RefreshLocalization.</summary>
+    public void NotifyLangChanged() => OnPropertyChanged(nameof(CheckLinkText));
+
     [ObservableProperty] private bool _isChecking;
 
     private UpdateInfo? _pendingUpdate;
@@ -44,7 +71,8 @@ public partial class UpdateNotificationViewModel : ObservableObject
         _settings = settings;
         _logger = logger;
         _updateChecker = new UpdateChecker(settings, AppVersion.Version);
-        _checkLinkText = Strings.CheckForUpdates;
+        // v2.30.7-r3 — _checkLinkText init removed; CheckLinkText is now
+        // a computed property that derives from CheckState + current Strings.
 
         _updateChecker.DownloadProgress += progress =>
             Dispatcher.UIThread.Post(() => { if (!_errorLocked) DownloadProgress = progress; });
@@ -82,7 +110,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
     private async Task CheckManually()
     {
         IsChecking = true;
-        CheckLinkText = Strings.Checking;
+        CheckState = UpdateCheckState.Checking;
         try
         {
             var info = await _updateChecker.CheckForUpdateAsync();
@@ -90,24 +118,24 @@ public partial class UpdateNotificationViewModel : ObservableObject
             {
                 _pendingUpdate = info;
                 ShowUpdateNotification();
-                CheckLinkText = Strings.UpdateAvailableShort;
+                CheckState = UpdateCheckState.Found;
             }
             else
             {
-                CheckLinkText = Strings.UpToDate;
+                CheckState = UpdateCheckState.UpToDate;
             }
         }
         catch (Exception ex)
         {
             _logger.Warning(ex, "[UpdateVm] Manual check failed");
-            CheckLinkText = Strings.CheckFailed;
+            CheckState = UpdateCheckState.Failed;
         }
         finally
         {
             IsChecking = false;
             // Reset link text after 3 seconds
             _ = Task.Delay(3000).ContinueWith(_ =>
-                Dispatcher.UIThread.Post(() => CheckLinkText = Strings.CheckForUpdates));
+                Dispatcher.UIThread.Post(() => CheckState = UpdateCheckState.Default));
         }
     }
 
