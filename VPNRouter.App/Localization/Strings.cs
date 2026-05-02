@@ -451,7 +451,11 @@ public static class Strings
         : $"Start UI on {OsDisplayName} logon";
 
     // ── Free Configs ──
-    public static string TabFreeConfigs => Ru ? "Free" : "Free";
+    // v2.30.7 — TabFreeConfigs was hardcoded "Free" in both languages.
+    // Tab strip is narrow (~520px @ default window) so a long RU
+    // translation like "Бесплатные конфиги" doesn't fit. Compromise:
+    // RU "Свободные" (9 chars) — short enough + native, EN "Free".
+    public static string TabFreeConfigs => Ru ? "Свободные" : "Free";
     public static string FcDashboardTotal     => Ru ? "Всего"         : "Total";
     public static string FcDashboardWorking   => Ru ? "Работают"      : "Working";
     public static string FcDashboardTimeout   => Ru ? "Timeout"       : "Timeout";
@@ -1021,10 +1025,14 @@ public static class Strings
         : "Skip servers located in RU during deep verify";
     // ── Simple mode (v2.17+) ──
 
+    // v2.30.7 — both toggles were hardcoded English in both languages.
+    // RU users see "Advanced ▸" / "◂ Simple" inside an otherwise-Russian
+    // UI. Now: localized with the full word ("Расширенный/Простой"
+    // matches the UI mode names everywhere else).
     /// <summary>Header toggle button: Simple → Advanced.</summary>
-    public static string SmpToggleToAdvanced => Ru ? "Advanced ▸" : "Advanced ▸";
+    public static string SmpToggleToAdvanced => Ru ? "Расширенный ▸" : "Advanced ▸";
     /// <summary>Header toggle button: Advanced → Simple.</summary>
-    public static string SmpToggleToSimple   => Ru ? "◂ Simple"   : "◂ Simple";
+    public static string SmpToggleToSimple   => Ru ? "◂ Простой"     : "◂ Simple";
     /// <summary>Tooltip for the header toggle button.</summary>
     public static string SmpToggleTooltip => Ru
         ? "Переключить между упрощённым и полным интерфейсом"

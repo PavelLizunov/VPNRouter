@@ -1462,7 +1462,20 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(NewRuleValue))
         {
-            NewRuleValidationError = "Empty value";
+            NewRuleValidationError = IsRussian ? "Пустое значение" : "Empty value";
+            return;
+        }
+        // v2.30.7 — also gate on the live type-regex validator that
+        // colours the Value border red. Pre-r1 the parser was more
+        // permissive than the live regex (e.g. "53" with type
+        // "domain_suffix" passed parser but failed live regex), so a
+        // user could submit with a red border and an invalid rule
+        // would land in the YAML. Now we honor IsValid first.
+        if (!NewRuleValueIsValid)
+        {
+            NewRuleValidationError = IsRussian
+                ? $"Значение не подходит к типу «{NewRuleType}»"
+                : $"Value doesn't match type \"{NewRuleType}\"";
             return;
         }
         // Assemble a single-line rule and run it through the parser
@@ -1712,9 +1725,13 @@ public partial class MainWindowViewModel : ViewModelBase
     public string LblToolZapret => Strings.TabZapret;
     public string LblToolTgProxy => Strings.TabTgWsProxy;
     public string LblDpiBypassTab => Strings.TabZapret;
+    // v2.30.7 — UX-44 followup: the v2.30.5 fix dropped the "(zapret от
+    // Flowseal)" parenthetical from RU only. EN side kept "(zapret by
+    // Flowseal)". Symmetric drop here — Flowseal credit lives in the
+    // GitHub link in the Advanced section.
     public string LblDpiDescription => IsRussian
         ? "Обход блокировок провайдера. Работает с Discord, YouTube, и другими заблокированными сервисами. Если стратегия не работает — пробуйте другую."
-        : "Bypass ISP blocking (zapret by Flowseal). Works with Discord, YouTube, and other blocked services. If a strategy doesn't work — try another.";
+        : "Bypass ISP blocking. Works with Discord, YouTube, and other blocked services. If a strategy doesn't work — try another.";
     public string LblDpiStrategy => IsRussian ? "Стратегия" : "Strategy";
     public string LblUpdateZapret => IsRussian
         ? (VPNRouter.Core.Services.ZapretUpdater.IsInstalled() ? "Обновить" : "Скачать")

@@ -863,7 +863,24 @@ public static class CustomConfigInjector
                 }
                 else if (address.Contains("://"))
                 {
-                    var uri = new Uri(address);
+                    // v2.30.7 — Uri ctor throws UriFormatException on
+                    // malformed user-supplied DNS server addresses
+                    // (e.g. "://no-scheme" or schemes with chars Uri
+                    // doesn't grok). Without this guard the exception
+                    // propagates up through Inject → HealthMonitor and
+                    // shows as an opaque "configuration error" mid-
+                    // hot-reload. Now we skip the broken entry and let
+                    // the rest of StripUnsupportedFeatures continue.
+                    if (!Uri.TryCreate(address, UriKind.Absolute, out var uri))
+                    {
+                        // Fall through to plain UDP, treating the address
+                        // string as a hostname/IP. sing-box will reject
+                        // it later if truly malformed, but the user gets
+                        // a more specific error from sing-box than from us.
+                        obj["type"] = "udp";
+                        obj["server"] = address;
+                        continue;
+                    }
                     var scheme = uri.Scheme;
 
                     // Upgrade DoT (tls, port 853) → DoH (https, port 443) for better performance.
