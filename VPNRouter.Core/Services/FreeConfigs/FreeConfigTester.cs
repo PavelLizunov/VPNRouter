@@ -147,17 +147,29 @@ public sealed class FreeConfigTester
     /// for the proxy-alive gate; we keep TCP ping as the displayed value).
     /// Skips TLS validation — Recheck runs only on already-Verified entries
     /// that previously passed the full TCP+TLS gauntlet, so re-validating
-    /// TLS is redundant and costs another second per entry.</summary>
+    /// TLS is redundant and costs another second per entry.
+    /// <para>v2.31.2-r1 (F-25 fix): apply the same plausibility gate as
+    /// <see cref="TestOneAsync"/>. Without it Recheck on Saved Verified
+    /// entries was overwriting <c>LatencyMs</c> with raw sub-5 ms readings —
+    /// <c>TcpClient.ConnectAsync</c> returns in &lt;1 ms when the OS has cached
+    /// the route + ARP entry from a previous Deep Verify (most Saved
+    /// entries fit this profile), masking the real internet RTT and making
+    /// every Saved row look like "1 ms" after a recheck. Drop implausible
+    /// readings; keep the previous value (which already passed the gate
+    /// during the original TestOneAsync run, so it's a true RTT).</para>
+    /// </summary>
     public async Task TcpPingOnlyAsync(FreeConfigEntry cfg, CancellationToken ct = default)
     {
         if (cfg == null) return;
         var (status, latency, _) = await TcpPingAsync(cfg.Host, cfg.Port, ct);
-        if (status == FreeConfigStatus.Ok)
+        if (status == FreeConfigStatus.Ok && latency >= ImplausibleThresholdMs)
         {
             cfg.LatencyMs = latency;
         }
         // Don't mutate Status/LastError on failure — caller (Recheck flow)
         // needs the original Verified status preserved for retention.
+        // Sub-threshold readings are dropped silently; the previous LatencyMs
+        // (set by the TestOneAsync gate) stays as the displayed value.
     }
 
     /// <summary>Single TCP connect attempt with timeout.</summary>
