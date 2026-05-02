@@ -634,13 +634,19 @@ public partial class MainWindowViewModel : ViewModelBase
         = new[] { "direct", "proxy", "block" };
 
     /// <summary>Static list of type options for the Add-rule ComboBox.
-    /// Order matches the textbox grammar documentation for UX consistency.</summary>
+    /// Order matches the textbox grammar documentation for UX consistency.
+    /// <para>v2.31.0-r4 (AU-10): added <c>domain_regex</c> + <c>process_path</c>
+    /// so Cards-mode now exposes the same surface that the Edit-mode
+    /// validator (line ~951) already accepts. Pre-fix users could author
+    /// these rule types only via raw textbox grammar; the Add-form
+    /// ComboBox didn't list them, leading to a silent surface mismatch.</para>
+    /// </summary>
     public IReadOnlyList<string> AvailableRuleTypes { get; }
         = new[]
         {
-            "domain", "domain_suffix", "domain_keyword",
+            "domain", "domain_suffix", "domain_keyword", "domain_regex",
             "ip_cidr", "port", "port_range", "network",
-            "process_name", "geosite", "geoip",
+            "process_name", "process_path", "geosite", "geoip",
         };
 
     // ─── Legacy v2.29.0 properties (deprecated, kept for binding back-compat) ───
@@ -1825,6 +1831,12 @@ public partial class MainWindowViewModel : ViewModelBase
                 };
             }
             System.Diagnostics.Process.Start(psi);
+            // v2.31.0-r4 (F-26): inline confirmation toast so the user
+            // gets feedback that the report was saved + opened. Pre-fix
+            // the menu item dismissed silently and the report only appeared
+            // in a separate Notepad window — easy to miss on multi-monitor
+            // setups or when Notepad opens behind VPNRouter.
+            ShowRulesToast(VPNRouter.App.Localization.Strings.HealthCheckSavedToast);
         }
         catch (Exception ex)
         {

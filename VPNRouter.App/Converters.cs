@@ -42,8 +42,22 @@ public class BoolToFontWeightConverter : IValueConverter
 public class BoolToChevronConverter : IValueConverter
 {
     public static readonly BoolToChevronConverter Instance = new();
+
+    /// <summary>
+    /// v2.31.0-r4 (F-3): now accepts a `ConverterParameter` of the form
+    /// "TRUE_GLYPH|FALSE_GLYPH" so each call site can pick the right
+    /// orientation. Examples:
+    ///   - default (no param): "▲" (true) / "▼" (false)
+    ///   - parameter="▽|›":   "▽" (expanded) / "›" (collapsed) — for
+    ///     side-anchored chevrons in the Simple-mode "Конфиг·Режим" card.
+    /// </summary>
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => value is bool b && b ? "▲" : "▼";
+    {
+        var glyphs = (parameter as string)?.Split('|', 2) ?? new[] { "▲", "▼" };
+        var trueGlyph = glyphs.Length > 0 ? glyphs[0] : "▲";
+        var falseGlyph = glyphs.Length > 1 ? glyphs[1] : "▼";
+        return value is bool b && b ? trueGlyph : falseGlyph;
+    }
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }

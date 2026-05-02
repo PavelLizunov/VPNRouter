@@ -98,6 +98,17 @@
         <Style Selector="Button.menu-item:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource SurfaceSunkenBrush}"/>
         </Style>
+        <!-- v2.31.0-r4 (F-27): armed state for the destructive Reset
+             menu item. When the user has clicked once, the label flips to
+             "Нажмите ещё раз для сброса" via ResetConfigMenuHeader; this
+             style adds a danger-tinted backdrop + 1px danger border so the
+             visual rises out of the regular menu strip. Inactive state
+             stays transparent (matches every other menu-item). -->
+        <Style Selector="Button.menu-item.armed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource DangerBgBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource DangerBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
 
         <!-- Mono version pill on the right side of the About row -->
         <Style Selector="TextBlock.version-hint">
@@ -491,6 +502,7 @@
                                          foreground tint so accidental clicks
                                          are less likely. -->
                                     <Button Classes="menu-item"
+                                            Classes.armed="{Binding ResetConfigArmed}"
                                             Command="{Binding ResetConfigCommand}"
                                             Content="{Binding ResetConfigMenuHeader}"
                                             ToolTip.Tip="{Binding L_TipSmpMenuResetConfig}"

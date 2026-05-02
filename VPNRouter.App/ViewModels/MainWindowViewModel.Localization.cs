@@ -184,6 +184,7 @@ public partial class MainWindowViewModel
     public string L_FcClearAll => Strings.FcClearAll;
     public string L_FcClearFailed => Strings.FcClearFailed;
     public string L_FcColBandwidth => Strings.FcColBandwidth;
+    public string L_FcSpeedColumnTooltip => Strings.FcSpeedColumnTooltip;
     public string L_FcColCountry => Strings.FcColCountry;
     public string L_FcColEndpoint => Strings.FcColEndpoint;
     public string L_FcColLatency => Strings.FcColLatency;
@@ -317,6 +318,7 @@ public partial class MainWindowViewModel
     public string L_OpenFolder => Strings.OpenFolder;
     public string L_OpenGitHub => Strings.OpenGitHub;
     public string L_OpenServiceMenu => Strings.OpenServiceMenu;
+    public string L_TipOpenServiceMenu => Strings.TipOpenServiceMenu;
     public string L_PasteVlessUri => Strings.PasteVlessUri;
     public string L_RefreshAll => Strings.RefreshAll;
     public string L_ReinstallService => Strings.ReinstallService;

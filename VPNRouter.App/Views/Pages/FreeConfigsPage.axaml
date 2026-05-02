@@ -54,9 +54,13 @@
                         BorderBrush="{DynamicResource SuccessSolidBrush}"
                         BorderThickness="1">
                     <StackPanel Spacing="10">
-                        <TextBlock Text="{Binding L_FcDeepVerify}"
-                                   FontSize="13" FontWeight="Bold"
-                                   Foreground="{DynamicResource SuccessFgBrush}"/>
+                        <!-- v2.31.0-r4 (F-18 / UX-65): pre-fix the
+                             "✓✓ Найти рабочие конфиги" string appeared
+                             twice — once as section header (this block),
+                             once as the button label below. Visually
+                             duplicative; dropped the header. The hint
+                             below + the button label together carry the
+                             same intent without the repetition. -->
                         <TextBlock Text="{Binding L_FcDeepHint}"
                                    FontSize="10" TextWrapping="Wrap"
                                    Foreground="{DynamicResource SuccessFgBrush}"
@@ -214,7 +218,14 @@
                                                 <TextBlock Text="{Binding LatencyDisplay}"
                                                            Foreground="White" FontSize="9" FontWeight="SemiBold"/>
                                             </Border>
+                                            <!-- v2.31.0-r4 (F-24 / UX-63):
+                                                 added tooltip so "—" rows are
+                                                 self-explanatory ("speed not
+                                                 measured — run Deep verify").
+                                                 Same hint used in Saved tab.
+                                                 -->
                                             <TextBlock Grid.Column="3" Text="{Binding BandwidthDisplay}"
+                                                       ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_FcSpeedColumnTooltip}"
                                                        FontSize="9" Opacity="0.75" FontWeight="SemiBold"
                                                        VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
                                             <TextBlock Grid.Column="4" Text="{Binding Transport}"
@@ -254,10 +265,16 @@
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6"
                       Margin="2,0,2,8"
                       IsVisible="{Binding !FreeConfigsVm.IsSavedEmpty}">
+                    <!-- v2.31.0-r4 (F-22 / UX-60): subtitle was being
+                         truncated mid-sentence with CharacterEllipsis on
+                         narrow windows. Switched to TextWrapping=Wrap so
+                         the full hint stays visible (it's purposely
+                         informative — explains why Saved configs may
+                         break and how to recheck). -->
                     <TextBlock Grid.Column="0"
                                Text="{Binding L_FcSavedTabHint}"
                                FontSize="9" Opacity="0.55"
-                               TextTrimming="CharacterEllipsis"
+                               TextWrapping="Wrap"
                                VerticalAlignment="Center"/>
                     <Button Grid.Column="1"
                             Content="{Binding FreeConfigsVm.SavedRecheckStaleButtonText}"
@@ -340,6 +357,7 @@
                                                        Foreground="White" FontSize="9" FontWeight="SemiBold"/>
                                         </Border>
                                         <TextBlock Grid.Column="3" Text="{Binding BandwidthDisplay}"
+                                                   ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_FcSpeedColumnTooltip}"
                                                    FontSize="9" Opacity="0.85" FontWeight="SemiBold"
                                                    VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,4,0"/>
                                         <TextBlock Grid.Column="4" Text="{Binding FreshnessLabel}"

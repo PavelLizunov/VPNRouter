@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:loc="using:VPNRouter.App.Localization"
+             xmlns:conv="using:VPNRouter.App"
              x:Class="VPNRouter.App.Views.Pages.SimplePage"
              x:DataType="vm:MainWindowViewModel">
 
@@ -98,7 +99,16 @@
                                        Foreground="{DynamicResource TextPrimaryBrush}"
                                        FontFamily="Consolas, 'Segoe UI Mono', monospace"/>
                         </StackPanel>
-                        <TextBlock Grid.Column="2" Text="›" FontSize="13"
+                        <!-- v2.31.0-r4 (F-3 / UX-2): chevron now flips with
+                             SmpFormExpanded so users can tell the section is
+                             open vs collapsed at a glance. Pre-fix the static
+                             `›` glyph was identical in both states and looked
+                             like a glitch on the first accidental click. -->
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding SmpFormExpanded,
+                                          Converter={x:Static conv:BoolToChevronConverter.Instance},
+                                          ConverterParameter=▽|›}"
+                                   FontSize="13"
                                    Foreground="{DynamicResource TextMutedBrush}"
                                    VerticalAlignment="Center"/>
                     </Grid>

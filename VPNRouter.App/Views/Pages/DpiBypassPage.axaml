@@ -281,6 +281,7 @@
                             Foreground="{DynamicResource DangerSolidBrush}"/>
                     <Button Content="{Binding L_OpenServiceMenu}"
                             Command="{Binding OpenZapretServiceMenuCommand}"
+                            ToolTip.Tip="{Binding L_TipOpenServiceMenu}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                             FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
                     <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">

@@ -367,6 +367,10 @@ public static class Strings
     public static string OpenServiceMenu => Ru
         ? "Открыть меню service.bat"
         : "Open service.bat menu";
+    // v2.31.0-r4 (F-15): tooltip on the service.bat menu button.
+    public static string TipOpenServiceMenu => Ru
+        ? "Открыть служебное меню Zapret (winws.exe service.bat) — установка/удаление службы и переключение стратегии."
+        : "Open the Zapret service menu (winws.exe service.bat) — install/remove service and switch strategy.";
 
     // ── Zapret sections (master-detail) ──
     public static string ZapretSecStatus       => Ru ? "Статус" : "Status";
@@ -552,6 +556,14 @@ public static class Strings
     public static string FcColEndpoint        => Ru ? "Адрес"         : "Endpoint";
     public static string FcColLatency         => Ru ? "Пинг"          : "Latency";
     public static string FcColBandwidth       => Ru ? "Скорость"      : "Speed";
+    // v2.31.0-r4 (F-24 / UX-63): tooltip explaining "—" rows.
+    public static string FcSpeedColumnTooltip => Ru
+        ? "Скорость измеряется во время Глубокой проверки. «—» означает, что замер не запускался — нажмите ↻ или «Глубоко проверить» чтобы получить значение."
+        : "Speed is measured during Deep verify. \"—\" means it wasn't measured — click ↻ or 'Deep verify' to get a number.";
+    // v2.31.0-r4 (F-26): inline confirmation toast after RunHealthCheck.
+    public static string HealthCheckSavedToast => Ru
+        ? "Отчёт сохранён и открыт в Блокноте"
+        : "Report saved and opened in Notepad";
     public static string FcColSni             => "SNI";
     public static string FcColTransport       => Ru ? "Транспорт"     : "Transport";
     public static string FcEmptyHint          => Ru
