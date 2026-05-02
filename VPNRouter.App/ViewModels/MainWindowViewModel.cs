@@ -4956,6 +4956,21 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// v2.31.1-r1 (F-4 / UX-6): inline CTA used by the Autostart Section A
+    /// when the boot-autostart checkboxes are greyed out because the Windows
+    /// service isn't installed. Pre-fix the only path to install was scrolling
+    /// up to the master toggle, which wasn't obvious. The button binds to this
+    /// command which simply flips the master toggle — same code path as
+    /// clicking it directly, just discoverable from where the user is looking.
+    /// </summary>
+    [RelayCommand]
+    private void InstallServiceForAutostart()
+    {
+        if (ServiceVm.IsInstalled || ServiceVm.IsBusy) return;
+        ServiceVm.AutostartChecked = true;
+    }
+
+    /// <summary>
     /// Workaround for Avalonia's <c>{x:Static loc:Strings.*}</c> bindings which
     /// are evaluated ONCE at XAML parse time and never re-read — so a language
     /// toggle doesn't update them (Free Configs page has ~100 such bindings).

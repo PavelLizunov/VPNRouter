@@ -173,6 +173,12 @@ public class EtwProcessMonitor : IProcessMonitor
         if (_disposed) return;
         _disposed = true;
         Stop();
+        // v2.31.1-r1 (AU-9 follow-up): _sessionReady is a
+        // ManualResetEventSlim and lazily allocates a kernel WaitHandle on
+        // the first Wait(timeout). Pre-fix the handle leaked once per app
+        // lifetime (small, but still a real leak when the monitor is
+        // recycled by tests or future hot-reload paths).
+        try { _sessionReady.Dispose(); } catch { /* defensive */ }
     }
 }
 #endif

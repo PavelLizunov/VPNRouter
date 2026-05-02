@@ -30,27 +30,42 @@ public static class RuntimeStatusDetector
 {
     /// <summary>True if any sing-box.exe process is running on this machine.</summary>
     public static bool IsVpnRunning()
-    {
-        try
-        {
-            return Process.GetProcessesByName("sing-box").Length > 0;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+        => AnyProcessAlive("sing-box");
 
     /// <summary>True if any winws.exe process is running (Zapret DPI bypass).</summary>
     public static bool IsZapretRunning()
+        => AnyProcessAlive("winws");
+
+    /// <summary>
+    /// v2.31.1-r1 (AU-9 fix): <c>Process.GetProcessesByName</c> returns
+    /// <c>Process[]</c> where each entry holds a kernel handle. The detector
+    /// is polled every 1–2 seconds (see class summary), so without explicit
+    /// disposal we leaked one OS handle per <c>Process</c> per poll until GC
+    /// finalised the orphaned objects — matching the audit's "+170 handles
+    /// per VPN start/stop cycle" symptom. Centralised the disposal here so
+    /// any future name-based detector picks it up automatically.
+    /// </summary>
+    private static bool AnyProcessAlive(string processName)
     {
+        Process[]? procs = null;
         try
         {
-            return Process.GetProcessesByName("winws").Length > 0;
+            procs = Process.GetProcessesByName(processName);
+            return procs.Length > 0;
         }
         catch
         {
             return false;
+        }
+        finally
+        {
+            if (procs != null)
+            {
+                foreach (var p in procs)
+                {
+                    try { p.Dispose(); } catch { /* defensive — GC will mop up */ }
+                }
+            }
         }
     }
 

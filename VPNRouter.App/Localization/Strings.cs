@@ -174,6 +174,22 @@ public static class Strings
     public static string AutostartComponentsInfoHint => Ru
         ? "Эти флаги читает служба при boot. Требуется установленная служба."
         : "These flags are read by the service at boot. Requires the service to be installed.";
+    // v2.31.1-r1 (F-4 / UX-6): inline CTA below the warning hint when the
+    // service isn't installed — pre-fix the only way to install was scrolling
+    // up to the master toggle, which wasn't obvious.
+    public static string BtnInstallServiceInlineCta => Ru
+        ? "Установить службу"
+        : "Install service";
+    public static string TipInstallServiceInlineCta => Ru
+        ? "Установит службу VPNRouter и активирует мастер-тумблер автозапуска выше."
+        : "Installs the VPNRouter Windows service and turns on the master autostart toggle above.";
+    // v2.31.1-r1 (F-6 / UX-33): tooltip explaining the subscription card
+    // metadata format `URL · Ns · refreshed-time`. Pre-fix users wondered
+    // what "7s · –" meant — the "s" plural marker on server count read as
+    // a time unit and the "–" was opaque.
+    public static string TipSubscriptionMetadata => Ru
+        ? "URL · число серверов в последнем обновлении · когда был последний рефреш. «—» если ни разу не обновлялась."
+        : "URL · server count from last refresh · time since last refresh. \"—\" means it has never been refreshed.";
     public static string AutostartLoginSectionTitle => Ru
         ? "При входе пользователя"
         : "At user sign-in";

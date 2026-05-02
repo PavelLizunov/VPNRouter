@@ -2077,12 +2077,30 @@
                     <TextBlock Text="{Binding LblAutostartTgProxy}" TextWrapping="Wrap"/>
                   </CheckBox>
                 </StackPanel>
-                <TextBlock Text="{Binding L_AutostartComponentsInfoHint}"
-                           IsVisible="{Binding !ServiceVm.IsInstalled}"
-                           FontSize="9" FontStyle="Italic"
-                           Foreground="{DynamicResource WarningFgBrush}"
-                           TextWrapping="Wrap"
-                           Margin="0,2,0,0"/>
+                <!-- v2.31.1-r1 (F-4 / UX-6): inline CTA when service not
+                     installed. Pre-fix the only install path was scrolling
+                     up to the master toggle. Now there's a button right
+                     under the explanatory hint, both visible only when
+                     ServiceVm.IsInstalled=false. -->
+                <StackPanel Spacing="4"
+                            IsVisible="{Binding !ServiceVm.IsInstalled}"
+                            Margin="0,2,0,0">
+                  <TextBlock Text="{Binding L_AutostartComponentsInfoHint}"
+                             FontSize="9" FontStyle="Italic"
+                             Foreground="{DynamicResource WarningFgBrush}"
+                             TextWrapping="Wrap"/>
+                  <Button Content="{Binding L_BtnInstallServiceInlineCta}"
+                          Command="{Binding InstallServiceForAutostartCommand}"
+                          ToolTip.Tip="{Binding L_TipInstallServiceInlineCta}"
+                          IsEnabled="{Binding !ServiceVm.IsBusy}"
+                          HorizontalAlignment="Left"
+                          FontSize="10" Padding="10,4"
+                          CornerRadius="{StaticResource RadiusSm}"
+                          Background="{DynamicResource AccentBgSubtleBrush}"
+                          Foreground="{DynamicResource AccentFgBrush}"
+                          BorderBrush="{DynamicResource BorderAccentBrush}"
+                          BorderThickness="1"/>
+                </StackPanel>
               </StackPanel>
             </Border>
           </StackPanel>

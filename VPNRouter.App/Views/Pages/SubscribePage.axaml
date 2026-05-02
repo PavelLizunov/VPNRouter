@@ -266,7 +266,12 @@
 
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                   <TextBlock Classes="srv-name" Text="{Binding Name}"/>
-                  <TextBlock Classes="srv-host">
+                  <!-- v2.31.1-r1 (F-6 / UX-33): tooltip explaining the
+                       cryptic `URL · Ns · time` format. Pre-fix users
+                       read "7s" as seconds and the "—" placeholder as
+                       opaque. -->
+                  <TextBlock Classes="srv-host"
+                             ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_TipSubscriptionMetadata}">
                     <TextBlock.Text>
                       <MultiBinding StringFormat="{}{0} · {1}s · {2}">
                         <Binding Path="Url"/>

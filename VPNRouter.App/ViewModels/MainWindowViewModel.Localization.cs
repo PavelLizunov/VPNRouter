@@ -139,6 +139,9 @@ public partial class MainWindowViewModel
     public string L_AutostartBootSectionTitle => Strings.AutostartBootSectionTitle;
     public string L_AutostartBootSectionSub => Strings.AutostartBootSectionSub;
     public string L_AutostartComponentsInfoHint => Strings.AutostartComponentsInfoHint;
+    public string L_BtnInstallServiceInlineCta => Strings.BtnInstallServiceInlineCta;
+    public string L_TipInstallServiceInlineCta => Strings.TipInstallServiceInlineCta;
+    public string L_TipSubscriptionMetadata => Strings.TipSubscriptionMetadata;
     public string L_AutostartLoginSectionTitle => Strings.AutostartLoginSectionTitle;
     public string L_AutostartLoginAppDescription => Strings.AutostartLoginAppDescription;
     // v2.27 §4.5 — prominent PID line replacing the small pill
