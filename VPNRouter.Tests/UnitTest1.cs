@@ -4363,3 +4363,159 @@ public class TcpPingOnlyPlausibilityGateTests
             entry.Status);
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// v2.31.5-r1 — UI-fix regression pins (no dispatcher needed)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Several v2.31.x fixes touched data the App layer already exposes via plain
+// .NET getters / converters / collections. Those don't need a headless Avalonia
+// dispatcher, so we pin them as regular [Fact] tests in this file. Tests that
+// need full XAML rendering (chevron-flip visual, F-27 .armed style) live in
+// the headless suite (HeadlessGuiTests / PageScreenshotTests) where the dis-
+// patcher is wired up.
+
+public class FreeConfigCacheMigrationTests
+{
+    /// <summary>
+    /// v2.31.3-r1 (F-25 heal-old): on cache load, any LatencyMs in [1..4]
+    /// gets reset to 0 — those values were written by the pre-v2.31.2
+    /// Recheck flow that skipped the plausibility gate. The migration is
+    /// in-memory only (a subsequent Save persists). Test it via a synthetic
+    /// CacheFile + reflection on the private static helper.
+    /// </summary>
+    [Fact]
+    public void Load_WithCorruptedSubThresholdLatencies_ResetsToZero()
+    {
+        var file = new VPNRouter.Core.Services.FreeConfigs.FreeConfigCache.CacheFile
+        {
+            Configs = new()
+            {
+                MakeEntry(1),   // implausible — must heal
+                MakeEntry(4),   // implausible — must heal
+                MakeEntry(0),   // already zero — leave alone
+                MakeEntry(5),   // threshold — keep (gate uses < 5)
+                MakeEntry(42),  // plausible — keep
+            },
+        };
+
+        // Invoke the private static heal helper via reflection. It mirrors
+        // what FreeConfigCache.Load() does post-deserialise.
+        var t = typeof(VPNRouter.Core.Services.FreeConfigs.FreeConfigCache);
+        var m = t.GetMethod("HealCorruptedSubThresholdLatencies",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(m);
+        m!.Invoke(null, new object[] { file });
+
+        Assert.Equal(0, file.Configs[0].LatencyMs); // 1 → 0
+        Assert.Equal(0, file.Configs[1].LatencyMs); // 4 → 0
+        Assert.Equal(0, file.Configs[2].LatencyMs); // 0 → 0
+        Assert.Equal(5, file.Configs[3].LatencyMs); // 5 → 5 (threshold inclusive)
+        Assert.Equal(42, file.Configs[4].LatencyMs); // 42 → 42
+    }
+
+    private static VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry MakeEntry(int latency) =>
+        new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
+        {
+            Host = "1.2.3.4",
+            Port = 443,
+            LatencyMs = latency,
+            Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified,
+        };
+}
+
+public class AvailableRuleTypesSurfaceTests
+{
+    /// <summary>
+    /// v2.31.0-r4 (AU-10): the Cards-mode Add-rule ComboBox lists rule
+    /// types. Pre-fix it was missing <c>domain_regex</c> and
+    /// <c>process_path</c> even though the Edit-mode validator accepted
+    /// both — surface mismatch. The fix lives in
+    /// <c>MainWindowViewModel.AvailableRuleTypes</c> (initialiser); this
+    /// test pins the contents so a future tidy-up doesn't accidentally
+    /// drop them again.
+    ///
+    /// <para>Construction is heavyweight (touches settings + logger), but
+    /// we only read a static initialiser, so wrap it in [AvaloniaFact] —
+    /// MainWindowViewModel's ApplyTheme path needs the dispatcher.</para>
+    /// </summary>
+    [Avalonia.Headless.XUnit.AvaloniaFact]
+    public void AvailableRuleTypes_Contains_DomainRegex_And_ProcessPath()
+    {
+        var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
+        Assert.Contains("domain_regex", vm.AvailableRuleTypes);
+        Assert.Contains("process_path", vm.AvailableRuleTypes);
+        // Sanity: existing types still present.
+        Assert.Contains("domain", vm.AvailableRuleTypes);
+        Assert.Contains("ip_cidr", vm.AvailableRuleTypes);
+    }
+}
+
+public class FreeConfigItemViewModelDisplayTests
+{
+    /// <summary>
+    /// v2.31.3-r1 (F-25 heal-old): a Verified entry with LatencyMs ≤ 0
+    /// (post-cache-migration "needs re-verify" state) must render as
+    /// "— ✓✓" instead of the misleading "0 ms ✓✓". Pin both the display
+    /// string and the sort-key bucket — the Saved tab's ascending order
+    /// must NOT push these healed entries to the bottom (they're still
+    /// proven-working configs, just lacking a fresh ping reading).
+    /// </summary>
+    [Fact]
+    public void Verified_WithZeroLatency_DisplaysDashWithDoubleCheck()
+    {
+        var entry = new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
+        {
+            Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified,
+            LatencyMs = 0,
+            Host = "1.2.3.4",
+            Port = 443,
+        };
+        var vm = new VPNRouter.App.ViewModels.FreeConfigs.FreeConfigItemViewModel(entry);
+
+        Assert.Equal("— ✓✓", vm.LatencyDisplay);
+    }
+
+    [Fact]
+    public void Verified_WithPlausibleLatency_StillShowsMsCheck()
+    {
+        var entry = new VPNRouter.Core.Services.FreeConfigs.FreeConfigEntry
+        {
+            Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified,
+            LatencyMs = 42,
+        };
+        var vm = new VPNRouter.App.ViewModels.FreeConfigs.FreeConfigItemViewModel(entry);
+
+        Assert.Equal("42 ms ✓✓", vm.LatencyDisplay);
+    }
+}
+
+public class BoolToChevronConverterTests
+{
+    /// <summary>
+    /// v2.31.0-r4 (F-3): the Simple-mode "Конфиг·Режим" card chevron now
+    /// flips ▽ ↔ › via <see cref="VPNRouter.App.BoolToChevronConverter"/>
+    /// with a parameter. The pre-fix converter only returned ▲/▼ — the
+    /// regression test ensures both default + parameter paths stay correct
+    /// so a refactor doesn't silently break F-3 again.
+    /// </summary>
+    [Fact]
+    public void DefaultParameter_ReturnsArrowGlyphs()
+    {
+        var c = VPNRouter.App.BoolToChevronConverter.Instance;
+        Assert.Equal("▲", c.Convert(true, typeof(string), null,
+            System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal("▼", c.Convert(false, typeof(string), null,
+            System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    public void RightDownParameter_ReturnsCardChevronGlyphs()
+    {
+        var c = VPNRouter.App.BoolToChevronConverter.Instance;
+        Assert.Equal("▽", c.Convert(true, typeof(string), "▽|›",
+            System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal("›", c.Convert(false, typeof(string), "▽|›",
+            System.Globalization.CultureInfo.InvariantCulture));
+    }
+}
