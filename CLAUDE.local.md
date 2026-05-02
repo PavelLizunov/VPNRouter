@@ -29,17 +29,26 @@ git push origin main && git push github main
 candidates `vX.Y.Z-r1`, `vX.Y.Z-r2` to keep the Releases page clean
 and avoid 30-prerelease bursts we had in v2.17 → v2.21 cycle.
 
+**Updated 2026-05-03 (после v2.31.4)**: stable cut больше НЕ
+autonomous. Партнёрство user+claude: claude ships -rN автономно и
+verifies, user даёт явную команду на promotion. Слишком много
+partial-fix slips в одной session показали что "5 green checkboxes"
+gate скрывает UX bugs — нужен human-in-the-loop перед stable.
+
 1. Pick version `vX.Y.Z` (patch bump vs. current stable).
 2. Ship first iteration as `vX.Y.Z-r1` prerelease (autonomously, no confirm).
-3. User tests на своей машине. Если репортит баги — итерируем; если молчит и
-   verification gate зелёная — продвигаемся (см. шаг 5).
+3. **Verify** через MCP+UIA где testable, или explicit "Core-only / not UI-testable" label.
+   Доложить status-summary user'у.
 4. Ship fix as `vX.Y.Z-r2`, **delete previous candidate**:
    ```bash
    gh release delete "vX.Y.Z-r1" --yes --repo PavelLizunov/VPNRouter
    ```
 5. Repeat until verification gate зелёная (build + tests + Mac/Linux CI green +
-   12 assets) и no user-reported regressions за ~24h.
-6. Cut stable `vX.Y.Z` (no suffix) **autonomously** когда gate зелёная:
+   12 assets) и MCP verification PASS where applicable.
+6. **STOP. Wait for user "cut" / "ok" / "promote" command.** No autonomous
+   stable cut — see lesson v2.31.2 ниже. Only proceed когда user явно
+   подтверждает.
+7. Cut stable `vX.Y.Z` (no suffix) **по команде user'а**:
    ```bash
    gh release create vX.Y.Z <assets> --title "vX.Y.Z — ..." --notes "..."
    gh release edit "vX.Y.Z" --prerelease=false --latest
@@ -49,6 +58,20 @@ and avoid 30-prerelease bursts we had in v2.17 → v2.21 cycle.
 **Only one in-flight prerelease visible at any time.** User паузит явной
 командой "hold stable" если хочет задержать promotion. Full strategy +
 rationale + hotfix emergency path in `plans/vpnrouter-release-strategy.md`.
+
+### Урок v2.31.2 → v2.31.3 → v2.31.4 (партнёрство, не auto-cut)
+
+В одной session 2026-05-02..03 cut'нули 5 stable releases подряд.
+Из них 2 (v2.31.2 + v2.31.4) cut'нулись по "all-green" gate БЕЗ
+MCP-verify (один — потому что toast not testable, второй — cache
+empty). v2.31.2 оказался partial fix — user получил stable где F-25
+всё ещё видим в UI. Поймали только потому что MCP retest сделали
+сами после cut. v2.31.3 пришлось shipать как hotfix.
+
+**Vывод**: green tests + CI ≠ "ship to stable". Tests не покрывают
+UI rendering, hover, tooltips, popup interactions. user-в-цикле перед
+stable cut обязателен. Tiny fixes (typo, version bump, README) —
+exception: ship + flag + let user decide if нужен ceremonial stable.
 
 ## GitHub Release Retention Policy
 
@@ -68,9 +91,11 @@ page подчищаем. Если надо восстановить старый
 **Когда чистить**: каждый раз когда общее число релизов выходит за 30
 (обычно после серии -rN итераций внутри одного минорного цикла).
 
-Promote to stable когда verification gate зелёная (build + tests + Mac/Linux CI +
-12 assets) и user не репортил regressions за ~24h. Default mode: autonomous;
-user паузит явной командой "hold stable" если хочет задержать promotion.
+Promote to stable **по явной команде user'а** (cut / ok / promote). Не
+autonomous — см. урок v2.31.2 в Release Process выше. Verification gate
+(build + tests + Mac/Linux CI + 12 assets + MCP verify где testable)
+обязательно зелёная ПЕРЕД тем как просить разрешение, но cut только
+по подтверждению.
 
 ### Build / push steps (unchanged)
 

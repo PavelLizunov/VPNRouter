@@ -89,15 +89,17 @@ Open Tasks / Last session log.
 
 ## Golden rules
 
-**Mode = autonomous by default.** Подтверждений от user'а не запрашиваем —
-делаем всё сами (commit / push / tag / release / cut stable / cleanup).
-User прерывает явной командой ("стоп", "hold", "откати") если направление
-неверное. Safety rails ниже остаются — это про destructive ops, не workflow.
+**Mode = autonomous до stable cut.** Подтверждений от user'а не запрашиваем
+для code → -rN ship cycle (commit / push / tag / release / cleanup). User
+прерывает явной командой ("стоп", "hold", "откати"). **Stable cut требует
+явной user-команды** ("cut" / "ok" / "promote") — см. урок v2.31.2 в
+`CLAUDE.local.md`. Safety rails ниже остаются — про destructive ops.
 
-1. **Default = autonomous full cycle.** Code change → build → tests → commit →
-   push в оба remote → ship -rN → mac/linux CI → finalize release → delete
-   previous -rN. Без вопросов между шагами. Cut stable тоже autonomous когда
-   последний -rN прошёл verification gate (см. rule #6).
+1. **Default = autonomous до stable.** Code change → build → tests → commit →
+   push в оба remote → ship -rN → mac/linux CI → finalize prerelease → delete
+   previous -rN → MCP verify где testable → **доложить user'у + ждать cut**.
+   Без вопросов между intermediate шагами. **Cut stable НЕ autonomous** —
+   только по явной команде. См. rule #6.
 2. **Push в ОБА remote** после commit'а: `git push github HEAD:main && git push origin HEAD:main`.
    Forgejo через VPN — может быть down, retry позже автоматически.
 3. **Никогда `--no-verify` / `--no-gpg-sign`** без явного запроса. Если pre-commit
@@ -107,11 +109,17 @@ User прерывает явной командой ("стоп", "hold", "отк
    до того как опубликован release. (Safety rail.)
 5. **`AppVersion.Version` ВСЕГДА совпадает с release tag**, включая `-rN`
    суффикс. Урок v2.25.0-r1→r2 в `CLAUDE.local.md`.
-6. **Stable cut autonomous gate**: cut когда (a) `dotnet build -c Release` 0 errors,
+6. **Stable cut по user-команде** (изменено 2026-05-03 после v2.31.4).
+   Verification gate (5 conditions ниже) — обязательное READY условие, но
+   само не cut'ает. Жди explicit "cut" / "ok" / "promote" перед `vX.Y.Z`
+   stable. Conditions: (a) `dotnet build -c Release` 0 errors,
    (b) regression tests зелёные, (c) Mac+Linux CI на последнем -rN зелёные,
-   (d) `gh release view` показывает 12 assets, (e) no user-reported regressions
-   за reasonable timeframe (~24h по умолчанию). Все 5 → cut. User паузит явной
-   командой "hold stable".
+   (d) `gh release view` показывает 12 assets, (e) MCP+UIA verify PASS
+   где testable (или explicit "Core-only / not UI-testable" label).
+   **Урок v2.31.2**: 2 из 5 stable cuts в одной session оказались
+   partial-fix slips потому что MCP verify не делался — нужен
+   human-in-the-loop. Tiny / config-only / typo fixes — exception:
+   ship + flag + let user decide if нужен ceremonial stable.
 7. **process_name в sing-box case-sensitive** — не использовать `ToLowerInvariant()`.
    Дедупликация через `StringComparer.OrdinalIgnoreCase` без mutation.
 8. **`.claude/` partially editable** — `.claude/skills/<name>/SKILL.md` и
