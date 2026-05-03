@@ -9,8 +9,10 @@ Windows Service wrapper. Запускается при boot до user logon. И�
 Program.cs              ← --service vs console mode detection
 VPNRouterService.cs     ← BackgroundService implementation. Использует SubscriptionResolver.
 ServiceInstaller.cs     ← sc.exe install/uninstall, failure recovery (3x/60s)
-Worker.cs               ← UNUSED scaffold от template, можно удалить
 ```
+
+(`Worker.cs` template-scaffold удалён в одной из ранних v2.27 чисток —
+он никогда не был зарегистрирован в DI и не запускался.)
 
 ## Lifecycle
 

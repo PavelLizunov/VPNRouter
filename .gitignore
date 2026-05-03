@@ -68,7 +68,12 @@ release-notes-*.md
 
 # UI test screenshots (regenerated on every `dotnet test` run; inspection
 # artefact, not versioned content). See plans/ui-testing-workflow.md.
-VPNRouter.Tests/screenshots/
+# Exception: screenshots/baseline/ holds pinned PNGs for VisualDiffTests
+# regression — those ARE versioned and refreshed only when a page change
+# is intentional (see VisualDiffTests doc-comment for the workflow).
+VPNRouter.Tests/screenshots/*
+!VPNRouter.Tests/screenshots/baseline/
+!VPNRouter.Tests/screenshots/baseline/**
 
 # Claude session handoff (memory layer for CSM context system).
 # Contains current state + persons + infrastructure pointers. May contain
