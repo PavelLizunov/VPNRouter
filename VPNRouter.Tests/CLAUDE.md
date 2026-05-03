@@ -45,6 +45,7 @@ offscreen-render → `window.CaptureRenderedFrame()` для PNG snapshots.
 | `FreeConfigAggregatorPreserveTests` | v2.28.3-r5: cache merge logic (Verified preserved, recent Ok preserved, etc.) | 9 |
 | `ProfileManagerJsonDosGuardTests` | v2.31.0-r1 (CO-4): `MaxDepth=32` JSON guard | 2 |
 | `HealthMonitorTimerRaceTests` | v2.31.0-r1 (CO-1): atomic timer-swap conservation | 1 |
+| `HealthMonitorRecoveryGapTests` | v2.31.5-r2: post-crash recovery via `_shouldBeRunning` intent flag (User-reported VPN-loss bug) | 5 |
 | `FirewallManagerLocalizedNetshTests` | v2.31.0-r1 (CO-5): block-aware netsh parser | 2 |
 | `RuntimeStatusDetectorHandleLeakTests` | v2.31.1-r1 (AU-9): `Process[]` dispose pattern callable-stability | 2 |
 | `TcpPingOnlyPlausibilityGateTests` | v2.31.2-r1 (F-25 prevent-new): preserve LatencyMs on probe failure | 1 |

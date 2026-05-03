@@ -30,6 +30,24 @@ public class HealthMonitor : IDisposable
     private bool _disposed;
     private bool _isStopping;   // set during HealthMonitor.Stop() to block crash handling
 
+    // v2.31.5-r2 (user-reported VPN-loss bug):
+    // tracks user intent — true between Start() and Stop(), regardless of
+    // whether sing-box is currently up. Pre-fix the only crash-recovery path
+    // was the Task.Delay scheduled inside AttemptRestart from OnSingBoxCrashed.
+    // If that continuation didn't fire (laptop slept and the task got
+    // cancelled, App quit between schedule and fire, dispatcher starved,
+    // exception thrown before logger flushed) the user was stranded:
+    //   - _vpnWasRunning was set to false by OnSingBoxCrashed,
+    //   - the periodic health-tick check `!isHealthy && _vpnWasRunning`
+    //     evaluated to false-after-crash and did nothing,
+    //   - firewall block rules stayed enabled forever, but VPN never came
+    //     back without manual user intervention.
+    // The new flag drives a defensive recovery path inside OnHealthTick
+    // that re-attempts AttemptRestart whenever sing-box is dead, the user
+    // intends VPN to run, and we're not in the middle of Stop().
+    // See plans/release-notes-v2.31.5-r2.md for the full timeline.
+    private bool _shouldBeRunning;
+
     // Cancels any pending AttemptRestart Task.Delay — prevents stale restarts
     // from firing after a successful reload has already happened.
     private CancellationTokenSource? _restartCts;
@@ -70,6 +88,7 @@ public class HealthMonitor : IDisposable
         _appSettings = appSettings;
         _restartAttempts = 0;
         _isStopping = false;
+        _shouldBeRunning = true;   // v2.31.5-r2: arms the OnHealthTick recovery path
         _lastScan = initialScan; // baseline — prevents reload on first debounce if nothing changed
 
         // Strict mode: poll every 5 seconds instead of the configured interval
@@ -89,6 +108,7 @@ public class HealthMonitor : IDisposable
     public void Stop()
     {
         _isStopping = true;
+        _shouldBeRunning = false;  // v2.31.5-r2: disarm OnHealthTick recovery
         // v2.31.0-r1 (CO-2): also dispose the CTS — Cancel alone leaves the
         // wait handle alive until the GC catches the finalizer. Symmetric
         // with the AttemptRestart swap pattern.
@@ -162,9 +182,37 @@ public class HealthMonitor : IDisposable
                 _logger.Warning("[HealthMonitor] Health check failed — sing-box is not healthy");
                 AttemptRestart();
             }
+            else if (!isHealthy && _shouldBeRunning && !_isStopping)
+            {
+                // v2.31.5-r2 (user-reported VPN-loss bug): defensive recovery.
+                // sing-box is dead AND user wants VPN up AND we're not in
+                // the middle of Stop(). This path catches the gap where
+                // OnSingBoxCrashed scheduled an AttemptRestart Task.Delay
+                // that never fired its continuation (laptop slept across the
+                // 5s deadline; App was killed-then-revived by the OS;
+                // dispatcher starved long enough that the CTS got cancelled
+                // by Stop()-then-Start() outside our intent). Pre-fix this
+                // condition silently stranded the user: _vpnWasRunning was
+                // set false by OnSingBoxCrashed, the original `!isHealthy
+                // && _vpnWasRunning` check no longer matched, and recovery
+                // never happened until manual reconnect.
+                //
+                // Bound by _settings.MaxRestartAttempts — same cap as the
+                // crash path. If we hit the ceiling here, AttemptRestart
+                // logs "Max restart attempts reached" and gives up; the UI
+                // surfaces "VPN down" and the user can press Reconnect.
+                _logger.Warning("[HealthMonitor] sing-box dead while user wants VPN up — initiating recovery (intended-running path)");
+                AttemptRestart();
+            }
             else if (isHealthy && !_vpnWasRunning)
             {
                 _vpnWasRunning = true;
+                // v2.31.5-r2: a successful health observation after a crash
+                // gap means recovery worked. Reset the attempt counter so
+                // the next unrelated crash doesn't inherit a half-burned
+                // backoff budget — the user shouldn't pay for previous
+                // restart history once they're connected again.
+                _restartAttempts = 0;
                 _logger.Information("[HealthMonitor] VPN is up");
                 VpnStarted?.Invoke(this, EventArgs.Empty);
             }
