@@ -208,55 +208,18 @@ public class VpnEngine : IDisposable
             _logger?.Warning("[VpnEngine] Safe mode — skipping custom apps / categories / group-apps merge");
         }
 
-        // 2a. Merge user-added apps into default groups (custom_group_apps)
-        if (!SafeMode.Enabled && settings.CustomGroupApps?.Count > 0)
+        // v2.31.6-r10 (Phase F): merge user-added apps into default groups
+        // (custom_group_apps) + inject user-created categories
+        // (custom_categories) as new profiles. Logic was previously
+        // duplicated ~50 LOC verbatim between this StartAsync path and
+        // ApplyAsync (drift risk between the two — silent leak class
+        // of bug). Extracted to MergeUserCustomization. SafeMode guard
+        // stays at this call site since StartAsync's pre-existing
+        // semantics respect safe mode (ApplyAsync historically did
+        // not — preserving that asymmetry to avoid behavioural change).
+        if (!SafeMode.Enabled)
         {
-            foreach (var (groupName, extras) in settings.CustomGroupApps)
-            {
-                var profile = collection.Profiles.FirstOrDefault(p =>
-                    p.Name.Equals(groupName, StringComparison.OrdinalIgnoreCase));
-                if (profile == null) continue;
-                foreach (var app in extras ?? new())
-                {
-                    if (string.IsNullOrWhiteSpace(app)) continue;
-                    var name = app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app : app + ".exe";
-                    if (profile.Processes.Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
-                        continue;
-                    profile.Processes.Add(new ProcessRule
-                    {
-                        Name = name, IncludeChildren = true, ScanPatterns = new[] { name }
-                    });
-                }
-            }
-        }
-
-        // 2b. Inject user-created categories (custom_categories) as profiles
-        if (!SafeMode.Enabled && settings.CustomCategories?.Count > 0)
-        {
-            foreach (var cat in settings.CustomCategories)
-            {
-                if (string.IsNullOrWhiteSpace(cat.Name)) continue;
-                if (collection.Profiles.Any(p => p.Name.Equals(cat.Name, StringComparison.OrdinalIgnoreCase)))
-                    continue;
-                var profile = new Profile
-                {
-                    Name = cat.Name,
-                    Description = "User category",
-                    DnsMode = "vpn_only",
-                    BlockOnVpnFail = false,
-                    Processes = new List<ProcessRule>()
-                };
-                foreach (var app in cat.Apps ?? new())
-                {
-                    if (string.IsNullOrWhiteSpace(app)) continue;
-                    var name = app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app : app + ".exe";
-                    profile.Processes.Add(new ProcessRule
-                    {
-                        Name = name, IncludeChildren = true, ScanPatterns = new[] { name }
-                    });
-                }
-                collection.Profiles.Add(profile);
-            }
+            MergeUserCustomization(collection, settings);
         }
 
         // v2.22.0-r1: dump catalogue at boot so we can eyeball from logs
@@ -695,48 +658,11 @@ public class VpnEngine : IDisposable
             var manager = new ProfileManager(sources, _logger);
             var collection = await manager.LoadAsync(ct);
 
-            // Merge custom_group_apps
-            if (settings.CustomGroupApps?.Count > 0)
-            {
-                foreach (var (groupName, extras) in settings.CustomGroupApps)
-                {
-                    var p = collection.Profiles.FirstOrDefault(x =>
-                        x.Name.Equals(groupName, StringComparison.OrdinalIgnoreCase));
-                    if (p == null) continue;
-                    foreach (var app in extras ?? new())
-                    {
-                        if (string.IsNullOrWhiteSpace(app)) continue;
-                        var name = app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app : app + ".exe";
-                        if (p.Processes.Any(pr => pr.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) continue;
-                        p.Processes.Add(new ProcessRule { Name = name, IncludeChildren = true, ScanPatterns = new[] { name } });
-                    }
-                }
-            }
-
-            // Inject custom_categories
-            if (settings.CustomCategories?.Count > 0)
-            {
-                foreach (var cat in settings.CustomCategories)
-                {
-                    if (string.IsNullOrWhiteSpace(cat.Name)) continue;
-                    if (collection.Profiles.Any(p => p.Name.Equals(cat.Name, StringComparison.OrdinalIgnoreCase))) continue;
-                    var profile = new Profile
-                    {
-                        Name = cat.Name,
-                        Description = "User category",
-                        DnsMode = "vpn_only",
-                        BlockOnVpnFail = false,
-                        Processes = new List<ProcessRule>()
-                    };
-                    foreach (var app in cat.Apps ?? new())
-                    {
-                        if (string.IsNullOrWhiteSpace(app)) continue;
-                        var name = app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app : app + ".exe";
-                        profile.Processes.Add(new ProcessRule { Name = name, IncludeChildren = true, ScanPatterns = new[] { name } });
-                    }
-                    collection.Profiles.Add(profile);
-                }
-            }
+            // v2.31.6-r10 (Phase F): consolidated user-customization merge.
+            // ApplyAsync historically called this without a SafeMode guard
+            // (StartAsync skips when safe mode is on; ApplyAsync didn't —
+            // preserving that asymmetry, see helper doc-comment).
+            MergeUserCustomization(collection, settings);
 
             // Resolve active profile (tolerant — v2.22.0-r1)
             var profileName = settings.ActiveProfile;
@@ -1076,6 +1002,100 @@ public class VpnEngine : IDisposable
             tun.AutoRoute ? "1" : "0",
             tun.StrictRoute ? "1" : "0",
             excludeKey);
+    }
+
+    /// <summary>
+    /// v2.31.6-r10 (Phase F) — consolidated user-customization merge step.
+    /// Mutates <paramref name="collection"/> in place by:
+    ///
+    /// <list type="bullet">
+    ///   <item>Adding entries from <c>settings.CustomGroupApps</c> as
+    ///   ProcessRule items on existing profiles whose name matches the
+    ///   group key (case-insensitive). Skips dupes — a name already
+    ///   present in the profile's Processes is left alone.</item>
+    ///   <item>Injecting entries from <c>settings.CustomCategories</c>
+    ///   as new <see cref="Profile"/> instances appended to the
+    ///   collection. Skips categories whose Name collides with an
+    ///   existing profile (the existing profile wins; user can rename
+    ///   in CustomCategories to disambiguate).</item>
+    /// </list>
+    ///
+    /// <para>App names are normalised to <c>foo.exe</c> form (extension
+    /// added if missing) — sing-box's <c>process_name</c> matcher is
+    /// case-sensitive but extension-aware, and this is the canonical
+    /// shape the rest of the pipeline uses.</para>
+    ///
+    /// <para><b>SafeMode handling</b>: this helper does NOT itself
+    /// check <see cref="SafeMode.Enabled"/>. The caller decides:
+    /// <see cref="StartAsync"/> wraps the call in
+    /// <c>if (!SafeMode.Enabled)</c> (so safe mode bypasses customization
+    /// at boot — the entire point of safe mode). <see cref="ApplyAsync"/>
+    /// calls unconditionally — preserving the pre-r10 asymmetry where
+    /// a hot-reload Apply still merges customization even when a
+    /// previous safe-mode boot would have skipped it. If we ever decide
+    /// Apply should also respect safe mode, that's a separate
+    /// behavioural change.</para>
+    ///
+    /// <para>Pre-r10 this body was duplicated ~50 LOC verbatim across
+    /// StartAsync and ApplyAsync — a silent-leak class of bug if the
+    /// two ever drifted (and they did briefly drift in v2.28.2's
+    /// initial fix attempt, caught by the regression suite). The
+    /// extraction makes the merge behaviour single-sourced.</para>
+    /// </summary>
+    internal static void MergeUserCustomization(
+        ProfileCollection collection,
+        AppSettings settings)
+    {
+        // Merge user-added apps into existing default groups.
+        if (settings.CustomGroupApps?.Count > 0)
+        {
+            foreach (var (groupName, extras) in settings.CustomGroupApps)
+            {
+                var profile = collection.Profiles.FirstOrDefault(p =>
+                    p.Name.Equals(groupName, StringComparison.OrdinalIgnoreCase));
+                if (profile == null) continue;
+                foreach (var app in extras ?? new())
+                {
+                    if (string.IsNullOrWhiteSpace(app)) continue;
+                    var name = app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app : app + ".exe";
+                    if (profile.Processes.Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                        continue;
+                    profile.Processes.Add(new ProcessRule
+                    {
+                        Name = name, IncludeChildren = true, ScanPatterns = new[] { name }
+                    });
+                }
+            }
+        }
+
+        // Inject user-created categories as new profiles.
+        if (settings.CustomCategories?.Count > 0)
+        {
+            foreach (var cat in settings.CustomCategories)
+            {
+                if (string.IsNullOrWhiteSpace(cat.Name)) continue;
+                if (collection.Profiles.Any(p => p.Name.Equals(cat.Name, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+                var profile = new Profile
+                {
+                    Name = cat.Name,
+                    Description = "User category",
+                    DnsMode = "vpn_only",
+                    BlockOnVpnFail = false,
+                    Processes = new List<ProcessRule>()
+                };
+                foreach (var app in cat.Apps ?? new())
+                {
+                    if (string.IsNullOrWhiteSpace(app)) continue;
+                    var name = app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app : app + ".exe";
+                    profile.Processes.Add(new ProcessRule
+                    {
+                        Name = name, IncludeChildren = true, ScanPatterns = new[] { name }
+                    });
+                }
+                collection.Profiles.Add(profile);
+            }
+        }
     }
 
     private static List<IProfileSource> BuildProfileSources(AppSettings settings)
