@@ -235,5 +235,31 @@ subscription leak fits this.
 
 ## Тесты
 
-Тесты ViewModel'ов отсутствуют (headless Avalonia harness — backlog).
-Тестируется только Core layer. Manual repro для UI bugs через `tools/live-test-r1.ps1`.
+Headless Avalonia harness активен (с v2.31.5+) — `VPNRouter.Tests/TestAppBuilder.cs`
+поднимает Avalonia на dispatcher-thread теста через `[AvaloniaFact]` /
+`[AvaloniaTheory]`, `UseSkia()` + `UseHeadlessDrawing=false` дают
+offscreen-render для PNG snapshots.
+
+Покрытие App-layer'а:
+
+- `HeadlessGuiTests` (4) — MainWindow / AboutWindow ctor smoke + button
+  input routing
+- `PageScreenshotTests` (14) — 9 page snapshots + NetworkPage Autostart
+  sub-tab + 3 narrow-window variants (520 / 440 / 360 / 300 / 720 / 500
+  / 400 px), inspectional PNG'и в `screenshots/` (gitignored)
+- `VisualDiffTests` (3, v2.31.5+) — pixel-tolerance regression vs
+  pinned `screenshots/baseline/*.png` для DpiBypass / Telegram / Tools.
+  Threshold 2% pixels >30 RGB-sum. Windows-only.
+- `AvailableRuleTypesSurfaceTests` — `MainWindowViewModel.AvailableRuleTypes`
+  Cards-mode ComboBox содержит `domain_regex` + `process_path`
+- `MainWindowViewModelTests` (`ViewModelTests.cs`) — `SmpAutostartChecked`
+  re-notify on three inputs (v2.27 Bug B)
+- `FreeConfigItemViewModelDisplayTests` (2, v2.31.3-r1) — Verified+0
+  rendering как "— ✓✓" (graceful unknown state)
+- `BoolToChevronConverterTests` (2, v2.31.0-r4) — chevron-glyph converter
+  default + param paths
+
+Полный inventory + visual-diff baseline refresh workflow —
+`VPNRouter.Tests/CLAUDE.md`.
+
+Manual repro для UI bugs где удобнее — `tools/live-test-r1.ps1`.

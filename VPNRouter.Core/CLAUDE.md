@@ -25,7 +25,7 @@ AppVersion.cs   единая версия — обновлять перед ка
 | `HealthMonitor.cs` | Periodic health check, auto-restart с backoff (5/10/20/40/80s), debounced rescan (5s window). |
 | `VlessServersResolver.cs` | **Single source of truth** для агрегации subscription→VLESS. Зовётся из `VpnEngine.StartAsync`, `VpnEngine.Apply`, `HealthMonitor.GenerateConfigJson`. (v2.28.2-r1) |
 | `SubscriptionResolver.cs` | Service/CLI bootstrap. **Не путать с VlessServersResolver** — этот делает refresh + flip ConfigMode→generated. |
-| `SubscriptionFetcher.cs` | HTTP fetch + parse VLESS URI list. Три формата: JSON wrapper, raw base64, plain URIs. Dedup по `Server:Port:UUID:Flow`. |
+| `SubscriptionFetcher.cs` | HTTP fetch + parse server URI list. Три формата: JSON wrapper, raw base64, plain URIs. Dedup по `Server:Port:UUID:Flow`. Parser extracted to internal `ParseBody` (v2.31.5+) для unit-test без HTTP. |
 | `VlessUriParser.cs` | Парсер `vless://...` URI. **`HttpUtility.ParseQueryString` НЕ делает двойной unquote** — `pbk` (base64url с `-_`) приходит как есть. |
 | `ProcessScanner.cs` | Резолвит process_name по profile. Поддерживает wildcards через regex. **case-sensitive**: sing-box `process_name` matching через Go map → не использовать `ToLowerInvariant()`. |
 | `EtwProcessMonitor.cs` | Real-time process events через ETW. <10ms latency vs WMI 500ms+. |
@@ -85,12 +85,25 @@ _process.Kill(entireProcessTree: true);
 
 ## Тестирование
 
-`VPNRouter.Tests/UnitTest1.cs` (1900+ строк, 30+ тестов):
+`VPNRouter.Tests/UnitTest1.cs` ~4900 строк, 80+ unit-тестов в ~25 классах
+плюс headless Avalonia tests в отдельных файлах. Полный inventory с
+покрытием — `VPNRouter.Tests/CLAUDE.md` "Test classes" таблица.
+
+Headline классы по Core (не исчерпывающе):
 - `GetEffectiveServersTests` — backward compat legacy fields
 - `ConfigGeneratorTests` — DNS rules, route rules, outbound generation
 - `VlessServersResolverTests` (v2.28.2) — 8 cases для subscription aggregation
 - `ConfigGeneratorEmptyServersGuardTests` (v2.28.2) — hard guard pin
-- `Generate_FromSubscribeMode_PassesSingBoxCheck` — integration: запускает `sing-box check` на сгенерированном JSON
+- `LeakProtectionTests` — 19 cases (включая протокол-aware dispatch
+  v2.30.1-r4 + smart-mode local-dns v2.31.x, добавлены в v2.31.5+)
+- `CustomConfigInjectorTests` — 22+ cases (Validate / Inject / DNS
+  optimization / sing-box check integration)
+- `SubscriptionFetcherParserTests` (v2.31.5+) — 8 cases на 3 body формата
 - `FreeConfigAggregatorPreserveTests` (v2.28.3-r5) — 9 cases для merge logic
+- `Generate_FromSubscribeMode_PassesSingBoxCheck` — integration: запускает
+  `sing-box check` на сгенерированном JSON
 
-`InternalsVisibleTo VPNRouter.Tests` уже настроен в `.csproj` — internal helpers тестируются напрямую.
+`InternalsVisibleTo VPNRouter.Tests` уже настроен в `.csproj` — internal
+helpers (`SubscriptionFetcher.ParseBody`,
+`FreeConfigAggregator.PreservePreviousValidation`,
+`FreeConfigCache.HealCorruptedSubThresholdLatencies`) тестируются напрямую.
