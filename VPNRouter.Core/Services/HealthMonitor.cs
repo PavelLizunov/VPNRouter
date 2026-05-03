@@ -52,6 +52,21 @@ public class HealthMonitor : IDisposable
     // from firing after a successful reload has already happened.
     private CancellationTokenSource? _restartCts;
 
+    // v2.31.6-r9 — re-entry guard for OnHealthTick.
+    // System.Threading.Timer can fire callbacks re-entrantly when a
+    // previous tick is still running. The body does cross-process
+    // calls (`SingBoxManager.IsHealthy` → Clash API HTTP / Process
+    // probe) which under strict-mode 5 s polls or under WMI/HTTP
+    // latency can take multiple seconds. Two ticks racing each
+    // other could each call `AttemptRestart` (now serialised by
+    // the lock added in r8 — the harm is bounded but still wasteful)
+    // or both observe stale state at different points. The Interlocked
+    // gate here ensures only ONE OnHealthTick body runs at a time;
+    // a re-entrant call returns immediately. CompareExchange returns
+    // the *previous* value, so 0→1 success means we won the race;
+    // any non-zero previous value means another tick is in-flight.
+    private int _onHealthTickInProgress;
+
     // v2.31.6-r8 — serialise AttemptRestart against itself.
     // Iter#4 audit (2026-05-04) flagged that AttemptRestart is invokable from
     // two callbacks running on different threadpool threads:
@@ -190,6 +205,16 @@ public class HealthMonitor : IDisposable
 
     private void OnHealthTick(object? state)
     {
+        // v2.31.6-r9: re-entry guard. If a previous tick is still
+        // running (e.g. blocked in IsHealthy's Clash API HTTP call),
+        // skip this invocation rather than running the body in
+        // parallel. The previous tick will clear the flag in finally.
+        if (System.Threading.Interlocked.CompareExchange(ref _onHealthTickInProgress, 1, 0) != 0)
+        {
+            _logger.Debug("[HealthMonitor] OnHealthTick skipped — previous tick still in progress");
+            return;
+        }
+
         try
         {
             var isHealthy = _singBox.IsHealthy();
@@ -237,6 +262,13 @@ public class HealthMonitor : IDisposable
         catch (Exception ex)
         {
             _logger.Error(ex, "[HealthMonitor] Exception in health tick");
+        }
+        finally
+        {
+            // v2.31.6-r9: clear the re-entry guard. Volatile write via
+            // Interlocked.Exchange ensures the next tick sees the cleared
+            // flag without needing a memory barrier dance.
+            System.Threading.Interlocked.Exchange(ref _onHealthTickInProgress, 0);
         }
     }
 

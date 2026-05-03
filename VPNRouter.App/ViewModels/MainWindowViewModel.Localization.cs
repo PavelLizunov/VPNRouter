@@ -309,7 +309,10 @@ public partial class MainWindowViewModel
     public string L_LblNoServers => Strings.LblNoServers;
     public string L_LblPort => Strings.LblPort;
     public string L_LblPublicKey => Strings.LblPublicKey;
-    public string L_LblRoutingMode => Strings.LblRoutingMode;
+    // v2.31.6-r9 — removed L_LblRoutingMode (no XAML reference).
+    // The corresponding LblRoutingMode getter in MainWindowViewModel.cs
+    // is still in use by NetworkPage.axaml routing-mode label binding,
+    // so kept; only the L_-prefixed proxy was orphaned.
     public string L_LblServer => Strings.LblServer;
     public string L_LblShortId => Strings.LblShortId;
     public string L_LblUuid => Strings.LblUuid;
@@ -450,6 +453,8 @@ public partial class MainWindowViewModel
     public string L_TcpUdpHint => Strings.TcpUdpHint;
     public string L_TgProxyCopied => Strings.TgProxyCopied;
     public string L_TgProxyCopy => Strings.TgProxyCopy;
+    public string L_TgProxyCopySecretA11y => Strings.TgProxyCopySecretA11y;
+    public string L_TgProxyRegenerateSecretA11y => Strings.TgProxyRegenerateSecretA11y;
     public string L_TgProxyDescription => Strings.TgProxyDescription;
     public string L_TgProxyLink => Strings.TgProxyLink;
     public string L_TgProxyOpenInTelegram => Strings.TgProxyOpenInTelegram;

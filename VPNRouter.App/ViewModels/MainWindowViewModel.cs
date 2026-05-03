@@ -210,19 +210,11 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <summary>True when the server ListBox should be visible (Manual or Subscribe mode).</summary>
     public bool IsServerListMode => IsVlessMode || IsSubscribeMode;
 
-    // ComboBox mode selector: 0=Manual, 1=Subscribe, 2=Custom Config
-    [ObservableProperty] private int _configModeIndex;
-    public string[] ConfigModeItems => new[]
-    {
-        Strings.ModeManual,
-        Strings.ModeSubscribe,
-        Strings.ModeCustomConfig
-    };
-
-    // ConfigModeIndex is no longer used for mode switching.
-    // Mode is determined solely by tab selection (OnSelectedTabIndexChanged).
-    // ComboBox removed from UI in v2.5.0; this handler kept as no-op safety.
-    partial void OnConfigModeIndexChanged(int value) { }
+    // v2.31.6-r9 — removed `_configModeIndex` ObservableProperty +
+    // `ConfigModeItems` getter + `OnConfigModeIndexChanged` no-op partial.
+    // The ComboBox they backed was dropped from the UI in v2.5.0 and the
+    // empty handler had been parked as a no-op safety since. No XAML
+    // bindings left, no callers — iter#4 audit confirmed unused.
 
     // Sync mode flags when tab changes. Saves on tab switch so Connect
     // always uses the mode matching the visible tab.
@@ -650,21 +642,11 @@ public partial class MainWindowViewModel : ViewModelBase
             "process_name", "process_path", "geosite", "geoip",
         };
 
-    // ─── Legacy v2.29.0 properties (deprecated, kept for binding back-compat) ───
-    /// <summary>v2.29.0-r4 legacy. Kept as a thin alias to CustomRulesText
-    /// so v2.29.0-r4..r8 cached XAML bindings still resolve. New UI binds
-    /// to CustomRulesText / CustomRulesErrorText. This alias is read-only
-    /// post-migration.</summary>
-    public string CustomDirectRulesText
-    {
-        get => CustomRulesText;
-        set => CustomRulesText = value;
-    }
-    public string CustomDirectRulesErrorText
-    {
-        get => CustomRulesErrorText;
-        set => CustomRulesErrorText = value;
-    }
+    // v2.31.6-r9 — removed CustomDirectRulesText / CustomDirectRulesErrorText
+    // aliases (v2.29.0-r4 transitional shim for cached XAML bindings).
+    // Iter#4 audit: no XAML reference remains anywhere; the only callers
+    // were the VM's own self-OnPropertyChanged announcements at lines
+    // 806-807 (also removed).
     [ObservableProperty] private bool _strictMode = false;
     [ObservableProperty] private bool _forceIpv4Only = true;
     [ObservableProperty] private bool _flushDnsOnStart = true;
@@ -802,9 +784,9 @@ public partial class MainWindowViewModel : ViewModelBase
         // Notify so the UI re-binds diagnostic blocks.
         OnPropertyChanged(nameof(CustomRulesErrorText));
         OnPropertyChanged(nameof(CustomRulesConflictText));
-        // Legacy aliases too — for any v2.29 cached XAML still binding to them.
-        OnPropertyChanged(nameof(CustomDirectRulesText));
-        OnPropertyChanged(nameof(CustomDirectRulesErrorText));
+        // v2.31.6-r9 — dropped the two legacy alias OnPropertyChanged
+        // calls (`CustomDirectRulesText`, `CustomDirectRulesErrorText`)
+        // along with the alias getters above. No remaining XAML refs.
 
         // v2.30.0-r2: rebuild CustomRulesList rows from the parsed
         // structured list so the structured view stays in sync with
@@ -1837,16 +1819,11 @@ public partial class MainWindowViewModel : ViewModelBase
         ? Strings.TgProxyStop
         : Strings.TgProxyStartAndOpen;
 
-    // v2.31.6-r1: simplified TelegramPage UX strings (kept here for
-    // backward-compat; r3 page uses only the SetupCta wording for the
-    // pre-existing OpenTgProxyInTelegramCommand fallback path. The
-    // other L_TgProxy* + L_OpenFolder + L_OpenGitHub + L_Wm* getters
-    // already live in MainWindowViewModel.Localization.cs).
-    public string L_TgProxySetupCta => Strings.TgProxySetupCta;
-    public string L_TgProxySetupSubtitle => Strings.TgProxySetupSubtitle;
-    public string L_TgProxySetupStep => Strings.TgProxySetupStep;
-    public string L_TgProxyClientAutoHint => Strings.TgProxyClientAutoHint;
-    public string L_TgProxyAdvanced => Strings.TgProxyAdvanced;
+    // v2.31.6-r9 — purged 5 unused L_TgProxySetup* / L_TgProxyClientAutoHint
+    // / L_TgProxyAdvanced getters added in v2.31.6-r1's two-state cascade
+    // but orphaned by r3's design-aligned redo. Iter#4 audit confirmed no
+    // XAML bindings. Only L_TgProxyReopenInTelegram is still used (body
+    // «Reopen in Telegram» button).
     public string L_TgProxyReopenInTelegram => Strings.TgProxyReopenInTelegram;
     // v2.30.7-r4 — F-17 fix: button label "Обновить" / "Update" alone
     // is ambiguous — the page has multiple things that can be updated
@@ -5202,67 +5179,16 @@ public partial class MainWindowViewModel : ViewModelBase
         ServiceVm.AutostartChecked = true;
     }
 
-    /// <summary>
-    /// Workaround for Avalonia's <c>{x:Static loc:Strings.*}</c> bindings which
-    /// are evaluated ONCE at XAML parse time and never re-read — so a language
-    /// toggle doesn't update them (Free Configs page has ~100 such bindings).
-    /// We rebuild the window with the same DataContext so XAML re-parses and
-    /// picks up the new <see cref="Strings.Lang"/>, while all VM state
-    /// (Servers list, connection, Free Configs cache, etc.) is preserved
-    /// because the VM instance is shared.
-    /// </summary>
-    private void ReloadMainWindowForLocalization()
-    {
-        try
-        {
-            if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
-                return;
-
-            var oldWindow = desktop.MainWindow;
-            if (oldWindow == null) return;
-
-            // Remember geometry + state so the new window opens where the old one was
-            var pos    = oldWindow.Position;
-            var width  = oldWindow.Width;
-            var height = oldWindow.Height;
-            var state  = oldWindow.WindowState;
-
-            var newWindow = new Views.MainWindow
-            {
-                DataContext   = this,
-                Position      = pos,
-                Width         = width,
-                Height        = height,
-                WindowState   = state,
-                // v2.17.10 fix: MainWindow.axaml declares
-                // WindowStartupLocation="CenterScreen" which, on the rebuilt
-                // instance, would re-centre the window at Show() time and
-                // discard the Position we just copied from the old window.
-                // Set Manual to tell Avalonia "trust the Position property".
-                WindowStartupLocation = WindowStartupLocation.Manual,
-            };
-
-            // v2.25.9 fix: wait for the new window to be fully opened
-            // (XAML parsed + first render done) BEFORE closing the old
-            // one. Previously we called newWindow.Show() then
-            // oldWindow.Close() synchronously — Avalonia would briefly
-            // show an empty desktop patch where the old window lived
-            // before the new one caught up, causing the visible "flash"
-            // users reported. Listening to Opened lets us overlap the
-            // two windows perfectly.
-            desktop.MainWindow = newWindow;
-            newWindow.Opened += (_, _) =>
-            {
-                try { oldWindow.Close(); }
-                catch { /* old window already gone, ignore */ }
-            };
-            newWindow.Show();
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(ex, "[VM] ReloadMainWindowForLocalization failed (non-fatal)");
-        }
-    }
+    // v2.31.6-r9 — removed ReloadMainWindowForLocalization (~50 LOC).
+    // Originally a workaround for Avalonia's {x:Static loc:Strings.*}
+    // binding evaluation timing — bindings cached at XAML parse time
+    // and didn't refresh on language toggle, so Free Configs page (~100
+    // x:Static bindings) needed window rebuild. The newer locale-toggle
+    // path (RefreshL10nProxies) reflects PropertyChanged across all L_*
+    // proxy getters and made this rebuild redundant; the comment at
+    // line 5108 explicitly noted "no longer wired into the toggle path".
+    // Iter#4 audit confirmed zero callers (only definition + its own
+    // catch-block log line referenced the symbol).
 
     [RelayCommand]
     private void ApplySettings()

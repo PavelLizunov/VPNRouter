@@ -436,12 +436,23 @@ public class VPNRouterService : BackgroundService
         }
         catch (OperationCanceledException) { }
 
-        try { _engine?.Stop(); } catch { }
-        try { _engine?.Dispose(); } catch { }
-        try { _zapret?.Stop(); } catch { }
-        try { _zapret?.Dispose(); } catch { }
-        try { _tgProxy?.Stop(); } catch { }
-        try { _tgProxy?.Dispose(); } catch { }
+        // v2.31.6-r9 — preserve the "all components must be stopped even if
+        // one throws" invariant but log the swallowed exception instead of
+        // discarding silently. Pre-r9 a sing-box stuck on Kill() during
+        // shutdown produced an empty-catch swallow + zero diagnostics; now
+        // operators can see what failed in Event Log.
+        try { _engine?.Stop(); }
+        catch (Exception ex) { _logger.LogWarning(ex, "[Service] _engine.Stop failed (non-fatal)"); }
+        try { _engine?.Dispose(); }
+        catch (Exception ex) { _logger.LogWarning(ex, "[Service] _engine.Dispose failed (non-fatal)"); }
+        try { _zapret?.Stop(); }
+        catch (Exception ex) { _logger.LogWarning(ex, "[Service] _zapret.Stop failed (non-fatal)"); }
+        try { _zapret?.Dispose(); }
+        catch (Exception ex) { _logger.LogWarning(ex, "[Service] _zapret.Dispose failed (non-fatal)"); }
+        try { _tgProxy?.Stop(); }
+        catch (Exception ex) { _logger.LogWarning(ex, "[Service] _tgProxy.Stop failed (non-fatal)"); }
+        try { _tgProxy?.Dispose(); }
+        catch (Exception ex) { _logger.LogWarning(ex, "[Service] _tgProxy.Dispose failed (non-fatal)"); }
 
         await base.StopAsync(cancellationToken);
         _logger.LogInformation("[Service] Stopped");

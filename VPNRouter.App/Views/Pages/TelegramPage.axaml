@@ -79,7 +79,8 @@
                             <TextBox Text="{Binding TgProxyPort}"
                                      Watermark="{Binding L_WmTgProxyPort}"
                                      FontSize="11" Padding="6,4"
-                                     HorizontalContentAlignment="Center"/>
+                                     HorizontalContentAlignment="Center"
+                                     AutomationProperties.Name="{Binding L_TgProxyPort}"/>
                         </StackPanel>
 
                         <!-- Col 2: Secret + Copy + New -->
@@ -91,22 +92,33 @@
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        LetterSpacing="0.5"/>
                             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
+                                <!-- v2.31.6-r9 — A11y: explicit AutomationProperties.Name
+                                     so screen readers announce «MTProto secret» rather
+                                     than the cryptic 32-char hex value the TextBox
+                                     reads otherwise. Name uses the same RU/EN string
+                                     that the visible caption above shows. -->
                                 <TextBox Grid.Column="0"
                                          Text="{Binding TgProxySecret}"
                                          Watermark="{Binding L_WmTgProxySecret}"
                                          FontSize="10" Padding="6,4"
                                          FontFamily="Consolas,Courier New,monospace"
-                                         IsReadOnly="True"/>
+                                         IsReadOnly="True"
+                                         AutomationProperties.Name="{Binding L_TgProxySecret}"/>
+                                <!-- A11y: «Copy» / «New» button labels are too short
+                                     for screen readers to disambiguate without context.
+                                     Name binds to fuller phrases via Strings. -->
                                 <Button Grid.Column="1"
                                         Content="{Binding L_TgProxyCopy}"
                                         Command="{Binding CopyTgProxySecretCommand}"
                                         FontSize="10" Padding="8,4"
-                                        CornerRadius="{StaticResource RadiusSm}"/>
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        AutomationProperties.Name="{Binding L_TgProxyCopySecretA11y}"/>
                                 <Button Grid.Column="2"
                                         Content="{Binding L_TgProxyRegenerate}"
                                         Command="{Binding RegenerateTgProxySecretCommand}"
                                         FontSize="10" Padding="8,4"
-                                        CornerRadius="{StaticResource RadiusSm}"/>
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        AutomationProperties.Name="{Binding L_TgProxyRegenerateSecretA11y}"/>
                             </Grid>
                         </StackPanel>
 
@@ -166,6 +178,10 @@
                                            Opacity="0.6"
                                            VerticalAlignment="Center"/>
                             </StackPanel>
+                            <!-- v2.31.6-r9 A11y: Content already descriptive
+                                 («Update TgProxy») but adding explicit Name
+                                 ensures the icon-rendered ↻ glyph in some
+                                 themes doesn't strip the label. -->
                             <Button Grid.Column="2"
                                     Content="{Binding LblUpdateTgProxy}"
                                     Command="{Binding UpdateTgProxyCommand}"
@@ -175,7 +191,8 @@
                                     BorderBrush="{DynamicResource BorderSubtleBrush}"
                                     BorderThickness="1"
                                     IsEnabled="{Binding !IsTgProxyDownloading}"
-                                    VerticalAlignment="Center"/>
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.Name="{Binding LblUpdateTgProxy}"/>
                         </Grid>
                     </Border>
 

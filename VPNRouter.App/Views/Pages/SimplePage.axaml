@@ -71,7 +71,11 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ═══ Config row — tappable, opens the inline form ═══ -->
+                <!-- ═══ Config row — tappable, opens the inline form ═══
+                     v2.31.6-r9 A11y: same card-as-button pattern as the
+                     Advanced settings card below. Bind Name to the
+                     L_SmpConfigRowLabel («Конфиг» / «Config») which is
+                     also the visible header inside the button. -->
                 <Button Command="{Binding OpenConfigPickerCommand}"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch"
@@ -79,7 +83,8 @@
                         BorderThickness="1"
                         BorderBrush="{DynamicResource BorderSubtleBrush}"
                         Background="{DynamicResource SurfaceRaisedBrush}"
-                        CornerRadius="{StaticResource RadiusSm}">
+                        CornerRadius="{StaticResource RadiusSm}"
+                        AutomationProperties.Name="{Binding L_SmpConfigRowLabel}">
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10" Margin="12,8">
                         <!-- Flag-like icon -->
                         <Border Grid.Column="0" Width="24" Height="24"
@@ -214,7 +219,11 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ═══ CTA — three mutually-exclusive variants ═══ -->
+                <!-- ═══ CTA — three mutually-exclusive variants ═══
+                     v2.31.6-r9 A11y: each variant binds AutomationProperties.Name
+                     to SimpleCtaText so screen readers announce the state-
+                     appropriate verb ("Connect" / "Disconnect" / "Cancel").
+                     Same string drives Content visually + Name for a11y. -->
                 <!-- ON: Disconnect — accent-solid, NOT red (per design) -->
                 <Button Command="{Binding SmpToggleConnectCommand}"
                         Content="{Binding SimpleCtaText}"
@@ -225,7 +234,8 @@
                         Background="{DynamicResource AccentSolidBrush}"
                         Foreground="{DynamicResource AccentOnSolidBrush}"
                         BorderThickness="0"
-                        CornerRadius="{StaticResource RadiusSm}"/>
+                        CornerRadius="{StaticResource RadiusSm}"
+                        AutomationProperties.Name="{Binding SimpleCtaText}"/>
 
                 <!-- WARN: Cancel — sunken, progress cursor -->
                 <Button Command="{Binding SmpToggleConnectCommand}"
@@ -238,7 +248,8 @@
                         Background="{DynamicResource SurfaceSunkenBrush}"
                         Foreground="{DynamicResource TextSecondaryBrush}"
                         BorderThickness="0"
-                        CornerRadius="{StaticResource RadiusSm}"/>
+                        CornerRadius="{StaticResource RadiusSm}"
+                        AutomationProperties.Name="{Binding SimpleCtaText}"/>
 
                 <!-- OFF: Connect — outlined, accent fg -->
                 <Button Command="{Binding SmpToggleConnectCommand}"
@@ -251,9 +262,16 @@
                         Foreground="{DynamicResource AccentFgBrush}"
                         BorderBrush="{DynamicResource AccentBorderBrush}"
                         BorderThickness="1"
-                        CornerRadius="{StaticResource RadiusSm}"/>
+                        CornerRadius="{StaticResource RadiusSm}"
+                        AutomationProperties.Name="{Binding SimpleCtaText}"/>
 
-                <!-- ═══ Advanced settings card ═══ -->
+                <!-- ═══ Advanced settings card ═══
+                     v2.31.6-r9 A11y: this is a Button rendered as a card; the
+                     Content is composed of inner Grid + TextBlocks rather than
+                     a plain string label, so screen readers can't fall back
+                     to a default name. Bind Name to L_SmpAdvCardTitle so the
+                     announcement matches the visible primary text «Advanced
+                     settings» / «Расширенные настройки». -->
                 <Button Command="{Binding ToggleUiModeCommand}"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Stretch"
@@ -262,7 +280,8 @@
                         BorderBrush="{DynamicResource BorderDefaultBrush}"
                         Background="{DynamicResource SurfaceBaseBrush}"
                         CornerRadius="{StaticResource RadiusMd}"
-                        ToolTip.Tip="{Binding UiModeToggleTooltip}">
+                        ToolTip.Tip="{Binding UiModeToggleTooltip}"
+                        AutomationProperties.Name="{Binding L_SmpAdvCardTitle}">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="14,12">
                         <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
                             <TextBlock Text="{Binding L_SmpAdvCardTitle}"

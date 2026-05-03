@@ -225,27 +225,6 @@ public class BoolToBrushConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
-public class AppsTabVisibleConverter : IMultiValueConverter
-{
-    public static readonly AppsTabVisibleConverter Instance = new();
-    public object? Convert(System.Collections.Generic.IList<object?> values, Type targetType, object? parameter, CultureInfo culture)
-    {
-        if (values.Count < 2) return false;
-        var idx = values[0] is int i ? i : -1;
-        var split = values[1] is bool b && b;
-        return idx == 2 && split;
-    }
-}
-
-public class EmptyCustomConverter : IMultiValueConverter
-{
-    public static readonly EmptyCustomConverter Instance = new();
-    public object? Convert(System.Collections.Generic.IList<object?> values, Type targetType, object? parameter, CultureInfo culture)
-    {
-        if (values.Count < 3) return false;
-        var isCustom = values[0] is bool b && b;
-        var count = values[1] is int i ? i : 0;
-        var expanded = values[2] is bool e && e;
-        return isCustom && count == 0 && expanded;
-    }
-}
+// v2.31.6-r9 — removed AppsTabVisibleConverter + EmptyCustomConverter.
+// Both were defined with `Instance` singletons but no XAML reference
+// anywhere across `Views/`. Iter#4 audit flagged as dead code.

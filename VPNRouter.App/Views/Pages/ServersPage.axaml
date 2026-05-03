@@ -345,13 +345,20 @@
       <StackPanel Spacing="6">
         <!-- Test all + Deep verify + progress row -->
         <StackPanel Spacing="2" IsVisible="{Binding IsVlessMode}">
+          <!-- v2.31.6-r9 — A11y: AutomationProperties.Name on action buttons.
+               ServerTestButtonText / ServerDeepButtonText already give a
+               descriptive label, but their content can flip to short
+               progress strings («Testing…», «Deep…»); the explicit Name
+               binding keeps screen readers announcing the canonical
+               action name regardless of progress state. -->
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Button Content="{Binding ServerTestButtonText}"
                     Command="{Binding TestAllServersCommand}"
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
                     Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
-                    ToolTip.Tip="{Binding L_TipTestAllServers}"/>
+                    ToolTip.Tip="{Binding L_TipTestAllServers}"
+                    AutomationProperties.Name="{Binding L_TipTestAllServers}"/>
             <!-- v2.25.3: Deep verify was #7C3AED (violet, outside Arctic
                  palette). Now arctic primary to match the design-system
                  rule "primary CTAs in arctic; state colours for state".
@@ -362,7 +369,8 @@
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
                     Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                    ToolTip.Tip="{Binding L_TipDeepVerifyServers}"/>
+                    ToolTip.Tip="{Binding L_TipDeepVerifyServers}"
+                    AutomationProperties.Name="{Binding L_TipDeepVerifyServers}"/>
             <TextBlock Text="{Binding ServerTestProgressText}"
                        VerticalAlignment="Center"
                        FontSize="10" Opacity="0.7"/>
@@ -378,16 +386,22 @@
                   Command="{Binding AddServerCommand}"
                   Margin="6,0,0,0"
                   Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"/>
+                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"
+                  AutomationProperties.Name="{Binding LblAddServers}"/>
           <Button DockPanel.Dock="Right" Content="{Binding LblRemove}"
                   Command="{Binding RemoveServerCommand}"
                   Margin="6,0,0,0"
-                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}"/>
+                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}"
+                  AutomationProperties.Name="{Binding L_TipDeleteServer}"/>
+          <!-- v2.31.6-r9 A11y: VLESS URI textbox needs explicit Name —
+               watermark text disappears once user starts typing, leaving
+               screen readers without context. -->
           <TextBox Text="{Binding VlessUri}"
                    Watermark="{Binding L_WmVlessUri}"
                    FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
                    FontSize="10" Padding="6,4"
-                   AcceptsReturn="False"/>
+                   AcceptsReturn="False"
+                   AutomationProperties.Name="{Binding L_WmVlessUri}"/>
         </DockPanel>
         <!-- Custom Config buttons -->
         <StackPanel Orientation="Horizontal" Spacing="8"
@@ -395,10 +409,12 @@
           <Button Content="{Binding LblAddConfig}"
                   Command="{Binding AddCustomConfigCommand}"
                   Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"/>
+                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}" FontWeight="SemiBold"
+                  AutomationProperties.Name="{Binding LblAddConfig}"/>
           <Button Content="{Binding LblRemove}"
                   Command="{Binding RemoveCustomConfigCommand}"
-                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}"/>
+                  Padding="14,5" CornerRadius="{StaticResource RadiusSm}"
+                  AutomationProperties.Name="{Binding LblRemove}"/>
         </StackPanel>
       </StackPanel>
     </Border>

@@ -375,29 +375,30 @@ public static class Strings
         ? "Нажмите 'Открыть в Telegram' один раз для настройки прокси. После этого просто Запуск/Остановка."
         : "Click 'Open in Telegram' once to set up the proxy. After that just Start/Stop.";
 
-    // v2.31.6-r1 (TelegramPage UX simplification): two-state minimal
-    // layout — the page now hides the power-user controls (port /
-    // secret / version / folder / GitHub) behind an Advanced expander
-    // and surfaces a single primary action that depends on whether
-    // the proxy has ever been set up before.
-    public static string TgProxySetupCta => Ru
-        ? "Настроить Telegram-прокси"
-        : "Set up Telegram proxy";
-    public static string TgProxySetupSubtitle => Ru
-        ? "Обход блокировки Telegram через локальный прокси."
-        : "Bypass Telegram blocks via a local proxy.";
-    public static string TgProxySetupStep => Ru
-        ? "Один клик: скачивает прокси-бинарь, запускает его и открывает Telegram для авто-добавления."
-        : "One click: downloads the proxy binary, starts it, and opens Telegram to auto-add the entry.";
-    public static string TgProxyClientAutoHint => Ru
-        ? "Telegram использует этот прокси автоматически после настройки."
-        : "Telegram automatically uses this proxy after setup.";
-    public static string TgProxyAdvanced => Ru
-        ? "Расширенные настройки"
-        : "Advanced settings";
+    // v2.31.6-r9 — purged 5 unused TgProxySetup* + TgProxyClientAutoHint
+    // + TgProxyAdvanced strings that were added in v2.31.6-r1's two-state
+    // setup-cascade but dropped in r3 (full redo per design handoff cell 6).
+    // The XAML referenced them via `L_TgProxySetupCta` etc. only in r1/r2;
+    // r3+ pages no longer bind them. Iter#4 audit confirmed zero XAML hits.
+    // TgProxyReopenInTelegram below is the only string from that batch
+    // still in use (TelegramPage body button label).
     public static string TgProxyReopenInTelegram => Ru
         ? "Открыть в Telegram повторно"
         : "Reopen in Telegram";
+
+    // v2.31.6-r9 — A11y: full-sentence announcements for short
+    // button labels («Copy» / «New») that screen readers can't
+    // disambiguate without context. Used in
+    // <c>AutomationProperties.Name</c> bindings on the secret-row
+    // buttons in TelegramPage. Visible button text stays short
+    // («Copy» / «New») per the design — only Narrator/VoiceOver
+    // hears the longer phrase.
+    public static string TgProxyCopySecretA11y => Ru
+        ? "Скопировать MTProto secret в буфер обмена"
+        : "Copy MTProto secret to clipboard";
+    public static string TgProxyRegenerateSecretA11y => Ru
+        ? "Сгенерировать новый MTProto secret"
+        : "Generate new MTProto secret";
 
     public static string OpenFolder => Ru ? "Открыть папку" : "Open folder";
     public static string OpenGitHub => "GitHub";
