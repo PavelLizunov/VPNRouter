@@ -1793,7 +1793,11 @@ public partial class MainWindowViewModel : ViewModelBase
     public string LblTgProxySetupHint => Strings.TgProxySetupHint;
     public string LblTgProxyToggle => TgProxyEnabled ? Strings.TgProxyStop : Strings.TgProxyStart;
 
-    // v2.31.6-r1: simplified TelegramPage UX strings.
+    // v2.31.6-r1: simplified TelegramPage UX strings (kept here for
+    // backward-compat; r3 page uses only the SetupCta wording for the
+    // pre-existing OpenTgProxyInTelegramCommand fallback path. The
+    // other L_TgProxy* + L_OpenFolder + L_OpenGitHub + L_Wm* getters
+    // already live in MainWindowViewModel.Localization.cs).
     public string L_TgProxySetupCta => Strings.TgProxySetupCta;
     public string L_TgProxySetupSubtitle => Strings.TgProxySetupSubtitle;
     public string L_TgProxySetupStep => Strings.TgProxySetupStep;

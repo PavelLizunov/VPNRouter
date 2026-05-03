@@ -144,157 +144,42 @@ public class PageScreenshotTests
     }
 
     /// <summary>
-    /// v2.31.6-r1 (TelegramPage Variant A) — explicit Setup-state
-    /// render. The default <see cref="TelegramPage"/> capture above
-    /// uses settings already populated on the dev machine
-    /// (TgProxySecret + TgProxyVersionText non-empty), which evaluates
-    /// to <c>IsTgProxySetUp = true</c> and renders the Active state.
-    /// To regress-pin the onboarding (Setup) state we have to clear
-    /// those properties on a fresh VM before capturing — that's the
-    /// only path that exercises the "Set up Telegram proxy" CTA + the
-    /// surface-raised step card.
+    /// v2.31.6-r3 — render TelegramPage at app window width (520 px) to
+    /// confirm the design-handoff cell 6 layout (description + 2-col
+    /// Port|Secret grid + info banner + 3-button row + note paragraph
+    /// + secondary footer) wraps cleanly without horizontal overflow.
     ///
-    /// Renders to <c>page-telegram-setup-state.png</c> alongside the
-    /// default Active capture so both branches of the IsTgProxySetUp
-    /// cascade are visually inspectable per release.
+    /// The default <see cref="TelegramPage"/> capture above uses 1200 px,
+    /// which leaves the 2-column grid generously spaced; the real risk
+    /// is overflow at 520 px when the Secret hex string forces the
+    /// flex grid wider than the column allows. That's caught here.
     /// </summary>
     [AvaloniaFact]
-    public void TelegramPage_SetupState_OnFreshInstall()
+    public void TelegramPage_Narrow520()
     {
         var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
-        vm.TgProxySecret = "";
-        vm.TgProxyVersionText = "";
-
-        Assert.False(vm.IsTgProxySetUp,
-            "IsTgProxySetUp should be false when both secret and version are empty");
-
         ScreenshotHelper.CapturePage(
             new TelegramPage { DataContext = vm },
-            "page-telegram-setup-state");
+            "page-telegram-narrow520",
+            width: 520, height: 800);
     }
 
     /// <summary>
-    /// v2.31.6-r2 polish — Active state with proxy stopped should
-    /// render the footer toggle as primary accent (Connect is the
-    /// pull-action). Pre-r2 the footer was always secondary, which
-    /// understated the action a Stopped user clearly came here to do.
+    /// v2.31.6-r3 — render with TgProxyEnabled=true so the banner
+    /// status line shows the "Running" wording instead of "Stopped".
+    /// Pinning both branches per release prevents a regression where
+    /// the runtime status binding silently breaks (e.g. setter no
+    /// longer fires <c>OnPropertyChanged</c> on TgProxyStatus).
     /// </summary>
     [AvaloniaFact]
-    public void TelegramPage_ActiveState_StoppedFooterIsAccentPrimary()
+    public void TelegramPage_RunningStateBanner()
     {
         var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
-        vm.TgProxySecret = "deadbeef00000000deadbeef00000000";
-        vm.TgProxyVersionText = "v1.6.5";
-        vm.TgProxyEnabled = false;
-
-        Assert.True(vm.IsTgProxySetUp);
-        Assert.False(vm.TgProxyEnabled);
-
-        ScreenshotHelper.CapturePage(
-            new TelegramPage { DataContext = vm },
-            "page-telegram-active-stopped");
-    }
-
-    /// <summary>
-    /// v2.31.6-r2 polish — Active state with proxy running should
-    /// render the footer toggle as secondary (Stop is destructive-ish,
-    /// don't push). Pairs with
-    /// <see cref="TelegramPage_ActiveState_StoppedFooterIsAccentPrimary"/>
-    /// to lock in both branches of the conditional styling.
-    /// </summary>
-    [AvaloniaFact]
-    public void TelegramPage_ActiveState_RunningFooterIsSecondary()
-    {
-        var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
-        vm.TgProxySecret = "deadbeef00000000deadbeef00000000";
-        vm.TgProxyVersionText = "v1.6.5";
         vm.TgProxyEnabled = true;
-
-        Assert.True(vm.IsTgProxySetUp);
-        Assert.True(vm.TgProxyEnabled);
+        vm.TgProxyStatus = "Running (PID 18636)";
 
         ScreenshotHelper.CapturePage(
             new TelegramPage { DataContext = vm },
-            "page-telegram-active-running");
-    }
-
-    /// <summary>
-    /// v2.31.6-r2 polish — TelegramPage at the actual VPNRouter
-    /// window width (~520 px) to confirm the two-state layout fits
-    /// without horizontal overflow. The default 1200 px capture in
-    /// <see cref="TelegramPage"/> hides this risk because the page
-    /// has plenty of room.
-    /// </summary>
-    [AvaloniaFact]
-    public void TelegramPage_SetupState_Narrow520()
-    {
-        var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
-        vm.TgProxySecret = "";
-        vm.TgProxyVersionText = "";
-
-        ScreenshotHelper.CapturePage(
-            new TelegramPage { DataContext = vm },
-            "page-telegram-setup-narrow520",
-            width: 520, height: 800);
-    }
-
-    [AvaloniaFact]
-    public void TelegramPage_ActiveState_Narrow520()
-    {
-        var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
-        vm.TgProxySecret = "deadbeef00000000deadbeef00000000";
-        vm.TgProxyVersionText = "v1.6.5";
-        vm.TgProxyEnabled = false;
-
-        ScreenshotHelper.CapturePage(
-            new TelegramPage { DataContext = vm },
-            "page-telegram-active-narrow520",
-            width: 520, height: 800);
-    }
-
-    /// <summary>
-    /// v2.31.6-r2 — render the page with the Advanced expander
-    /// programmatically expanded so the power-user controls (port,
-    /// secret, regenerate, version, update, folder, GitHub, manual
-    /// setup hint) are visually inspectable per release. Without
-    /// this the Advanced surface only ships in a release if a human
-    /// remembers to expand it during a manual visual check.
-    ///
-    /// Walks the visual tree to find the Expander since the control
-    /// has no x:Name and we don't want to add one (Advanced is
-    /// supposed to be incidental to the page identity).
-    /// </summary>
-    [AvaloniaFact]
-    public void TelegramPage_AdvancedExpanded()
-    {
-        var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
-        vm.TgProxySecret = "deadbeef00000000deadbeef00000000";
-        vm.TgProxyVersionText = "v1.6.5";
-        vm.TgProxyEnabled = false;
-
-        var page = new TelegramPage { DataContext = vm };
-        var window = new Avalonia.Controls.Window { Width = 1200, Height = 800, Content = page };
-        window.Show();
-        try
-        {
-            // Layout pass before searching the visual tree — Expander
-            // is inside a ScrollViewer's lazily-built content tree.
-            window.UpdateLayout();
-            var expander = page.GetVisualDescendants()
-                .OfType<Avalonia.Controls.Expander>()
-                .FirstOrDefault();
-            Assert.NotNull(expander);
-            expander!.IsExpanded = true;
-            window.UpdateLayout();
-
-            var bitmap = window.CaptureRenderedFrame()
-                ?? throw new InvalidOperationException("CaptureRenderedFrame returned null");
-            var path = System.IO.Path.Combine(ScreenshotHelper.ScreenshotsDir, "page-telegram-advanced-expanded.png");
-            bitmap.Save(path);
-        }
-        finally
-        {
-            window.Close();
-        }
+            "page-telegram-running");
     }
 }
