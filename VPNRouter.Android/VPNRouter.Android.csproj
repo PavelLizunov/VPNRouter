@@ -36,10 +36,41 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- VPNRouter.Core needs to be built with Android target enabled. -->
-    <ProjectReference Include="..\VPNRouter.Core\VPNRouter.Core.csproj">
-      <Properties>EnableAndroidTarget=true</Properties>
-    </ProjectReference>
+    <!-- v3.0 Phase 1.E (2026-05-04): link VPNRouter.Core sources
+         directly into this project rather than using a ProjectReference
+         to a multi-target Core build.
+         Why: ProjectReference + multi-target + RID-aware Android consumer
+         hit a deadlock — Core's restore for net8.0-android needs RIDs
+         to satisfy Android.csproj's restore graph, but adding RIDs to
+         Core.csproj makes its build expect per-RID DLL outputs in obj/
+         which never get written for a class library. The cleanest
+         workaround for now is to compile Core sources straight into
+         the Android assembly. PLATFORM_ANDROID is already defined for
+         this project (see <DefineConstants> above), so Core's
+         #if PLATFORM_ANDROID branches activate; Windows-only files
+         (EtwProcessMonitor, FirewallManager, WindowsDnsHardening,
+         Zapret*, TgProxy*, etc.) are gated behind #if PLATFORM_WINDOWS
+         and compile out cleanly.
+
+         When Core grows enough Android-specific code that source
+         linking becomes painful (or when .NET 9's improved ProjectReference
+         multi-target story lands), revisit and switch to a proper
+         ProjectReference. -->
+    <Compile Include="..\VPNRouter.Core\**\*.cs"
+             Exclude="..\VPNRouter.Core\bin\**;..\VPNRouter.Core\obj\**"
+             LinkBase="Core" />
+  </ItemGroup>
+
+  <!-- Cross-platform packages that VPNRouter.Core depends on. Mirror
+       what's declared in VPNRouter.Core.csproj because we're consuming
+       Core's source files directly above (no ProjectReference to pull
+       its package graph). -->
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Serilog" Version="3.1.1" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="5.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+    <PackageReference Include="YamlDotNet" Version="15.1.2" />
   </ItemGroup>
 
   <ItemGroup>

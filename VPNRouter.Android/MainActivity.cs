@@ -58,36 +58,27 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
     private const int RequestVpnConsent = 0xBEEF;
 
     /// <summary>
-    /// Phase 1.C/1.D smoke-test config: TUN inbound + direct outbound +
-    /// minimal log + Clash API. No proxy server — the goal is to
-    /// verify libbox initialises, opens the TUN, and routes packets out
-    /// via direct. Phase 1.E will replace this with a real generated
-    /// config from VPNRouter.Core's ConfigGenerator.
+    /// Phase 1.E (2026-05-04) — placeholder VLESS-Reality URI used to
+    /// smoke-test the full VPNRouter.Core → ConfigGenerator → libbox
+    /// pipeline end-to-end. Same URI used in the desktop unit-test
+    /// fixture for VlessUriParser (see VPNRouter.Tests/UnitTest1.cs
+    /// VlessUriParserTests.RealityUri). Server is a real Reality
+    /// endpoint that the test suite uses; the VLESS UUID is published
+    /// in the open-source repo and works for verification but isn't a
+    /// production server.
+    ///
+    /// <para>Phase 1.F will replace this with a stored subscription
+    /// URL pulled from SettingsLoader once the Avalonia subscription
+    /// settings UI is ported. For Phase 1.E the goal is just to
+    /// confirm the Core pipeline + libbox handshake works — once the
+    /// generated JSON spawns a libbox service without errors we know
+    /// the bridge is sound.</para>
     /// </summary>
-    private const string SmokeTestConfig = """
-{
-  "log": { "level": "info" },
-  "inbounds": [
-    {
-      "type": "tun",
-      "tag": "tun-in",
-      "interface_name": "tun0",
-      "address": ["172.19.0.1/30", "fdfe:dcba:9876::1/126"],
-      "mtu": 1500,
-      "auto_route": true,
-      "stack": "system"
-    }
-  ],
-  "outbounds": [
-    { "type": "direct", "tag": "direct" }
-  ],
-  "experimental": {
-    "clash_api": {
-      "external_controller": "127.0.0.1:9090"
-    }
-  }
-}
-""";
+    private const string PlaceholderVlessUri =
+        "vless://2d54442d-158f-49e2-b225-67ba1a5b77f4@194.87.222.111:443" +
+        "?security=reality&sni=yahoo.com&fp=firefox" +
+        "&pbk=DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU&sid=78ca7952" +
+        "&spx=/&type=tcp&flow=xtls-rprx-vision&encryption=none#android-test";
 
     // Mirrors VpnRouterService.java's intent contract.
     private const string ActionStart = "com.ninitux.vpnrouter.START";
@@ -199,13 +190,33 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
 
     private void StartTunnelService()
     {
+        // v3.0 Phase 1.E (2026-05-04): generate the sing-box config from
+        // VPNRouter.Core.ConfigGenerator instead of using the hand-rolled
+        // smoke-test JSON. AndroidConfigBuilder.BuildConfigJson runs the
+        // same pipeline as desktop (parse VLESS URI → AppSettings →
+        // ConfigGenerator → JSON) so the Android app gets DNS routing,
+        // Reality fingerprinting, route rules etc. for free. Generation
+        // failures fall back to logging + cancelling the start.
+        string configJson;
+        try
+        {
+            configJson = AndroidConfigBuilder.BuildConfigJson(PlaceholderVlessUri);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("VpnRouter",
+                $"Phase 1.E: failed to generate sing-box config — {ex.GetType().Name}: {ex.Message}");
+            SetIntent(false);
+            return;
+        }
+
         // VpnRouterService is a Java class (VpnRouterService.java) — we
         // address it via fully-qualified component name rather than
         // typeof() because the .NET Android side has no C# binding for it.
         var intent = new Intent()
             .SetClassName(PackageName!, "com.ninitux.vpnrouter.VpnRouterService")
             .SetAction(ActionStart)
-            .PutExtra(ExtraConfigJson, SmokeTestConfig)
+            .PutExtra(ExtraConfigJson, configJson)
             .PutExtra(ExtraAllowedPackages, Array.Empty<string>());
 
         if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
