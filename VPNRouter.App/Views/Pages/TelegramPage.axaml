@@ -252,35 +252,62 @@
             </Grid>
         </ScrollViewer>
 
-        <!-- 6. Footer — v2.31.6-r5 (TG-2) unified main action.
-             Pre-r5 footer was secondary «Start/Stop Telegram proxy»
-             — Start path didn't open Telegram, leading to user
-             confusion: «What's the difference between body Open and
-             footer Start?». r5 folds setup + start + open into ONE
-             footer click when stopped:
-               Stopped → «Запустить и открыть Telegram» → SetupTgProxy
-               Running → «Остановить Telegram-прокси» → ToggleTgProxy
-             Style stays secondary white per v2.25.6 design handoff
-             («не ещё один огромный синий»). The action is now the
-             only first-run entry point — body «Re-pair in Telegram»
-             button above is disabled until the proxy is up. Bound
-             through TgProxyMainActionCommand which dispatches by
-             state. -->
-        <Border Grid.Row="1" Padding="10,8"
+        <!-- 6. Footer — v2.31.6-r6 production-standard alignment.
+             Pre-r6 footer was a `Padding="10,8"` Border with no
+             background, hosting an oversized button (FontSize 11
+             Padding 14,7). The non-sunken bg made the divider
+             above look orphaned, and the button was wider than
+             NetworkPage's canonical Apply pattern.
+
+             r6 matches NetworkPage Apply bar styling exactly:
+             - Border: `Padding="14,7,14,8"` + `SurfaceSunkenBrush`
+               bg + `0,1,0,0` divider (canonical footer-bar look).
+             - Status indicator on left: color dot + TgProxyStatus
+               text. Mirrors NetworkPage's "✓ Auto-saved" hint and
+               surfaces the runtime state even on this page where
+               the body banner already shows it (footer indicator
+               stays visible if user scrolls past the banner on
+               narrow windows). Uses StatusColorConverter same as
+               body banner, plus TextSecondaryBrush text per the
+               Apply-bar pattern.
+             - Button compact right-aligned: `Padding="10,5"
+               FontSize="10" SemiBold`. Stays SECONDARY (white +
+               text-primary fg + border) per design cell 6 (`btn`
+               not `btn primary`) — TgProxy's footer is intentionally
+               not primary because the v2.25.6 design intent was
+               «не ещё один огромный синий» next to the global
+               Start VPN footer. -->
+        <Border Grid.Row="1" Padding="14,7,14,8"
                 BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource BorderDefaultBrush}">
-            <Button Content="{Binding LblTgProxyMainAction}"
-                    Command="{Binding TgProxyMainActionCommand}"
-                    FontSize="11" FontWeight="SemiBold"
-                    Padding="14,7"
-                    HorizontalAlignment="Right"
-                    HorizontalContentAlignment="Center"
-                    Background="{DynamicResource SurfaceBaseBrush}"
-                    Foreground="{DynamicResource TextPrimaryBrush}"
-                    BorderBrush="{DynamicResource BorderDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="{StaticResource RadiusSm}"
-                    IsEnabled="{Binding !IsTgProxyDownloading}"/>
+                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                Background="{DynamicResource SurfaceSunkenBrush}">
+            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center" ColumnSpacing="8">
+                <StackPanel Grid.Column="0"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            VerticalAlignment="Center">
+                    <Ellipse Width="8" Height="8"
+                             VerticalAlignment="Center"
+                             Fill="{Binding TgProxyBadgeBrush}"/>
+                    <TextBlock Text="{Binding TgProxyStatus}"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="{Binding LblTgProxyMainAction}"
+                        Command="{Binding TgProxyMainActionCommand}"
+                        FontSize="10" FontWeight="SemiBold"
+                        Padding="10,5"
+                        Background="{DynamicResource SurfaceBaseBrush}"
+                        Foreground="{DynamicResource TextPrimaryBrush}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        IsEnabled="{Binding !IsTgProxyDownloading}"/>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

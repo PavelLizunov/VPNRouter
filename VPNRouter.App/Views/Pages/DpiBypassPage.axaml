@@ -13,17 +13,23 @@
         <conv:BoolToStatusColorConverter x:Key="StatusColorConverter"/>
     </UserControl.Resources>
 
-    <!-- v2.25.6 Phase 6: arctic highlight for the active side-nav item.
-         Same pattern as NetworkPage / ApplicationsPage so Settings / Apps /
-         Tools side-navs all behave consistently. -->
-    <UserControl.Styles>
-        <Style Selector="ListBox ListBoxItem:selected /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
-        </Style>
-        <Style Selector="ListBox ListBoxItem:selected">
-            <Setter Property="Foreground" Value="{DynamicResource AccentFgBrush}"/>
-        </Style>
-    </UserControl.Styles>
+    <!-- v2.31.6-r6 — sidebar selection style now matches production
+         standard. Pre-r6 the override below set selected ListBoxItem
+         bg to SurfaceBaseBrush + fg to AccentFgBrush, producing a
+         very subtle "white card with accent text" highlight. The
+         v2.25.6 comment that introduced it claimed parity with
+         NetworkPage / ApplicationsPage, but a side-by-side audit
+         on 2026-05-04 found NetworkPage uses NO such override —
+         it falls back to Avalonia's default ListBoxItem:selected
+         which paints AccentBgSubtleBrush + AccentFgBrush. So
+         Settings sidebar ("Routing") looked vivid blue while
+         Zapret sidebar ("Status") looked washed-out grey. r6
+         drops the override here so DpiBypass matches NetworkPage's
+         default. ApplicationsPage keeps its own (class-scoped
+         `ListBox.cat-list` selector) since its sidebar items
+         have a different inner template. -->
+    <!-- (no UserControl.Styles needed — relying on default
+         ListBoxItem:selected appearance) -->
 
     <Grid RowDefinitions="*,Auto">
 
@@ -315,24 +321,58 @@
             </ScrollViewer>
         </Grid>
 
-        <!-- ═══ Bottom: Start/Stop toggle (always visible) ═══ -->
-        <Border Grid.Row="1" Padding="10,8"
+        <!-- v2.31.6-r6 — footer matches production NetworkPage Apply
+             bar pattern (`Padding="14,7,14,8"`, `SurfaceSunkenBrush`
+             bg, `0,1,0,0` divider). Pre-r6 footer was a full-width
+             arctic-blue mega-CTA (FontSize 12 Bold, Padding 0,8,
+             HorizontalAlignment Stretch) which dominated the layout
+             and visually competed with the global Start VPN footer
+             below. Audit 2026-05-04 found this is the only page that
+             uses such a wide solid-blue strip; NetworkPage's Apply
+             button is compact right-aligned (`Padding="10,5"
+             FontSize="10" SemiBold`) while keeping primary blue
+             style for emphasis.
+
+             r6 brings both into consistency:
+             - Border: SurfaceSunkenBrush bg + canonical 14,7,14,8
+               padding so the footer reads as a "footer bar" (was a
+               bare divider line on transparent bg pre-r6).
+             - Status indicator on left: color dot + ZapretStatus text
+               so the user always sees current state regardless of
+               which sidebar section they're on. Mirrors the
+               "✓ Auto-saved" hint NetworkPage uses on the same row.
+             - Button compact right-aligned: Padding 10,5, FontSize 10,
+               SemiBold (was Bold) — still primary blue (the action
+               itself remains primary), just sized to match the rest
+               of the app. -->
+        <Border Grid.Row="1" Padding="14,7,14,8"
                 BorderThickness="0,1,0,0"
-                BorderBrush="{DynamicResource BorderDefaultBrush}">
-            <!-- v2.25.6 Phase 6: "Запустить обход DPI" теперь arctic primary
-                 (было #7C3AED violet). Design-system rule: primary CTAs в
-                 Arctic, state colours только для state. Violet остаётся
-                 намеренно только в 2 местах (Deep verify уже переведён на
-                 arctic в v2.25.3) — сейчас 0 мест, CLAUDE.md надо обновить. -->
-            <Button Content="{Binding LblDpiToggle}"
-                    Command="{Binding ToggleZapretCommand}"
-                    FontSize="12" FontWeight="Bold"
-                    Padding="0,8"
-                    HorizontalAlignment="Stretch"
-                    HorizontalContentAlignment="Center"
-                    Background="{DynamicResource AccentSolidBrush}"
-                    Foreground="{DynamicResource AccentOnSolidBrush}"
-                    CornerRadius="{StaticResource RadiusSm}"/>
+                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                Background="{DynamicResource SurfaceSunkenBrush}">
+            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center" ColumnSpacing="8">
+                <StackPanel Grid.Column="0"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            VerticalAlignment="Center">
+                    <Ellipse Width="8" Height="8"
+                             VerticalAlignment="Center"
+                             Fill="{Binding ZapretEnabled, Converter={StaticResource StatusColorConverter}}"/>
+                    <TextBlock Text="{Binding ZapretStatus}"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="{Binding LblDpiToggle}"
+                        Command="{Binding ToggleZapretCommand}"
+                        FontSize="10" FontWeight="SemiBold"
+                        Padding="10,5"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        Background="{DynamicResource AccentSolidBrush}"
+                        Foreground="{DynamicResource AccentOnSolidBrush}"/>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>
