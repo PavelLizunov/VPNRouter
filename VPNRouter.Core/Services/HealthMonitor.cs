@@ -52,6 +52,23 @@ public class HealthMonitor : IDisposable
     // from firing after a successful reload has already happened.
     private CancellationTokenSource? _restartCts;
 
+    // v2.31.6-r8 — serialise AttemptRestart against itself.
+    // Iter#4 audit (2026-05-04) flagged that AttemptRestart is invokable from
+    // two callbacks running on different threadpool threads:
+    //   • OnHealthTick (periodic timer) — every 5/30 s while VPN should be up
+    //   • OnSingBoxCrashed (Process.Exited event)
+    // Pre-r8 the body did `_restartAttempts++;` and a non-atomic CTS swap
+    // (`var old = _restartCts; _restartCts = new ...;`). Two threads could
+    // race the increment (both passing the MaxRestartAttempts gate when
+    // they shouldn't) AND race the CTS swap (one Cancel/Dispose hitting an
+    // already-disposed CTS, or a leaked old reference). The lock here makes
+    // the whole "increment + swap CTS + schedule Task.Delay" sequence
+    // atomic with respect to itself; the existing Task.Delay continuation
+    // remains async (it checks `ct.IsCancellationRequested` and `_isStopping`
+    // before doing real work, so a stale restart from a cancelled attempt
+    // is still benign).
+    private readonly object _attemptRestartLock = new();
+
     // Debounce window — wait 5s after last new process before reloading
     private static readonly TimeSpan DebounceWindow = TimeSpan.FromSeconds(5);
 
@@ -242,46 +259,67 @@ public class HealthMonitor : IDisposable
 
     private void AttemptRestart()
     {
-        if (_restartAttempts >= _settings.MaxRestartAttempts)
+        // v2.31.6-r8: serialise the attempt-counter increment + CTS swap
+        // so concurrent OnHealthTick and OnSingBoxCrashed callbacks don't
+        // race the gate or leak/double-dispose the cancellation token.
+        // The Task.Delay continuation is left outside the lock so we don't
+        // hold the lock across an async wait.
+        int attempt;
+        CancellationToken ct;
+        int delayMs;
+        lock (_attemptRestartLock)
         {
-            _logger.Error("[HealthMonitor] Max restart attempts ({Max}) reached — giving up",
-                _settings.MaxRestartAttempts);
-            return;
+            if (_restartAttempts >= _settings.MaxRestartAttempts)
+            {
+                _logger.Error("[HealthMonitor] Max restart attempts ({Max}) reached — giving up",
+                    _settings.MaxRestartAttempts);
+                return;
+            }
+
+            _restartAttempts++;
+            attempt = _restartAttempts;
+
+            // Cancel any previously scheduled restart — only the latest one matters.
+            // v2.31.0-r1 (CO-2 audit fix): the previous code reassigned _restartCts
+            // without disposing the old one — one CancellationTokenSource leaked
+            // per restart attempt. Long-running sessions with many crash-restart
+            // cycles accumulated CTS instances. Now: Cancel + Dispose the previous
+            // before swapping in the new one.
+            // v2.31.6-r8: the swap is now under the lock so a concurrent caller
+            // can't observe a half-published CTS (read after our write to
+            // _restartCts but before we Cancel/Dispose oldCts).
+            var oldCts = _restartCts;
+            _restartCts = new CancellationTokenSource();
+            ct = _restartCts.Token;
+            if (oldCts != null)
+            {
+                try { oldCts.Cancel(); } catch (ObjectDisposedException) { /* already disposed elsewhere */ }
+                oldCts.Dispose();
+            }
+
+            // Exponential backoff: 5s, 10s, 20s, 40s, 80s
+            delayMs = (int)Math.Pow(2, attempt - 1) * 5000;
         }
 
-        _restartAttempts++;
-        RestartAttempted?.Invoke(this, _restartAttempts);
+        RestartAttempted?.Invoke(this, attempt);
 
-        // Cancel any previously scheduled restart — only the latest one matters.
-        // v2.31.0-r1 (CO-2 audit fix): the previous code reassigned _restartCts
-        // without disposing the old one — one CancellationTokenSource leaked
-        // per restart attempt. Long-running sessions with many crash-restart
-        // cycles accumulated CTS instances. Now: Cancel + Dispose the previous
-        // before swapping in the new one.
-        var oldCts = _restartCts;
-        _restartCts = new CancellationTokenSource();
-        var ct = _restartCts.Token;
-        if (oldCts != null)
-        {
-            try { oldCts.Cancel(); } catch (ObjectDisposedException) { /* already disposed elsewhere */ }
-            oldCts.Dispose();
-        }
-
-        // Exponential backoff: 5s, 10s, 20s, 40s, 80s
-        var delayMs = (int)Math.Pow(2, _restartAttempts - 1) * 5000;
         _logger.Warning("[HealthMonitor] Restarting sing-box (attempt {N}/{Max}) in {Delay}ms",
-            _restartAttempts, _settings.MaxRestartAttempts, delayMs);
+            attempt, _settings.MaxRestartAttempts, delayMs);
 
         Task.Delay(delayMs, ct).ContinueWith(_ =>
         {
             if (ct.IsCancellationRequested || _isStopping) return;
 
             // If sing-box is already running (e.g. debounce reload succeeded),
-            // skip — no need to restart what's already up
+            // skip — no need to restart what's already up.
+            // v2.31.6-r8: counter-reset under the lock so a concurrent
+            // AttemptRestart caller observes the cleared budget atomically
+            // (otherwise it could read mid-write of `_restartAttempts++`
+            // and produce an off-by-one cap evaluation).
             if (_singBox.IsRunning())
             {
                 _logger.Debug("[HealthMonitor] sing-box already running — skipping scheduled restart");
-                _restartAttempts = 0;
+                lock (_attemptRestartLock) { _restartAttempts = 0; }
                 return;
             }
 
@@ -299,7 +337,8 @@ public class HealthMonitor : IDisposable
                 catch (Exception fwEx) { _logger.Error(fwEx, "[HealthMonitor] Failed to disable firewall block rules after restart"); }
 
                 _logger.Information("[HealthMonitor] sing-box restarted successfully");
-                _restartAttempts = 0;
+                // v2.31.6-r8: counter-reset under the lock (see comment above).
+                lock (_attemptRestartLock) { _restartAttempts = 0; }
                 _vpnWasRunning = true;
                 VpnStarted?.Invoke(this, EventArgs.Empty);
             }

@@ -81,7 +81,7 @@ public partial class MainWindowViewModel
     {
         get => ServiceVm.IsInstalled
                && ServiceVm.IsRunning
-               && _settings.App.AutostartVpn;
+               && AutostartVpn;
         set
         {
             if (_isLoadingUI) return;
@@ -94,11 +94,23 @@ public partial class MainWindowViewModel
                 // so the service actually starts the VPN rather than idling.
                 if (!ServiceVm.AutostartChecked)
                     ServiceVm.AutostartChecked = true;
-                _settings.App.AutostartVpn = true;
+                // v2.31.6-r8: write through the [ObservableProperty] backing
+                // field instead of the YAML model directly. Pre-r8 this set
+                // `_settings.App.AutostartVpn = true;` which persisted
+                // correctly via the SaveSettings call below but did NOT raise
+                // PropertyChanged on the bound `AutostartVpn` getter that the
+                // Advanced-mode checkbox uses. Result: toggling Simple-mode
+                // autostart didn't visibly update the Settings → Autostart
+                // pane until the next LoadSettingsIntoUI. Going through the
+                // property keeps both surfaces in sync and reuses the
+                // partial-method `OnAutostartVpnChanged` (which already calls
+                // SaveSettings) — so the explicit SaveSettings below is a
+                // belt-and-braces no-op when the property setter saved.
+                AutostartVpn = true;
             }
             else
             {
-                _settings.App.AutostartVpn = false;
+                AutostartVpn = false;
                 // Only tear down the service when nothing else depends on it.
                 // Keeping it installed for Zapret/TgProxy autostart is fine —
                 // the service just won't bring up VPN at boot.

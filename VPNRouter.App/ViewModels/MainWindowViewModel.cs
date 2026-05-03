@@ -18,7 +18,8 @@ using VPNRouter.Core.Models;
 using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.FreeConfigs;
-using VPNRouter.Core.Platform;
+// v2.31.6-r8: removed duplicate `using VPNRouter.Core.Platform;` (was line 21
+// and line 18 — compiler tolerates but flagged in the iter#4 audit).
 using VPNRouter.App.Localization;
 using VPNRouter.App.ViewModels.FreeConfigs;
 
@@ -5515,13 +5516,30 @@ public partial class MainWindowViewModel : ViewModelBase
 
         var tcs = new TaskCompletionSource<bool>();
 
+        // v2.31.6-r8: replaced 6 hardcoded hex colours with semantic design
+        // tokens from Tokens.axaml. Pre-r8 the dialog used Avalonia.Media.Brush.
+        // Parse("#059669"), "#FEF3C7", "#F59E0B", "#78350F", "#DCFCE7",
+        // "#14532D", "#B45309" — Rule B3 violation (no raw hex in code) AND
+        // the dialog rendered identically in Light/Dark themes because the
+        // hex literals don't follow theme switching. Tokens
+        // (SuccessBg/Fg/Solid/Border, WarningBg/Fg/Border) auto-resolve per
+        // theme. TryFindResource returns null on test/design-time AppBuilder
+        // setups; falling back to a sensible default (Brushes.Transparent
+        // for backgrounds, default foreground) keeps the dialog renderable
+        // in headless tests.
+        IBrush Tok(string key, IBrush fallback)
+            => owner.TryFindResource(key, owner.ActualThemeVariant, out var v)
+                && v is IBrush b
+                ? b
+                : fallback;
+
         var proceedBtn = new Button
         {
             Content = Strings.FcSecWarnProceed,
             Padding = new Thickness(12, 6),
             FontWeight = FontWeight.SemiBold,
-            Background = Avalonia.Media.Brush.Parse("#059669"),
-            Foreground = Avalonia.Media.Brushes.White,
+            Background = Tok("SuccessSolidBrush", Avalonia.Media.Brushes.SeaGreen),
+            Foreground = Tok("AccentOnSolidBrush", Avalonia.Media.Brushes.White),
             CornerRadius = new CornerRadius(4),
         };
         var cancelBtn = new Button
@@ -5552,7 +5570,7 @@ public partial class MainWindowViewModel : ViewModelBase
                             Text = "⚠ " + Strings.FcSecWarnHeader,
                             FontSize = 15,
                             FontWeight = FontWeight.Bold,
-                            Foreground = Avalonia.Media.Brush.Parse("#B45309"),
+                            Foreground = Tok("WarningFgBrush", Avalonia.Media.Brushes.DarkOrange),
                             TextWrapping = TextWrapping.Wrap,
                         },
                         new TextBlock
@@ -5564,8 +5582,8 @@ public partial class MainWindowViewModel : ViewModelBase
                         new Border
                         {
                             Padding = new Thickness(10, 8),
-                            Background = Avalonia.Media.Brush.Parse("#FEF3C7"),
-                            BorderBrush = Avalonia.Media.Brush.Parse("#F59E0B"),
+                            Background = Tok("WarningBgBrush", Avalonia.Media.Brushes.LightYellow),
+                            BorderBrush = Tok("WarningBorderBrush", Avalonia.Media.Brushes.Goldenrod),
                             BorderThickness = new Thickness(1),
                             CornerRadius = new CornerRadius(4),
                             Child = new TextBlock
@@ -5573,14 +5591,14 @@ public partial class MainWindowViewModel : ViewModelBase
                                 Text = Strings.FcSecWarnDontUseList,
                                 FontSize = 11,
                                 TextWrapping = TextWrapping.Wrap,
-                                Foreground = Avalonia.Media.Brush.Parse("#78350F"),
+                                Foreground = Tok("WarningFgBrush", Avalonia.Media.Brushes.SaddleBrown),
                             },
                         },
                         new Border
                         {
                             Padding = new Thickness(10, 8),
-                            Background = Avalonia.Media.Brush.Parse("#DCFCE7"),
-                            BorderBrush = Avalonia.Media.Brush.Parse("#059669"),
+                            Background = Tok("SuccessBgBrush", Avalonia.Media.Brushes.Honeydew),
+                            BorderBrush = Tok("SuccessBorderBrush", Avalonia.Media.Brushes.SeaGreen),
                             BorderThickness = new Thickness(1),
                             CornerRadius = new CornerRadius(4),
                             Child = new TextBlock
@@ -5588,7 +5606,7 @@ public partial class MainWindowViewModel : ViewModelBase
                                 Text = Strings.FcSecWarnGoodFor,
                                 FontSize = 11,
                                 TextWrapping = TextWrapping.Wrap,
-                                Foreground = Avalonia.Media.Brush.Parse("#14532D"),
+                                Foreground = Tok("SuccessFgBrush", Avalonia.Media.Brushes.DarkGreen),
                             },
                         },
                         new StackPanel

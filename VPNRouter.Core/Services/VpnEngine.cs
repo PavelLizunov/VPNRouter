@@ -577,6 +577,12 @@ public class VpnEngine : IDisposable
 
         // Warm up TUN + proxy connection. After TUN creation, Windows needs time to rebuild
         // routing tables. First packets may get lost. Retry until connectivity works.
+        // v2.31.6-r8: capture _singBox.Pid into a local before the Task.Run so a
+        // racing Stop() that nulls _singBox between this point and the lambda
+        // body running can't NRE on `_singBox.Pid` at the OnStatus call. The
+        // lambda is fire-and-forget and may execute after the user has already
+        // initiated a quick disconnect.
+        var pidSnapshot = _singBox.Pid;
         OnStatus("Warming up network...");
         _ = Task.Run(async () =>
         {
@@ -590,7 +596,7 @@ public class VpnEngine : IDisposable
                     await http.GetStringAsync("https://www.gstatic.com/generate_204", ct);
                     _logger?.Information("[VpnEngine] TUN ready after {Ms}ms (attempt {Attempt})",
                         sw.ElapsedMilliseconds, attempt);
-                    OnStatus($"Connected (PID {_singBox.Pid})");
+                    OnStatus($"Connected (PID {pidSnapshot})");
                     return;
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -600,7 +606,7 @@ public class VpnEngine : IDisposable
                 }
             }
             _logger?.Warning("[VpnEngine] TUN warm-up failed after {Ms}ms", sw.ElapsedMilliseconds);
-            OnStatus($"Connected (PID {_singBox.Pid})");
+            OnStatus($"Connected (PID {pidSnapshot})");
         }, ct);
 
         ct.ThrowIfCancellationRequested();
