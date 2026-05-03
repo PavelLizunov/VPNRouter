@@ -157,6 +157,21 @@
                      keeps all version/update controls in one place. -->
                 <StackPanel Spacing="8" IsVisible="{Binding IsZapretStrategySection}">
                     <TextBlock Text="{Binding L_ZapretSecStrategy}" FontWeight="Bold" FontSize="13"/>
+                    <!-- v2.31.6-r7 — 1-line section description so first-run
+                         users understand the section at a glance without
+                         having to click each control to learn its purpose.
+                         Iter#3 audit feedback: «Не слишком ли сложна страница
+                         Zapret?». Adding inline descriptions keeps the 5-section
+                         layout (which design handoff cell 7 specifies) but
+                         makes the complexity less intimidating to first-run
+                         users — a power-user can still ignore every section
+                         except Status; a normal user now knows which sections
+                         to ignore (Filters / Advanced) without dipping into
+                         them first. -->
+                    <TextBlock Text="{Binding L_ZapretSecStrategyDesc}"
+                               TextWrapping="Wrap" FontSize="10"
+                               Opacity="0.7"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
                     <ComboBox ItemsSource="{Binding ZapretStrategies}"
                               SelectedIndex="{Binding ZapretStrategyIndex}"
                               HorizontalAlignment="Stretch"
@@ -197,6 +212,11 @@
                 <!-- ═══ Hosts ═══ -->
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretHostsSection}">
                     <TextBlock Text="{Binding L_ZapretSecHosts}" FontWeight="Bold" FontSize="13"/>
+                    <!-- v2.31.6-r7 — section description (see Strategy comment). -->
+                    <TextBlock Text="{Binding L_ZapretSecHostsDesc}"
+                               TextWrapping="Wrap" FontSize="10"
+                               Opacity="0.7"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
 
                     <!-- v2.30.7-r4 — F-12 fix: hosts buttons are toggle-state.
                          When installed=true, click = REMOVE (destructive) →
@@ -238,6 +258,11 @@
                 <!-- ═══ Filters ═══ -->
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretFiltersSection}">
                     <TextBlock Text="{Binding L_ZapretSecFilters}" FontWeight="Bold" FontSize="13"/>
+                    <!-- v2.31.6-r7 — section description (see Strategy comment). -->
+                    <TextBlock Text="{Binding L_ZapretSecFiltersDesc}"
+                               TextWrapping="Wrap" FontSize="10"
+                               Opacity="0.7"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
 
                     <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource SurfaceSunkenBrush}">
@@ -277,6 +302,12 @@
                 <!-- ═══ Advanced ═══ -->
                 <StackPanel Spacing="6" IsVisible="{Binding IsZapretAdvancedSection}">
                     <TextBlock Text="{Binding L_ZapretSecAdvanced}" FontWeight="Bold" FontSize="13"/>
+                    <!-- v2.31.6-r7 — section description. Explicitly tells
+                         normal users this section can be skipped. -->
+                    <TextBlock Text="{Binding L_ZapretSecAdvancedDesc}"
+                               TextWrapping="Wrap" FontSize="10"
+                               Opacity="0.7"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
 
                     <Button Content="{Binding L_ClearDiscordCache}"
                             Command="{Binding ClearDiscordCacheCommand}"

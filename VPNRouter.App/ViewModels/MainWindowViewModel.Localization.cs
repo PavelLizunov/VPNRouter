@@ -516,11 +516,15 @@ public partial class MainWindowViewModel
     public string L_WmZapretCustomArgs => Strings.WmZapretCustomArgs;
     public string L_ZapretHostsHint => Strings.ZapretHostsHint;
     public string L_ZapretSecAdvanced => Strings.ZapretSecAdvanced;
+    public string L_ZapretSecAdvancedDesc => Strings.ZapretSecAdvancedDesc;
     public string L_ZapretSecDiagnostics => Strings.ZapretSecDiagnostics;
     public string L_ZapretSecFilters => Strings.ZapretSecFilters;
+    public string L_ZapretSecFiltersDesc => Strings.ZapretSecFiltersDesc;
     public string L_ZapretSecHosts => Strings.ZapretSecHosts;
+    public string L_ZapretSecHostsDesc => Strings.ZapretSecHostsDesc;
     public string L_ZapretSecStatus => Strings.ZapretSecStatus;
     public string L_ZapretSecStrategy => Strings.ZapretSecStrategy;
+    public string L_ZapretSecStrategyDesc => Strings.ZapretSecStrategyDesc;
     public string L_ZapretSecUpdates => Strings.ZapretSecUpdates;
 
     /// <summary>

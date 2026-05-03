@@ -433,6 +433,27 @@ public static class Strings
     public static string ZapretSecDiagnostics  => Ru ? "Диагностика" : "Diagnostics";
     public static string ZapretSecAdvanced     => Ru ? "Дополнительно" : "Advanced";
 
+    // v2.31.6-r7 — section descriptions for the Zapret master-detail.
+    // Iter#3 audit (2026-05-04) flagged the page as «возможно слишком
+    // сложная» — 5 unlabelled sections looked intimidating to first-run
+    // users who only wanted to click Start DPI Bypass. Adding a 1-line
+    // hint under each section header so first-time visitors understand
+    // each section's purpose at a glance and can ignore power-user
+    // sections without feeling they're missing something. Status keeps
+    // its existing LblDpiDescription which already serves this role.
+    public static string ZapretSecStrategyDesc => Ru
+        ? "Технология обхода DPI. Если одна не работает — попробуйте другую."
+        : "DPI bypass technique. If one doesn't work — try another.";
+    public static string ZapretSecHostsDesc => Ru
+        ? "Правки файла hosts: Discord voice + Flowseal-список."
+        : "Hosts-file overrides: Discord voice + Flowseal list.";
+    public static string ZapretSecFiltersDesc => Ru
+        ? "Какой трафик пропускать через обход DPI."
+        : "Which traffic to route through DPI bypass.";
+    public static string ZapretSecAdvancedDesc => Ru
+        ? "Диагностика и управление службой. Большинству не нужно."
+        : "Diagnostics and service controls. Not needed for most users.";
+
     // Filters
     public static string GameFilter => Ru ? "Игровой фильтр (диапазон 1024-65535)" : "Game filter (port range 1024-65535)";
     public static string GameFilterOff => Ru ? "Выкл" : "Off";
