@@ -2159,13 +2159,15 @@
                      VerticalAlignment="Center"
                      TextTrimming="CharacterEllipsis"/>
         </StackPanel>
+        <!-- v2.31.6-r14 A11y: explicit Name on the canonical Apply CTA. -->
         <Button Grid.Column="1"
                 Content="{Binding L_ApplyNowReloadVpn}"
                 Command="{Binding ApplyPendingChangesCommand}"
                 IsEnabled="{Binding IsConnected}"
                 Padding="10,5" FontSize="10" FontWeight="SemiBold" CornerRadius="{StaticResource RadiusSm}"
                 Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                ToolTip.Tip="{Binding L_ApplyNowHint}"/>
+                ToolTip.Tip="{Binding L_ApplyNowHint}"
+                AutomationProperties.Name="{Binding L_ApplyNowReloadVpn}"/>
       </Grid>
     </Border>
   </Grid>

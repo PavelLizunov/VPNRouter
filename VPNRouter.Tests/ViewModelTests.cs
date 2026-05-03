@@ -82,4 +82,35 @@ public class MainWindowViewModelTests
         Assert.Contains("changed@False", string.Join(",", notifications));
         Assert.False(vm.SmpAutostartChecked, "AutostartVpn=false → SmpAutostartChecked must be false");
     }
+
+    /// <summary>
+    /// v2.31.6-r12 (Phase H, iter#5): MainWindowViewModel.Dispose pin —
+    /// idempotent, doesn't NRE when called twice, and clears the
+    /// internal _disposed flag so subsequent Dispose calls return
+    /// immediately. Pre-r12 the VM had no IDisposable surface — this
+    /// test pins the new contract.
+    ///
+    /// <para>We can't easily verify the unhook side-effects (engine
+    /// StatusChanged, FreeConfigsVm.Dispose) without mocks the test
+    /// harness doesn't have, but the public contract — "calling Dispose
+    /// is safe and repeatable" — is verifiable end-to-end. Reflection
+    /// peeks at the _disposed flag to confirm state.</para>
+    /// </summary>
+    [AvaloniaFact]
+    public void Dispose_IsIdempotent()
+    {
+        var vm = new MainWindowViewModel();
+        var disposedField = vm.GetType().GetField(
+            "_disposed",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+
+        Assert.False((bool)disposedField.GetValue(vm)!, "Fresh VM must not be disposed");
+
+        vm.Dispose();
+        Assert.True((bool)disposedField.GetValue(vm)!, "After first Dispose, flag must be true");
+
+        // Second call must NOT throw (idempotent guard).
+        vm.Dispose();
+        Assert.True((bool)disposedField.GetValue(vm)!, "Flag stays true after second Dispose");
+    }
 }
