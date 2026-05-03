@@ -18,13 +18,19 @@ namespace VPNRouter.Android;
 /// to auto-generate the corresponding <c>&lt;activity&gt;</c> entry inside
 /// <c>AndroidManifest.xml</c>.</para>
 ///
-/// <para>Phase 1.C wires VpnService consent + ACTION_START dispatch:
-/// 3 seconds after launch we call <see cref="VpnService.Prepare"/>; if
-/// consent is needed we present the system dialog via
-/// <see cref="StartActivityForResult(Intent?, int)"/>; once granted we
-/// fire ACTION_START at the (Java) <c>VpnRouterService</c> with a
-/// minimal direct-routing test config to exercise the libbox runtime
-/// end-to-end on hardware.</para>
+/// <para>Phase 1.D (current): the Connect / Disconnect actions are wired
+/// to the Avalonia UI in <see cref="AndroidApp"/>. The Activity exposes
+/// <see cref="Instance"/> + <see cref="RequestConnect"/> /
+/// <see cref="RequestDisconnect"/> so the button click handlers can talk
+/// to Android-only APIs (<c>VpnService.Prepare</c>,
+/// <c>StartActivityForResult</c>, <c>StartForegroundService</c>) without
+/// pulling Android.* references into the shared Avalonia layer.</para>
+///
+/// <para>Phase 1.C (replaced): used to auto-start the libbox tunnel ~3 s
+/// after launch via a <c>Handler.PostDelayed</c> smoke-test. That worked
+/// well enough for end-to-end runtime verification on hardware but
+/// hard-coded the consent flow and gave the user no way to disconnect.
+/// 1.D moves the trigger behind a proper Connect button.</para>
 /// </summary>
 [Activity(
     Label = "VPNRouter",
@@ -52,12 +58,13 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
     private const int RequestVpnConsent = 0xBEEF;
 
     /// <summary>
-    /// Phase 1.C smoke-test config: TUN inbound + direct outbound +
+    /// Phase 1.C/1.D smoke-test config: TUN inbound + direct outbound +
     /// minimal log + Clash API. No proxy server — the goal is to
     /// verify libbox initialises, opens the TUN, and routes packets out
-    /// via direct.
+    /// via direct. Phase 1.E will replace this with a real generated
+    /// config from VPNRouter.Core's ConfigGenerator.
     /// </summary>
-    private const string Phase1cTestConfig = """
+    private const string SmokeTestConfig = """
 {
   "log": { "level": "info" },
   "inbounds": [
@@ -84,8 +91,31 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
 
     // Mirrors VpnRouterService.java's intent contract.
     private const string ActionStart = "com.ninitux.vpnrouter.START";
+    private const string ActionStop = "com.ninitux.vpnrouter.STOP";
     private const string ExtraConfigJson = "config_json";
     private const string ExtraAllowedPackages = "allowed_packages";
+
+    /// <summary>
+    /// Singleton-ish reference so the Avalonia button handlers in
+    /// <see cref="AndroidApp"/> can reach the Activity-scoped Android APIs
+    /// (consent dialog, foreground service start). Set in
+    /// <see cref="OnCreate"/>, cleared in <see cref="OnDestroy"/>.
+    /// </summary>
+    public static MainActivity? Instance { get; private set; }
+
+    /// <summary>
+    /// Fires whenever <see cref="RequestConnect"/> /
+    /// <see cref="RequestDisconnect"/> changes the user-visible tunnel
+    /// intent. The Avalonia UI subscribes so it can flip the button label
+    /// and status text. Phase 1.D scope: fire-and-forget — the boolean
+    /// reflects "we asked the OS to start/stop", not "the tunnel is
+    /// actually carrying packets". Real state sync (libbox status →
+    /// broadcast → UI) is Phase 1.E.
+    /// </summary>
+    public static event Action<bool>? IntentChanged;
+
+    private static bool _intendedConnected;
+    public static bool IntendedConnected => _intendedConnected;
 
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder)
     {
@@ -96,27 +126,52 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
-
-        // Schedule the libbox start ~3 seconds after onCreate so the
-        // Activity is fully attached + Avalonia surface visible before
-        // the system VpnService consent dialog appears.
-        new Handler(Looper.MainLooper!).PostDelayed(SchedulePhase1cStart, 3000);
+        Instance = this;
     }
 
-    private void SchedulePhase1cStart()
+    protected override void OnDestroy()
     {
-        global::Android.Util.Log.Info("VpnRouter", "Phase 1.C: requesting VPN consent");
+        if (ReferenceEquals(Instance, this))
+            Instance = null;
+        base.OnDestroy();
+    }
+
+    /// <summary>
+    /// Phase 1.D: invoked by the Avalonia Connect button. Asks Android for
+    /// VpnService consent (system dialog the first time per app
+    /// installation, instant otherwise) and dispatches an ACTION_START
+    /// intent at <c>VpnRouterService</c> with the smoke-test config.
+    /// </summary>
+    public void RequestConnect()
+    {
+        global::Android.Util.Log.Info("VpnRouter", "Phase 1.D: Connect requested by UI");
         var prepareIntent = VpnService.Prepare(this);
         if (prepareIntent is null)
         {
-            global::Android.Util.Log.Info("VpnRouter", "Phase 1.C: consent already granted, starting service");
+            global::Android.Util.Log.Info("VpnRouter", "Phase 1.D: consent already granted, starting service");
             StartTunnelService();
         }
         else
         {
-            global::Android.Util.Log.Info("VpnRouter", "Phase 1.C: presenting system VPN consent dialog");
+            global::Android.Util.Log.Info("VpnRouter", "Phase 1.D: presenting system VPN consent dialog");
             StartActivityForResult(prepareIntent, RequestVpnConsent);
         }
+    }
+
+    /// <summary>
+    /// Phase 1.D: invoked by the Avalonia Disconnect button. Sends an
+    /// ACTION_STOP intent at the (foreground) <c>VpnRouterService</c>,
+    /// which tears down the libbox tunnel + closes the system tun fd +
+    /// removes the persistent notification.
+    /// </summary>
+    public void RequestDisconnect()
+    {
+        global::Android.Util.Log.Info("VpnRouter", "Phase 1.D: Disconnect requested by UI");
+        var intent = new Intent()
+            .SetClassName(PackageName!, "com.ninitux.vpnrouter.VpnRouterService")
+            .SetAction(ActionStop);
+        StartService(intent);
+        SetIntent(false);
     }
 
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
@@ -129,13 +184,16 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
 
         if (resultCode == Result.Ok)
         {
-            global::Android.Util.Log.Info("VpnRouter", "Phase 1.C: consent granted");
+            global::Android.Util.Log.Info("VpnRouter", "Phase 1.D: consent granted");
             StartTunnelService();
         }
         else
         {
             global::Android.Util.Log.Warn("VpnRouter",
-                $"Phase 1.C: consent denied (resultCode={resultCode})");
+                $"Phase 1.D: consent denied (resultCode={resultCode})");
+            // User declined — keep IntendedConnected false so the button
+            // resets to "Connect" and they can retry.
+            SetIntent(false);
         }
     }
 
@@ -147,7 +205,7 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
         var intent = new Intent()
             .SetClassName(PackageName!, "com.ninitux.vpnrouter.VpnRouterService")
             .SetAction(ActionStart)
-            .PutExtra(ExtraConfigJson, Phase1cTestConfig)
+            .PutExtra(ExtraConfigJson, SmokeTestConfig)
             .PutExtra(ExtraAllowedPackages, Array.Empty<string>());
 
         if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
@@ -157,6 +215,19 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
         else
         {
             StartService(intent);
+        }
+        SetIntent(true);
+    }
+
+    private static void SetIntent(bool connected)
+    {
+        if (_intendedConnected == connected) return;
+        _intendedConnected = connected;
+        try { IntentChanged?.Invoke(connected); }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter",
+                $"Phase 1.D: IntentChanged handler raised: {ex}");
         }
     }
 }
