@@ -53,6 +53,7 @@ offscreen-render → `window.CaptureRenderedFrame()` для PNG snapshots.
 | `BoolToChevronConverterTests` | v2.31.0-r4 (F-3): default vs param glyph paths | 2 |
 | `AvailableRuleTypesSurfaceTests` | v2.31.0-r4 (AU-10): domain_regex + process_path в Cards-mode ComboBox | 1 |
 | `LeakProtectionTests` | `ValidateConfig` invariants + protocol-aware dispatch (VLESS/Hy2/TUIC, v2.30.1-r4) + smart-mode local-dns (v2.31.x) + proxy-udp branch | 19 |
+| `SubscriptionFetcherParserTests` | v2.31.5+: 3 subscription body formats (JSON wrapper / raw base64 / plain URIs) + dedup + unsupported-scheme filter | 8 |
 | `MainWindowViewModelTests` (ViewModelTests.cs) | v2.27 Bug B: SmpAutostartChecked re-notify on three inputs | 1 |
 | `HeadlessGuiTests` | MainWindow/AboutWindow ctor smoke + width screenshots + button input routing | 4 |
 | `PageScreenshotTests` | 9 page snapshots + NetworkPage Autostart sub-tab + 3 narrow-window variants | 14 |

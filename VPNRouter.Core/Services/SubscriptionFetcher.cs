@@ -49,88 +49,11 @@ public static class SubscriptionFetcher
                 return result;
             }
 
-            // Extract base64 content — supports:
-            // 1. JSON wrapper: {"config":"base64..."} (ninitux.com format)
-            // 2. Raw base64 (v2rayNG/Streisand format)
-            // 3. Plain VLESS URIs (one per line)
-            string decoded;
-            var trimmed = response.Trim();
-
-            // Try JSON with "config" field first
-            if (trimmed.StartsWith("{"))
-            {
-                try
-                {
-                    using var doc = JsonDocument.Parse(trimmed);
-                    if (doc.RootElement.TryGetProperty("config", out var configEl))
-                    {
-                        var b64 = configEl.GetString() ?? "";
-                        decoded = Encoding.UTF8.GetString(Convert.FromBase64String(b64));
-                        logger?.Debug("[Subscription] Parsed JSON wrapper, config decoded ({Len} chars)", decoded.Length);
-                    }
-                    else
-                    {
-                        logger?.Warning("[Subscription] JSON response has no 'config' field");
-                        return result;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger?.Warning(ex, "[Subscription] Failed to parse JSON response");
-                    decoded = trimmed;
-                }
-            }
-            // Try raw base64
-            else
-            {
-                try
-                {
-                    decoded = Encoding.UTF8.GetString(Convert.FromBase64String(trimmed));
-                }
-                catch (FormatException)
-                {
-                    // Not base64 — plain VLESS URIs
-                    decoded = trimmed;
-                }
-            }
-
-            var lines = decoded.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-            foreach (var line in lines)
-            {
-                // v2.30.1-r3: accept any supported share-link scheme
-                // (vless://, hysteria2://, hy2://, tuic://, ss://). The
-                // ServerUriParser dispatches to the right per-protocol
-                // parser internally.
-                if (!ServerUriParser.IsSupportedScheme(line))
-                    continue;
-
-                try
-                {
-                    var entry = ServerUriParser.Parse(line);
-                    result.Add(entry);
-                }
-                catch (Exception ex)
-                {
-                    logger?.Warning(ex, "[Subscription] Failed to parse line: {Line}", line);
-                }
-            }
-
-            // Deduplicate by Server:Port:UUID:Flow (Flow differs for TCP/UDP split pairs)
-            var seen = new HashSet<string>();
-            var deduped = new List<VlessServerEntry>(result.Count);
-            foreach (var e in result)
-            {
-                var key = $"{e.Server}:{e.Port}:{e.Uuid}:{e.Flow}";
-                if (seen.Add(key)) deduped.Add(e);
-            }
-            if (deduped.Count < result.Count)
-                logger?.Information("[Subscription] Deduplicated {Before}→{After} servers",
-                    result.Count, deduped.Count);
-            result = deduped;
-
-            if (result.Count >= 500)
-                logger?.Warning("[Subscription] Large subscription: {Count} servers — may impact performance", result.Count);
+            // v2.31.5+: parsing extracted to ParseBody for unit-testability
+            // without an HTTP round-trip. Behaviour-preserving — FetchAsync
+            // is still the only production caller and the user-visible
+            // pipeline (HTTP → parse → dedup → list) is identical.
+            result = ParseBody(response, logger);
 
             logger?.Information("[Subscription] Fetched {Count} servers from {Url}", result.Count, url);
         }
@@ -138,6 +61,117 @@ public static class SubscriptionFetcher
         {
             logger?.Error(ex, "[Subscription] Fetch failed for {Url}", url);
         }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Extract server entries from a subscription response body. Supports
+    /// the three formats that providers in the wild use:
+    /// <list type="number">
+    ///   <item>JSON wrapper <c>{"config":"base64..."}</c> (ninitux.com).</item>
+    ///   <item>Raw base64-encoded URI list (v2rayNG / Streisand / Hiddify).</item>
+    ///   <item>Plain URIs separated by newlines.</item>
+    /// </list>
+    ///
+    /// <para>Falls back gracefully: malformed JSON → tries trimmed body
+    /// directly; non-base64 → tries plain URIs. Returns empty list on
+    /// fully-unparseable input rather than throwing — the call site
+    /// (FetchAsync) treats "0 entries returned" as transient and keeps
+    /// the cached list, which is the right move when the only signal
+    /// is "we got bytes back but couldn't make sense of them".</para>
+    ///
+    /// <para>Internal so <see cref="VPNRouter.Tests"/> can hit the
+    /// parser branches directly via <c>InternalsVisibleTo</c>; not part
+    /// of the public Core API.</para>
+    /// </summary>
+    internal static List<VlessServerEntry> ParseBody(string responseBody, ILogger? logger = null)
+    {
+        var result = new List<VlessServerEntry>();
+        if (string.IsNullOrWhiteSpace(responseBody)) return result;
+
+        // Extract base64 content — supports:
+        // 1. JSON wrapper: {"config":"base64..."} (ninitux.com format)
+        // 2. Raw base64 (v2rayNG/Streisand format)
+        // 3. Plain VLESS URIs (one per line)
+        string decoded;
+        var trimmed = responseBody.Trim();
+
+        // Try JSON with "config" field first
+        if (trimmed.StartsWith("{"))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(trimmed);
+                if (doc.RootElement.TryGetProperty("config", out var configEl))
+                {
+                    var b64 = configEl.GetString() ?? "";
+                    decoded = Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+                    logger?.Debug("[Subscription] Parsed JSON wrapper, config decoded ({Len} chars)", decoded.Length);
+                }
+                else
+                {
+                    logger?.Warning("[Subscription] JSON response has no 'config' field");
+                    return result;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.Warning(ex, "[Subscription] Failed to parse JSON response");
+                decoded = trimmed;
+            }
+        }
+        // Try raw base64
+        else
+        {
+            try
+            {
+                decoded = Encoding.UTF8.GetString(Convert.FromBase64String(trimmed));
+            }
+            catch (FormatException)
+            {
+                // Not base64 — plain VLESS URIs
+                decoded = trimmed;
+            }
+        }
+
+        var lines = decoded.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var line in lines)
+        {
+            // v2.30.1-r3: accept any supported share-link scheme
+            // (vless://, hysteria2://, hy2://, tuic://, ss://). The
+            // ServerUriParser dispatches to the right per-protocol
+            // parser internally.
+            if (!ServerUriParser.IsSupportedScheme(line))
+                continue;
+
+            try
+            {
+                var entry = ServerUriParser.Parse(line);
+                result.Add(entry);
+            }
+            catch (Exception ex)
+            {
+                logger?.Warning(ex, "[Subscription] Failed to parse line: {Line}", line);
+            }
+        }
+
+        // Deduplicate by Server:Port:UUID:Flow (Flow differs for TCP/UDP split pairs)
+        var seen = new HashSet<string>();
+        var deduped = new List<VlessServerEntry>(result.Count);
+        foreach (var e in result)
+        {
+            var key = $"{e.Server}:{e.Port}:{e.Uuid}:{e.Flow}";
+            if (seen.Add(key)) deduped.Add(e);
+        }
+        if (deduped.Count < result.Count)
+            logger?.Information("[Subscription] Deduplicated {Before}→{After} servers",
+                result.Count, deduped.Count);
+        result = deduped;
+
+        if (result.Count >= 500)
+            logger?.Warning("[Subscription] Large subscription: {Count} servers — may impact performance", result.Count);
 
         return result;
     }
