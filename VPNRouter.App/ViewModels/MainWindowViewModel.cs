@@ -25,9 +25,21 @@ using VPNRouter.App.ViewModels.FreeConfigs;
 
 namespace VPNRouter.App.ViewModels;
 
-public partial class MainWindowViewModel : ViewModelBase
+public partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private readonly VpnEngine _engine;
+    // v2.31.6-r12 (Phase H, iter#4 audit): Dispose-state guard.
+    // Pre-r12 the VM had no IDisposable surface — _runtimeStatusTimer
+    // (DispatcherTimer) and _subRefreshTimer (System.Threading.Timer)
+    // only stopped on the explicit Quit() / OnEngineStatus("Stopped")
+    // happy paths. On unhandled exit / X-button close / a future
+    // ReloadMainWindowForLocalization-style window rebuild, both timers
+    // would leak; FreeConfigsVm.Dispose() (which it implements) was
+    // never called either. r12 adds Dispose() that unhooks engine
+    // events, stops + disposes both timers, and disposes FreeConfigsVm.
+    // MainWindow.Closed should call this; until then it's still wired
+    // to Quit() so explicit-quit paths benefit immediately.
+    private bool _disposed;
 #if PLATFORM_WINDOWS
     private ZapretManager? _zapret;
     private TgProxyManager? _tgProxy;
@@ -3758,13 +3770,18 @@ public partial class MainWindowViewModel : ViewModelBase
     private void KillAllZapret()
     {
 #if PLATFORM_WINDOWS
-        try { _zapret?.Stop(); } catch { }
+        // v2.31.6-r12: Debug-log instead of swallowing silently.
+        try { _zapret?.Stop(); }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] KillAllZapret: _zapret.Stop failed"); }
 
         // Force kill by process name
         foreach (var proc in System.Diagnostics.Process.GetProcessesByName("winws"))
         {
             try { proc.Kill(entireProcessTree: true); proc.WaitForExit(3000); }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "[VM] KillAllZapret: proc.Kill failed (PID {Pid})", proc.Id);
+            }
             finally { proc.Dispose(); }
         }
 
@@ -3781,7 +3798,10 @@ public partial class MainWindowViewModel : ViewModelBase
             using var p = System.Diagnostics.Process.Start(psi);
             p?.WaitForExit(3000);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[VM] KillAllZapret: taskkill fallback failed");
+        }
 #endif
     }
 
@@ -4431,12 +4451,21 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private static void OpenFolderInExplorer(string path)
     {
+        // v2.31.6-r11: Debug-log instead of swallowing silently. Iter#4
+        // audit P2: user-action paths (Open folder / Open URL / Copy to
+        // clipboard) shouldn't fail invisibly — add at least a Debug
+        // line so postmortem from logs is possible. We don't escalate
+        // to Warning because the failure modes are usually benign
+        // (folder doesn't exist, no shell associated with the URL).
         try
         {
             if (Directory.Exists(path))
                 Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Serilog.Log.Logger.Debug(ex, "[VM] OpenFolderInExplorer failed: {Path}", path);
+        }
     }
 
     private static void OpenUrl(string url)
@@ -4445,7 +4474,10 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Serilog.Log.Logger.Debug(ex, "[VM] OpenUrl failed: {Url}", url);
+        }
     }
 
     [RelayCommand]
@@ -4514,6 +4546,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void CopyToClipboard(string text)
     {
+        // v2.31.6-r12: Debug-log instead of swallowing silently. Iter#4
+        // audit P2: clipboard failures (no clipboard service available
+        // in headless test, app exited mid-copy, etc.) should leave a
+        // forensic trace.
         try
         {
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -4521,7 +4557,10 @@ public partial class MainWindowViewModel : ViewModelBase
                 desktop.MainWindow?.Clipboard?.SetTextAsync(text);
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[VM] CopyToClipboard failed (text length: {Len})", text?.Length ?? 0);
+        }
     }
 
     /// <summary>Parse stats line into short summary for UI display.</summary>
@@ -5222,13 +5261,82 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Kill tg-ws-proxy on app exit
 #if PLATFORM_WINDOWS
-        try { _tgProxy?.Stop(); TgProxyManager.KillAll(TgProxyPort); } catch { }
+        // v2.31.6-r12: Debug-log instead of swallowing silently.
+        try { _tgProxy?.Stop(); TgProxyManager.KillAll(TgProxyPort); }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Quit: _tgProxy.Stop / KillAll failed"); }
 #endif
 
         SaveSettings();
 
+        // v2.31.6-r12 (Phase H): release IDisposable resources so a
+        // subsequent app reopen / future ReloadMainWindowForLocalization
+        // doesn't leak this VM's timers / event subscriptions.
+        Dispose();
+
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             desktop.Shutdown();
+    }
+
+    /// <summary>
+    /// v2.31.6-r12 (Phase H, iter#4 audit): IDisposable surface for the
+    /// VM. Ensures both timers (`_runtimeStatusTimer`, `_subRefreshTimer`),
+    /// the engine event handlers, and the FreeConfigs sub-VM all get
+    /// torn down cleanly when the VM is no longer needed. Pre-r12 these
+    /// only stopped on the explicit Quit() / OnEngineStatus("Stopped")
+    /// paths; an unhandled exit or a future window-rebuild path would
+    /// leak them.
+    ///
+    /// <para>Idempotent — safe to call multiple times. Exceptions during
+    /// individual cleanup steps are swallowed-with-debug-log so the
+    /// rest of the chain still runs (we'd rather leak ONE thing than
+    /// leak everything because the first cleanup threw).</para>
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        // 1. Stop polling timers.
+        try
+        {
+            _runtimeStatusTimer?.Stop();
+            _runtimeStatusTimer = null;
+        }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _runtimeStatusTimer stop failed"); }
+
+        try { StopSubRefreshTimer(); }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: StopSubRefreshTimer failed"); }
+
+        // 2. Unhook engine events. _engine itself is owned by the host
+        // (App / Service) so we don't dispose it here — just unhook
+        // our handlers so a stale VM doesn't continue to receive
+        // status updates after disposal.
+        try
+        {
+            _engine.StatusChanged -= OnEngineStatus;
+        }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: engine StatusChanged unhook failed"); }
+
+        // 3. Dispose the FreeConfigs sub-VM (it owns its own timers +
+        // HttpClient + cache write FileStream).
+        try
+        {
+            FreeConfigsVm?.Dispose();
+        }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: FreeConfigsVm.Dispose failed"); }
+
+        // 4. Cancel + dispose the subscription-refresh CTS if active.
+        try
+        {
+            var cts = _subRefreshCts;
+            _subRefreshCts = null;
+            if (cts != null)
+            {
+                cts.Cancel();
+                cts.Dispose();
+            }
+        }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: _subRefreshCts cleanup failed"); }
     }
 
     // ── Theme ──

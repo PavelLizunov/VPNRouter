@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Platform;
+using VPNRouter.App.ViewModels;
 
 namespace VPNRouter.App.Views;
 
@@ -32,5 +33,23 @@ public partial class MainWindow : Window
             }
             catch { /* no icon is better than crashing */ }
         }
+
+        // v2.31.6-r12 (Phase H, iter#4 audit): wire the VM's IDisposable
+        // surface to the window's Closed event so timer/event leaks
+        // can't survive an X-button close. Quit() also calls Dispose
+        // (defensive double-call is idempotent), so explicit-quit and
+        // window-close paths both clean up. If the user opens a future
+        // ReloadMainWindowForLocalization-style window rebuild, the
+        // outgoing window's Closed will fire and dispose the OLD VM —
+        // the new window must use a fresh VM instance (per-window
+        // ownership).
+        Closed += (_, _) =>
+        {
+            if (DataContext is MainWindowViewModel vm)
+            {
+                try { vm.Dispose(); }
+                catch { /* avoid raising on the closed-event path */ }
+            }
+        };
     }
 }
