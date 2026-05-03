@@ -685,6 +685,184 @@ public class LeakProtectionTests
         Assert.True(result.IsValid); // warnings don't cause failure
         Assert.Contains(result.Warnings, w => w.Contains("DNS may leak"));
     }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // v2.31.5-r1+: extra coverage for protocol-aware dispatch (v2.30.1-r4)
+    // and smart-mode DNS leak check (v2.31.x). These pin behaviour that the
+    // older tests above didn't reach because they exercise only the VLESS
+    // protocol branch.
+    // ───────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Hysteria2_ValidConfig_Passes()
+    {
+        // Sanity: a non-VLESS proxy with all required fields validates
+        // green. Pre-r4 (when ValidateVlessOutbound ran unconditionally)
+        // this would have failed with "uuid is empty" because Hy2 has no
+        // uuid by spec.
+        var config = CreateValidConfig();
+        config.Outbounds = new List<SingBoxOutbound>
+        {
+            new()
+            {
+                Type = "hysteria2",
+                Tag = "proxy",
+                Server = "1.2.3.4",
+                ServerPort = 443,
+                Password = "secret"
+            },
+            new() { Type = "direct", Tag = "direct" }
+        };
+
+        var result = LeakProtection.ValidateConfig(config);
+
+        Assert.True(result.IsValid, string.Join("; ", result.Errors));
+    }
+
+    [Fact]
+    public void Hysteria2_EmptyPassword_Fails()
+    {
+        // Hy2-specific required field. The protocol-aware validator
+        // dispatches to ValidateHysteria2Outbound which checks Password —
+        // a regression that reverts to the VLESS-only path would also
+        // miss this branch.
+        var config = CreateValidConfig();
+        config.Outbounds = new List<SingBoxOutbound>
+        {
+            new()
+            {
+                Type = "hysteria2",
+                Tag = "proxy",
+                Server = "1.2.3.4",
+                ServerPort = 443,
+                Password = ""
+            },
+            new() { Type = "direct", Tag = "direct" }
+        };
+
+        var result = LeakProtection.ValidateConfig(config);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("password is empty"));
+    }
+
+    [Fact]
+    public void Tuic_EmptyUuid_Fails()
+    {
+        // TUIC needs uuid (like VLESS) but optionally password (unlike
+        // Shadowsocks). Pins the TUIC dispatch branch independently from
+        // the VLESS-uuid test above.
+        var config = CreateValidConfig();
+        config.Outbounds = new List<SingBoxOutbound>
+        {
+            new()
+            {
+                Type = "tuic",
+                Tag = "proxy",
+                Server = "1.2.3.4",
+                ServerPort = 443,
+                Uuid = ""
+            },
+            new() { Type = "direct", Tag = "direct" }
+        };
+
+        var result = LeakProtection.ValidateConfig(config);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e =>
+            e.Contains("TUIC", StringComparison.OrdinalIgnoreCase) && e.Contains("uuid"));
+    }
+
+    [Fact]
+    public void MixedProtocolUrltest_VlessAndHysteria2_Passes()
+    {
+        // v2.30.1-r4 regression sentinel. Pre-r4: a urltest selector
+        // containing both vless:// and hy2:// children failed validation
+        // because the Hy2 child got run through ValidateVlessOutbound
+        // and rejected for "uuid is empty". User report 2026-05-01.
+        // Fix dispatched validation by outbound type per child; this
+        // test pins that behaviour so a regression is caught at unit
+        // level, not in the wild.
+        var config = CreateValidConfig();
+        config.Outbounds = new List<SingBoxOutbound>
+        {
+            new() { Type = "vless", Tag = "vless-1", Server = "1.2.3.4", ServerPort = 443, Uuid = "uuid-1" },
+            new() { Type = "hysteria2", Tag = "hy2-1", Server = "5.6.7.8", ServerPort = 443, Password = "secret" },
+            new()
+            {
+                Type = "urltest",
+                Tag = "proxy",
+                Outbounds = new List<string> { "vless-1", "hy2-1" }
+            },
+            new() { Type = "direct", Tag = "direct" }
+        };
+
+        var result = LeakProtection.ValidateConfig(config);
+
+        Assert.True(result.IsValid, string.Join("; ", result.Errors));
+    }
+
+    [Fact]
+    public void SmartMode_LocalDnsServer_DoesNotWarnAboutLeak()
+    {
+        // v2.31.x dns_mode="smart" regression sentinel. Smart mode
+        // routes process DNS to local-dns (resolves via direct, but
+        // through TLS so still leak-resistant). Pre-fix the leak check
+        // only accepted "vpn-dns" as a valid DNS rule target, so smart
+        // mode unconditionally fired "DNS may leak" — confusing because
+        // the config was actually fine.
+        var config = CreateValidConfig();
+        config.Dns.Rules[0].Server = "local-dns";
+
+        var result = LeakProtection.ValidateConfig(config);
+
+        Assert.True(result.IsValid);
+        Assert.DoesNotContain(result.Warnings, w => w.Contains("DNS may leak"));
+    }
+
+    [Fact]
+    public void FullTunnel_DnsFinalNotVpnDns_WarnsButPasses()
+    {
+        // Full-tunnel mode (route.final="proxy") expects DNS to also
+        // route through the proxy by default. If dns.final lands on
+        // anything other than vpn-dns, we want a noisy warning so the
+        // user can make an informed call about whether the leak is
+        // intentional (rare) or a misconfig (common).
+        var config = CreateValidConfig();
+        config.Route.Final = "proxy";
+        config.Dns.Final = "local-dns";
+
+        var result = LeakProtection.ValidateConfig(config);
+
+        Assert.True(result.IsValid); // warnings don't block startup
+        Assert.Contains(result.Warnings, w =>
+            w.Contains("Full tunnel") || w.Contains("DNS may bypass"));
+    }
+
+    [Fact]
+    public void ProxyUdp_AlsoValidated_FailsOnInvalidChild()
+    {
+        // Both "proxy" (TCP) and optional "proxy-udp" (UDP via Hy2/TUIC)
+        // get validated. A regression that drops the proxy-udp branch
+        // would let a malformed UDP outbound slip through and only
+        // surface as a sing-box startup error — ValidateConfig is meant
+        // to catch it at the pre-flight gate.
+        var config = CreateValidConfig();
+        config.Outbounds.Add(new SingBoxOutbound
+        {
+            Type = "vless",
+            Tag = "proxy-udp",
+            Server = "1.2.3.4",
+            ServerPort = 443,
+            Uuid = ""  // intentionally bad
+        });
+
+        var result = LeakProtection.ValidateConfig(config);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e =>
+            e.Contains("proxy-udp") && e.Contains("uuid"));
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
