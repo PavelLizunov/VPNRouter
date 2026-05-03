@@ -32,13 +32,17 @@
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
   </ItemGroup>
 
-  <!-- Windows-only packages (ETW, WMI). Only loaded when building net8.0
-       target on a Windows host. Android target excludes these — Windows-
-       specific files in the source tree are gated behind PLATFORM_WINDOWS
-       so they compile out on Android. -->
+  <!-- Windows-only packages (ETW, WMI, SystemEvents). Only loaded when
+       building net8.0 target on a Windows host. Android target excludes
+       these — Windows-specific files in the source tree are gated behind
+       PLATFORM_WINDOWS so they compile out on Android.
+       v2.31.6-r10 (Phase D): added Microsoft.Win32.SystemEvents for the
+       PowerEventListener that drives sleep/wake/lock/unlock recovery
+       (brat user-reported recovery gap). -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0' AND $([MSBuild]::IsOSPlatform('Windows'))">
     <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.1.7" />
     <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Win32.SystemEvents" Version="8.0.0" />
   </ItemGroup>
 
   <!-- v2.27.2: expose internals to the test project so unit tests can

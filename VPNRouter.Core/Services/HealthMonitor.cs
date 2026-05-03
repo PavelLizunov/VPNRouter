@@ -22,6 +22,12 @@ public class HealthMonitor : IDisposable
     private System.Threading.Timer? _healthTimer;
     private System.Threading.Timer? _debounceTimer;
 
+    // v2.31.6-r10 (Phase D): power-event listener so we can recover
+    // immediately on resume/unlock instead of waiting for the next
+    // periodic OnHealthTick (which Windows modern-standby may have
+    // throttled to >30 minutes per brat's 2026-05-03 log).
+    private PowerEventListener? _powerListener;
+
     private Profile _activeProfile = null!;
     private AppSettings _appSettings = null!;
     private ScanResult? _lastScan;
@@ -133,6 +139,14 @@ public class HealthMonitor : IDisposable
         _healthTimer = new System.Threading.Timer(
             OnHealthTick, null, intervalMs, intervalMs);
 
+        // v2.31.6-r10 (Phase D): subscribe to Windows session/power events.
+        // No-op on non-Windows; on Windows fires HealthMonitor.ProbeNow on
+        // resume/unlock/console-connect so recovery doesn't have to wait
+        // for the next periodic tick (modern-standby may have throttled
+        // it to >30 min per brat's logs).
+        _powerListener = new PowerEventListener(ProbeNow, _logger);
+        _powerListener.Start();
+
         _logger.Information("[HealthMonitor] Started — check every {Sec}s, max {Max} restarts (strict mode: {Strict})",
             intervalSeconds, _settings.MaxRestartAttempts, appSettings.App.StrictMode);
     }
@@ -157,7 +171,30 @@ public class HealthMonitor : IDisposable
         var dt = System.Threading.Interlocked.Exchange(ref _debounceTimer, null);
         ht?.Dispose();
         dt?.Dispose();
+
+        // v2.31.6-r10 (Phase D): unsubscribe SystemEvents listener.
+        var pl = System.Threading.Interlocked.Exchange(ref _powerListener, null);
+        pl?.Dispose();
+
         _logger.Information("[HealthMonitor] Stopped");
+    }
+
+    /// <summary>
+    /// v2.31.6-r10 (Phase D, brat user-reported recovery gap fix).
+    /// Public out-of-band probe — runs the same body as the periodic
+    /// <see cref="OnHealthTick"/> immediately. Called from
+    /// <see cref="PowerEventListener"/> on resume/unlock/console-connect
+    /// so recovery doesn't have to wait for the next periodic tick
+    /// (modern-standby can throttle the timer to &gt;30 min).
+    ///
+    /// <para>Safe to call concurrently with the periodic timer — the
+    /// r9 <c>_onHealthTickInProgress</c> Interlocked gate inside
+    /// OnHealthTick serialises both paths so only one runs at a time.</para>
+    /// </summary>
+    public void ProbeNow()
+    {
+        if (_isStopping || _disposed) return;
+        OnHealthTick(state: null);
     }
 
     /// <summary>

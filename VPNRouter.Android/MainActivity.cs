@@ -190,17 +190,29 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
 
     private void StartTunnelService()
     {
-        // v3.0 Phase 1.E (2026-05-04): generate the sing-box config from
-        // VPNRouter.Core.ConfigGenerator instead of using the hand-rolled
-        // smoke-test JSON. AndroidConfigBuilder.BuildConfigJson runs the
-        // same pipeline as desktop (parse VLESS URI → AppSettings →
-        // ConfigGenerator → JSON) so the Android app gets DNS routing,
-        // Reality fingerprinting, route rules etc. for free. Generation
-        // failures fall back to logging + cancelling the start.
+        // v3.0 Phase 1.F (2026-05-04): prefer the persisted VLESS URI
+        // from AndroidStorage; fall back to PlaceholderVlessUri if
+        // none stored. Phase 3 (full UI port) will add a settings
+        // page where the user can paste a vless:// URI / subscription
+        // URL; for now you can pre-populate the SharedPreferences
+        // entry via adb:
+        //
+        //   adb shell run-as com.ninitux.vpnrouter \
+        //       sh -c "echo '<root><string name=\"vless_uri\">vless://...</string></root>' > files/shared_prefs/vpnrouter_settings.xml"
+        //
+        // — or by calling AndroidStorage.SetVlessUri from a future
+        // Avalonia settings UI.
+        var vlessUri = AndroidStorage.GetVlessUri() ?? PlaceholderVlessUri;
+        var usingPlaceholder = vlessUri == PlaceholderVlessUri;
+        global::Android.Util.Log.Info("VpnRouter",
+            usingPlaceholder
+                ? "Phase 1.F: no stored VLESS URI — falling back to placeholder"
+                : "Phase 1.F: using stored VLESS URI from SharedPreferences");
+
         string configJson;
         try
         {
-            configJson = AndroidConfigBuilder.BuildConfigJson(PlaceholderVlessUri);
+            configJson = AndroidConfigBuilder.BuildConfigJson(vlessUri);
         }
         catch (Exception ex)
         {
