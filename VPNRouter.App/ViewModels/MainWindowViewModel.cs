@@ -702,14 +702,36 @@ public partial class MainWindowViewModel : ViewModelBase
     // Telegram proxy
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblTgProxyToggle))]
+    [NotifyPropertyChangedFor(nameof(IsTgProxySetUp))]
     private bool _tgProxyEnabled = false;
     [ObservableProperty] private string _tgProxyStatus = "Stopped";
     [ObservableProperty] private int _tgProxyPort = 1443;
-    [ObservableProperty] private string _tgProxySecret = "";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTgProxySetUp))]
+    private string _tgProxySecret = "";
     [ObservableProperty] private string _tgProxyLink = "";
-    [ObservableProperty] private string _tgProxyVersionText = "";
-    [ObservableProperty] private bool _isTgProxyDownloading = false;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTgProxySetUp))]
+    private string _tgProxyVersionText = "";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTgProxySetUp))]
+    private bool _isTgProxyDownloading = false;
     [ObservableProperty] private string _tgProxyStats = "";
+
+    /// <summary>
+    /// v2.31.6-r1 (TelegramPage UX simplification): true when the
+    /// user has already set up the Telegram proxy at least once —
+    /// binary is downloaded AND a secret has been generated. Drives
+    /// the two-state TelegramPage layout: <c>false</c> shows the
+    /// onboarding "Set up Telegram proxy" CTA, <c>true</c> shows the
+    /// run/stop status surface. Power-user controls (port / secret /
+    /// version / folder / GitHub) live behind the Advanced expander
+    /// in both states so the page never overwhelms a first-time user
+    /// while keeping every existing knob reachable.
+    /// </summary>
+    public bool IsTgProxySetUp =>
+        !string.IsNullOrWhiteSpace(TgProxySecret)
+        && !string.IsNullOrWhiteSpace(TgProxyVersionText);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServersTabSelected))]
@@ -1770,6 +1792,14 @@ public partial class MainWindowViewModel : ViewModelBase
     public string LblTgProxyDescription => Strings.TgProxyDescription;
     public string LblTgProxySetupHint => Strings.TgProxySetupHint;
     public string LblTgProxyToggle => TgProxyEnabled ? Strings.TgProxyStop : Strings.TgProxyStart;
+
+    // v2.31.6-r1: simplified TelegramPage UX strings.
+    public string L_TgProxySetupCta => Strings.TgProxySetupCta;
+    public string L_TgProxySetupSubtitle => Strings.TgProxySetupSubtitle;
+    public string L_TgProxySetupStep => Strings.TgProxySetupStep;
+    public string L_TgProxyClientAutoHint => Strings.TgProxyClientAutoHint;
+    public string L_TgProxyAdvanced => Strings.TgProxyAdvanced;
+    public string L_TgProxyReopenInTelegram => Strings.TgProxyReopenInTelegram;
     // v2.30.7-r4 — F-17 fix: button label "Обновить" / "Update" alone
     // is ambiguous — the page has multiple things that can be updated
     // (binary version, secret, port). Prefix with "TgProxy" so the
@@ -4241,6 +4271,46 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(TgProxySecret)) return;
         TgProxyManager.OpenInTelegram("127.0.0.1", TgProxyPort, TgProxySecret);
+    }
+
+    /// <summary>
+    /// v2.31.6-r1 (TelegramPage UX simplification): one-click
+    /// onboarding for Telegram proxy. Wraps the three things a
+    /// first-time user needs into a single CTA:
+    ///   1. Download the tg-ws-proxy binary if not already installed.
+    ///   2. Start the proxy (which auto-generates a secret if empty).
+    ///   3. Open Telegram with the deep-link so the client adds the
+    ///      proxy to its Settings → Advanced → Connection type list.
+    /// On subsequent visits <see cref="IsTgProxySetUp"/> flips to
+    /// true and the page swaps to the simpler Connect/Disconnect
+    /// surface — at which point this command is no longer reachable
+    /// from the UI but stays callable defensively.
+    /// </summary>
+    [RelayCommand]
+    private async Task SetupTgProxyAsync()
+    {
+#if PLATFORM_WINDOWS
+        if (IsTgProxyDownloading) return;
+
+        // Step 1+2: ToggleTgProxyAsync handles "download → generate
+        // secret → start" already. Re-using it keeps the start path
+        // single-sourced and avoids drift if the toggle logic
+        // evolves later (port retry, secret rotation policy, etc.).
+        if (!TgProxyEnabled && !TgProxyManager.IsAnyRunning(TgProxyPort))
+        {
+            await ToggleTgProxyAsync();
+        }
+
+        // Step 3: open Telegram with the deep-link. Skip if the
+        // start above failed for some reason (no binary, port
+        // collision, etc.) — Status text already explains why.
+        if (TgProxyEnabled && !string.IsNullOrEmpty(TgProxySecret))
+        {
+            TgProxyManager.OpenInTelegram("127.0.0.1", TgProxyPort, TgProxySecret);
+        }
+#else
+        await Task.CompletedTask;
+#endif
     }
 
     [RelayCommand]

@@ -363,6 +363,31 @@ public static class Strings
         // v2.30.5-r1 (UX-55 fix): EN "Start/Stop" inside RU sentence.
         ? "Нажмите 'Открыть в Telegram' один раз для настройки прокси. После этого просто Запуск/Остановка."
         : "Click 'Open in Telegram' once to set up the proxy. After that just Start/Stop.";
+
+    // v2.31.6-r1 (TelegramPage UX simplification): two-state minimal
+    // layout — the page now hides the power-user controls (port /
+    // secret / version / folder / GitHub) behind an Advanced expander
+    // and surfaces a single primary action that depends on whether
+    // the proxy has ever been set up before.
+    public static string TgProxySetupCta => Ru
+        ? "Настроить Telegram-прокси"
+        : "Set up Telegram proxy";
+    public static string TgProxySetupSubtitle => Ru
+        ? "Обход блокировки Telegram через локальный прокси."
+        : "Bypass Telegram blocks via a local proxy.";
+    public static string TgProxySetupStep => Ru
+        ? "Один клик: скачивает прокси-бинарь, запускает его и открывает Telegram для авто-добавления."
+        : "One click: downloads the proxy binary, starts it, and opens Telegram to auto-add the entry.";
+    public static string TgProxyClientAutoHint => Ru
+        ? "Telegram использует этот прокси автоматически после настройки."
+        : "Telegram automatically uses this proxy after setup.";
+    public static string TgProxyAdvanced => Ru
+        ? "Расширенные настройки"
+        : "Advanced settings";
+    public static string TgProxyReopenInTelegram => Ru
+        ? "Открыть в Telegram повторно"
+        : "Reopen in Telegram";
+
     public static string OpenFolder => Ru ? "Открыть папку" : "Open folder";
     public static string OpenGitHub => "GitHub";
 

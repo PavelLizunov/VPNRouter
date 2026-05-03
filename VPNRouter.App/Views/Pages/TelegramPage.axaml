@@ -13,136 +13,261 @@
         <conv:BoolToStatusColorConverter x:Key="StatusColorConverter"/>
     </UserControl.Resources>
 
+    <!--
+      v2.31.6-r1 — two-state simplified layout.
+
+      Pre-r1 the page showed 13 element groups simultaneously
+      (description / port / secret / copy / regenerate / version /
+      update / status / open-in-telegram / setup-once-hint /
+      open-folder / GitHub / setup-path-hint / footer-toggle) and
+      forced a first-time user to read three different hint
+      paragraphs to understand the flow. Power-user knobs
+      (port / secret / regenerate / version / folder / GitHub) sat
+      on the main path even though >95% of users never touch them.
+
+      r1 splits the page by IsTgProxySetUp:
+        State 1 (false) — onboarding: title + subtitle + single
+          big "Set up Telegram proxy" CTA card + auto-flow hint.
+          The CTA chains download → start → Open-in-Telegram into
+          one click via SetupTgProxyCommand.
+        State 2 (true) — active: status badge + auto-use hint +
+          re-open-in-Telegram secondary action.
+
+      Both states share an Advanced expander at the bottom that
+      surfaces every existing knob (port, secret, version, etc.)
+      and a manual-setup hint for users whose Telegram client
+      doesn't follow the auto-add deep-link.
+
+      The footer toggles between SetupTgProxy (State 1) and the
+      existing ToggleTgProxy command (State 2) so the wording
+      stays accurate to the action that's actually about to fire.
+    -->
+
     <Grid RowDefinitions="*,Auto">
 
-        <!-- v2.28.4-r7: same pattern as FreeConfigsPage r6 fix — push
-             horizontal padding from ScrollViewer to an inner Grid Margin
-             so the right edge stays locked regardless of scrollbar
-             reservation when content wraps on resize. -->
         <ScrollViewer Grid.Row="0"
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto"
                       AllowAutoHide="False"
-                      Padding="0,8,0,12">
-            <Grid Margin="10,0,16,0">
-            <StackPanel Spacing="10">
+                      Padding="0,12,0,12">
+            <Grid Margin="14,0,18,0">
+                <StackPanel Spacing="14">
 
-                <TextBlock TextWrapping="Wrap" FontSize="11" Opacity="0.7"
-                           Text="{Binding LblTgProxyDescription}"/>
+                    <!-- ─── State 1: Onboarding ─── -->
+                    <StackPanel Spacing="12"
+                                IsVisible="{Binding !IsTgProxySetUp}">
 
-                <!-- Port -->
-                <StackPanel Spacing="2">
-                    <TextBlock Text="{Binding L_TgProxyPort}" FontWeight="SemiBold" Opacity="0.7"/>
-                    <TextBox Text="{Binding TgProxyPort}"
-                             Watermark="{Binding L_WmTgProxyPort}"
-                             FontSize="11" Padding="6,4"
-                             MaxWidth="120" HorizontalAlignment="Left"/>
-                </StackPanel>
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="Telegram Proxy"
+                                       FontSize="16" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding L_TgProxySetupSubtitle}"
+                                       FontSize="11" Opacity="0.65"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
 
-                <!-- Secret + Copy + Regenerate -->
-                <StackPanel Spacing="2">
-                    <TextBlock Text="{Binding L_TgProxySecret}" FontWeight="SemiBold" Opacity="0.7"/>
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBox Text="{Binding TgProxySecret}"
-                                 Watermark="{Binding L_WmTgProxySecret}"
-                                 FontSize="10" Padding="6,4"
-                                 FontFamily="Consolas,Courier New,monospace"
-                                 MinWidth="260" IsReadOnly="True"/>
-                        <Button Content="{Binding L_TgProxyCopy}"
-                                Command="{Binding CopyTgProxySecretCommand}"
-                                FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
-                        <Button Content="{Binding L_TgProxyRegenerate}"
-                                Command="{Binding RegenerateTgProxySecretCommand}"
-                                FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
+                        <Border Padding="14,12"
+                                CornerRadius="{StaticResource RadiusMd}"
+                                Background="{DynamicResource SurfaceRaisedBrush}"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource BorderSubtleBrush}">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="{Binding L_TgProxySetupStep}"
+                                           FontSize="11" Opacity="0.85"
+                                           TextWrapping="Wrap"/>
+
+                                <ProgressBar IsVisible="{Binding IsTgProxyDownloading}"
+                                             IsIndeterminate="True"
+                                             Height="4"
+                                             CornerRadius="{StaticResource RadiusXs}"
+                                             Foreground="{DynamicResource AccentSolidBrush}"/>
+
+                                <!-- Status surfaces only while download is
+                                     in flight; the "Stopped" baseline is
+                                     not informative on this screen. -->
+                                <TextBlock Text="{Binding TgProxyStatus}"
+                                           IsVisible="{Binding IsTgProxyDownloading}"
+                                           FontSize="10" Opacity="0.6"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Text="{Binding LblTgProxyDescription}"
+                                   FontSize="10" Opacity="0.5"
+                                   TextWrapping="Wrap"/>
                     </StackPanel>
-                </StackPanel>
 
-                <!-- Version + Download/Update -->
-                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-                    <TextBlock Text="{Binding TgProxyVersionText}" FontSize="10" Opacity="0.5"
-                               VerticalAlignment="Center"/>
-                    <Button Content="{Binding LblUpdateTgProxy}"
-                            Command="{Binding UpdateTgProxyCommand}"
-                            FontSize="10" Padding="8,4"
-                            CornerRadius="{StaticResource RadiusSm}" VerticalAlignment="Center"
-                            IsEnabled="{Binding !IsTgProxyDownloading}"/>
-                    <ProgressBar IsVisible="{Binding IsTgProxyDownloading}"
-                                 IsIndeterminate="True"
-                                 Height="4" Width="100" CornerRadius="{StaticResource RadiusXs}"
-                                 VerticalAlignment="Center"
-                                 Foreground="{DynamicResource AccentSolidBrush}"/>
-                </StackPanel>
+                    <!-- ─── State 2: Active ─── -->
+                    <StackPanel Spacing="12"
+                                IsVisible="{Binding IsTgProxySetUp}">
 
-                <!-- Status.
-                     v2.20.0: dot reads TgProxyBadgeBrush — same polled
-                     ComponentRuntimeStatus that drives the header chip — so
-                     the page never contradicts the header. Previously the
-                     dot flipped to grey instantly on the local
-                     TgProxyEnabled flag even when the process failed to die
-                     (e.g. KillAll missed it because of the old
-                     process-name mismatch). Users saw "Stopped" dot + green
-                     header chip + working Telegram traffic. -->
-                <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
-                        Background="{DynamicResource SurfaceSunkenBrush}">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                                 Fill="{Binding TgProxyBadgeBrush}"/>
-                        <TextBlock Text="{Binding TgProxyStatus}" FontSize="11"
-                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Telegram Proxy"
+                                   FontSize="16" FontWeight="SemiBold"/>
+
+                        <!-- Status card -->
+                        <Border Padding="14,12"
+                                CornerRadius="{StaticResource RadiusMd}"
+                                Background="{DynamicResource SurfaceSunkenBrush}">
+                            <StackPanel Spacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Ellipse Width="10" Height="10"
+                                             VerticalAlignment="Center"
+                                             Fill="{Binding TgProxyBadgeBrush}"/>
+                                    <TextBlock Text="{Binding TgProxyStatus}"
+                                               FontSize="13" FontWeight="SemiBold"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding L_TgProxyClientAutoHint}"
+                                           FontSize="10" Opacity="0.6"
+                                           TextWrapping="Wrap"
+                                           Margin="20,0,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Re-open in Telegram (rare action: user
+                             reset Telegram, switched device, etc.) -->
+                        <Button Content="{Binding L_TgProxyReopenInTelegram}"
+                                Command="{Binding OpenTgProxyInTelegramCommand}"
+                                FontSize="11" Padding="10,5"
+                                CornerRadius="{StaticResource RadiusSm}"
+                                HorizontalAlignment="Left"
+                                Background="{DynamicResource SurfaceBaseBrush}"
+                                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                BorderThickness="1"/>
                     </StackPanel>
-                </Border>
 
-                <!-- Open in Telegram button (one-time setup) -->
-                <StackPanel Spacing="4">
-                    <Button Content="{Binding L_TgProxyOpenInTelegram}"
-                            Command="{Binding OpenTgProxyInTelegramCommand}"
-                            FontSize="11" Padding="12,6"
-                            CornerRadius="{StaticResource RadiusSm}"/>
-                    <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.5" FontStyle="Italic"
-                               Text="{Binding L_TgProxySetupOnce}"/>
+                    <!-- ─── Advanced expander (shared) ─── -->
+                    <!-- Power-user controls collapsed by default. Expanded
+                         state surfaces every knob the pre-r1 page had on
+                         the main path: port / secret / regenerate /
+                         version / update / folder / GitHub / manual setup
+                         hint. Lives below both states so it's reachable
+                         regardless of setup status. -->
+                    <Expander Header="{Binding L_TgProxyAdvanced}"
+                              FontSize="11">
+                        <StackPanel Spacing="12" Margin="0,8,0,4">
+
+                            <!-- Port -->
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="{Binding L_TgProxyPort}"
+                                           FontWeight="SemiBold" Opacity="0.7" FontSize="11"/>
+                                <TextBox Text="{Binding TgProxyPort}"
+                                         Watermark="{Binding L_WmTgProxyPort}"
+                                         FontSize="11" Padding="6,4"
+                                         MaxWidth="120" HorizontalAlignment="Left"/>
+                            </StackPanel>
+
+                            <!-- Secret + Copy + Regenerate -->
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="{Binding L_TgProxySecret}"
+                                           FontWeight="SemiBold" Opacity="0.7" FontSize="11"/>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBox Text="{Binding TgProxySecret}"
+                                             Watermark="{Binding L_WmTgProxySecret}"
+                                             FontSize="10" Padding="6,4"
+                                             FontFamily="Consolas,Courier New,monospace"
+                                             MinWidth="240" IsReadOnly="True"/>
+                                    <Button Content="{Binding L_TgProxyCopy}"
+                                            Command="{Binding CopyTgProxySecretCommand}"
+                                            FontSize="10" Padding="8,4"
+                                            CornerRadius="{StaticResource RadiusSm}"/>
+                                    <Button Content="{Binding L_TgProxyRegenerate}"
+                                            Command="{Binding RegenerateTgProxySecretCommand}"
+                                            FontSize="10" Padding="8,4"
+                                            CornerRadius="{StaticResource RadiusSm}"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Version + Update -->
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{Binding TgProxyVersionText}"
+                                           FontSize="10" Opacity="0.5"
+                                           VerticalAlignment="Center"/>
+                                <Button Content="{Binding LblUpdateTgProxy}"
+                                        Command="{Binding UpdateTgProxyCommand}"
+                                        FontSize="10" Padding="8,4"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        VerticalAlignment="Center"
+                                        IsEnabled="{Binding !IsTgProxyDownloading}"/>
+                                <ProgressBar IsVisible="{Binding IsTgProxyDownloading}"
+                                             IsIndeterminate="True"
+                                             Height="4" Width="100"
+                                             CornerRadius="{StaticResource RadiusXs}"
+                                             VerticalAlignment="Center"
+                                             Foreground="{DynamicResource AccentSolidBrush}"/>
+                            </StackPanel>
+
+                            <!-- Open folder + GitHub -->
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="{Binding L_OpenFolder}"
+                                        Command="{Binding OpenTgProxyFolderCommand}"
+                                        FontSize="10" Padding="8,4"
+                                        CornerRadius="{StaticResource RadiusSm}"/>
+                                <Button Content="{Binding L_OpenGitHub}"
+                                        Command="{Binding OpenTgProxyGitHubCommand}"
+                                        FontSize="10" Padding="8,4"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Foreground="{DynamicResource AccentSolidBrush}"/>
+                                <TextBlock Text="Flowseal/tg-ws-proxy"
+                                           FontSize="9" Opacity="0.4"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Manual setup hint (fallback if the
+                                 'Open in Telegram' deep-link doesn't
+                                 work — happens on some Telegram
+                                 distributions / desktop forks). -->
+                            <TextBlock Text="{Binding LblTgProxySetupHint}"
+                                       FontSize="10" Opacity="0.5"
+                                       TextWrapping="Wrap"/>
+
+                        </StackPanel>
+                    </Expander>
+
                 </StackPanel>
-
-                <!-- Open folder + GitHub -->
-                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
-                    <Button Content="{Binding L_OpenFolder}"
-                            Command="{Binding OpenTgProxyFolderCommand}"
-                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
-                    <Button Content="{Binding L_OpenGitHub}"
-                            Command="{Binding OpenTgProxyGitHubCommand}"
-                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"
-                            Foreground="{DynamicResource AccentSolidBrush}"/>
-                    <TextBlock Text="Flowseal/tg-ws-proxy" FontSize="9" Opacity="0.4"
-                               VerticalAlignment="Center"/>
-                </StackPanel>
-
-                <!-- Setup path hint -->
-                <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.4"
-                           Text="{Binding LblTgProxySetupHint}"/>
-
-            </StackPanel>
             </Grid>
         </ScrollViewer>
 
-        <!-- v2.25.6 Phase 6: TgProxy toggle демотирован до secondary
-             (surface-base bg + border + text-primary). Причина дизайн
-             handoff: "Остановить Telegram Proxy" не должен кричать как
-             primary — в окне уже есть один primary (Start/Stop VPN в
-             footer). Secondary-стиль делает его явным действием но не
-             бьётся за внимание с главным. -->
+        <!-- ─── Footer: primary action ─── -->
+        <!-- Two buttons sharing the footer slot via IsVisible — one
+             for setup (State 1), one for connect/disconnect (State 2).
+             The wording stays accurate to the action about to fire,
+             which the pre-r1 single-button "Start/Stop" couldn't
+             promise on the first run (it actually had to download
+             and configure first). -->
         <Border Grid.Row="1" Padding="10,8"
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource BorderDefaultBrush}">
-            <Button Content="{Binding LblTgProxyToggle}"
-                    Command="{Binding ToggleTgProxyCommand}"
-                    FontSize="11" FontWeight="SemiBold"
-                    Padding="14,7"
-                    HorizontalAlignment="Right"
-                    HorizontalContentAlignment="Center"
-                    Background="{DynamicResource SurfaceBaseBrush}"
-                    Foreground="{DynamicResource TextPrimaryBrush}"
-                    BorderBrush="{DynamicResource BorderDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="{StaticResource RadiusSm}"/>
+            <Grid>
+                <!-- State 1: primary CTA — full setup chain -->
+                <Button Content="{Binding L_TgProxySetupCta}"
+                        Command="{Binding SetupTgProxyCommand}"
+                        IsVisible="{Binding !IsTgProxySetUp}"
+                        IsEnabled="{Binding !IsTgProxyDownloading}"
+                        FontSize="11" FontWeight="SemiBold"
+                        Padding="14,7"
+                        HorizontalAlignment="Right"
+                        HorizontalContentAlignment="Center"
+                        Background="{DynamicResource AccentSolidBrush}"
+                        Foreground="{DynamicResource AccentOnSolidBrush}"
+                        CornerRadius="{StaticResource RadiusSm}"/>
+
+                <!-- State 2: connect/disconnect (existing toggle).
+                     Stays secondary-styled per v2.25.6 design
+                     handoff: "Остановить Telegram Proxy" не должен
+                     кричать как primary — главное primary в окне это
+                     Start/Stop VPN в footer окна. -->
+                <Button Content="{Binding LblTgProxyToggle}"
+                        Command="{Binding ToggleTgProxyCommand}"
+                        IsVisible="{Binding IsTgProxySetUp}"
+                        FontSize="11" FontWeight="SemiBold"
+                        Padding="14,7"
+                        HorizontalAlignment="Right"
+                        HorizontalContentAlignment="Center"
+                        Background="{DynamicResource SurfaceBaseBrush}"
+                        Foreground="{DynamicResource TextPrimaryBrush}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusSm}"/>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>
