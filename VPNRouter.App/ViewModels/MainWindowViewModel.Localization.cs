@@ -459,6 +459,7 @@ public partial class MainWindowViewModel
     public string L_TgProxySetupHint => Strings.TgProxySetupHint;
     public string L_TgProxySetupOnce => Strings.TgProxySetupOnce;
     public string L_TgProxyStart => Strings.TgProxyStart;
+    public string L_TgProxyStartAndOpen => Strings.TgProxyStartAndOpen;
     public string L_TgProxyStop => Strings.TgProxyStop;
     public string L_ThemeDark => Strings.ThemeDark;
     public string L_ThemeLight => Strings.ThemeLight;

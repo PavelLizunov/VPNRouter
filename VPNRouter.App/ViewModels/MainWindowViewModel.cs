@@ -702,6 +702,7 @@ public partial class MainWindowViewModel : ViewModelBase
     // Telegram proxy
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblTgProxyToggle))]
+    [NotifyPropertyChangedFor(nameof(LblTgProxyMainAction))]
     [NotifyPropertyChangedFor(nameof(IsTgProxySetUp))]
     private bool _tgProxyEnabled = false;
     [ObservableProperty] private string _tgProxyStatus = "Stopped";
@@ -1590,14 +1591,32 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnAutostartZapretChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
     partial void OnAutostartTgProxyChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
 
-    // Zapret section navigator (master-detail)
+    // Zapret section navigator (master-detail).
+    // v2.31.6-r5 (ZAPRET-2): consolidated 7 sections → 5 per user
+    // feedback 2026-05-03 night («упростить ZAPRET страницу — где
+    // можно»). Audit findings:
+    //   • Diagnostics had ONE button («Run diagnostics») + an output
+    //     panel → merged into Status (lives below the warning banner;
+    //     diagnosing is the natural follow-up to seeing the status).
+    //   • Updates had TWO elements («Update IPSet list» + «Auto-check
+    //     Zapret updates» checkbox) → merged into Strategy where the
+    //     existing «Update Zapret» button already handles version
+    //     management, keeping all update-related controls together.
+    // Design handoff cell 7 specifies 7 sections, so this is a
+    // documented deviation per v2.31.6-r1/r3 lesson (Rule B4): walking
+    // each section with mcp__vpnrouter-test__mouse_click revealed
+    // 6 of 7 had ≤3 elements — the 7-section spread was over-architected
+    // for the actual content. Surface area per section now averages
+    // ~5 controls — denser without crowding.
+    // The IsZapret*Section flags below are kept as 5 contiguous indices;
+    // pre-r5 dead branches («IsZapretUpdatesSection», «IsZapretDiagnosticsSection»)
+    // are removed so the XAML can't accidentally bind to unreachable
+    // sections.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsZapretStatusSection))]
     [NotifyPropertyChangedFor(nameof(IsZapretStrategySection))]
     [NotifyPropertyChangedFor(nameof(IsZapretHostsSection))]
     [NotifyPropertyChangedFor(nameof(IsZapretFiltersSection))]
-    [NotifyPropertyChangedFor(nameof(IsZapretUpdatesSection))]
-    [NotifyPropertyChangedFor(nameof(IsZapretDiagnosticsSection))]
     [NotifyPropertyChangedFor(nameof(IsZapretAdvancedSection))]
     private int _selectedZapretSectionIndex;
 
@@ -1605,9 +1624,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public bool IsZapretStrategySection => SelectedZapretSectionIndex == 1;
     public bool IsZapretHostsSection => SelectedZapretSectionIndex == 2;
     public bool IsZapretFiltersSection => SelectedZapretSectionIndex == 3;
-    public bool IsZapretUpdatesSection => SelectedZapretSectionIndex == 4;
-    public bool IsZapretDiagnosticsSection => SelectedZapretSectionIndex == 5;
-    public bool IsZapretAdvancedSection => SelectedZapretSectionIndex == 6;
+    public bool IsZapretAdvancedSection => SelectedZapretSectionIndex == 4;
 
     // Zapret tool state
     [ObservableProperty]
@@ -1806,6 +1823,18 @@ public partial class MainWindowViewModel : ViewModelBase
     public string LblTgProxyDescription => Strings.TgProxyDescription;
     public string LblTgProxySetupHint => Strings.TgProxySetupHint;
     public string LblTgProxyToggle => TgProxyEnabled ? Strings.TgProxyStop : Strings.TgProxyStart;
+
+    /// <summary>
+    /// v2.31.6-r5 (TG-2): label for the unified footer action introduced
+    /// per user feedback 2026-05-03 night. When stopped, footer fires the
+    /// full SetupTgProxy chain (download → start → open Telegram), so
+    /// label reads «Запустить и открыть Telegram» / «Start &amp; open
+    /// Telegram». When running, footer reverts to the existing «Stop»
+    /// semantics. Bound to <see cref="TgProxyMainActionCommand"/>.
+    /// </summary>
+    public string LblTgProxyMainAction => TgProxyEnabled
+        ? Strings.TgProxyStop
+        : Strings.TgProxyStartAndOpen;
 
     // v2.31.6-r1: simplified TelegramPage UX strings (kept here for
     // backward-compat; r3 page uses only the SetupCta wording for the
@@ -4344,9 +4373,54 @@ public partial class MainWindowViewModel : ViewModelBase
         // Step 3: open Telegram with the deep-link. Skip if the
         // start above failed for some reason (no binary, port
         // collision, etc.) — Status text already explains why.
+        // v2.31.6-r5: route through OpenTgProxyInTelegram (the command
+        // body, not the relay wrapper) so the BUG #1 toast guard for
+        // missing Telegram desktop fires here too. Pre-r5 this branch
+        // called TgProxyManager.OpenInTelegram directly and bypassed
+        // the registry probe — first-time Linux/macOS-style users
+        // without Telegram desktop saw the OS dialog instead of the
+        // download-link toast.
         if (TgProxyEnabled && !string.IsNullOrEmpty(TgProxySecret))
         {
-            TgProxyManager.OpenInTelegram("127.0.0.1", TgProxyPort, TgProxySecret);
+            OpenTgProxyInTelegram();
+        }
+#else
+        await Task.CompletedTask;
+#endif
+    }
+
+    /// <summary>
+    /// v2.31.6-r5 (TG-2): unified main-action command wired to the
+    /// TelegramPage footer button. Branches on current state:
+    /// <list type="bullet">
+    ///   <item>Stopped → fires <see cref="SetupTgProxyAsync"/> (download
+    ///     binary if needed, start the proxy, open Telegram with
+    ///     deep-link to auto-add the entry — single click).</item>
+    ///   <item>Running → fires <see cref="ToggleTgProxyAsync"/> which
+    ///     stops the proxy.</item>
+    /// </list>
+    /// User feedback 2026-05-03 night surfaced that the pre-r5 layout
+    /// had two visually distant buttons (body «Open in Telegram» +
+    /// footer «Start Telegram proxy») that conceptually belonged
+    /// together on first run. Folding the start+open chain into the
+    /// footer, demoting the body button to a secondary «re-pair»
+    /// fallback, removes the «click body, then click footer» two-step
+    /// without competing visually with the global Start VPN footer
+    /// (per v2.25.6 design intent — footer keeps its secondary style).
+    /// </summary>
+    [RelayCommand]
+    private async Task TgProxyMainActionAsync()
+    {
+#if PLATFORM_WINDOWS
+        if (IsTgProxyDownloading) return;
+
+        if (TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort))
+        {
+            await ToggleTgProxyAsync();
+        }
+        else
+        {
+            await SetupTgProxyAsync();
         }
 #else
         await Task.CompletedTask;

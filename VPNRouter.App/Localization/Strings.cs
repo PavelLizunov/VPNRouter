@@ -359,6 +359,17 @@ public static class Strings
     public static string TgProxyStart => Ru ? "Запустить Telegram-прокси" : "Start Telegram proxy";
     public static string TgProxyStop  => Ru ? "Остановить Telegram-прокси" : "Stop Telegram proxy";
     public static string TgProxyOpenInTelegram => Ru ? "Открыть в Telegram" : "Open in Telegram";
+
+    // v2.31.6-r5 (TG-2) — unified footer action label per user feedback
+    // 2026-05-03 night: «запуск прокси и открыть телеграм нужно объединить,
+    // сейчас они очень далеко». Footer becomes the primary CTA on first run
+    // (download → start → open-in-Telegram in one click) so the user no
+    // longer plays "click body button + click footer button" two-step.
+    // The body button demotes to a secondary "re-pair" fallback for
+    // sessions where Telegram client lost the proxy entry.
+    public static string TgProxyStartAndOpen => Ru
+        ? "Запустить и открыть Telegram"
+        : "Start & open Telegram";
     public static string TgProxySetupOnce => Ru
         // v2.30.5-r1 (UX-55 fix): EN "Start/Stop" inside RU sentence.
         ? "Нажмите 'Открыть в Telegram' один раз для настройки прокси. После этого просто Запуск/Остановка."

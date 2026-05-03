@@ -35,17 +35,20 @@
                     BorderThickness="0,0,1,0"
                     BorderBrush="{DynamicResource BorderDefaultBrush}"
                     Background="{DynamicResource SurfaceSunkenBrush}">
+                <!-- v2.31.6-r5 (ZAPRET-2): 7 → 5 sections per user
+                     feedback 2026-05-03 night («упростить»). Diagnostics
+                     (1 button) merged into Status; Updates (2 elements)
+                     merged into Strategy. See MainWindowViewModel
+                     SelectedZapretSectionIndex comment for rationale. -->
                 <ListBox SelectedIndex="{Binding SelectedZapretSectionIndex}"
                          Background="Transparent" BorderThickness="0"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          ScrollViewer.VerticalScrollBarVisibility="Auto">
-                    <ListBoxItem Content="{Binding L_ZapretSecStatus}"      Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding L_ZapretSecStrategy}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding L_ZapretSecHosts}"       Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding L_ZapretSecFilters}"     Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding L_ZapretSecUpdates}"     Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding L_ZapretSecDiagnostics}" Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
-                    <ListBoxItem Content="{Binding L_ZapretSecAdvanced}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding L_ZapretSecStatus}"   Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding L_ZapretSecStrategy}" Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding L_ZapretSecHosts}"    Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding L_ZapretSecFilters}"  Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
+                    <ListBoxItem Content="{Binding L_ZapretSecAdvanced}" Padding="10,7" FontSize="11" FontWeight="SemiBold"/>
                 </ListBox>
             </Border>
 
@@ -62,7 +65,14 @@
               <Grid Margin="12,0,14,0">
               <StackPanel>
 
-                <!-- ═══ Status ═══ -->
+                <!-- ═══ Status ═══
+                     v2.31.6-r5 (ZAPRET-2): absorbs the former Diagnostics
+                     section (which had a single «Run diagnostics» button
+                     + output panel). Diagnosing is the natural follow-up
+                     to checking status, so keeping both in the same pane
+                     removes a navigation step without crowding the page —
+                     the output Border only appears once a diagnostic
+                     run has produced output. -->
                 <StackPanel Spacing="10" IsVisible="{Binding IsZapretStatusSection}">
                     <TextBlock Text="{Binding L_ZapretSecStatus}" FontWeight="Bold" FontSize="13"/>
                     <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.7"
@@ -92,12 +102,53 @@
                                        Text="{Binding LblDpiWarning}"/>
                         </Grid>
                     </Border>
+
+                    <!-- v2.31.6-r5: Run diagnostics, ex-Diagnostics section.
+                         Output panel only renders when ZapretActionOutput
+                         is non-empty so the Status pane stays compact
+                         pre-run. -->
+                    <Button Content="{Binding L_RunDiagnostics}"
+                            Command="{Binding RunZapretDiagnosticsCommand}"
+                            IsEnabled="{Binding !IsZapretActionRunning}"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
+
+                    <Border IsVisible="{Binding ZapretActionOutput.Count}"
+                            Padding="8" MaxHeight="260"
+                            Background="{DynamicResource SurfaceSunkenBrush}"
+                            BorderBrush="{DynamicResource BorderDefaultBrush}"
+                            BorderThickness="1" CornerRadius="{StaticResource RadiusSm}">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding ZapretActionTitle}"
+                                       FontWeight="SemiBold" FontSize="10" Opacity="0.7"/>
+                            <ScrollViewer MaxHeight="220"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding ZapretActionOutput}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" FontSize="9"
+                                                       FontFamily="Consolas,Courier New,monospace"
+                                                       TextWrapping="Wrap"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- ═══ Strategy ═══
                      v2.30.5-r1 (UX-47 fix): dropped redundant secondary
                      "Стратегия" label below the page title — both showed
-                     the same word. Now only the page title remains. -->
+                     the same word. Now only the page title remains.
+                     v2.31.6-r5 (ZAPRET-2): absorbs the former Updates
+                     section (Update IPSet button + auto-check Zapret
+                     updates checkbox). Both belong to the «keep
+                     binary + lists fresh» domain that already lives
+                     here via the «Update Zapret» button. Consolidating
+                     keeps all version/update controls in one place. -->
                 <StackPanel Spacing="8" IsVisible="{Binding IsZapretStrategySection}">
                     <TextBlock Text="{Binding L_ZapretSecStrategy}" FontWeight="Bold" FontSize="13"/>
                     <ComboBox ItemsSource="{Binding ZapretStrategies}"
@@ -120,6 +171,21 @@
                              Watermark="{Binding L_WmZapretCustomArgs}"
                              FontSize="10" Padding="6,4"
                              AcceptsReturn="True" MinHeight="50" MaxHeight="80"/>
+
+                    <!-- v2.31.6-r5: ex-Updates section content. -->
+                    <Button Content="{Binding L_UpdateIpSet}"
+                            Command="{Binding UpdateIpSetListCommand}"
+                            IsEnabled="{Binding !IsZapretActionRunning}"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
+                    <CheckBox IsChecked="{Binding ZapretAutoUpdateCheck}"
+                              AutomationProperties.Name="{Binding L_AutoUpdateCheckLabel}"
+                              ToolTip.Tip="{Binding L_TipZapretAutoUpdate}"
+                              FontSize="10" MinHeight="0" Padding="4,0">
+                        <TextBlock Text="{Binding L_AutoUpdateCheckLabel}"
+                                   TextWrapping="Wrap" FontSize="10"/>
+                    </CheckBox>
                 </StackPanel>
 
                 <!-- ═══ Hosts ═══ -->
@@ -197,63 +263,10 @@
                     </Border>
                 </StackPanel>
 
-                <!-- ═══ Updates ═══ -->
-                <StackPanel Spacing="10" IsVisible="{Binding IsZapretUpdatesSection}">
-                    <TextBlock Text="{Binding L_ZapretSecUpdates}" FontWeight="Bold" FontSize="13"/>
-
-                    <Button Content="{Binding L_UpdateIpSet}"
-                            Command="{Binding UpdateIpSetListCommand}"
-                            IsEnabled="{Binding !IsZapretActionRunning}"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Left"
-                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
-
-                    <!-- v2.28.3: TextWrapping fix for narrow-window overflow.
-                         Same anti-pattern as the v2.27.0-r2 fix in NetworkPage. -->
-                    <CheckBox IsChecked="{Binding ZapretAutoUpdateCheck}"
-                              AutomationProperties.Name="{Binding L_AutoUpdateCheckLabel}"
-                              ToolTip.Tip="{Binding L_TipZapretAutoUpdate}"
-                              FontSize="10" MinHeight="0" Padding="4,0">
-                        <TextBlock Text="{Binding L_AutoUpdateCheckLabel}"
-                                   TextWrapping="Wrap" FontSize="10"/>
-                    </CheckBox>
-                </StackPanel>
-
-                <!-- ═══ Diagnostics ═══ -->
-                <StackPanel Spacing="8" IsVisible="{Binding IsZapretDiagnosticsSection}">
-                    <TextBlock Text="{Binding L_ZapretSecDiagnostics}" FontWeight="Bold" FontSize="13"/>
-
-                    <Button Content="{Binding L_RunDiagnostics}"
-                            Command="{Binding RunZapretDiagnosticsCommand}"
-                            IsEnabled="{Binding !IsZapretActionRunning}"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Left"
-                            FontSize="10" Padding="8,4" CornerRadius="{StaticResource RadiusSm}"/>
-
-                    <Border IsVisible="{Binding ZapretActionOutput.Count}"
-                            Padding="8" MaxHeight="260"
-                            Background="{DynamicResource SurfaceSunkenBrush}"
-                            BorderBrush="{DynamicResource BorderDefaultBrush}"
-                            BorderThickness="1" CornerRadius="{StaticResource RadiusSm}">
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="{Binding ZapretActionTitle}"
-                                       FontWeight="SemiBold" FontSize="10" Opacity="0.7"/>
-                            <ScrollViewer MaxHeight="220"
-                                          HorizontalScrollBarVisibility="Disabled"
-                                          VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding ZapretActionOutput}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding}" FontSize="9"
-                                                       FontFamily="Consolas,Courier New,monospace"
-                                                       TextWrapping="Wrap"/>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+                <!-- v2.31.6-r5 (ZAPRET-2): standalone Updates and Diagnostics
+                     sections removed — content merged into Strategy and
+                     Status respectively. See SelectedZapretSectionIndex
+                     comment in MainWindowViewModel for full rationale. -->
 
                 <!-- ═══ Advanced ═══ -->
                 <StackPanel Spacing="6" IsVisible="{Binding IsZapretAdvancedSection}">

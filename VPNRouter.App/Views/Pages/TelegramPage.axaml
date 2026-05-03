@@ -188,27 +188,27 @@
                                  CornerRadius="{StaticResource RadiusXs}"
                                  Foreground="{DynamicResource AccentSolidBrush}"/>
 
-                    <!-- 4. 3-button row.
-                         Open in Telegram = primary blue per design (it's
-                         the primary user-facing action — sets up the
-                         proxy AND opens Telegram client to add it). We
-                         route it through SetupTgProxyCommand which does
-                         the full chain: download (if needed) → start →
-                         open Telegram deep-link. Once the proxy is set
-                         up, subsequent clicks fall through to plain
-                         deep-link opens.
-                         Open folder + GitHub = secondary per design. -->
+                    <!-- 4. 3-button row — v2.31.6-r5 (TG-2) demotion.
+                         Pre-r5 the body had a primary-blue «Open in Telegram»
+                         button that fired SetupTgProxyCommand (download +
+                         start + open). The user reported this conflicts
+                         with the footer «Start Telegram proxy» button —
+                         visually the two were ~300 px apart but conceptually
+                         a single first-run flow. r5 unifies the action in
+                         the footer and demotes this button to a secondary
+                         «re-pair» fallback used only after initial setup
+                         when Telegram client lost its proxy entry (e.g.
+                         user reset the client or switched device). When
+                         the proxy is stopped the button is disabled — the
+                         footer is the only correct entry point on first
+                         run, removing the two-step ambiguity.
+                         Open folder + GitHub remain secondary as before. -->
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Button Content="{Binding L_TgProxyOpenInTelegram}"
-                                Command="{Binding SetupTgProxyCommand}"
-                                FontSize="11" FontWeight="SemiBold"
-                                Padding="12,6"
+                        <Button Content="{Binding L_TgProxyReopenInTelegram}"
+                                Command="{Binding OpenTgProxyInTelegramCommand}"
+                                FontSize="10" Padding="10,5"
                                 CornerRadius="{StaticResource RadiusSm}"
-                                Background="{DynamicResource AccentSolidBrush}"
-                                Foreground="{DynamicResource AccentOnSolidBrush}"
-                                BorderBrush="Transparent"
-                                BorderThickness="1"
-                                IsEnabled="{Binding !IsTgProxyDownloading}"/>
+                                IsEnabled="{Binding TgProxyEnabled}"/>
                         <Button Content="{Binding L_OpenFolder}"
                                 Command="{Binding OpenTgProxyFolderCommand}"
                                 FontSize="10" Padding="10,5"
@@ -252,17 +252,25 @@
             </Grid>
         </ScrollViewer>
 
-        <!-- 6. Footer toggle — secondary per design (per v2.25.6 design
-             handoff comment: "Кнопка «Остановить Telegram Proxy» —
-             secondary (не ещё один огромный синий)"). Stays secondary
-             in BOTH start/stop wording — page primary is "Open in
-             Telegram" above, this is the runtime toggle for users who
-             already finished setup. -->
+        <!-- 6. Footer — v2.31.6-r5 (TG-2) unified main action.
+             Pre-r5 footer was secondary «Start/Stop Telegram proxy»
+             — Start path didn't open Telegram, leading to user
+             confusion: «What's the difference between body Open and
+             footer Start?». r5 folds setup + start + open into ONE
+             footer click when stopped:
+               Stopped → «Запустить и открыть Telegram» → SetupTgProxy
+               Running → «Остановить Telegram-прокси» → ToggleTgProxy
+             Style stays secondary white per v2.25.6 design handoff
+             («не ещё один огромный синий»). The action is now the
+             only first-run entry point — body «Re-pair in Telegram»
+             button above is disabled until the proxy is up. Bound
+             through TgProxyMainActionCommand which dispatches by
+             state. -->
         <Border Grid.Row="1" Padding="10,8"
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource BorderDefaultBrush}">
-            <Button Content="{Binding LblTgProxyToggle}"
-                    Command="{Binding ToggleTgProxyCommand}"
+            <Button Content="{Binding LblTgProxyMainAction}"
+                    Command="{Binding TgProxyMainActionCommand}"
                     FontSize="11" FontWeight="SemiBold"
                     Padding="14,7"
                     HorizontalAlignment="Right"
@@ -271,7 +279,8 @@
                     Foreground="{DynamicResource TextPrimaryBrush}"
                     BorderBrush="{DynamicResource BorderDefaultBrush}"
                     BorderThickness="1"
-                    CornerRadius="{StaticResource RadiusSm}"/>
+                    CornerRadius="{StaticResource RadiusSm}"
+                    IsEnabled="{Binding !IsTgProxyDownloading}"/>
         </Border>
     </Grid>
 </UserControl>
