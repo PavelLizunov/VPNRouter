@@ -1,5 +1,7 @@
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.Views.Pages;
 
@@ -248,5 +250,51 @@ public class PageScreenshotTests
             new TelegramPage { DataContext = vm },
             "page-telegram-active-narrow520",
             width: 520, height: 800);
+    }
+
+    /// <summary>
+    /// v2.31.6-r2 — render the page with the Advanced expander
+    /// programmatically expanded so the power-user controls (port,
+    /// secret, regenerate, version, update, folder, GitHub, manual
+    /// setup hint) are visually inspectable per release. Without
+    /// this the Advanced surface only ships in a release if a human
+    /// remembers to expand it during a manual visual check.
+    ///
+    /// Walks the visual tree to find the Expander since the control
+    /// has no x:Name and we don't want to add one (Advanced is
+    /// supposed to be incidental to the page identity).
+    /// </summary>
+    [AvaloniaFact]
+    public void TelegramPage_AdvancedExpanded()
+    {
+        var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
+        vm.TgProxySecret = "deadbeef00000000deadbeef00000000";
+        vm.TgProxyVersionText = "v1.6.5";
+        vm.TgProxyEnabled = false;
+
+        var page = new TelegramPage { DataContext = vm };
+        var window = new Avalonia.Controls.Window { Width = 1200, Height = 800, Content = page };
+        window.Show();
+        try
+        {
+            // Layout pass before searching the visual tree — Expander
+            // is inside a ScrollViewer's lazily-built content tree.
+            window.UpdateLayout();
+            var expander = page.GetVisualDescendants()
+                .OfType<Avalonia.Controls.Expander>()
+                .FirstOrDefault();
+            Assert.NotNull(expander);
+            expander!.IsExpanded = true;
+            window.UpdateLayout();
+
+            var bitmap = window.CaptureRenderedFrame()
+                ?? throw new InvalidOperationException("CaptureRenderedFrame returned null");
+            var path = System.IO.Path.Combine(ScreenshotHelper.ScreenshotsDir, "page-telegram-advanced-expanded.png");
+            bitmap.Save(path);
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 }
