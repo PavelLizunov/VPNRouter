@@ -251,10 +251,18 @@
                         CornerRadius="{StaticResource RadiusSm}"/>
 
                 <!-- State 2: connect/disconnect (existing toggle).
-                     Stays secondary-styled per v2.25.6 design
-                     handoff: "Остановить Telegram Proxy" не должен
-                     кричать как primary — главное primary в окне это
-                     Start/Stop VPN в footer окна. -->
+                     v2.31.6-r2 polish: style varies by TgProxyEnabled
+                     so the button doesn't lie about urgency:
+                       Stopped → Start (primary accent — pull user to
+                         the action they came here for).
+                       Running → Stop  (secondary — destructive-ish,
+                         don't push). Stays consistent with the v2.25.6
+                         "don't fight the global Start/Stop VPN" intent
+                         since when this is showing primary, the global
+                         Stop-VPN is the only competing primary, and
+                         the two actions don't visually clash because
+                         one is footer-of-page and the other is global
+                         footer-of-window. -->
                 <Button Content="{Binding LblTgProxyToggle}"
                         Command="{Binding ToggleTgProxyCommand}"
                         IsVisible="{Binding IsTgProxySetUp}"
@@ -262,9 +270,15 @@
                         Padding="14,7"
                         HorizontalAlignment="Right"
                         HorizontalContentAlignment="Center"
-                        Background="{DynamicResource SurfaceBaseBrush}"
-                        Foreground="{DynamicResource TextPrimaryBrush}"
-                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        Background="{Binding TgProxyEnabled,
+                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                     ConverterParameter=SurfaceBaseBrush|AccentSolidBrush}"
+                        Foreground="{Binding TgProxyEnabled,
+                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                     ConverterParameter=TextPrimaryBrush|AccentOnSolidBrush}"
+                        BorderBrush="{Binding TgProxyEnabled,
+                                     Converter={x:Static conv:BoolToBrushConverter.Instance},
+                                     ConverterParameter=BorderDefaultBrush|Transparent}"
                         BorderThickness="1"
                         CornerRadius="{StaticResource RadiusSm}"/>
             </Grid>

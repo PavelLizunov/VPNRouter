@@ -140,4 +140,113 @@ public class PageScreenshotTests
         }
         finally { vm.SelectedSettingsIndex = 0; }
     }
+
+    /// <summary>
+    /// v2.31.6-r1 (TelegramPage Variant A) — explicit Setup-state
+    /// render. The default <see cref="TelegramPage"/> capture above
+    /// uses settings already populated on the dev machine
+    /// (TgProxySecret + TgProxyVersionText non-empty), which evaluates
+    /// to <c>IsTgProxySetUp = true</c> and renders the Active state.
+    /// To regress-pin the onboarding (Setup) state we have to clear
+    /// those properties on a fresh VM before capturing — that's the
+    /// only path that exercises the "Set up Telegram proxy" CTA + the
+    /// surface-raised step card.
+    ///
+    /// Renders to <c>page-telegram-setup-state.png</c> alongside the
+    /// default Active capture so both branches of the IsTgProxySetUp
+    /// cascade are visually inspectable per release.
+    /// </summary>
+    [AvaloniaFact]
+    public void TelegramPage_SetupState_OnFreshInstall()
+    {
+        var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
+        vm.TgProxySecret = "";
+        vm.TgProxyVersionText = "";
+
+        Assert.False(vm.IsTgProxySetUp,
+            "IsTgProxySetUp should be false when both secret and version are empty");
+
+        ScreenshotHelper.CapturePage(
+            new TelegramPage { DataContext = vm },
+            "page-telegram-setup-state");
+    }
+
+    /// <summary>
+    /// v2.31.6-r2 polish — Active state with proxy stopped should
+    /// render the footer toggle as primary accent (Connect is the
+    /// pull-action). Pre-r2 the footer was always secondary, which
+    /// understated the action a Stopped user clearly came here to do.
+    /// </summary>
+    [AvaloniaFact]
+    public void TelegramPage_ActiveState_StoppedFooterIsAccentPrimary()
+    {
+        var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
+        vm.TgProxySecret = "deadbeef00000000deadbeef00000000";
+        vm.TgProxyVersionText = "v1.6.5";
+        vm.TgProxyEnabled = false;
+
+        Assert.True(vm.IsTgProxySetUp);
+        Assert.False(vm.TgProxyEnabled);
+
+        ScreenshotHelper.CapturePage(
+            new TelegramPage { DataContext = vm },
+            "page-telegram-active-stopped");
+    }
+
+    /// <summary>
+    /// v2.31.6-r2 polish — Active state with proxy running should
+    /// render the footer toggle as secondary (Stop is destructive-ish,
+    /// don't push). Pairs with
+    /// <see cref="TelegramPage_ActiveState_StoppedFooterIsAccentPrimary"/>
+    /// to lock in both branches of the conditional styling.
+    /// </summary>
+    [AvaloniaFact]
+    public void TelegramPage_ActiveState_RunningFooterIsSecondary()
+    {
+        var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
+        vm.TgProxySecret = "deadbeef00000000deadbeef00000000";
+        vm.TgProxyVersionText = "v1.6.5";
+        vm.TgProxyEnabled = true;
+
+        Assert.True(vm.IsTgProxySetUp);
+        Assert.True(vm.TgProxyEnabled);
+
+        ScreenshotHelper.CapturePage(
+            new TelegramPage { DataContext = vm },
+            "page-telegram-active-running");
+    }
+
+    /// <summary>
+    /// v2.31.6-r2 polish — TelegramPage at the actual VPNRouter
+    /// window width (~520 px) to confirm the two-state layout fits
+    /// without horizontal overflow. The default 1200 px capture in
+    /// <see cref="TelegramPage"/> hides this risk because the page
+    /// has plenty of room.
+    /// </summary>
+    [AvaloniaFact]
+    public void TelegramPage_SetupState_Narrow520()
+    {
+        var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
+        vm.TgProxySecret = "";
+        vm.TgProxyVersionText = "";
+
+        ScreenshotHelper.CapturePage(
+            new TelegramPage { DataContext = vm },
+            "page-telegram-setup-narrow520",
+            width: 520, height: 800);
+    }
+
+    [AvaloniaFact]
+    public void TelegramPage_ActiveState_Narrow520()
+    {
+        var vm = new VPNRouter.App.ViewModels.MainWindowViewModel();
+        vm.TgProxySecret = "deadbeef00000000deadbeef00000000";
+        vm.TgProxyVersionText = "v1.6.5";
+        vm.TgProxyEnabled = false;
+
+        ScreenshotHelper.CapturePage(
+            new TelegramPage { DataContext = vm },
+            "page-telegram-active-narrow520",
+            width: 520, height: 800);
+    }
 }
