@@ -125,6 +125,48 @@ public class TgProxyManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// v2.31.6-r4 (BUG #1 fix): does Windows have an app registered
+    /// for the <c>tg://</c> URI scheme? Pre-fix the user got the OS
+    /// dialog "We can't open this 'tg' link. Your device needs a new
+    /// app to open this link." with no recourse from inside VPNRouter.
+    ///
+    /// Implementation: probe HKEY_CLASSES_ROOT for the "tg" key. The
+    /// presence of any non-empty value or sub-key indicates a handler
+    /// is registered. Telegram Desktop installs the registration; web
+    /// Telegram + Telegram Web add HKCU shell associations.
+    ///
+    /// Returns true on non-Windows (no equivalent check makes sense
+    /// — macOS/Linux deep-link routing fails through different
+    /// pipes that have their own user-visible errors).
+    /// </summary>
+    public static bool IsTelegramSchemeRegistered()
+    {
+        if (!OperatingSystem.IsWindows()) return true;
+
+        try
+        {
+#pragma warning disable CA1416 // Windows-only is guarded above.
+            // HKEY_CLASSES_ROOT is the merged HKLM+HKCU classes view.
+            using var hkcrTg = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey("tg");
+            if (hkcrTg != null) return true;
+
+            // Newer Edge/Chrome installs sometimes register tg via
+            // HKCU\SOFTWARE\Classes overlay only. Probe explicitly.
+            using var hkcuTg = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Classes\tg");
+            return hkcuTg != null;
+#pragma warning restore CA1416
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "[TgProxy] tg:// scheme probe failed (assume registered)");
+            // Defensive: don't block the user just because we couldn't
+            // read registry. If the deep-link still fails, the OS
+            // dialog is the worst case — same as pre-fix.
+            return true;
+        }
+    }
+
     public void Stop()
     {
         if (_process == null || _process.HasExited)

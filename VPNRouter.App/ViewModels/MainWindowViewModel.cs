@@ -719,6 +719,20 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty] private string _tgProxyStats = "";
 
     /// <summary>
+    /// v2.31.6-r4 (BUG #3 fix): transient toast banner shown above
+    /// the persistent <see cref="TgProxyStatus"/>. Used by
+    /// <see cref="ShowTgProxyToast"/> to surface "Copied!", "Telegram
+    /// not installed", "New secret — restart proxy" and similar
+    /// confirmations without overwriting the runtime status field.
+    /// Auto-clears after 2.5 s; latest-write wins via a token guard.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTgProxyToast))]
+    private string _tgProxyToast = string.Empty;
+
+    public bool HasTgProxyToast => !string.IsNullOrEmpty(TgProxyToast);
+
+    /// <summary>
     /// v2.31.6-r1 (TelegramPage UX simplification): true when the
     /// user has already set up the Telegram proxy at least once —
     /// binary is downloaded AND a secret has been generated. Drives
@@ -4267,13 +4281,35 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(TgProxyLink)) return;
         CopyToClipboard(TgProxyLink);
-        TgProxyStatus = Strings.TgProxyCopied;
+        // v2.31.6-r4 (BUG #3 fix): don't overwrite TgProxyStatus.
+        // Pre-r4 we set it to "Copied!" which persistently shadowed
+        // the real status (Stopped / Running / Error) until the next
+        // status-mutating event. Computer-use audit on r2/r3 confirmed
+        // the field never auto-reverted, so user saw stale "Copied!"
+        // 30 minutes after click. The clipboard side-effect is its
+        // own feedback channel; we trust users to know the click
+        // landed without us hijacking the status banner.
+        ShowTgProxyToast(Strings.TgProxyCopied);
     }
 
     [RelayCommand]
     private void OpenTgProxyInTelegram()
     {
         if (string.IsNullOrEmpty(TgProxySecret)) return;
+
+        // v2.31.6-r4 (BUG #1 fix): if no app is registered for the
+        // tg:// URI scheme (Windows shows "We can't open this 'tg' link"
+        // dialog), Telegram desktop is missing. Surface the cause
+        // directly instead of letting the OS dialog do the talking,
+        // and offer the canonical download link.
+        if (!TgProxyManager.IsTelegramSchemeRegistered())
+        {
+            ShowTgProxyToast(IsRussian
+                ? "Telegram не установлен — скачай с desktop.telegram.org"
+                : "Telegram not installed — download from desktop.telegram.org");
+            return;
+        }
+
         TgProxyManager.OpenInTelegram("127.0.0.1", TgProxyPort, TgProxySecret);
     }
 
@@ -4365,17 +4401,64 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (string.IsNullOrEmpty(TgProxySecret)) return;
         CopyToClipboard(TgProxySecret);
-        TgProxyStatus = Strings.TgProxyCopied;
+        // v2.31.6-r4 (BUG #3): toast not status — see CopyTgProxyLink.
+        ShowTgProxyToast(Strings.TgProxyCopied);
     }
 
     [RelayCommand]
     private void RegenerateTgProxySecret()
     {
+        var wasRunning = TgProxyEnabled || TgProxyManager.IsAnyRunning(TgProxyPort);
+
         var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
         TgProxySecret = Convert.ToHexString(bytes).ToLowerInvariant();
         TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", TgProxyPort, TgProxySecret);
         SaveSettings();
+
+        // v2.31.6-r4 (BUG #4 fix): if the proxy was running when the
+        // secret got rotated, the existing Telegram client connection
+        // is now using a stale secret and will silently keep failing
+        // until the user restarts the proxy AND re-pairs Telegram.
+        // Make this consequence explicit instead of silent.
+        if (wasRunning)
+        {
+            ShowTgProxyToast(IsRussian
+                ? "Новый secret — перезапусти proxy и Telegram client"
+                : "New secret — restart proxy and re-pair Telegram client");
+        }
+        else
+        {
+            ShowTgProxyToast(IsRussian ? "Новый secret сгенерирован" : "New secret generated");
+        }
     }
+
+    /// <summary>
+    /// v2.31.6-r4: transient toast surface for TgProxy actions that
+    /// pre-r4 hijacked TgProxyStatus (Copied! / Installed v… / similar).
+    /// Sets <see cref="TgProxyToast"/>, schedules a 2500 ms revert,
+    /// and bails the revert if a newer toast races in. Page binds
+    /// the toast separately from the status banner so the runtime
+    /// status (Stopped / Running / Error) is never shadowed by
+    /// a transient confirmation.
+    /// </summary>
+    private void ShowTgProxyToast(string message)
+    {
+        TgProxyToast = message;
+        var token = ++_tgProxyToastToken;
+        _ = Task.Delay(2500).ContinueWith(_ =>
+        {
+            // Only clear if no newer toast has fired in the meantime.
+            if (token == _tgProxyToastToken)
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (token == _tgProxyToastToken) TgProxyToast = string.Empty;
+                });
+            }
+        });
+    }
+
+    private int _tgProxyToastToken;
 
     private void CopyToClipboard(string text)
     {

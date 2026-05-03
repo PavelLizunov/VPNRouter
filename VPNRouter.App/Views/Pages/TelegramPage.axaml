@@ -112,6 +112,28 @@
 
                     </Grid>
 
+                    <!-- v2.31.6-r4 (BUG #3 fix) transient toast.
+                         Pre-r4 the Copy/Update/Regenerate commands
+                         hijacked TgProxyStatus to show "Copied!" /
+                         "Installed v1.6.5" / etc., shadowing the real
+                         runtime status (Stopped / Running) until the
+                         next status mutation. Computer-use audit
+                         confirmed it never auto-reverted. r4 routes
+                         these confirmations through TgProxyToast
+                         (auto-clear after 2.5 s) and renders them
+                         here above the persistent status banner. -->
+                    <Border IsVisible="{Binding HasTgProxyToast}"
+                            Padding="10,6"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Background="{DynamicResource AccentBgSubtleBrush}"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource AccentBorderBrush}">
+                        <TextBlock Text="{Binding TgProxyToast}"
+                                   TextWrapping="Wrap"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource AccentFgBrush}"/>
+                    </Border>
+
                     <!-- 3. Info banner — status line + Update button.
                          Per design `banner` class: surface-base bg with
                          info icon + status text + ghost button on the
