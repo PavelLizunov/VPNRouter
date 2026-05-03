@@ -196,7 +196,11 @@
                  HorizontalAlignment="Center"/>
     </StackPanel>
 
-    <!-- Section: action bar (Проверить все / Deep verify / прогресс) -->
+    <!-- Section: action bar (Проверить все / Deep verify / прогресс)
+         v2.31.6-r13 A11y: AutomationProperties.Name on each action
+         button so screen readers announce the canonical label even
+         when the visible Content has been replaced with a progress
+         string ("Testing 3/7…"). Same pattern as ServersPage r9. -->
     <Border Grid.Row="2" Padding="10,6,10,4"
             BorderThickness="0,1,0,0"
             BorderBrush="{DynamicResource BorderDefaultBrush}">
@@ -208,7 +212,8 @@
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
                     Background="{DynamicResource SuccessSolidBrush}" Foreground="White"
-                    ToolTip.Tip="{Binding L_TipTestAllServers}"/>
+                    ToolTip.Tip="{Binding L_TipTestAllServers}"
+                    AutomationProperties.Name="{Binding L_TipTestAllServers}"/>
             <!-- v2.25.3: arctic primary, was #7C3AED violet — same rationale
                  as in ServersPage. -->
             <Button Content="{Binding ServerDeepButtonText}"
@@ -216,7 +221,8 @@
                     Padding="10,4" CornerRadius="{StaticResource RadiusSm}"
                     FontSize="10"
                     Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
-                    ToolTip.Tip="{Binding L_TipDeepVerifyServers}"/>
+                    ToolTip.Tip="{Binding L_TipDeepVerifyServers}"
+                    AutomationProperties.Name="{Binding L_TipDeepVerifyServers}"/>
             <TextBlock Text="{Binding ServerTestProgressText}"
                        VerticalAlignment="Center"
                        FontSize="10" Opacity="0.7"/>
@@ -232,7 +238,8 @@
           <Button Grid.Column="1"
                   Content="{Binding L_RefreshAll}"
                   Command="{Binding RefreshAllSubscriptionsCommand}"
-                  FontSize="10" Padding="8,3" CornerRadius="{StaticResource RadiusSm}"/>
+                  FontSize="10" Padding="8,3" CornerRadius="{StaticResource RadiusSm}"
+                  AutomationProperties.Name="{Binding L_RefreshAll}"/>
         </Grid>
       </StackPanel>
     </Border>
@@ -306,7 +313,11 @@
       </ItemsControl>
     </ScrollViewer>
 
-    <!-- Add new subscription -->
+    <!-- Add new subscription
+         v2.31.6-r13 A11y: AutomationProperties.Name on the form
+         inputs and the primary blue Add button. Watermarks disappear
+         after the user starts typing, so screen readers fall back to
+         the explicit Name binding. -->
     <Border Grid.Row="4" Padding="10,6"
             BorderThickness="0,1,0,0"
             BorderBrush="{DynamicResource BorderDefaultBrush}">
@@ -314,18 +325,21 @@
         <TextBox Grid.Column="0"
                  Text="{Binding NewSubName}"
                  Watermark="{Binding L_SubscriptionNameHint}"
-                 FontSize="10" Padding="6,4"/>
+                 FontSize="10" Padding="6,4"
+                 AutomationProperties.Name="{Binding L_SubscriptionNameHint}"/>
         <TextBox Grid.Column="1"
                  Text="{Binding NewSubUrl}"
                  Watermark="{Binding LblSubscriptionUrlHint}"
                  FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
-                 FontSize="10" Padding="6,4"/>
+                 FontSize="10" Padding="6,4"
+                 AutomationProperties.Name="{Binding LblSubscriptionUrlHint}"/>
         <Button Grid.Column="2"
                 Content="{Binding L_AddSubscription}"
                 Command="{Binding AddSubscriptionCommand}"
                 Background="{DynamicResource AccentSolidBrush}" Foreground="{DynamicResource AccentOnSolidBrush}"
                 FontSize="11" FontWeight="SemiBold"
-                Padding="12,5" CornerRadius="{StaticResource RadiusSm}"/>
+                Padding="12,5" CornerRadius="{StaticResource RadiusSm}"
+                AutomationProperties.Name="{Binding L_AddSubscription}"/>
       </Grid>
     </Border>
   </Grid>

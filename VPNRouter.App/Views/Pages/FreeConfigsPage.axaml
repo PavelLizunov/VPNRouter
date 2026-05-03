@@ -65,6 +65,12 @@
                                    FontSize="10" TextWrapping="Wrap"
                                    Foreground="{DynamicResource SuccessFgBrush}"
                                    Opacity="0.85"/>
+                        <!-- v2.31.6-r13 A11y: explicit Names for the
+                             primary find/stop CTAs. The visible Content
+                             already conveys the action, but a screen
+                             reader could mis-announce when the button
+                             swaps between Verify/Stop on busy state —
+                             explicit Name matches the canonical label. -->
                         <Button Content="{Binding L_FcDeepVerify}"
                                 Command="{Binding FreeConfigsVm.RefreshCommand}"
                                 IsVisible="{Binding !FreeConfigsVm.IsBusy}"
@@ -74,7 +80,8 @@
                                 HorizontalContentAlignment="Center"
                                 Background="{DynamicResource SuccessSolidBrush}"
                                 Foreground="White"
-                                ToolTip.Tip="{Binding L_FcDeepVerifyTooltip}"/>
+                                ToolTip.Tip="{Binding L_FcDeepVerifyTooltip}"
+                                AutomationProperties.Name="{Binding L_FcDeepVerify}"/>
                         <Button Content="{Binding L_FcDeepStop}"
                                 Command="{Binding FreeConfigsVm.CancelCommand}"
                                 IsVisible="{Binding FreeConfigsVm.IsBusy}"
@@ -84,7 +91,8 @@
                                 HorizontalContentAlignment="Center"
                                 Background="{DynamicResource DangerSolidBrush}"
                                 Foreground="White"
-                                ToolTip.Tip="{Binding L_FcDeepStopTooltip}"/>
+                                ToolTip.Tip="{Binding L_FcDeepStopTooltip}"
+                                AutomationProperties.Name="{Binding L_FcDeepStop}"/>
                         <Expander Header="{Binding L_FcAdvancedSettings}"
                                   Background="Transparent"
                                   BorderBrush="{DynamicResource SuccessBorderBrush}"
@@ -431,6 +439,8 @@
                            FontSize="10" Opacity="0.55"
                            HorizontalAlignment="Center" TextAlignment="Center"
                            TextWrapping="Wrap"/>
+                <!-- v2.31.6-r13 A11y: primary "Connect to selected"
+                     CTA at the bottom of the right pane. -->
                 <Button Content="{Binding L_FcApplySelected}"
                         Command="{Binding FreeConfigsVm.ApplySelectedCommand}"
                         IsEnabled="{Binding FreeConfigsVm.HasSelection}"
@@ -440,7 +450,8 @@
                         HorizontalContentAlignment="Center"
                         Background="{DynamicResource AccentSolidBrush}"
                         Foreground="{DynamicResource AccentOnSolidBrush}"
-                        CornerRadius="{StaticResource RadiusSm}"/>
+                        CornerRadius="{StaticResource RadiusSm}"
+                        AutomationProperties.Name="{Binding L_FcApplySelected}"/>
             </StackPanel>
         </Border>
     </Grid>
