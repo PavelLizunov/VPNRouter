@@ -2128,6 +2128,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             .WriteTo.Console()
             .CreateLogger();
 
+        // v2.31.6-r16 (iter#7 / Phase 3): wire the static TcpTlsProbe logger
+        // so quick-probe runs (Servers/Subscribe Test all + Free Configs bulk)
+        // emit Debug-level entries to vpnrouter*.log. User feedback:
+        // «есть ли у проверки логи?» — pre-r16 the answer was no (zero log
+        // calls in TcpTlsProbe). r16 logs every probe target + outcome.
+        TcpTlsProbe.Logger = _logger;
+
         // v2.29.0-r7+ Layer 7 — pick up receipt-derived "previous update
         // didn't land" warning that App.axaml.cs OnFrameworkInitialization
         // stored before this VM was constructed. The HasUpdateWarning

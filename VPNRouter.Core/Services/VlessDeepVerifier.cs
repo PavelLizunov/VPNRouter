@@ -103,8 +103,21 @@ public sealed class VlessDeepVerifier
         bool measureBandwidth,
         CancellationToken ct = default)
     {
+        // v2.31.6-r16 (iter#7 / Phase 3): structured per-probe logging.
+        // User feedback: «есть ли у проверки логи?» — pre-r16 only top-level
+        // batch failures showed up in vpnrouter.log; per-server outcomes
+        // (sing-box stderr, HTTP error, port-bind timeout) were silent.
+        var protocol = (entry.Protocol ?? "vless").Trim().ToLowerInvariant();
+        var label = string.IsNullOrEmpty(entry.Name) ? entry.Server : entry.Name;
+        _logger.Debug(
+            "[VlessDeepVerifier] start: name={Name} host={Host} port={Port} protocol={Protocol} measureBw={MeasureBw}",
+            label, entry.Server, entry.Port, protocol, measureBandwidth);
+
         if (!IsAvailable)
+        {
+            _logger.Warning("[VlessDeepVerifier] {Name}: sing-box binary missing at {Path}", label, _singBoxPath);
             return DeepVerifyResult.Failed("sing-box binary missing");
+        }
 
         var socksPort = FindFreePort();
         var clashPort = FindFreePort();
@@ -140,14 +153,19 @@ public sealed class VlessDeepVerifier
             };
 
             if (!process.Start())
+            {
+                _logger.Warning("[VlessDeepVerifier] {Name}: sing-box spawn returned false", label);
                 return DeepVerifyResult.Failed("sing-box spawn failed");
+            }
 
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
+            _logger.Debug("[VlessDeepVerifier] {Name}: sing-box spawned pid={Pid} socks={SocksPort}", label, process.Id, socksPort);
 
             if (!await WaitForPortBoundAsync(socksPort, SingBoxWarmup, overallCts.Token))
             {
                 var snip = TrimSnippet(stderrBuffer.ToString(), 80);
+                _logger.Warning("[VlessDeepVerifier] {Name}: SOCKS port {Port} never bound. stderr: {Stderr}", label, socksPort, snip);
                 return DeepVerifyResult.Failed(string.IsNullOrWhiteSpace(snip)
                     ? "sing-box didn't bind"
                     : $"sing-box: {snip}");
@@ -155,7 +173,10 @@ public sealed class VlessDeepVerifier
 
             var (httpOk, httpLatencyMs, httpErr) = await ProbeViaSocksAsync(socksPort, overallCts.Token);
             if (!httpOk)
+            {
+                _logger.Information("[VlessDeepVerifier] {Name}: HTTP probe FAILED — {Err}", label, httpErr);
                 return DeepVerifyResult.Failed(httpErr ?? "http failed");
+            }
 
             double? mbps = null;
             if (measureBandwidth)
@@ -164,14 +185,19 @@ public sealed class VlessDeepVerifier
                 if (bwOk) mbps = measuredMbps;
             }
 
+            _logger.Information(
+                "[VlessDeepVerifier] {Name}: PASS http={HttpMs}ms bw={BwMbps}",
+                label, httpLatencyMs, mbps?.ToString("F1") ?? "-");
             return new DeepVerifyResult(true, httpLatencyMs, mbps, null);
         }
         catch (OperationCanceledException)
         {
+            _logger.Information("[VlessDeepVerifier] {Name}: TIMEOUT (overall {Sec}s)", label, OverallTimeout.TotalSeconds);
             return DeepVerifyResult.Failed("timeout");
         }
         catch (Exception ex)
         {
+            _logger.Warning(ex, "[VlessDeepVerifier] {Name}: unexpected error", label);
             return DeepVerifyResult.Failed(ex.GetType().Name);
         }
         finally
@@ -196,65 +222,27 @@ public sealed class VlessDeepVerifier
 
     // ─── Helpers (mirror FreeConfigDeepVerifier, kept here to keep this class standalone) ─────
 
+    /// <summary>
+    /// v2.31.6-r16 (iter#7 / Phase 2): protocol-aware outbound dispatcher.
+    /// Pre-r16 hard-coded <c>["type"] = "vless"</c> for every entry, so
+    /// Hysteria2/TUIC/Shadowsocks deep-verify always failed (sing-box
+    /// rejected the spawned config because protocol vs. credentials
+    /// didn't match). Now dispatches to the protocol-specific builder
+    /// in parallel with <see cref="ConfigGenerator.BuildVlessOutbound"/>'s
+    /// dispatch pattern (see ConfigGenerator.cs:858–869).
+    /// </summary>
     private static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int clashPort)
     {
-        var outbound = new JsonObject
+        var protocol = (s.Protocol ?? "vless").Trim().ToLowerInvariant();
+        var outbound = protocol switch
         {
-            ["type"] = "vless",
-            ["tag"] = "proxy",
-            ["server"] = s.Server,
-            ["server_port"] = s.Port,
-            ["uuid"] = s.Uuid,
-            ["flow"] = string.IsNullOrWhiteSpace(s.Flow) ? null : s.Flow,
-            ["packet_encoding"] = "xudp",
+            "hysteria2"   => BuildHysteria2Outbound(s),
+            "hy2"         => BuildHysteria2Outbound(s),
+            "tuic"        => BuildTuicOutbound(s),
+            "shadowsocks" => BuildShadowsocksOutbound(s),
+            "ss"          => BuildShadowsocksOutbound(s),
+            _             => BuildVlessOutbound(s),
         };
-
-        if (s.Reality?.Enabled == true)
-        {
-            outbound["tls"] = new JsonObject
-            {
-                ["enabled"] = true,
-                ["server_name"] = s.Reality.ServerName ?? s.Server,
-                ["utls"] = new JsonObject
-                {
-                    ["enabled"] = true,
-                    ["fingerprint"] = string.IsNullOrWhiteSpace(s.Reality.Fingerprint) ? "chrome" : s.Reality.Fingerprint,
-                },
-                ["reality"] = new JsonObject
-                {
-                    ["enabled"] = true,
-                    ["public_key"] = s.Reality.PublicKey ?? "",
-                    ["short_id"]  = s.Reality.ShortId ?? "",
-                },
-            };
-        }
-        else if (s.Tls?.Enabled == true)
-        {
-            outbound["tls"] = new JsonObject
-            {
-                ["enabled"] = true,
-                ["server_name"] = s.Tls.ServerName ?? s.Server,
-                ["insecure"] = s.Tls.Insecure,
-            };
-        }
-
-        var transportType = s.Transport?.Type?.ToLowerInvariant() ?? "tcp";
-        if (transportType == "grpc")
-        {
-            outbound["transport"] = new JsonObject
-            {
-                ["type"] = "grpc",
-                ["service_name"] = s.Transport?.Path ?? "",
-            };
-        }
-        else if (transportType == "ws")
-        {
-            outbound["transport"] = new JsonObject
-            {
-                ["type"] = "ws",
-                ["path"] = s.Transport?.Path ?? "/",
-            };
-        }
 
         var root = new JsonObject
         {
@@ -452,4 +440,167 @@ public sealed class VlessDeepVerifier
     }
 
     private static string Short(string s) => s.Length > 60 ? s[..60] : s;
+
+    // ─── Protocol-specific outbound builders (v2.31.6-r16, Phase 2) ──────────
+    // Mirror ConfigGenerator.BuildVlessOutbound dispatcher (ConfigGenerator.cs
+    // lines 858–869). Kept here as JsonObject builders to match the existing
+    // VlessDeepVerifier style (rest of BuildSingleOutboundConfig uses JsonNode).
+
+    /// <summary>VLESS outbound (Reality / TLS / plain). Pre-r16 logic, extracted into a builder.</summary>
+    private static JsonObject BuildVlessOutbound(VlessServerEntry s)
+    {
+        var outbound = new JsonObject
+        {
+            ["type"] = "vless",
+            ["tag"] = "proxy",
+            ["server"] = s.Server,
+            ["server_port"] = s.Port,
+            ["uuid"] = s.Uuid,
+            ["flow"] = string.IsNullOrWhiteSpace(s.Flow) ? null : s.Flow,
+            ["packet_encoding"] = "xudp",
+        };
+
+        if (s.Reality?.Enabled == true)
+        {
+            outbound["tls"] = new JsonObject
+            {
+                ["enabled"] = true,
+                ["server_name"] = s.Reality.ServerName ?? s.Server,
+                ["utls"] = new JsonObject
+                {
+                    ["enabled"] = true,
+                    ["fingerprint"] = string.IsNullOrWhiteSpace(s.Reality.Fingerprint) ? "chrome" : s.Reality.Fingerprint,
+                },
+                ["reality"] = new JsonObject
+                {
+                    ["enabled"] = true,
+                    ["public_key"] = s.Reality.PublicKey ?? "",
+                    ["short_id"]  = s.Reality.ShortId ?? "",
+                },
+            };
+        }
+        else if (s.Tls?.Enabled == true)
+        {
+            outbound["tls"] = new JsonObject
+            {
+                ["enabled"] = true,
+                ["server_name"] = s.Tls.ServerName ?? s.Server,
+                ["insecure"] = s.Tls.Insecure,
+            };
+        }
+
+        var transportType = s.Transport?.Type?.ToLowerInvariant() ?? "tcp";
+        if (transportType == "grpc")
+        {
+            outbound["transport"] = new JsonObject
+            {
+                ["type"] = "grpc",
+                ["service_name"] = s.Transport?.Path ?? "",
+            };
+        }
+        else if (transportType == "ws")
+        {
+            outbound["transport"] = new JsonObject
+            {
+                ["type"] = "ws",
+                ["path"] = s.Transport?.Path ?? "/",
+            };
+        }
+
+        return outbound;
+    }
+
+    /// <summary>
+    /// Hysteria2 outbound (UDP+QUIC). ALPN forced to ["h3"] per Hysteria2
+    /// spec. Optional Salamander obfs from <see cref="VlessServerEntry.ObfsType"/>.
+    /// Mirrors <c>ConfigGenerator.BuildHysteria2Outbound</c>.
+    /// </summary>
+    private static JsonObject BuildHysteria2Outbound(VlessServerEntry s)
+    {
+        var outbound = new JsonObject
+        {
+            ["type"] = "hysteria2",
+            ["tag"] = "proxy",
+            ["server"] = s.Server,
+            ["server_port"] = s.Port,
+            ["password"] = s.Password ?? string.Empty,
+            ["tls"] = new JsonObject
+            {
+                ["enabled"] = true,
+                ["server_name"] = string.IsNullOrEmpty(s.Tls?.ServerName) ? s.Server : s.Tls!.ServerName,
+                ["insecure"] = s.Tls?.Insecure ?? false,
+                ["alpn"] = new JsonArray("h3"),
+            },
+        };
+
+        if (!string.IsNullOrWhiteSpace(s.ObfsType))
+        {
+            outbound["obfs"] = new JsonObject
+            {
+                ["type"] = s.ObfsType,
+                ["password"] = s.ObfsPassword ?? string.Empty,
+            };
+        }
+
+        return outbound;
+    }
+
+    /// <summary>
+    /// TUIC v5 outbound (UDP+QUIC). ALPN ["h3"] default, BBR congestion
+    /// control default. Mirrors <c>ConfigGenerator.BuildTuicOutbound</c>.
+    /// </summary>
+    private static JsonObject BuildTuicOutbound(VlessServerEntry s)
+    {
+        var alpn = new JsonArray();
+        if (!string.IsNullOrWhiteSpace(s.Tls?.Alpn))
+        {
+            foreach (var part in s.Tls!.Alpn.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                alpn.Add(part);
+        }
+        if (alpn.Count == 0) alpn.Add("h3");
+
+        return new JsonObject
+        {
+            ["type"] = "tuic",
+            ["tag"] = "proxy",
+            ["server"] = s.Server,
+            ["server_port"] = s.Port,
+            ["uuid"] = s.Uuid,
+            ["password"] = s.Password ?? string.Empty,
+            ["congestion_control"] = string.IsNullOrEmpty(s.CongestionControl) ? "bbr" : s.CongestionControl,
+            ["udp_relay_mode"] = string.IsNullOrEmpty(s.UdpRelayMode) ? "native" : s.UdpRelayMode,
+            ["tls"] = new JsonObject
+            {
+                ["enabled"] = true,
+                ["server_name"] = string.IsNullOrEmpty(s.Tls?.ServerName) ? s.Server : s.Tls!.ServerName,
+                ["insecure"] = s.Tls?.Insecure ?? false,
+                ["alpn"] = alpn,
+            },
+        };
+    }
+
+    /// <summary>
+    /// Shadowsocks outbound (TCP, optional plugin like shadow-tls v3).
+    /// Supports SS 2022 ciphers natively via <see cref="VlessServerEntry.Method"/>.
+    /// Mirrors <c>ConfigGenerator.BuildShadowsocksOutbound</c>.
+    /// </summary>
+    private static JsonObject BuildShadowsocksOutbound(VlessServerEntry s)
+    {
+        var outbound = new JsonObject
+        {
+            ["type"] = "shadowsocks",
+            ["tag"] = "proxy",
+            ["server"] = s.Server,
+            ["server_port"] = s.Port,
+            ["method"] = s.Method ?? string.Empty,
+            ["password"] = s.Password ?? string.Empty,
+        };
+
+        if (!string.IsNullOrWhiteSpace(s.Plugin))
+            outbound["plugin"] = s.Plugin;
+        if (!string.IsNullOrWhiteSpace(s.PluginOpts))
+            outbound["plugin_opts"] = s.PluginOpts;
+
+        return outbound;
+    }
 }

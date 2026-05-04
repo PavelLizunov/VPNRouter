@@ -1,13 +1,16 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
+using Serilog;
+using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
 /// <summary>
-/// Outcome classes for a TCP + optional TLS probe.
+/// Outcome classes for a TCP/UDP + optional TLS probe.
 /// Used by generic server-testing UI (Servers tab, Subscriptions tab).
 /// Free Configs tab has its own richer <c>FreeConfigStatus</c> that maps
 /// from this enum — see <c>FreeConfigTester</c>.
@@ -33,7 +36,18 @@ public enum ServerProbeStatus
     TlsFailed,
 
     /// <summary>Latency &lt; 5 ms — likely intercepted by a local TUN adapter (active VPN).</summary>
-    Implausible
+    Implausible,
+
+    /// <summary>
+    /// v2.31.6-r16 (Phase 1): quick TCP+TLS probe is not applicable to
+    /// this protocol (e.g. Hysteria2 / TUIC are pure UDP+QUIC; raw TCP
+    /// probe always fails as Unreachable even when the server works
+    /// fine in production). The result was skipped intentionally and
+    /// the user should run Deep verify (which spawns sing-box with the
+    /// real protocol) for a meaningful answer. UI renders this as a
+    /// neutral «—» with a tooltip explaining the skip.
+    /// </summary>
+    SkippedNotApplicable
 }
 
 /// <summary>
@@ -66,6 +80,22 @@ public static class TcpTlsProbe
 
     public static TimeSpan TcpConnectTimeout { get; set; } = TimeSpan.FromSeconds(3);
     public static TimeSpan TlsHandshakeTimeout { get; set; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// v2.31.6-r16 (Phase 3): static logger for verification diagnostics.
+    /// Set once at app startup (typically in <c>MainWindowViewModel</c>
+    /// ctor). Iter#7 user feedback: «есть ли у проверки логи?» — pre-r16
+    /// the answer was no (this class had zero log calls in 333 lines,
+    /// confirmed by grep across all log files in
+    /// <c>%ProgramData%\VPNRouter\logs\</c>). r16 adds Debug-level
+    /// per-probe entries (target, protocol, outcome, latency, error)
+    /// so the user can <c>tail -f vpnrouter*.log</c> while running
+    /// "Test all" and see exactly why each server fails.
+    /// </summary>
+    public static ILogger? Logger { get; set; }
+
+    /// <summary>UDP probe timeout (Hysteria2 / TUIC don't speak TCP).</summary>
+    public static TimeSpan UdpProbeTimeout { get; set; } = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// Full probe: TCP with 2 attempts (best RTT), optional TLS with cert-chain
@@ -330,4 +360,245 @@ public static class TcpTlsProbe
     }
 
     private static string Short(string s) => s.Length > 60 ? s[..60] : s;
+
+    // ──────────────────────────────────────────────────────────────────────
+    // v2.31.6-r16 (iter#7 / Phase 1): protocol-aware probe dispatcher
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Protocol-aware quick probe. Replaces the old "always TCP+TLS" path
+    /// that produced 100% false negatives on Hysteria2 / TUIC servers
+    /// (pure UDP+QUIC — TCP probe always returns Unreachable even when
+    /// the server works fine in production). User feedback iter#7:
+    /// «как проверка работает на не vless конфиги? сейчас на другом пк
+    /// мне показала что два моих конфига со страницы servers не работают,
+    /// хотя я без проблем смог к ним законнектиться».
+    ///
+    /// Dispatch by <see cref="VlessServerEntry.Protocol"/>:
+    /// <list type="bullet">
+    ///   <item><c>vless</c> + Reality/TLS → full TCP+TLS probe with cert validation</item>
+    ///   <item><c>vless</c> + plain (legacy, no security) → TCP only</item>
+    ///   <item><c>shadowsocks</c> / <c>ss</c> → TCP only (no TLS layer to validate)</item>
+    ///   <item><c>hysteria2</c> / <c>hy2</c> → UDP probe (port reachability only)</item>
+    ///   <item><c>tuic</c> → UDP probe (port reachability only)</item>
+    ///   <item>unknown → <see cref="ServerProbeStatus.SkippedNotApplicable"/></item>
+    /// </list>
+    ///
+    /// For UDP probes the result is "probably reachable" — true correctness
+    /// requires Deep verify (which spawns sing-box with the actual protocol
+    /// stack). Quick probe is the cheap reachability gate, deep probe is
+    /// the expensive end-to-end correctness check.
+    /// </summary>
+    public static async Task<ServerProbeResult> ProbeServerAsync(
+        VlessServerEntry server,
+        CancellationToken ct = default)
+    {
+        if (server is null)
+            return new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "server is null");
+
+        var protocol = (server.Protocol ?? "vless").Trim().ToLowerInvariant();
+        var host = server.Server ?? string.Empty;
+        var port = server.Port;
+
+        Logger?.Debug(
+            "TcpTlsProbe.ProbeServerAsync start: name={Name} host={Host} port={Port} protocol={Protocol}",
+            server.Name, host, port, protocol);
+
+        ServerProbeResult result;
+        switch (protocol)
+        {
+            case "vless":
+            {
+                // Reality / TLS variants → full TCP+TLS+cert validation.
+                // Plain VLESS (no security, no transport TLS) → TCP only.
+                var security = (server.Security ?? string.Empty).Trim().ToLowerInvariant();
+                var hasReality = string.Equals(security, "reality", StringComparison.OrdinalIgnoreCase)
+                              || (server.Reality is { Enabled: true });
+                var hasTls = string.Equals(security, "tls", StringComparison.OrdinalIgnoreCase)
+                          || (server.Tls is { Enabled: true });
+
+                if (hasReality || hasTls)
+                {
+                    var sni = ResolveSni(server, host);
+                    result = await ProbeAsync(host, port, sni, requireTls: true, ct);
+                }
+                else
+                {
+                    result = await ProbeAsync(host, port, sni: null, requireTls: false, ct);
+                }
+                break;
+            }
+
+            case "shadowsocks":
+            case "ss":
+                // SS speaks raw TCP encrypted from byte 0 — no TLS layer to handshake.
+                // Plugin-wrapped SS (shadow-tls) does have TLS but probing the outer
+                // TLS without the plugin sequence still yields the cover server's
+                // cert which won't match SNI; so we treat all SS as TCP-only.
+                result = await ProbeTcpOnlyAsync(host, port, ct);
+                break;
+
+            case "hysteria2":
+            case "hy2":
+            case "tuic":
+                // Pure UDP+QUIC — TCP probe always fails Unreachable.
+                result = await ProbeUdpAsync(host, port, ct);
+                break;
+
+            default:
+                result = new ServerProbeResult(
+                    ServerProbeStatus.SkippedNotApplicable,
+                    0,
+                    $"unknown protocol '{protocol}' — use Deep verify");
+                break;
+        }
+
+        Logger?.Debug(
+            "TcpTlsProbe.ProbeServerAsync done: name={Name} host={Host} port={Port} protocol={Protocol} status={Status} latency={LatencyMs}ms err={Error}",
+            server.Name, host, port, protocol, result.Status, result.LatencyMs, result.Error ?? "-");
+        return result;
+    }
+
+    /// <summary>
+    /// TCP-only probe for protocols without a TLS layer (Shadowsocks,
+    /// plain VLESS). Identical to <see cref="ProbeAsync"/> with
+    /// <c>requireTls: false</c> — provided as a named entry point so
+    /// call sites read self-documenting (<c>ProbeTcpOnlyAsync(host, port)</c>
+    /// vs <c>ProbeAsync(host, port, null, requireTls: false)</c>).
+    /// </summary>
+    public static Task<ServerProbeResult> ProbeTcpOnlyAsync(
+        string host, int port, CancellationToken ct = default)
+        => ProbeAsync(host, port, sni: null, requireTls: false, ct);
+
+    /// <summary>
+    /// UDP probe for Hysteria2 / TUIC. UDP has no connection state — we
+    /// just verify the port doesn't immediately surface ICMP Port
+    /// Unreachable (which arrives as <see cref="SocketError.ConnectionReset"/>
+    /// on a subsequent receive). For QUIC servers that ignore unsolicited
+    /// garbage, we rely on the absence of ICMP back as "probably reachable".
+    ///
+    /// <para>This is intentionally optimistic: it's a reachability gate,
+    /// not a correctness check. A blackhole IP returns ConnectionReset
+    /// on most networks; an ICMP-stripping firewall + dead server would
+    /// false-positive here, but Deep verify catches that downstream
+    /// (real QUIC handshake fails).</para>
+    /// </summary>
+    public static async Task<ServerProbeResult> ProbeUdpAsync(
+        string host, int port, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(host) || port <= 0 || port > 65535)
+            return new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "invalid host/port");
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(UdpProbeTimeout);
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            // Resolve hostname to IPv4 first
+            IPAddress[] addrs;
+            try
+            {
+                addrs = await Dns.GetHostAddressesAsync(host, cts.Token);
+            }
+            catch (Exception dnsEx)
+            {
+                return new ServerProbeResult(
+                    ServerProbeStatus.Unreachable, 0,
+                    $"dns: {Short(dnsEx.Message)}");
+            }
+            var ipv4 = Array.Find(addrs, a => a.AddressFamily == AddressFamily.InterNetwork);
+            if (ipv4 is null)
+                return new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "no ipv4");
+
+            using var udp = new UdpClient(AddressFamily.InterNetwork);
+            udp.Client.SendTimeout = (int)UdpProbeTimeout.TotalMilliseconds;
+            udp.Client.ReceiveTimeout = (int)UdpProbeTimeout.TotalMilliseconds;
+
+            // Send 8 random bytes — too small for a real QUIC INITIAL but
+            // enough to elicit ICMP Port Unreachable from a closed port.
+            var probe = new byte[8];
+            Random.Shared.NextBytes(probe);
+            var endpoint = new IPEndPoint(ipv4, port);
+            try
+            {
+                await udp.SendAsync(probe, probe.Length, endpoint);
+            }
+            catch (SocketException sx) when (sx.SocketErrorCode is
+                SocketError.HostUnreachable or
+                SocketError.NetworkUnreachable or
+                SocketError.HostNotFound)
+            {
+                return new ServerProbeResult(
+                    ServerProbeStatus.Unreachable, 0, sx.SocketErrorCode.ToString());
+            }
+
+            // Brief receive window. ICMP Unreachable surfaces as
+            // ConnectionReset on the next op. QUIC servers that ignore
+            // garbage will simply not reply → we reach the timeout
+            // branch and mark Ok.
+            var receiveTask = udp.ReceiveAsync(cts.Token).AsTask();
+            var timeoutTask = Task.Delay(UdpProbeTimeout, CancellationToken.None);
+            var completed = await Task.WhenAny(receiveTask, timeoutTask);
+            sw.Stop();
+
+            if (completed == receiveTask)
+            {
+                if (receiveTask.IsFaulted)
+                {
+                    var inner = receiveTask.Exception?.GetBaseException();
+                    if (inner is SocketException sx2 && sx2.SocketErrorCode is SocketError.ConnectionReset)
+                        return new ServerProbeResult(
+                            ServerProbeStatus.Unreachable, 0, "ICMP port unreachable");
+                    return new ServerProbeResult(
+                        ServerProbeStatus.Unreachable, 0, inner?.GetType().Name ?? "udp recv error");
+                }
+                // Got a reply — rare for QUIC INITIAL with garbage payload.
+                var latencyMs = (int)sw.ElapsedMilliseconds;
+                if (latencyMs < ImplausibleThresholdMs)
+                    return new ServerProbeResult(ServerProbeStatus.Implausible, latencyMs, "udp <5ms");
+                var status = latencyMs > SlowThresholdMs ? ServerProbeStatus.Slow : ServerProbeStatus.Ok;
+                return new ServerProbeResult(status, latencyMs, null);
+            }
+
+            // Timeout branch: no ICMP back → port is probably open.
+            // Report ~timeout as latency (cosmetic — UDP doesn't have RTT).
+            var elapsedMs = Math.Min((int)sw.ElapsedMilliseconds, (int)UdpProbeTimeout.TotalMilliseconds);
+            return new ServerProbeResult(ServerProbeStatus.Ok, elapsedMs, "udp open (no reply)");
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Outer timeout — same semantics: probably open.
+            var elapsedMs = Math.Min((int)sw.ElapsedMilliseconds, (int)UdpProbeTimeout.TotalMilliseconds);
+            return new ServerProbeResult(ServerProbeStatus.Ok, elapsedMs, "udp timeout (no reply)");
+        }
+        catch (SocketException sx) when (
+            sx.SocketErrorCode is SocketError.ConnectionRefused
+                             or SocketError.ConnectionReset
+                             or SocketError.HostUnreachable
+                             or SocketError.NetworkUnreachable
+                             or SocketError.HostNotFound)
+        {
+            return new ServerProbeResult(
+                ServerProbeStatus.Unreachable, 0, sx.SocketErrorCode.ToString());
+        }
+        catch (Exception ex)
+        {
+            return new ServerProbeResult(
+                ServerProbeStatus.Unreachable, 0, ex.GetType().Name);
+        }
+    }
+
+    /// <summary>
+    /// Resolve effective SNI: Reality.ServerName → Tls.ServerName → host.
+    /// Matches the sing-box outbound generation logic in ConfigGenerator.
+    /// </summary>
+    private static string ResolveSni(VlessServerEntry server, string fallback)
+    {
+        if (server.Reality is { Enabled: true } r && !string.IsNullOrWhiteSpace(r.ServerName))
+            return r.ServerName;
+        if (server.Tls is { Enabled: true } t && !string.IsNullOrWhiteSpace(t.ServerName))
+            return t.ServerName;
+        return fallback;
+    }
 }

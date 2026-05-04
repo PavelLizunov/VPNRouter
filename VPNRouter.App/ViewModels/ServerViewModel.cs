@@ -73,43 +73,51 @@ public partial class ServerViewModel : ViewModelBase
     /// <summary>
     /// Compact ping text for the list column: "42 ms", "—" when not tested,
     /// "×" when unreachable/timeout.
+    /// v2.31.6-r16: <see cref="ServerProbeStatus.SkippedNotApplicable"/>
+    /// renders as a neutral "—" — quick TCP+TLS probe doesn't apply to
+    /// this protocol (e.g. unknown), so we don't claim a result.
     /// </summary>
     public string PingDisplay => TestStatus switch
     {
         ServerProbeStatus.Unknown                          => "—",
+        ServerProbeStatus.SkippedNotApplicable             => "—",
         ServerProbeStatus.Unreachable or ServerProbeStatus.Timeout => "×",
         ServerProbeStatus.TlsFailed                        => "TLS ×",
         ServerProbeStatus.Implausible                      => "<5 ms",
         _                                                  => PingMs > 0 ? $"{PingMs} ms" : "—"
     };
 
-    /// <summary>One-character status dot (🟢/🟡/🔴) or testing spinner text.</summary>
+    /// <summary>One-character status dot (filled/hollow) or testing spinner text.</summary>
     public string StatusDot => IsTesting ? "…" : TestStatus switch
     {
-        ServerProbeStatus.Ok           => "●",
-        ServerProbeStatus.Slow         => "●",
-        ServerProbeStatus.Unreachable  => "●",
-        ServerProbeStatus.Timeout      => "●",
-        ServerProbeStatus.TlsFailed    => "●",
-        ServerProbeStatus.Implausible  => "●",
-        _                              => "○"
+        ServerProbeStatus.Ok                   => "●",
+        ServerProbeStatus.Slow                 => "●",
+        ServerProbeStatus.Unreachable          => "●",
+        ServerProbeStatus.Timeout              => "●",
+        ServerProbeStatus.TlsFailed            => "●",
+        ServerProbeStatus.Implausible          => "●",
+        ServerProbeStatus.SkippedNotApplicable => "○",
+        _                                      => "○"
     };
 
     /// <summary>Brush for <see cref="StatusDot"/>. Resolves from the token
-    /// dictionary (Tokens.axaml) so the dot adapts to theme variant in v2.16.5.</summary>
+    /// dictionary (Tokens.axaml) so the dot adapts to theme variant in v2.16.5.
+    /// v2.31.6-r16: SkippedNotApplicable maps to TextMutedBrush — same visual
+    /// treatment as Unknown, signalling "we didn't actually test this".</summary>
     public IBrush StatusDotBrush
     {
         get
         {
             var key = TestStatus switch
             {
-                ServerProbeStatus.Ok           => "SuccessSolidBrush",
-                ServerProbeStatus.Slow         => "WarningSolidBrush",
-                ServerProbeStatus.Implausible  => "WarningSolidBrush",
-                ServerProbeStatus.TlsFailed    => "DangerSolidBrush",
-                ServerProbeStatus.Unreachable  => "DangerSolidBrush",
-                ServerProbeStatus.Timeout      => "DangerSolidBrush",
-                _                              => "TextMutedBrush"
+                ServerProbeStatus.Ok                   => "SuccessSolidBrush",
+                ServerProbeStatus.Slow                 => "WarningSolidBrush",
+                ServerProbeStatus.Implausible          => "WarningSolidBrush",
+                ServerProbeStatus.TlsFailed            => "DangerSolidBrush",
+                ServerProbeStatus.Unreachable          => "DangerSolidBrush",
+                ServerProbeStatus.Timeout              => "DangerSolidBrush",
+                ServerProbeStatus.SkippedNotApplicable => "TextMutedBrush",
+                _                                      => "TextMutedBrush"
             };
             return LookupBrush(key) ?? new SolidColorBrush(Color.FromRgb(0x94, 0xA0, 0xB2));
         }

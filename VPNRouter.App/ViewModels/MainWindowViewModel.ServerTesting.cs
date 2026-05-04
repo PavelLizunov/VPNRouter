@@ -93,10 +93,14 @@ public partial class MainWindowViewModel
         server.IsTesting = true;
         try
         {
-            var sni = PickSni(server);
-            var result = await TcpTlsProbe.ProbeAsync(
-                server.Server, server.Port, sni,
-                requireTls: true);
+            // v2.31.6-r16 (iter#7 / Phase 1): protocol-aware probe.
+            // ProbeServerAsync dispatches by entry.Protocol so Hysteria2/TUIC
+            // get UDP probes (TCP probe always fails Unreachable for them),
+            // Shadowsocks gets TCP-only (no TLS layer), VLESS keeps full
+            // TCP+TLS+cert validation. Pre-r16 was hard-coded TCP+TLS for
+            // every protocol → 100% false negatives on QUIC servers.
+            var entry = server.ToEntry();
+            var result = await TcpTlsProbe.ProbeServerAsync(entry);
             server.ApplyProbeResult(result);
         }
         catch (Exception ex)
@@ -198,10 +202,10 @@ public partial class MainWindowViewModel
                         return;
                     }
 
-                    var sni = PickSni(server);
-                    var result = await TcpTlsProbe.ProbeAsync(
-                        server.Server, server.Port, sni,
-                        requireTls: true, ct: ct);
+                    // v2.31.6-r16 (iter#7 / Phase 1): protocol-aware probe.
+                    // See TestServerAsync above for rationale.
+                    var entry = server.ToEntry();
+                    var result = await TcpTlsProbe.ProbeServerAsync(entry, ct);
 
                     await Dispatcher.UIThread.InvokeAsync(() =>
                     {
@@ -287,14 +291,10 @@ public partial class MainWindowViewModel
         }
     }
 
-    /// <summary>Pick the right SNI for TLS validation based on the server's security mode.</summary>
-    private static string? PickSni(ServerViewModel server)
-    {
-        // Reality: cert is presented for the masked SNI (e.g. yahoo.com) — use ServerName.
-        // TLS: cert is for the actual server hostname — also use ServerName (often = Server).
-        // Fall back to Server if ServerName is empty.
-        return !string.IsNullOrWhiteSpace(server.ServerName) ? server.ServerName : server.Server;
-    }
+    // v2.31.6-r16 (iter#7 / Phase 1): PickSni() removed — SNI resolution
+    // is now centralised inside TcpTlsProbe.ProbeServerAsync's dispatcher
+    // (uses Reality.ServerName → Tls.ServerName → host fallback, matching
+    // ConfigGenerator's outbound generation logic).
 
     // ── Deep verify (sing-box spawn + HTTP probe + bandwidth) ─────────────
 
