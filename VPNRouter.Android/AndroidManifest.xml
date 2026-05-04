@@ -16,6 +16,11 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- v3.0 Phase 6.2 — required by ConnectivityManager.requestNetwork
+         used in fallback NetworkCallback path on API 28-30. On API 31+
+         we use registerBestMatchingNetworkCallback which doesn't need
+         this, but keeping for forward/back-compat. -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

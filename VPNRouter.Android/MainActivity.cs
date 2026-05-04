@@ -291,10 +291,57 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
         global::Android.Util.Log.Info("VpnRouter",
             $"Phase 1.H: using server {label} ({entry.Server}:{entry.Port})");
 
+        // v3.0 Phase 6.1 (2026-05-04) — point sing-box log.output at a
+        // world-readable file under getExternalFilesDir() so we can pull
+        // the real sing-box errors via plain `adb shell cat` (no root,
+        // no run-as). Pre-6.1 log.output was removed → sing-box wrote
+        // to stderr → libbox.redirectStderr captured Go-runtime panics
+        // only, NOT sing-box's internal logger. Result: empty stderr
+        // file even when routing failed silently.
+        //
+        // Path: /sdcard/Android/data/com.ninitux.vpnrouter/files/singbox.log
+        string? singboxLogPath = null;
+        try
+        {
+            var extDir = GetExternalFilesDir(null);
+            if (extDir is not null)
+            {
+                singboxLogPath = System.IO.Path.Combine(extDir.AbsolutePath, "singbox.log");
+                global::Android.Util.Log.Info("VpnRouter",
+                    $"Phase 6.1: sing-box log.output → {singboxLogPath}");
+            }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter",
+                $"Phase 6.1: GetExternalFilesDir failed — {ex.GetType().Name}: {ex.Message}");
+        }
+
         string configJson;
         try
         {
-            configJson = AndroidConfigBuilder.BuildConfigJson(entry);
+            configJson = AndroidConfigBuilder.BuildConfigJson(entry, singboxLogPath);
+            // Phase 6.2 debug — write the JSON we hand to libbox to a
+            // world-readable file for offline inspection. Useful when
+            // diagnosing routing issues like "TCP packets never reach
+            // TUN inbound".
+            try
+            {
+                if (singboxLogPath is not null)
+                {
+                    var configDumpPath = System.IO.Path.Combine(
+                        System.IO.Path.GetDirectoryName(singboxLogPath)!,
+                        "config-dump.json");
+                    System.IO.File.WriteAllText(configDumpPath, configJson);
+                    global::Android.Util.Log.Info("VpnRouter",
+                        $"Phase 6.2 debug: config dumped to {configDumpPath} ({configJson.Length} chars)");
+                }
+            }
+            catch (Exception dumpEx)
+            {
+                global::Android.Util.Log.Warn("VpnRouter",
+                    $"Phase 6.2 debug: config dump failed — {dumpEx.GetType().Name}: {dumpEx.Message}");
+            }
         }
         catch (Exception ex)
         {

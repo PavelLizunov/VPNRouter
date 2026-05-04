@@ -36,10 +36,10 @@ public static class AndroidConfigBuilder
     /// </summary>
     /// <param name="vlessUri">A single <c>vless://...</c> share-link URI.</param>
     /// <returns>Pretty-printed sing-box 1.13+ JSON.</returns>
-    public static string BuildConfigJson(string vlessUri)
+    public static string BuildConfigJson(string vlessUri, string? logOutputPath = null)
     {
         var entry = VlessUriParser.Parse(vlessUri);
-        return BuildConfigJson(entry);
+        return BuildConfigJson(entry, logOutputPath);
     }
 
     /// <summary>
@@ -47,8 +47,20 @@ public static class AndroidConfigBuilder
     /// <see cref="VlessServerEntry"/>. Used by the subscription path which
     /// gets entries straight from <see cref="SubscriptionFetcher"/> without
     /// round-tripping back to a URI string.
+    ///
+    /// <para>v3.0 Phase 6.1 (2026-05-04) — added <paramref name="logOutputPath"/>
+    /// so MainActivity can route sing-box's own log to a world-readable file
+    /// (<c>getExternalFilesDir()/singbox.log</c>). Pre-6.1 we only had the
+    /// Go-stderr redirect set up via <c>Libbox.redirectStderr</c>, but sing-box
+    /// errors that come from its internal logger (e.g. dial failures, TLS
+    /// handshake failures, route mismatches) bypass stderr and go to its own
+    /// log writer. With <c>log.output</c> unset, that writer falls back to
+    /// stderr → logcat — but logcat on a non-rooted device only ships a
+    /// truncated subset of the entry, and we couldn't see the actual sing-box
+    /// error message. Routing log.output to a file we can <c>adb shell cat</c>
+    /// finally surfaces those errors.</para>
     /// </summary>
-    public static string BuildConfigJson(VlessServerEntry entry)
+    public static string BuildConfigJson(VlessServerEntry entry, string? logOutputPath = null)
     {
         var settings = new AppSettings();
         // v3.0 Phase 3 (2026-05-04) — P0 fix.
@@ -106,7 +118,7 @@ public static class AndroidConfigBuilder
         // to stderr → logcat. Long-term Phase 2: make AppPaths Android-
         // aware (Application.Context.FilesDir-based) so the desktop log
         // file pattern carries over with all the rotation logic.
-        return PatchLogPathForAndroid(json);
+        return PatchLogPathForAndroid(json, logOutputPath);
     }
 
     /// <summary>
@@ -126,17 +138,26 @@ public static class AndroidConfigBuilder
     /// VpnService.Builder routes are what actually direct kernel
     /// packets into the TUN.</para>
     /// </summary>
-    private static string PatchLogPathForAndroid(string json)
+    private static string PatchLogPathForAndroid(string json, string? logOutputPath)
     {
         try
         {
             var root = JsonNode.Parse(json) as JsonObject;
             if (root is null) return json;
 
-            // 1. log.output → null (libbox writes to logcat via stderr)
+            // 1. log.output → either logOutputPath (Phase 6.1, world-readable
+            //    file under getExternalFilesDir()) or remove entirely so libbox
+            //    falls back to stderr → logcat.
             if (root["log"] is JsonObject logObj)
             {
-                logObj.Remove("output");
+                if (!string.IsNullOrEmpty(logOutputPath))
+                {
+                    logObj["output"] = logOutputPath;
+                }
+                else
+                {
+                    logObj.Remove("output");
+                }
                 // Bump log level to debug for now so we can see why
                 // upstream connections fail. Phase 5 dial back to info
                 // once routing is solid.
@@ -156,9 +177,39 @@ public static class AndroidConfigBuilder
                     // kernel routes (auto_route requires root on Android).
                     inb["auto_route"] = false;
                     inb["strict_route"] = false;
-                    // sing-box-for-android reference uses platform: "android"
-                    // hint to enable some optimizations, but the field is
-                    // optional. Skip for now.
+
+                    // v3.0 Phase 6.3 (2026-05-04) — TCP routing fix.
+                    //
+                    // Pre-6.3 we inherited stack="system" from the desktop
+                    // ConfigGenerator. On Linux desktop the system stack
+                    // works because the daemon runs with CAP_NET_ADMIN +
+                    // CAP_NET_RAW. On Android (non-rooted) sing-box has
+                    // neither — so the system stack silently passes UDP
+                    // (which doesn't need raw sockets to receive) but TCP
+                    // SYN packets are dropped before they can reach the
+                    // sing-box TCP handler. Symptom: UDP/QUIC traffic
+                    // proxies cleanly; every TCP HTTPS request times out.
+                    //
+                    // Switch to "gvisor" — pure user-mode TCP/IP stack
+                    // written in Go, ships inside libbox.aar via the
+                    // with_gvisor build tag. Works without privileged
+                    // capabilities. Slightly slower than system stack but
+                    // correctness > a few % CPU.
+                    inb["stack"] = "gvisor";
+
+                    // v3.0 Phase 6.3 — drop MTU 9000 → 1500. The desktop
+                    // 9000 MTU was tuned for Wireguard-style native TUN
+                    // where the kernel handles fragmentation. On Android
+                    // the VpnService.Builder MTU must match what the OS
+                    // can actually deliver, and the underlying network
+                    // (wifi/cellular) is almost always 1500 or smaller.
+                    // Setting 9000 means every IP packet ≥1500 bytes from
+                    // an app gets fragmented or dropped before reaching
+                    // sing-box, which can manifest as connection hangs.
+                    //
+                    // 1500 matches Android system VPN default and what
+                    // sing-box-for-android uses out of the box.
+                    inb["mtu"] = 1500;
                 }
             }
 

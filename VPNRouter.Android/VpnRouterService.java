@@ -42,9 +42,12 @@ import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.VpnService;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.system.OsConstants;
 import android.util.Base64;
@@ -394,6 +397,13 @@ public final class VpnRouterService extends VpnService {
     private static final class VpnRouterPlatformInterface implements PlatformInterface {
         private final VpnRouterService service;
 
+        // v3.0 Phase 6.2 — DefaultNetworkMonitor state. Holds the
+        // current InterfaceUpdateListener libbox is interested in plus the
+        // ConnectivityManager.NetworkCallback we registered to feed it.
+        private InterfaceUpdateListener defaultListener;
+        private ConnectivityManager.NetworkCallback defaultCallback;
+        private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
         VpnRouterPlatformInterface(VpnRouterService service) {
             this.service = service;
         }
@@ -583,15 +593,154 @@ public final class VpnRouterService extends VpnService {
         @Override
         public boolean underNetworkExtension() { return false; }
 
+        /**
+         * v3.0 Phase 6.2 (2026-05-04) — wire ConnectivityManager.NetworkCallback
+         * to libbox's InterfaceUpdateListener.
+         *
+         * <para>Pre-6.2 this was a no-op stub. Symptom: every upstream
+         * connection from sing-box failed with "no available network
+         * interface" — sing-box has the interface list (from getInterfaces),
+         * but it doesn't know which one is the DEFAULT to bind upstream
+         * sockets to. Without that, all outbound dialing fails.</para>
+         *
+         * <para>Per sagernet/sing-box-for-android DefaultNetworkListener.kt
+         * + DefaultNetworkMonitor.kt, on Android P+ we cannot use
+         * <code>registerDefaultNetworkCallback</code> because since DP1 it
+         * returns the VPN interface itself (which would loop our own
+         * traffic). Instead:
+         *   - API 31+ → registerBestMatchingNetworkCallback (Android 12+)
+         *   - API 28-30 → requestNetwork(NetworkRequest, callback)
+         *   - API 26-27 → registerDefaultNetworkCallback
+         *   - API 24-25 → registerDefaultNetworkCallback (no Handler arg)
+         * </para>
+         *
+         * <para>When the callback fires onAvailable / onCapabilitiesChanged,
+         * we resolve the interface name → kernel index via
+         * NetworkInterface.getByName, then call
+         * <code>listener.updateDefaultInterface(name, index, false, false)</code>.
+         * The kernel can briefly report a network as available before its
+         * <code>NetworkInterface</code> entry shows up — we retry up to
+         * 10× with 50 ms backoff (per reference impl) before giving up.</para>
+         */
         @Override
         public void startDefaultInterfaceMonitor(InterfaceUpdateListener listener) {
-            // Phase 5 simplification: rely on libbox's own monitor.
-            // Reference impl wires NetworkCallback. Phase 6.
+            this.defaultListener = listener;
+            ConnectivityManager cm = (ConnectivityManager)
+                    service.getSystemService(CONNECTIVITY_SERVICE);
+            if (cm == null) {
+                Log.w(LOG_TAG, "Phase 6.2: ConnectivityManager unavailable");
+                return;
+            }
+
+            defaultCallback = new ConnectivityManager.NetworkCallback() {
+                @Override
+                public void onAvailable(Network network) {
+                    Log.i(LOG_TAG, "Phase 6.2: default network onAvailable " + network);
+                    fireUpdate(cm, network);
+                }
+                @Override
+                public void onCapabilitiesChanged(Network network, NetworkCapabilities caps) {
+                    fireUpdate(cm, network);
+                }
+                @Override
+                public void onLost(Network network) {
+                    Log.i(LOG_TAG, "Phase 6.2: default network onLost " + network);
+                    InterfaceUpdateListener l = defaultListener;
+                    if (l == null) return;
+                    try { l.updateDefaultInterface("", -1, false, false); }
+                    catch (Exception e) {
+                        Log.w(LOG_TAG, "Phase 6.2: updateDefaultInterface(lost) threw: " + e.getMessage());
+                    }
+                }
+            };
+
+            try {
+                if (Build.VERSION.SDK_INT >= 31) {
+                    NetworkRequest request = new NetworkRequest.Builder()
+                            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+                            .build();
+                    cm.registerBestMatchingNetworkCallback(request, defaultCallback, mainHandler);
+                    Log.i(LOG_TAG, "Phase 6.2: registerBestMatchingNetworkCallback (API 31+)");
+                } else if (Build.VERSION.SDK_INT >= 28) {
+                    NetworkRequest request = new NetworkRequest.Builder()
+                            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                            .build();
+                    cm.requestNetwork(request, defaultCallback, mainHandler);
+                    Log.i(LOG_TAG, "Phase 6.2: requestNetwork (API 28-30)");
+                } else if (Build.VERSION.SDK_INT >= 26) {
+                    cm.registerDefaultNetworkCallback(defaultCallback, mainHandler);
+                    Log.i(LOG_TAG, "Phase 6.2: registerDefaultNetworkCallback (API 26-27)");
+                } else if (Build.VERSION.SDK_INT >= 24) {
+                    cm.registerDefaultNetworkCallback(defaultCallback);
+                    Log.i(LOG_TAG, "Phase 6.2: registerDefaultNetworkCallback (API 24-25)");
+                } else {
+                    NetworkRequest request = new NetworkRequest.Builder()
+                            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                            .build();
+                    cm.requestNetwork(request, defaultCallback);
+                    Log.i(LOG_TAG, "Phase 6.2: requestNetwork (API 23 fallback)");
+                }
+            } catch (Exception e) {
+                Log.e(LOG_TAG, "Phase 6.2: registering NetworkCallback failed: " + e.getMessage(), e);
+            }
+
+            // Initial fire — there's almost certainly already an active
+            // network when libbox starts. Kicking it now means the very
+            // first outbound dial doesn't have to wait for a callback.
+            try {
+                Network active = cm.getActiveNetwork();
+                if (active != null) {
+                    fireUpdate(cm, active);
+                }
+            } catch (Exception e) {
+                Log.w(LOG_TAG, "Phase 6.2: initial getActiveNetwork failed: " + e.getMessage());
+            }
+        }
+
+        private void fireUpdate(ConnectivityManager cm, Network network) {
+            InterfaceUpdateListener l = defaultListener;
+            if (l == null) return;
+            try {
+                LinkProperties lp = cm.getLinkProperties(network);
+                if (lp == null) return;
+                String name = lp.getInterfaceName();
+                if (name == null || name.isEmpty()) return;
+
+                int index = -1;
+                for (int attempt = 0; attempt < 10 && index < 0; attempt++) {
+                    try {
+                        java.net.NetworkInterface ni = java.net.NetworkInterface.getByName(name);
+                        if (ni != null) { index = ni.getIndex(); break; }
+                    } catch (Exception e) {
+                        // Kernel hasn't created the interface entry yet —
+                        // back off and retry. After 10 × 50 ms we give up
+                        // and pass index=-1 to libbox so it falls back to
+                        // its own resolution.
+                    }
+                    try { Thread.sleep(50); } catch (InterruptedException ignored) {}
+                }
+
+                Log.i(LOG_TAG, "Phase 6.2: updateDefaultInterface(" + name + ", " + index + ")");
+                l.updateDefaultInterface(name, index, false, false);
+            } catch (Exception e) {
+                Log.w(LOG_TAG, "Phase 6.2: fireUpdate threw: " + e.getMessage());
+            }
         }
 
         @Override
         public void closeDefaultInterfaceMonitor(InterfaceUpdateListener listener) {
-            // no-op
+            if (defaultCallback != null) {
+                try {
+                    ConnectivityManager cm = (ConnectivityManager)
+                            service.getSystemService(CONNECTIVITY_SERVICE);
+                    if (cm != null) cm.unregisterNetworkCallback(defaultCallback);
+                } catch (Exception e) {
+                    Log.w(LOG_TAG, "Phase 6.2: unregisterNetworkCallback threw: " + e.getMessage());
+                }
+                defaultCallback = null;
+            }
+            defaultListener = null;
         }
 
         @Override
