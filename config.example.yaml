@@ -17,14 +17,19 @@ app:
   #   - name: work-server
   #     path: "%ProgramData%\\VPNRouter\\config\\custom-work-server.json"
 
-# Profile sources — tried in order, first success wins
+# Profile sources — tried in order, first success wins.
+# By default we ship a single local source; bundled defaults
+# (`profiles/default.json`) and built-in fallbacks already cover the
+# common profile catalogue. Uncomment the github block only if you
+# host your own profiles repo — leaving the placeholder URL here
+# spammed the log with 404s every reload.
 profile_sources:
-  - type: github
-    url: "https://raw.githubusercontent.com/username/vpn-profiles/main/profiles.json"
-    update_interval: 3600  # seconds
-
   - type: local
     path: "%ProgramData%\\VPNRouter\\profiles\\custom.json"
+
+  # - type: github
+  #   url: "https://raw.githubusercontent.com/<your-org>/<your-repo>/main/profiles.json"
+  #   update_interval: 3600  # seconds
 
 # Profile to activate on start
 active_profile: Gaming_Full

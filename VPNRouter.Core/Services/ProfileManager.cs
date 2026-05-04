@@ -55,7 +55,16 @@ public class ProfileManager
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "[ProfileManager] Source '{Source}' failed, trying next", source.SourceName);
+                // v2.31.6-r19: profile sources are tried in order with built-in
+                // fallback as last resort. The vast majority of "failures" here
+                // are 404s from optional remote sources (e.g. an example
+                // GitHub URL the user never set up). Logging the full stack
+                // every reload spammed vpnrouter.log with stack traces. Keep
+                // a concise INFO for the common case; raw exception goes to
+                // DEBUG so diagnostics can opt in.
+                _logger.Debug(ex, "[ProfileManager] Source '{Source}' exception", source.SourceName);
+                _logger.Information("[ProfileManager] Source '{Source}' unavailable: {Reason} — trying next",
+                    source.SourceName, ex.Message);
             }
         }
 

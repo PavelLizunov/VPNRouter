@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
 using Serilog;
 using VPNRouter.Core.Interfaces;
 
@@ -26,6 +28,34 @@ public class FirewallManager : IFirewallManager
     private readonly ILogger _logger;
     private readonly List<string> _managedRules = new();
     private bool _disposed;
+
+    // v2.31.6-r19: netsh.exe writes its output in the OEM code page (CP-866
+    // on RU Windows, CP-850 on DE/FR/etc.), but .NET's default redirect
+    // assumes the system ANSI page (CP-1251 on RU). The mismatch produced
+    // mojibake like "РќРё РѕРґРЅРѕ РїСЂР°РІРёР»Рѕ" in vpnrouter.log every time a
+    // firewall rule operation hit a localized warning. Resolve once at type
+    // init so each PSI we spawn can pin the right encoding.
+    private static readonly Encoding ConsoleEncoding = ResolveConsoleEncoding();
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetOEMCP();
+
+    private static Encoding ResolveConsoleEncoding()
+    {
+        if (!OperatingSystem.IsWindows()) return Encoding.UTF8;
+        try
+        {
+            // .NET Core / 8 ships only UTF-8/16/32 + ASCII out of the box.
+            // CodePagesEncodingProvider unlocks legacy single-byte pages.
+            // Idempotent — safe even if another component already registered.
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            return Encoding.GetEncoding((int)GetOEMCP());
+        }
+        catch
+        {
+            return Encoding.UTF8;
+        }
+    }
 
     public FirewallManager(ILogger? logger = null)
     {
@@ -182,7 +212,9 @@ public class FirewallManager : IFirewallManager
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
-                RedirectStandardError = true
+                RedirectStandardError = true,
+                StandardOutputEncoding = ConsoleEncoding,
+                StandardErrorEncoding = ConsoleEncoding
             };
 
             using var proc = Process.Start(psi);
@@ -241,7 +273,9 @@ public class FirewallManager : IFirewallManager
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
-                RedirectStandardError = true
+                RedirectStandardError = true,
+                StandardOutputEncoding = ConsoleEncoding,
+                StandardErrorEncoding = ConsoleEncoding
             };
 
             using var proc = Process.Start(psi);
@@ -309,7 +343,9 @@ public class FirewallManager : IFirewallManager
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
-                RedirectStandardError = true
+                RedirectStandardError = true,
+                StandardOutputEncoding = ConsoleEncoding,
+                StandardErrorEncoding = ConsoleEncoding
             };
 
             using var proc = Process.Start(psi);
