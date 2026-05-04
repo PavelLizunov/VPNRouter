@@ -656,6 +656,14 @@ public class SingBoxManager : IDisposable
                 exitCodeError?.GetType().Name ?? "no exception");
         }
 
+        // v2.31.6-r20 — self-diagnosing crash. Pre-r20 we had to ask the
+        // user to copy %ProgramData%\VPNRouter\logs\singbox.log every time
+        // a crash happened on their machine, then root-cause from there.
+        // Now we read the tail of singbox.log into vpnrouter.log right at
+        // the crash boundary so the next log dump the user sends already
+        // contains the relevant sing-box context. Best-effort; never throws.
+        LogSingBoxCrashTail();
+
         State = SingBoxState.Failed;
         Crashed?.Invoke(this, EventArgs.Empty);
 
@@ -689,6 +697,62 @@ public class SingBoxManager : IDisposable
             {
                 _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
             }
+        }
+    }
+
+    /// <summary>
+    /// Read the tail of singbox.log and emit it line-by-line into the
+    /// vpnrouter.log so a single log dump contains both engine state and
+    /// sing-box's last words before the crash. Best-effort: returns
+    /// silently on any I/O error. Tail is bounded to keep vpnrouter.log
+    /// readable.
+    /// </summary>
+    private void LogSingBoxCrashTail()
+    {
+        try
+        {
+            var path = AppPaths.SingBoxLogPath;
+            if (!File.Exists(path)) return;
+
+            // Open with full sharing in case sing-box (or the OS) hasn't
+            // released the write handle yet on a hard kill.
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read,
+                                          FileShare.ReadWrite | FileShare.Delete);
+            using var sr = new StreamReader(fs);
+
+            // Bounded ring buffer — last 50 lines is enough to catch the
+            // typical sing-box panic + a handful of preceding INFO lines
+            // for context, without flooding vpnrouter.log on every crash.
+            const int TailLines = 50;
+            var buffer = new string[TailLines];
+            var count = 0;
+            string? line;
+            while ((line = sr.ReadLine()) != null)
+            {
+                buffer[count % TailLines] = line;
+                count++;
+            }
+
+            if (count == 0)
+            {
+                _logger.Warning("[SingBoxManager] singbox.log was empty — no crash context to capture");
+                return;
+            }
+
+            var keep = Math.Min(count, TailLines);
+            var start = count >= TailLines ? count % TailLines : 0;
+            _logger.Warning("[SingBoxManager] === sing-box crash tail (last {Keep} of {Total} lines) ===", keep, count);
+            for (var i = 0; i < keep; i++)
+            {
+                var idx = (start + i) % TailLines;
+                _logger.Warning("[singbox] {Line}", buffer[idx]);
+            }
+            _logger.Warning("[SingBoxManager] === end sing-box crash tail ===");
+        }
+        catch (Exception ex)
+        {
+            // Diagnostics layer must never break crash handling itself.
+            _logger.Debug(ex, "[SingBoxManager] Failed to capture sing-box crash tail");
         }
     }
 

@@ -70,7 +70,16 @@ public class FirewallManager : IFirewallManager
     /// </summary>
     public void CreateBlockRules(IEnumerable<string> processNames)
     {
+        // v2.31.6-r20: CleanupOrphanedRules deletes ALL prefix-matching
+        // rules in Windows Firewall (including ones we previously added to
+        // _managedRules). The pre-r20 code never reset _managedRules, so on
+        // a second CreateBlockRules call (e.g. after VpnEngine.Apply with a
+        // changed profile) we accumulated stale names that no longer
+        // existed in netsh. Subsequent EnableBlockRules / DisableBlockRules
+        // tried to flip those phantom rules and got "No rules match the
+        // specified criteria" warnings — F-LOG-4 in the 2026-05-04 audit.
         CleanupOrphanedRules();
+        _managedRules.Clear();
 
         // netsh does not support wildcards in program paths or rule names —
         // skip patterns; only create rules for exact .exe names
@@ -110,11 +119,20 @@ public class FirewallManager : IFirewallManager
     /// </summary>
     public void EnableBlockRules()
     {
+        // v2.31.6-r20: count actual successes so the summary log isn't a
+        // lie when some rules vanished between create and enable (Group
+        // Policy sweep, AV cleanup, manual deletion, etc.)
+        var ok = 0;
         foreach (var rule in _managedRules)
         {
-            RunNetsh($"advfirewall firewall set rule name=\"{rule}\" new enable=yes");
+            if (RunNetsh($"advfirewall firewall set rule name=\"{rule}\" new enable=yes"))
+                ok++;
         }
-        _logger.Information("[Firewall] ENABLED {Count} block rules (VPN down — leak protection active)", _managedRules.Count);
+        if (ok == _managedRules.Count)
+            _logger.Information("[Firewall] ENABLED {Count} block rules (VPN down — leak protection active)", ok);
+        else
+            _logger.Warning("[Firewall] ENABLED {Ok}/{Total} block rules (VPN down — {Missing} missing in firewall)",
+                ok, _managedRules.Count, _managedRules.Count - ok);
     }
 
     /// <summary>
@@ -123,11 +141,17 @@ public class FirewallManager : IFirewallManager
     /// </summary>
     public void DisableBlockRules()
     {
+        var ok = 0;
         foreach (var rule in _managedRules)
         {
-            RunNetsh($"advfirewall firewall set rule name=\"{rule}\" new enable=no");
+            if (RunNetsh($"advfirewall firewall set rule name=\"{rule}\" new enable=no"))
+                ok++;
         }
-        _logger.Information("[Firewall] Disabled {Count} block rules (VPN up — TUN handles routing)", _managedRules.Count);
+        if (ok == _managedRules.Count)
+            _logger.Information("[Firewall] Disabled {Count} block rules (VPN up — TUN handles routing)", ok);
+        else
+            _logger.Warning("[Firewall] Disabled {Ok}/{Total} block rules (VPN up — {Missing} missing in firewall)",
+                ok, _managedRules.Count, _managedRules.Count - ok);
     }
 
     /// <summary>

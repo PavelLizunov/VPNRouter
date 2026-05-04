@@ -1,5 +1,7 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
+using System.Runtime.Versioning;
 using System.Text;
 using VPNRouter.Core.Models;
 
@@ -253,6 +255,44 @@ public static class HealthCheck
             catch { /* unreadable lockfile — tolerated */ }
         }
 
+        // ── Process / Service ownership (v2.31.6-r20) ──
+        // User-reported pattern (spark-wraith 2026-05-04): "press disconnect,
+        // VPN turns back on after a second". Root cause: when the Windows
+        // Service is installed and running, it owns its own sing-box. The
+        // GUI / CLI sees the running sing-box via process scan and shows
+        // IsConnected=true, but its own _engine._singBox is null — so its
+        // Stop is a no-op. Service then keeps the tunnel up.
+        //
+        // Surface this state in doctor so users (and we, when triaging
+        // logs) can immediately tell whether a multi-owner conflict is
+        // happening before chasing other symptoms.
+        try
+        {
+            var singboxProcs = Process.GetProcessesByName("sing-box");
+            var singboxPids = string.Join(", ", singboxProcs.Select(p => p.Id));
+            var singboxCount = singboxProcs.Length;
+            foreach (var p in singboxProcs) { try { p.Dispose(); } catch { } }
+
+            var appProcs = Process.GetProcessesByName("VPNRouter.App");
+            var appCount = appProcs.Length;
+            foreach (var p in appProcs) { try { p.Dispose(); } catch { } }
+
+            if (singboxCount == 0)
+                results.Add(new(Level.Ok, "no sing-box process running"));
+            else if (singboxCount == 1)
+                results.Add(new(Level.Ok, $"1 sing-box process running (PID {singboxPids})"));
+            else
+                results.Add(new(Level.Warn,
+                    $"{singboxCount} sing-box processes running (PIDs {singboxPids}) — multiple owners is unusual; one of them is likely orphaned"));
+
+            if (OperatingSystem.IsWindows())
+                CheckWindowsServiceOwnership(results, singboxCount, appCount);
+        }
+        catch (Exception ex)
+        {
+            results.Add(new(Level.Warn, $"process inventory check failed: {ex.Message}"));
+        }
+
         // ── AppPaths directories ──
         foreach (var dir in new[] { AppPaths.DataDir, AppPaths.LogsDir, AppPaths.CacheDir, AppPaths.BinDir, AppPaths.ProfilesDir })
         {
@@ -261,6 +301,66 @@ public static class HealthCheck
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Windows-only: report whether the VPNRouter Service is installed and
+    /// running, and flag the multi-owner state where Service + GUI both
+    /// hold sing-box. Uses sc.exe query so we don't need a hard dependency
+    /// on System.ServiceProcess in Core (it's Windows-only and pulls in
+    /// extra closure mass on Linux/Mac builds).
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static void CheckWindowsServiceOwnership(
+        List<Result> results, int singboxCount, int appCount)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("sc.exe", "query VPNRouter")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            using var proc = Process.Start(psi);
+            if (proc == null) return;
+            var stdout = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit(3000);
+
+            // sc.exe exits non-zero when the service doesn't exist (1060).
+            if (proc.ExitCode != 0)
+            {
+                results.Add(new(Level.Ok, "Windows Service not installed (running in user mode)"));
+                return;
+            }
+
+            // STATE line is the canonical signal. Possible values:
+            // RUNNING / STOPPED / START_PENDING / STOP_PENDING / PAUSED
+            var running = stdout.Contains("RUNNING", StringComparison.OrdinalIgnoreCase);
+            var stopped = stdout.Contains("STOPPED", StringComparison.OrdinalIgnoreCase);
+
+            if (running)
+            {
+                results.Add(new(Level.Ok, "Windows Service installed: RUNNING"));
+                if (singboxCount > 0 && appCount > 0)
+                    results.Add(new(Level.Warn,
+                        "multi-owner state: Windows Service + GUI both running — disconnect button in GUI may not stop the tunnel; use 'sc stop VPNRouter' or restart the GUI (r20+ stops the Service automatically)"));
+            }
+            else if (stopped)
+            {
+                results.Add(new(Level.Ok, "Windows Service installed: STOPPED"));
+            }
+            else
+            {
+                results.Add(new(Level.Warn,
+                    "Windows Service installed but state is neither RUNNING nor STOPPED — see 'sc query VPNRouter'"));
+            }
+        }
+        catch (Exception ex)
+        {
+            results.Add(new(Level.Warn, $"could not query Windows Service: {ex.Message}"));
+        }
     }
 
     /// <summary>

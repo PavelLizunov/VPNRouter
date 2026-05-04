@@ -3313,7 +3313,42 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             StatusText = Strings.Stopping;
             try
             {
-                await Task.Run(() => _engine.Stop());
+                // v2.31.6-r20 — symmetric Stop. The pre-r20 path was a single
+                // _engine.Stop() call that only affected the GUI's own engine.
+                // If the Windows Service was the actual owner of sing-box (or
+                // an older crashed GUI left orphans), _engine._singBox was
+                // null and Stop became a no-op while the real sing-box kept
+                // running. RuntimeStatusDetector then re-flipped IsConnected
+                // back to true within 1-2 seconds — user reports
+                // "press disconnect, it turns back on after a second".
+                //
+                // Mirror the cleanup the Connect-branch already does (kill
+                // orphan sing-box + stop Windows Service) so Stop guarantees
+                // the tunnel actually goes down regardless of who started it.
+                await Task.Run(() =>
+                {
+                    try { _engine.Stop(); }
+                    catch (Exception ex) { _logger.Debug(ex, "[VM] _engine.Stop"); }
+
+                    try { OrphanCleanup.KillOrphans(); }
+                    catch (Exception ex) { _logger.Debug(ex, "[VM] OrphanCleanup on stop"); }
+
+#if PLATFORM_WINDOWS
+                    try
+                    {
+                        var psi = new System.Diagnostics.ProcessStartInfo("sc.exe", "stop VPNRouter")
+                        {
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true
+                        };
+                        using var proc = System.Diagnostics.Process.Start(psi);
+                        proc?.WaitForExit(5000);
+                    }
+                    catch (Exception ex) { _logger.Debug(ex, "[VM] sc stop on disconnect"); }
+#endif
+                });
             }
             catch (Exception ex)
             {
