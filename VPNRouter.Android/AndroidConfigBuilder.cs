@@ -110,10 +110,21 @@ public static class AndroidConfigBuilder
     }
 
     /// <summary>
-    /// Strip <c>log.output</c> from a generated sing-box config so libbox
-    /// emits logs to stderr (captured by Android logcat) instead of trying
-    /// to open a desktop-style logs/singbox.log path that doesn't exist
-    /// on the Android filesystem layout.
+    /// v3.0 Phase 4 (2026-05-04) — strip the desktop-only log path AND
+    /// adjust the TUN inbound for Android.
+    ///
+    /// <para>Pre-4: kept TUN inbound with desktop's
+    /// <c>auto_route=true, strict_route=false</c> — but on Android libbox
+    /// owns TUN via the openTun callback in VpnRouterService.java, NOT
+    /// sing-box's auto_route. Leaving auto_route=true makes sing-box try
+    /// to manipulate kernel routes itself (which Android doesn't permit
+    /// from a non-root app), producing silent failures that look like
+    /// "tunnel up but no traffic flows".</para>
+    ///
+    /// <para>Phase 4 fix: <c>auto_route=false</c> on Android — sing-box
+    /// just reads/writes the TUN fd we hand it via libbox; the
+    /// VpnService.Builder routes are what actually direct kernel
+    /// packets into the TUN.</para>
     /// </summary>
     private static string PatchLogPathForAndroid(string json)
     {
@@ -122,11 +133,33 @@ public static class AndroidConfigBuilder
             var root = JsonNode.Parse(json) as JsonObject;
             if (root is null) return json;
 
+            // 1. log.output → null (libbox writes to logcat via stderr)
             if (root["log"] is JsonObject logObj)
             {
                 logObj.Remove("output");
-                // Optional: keep level + timestamp; the absence of output
-                // is what tells libbox "go to stderr".
+                // Bump log level to debug for now so we can see why
+                // upstream connections fail. Phase 5 dial back to info
+                // once routing is solid.
+                logObj["level"] = "debug";
+            }
+
+            // 2. inbounds[*].type=tun → set Android-friendly TUN options
+            if (root["inbounds"] is JsonArray inbounds)
+            {
+                foreach (var inboundNode in inbounds)
+                {
+                    if (inboundNode is not JsonObject inb) continue;
+                    var type = inb["type"]?.GetValue<string>();
+                    if (type != "tun") continue;
+
+                    // libbox owns the TUN — don't let sing-box mess with
+                    // kernel routes (auto_route requires root on Android).
+                    inb["auto_route"] = false;
+                    inb["strict_route"] = false;
+                    // sing-box-for-android reference uses platform: "android"
+                    // hint to enable some optimizations, but the field is
+                    // optional. Skip for now.
+                }
             }
 
             return root.ToJsonString(new System.Text.Json.JsonSerializerOptions

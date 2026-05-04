@@ -68,6 +68,13 @@ internal static class Localization
 
     public static string LangToggleLabel => Ru ? "EN" : "RU";
 
+    // ── Phase 4: sub-header parity with desktop ────────────────────────
+
+    public static string BrandTitle => Ru ? "Virtual Penguin Network" : "Virtual Penguin Network";
+
+    public static string MenuLanguageLabel => Ru ? "Язык: Русский" : "Language: English";
+    public static string MenuThemeLabel => Ru ? "Тема: переключить" : "Theme: toggle";
+
     // ── Status / Connect button ─────────────────────────────────────────
 
     public static string StatusConnected => Ru ? "Подключено" : "Connected";

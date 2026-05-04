@@ -84,9 +84,15 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _advCardTitle;
     private TextBlock? _advCardSubtitle;
 
-    // Header
+    // Header (Phase 4: full sub-header matching desktop)
     private TextBlock? _brandTitle;
-    private Avalonia.Controls.Button? _languageToggle;
+    private TextBlock? _vpnChip;
+    private TextBlock? _zapretChip;
+    private TextBlock? _tgChip;
+    private Avalonia.Controls.Button? _kebabMenuButton;
+    private Popup? _kebabPopup;
+    private Avalonia.Controls.Button? _menuLanguageItem;
+    private Avalonia.Controls.Button? _menuThemeItem;
 
     // State
     private bool _formExpanded = false;
@@ -168,40 +174,148 @@ public partial class AndroidApp : Avalonia.Application
         var radiusSm = GetRadius("RadiusSm");
         var radiusMd = GetRadius("RadiusMd");
 
-        // ── Mini-header (brand + lang toggle) ───────────────────────────
+        // ── Sub-header (mascot + brand + chips + kebab menu) ────────────
+        // v3.0 Phase 4 (2026-05-04) — desktop parity. Pre-4 had a plain
+        // "VPNRouter" title with a "RU" toggle pill at right. Desktop
+        // shows: mascot 🐧 + "Virtual Penguin Network" bold + three
+        // status chips (VPN / Zapret / TG) + ⋯ kebab menu. The kebab
+        // hosts language + theme toggles (was inline RU pill).
+
+        // Mascot — emoji glyph for now; Phase 5 ports the real PNG
+        // from VPNRouter.App/Assets/.
+        var mascot = new Border
+        {
+            Width = 32,
+            Height = 32,
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = accentBgSubtle,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock
+            {
+                Text = "🐧",
+                FontSize = 18,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            }
+        };
+
         _brandTitle = new TextBlock
         {
-            Text = "VPNRouter",
-            FontSize = 16,
+            Text = Localization.BrandTitle,
+            FontSize = 14,
             FontWeight = FontWeight.Bold,
             Foreground = textPrimary,
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        _languageToggle = new Avalonia.Controls.Button
+        _vpnChip = MakeChip("VPN", GetBrush("SuccessBgBrush"), GetBrush("SuccessFgBrush"));
+        _zapretChip = MakeChip("Zapret", GetBrush("WarningBgBrush"), GetBrush("WarningFgBrush"));
+        _tgChip = MakeChip("TG", GetBrush("SurfaceSunkenBrush"), textMuted);
+
+        var chipRow = new StackPanel
         {
-            Content = Localization.LangToggleLabel,
-            FontSize = 11,
-            FontWeight = FontWeight.Medium,
-            Padding = new Thickness(12, 5),
-            CornerRadius = new CornerRadius(radiusSm),
-            Background = accentBgSubtle,
-            Foreground = accentFg,
-            BorderBrush = accentBorder,
-            BorderThickness = new Thickness(1),
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 6,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 2, 0, 0),
+            Children = { _vpnChip, _zapretChip, _tgChip }
+        };
+
+        var brandStack = new StackPanel
+        {
+            Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { _brandTitle, chipRow }
+        };
+
+        // ⋮ kebab menu trigger (vertical ellipsis — `⋯` horizontal
+        // doesn't render correctly on Android default fonts)
+        _kebabMenuButton = new Avalonia.Controls.Button
+        {
+            Content = "⋮",
+            FontSize = 22,
+            FontWeight = FontWeight.Bold,
+            Width = 32,
+            Height = 32,
+            Padding = new Thickness(0),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Foreground = textSecondary,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        _languageToggle.Click += OnLanguageToggleClicked;
+        _kebabMenuButton.Click += OnKebabMenuClicked;
+
+        // Kebab popup with language + theme items
+        _menuLanguageItem = new Avalonia.Controls.Button
+        {
+            Content = Localization.MenuLanguageLabel,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(14, 10),
+            FontSize = 12,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Foreground = textPrimary,
+        };
+        _menuLanguageItem.Click += OnMenuLanguageClicked;
+
+        _menuThemeItem = new Avalonia.Controls.Button
+        {
+            Content = Localization.MenuThemeLabel,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(14, 10),
+            FontSize = 12,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Foreground = textPrimary,
+        };
+        _menuThemeItem.Click += OnMenuThemeClicked;
+
+        var menuPanel = new Border
+        {
+            Background = card,
+            BorderBrush = defaultBorder,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(radiusSm),
+            BoxShadow = new BoxShadows(new BoxShadow
+            {
+                OffsetX = 0,
+                OffsetY = 4,
+                Blur = 12,
+                Color = Color.FromArgb(50, 0, 0, 0),
+            }),
+            Child = new StackPanel
+            {
+                Spacing = 0,
+                MinWidth = 180,
+                Children = { _menuLanguageItem, _menuThemeItem }
+            }
+        };
+
+        _kebabPopup = new Popup
+        {
+            PlacementTarget = _kebabMenuButton,
+            Placement = PlacementMode.BottomEdgeAlignedRight,
+            Child = menuPanel,
+            IsLightDismissEnabled = true,
+        };
 
         var headerRow = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(16, 12, 16, 0),
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            ColumnSpacing = 10,
+            Margin = new Thickness(16, 12, 16, 4),
         };
-        Grid.SetColumn(_brandTitle, 0);
-        Grid.SetColumn(_languageToggle, 1);
-        headerRow.Children.Add(_brandTitle);
-        headerRow.Children.Add(_languageToggle);
+        Grid.SetColumn(mascot, 0);
+        Grid.SetColumn(brandStack, 1);
+        Grid.SetColumn(_kebabMenuButton, 2);
+        headerRow.Children.Add(mascot);
+        headerRow.Children.Add(brandStack);
+        headerRow.Children.Add(_kebabMenuButton);
+        headerRow.Children.Add(_kebabPopup);
 
         // ── Status card (dot + title + description) ─────────────────────
         _statusDot = new Ellipse
@@ -665,6 +779,30 @@ public partial class AndroidApp : Avalonia.Application
         };
     }
 
+    /// <summary>
+    /// Phase 4 — pill-style status chip (rounded background + colored
+    /// label) for the sub-header VPN/Zapret/TG indicators. Mirrors
+    /// desktop's chip pattern from MainWindow.axaml header.
+    /// </summary>
+    private TextBlock MakeChip(string label, IBrush bg, IBrush fg)
+    {
+        // Wrapped Border preferred for rounded corners, but Avalonia
+        // TextBlock + StackPanel layout is simpler for now. Return a
+        // TextBlock styled as a tag — uses parent StackPanel's width.
+        // Note: chips render as boxes, not pills, on this font size;
+        // looks similar enough on phone screen at 9pt.
+        return new TextBlock
+        {
+            Text = label,
+            FontSize = 9,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = fg,
+            Background = bg,
+            Padding = new Thickness(7, 2),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+    }
+
     private Avalonia.Controls.Button StyledSecondaryButton(string label)
     {
         return new Avalonia.Controls.Button
@@ -909,11 +1047,42 @@ public partial class AndroidApp : Avalonia.Application
         _serverInputError.IsVisible = true;
     }
 
-    private void OnLanguageToggleClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    // ── Header kebab menu ──────────────────────────────────────────────
+
+    private void OnKebabMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is null) return;
+        _kebabPopup.IsOpen = !_kebabPopup.IsOpen;
+    }
+
+    private void OnMenuLanguageClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        ToggleLanguageAndRefresh();
+    }
+
+    private void OnMenuThemeClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        // Phase 4: cycle dark/light themes. Re-open after toggle requires
+        // app restart for full repaint (Avalonia 11 supports live theme
+        // change but our code-behind view caches brushes — Phase 5 will
+        // wire DynamicResource for live update; for now we update prefs
+        // and the next launch picks up the new theme).
+        var current = AndroidStorage.GetTheme();
+        var next = current == "dark" ? "light" : "dark";
+        AndroidStorage.SetTheme(next);
+        // Apply immediately to RequestedThemeVariant — most controls
+        // pick this up live.
+        RequestedThemeVariant = next == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
+    }
+
+    private void ToggleLanguageAndRefresh()
     {
         Localization.ToggleAndPersist();
-        if (_brandTitle is not null) _brandTitle.Text = "VPNRouter";
-        if (_languageToggle is not null) _languageToggle.Content = Localization.LangToggleLabel;
+        if (_brandTitle is not null) _brandTitle.Text = Localization.BrandTitle;
+        if (_menuLanguageItem is not null) _menuLanguageItem.Content = Localization.MenuLanguageLabel;
+        if (_menuThemeItem is not null) _menuThemeItem.Content = Localization.MenuThemeLabel;
         if (_statusTitle is not null)
             _statusTitle.Text = MainActivity.IntendedConnected ? Localization.SimpleStatusTitleOn : Localization.SimpleStatusTitleOff;
         if (_statusDesc is not null)
@@ -935,4 +1104,9 @@ public partial class AndroidApp : Avalonia.Application
         if (_ctaDisconnect is not null) _ctaDisconnect.Content = Localization.ButtonDisconnect;
         UpdateConfigSummary();
     }
+
+    /// <summary>Pre-Phase-4 entry point retained so any stale subscribers
+    /// don't break — delegates to the new ToggleLanguageAndRefresh.</summary>
+    private void OnLanguageToggleClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => ToggleLanguageAndRefresh();
 }
