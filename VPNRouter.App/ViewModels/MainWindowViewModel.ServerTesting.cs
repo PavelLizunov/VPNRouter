@@ -27,8 +27,19 @@ public partial class MainWindowViewModel
     private const int ServerTestConcurrency = 20;
     private const int ServerDeepConcurrency = 5;
 
-    /// <summary>Progress text shown in status area during a Test All run.</summary>
+    /// <summary>Progress text shown in status area during a Test All run
+    /// for the Manual VLESS list (Servers tab). v2.31.6-r15: split out
+    /// from the shared field used by Subscribe — the iter#6 audit caught
+    /// status text leaking from one tab to the other.</summary>
     [ObservableProperty] private string _serverTestProgressText = string.Empty;
+
+    /// <summary>v2.31.6-r15: Subscribe-tab Test all progress, isolated
+    /// from <see cref="ServerTestProgressText"/>. Pre-r15 both batches
+    /// wrote to the same field, so a Test all on Servers left "Готово.
+    /// Пинг прошёл: N/M" on the Subscribe tab status row even though
+    /// Subscribe servers had never been tested. Computer-use audit
+    /// 2026-05-04 confirmed the leak.</summary>
+    [ObservableProperty] private string _subscriptionTestProgressText = string.Empty;
 
     /// <summary>True while any TestAll* operation is in flight — disables other test buttons.</summary>
     [ObservableProperty]
@@ -40,8 +51,25 @@ public partial class MainWindowViewModel
         ? (IsRussian ? "Отмена" : "Cancel")
         : (IsRussian ? "Проверить все" : "Test all");
 
-    /// <summary>Progress text for deep verify passes.</summary>
+    /// <summary>Progress text for deep verify passes (Manual VLESS).</summary>
     [ObservableProperty] private string _serverDeepProgressText = string.Empty;
+
+    /// <summary>v2.31.6-r15: Subscribe-tab deep-verify progress, isolated
+    /// from <see cref="ServerDeepProgressText"/>.</summary>
+    [ObservableProperty] private string _subscriptionDeepProgressText = string.Empty;
+
+    /// <summary>v2.31.6-r15 (iter#6): Manual-tab active-VPN warning.
+    /// Empty when fewer than 50% of tested servers came back Implausible
+    /// after a Test all run. Pre-r15 the warning was concatenated as a
+    /// suffix to the status text, but the status line is in a non-wrap
+    /// horizontal stack panel — the suffix got clipped on narrow windows
+    /// (computer-use confirmed the warning was invisible at 536-px page
+    /// width). Separate property surfaces it as a wrap-able banner
+    /// rendered below the action buttons.</summary>
+    [ObservableProperty] private string _serverTestImplausibleWarning = string.Empty;
+
+    /// <summary>v2.31.6-r15: Subscribe-tab equivalent.</summary>
+    [ObservableProperty] private string _subscriptionTestImplausibleWarning = string.Empty;
 
     /// <summary>True while a deep-verify batch is running.</summary>
     [ObservableProperty]
@@ -93,9 +121,12 @@ public partial class MainWindowViewModel
             return;
         }
 
+        // v2.31.6-r15: per-tab progress + warning surfaces.
         await TestServerCollectionAsync(
             Servers.ToList(),
-            IsRussian ? "Проверка Manual-серверов" : "Testing Manual servers");
+            IsRussian ? "Проверка Manual-серверов" : "Testing Manual servers",
+            setProgress: text => ServerTestProgressText = text,
+            setWarning: text => ServerTestImplausibleWarning = text);
     }
 
     // ── Batch test: all aggregated subscription servers ──────────────────
@@ -111,18 +142,24 @@ public partial class MainWindowViewModel
 
         await TestServerCollectionAsync(
             SubscriptionServers.ToList(),
-            IsRussian ? "Проверка подписочных серверов" : "Testing subscription servers");
+            IsRussian ? "Проверка подписочных серверов" : "Testing subscription servers",
+            setProgress: text => SubscriptionTestProgressText = text,
+            setWarning: text => SubscriptionTestImplausibleWarning = text);
     }
 
     // ── Core batch implementation ────────────────────────────────────────
 
     private async Task TestServerCollectionAsync(
         IReadOnlyList<ServerViewModel> servers,
-        string labelPrefix)
+        string labelPrefix,
+        Action<string> setProgress,
+        Action<string> setWarning)
     {
+        // Reset warning at start of every run.
+        setWarning(string.Empty);
         if (servers.Count == 0)
         {
-            ServerTestProgressText = IsRussian ? "Нет серверов" : "No servers";
+            setProgress(IsRussian ? "Нет серверов" : "No servers");
             return;
         }
 
@@ -130,7 +167,7 @@ public partial class MainWindowViewModel
         var ct = _serverTestCts.Token;
 
         IsTestingServers = true;
-        ServerTestProgressText = $"{labelPrefix}: 0 / {servers.Count}";
+        setProgress($"{labelPrefix}: 0 / {servers.Count}");
 
         // Mark every row as testing so spinners show immediately
         foreach (var s in servers) s.IsTesting = true;
@@ -189,7 +226,7 @@ public partial class MainWindowViewModel
                     var n = Interlocked.Increment(ref done);
                     await Dispatcher.UIThread.InvokeAsync(() =>
                     {
-                        ServerTestProgressText = $"{labelPrefix}: {n} / {total}";
+                        setProgress($"{labelPrefix}: {n} / {total}");
                     });
                 }
             });
@@ -210,13 +247,36 @@ public partial class MainWindowViewModel
                 ServerProbeStatus.Ok or
                 ServerProbeStatus.Slow or
                 ServerProbeStatus.Implausible);
-            ServerTestProgressText = IsRussian
+
+            setProgress(IsRussian
                 ? $"Готово. Пинг прошёл: {responded} / {total} · полная проверка — «Глубокая проверка»"
-                : $"Done. Pinged: {responded} / {total} · full check via Deep verify";
+                : $"Done. Pinged: {responded} / {total} · full check via Deep verify");
+
+            // v2.31.6-r15 (iter#6): surface the active-VPN-intercept
+            // warning when Implausible dominates the results. Iter#6
+            // computer-use audit confirmed brat's pool of 7 servers
+            // returned 7/7 Implausible while showing as "passed ping",
+            // which the user reasonably interpreted as "all 7 working"
+            // but was actually "all 7 traffic was intercepted by the
+            // active VPN's TUN before reaching the real servers".
+            //
+            // v2.31.6-r15 follow-up after computer-use: the warning was
+            // initially concatenated as a suffix to the status text but
+            // got clipped on narrow windows because the status row uses
+            // a non-wrap horizontal StackPanel. Now surfaced via a
+            // separate ImplausibleWarning property bound to a
+            // wrap-able TextBlock.
+            var implausible = servers.Count(s => s.TestStatus is ServerProbeStatus.Implausible);
+            if (implausible > 0 && implausible >= total / 2)
+            {
+                setWarning(IsRussian
+                    ? "⚠ Активный VPN или прокси перехватывает соединения — реальные пинги недоступны. Отключите VPN для честных результатов или нажмите «Глубокая проверка» (она запускает sing-box отдельно и не зависит от текущего туннеля)."
+                    : "⚠ Active VPN or proxy intercepting connections — real pings unavailable. Disconnect for true results or click Deep verify (it spawns sing-box independently and bypasses the current tunnel).");
+            }
         }
         catch (OperationCanceledException)
         {
-            ServerTestProgressText = IsRussian ? "Отменено" : "Cancelled";
+            setProgress(IsRussian ? "Отменено" : "Cancelled");
             foreach (var s in servers) s.IsTesting = false;
         }
         finally
@@ -247,9 +307,11 @@ public partial class MainWindowViewModel
             return;
         }
 
+        // v2.31.6-r15: Manual / Subscribe progress isolated (iter#6).
         await DeepVerifyCollectionAsync(
             Servers.ToList(),
-            IsRussian ? "Deep verify Manual" : "Deep verify Manual");
+            IsRussian ? "Deep verify Manual" : "Deep verify Manual",
+            setProgress: text => ServerDeepProgressText = text);
     }
 
     [RelayCommand]
@@ -263,16 +325,18 @@ public partial class MainWindowViewModel
 
         await DeepVerifyCollectionAsync(
             SubscriptionServers.ToList(),
-            IsRussian ? "Deep verify подписки" : "Deep verify subscription");
+            IsRussian ? "Deep verify подписки" : "Deep verify subscription",
+            setProgress: text => SubscriptionDeepProgressText = text);
     }
 
     private async Task DeepVerifyCollectionAsync(
         IReadOnlyList<ServerViewModel> servers,
-        string labelPrefix)
+        string labelPrefix,
+        Action<string> setProgress)
     {
         if (servers.Count == 0)
         {
-            ServerDeepProgressText = IsRussian ? "Нет серверов" : "No servers";
+            setProgress(IsRussian ? "Нет серверов" : "No servers");
             return;
         }
 
@@ -280,9 +344,9 @@ public partial class MainWindowViewModel
 
         if (!_deepVerifier.IsAvailable)
         {
-            ServerDeepProgressText = IsRussian
+            setProgress(IsRussian
                 ? "sing-box не найден"
-                : "sing-box binary missing";
+                : "sing-box binary missing");
             return;
         }
 
@@ -290,7 +354,7 @@ public partial class MainWindowViewModel
         var ct = _serverDeepCts.Token;
 
         IsDeepTestingServers = true;
-        ServerDeepProgressText = $"{labelPrefix}: 0 / {servers.Count}";
+        setProgress($"{labelPrefix}: 0 / {servers.Count}");
 
         // Map VM → entry; remember the mapping so we can push results back.
         var entryToVm = new Dictionary<VlessServerEntry, ServerViewModel>();
@@ -325,19 +389,19 @@ public partial class MainWindowViewModel
                 {
                     Dispatcher.UIThread.Post(() =>
                     {
-                        ServerDeepProgressText = $"{labelPrefix}: {p.done} / {p.total}";
+                        setProgress($"{labelPrefix}: {p.done} / {p.total}");
                     });
                 }),
                 ct: ct);
 
             var verified = servers.Count(s => s.IsDeepVerified);
-            ServerDeepProgressText = IsRussian
+            setProgress(IsRussian
                 ? $"Готово. Verified: {verified} / {total}"
-                : $"Done. Verified: {verified} / {total}";
+                : $"Done. Verified: {verified} / {total}");
         }
         catch (OperationCanceledException)
         {
-            ServerDeepProgressText = IsRussian ? "Отменено" : "Cancelled";
+            setProgress(IsRussian ? "Отменено" : "Cancelled");
             foreach (var vm in servers)
             {
                 if (vm.IsDeepTesting) vm.IsDeepTesting = false;
@@ -346,7 +410,7 @@ public partial class MainWindowViewModel
         catch (Exception ex)
         {
             _logger.Warning(ex, "[DeepVerifyAll] failed");
-            ServerDeepProgressText = $"Error: {ex.GetType().Name}";
+            setProgress($"Error: {ex.GetType().Name}");
         }
         finally
         {

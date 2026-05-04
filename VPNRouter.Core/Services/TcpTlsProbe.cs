@@ -70,6 +70,15 @@ public static class TcpTlsProbe
     /// <summary>
     /// Full probe: TCP with 2 attempts (best RTT), optional TLS with cert-chain
     /// validation and SNI name matching. Returns a single result.
+    ///
+    /// <para>v2.31.6-r15 (iter#6 dedup): added optional per-call
+    /// <paramref name="tcpTimeout"/> / <paramref name="tlsTimeout"/>
+    /// overrides so <see cref="VPNRouter.Core.Services.FreeConfigs.FreeConfigTester"/>
+    /// can use shorter 1.5 s timeouts for free-config bulk testing without
+    /// mutating the static <see cref="TcpConnectTimeout"/> for the
+    /// concurrent Servers/Subscribe Test all flows. Pre-r15 the only way
+    /// to override was the static property, which created cross-test
+    /// interference.</para>
     /// </summary>
     /// <param name="host">Hostname or IP.</param>
     /// <param name="port">TCP port.</param>
@@ -81,13 +90,25 @@ public static class TcpTlsProbe
     /// true (default) to require a successful TLS handshake with valid chain + name match.
     /// false to stop after TCP.
     /// </param>
+    /// <param name="tcpTimeout">
+    /// Per-call TCP connect timeout. Defaults to the static
+    /// <see cref="TcpConnectTimeout"/> when null.
+    /// </param>
+    /// <param name="tlsTimeout">
+    /// Per-call TLS handshake timeout. Defaults to the static
+    /// <see cref="TlsHandshakeTimeout"/> when null.
+    /// </param>
     public static async Task<ServerProbeResult> ProbeAsync(
         string host,
         int port,
         string? sni,
         bool requireTls = true,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        TimeSpan? tcpTimeout = null,
+        TimeSpan? tlsTimeout = null)
     {
+        var effectiveTcpTimeout = tcpTimeout ?? TcpConnectTimeout;
+        var effectiveTlsTimeout = tlsTimeout ?? TlsHandshakeTimeout;
         if (string.IsNullOrWhiteSpace(host) || port <= 0 || port > 65535)
             return new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "invalid host/port");
 
@@ -99,7 +120,7 @@ public static class TcpTlsProbe
         for (var attempt = 0; attempt < 2; attempt++)
         {
             ct.ThrowIfCancellationRequested();
-            var (ok, latency, err) = await ProbeTcpAsync(host, port, ct);
+            var (ok, latency, err) = await ProbeTcpAsync(host, port, effectiveTcpTimeout, ct);
             if (ok)
             {
                 latencies.Add(latency);
@@ -136,7 +157,7 @@ public static class TcpTlsProbe
         if (requireTls)
         {
             var effectiveSni = !string.IsNullOrWhiteSpace(sni) ? sni : host;
-            var (tlsOk, tlsErr) = await ProbeTlsAsync(host, port, effectiveSni, ct);
+            var (tlsOk, tlsErr) = await ProbeTlsAsync(host, port, effectiveSni, effectiveTlsTimeout, ct);
 
             if (!tlsOk)
             {
@@ -155,11 +176,20 @@ public static class TcpTlsProbe
     /// Raw TCP probe: single connection attempt with timeout.
     /// Returns (success, latency in ms, error description).
     /// </summary>
-    public static async Task<(bool ok, int latencyMs, string? err)> ProbeTcpAsync(
+    public static Task<(bool ok, int latencyMs, string? err)> ProbeTcpAsync(
         string host, int port, CancellationToken ct)
+        => ProbeTcpAsync(host, port, TcpConnectTimeout, ct);
+
+    /// <summary>
+    /// v2.31.6-r15: per-call timeout overload for callers that need a
+    /// different TCP timeout than the static default (e.g.
+    /// FreeConfigTester uses 1.5 s for bulk free-config testing).
+    /// </summary>
+    public static async Task<(bool ok, int latencyMs, string? err)> ProbeTcpAsync(
+        string host, int port, TimeSpan tcpTimeout, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TcpConnectTimeout);
+        cts.CancelAfter(tcpTimeout);
 
         var sw = Stopwatch.StartNew();
         try
@@ -192,11 +222,16 @@ public static class TcpTlsProbe
     /// Raw TLS probe: full handshake with chain validation and SNI name match.
     /// Requires TCP reachability — caller must probe TCP first.
     /// </summary>
-    public static async Task<(bool ok, string? err)> ProbeTlsAsync(
+    public static Task<(bool ok, string? err)> ProbeTlsAsync(
         string host, int port, string sni, CancellationToken ct)
+        => ProbeTlsAsync(host, port, sni, TlsHandshakeTimeout, ct);
+
+    /// <summary>v2.31.6-r15: per-call timeout overload.</summary>
+    public static async Task<(bool ok, string? err)> ProbeTlsAsync(
+        string host, int port, string sni, TimeSpan tlsTimeout, CancellationToken ct)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TlsHandshakeTimeout);
+        cts.CancelAfter(tlsTimeout);
 
         TcpClient? tcp = null;
         SslStream? ssl = null;

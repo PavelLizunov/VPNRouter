@@ -1,9 +1,5 @@
 using System.Diagnostics;
-using System.Net;
-using System.Net.Security;
 using System.Net.Sockets;
-using System.Security.Authentication;
-using System.Security.Cryptography.X509Certificates;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
@@ -15,6 +11,15 @@ namespace VPNRouter.Core.Services.FreeConfigs;
 ///      SNIs like google.com/microsoft.com, so a valid TLS handshake with chain validation
 ///      strongly suggests the config is alive. Dead endpoints, honeypots, and local TUN
 ///      responders fail this stage.)
+///
+/// <para><b>v2.31.6-r15 (iter#6 dedup)</b>: this class is now a thin shim
+/// around <see cref="TcpTlsProbe"/>. Pre-r15 it was a verbatim copy
+/// (~200 LOC of TCP/TLS/cert-validation logic) — the iter#6 audit
+/// caught the duplication. Now <see cref="TestOneAsync"/> delegates
+/// to <see cref="TcpTlsProbe.ProbeAsync"/> with the bulk-test timeouts
+/// (1.5 s TCP, 3 s TLS) and maps the immutable
+/// <see cref="ServerProbeResult"/> back into the in-place mutation
+/// pattern that <see cref="FreeConfigEntry"/> uses.</para>
 /// </summary>
 public sealed class FreeConfigTester
 {
@@ -25,15 +30,13 @@ public sealed class FreeConfigTester
     private static readonly TimeSpan TcpConnectTimeout = TimeSpan.FromMilliseconds(1500);
     private static readonly TimeSpan TlsHandshakeTimeout = TimeSpan.FromSeconds(3);  // v2.13.16: was 5s — most real servers handshake in <1s; 3s covers slow links
 
-    /// <summary>Above this latency (ms) mark as "Slow" even if reachable.</summary>
-    private const int SlowThresholdMs = 800;
-
     /// <summary>
-    /// Below this latency, the TCP response can't have come from a real remote server
-    /// (internet RTT to any non-local host is ≥ 5 ms; sub-5ms means the connection was
-    /// intercepted locally — usually by the user's active VPN TUN adapter).
+    /// v2.31.6-r15: low-cardinality wrapper around the
+    /// <c>ConnectionRefused/HostUnreachable/HostNotFound</c> SocketException
+    /// codes that TcpClient throws synchronously inside ConnectAsync — the
+    /// rest of the codebase treats them as the same logical
+    /// <see cref="FreeConfigStatus.Unreachable"/> bucket.
     /// </summary>
-    private const int ImplausibleThresholdMs = 5;
 
     // v2.13.16: bumped from 30 → 80. Ephemeral ports on Windows: 49152-65535 = ~16k,
     // TIME_WAIT 2 min → 80 concurrent × 2s/test × 120s = ~9600 ports in flight at peak. Safe.
@@ -76,69 +79,68 @@ public sealed class FreeConfigTester
     /// Test a single config:
     ///   1) TCP connect (2 attempts, take best RTT)
     ///   2) TLS handshake with cert validation (if RequireTlsHandshake)
+    ///
+    /// <para>v2.31.6-r15: delegates to <see cref="TcpTlsProbe.ProbeAsync"/>
+    /// with FreeConfigTester's per-bulk-test timeouts. Mutates the entry
+    /// in place per the existing FreeConfigStatus contract.</para>
     /// </summary>
     public async Task TestOneAsync(FreeConfigEntry cfg, CancellationToken ct = default)
     {
         cfg.LastTestedAt = DateTime.UtcNow;
         cfg.LastError = null;
 
-        // ── Stage 1: TCP ──
-        var latencies = new List<int>(capacity: 2);
-        FreeConfigStatus tcpError = FreeConfigStatus.Timeout;
+        var sni = !string.IsNullOrWhiteSpace(cfg.Sni) ? cfg.Sni : cfg.Host;
 
-        for (var attempt = 0; attempt < 2; attempt++)
+        // v2.31.6-r15: single-source-of-truth call into TcpTlsProbe.
+        // Pre-r15 this body was ~80 LOC of TCP/TLS/plausibility logic
+        // duplicated from TcpTlsProbe.cs.
+        var result = await TcpTlsProbe.ProbeAsync(
+            cfg.Host,
+            cfg.Port,
+            sni,
+            requireTls: RequireTlsHandshake,
+            ct: ct,
+            tcpTimeout: TcpConnectTimeout,
+            tlsTimeout: TlsHandshakeTimeout);
+
+        // Map immutable ServerProbeResult back to in-place mutation on
+        // FreeConfigEntry. The two-status enum mapping is 1-to-1 by
+        // semantic intent (the FreeConfigStatus enum predates
+        // ServerProbeStatus by ~13 versions; consolidating them is a
+        // bigger refactor — Phase 2 of the iter#6 plan).
+        cfg.LatencyMs = result.LatencyMs;
+        switch (result.Status)
         {
-            ct.ThrowIfCancellationRequested();
-            var (status, latency, _) = await TcpPingAsync(cfg.Host, cfg.Port, ct);
-            if (status == FreeConfigStatus.Ok)
-            {
-                latencies.Add(latency);
-            }
-            else
-            {
-                tcpError = status;
-                // v2.13.16 smart retry: ConnectionRefused/HostUnreachable/HostNotFound are
-                // definitive — no point wasting a second 3s attempt. Only Timeout deserves retry.
-                if (status == FreeConfigStatus.Unreachable) break;
-            }
-        }
-
-        if (latencies.Count == 0)
-        {
-            cfg.LatencyMs = 0;
-            cfg.Status = tcpError;
-            cfg.LastError = tcpError == FreeConfigStatus.Timeout ? "tcp timeout" : "tcp unreachable";
-            return;
-        }
-
-        var bestLatency = latencies.Min();
-
-        // ── Plausibility gate: sub-5ms TCP means local intercept (active VPN / proxy). ──
-        if (bestLatency < ImplausibleThresholdMs)
-        {
-            cfg.LatencyMs = bestLatency;
-            cfg.Status = FreeConfigStatus.Implausible;
-            cfg.LastError = "latency < 5 ms (local intercept?)";
-            return;
-        }
-
-        // ── Stage 2: TLS handshake ──
-        if (RequireTlsHandshake)
-        {
-            var sni = !string.IsNullOrWhiteSpace(cfg.Sni) ? cfg.Sni : cfg.Host;
-            var (tlsOk, tlsErr) = await TlsHandshakeAsync(cfg.Host, cfg.Port, sni, ct);
-
-            if (!tlsOk)
-            {
+            case ServerProbeStatus.Ok:
+                cfg.Status = FreeConfigStatus.Ok;
+                break;
+            case ServerProbeStatus.Slow:
+                cfg.Status = FreeConfigStatus.Slow;
+                break;
+            case ServerProbeStatus.Implausible:
+                cfg.Status = FreeConfigStatus.Implausible;
+                cfg.LastError = result.Error;
+                break;
+            case ServerProbeStatus.TlsFailed:
                 cfg.Status = FreeConfigStatus.TlsFailed;
-                cfg.LatencyMs = bestLatency;
-                cfg.LastError = tlsErr ?? "tls failed";
-                return;
-            }
+                cfg.LastError = result.Error;
+                break;
+            case ServerProbeStatus.Timeout:
+                cfg.Status = FreeConfigStatus.Timeout;
+                cfg.LastError = result.Error ?? "tcp timeout";
+                cfg.LatencyMs = 0;
+                break;
+            case ServerProbeStatus.Unreachable:
+                cfg.Status = FreeConfigStatus.Unreachable;
+                cfg.LastError = result.Error ?? "tcp unreachable";
+                cfg.LatencyMs = 0;
+                break;
+            default:
+                cfg.Status = FreeConfigStatus.Timeout;
+                cfg.LastError = result.Error ?? "unknown";
+                cfg.LatencyMs = 0;
+                break;
         }
-
-        cfg.LatencyMs = bestLatency;
-        cfg.Status = bestLatency > SlowThresholdMs ? FreeConfigStatus.Slow : FreeConfigStatus.Ok;
     }
 
     /// <summary>v2.28.6-r5: public TCP-only ping helper used by the
@@ -157,12 +159,17 @@ public sealed class FreeConfigTester
     /// every Saved row look like "1 ms" after a recheck. Drop implausible
     /// readings; keep the previous value (which already passed the gate
     /// during the original TestOneAsync run, so it's a true RTT).</para>
+    /// <para>v2.31.6-r15: now delegates to
+    /// <see cref="TcpTlsProbe.ProbeTcpAsync(string,int,TimeSpan,CancellationToken)"/>
+    /// with the FreeConfigTester TCP timeout. Pre-r15 this had its own
+    /// inline copy of the TCP-connect-with-cancellation pattern.</para>
     /// </summary>
     public async Task TcpPingOnlyAsync(FreeConfigEntry cfg, CancellationToken ct = default)
     {
         if (cfg == null) return;
-        var (status, latency, _) = await TcpPingAsync(cfg.Host, cfg.Port, ct);
-        if (status == FreeConfigStatus.Ok && latency >= ImplausibleThresholdMs)
+        var (ok, latency, _) = await TcpTlsProbe.ProbeTcpAsync(
+            cfg.Host, cfg.Port, TcpConnectTimeout, ct);
+        if (ok && latency >= TcpTlsProbe.ImplausibleThresholdMs)
         {
             cfg.LatencyMs = latency;
         }
@@ -171,157 +178,4 @@ public sealed class FreeConfigTester
         // Sub-threshold readings are dropped silently; the previous LatencyMs
         // (set by the TestOneAsync gate) stays as the displayed value.
     }
-
-    /// <summary>Single TCP connect attempt with timeout.</summary>
-    private static async Task<(FreeConfigStatus status, int latencyMs, string? err)> TcpPingAsync(
-        string host, int port, CancellationToken ct)
-    {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TcpConnectTimeout);
-
-        var sw = Stopwatch.StartNew();
-        try
-        {
-            using var client = new TcpClient(AddressFamily.InterNetwork) { NoDelay = true };
-            await client.ConnectAsync(host, port, cts.Token);
-            sw.Stop();
-            return (FreeConfigStatus.Ok, (int)sw.ElapsedMilliseconds, null);
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            return (FreeConfigStatus.Timeout, 0, "timeout");
-        }
-        catch (SocketException sx) when (
-            sx.SocketErrorCode is SocketError.ConnectionRefused
-                             or SocketError.ConnectionReset
-                             or SocketError.HostUnreachable
-                             or SocketError.NetworkUnreachable
-                             or SocketError.HostNotFound)
-        {
-            return (FreeConfigStatus.Unreachable, 0, sx.SocketErrorCode.ToString());
-        }
-        catch (Exception ex)
-        {
-            return (FreeConfigStatus.Timeout, 0, ex.GetType().Name);
-        }
-    }
-
-    /// <summary>
-    /// Attempt a full TLS handshake to the given SNI.
-    /// Validates: cert chain OK AND cert SAN/CN matches the SNI domain.
-    /// A real Reality server forwards TLS to a real SNI (e.g. google.com) so a correct
-    /// chain-valid cert for that domain will be presented — genuine check.
-    /// </summary>
-    private static async Task<(bool ok, string? err)> TlsHandshakeAsync(
-        string host, int port, string sni, CancellationToken ct)
-    {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TlsHandshakeTimeout);
-
-        TcpClient? tcp = null;
-        SslStream? ssl = null;
-        try
-        {
-            tcp = new TcpClient(AddressFamily.InterNetwork) { NoDelay = true };
-            await tcp.ConnectAsync(host, port, cts.Token);
-
-            string? certError = null;
-
-            ssl = new SslStream(tcp.GetStream(), leaveInnerStreamOpen: false,
-                userCertificateValidationCallback: (sender, cert, chain, errors) =>
-                {
-                    // Must have at least a cert.
-                    if (cert is null) { certError = "no cert"; return false; }
-
-                    // Chain must validate OR have only a name-mismatch (we verify name separately).
-                    // But for Reality we want a REAL public cert — so we enforce full chain validity.
-                    if (errors != SslPolicyErrors.None)
-                    {
-                        certError = errors.ToString();
-                        return false;
-                    }
-
-                    // Verify cert name matches the SNI (Reality servers forward to real domains).
-                    var cert2 = cert as X509Certificate2 ?? new X509Certificate2(cert);
-                    if (!CertNameMatches(cert2, sni))
-                    {
-                        certError = $"cert name != {sni}";
-                        return false;
-                    }
-
-                    return true;
-                });
-
-            await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
-            {
-                TargetHost = sni,
-                EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
-            }, cts.Token);
-
-            return (true, null);
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            return (false, "tls timeout");
-        }
-        catch (AuthenticationException aex)
-        {
-            return (false, Short(aex.Message));
-        }
-        catch (IOException iox)
-        {
-            return (false, $"io: {Short(iox.Message)}");
-        }
-        catch (Exception ex)
-        {
-            return (false, ex.GetType().Name);
-        }
-        finally
-        {
-            ssl?.Dispose();
-            tcp?.Dispose();
-        }
-    }
-
-    /// <summary>Check if the certificate's CN or any SAN entry matches the given domain (wildcard supported).</summary>
-    private static bool CertNameMatches(X509Certificate2 cert, string domain)
-    {
-        if (string.IsNullOrEmpty(domain)) return false;
-
-        var domainLower = domain.ToLowerInvariant();
-
-        // Collect candidate names: CN + all SAN DNS entries.
-        var names = new List<string>();
-
-        // CN from Subject
-        var cn = cert.GetNameInfo(X509NameType.SimpleName, forIssuer: false);
-        if (!string.IsNullOrEmpty(cn)) names.Add(cn);
-
-        // SAN (Subject Alternative Names)
-        var sanExt = cert.Extensions["2.5.29.17"]; // OID for SAN
-        if (sanExt != null)
-        {
-            var sanText = sanExt.Format(multiLine: true);
-            foreach (var line in sanText.Split('\n', '\r'))
-            {
-                var trimmed = line.Trim();
-                // Format: "DNS Name=example.com" or "DNS:example.com"
-                var idx = trimmed.IndexOf('=');
-                if (idx < 0) idx = trimmed.IndexOf(':');
-                if (idx >= 0 && trimmed.StartsWith("DNS", StringComparison.OrdinalIgnoreCase))
-                    names.Add(trimmed[(idx + 1)..].Trim());
-            }
-        }
-
-        foreach (var n in names)
-        {
-            var nLower = n.ToLowerInvariant();
-            if (nLower == domainLower) return true;
-            if (nLower.StartsWith("*.") && domainLower.EndsWith(nLower[1..]))
-                return true;
-        }
-        return false;
-    }
-
-    private static string Short(string s) => s.Length > 60 ? s[..60] : s;
 }
