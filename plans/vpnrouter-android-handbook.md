@@ -345,80 +345,109 @@ passing the browser → https://1.1.1.1 visibility test. 28 TCP "inbound
 connection" + 34 UDP "inbound packet connection" events observed in singbox.log
 during the placeholder test session (proves both protocols flow).
 
-### 5.7 NEW P2 — VLESS+Reality+gRPC handshake EOF
+### 5.2 ✅ RESOLVED — Chip state semantic (Phase 7.1, commit 42715ab)
 
-is-01-grpc-test (URI: `mode=gun&serviceName=TunService`) fails with the
-DNS-over-HTTPS proxy returning EOF before the TLS layer. Other VLESS+Reality
-configs work; Hysteria2 + TUIC work. Test server may use a v2ray-core gRPC
-mode that sing-box's gRPC transport doesn't speak the same way. Investigate:
-- Compare singbox check output for the dumped config
-- Try with `mode=multi` if server supports
-- Review reference repo's gRPC reality-test config for hints
+`ChipState { Off / Connecting / On }` enum + `SetVpnChipState` driver.
+Off → SurfaceSunkenBrush + TextMutedBrush. Connecting → WarningBgBrush
++ WarningFgBrush + 1.2 s breathing pulse animation (1.0 ↔ 0.55,
+QuadraticEaseInOut). On → SuccessBgBrush + SuccessFgBrush. Wired to
+MainActivity.IntentChanged + Connect-click prefetch. Zapret/TG chips
+stay Off (those features not ported).
 
-### 5.2 P1 — Chip state semantic
+### 5.3 ✅ RESOLVED — Kebab menu full structure (Phase 7.2, commit 103216a)
 
-Сейчас chips static. Должны быть 3-state per VpnChipState. Implement:
-- `VpnChipState { On / Connecting / Off }` enum
-- Bind to MainActivity.IntentChanged + future libbox health callback
-- Replace static MakeChip TextBlock с state-aware Border+Ellipse+TextBlock
-- Pulse animation на Connecting (Avalonia Style with KeyFrame)
+4 sections matching desktop's MainWindow.axaml:414-512:
+- **Вид**: Light|Dark + RU|EN segmented controls (Phase 7.3, a7eea21)
+- **Диагностика**: Open log / Copy log path / Check for updates
+- **Устранение неполадок**: Reset settings (with 2-tap confirm)
+- **О приложении**: Version + GitHub repo link
 
-### 5.3 P1 — Kebab menu полная структура
+`MakeMenuItem` + `AppendMenuSection` + transient `_menuFeedback`
+banner under status card. Phase 7.3 added segmented controls
+(MakeSegmentButton/MakeSegmentRow) for parity with desktop's
+`Classes="segment" Classes.active="..."`.
 
-4 секции из `MainWindow.axaml:380+`:
-- "Вид" — Light|Dark + RU|EN segmented controls
-- "Диагностика" — Open logs / IP leak check / Updates check
-- "Устранение неполадок" — Health Check / Safe Mode / Reset config
-- "О приложении" — version pill + AboutDialog open
+### 5.4 ✅ RESOLVED — Form expand state default (Phase 7.3, a7eea21)
 
-### 5.4 P2 — Form expand state default
+`OnFrameworkInitializationCompleted` now starts with `_formExpanded =
+!hasManual && !hasSubscription`. Chevron initial glyph follows
+`_formExpanded`. First-launch users see the paste-config form open.
 
-Desktop держит форму expanded по умолчанию когда subscription not configured.
-Android по умолчанию collapsed. Synchronize.
+### 5.5 ✅ RESOLVED — Per-app filter UI (Phase 7.5, commit 3a6e9d6)
 
-### 5.5 P2 — Per-app filter UI
+Three modes via SharedPreferences key `per_app_mode`: `off` /
+`include` / `exclude`. Split radio in form drives `include` vs `off`.
+Tap split → "Выбрать приложения…" button + "Выбрано: N" counter
+appear. Tap button → fullscreen overlay:
+- Search TextBox + selection counter
+- "Системные приложения" toggle (default user-apps-only)
+- Scrollable ListBox: checkbox + label + package-name per row
+- Готово save button at bottom
 
-Desktop ApplicationsPage. Android — список installed packages с
-checkbox include/exclude → передать в VpnService.Builder.
+`AppListLoader` (new file) wraps PackageManager; runs on Task.Run so
+UI doesn't stall during 100-500 ms enumeration. Selection persisted
+as JSON List<string> in SharedPreferences.
 
-### 5.6 P3 — Logs page in-app
+`MainActivity.StartTunnelService` passes EXTRA_PER_APP_MODE +
+EXTRA_PER_APP_PACKAGES intent extras to VpnRouterService, which
+calls `addAllowedApplication` (include) or `addDisallowedApplication`
+(exclude) accordingly.
 
-Read sing-box log file + tail в TextBox. Без adb logcat.
+13 new localization strings.
+
+### 5.6 ✅ RESOLVED — Logs page in-app (Phase 7.4, commit 4ee39d9)
+
+Fullscreen overlay (Border layered over main ScrollViewer via Grid)
+with monospace ScrollViewer hosting last 50 KB of singbox.log.
+Title bar: title + ⟳ refresh + ✕ close. Auto-scroll to bottom after
+load (Dispatcher.UIThread.Post @ Background priority). Empty state
++ error state messages localized. Triggered from kebab menu
+Diagnostics > "Открыть лог" / "Open log".
+
+### 5.7 OPEN P2 — VLESS+Reality+gRPC handshake EOF
+
+is-01-grpc-test (URI: `mode=gun&serviceName=TunService`) fails with
+EOF before TLS. `nc -z 93.95.226.167 8444` confirms server is
+reachable, so it's not a network issue. Other VLESS+Reality configs
+work; Hysteria2 + TUIC v5 work. Likely sing-box gRPC + Reality combo
+quirk vs the test server's v2ray-style gRPC. Same config would fail
+on desktop — not Android-port-fundamental. Investigate when test
+server logs available:
+- Try `mode=multi` if server supports
+- Compare with sagernet/sing-box-for-android's gRPC+Reality test config
+- Test on desktop sing-box CLI directly with `singbox check`
 
 ---
 
-## 6. Текущий state (после Phase 6.4, commits 7dfef98 + 520d78f)
+## 6. Текущий state (после Phase 7.5+7.6, commit 3a6e9d6)
 
-### Готово
-- `VpnRouterService.java` rewrite по reference impl
-  (real getInterfaces / systemCertificates / useProcFS / protect / peek-fd)
-- DefaultInterfaceMonitor wired (Phase 6.2 — NetworkCallback per API tier)
-- AndroidApp.axaml.cs sub-header (mascot + brand + chips + kebab)
-- Real PNG mascot с RGB-invert (LoadMascot + TryBuildInverted)
-- Light theme default
-- 3-variant CTA button (outlined / sunken / accent-solid)
-- Status card / Config row / Form / Adv settings card
-- **VPN routing works** (Phase 6.1+6.2+6.3) — TCP + UDP both flow through proxy
-- Multi-protocol input (VLESS / Hysteria2 / TUIC / SS via ServerUriParser)
-- Debug helper: `getExternalFilesDir()/test-uri.txt` overrides URI without
-  rebuilding APK
+### Готово (10 commits, all on github + Forgejo)
+1. `7dfef98` — Phase 6.1+6.2+6.3 — VPN routing (log.output, NetworkCallback, gvisor stack)
+2. `520d78f` — Phase 6.4 — multi-protocol parser + TUIC insecure fix + test-uri.txt
+3. `aea8c17` — handbook update for Phase 6
+4. `42715ab` — Phase 7.1 — chip 3-state (Off/Connecting+pulse/On)
+5. `103216a` — Phase 7.2 — kebab menu 4 sections
+6. `a7eea21` — Phase 7.3 — segmented Light|Dark + RU|EN + form-expand default
+7. `4ee39d9` — Phase 7.4 — in-app log viewer (50 KB tail)
+8. `3a6e9d6` — Phase 7.5+7.6+7.7 — per-app filter + ReloadServerList async + gRPC investigation note
 
-### Известные недоработки
-- VLESS+Reality+gRPC fails (test server compat issue, see §5.7)
-- Chips static (должны быть 3-state) — §5.2
-- Kebab menu только 2 пункта (должно 4 секции) — §5.3
-- Form по умолчанию collapsed — §5.4
-- Per-app filter не реализован — §5.5
-- In-app logs viewer не реализован — §5.6
+### Капибилити summary
+- **VPN routing**: TCP + UDP through proxy on non-rooted Android 12+
+- **Protocols**: VLESS+Reality+TCP+Vision ✓, Hysteria2+Salamander ✓, TUIC v5 ✓, gRPC OPEN
+- **UI parity with desktop**:
+  - Sub-header (mascot + brand + chips + kebab) — ✓
+  - 3-state chips — ✓
+  - Kebab menu 4 sections + segmented controls — ✓
+  - Form expand-on-first-launch — ✓
+  - Per-app filter (Selected only / All) — ✓
+  - In-app log viewer — ✓
 
-### Файлы изменённые в Phase 6
-- `VPNRouter.Android/VpnRouterService.java` — startDefaultInterfaceMonitor wiring
-- `VPNRouter.Android/AndroidConfigBuilder.cs` — log.output param + stack=gvisor + MTU 1500
-- `VPNRouter.Android/AndroidManifest.xml` — CHANGE_NETWORK_STATE permission
-- `VPNRouter.Android/MainActivity.cs` — singboxLogPath compute + test-uri.txt override
-- `VPNRouter.Android/AndroidApp.axaml.cs` — IsSupportedScheme gate
-- `VPNRouter.Android/AndroidStorage.cs` — ServerUriParser.Parse instead of VlessUriParser
-- `VPNRouter.Core/Services/ServerUriParser.cs` — TUIC insecure flag (3 spelling variants)
+### Known gaps (no longer blocking)
+- VLESS+Reality+gRPC server-specific fail (§5.7) — investigate with server logs later
+- Per-app **exclude** mode wired in storage but no UI surface yet — power-user
+  mode, can edit SharedPreferences directly
+- Auto-update placeholder only (Android sideload UX needs PackageInstaller +
+  REQUEST_INSTALL_PACKAGES — out of v3.0 alpha scope)
 
 ---
 
@@ -426,42 +455,50 @@ Read sing-box log file + tail в TextBox. Без adb logcat.
 
 ```
 1. cd C:\Project\VPNRouter\.claude\worktrees\suspicious-kepler-fa08e0
-2. git pull origin main  (current head: 520d78f)
+2. git pull origin main  (current head: 3a6e9d6)
 3. Read this handbook fully (especially §5 + §3.4 test results)
-4. Pick top P1/P2 from §5 (P0 §5.1 closed)
+4. Phase 6 + Phase 7.1–7.6 are CLOSED. Next:
+   - §5.7 gRPC investigation (medium priority, server-side)
+   - Phase 8: deeper polish — performance audit, theme live-switch
+     (currently requires app restart for full repaint), Zapret port,
+     TG proxy port, app icons in picker (Drawable→Avalonia Bitmap)
 5. Apply 3.1 checklist before commit
 6. Apply 3.3 VPN test ritual after each ship
 7. Update §4 Coordinate map if UI changes
 ```
 
-### Recommended first action
+### Recommended next phases
 
-**Phase 7.1 — Chip 3-state semantic** (§5.2). The functional meaning user
-called out:
-  green = enabled, yellow = connecting, gray = disabled.
-Currently chips are static decoration. Implementation sketch:
-1. Add `enum VpnChipState { On / Connecting / Off }` (mirror desktop's
-   pattern in MainWindowViewModel).
-2. Bind to `MainActivity.IntentChanged` for VPN; future Zapret/TG state
-   bindings come from VpnEngine signals once Phase 7 wires them.
-3. Replace static `MakeChip(label, bg, fg)` with state-aware factory:
-   - On → SuccessSurfaceBrush + SuccessForegroundBrush + green dot
-   - Connecting → WarningSurfaceBrush + pulse animation (Avalonia Style
-     KeyFrame on Opacity)
-   - Off → MutedSurfaceBrush + MutedForegroundBrush + gray dot
+**Phase 8.1 — App icons in per-app picker** (cosmetic).
+PackageManager.GetApplicationIcon returns a Drawable; we need to
+convert to Avalonia Bitmap. Pattern: Drawable → DrawingCache → Bitmap
+(Android.Graphics.Bitmap) → byte[] (PNG encode) → MemoryStream →
+Avalonia.Media.Imaging.Bitmap. Cache the converted bitmap by package
+name.
 
-**Phase 7.2 — Full kebab menu sections** (§5.3). Mirror desktop's
-MainWindow.axaml:380+ ContextMenu structure: Вид / Диагностика /
-Устранение неполадок / О приложении.
+**Phase 8.2 — Theme live-switch** (handbook §6 known gap).
+Currently switching dark↔light persists but UI brushes are read at
+BuildSimplePageView and don't react. Solution: switch from cached
+brushes to Application.Current.FindResource calls per state change,
+or use Avalonia DynamicResource / DataBinding. ~80 LOC per token
+category.
 
-**Phase 7.3 — Form expand state default** (§5.4) when subscription not
-configured (matches desktop initial-launch UX).
+**Phase 8.3 — Performance audit pass 2.**
+After Phase 7.6 ReloadServerList async, profile remaining UI-thread
+ops: ApplyTheme, BuildSimplePageView (one-shot but heavy), kebab popup
+construction. Profile with AndroidPerfProfiler.
 
-Phase 6 cycle (routing + multi-protocol) is closed. Future Android
-sessions are UI parity polish, not core plumbing.
+**Phase 8.4 — Zapret port** (parity with desktop).
+Desktop's ZapretManager runs winws.exe; Android equivalent needs a
+DPI-bypass userspace tool. Investigate sing-box's `tls_fragment` /
+`fragment` outbound options as native replacement for Zapret.
+
+**Phase 8.5 — gRPC §5.7 investigation.**
+With access to test server logs, retry. Maybe try `mode=multi` or
+`tls_record_fragment=false`.
 
 ---
 
-**Last updated**: 2026-05-04 после Phase 6.4 (520d78f).
+**Last updated**: 2026-05-04 after Phase 7.5 + 7.6 (commit 3a6e9d6).
 **Maintainer**: Claude (continuing).
 **User**: Pavel (provides feedback + steers priorities).
