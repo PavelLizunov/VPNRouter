@@ -93,8 +93,15 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _tgChip;
     private Avalonia.Controls.Button? _kebabMenuButton;
     private Popup? _kebabPopup;
-    private Avalonia.Controls.Button? _menuLanguageItem;
-    private Avalonia.Controls.Button? _menuThemeItem;
+    // v3.0 Phase 7.3 — segmented control buttons (RU|EN, Light|Dark)
+    // replacing the v3.0 Phase 4 single-toggle buttons. User flagged
+    // 2026-05-04: "toogle на android отличаеться от pc версии".
+    // Desktop (MainWindow.axaml:430-459) has 2-segment grids that
+    // SET a specific value rather than toggle. Android now mirrors.
+    private Avalonia.Controls.Button? _menuLangRu;
+    private Avalonia.Controls.Button? _menuLangEn;
+    private Avalonia.Controls.Button? _menuThemeLight;
+    private Avalonia.Controls.Button? _menuThemeDark;
     // Phase 7.2 — additional menu items (Diagnostics + Troubleshooting + About)
     private Avalonia.Controls.Button? _menuOpenLogItem;
     private Avalonia.Controls.Button? _menuCopyLogPathItem;
@@ -143,6 +150,16 @@ public partial class AndroidApp : Avalonia.Application
 
         if (ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.ISingleViewApplicationLifetime singleView)
         {
+            // v3.0 Phase 7.3 (handbook §5.4) — auto-expand the config form
+            // on first launch when nothing has been configured yet, so
+            // user can paste their VPN URI without an extra tap on the
+            // chevron. Mirrors desktop's first-launch behaviour. If the
+            // user has either a manual URI or a subscription saved, keep
+            // the form collapsed (default).
+            var hasManual = !string.IsNullOrEmpty(AndroidStorage.GetVlessUri());
+            var hasSubscription = !string.IsNullOrEmpty(AndroidStorage.GetSubscriptionUrl());
+            _formExpanded = !hasManual && !hasSubscription;
+
             singleView.MainView = BuildSimplePageView();
             MainActivity.IntentChanged += OnIntentChanged;
             UpdateConnectionState(MainActivity.IntendedConnected);
@@ -295,19 +312,29 @@ public partial class AndroidApp : Avalonia.Application
         };
         _kebabMenuButton.Click += OnKebabMenuClicked;
 
-        // v3.0 Phase 7.2 (2026-05-04) — full kebab menu with 4 sections
-        // mirroring desktop's MainWindow.axaml ContextMenu structure:
-        //   • Вид           — Language + Theme toggles
+        // v3.0 Phase 7.2 + 7.3 (2026-05-04) — full kebab menu with 4 sections
+        // mirroring desktop's MainWindow.axaml ContextMenu (lines 414-512).
+        //   • Вид           — Theme segmented (Light|Dark) + Language segmented (RU|EN)
         //   • Диагностика   — Open log / Copy log path / Update check
         //   • Устранение    — Reset settings (with confirm step)
         //   • О приложении  — Version + GitHub repo link
-        // Pre-7.2 the menu only had 2 raw items (Language, Theme) without
-        // section grouping, which scaled poorly and didn't match desktop
-        // information architecture.
-        _menuLanguageItem = MakeMenuItem(Localization.MenuLanguageLabel,
-                                         textPrimary, OnMenuLanguageClicked);
-        _menuThemeItem    = MakeMenuItem(Localization.MenuThemeLabel,
-                                         textPrimary, OnMenuThemeClicked);
+        // 7.3 swap (user-flagged "toogle на android отличаеться от pc"):
+        // single-toggle buttons → 2-segment grids that SET a value
+        // directly (idempotent — clicking the active segment is a no-op).
+
+        // Theme segmented row: Light | Dark
+        var isDark = AndroidStorage.GetTheme() == "dark";
+        _menuThemeLight = MakeSegmentButton(Localization.MenuSegLight, !isDark, OnMenuThemeLightClicked);
+        _menuThemeDark  = MakeSegmentButton(Localization.MenuSegDark,   isDark,  OnMenuThemeDarkClicked);
+        var themeRow = MakeSegmentRow(_menuThemeLight, _menuThemeDark);
+
+        // Language segmented row: RU | EN
+        _menuLangRu = MakeSegmentButton(Localization.MenuSegRu, Localization.Ru, OnMenuLangRuClicked);
+        _menuLangEn = MakeSegmentButton(Localization.MenuSegEn, !Localization.Ru, OnMenuLangEnClicked);
+        var langRow = MakeSegmentRow(_menuLangRu, _menuLangEn);
+
+        // Diagnostics + Troubleshooting + About items stay as full-width
+        // labelled buttons.
         _menuOpenLogItem  = MakeMenuItem(Localization.MenuItemOpenLogs,
                                          textPrimary, OnMenuOpenLogClicked);
         _menuCopyLogPathItem = MakeMenuItem(Localization.MenuItemCopyLogPath,
@@ -325,11 +352,11 @@ public partial class AndroidApp : Avalonia.Application
         var menuStack = new StackPanel
         {
             Spacing = 0,
-            MinWidth = 220,
+            MinWidth = 240,
         };
 
-        AppendMenuSection(menuStack, Localization.MenuSectionView,
-                          new[] { _menuLanguageItem, _menuThemeItem });
+        AppendMenuSectionWithControls(menuStack, Localization.MenuSectionView,
+                                      new Control[] { themeRow, langRow });
         AppendMenuSection(menuStack, Localization.MenuSectionDiagnostics,
                           new[] { _menuOpenLogItem, _menuCopyLogPathItem, _menuUpdateCheckItem });
         AppendMenuSection(menuStack, Localization.MenuSectionTroubleshooting,
@@ -463,7 +490,10 @@ public partial class AndroidApp : Avalonia.Application
 
         _configRowChevron = new TextBlock
         {
-            Text = "›",
+            // v3.0 Phase 7.3 — initial glyph follows _formExpanded so the
+            // chevron points down when the form is auto-expanded on
+            // first launch (mirrors OnConfigRowClicked's flip logic).
+            Text = _formExpanded ? "⌄" : "›",
             FontSize = 14,
             Foreground = textMuted,
             VerticalAlignment = VerticalAlignment.Center,
@@ -1308,6 +1338,94 @@ public partial class AndroidApp : Avalonia.Application
     }
 
     /// <summary>
+    /// v3.0 Phase 7.3 (2026-05-04) — segment button factory. Mirrors
+    /// desktop's <c>Classes="segment" Classes.active="..."</c> CSS:
+    /// active segment uses the accent surface + accent foreground;
+    /// inactive uses the base surface + secondary foreground.
+    /// </summary>
+    private Avalonia.Controls.Button MakeSegmentButton(
+        string label,
+        bool active,
+        EventHandler<Avalonia.Interactivity.RoutedEventArgs> onClick)
+    {
+        var btn = new Avalonia.Controls.Button
+        {
+            Content = label,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Padding = new Thickness(0, 6),
+            FontSize = 12,
+            FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal,
+            Background = active ? GetBrush("AccentBgSubtleBrush") : GetBrush("SurfaceSunkenBrush"),
+            Foreground = active ? GetBrush("AccentFgBrush") : GetBrush("TextSecondaryBrush"),
+            BorderThickness = new Thickness(1),
+            BorderBrush = active ? GetBrush("BorderAccentBrush") : GetBrush("BorderSubtleBrush"),
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+        };
+        btn.Click += onClick;
+        return btn;
+    }
+
+    /// <summary>
+    /// v3.0 Phase 7.3 — wrap two segment buttons in a 2-column grid with
+    /// equal width and small gap, mirroring desktop's
+    /// <c>Grid ColumnDefinitions="*,*" ColumnSpacing="2"</c>.
+    /// </summary>
+    private Grid MakeSegmentRow(Avalonia.Controls.Button left, Avalonia.Controls.Button right)
+    {
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,*"),
+            ColumnSpacing = 4,
+            Margin = new Thickness(14, 4, 14, 4),
+        };
+        Grid.SetColumn(left, 0);
+        Grid.SetColumn(right, 1);
+        grid.Children.Add(left);
+        grid.Children.Add(right);
+        return grid;
+    }
+
+    /// <summary>
+    /// v3.0 Phase 7.3 — overload of <see cref="AppendMenuSection"/> that
+    /// accepts arbitrary <see cref="Control"/> items (not just Buttons),
+    /// so segment-control rows fit the same flow.
+    /// </summary>
+    private void AppendMenuSectionWithControls(
+        StackPanel stack,
+        string headerText,
+        Control[] items)
+    {
+        var header = new TextBlock
+        {
+            Text = headerText,
+            FontSize = 10,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = GetBrush("TextMutedBrush"),
+            Margin = new Thickness(14, 8, 14, 4),
+        };
+        if (headerText == Localization.MenuSectionView) _menuSectionView = header;
+        else if (headerText == Localization.MenuSectionDiagnostics) _menuSectionDiagnostics = header;
+        else if (headerText == Localization.MenuSectionTroubleshooting) _menuSectionTroubleshooting = header;
+        else if (headerText == Localization.MenuSectionAbout) _menuSectionAbout = header;
+
+        stack.Children.Add(header);
+
+        var divider = new Border
+        {
+            Height = 1,
+            Background = GetBrush("BorderSubtleBrush"),
+            Margin = new Thickness(14, 0, 14, 4),
+        };
+        stack.Children.Add(divider);
+
+        foreach (var item in items)
+        {
+            stack.Children.Add(item);
+        }
+    }
+
+    /// <summary>
     /// v3.0 Phase 7.2 — append a section to the kebab menu stack:
     /// header TextBlock + thin divider + the supplied items + bottom
     /// spacer. Section header TextBlocks are stored on the field
@@ -1363,26 +1481,80 @@ public partial class AndroidApp : Avalonia.Application
         }
     }
 
-    private void OnMenuLanguageClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    // v3.0 Phase 7.3 — segmented control click handlers. Each one SETS
+    // a specific value (no-op if already active) instead of toggling.
+    // Matches desktop's SetThemeLight / SetThemeDark / SetLanguageRussian
+    // / SetLanguageEnglish commands. Popup stays open so the user can
+    // see the segment switch visually.
+
+    private void OnMenuLangRuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-        ToggleLanguageAndRefresh();
+        if (Localization.Ru) return; // already active — no-op
+        ApplyLanguage(true);
     }
 
-    private void OnMenuThemeClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private void OnMenuLangEnClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-        // Phase 4: cycle dark/light themes. Re-open after toggle requires
-        // app restart for full repaint (Avalonia 11 supports live theme
-        // change but our code-behind view caches brushes — Phase 5 will
-        // wire DynamicResource for live update; for now we update prefs
-        // and the next launch picks up the new theme).
+        if (!Localization.Ru) return;
+        ApplyLanguage(false);
+    }
+
+    private void OnMenuThemeLightClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        ApplyTheme("light");
+    }
+
+    private void OnMenuThemeDarkClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        ApplyTheme("dark");
+    }
+
+    /// <summary>
+    /// v3.0 Phase 7.3 — set RU or EN explicitly + refresh all the
+    /// labels through ToggleLanguageAndRefresh + repaint segment
+    /// active state. Idempotent.
+    /// </summary>
+    private void ApplyLanguage(bool ru)
+    {
+        if (Localization.Ru == ru) return;
+        Localization.ToggleAndPersist();
+        ToggleLanguageAndRefresh();
+        RepaintLanguageSegment();
+    }
+
+    private void ApplyTheme(string mode)
+    {
         var current = AndroidStorage.GetTheme();
-        var next = current == "dark" ? "light" : "dark";
-        AndroidStorage.SetTheme(next);
-        // Apply immediately to RequestedThemeVariant — most controls
-        // pick this up live.
-        RequestedThemeVariant = next == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
+        if (current == mode) return;
+        AndroidStorage.SetTheme(mode);
+        RequestedThemeVariant = mode == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
+        RepaintThemeSegment();
+    }
+
+    /// <summary>
+    /// v3.0 Phase 7.3 — refresh segment colors after a theme change so
+    /// the active segment moves to the new selection.
+    /// </summary>
+    private void RepaintThemeSegment()
+    {
+        var isDark = AndroidStorage.GetTheme() == "dark";
+        StyleSegmentButton(_menuThemeLight, !isDark);
+        StyleSegmentButton(_menuThemeDark, isDark);
+    }
+
+    private void RepaintLanguageSegment()
+    {
+        StyleSegmentButton(_menuLangRu, Localization.Ru);
+        StyleSegmentButton(_menuLangEn, !Localization.Ru);
+    }
+
+    private void StyleSegmentButton(Avalonia.Controls.Button? btn, bool active)
+    {
+        if (btn is null) return;
+        btn.FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal;
+        btn.Background = active ? GetBrush("AccentBgSubtleBrush") : GetBrush("SurfaceSunkenBrush");
+        btn.Foreground = active ? GetBrush("AccentFgBrush") : GetBrush("TextSecondaryBrush");
+        btn.BorderBrush = active ? GetBrush("BorderAccentBrush") : GetBrush("BorderSubtleBrush");
     }
 
     /// <summary>
@@ -1548,8 +1720,12 @@ public partial class AndroidApp : Avalonia.Application
     {
         Localization.ToggleAndPersist();
         if (_brandTitle is not null) _brandTitle.Text = Localization.BrandTitle;
-        if (_menuLanguageItem is not null) _menuLanguageItem.Content = Localization.MenuLanguageLabel;
-        if (_menuThemeItem is not null) _menuThemeItem.Content = Localization.MenuThemeLabel;
+        // Phase 7.3 — segment controls re-style themselves via
+        // RepaintLanguageSegment / RepaintThemeSegment; only the theme
+        // segment label switches between RU/EN since it's localized.
+        if (_menuThemeLight is not null) _menuThemeLight.Content = Localization.MenuSegLight;
+        if (_menuThemeDark is not null) _menuThemeDark.Content = Localization.MenuSegDark;
+        // RU/EN segment labels are locale-independent; nothing to update.
         // Phase 7.2 menu items
         if (_menuOpenLogItem is not null) _menuOpenLogItem.Content = Localization.MenuItemOpenLogs;
         if (_menuCopyLogPathItem is not null) _menuCopyLogPathItem.Content = Localization.MenuItemCopyLogPath;

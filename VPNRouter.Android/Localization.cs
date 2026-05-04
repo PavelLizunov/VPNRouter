@@ -68,6 +68,17 @@ internal static class Localization
 
     public static string LangToggleLabel => Ru ? "EN" : "RU";
 
+    // v3.0 Phase 7.3 (2026-05-04) — segmented control labels for the
+    // kebab menu's "Вид" / "Appearance" section, mirroring desktop's
+    // SmpSegLight / SmpSegDark / SmpSegRu / SmpSegEn (see
+    // VPNRouter.App/Localization/Strings.cs:1280-1283). RU/EN labels
+    // for the language segments stay locale-independent (the segment
+    // shows what the user is switching TO, not the current language).
+    public static string MenuSegLight => Ru ? "Светлая" : "Light";
+    public static string MenuSegDark  => Ru ? "Тёмная"  : "Dark";
+    public static string MenuSegRu    => "RU";
+    public static string MenuSegEn    => "EN";
+
     // ── Phase 4: sub-header parity with desktop ────────────────────────
 
     public static string BrandTitle => Ru ? "Virtual Penguin Network" : "Virtual Penguin Network";
