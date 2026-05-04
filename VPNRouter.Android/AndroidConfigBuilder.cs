@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Text.Json.Nodes;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
@@ -60,6 +61,56 @@ public static class AndroidConfigBuilder
         var processNames = System.Array.Empty<string>();
         var sbConfig = ConfigGenerator.Generate(profile, processNames, settings);
 
-        return ConfigGenerator.Serialize(sbConfig);
+        var json = ConfigGenerator.Serialize(sbConfig);
+
+        // v3.0 Android Phase 1.G+ (2026-05-04) — strip the desktop log path
+        // from the generated config. ConfigGenerator unconditionally sets
+        // log.output = AppPaths.SingBoxLogPath, which on Android resolves
+        // to /data/data/com.ninitux.vpnrouter/files/.config/vpnrouter/logs/singbox.log
+        // — a directory that doesn't exist (libbox sets up basePath +
+        // workingPath + tempPath, but not the AppPaths-derived logs dir).
+        // libbox throws "start logger: open ... no such file or directory"
+        // and the service stopSelf's, leaving the UI stuck on "Connected"
+        // (Phase 1.D intent-only).
+        //
+        // Cheapest fix: rewrite log.output to empty so libbox falls back
+        // to stderr → logcat. Long-term Phase 2: make AppPaths Android-
+        // aware (Application.Context.FilesDir-based) so the desktop log
+        // file pattern carries over with all the rotation logic.
+        return PatchLogPathForAndroid(json);
+    }
+
+    /// <summary>
+    /// Strip <c>log.output</c> from a generated sing-box config so libbox
+    /// emits logs to stderr (captured by Android logcat) instead of trying
+    /// to open a desktop-style logs/singbox.log path that doesn't exist
+    /// on the Android filesystem layout.
+    /// </summary>
+    private static string PatchLogPathForAndroid(string json)
+    {
+        try
+        {
+            var root = JsonNode.Parse(json) as JsonObject;
+            if (root is null) return json;
+
+            if (root["log"] is JsonObject logObj)
+            {
+                logObj.Remove("output");
+                // Optional: keep level + timestamp; the absence of output
+                // is what tells libbox "go to stderr".
+            }
+
+            return root.ToJsonString(new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+        }
+        catch
+        {
+            // If parsing failed for any reason, return the original JSON
+            // unchanged — libbox will surface its own error which is more
+            // useful than us silently breaking the config.
+            return json;
+        }
     }
 }
