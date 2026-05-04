@@ -46,6 +46,11 @@
     -->
     <AvaloniaResource Include="..\VPNRouter.App\Styles\Tokens.axaml"
                       Link="Styles\Tokens.axaml" />
+    <!-- v3.0 Phase 5 (2026-05-04) — link the mascot PNG from desktop
+         assets directly so palette+art changes propagate. Pre-5 we used
+         🐧 emoji which doesn't match desktop's branded penguin. -->
+    <AvaloniaResource Include="..\VPNRouter.App\Assets\penguin_mascot.png"
+                      Link="Assets\penguin_mascot.png" />
   </ItemGroup>
 
   <ItemGroup>

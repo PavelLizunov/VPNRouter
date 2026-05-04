@@ -5,6 +5,8 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using System;
@@ -181,22 +183,31 @@ public partial class AndroidApp : Avalonia.Application
         // status chips (VPN / Zapret / TG) + ⋯ kebab menu. The kebab
         // hosts language + theme toggles (was inline RU pill).
 
-        // Mascot — emoji glyph for now; Phase 5 ports the real PNG
-        // from VPNRouter.App/Assets/.
+        // v3.0 Phase 5 — real PNG mascot with theme-aware RGB inversion.
+        // Mirrors desktop's MainWindowViewModel.LogoSource pattern:
+        //   - Light theme: penguin_mascot.png as-is (black lineart on
+        //     transparent bg)
+        //   - Dark theme: RGB-inverted copy (white lineart on transparent)
+        // Inversion preserves alpha so anti-aliased edges stay clean.
+        var mascotImage = new Image
+        {
+            Source = LoadMascot(),
+            Stretch = Stretch.Uniform,
+            Width = 26,
+            Height = 26,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        RenderOptions.SetBitmapInterpolationMode(mascotImage, BitmapInterpolationMode.HighQuality);
         var mascot = new Border
         {
-            Width = 32,
-            Height = 32,
+            Width = 28,
+            Height = 28,
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             Background = accentBgSubtle,
             VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock
-            {
-                Text = "🐧",
-                FontSize = 18,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            }
+            ClipToBounds = true,
+            Child = mascotImage,
         };
 
         _brandTitle = new TextBlock
@@ -777,6 +788,70 @@ public partial class AndroidApp : Avalonia.Application
             Padding = new Thickness(0, 0, 0, 16),
             Background = bg,
         };
+    }
+
+    // ── Mascot loading + theme-aware inversion ──────────────────────────
+
+    private static Bitmap? _mascotLight;
+    private static Bitmap? _mascotDark;
+
+    /// <summary>
+    /// v3.0 Phase 5 — load + cache mascot bitmap, RGB-inverted on dark
+    /// theme. Lifted from desktop's MainWindowViewModel.TryBuildInvertedLogo:
+    /// Bgra8888/Unpremul preserves alpha so edges stay anti-aliased
+    /// after the channel flip.
+    /// </summary>
+    private Bitmap LoadMascot()
+    {
+        if (_mascotLight is null)
+        {
+            try
+            {
+                var stream = AssetLoader.Open(new Uri("avares://VPNRouter.Android/Assets/penguin_mascot.png"));
+                _mascotLight = new Bitmap(stream);
+            }
+            catch
+            {
+                // Fallback transparent 1x1 — won't be visible but keeps
+                // the layout from crashing.
+                var wb = new WriteableBitmap(new PixelSize(1, 1), new Vector(96, 96),
+                    PixelFormat.Bgra8888, AlphaFormat.Unpremul);
+                _mascotLight = wb;
+            }
+        }
+        if (ActualThemeVariant == ThemeVariant.Dark)
+        {
+            _mascotDark ??= TryBuildInverted(_mascotLight) ?? _mascotLight;
+            return _mascotDark;
+        }
+        return _mascotLight;
+    }
+
+    private static Bitmap? TryBuildInverted(Bitmap source)
+    {
+        try
+        {
+            var size = source.PixelSize;
+            var wb = new WriteableBitmap(size, source.Dpi, PixelFormat.Bgra8888, AlphaFormat.Unpremul);
+            using var fb = wb.Lock();
+            int byteCount = fb.RowBytes * size.Height;
+            source.CopyPixels(new PixelRect(size), fb.Address, byteCount, fb.RowBytes);
+            var bytes = new byte[byteCount];
+            System.Runtime.InteropServices.Marshal.Copy(fb.Address, bytes, 0, byteCount);
+            // BGRA pixels — invert B, G, R; leave A alone
+            for (int i = 0; i + 3 < bytes.Length; i += 4)
+            {
+                bytes[i + 0] = (byte)(255 - bytes[i + 0]); // B
+                bytes[i + 1] = (byte)(255 - bytes[i + 1]); // G
+                bytes[i + 2] = (byte)(255 - bytes[i + 2]); // R
+            }
+            System.Runtime.InteropServices.Marshal.Copy(bytes, 0, fb.Address, byteCount);
+            return wb;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>
