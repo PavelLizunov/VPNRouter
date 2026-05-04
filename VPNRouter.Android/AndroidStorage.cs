@@ -140,10 +140,11 @@ public static class AndroidStorage
 
     /// <summary>
     /// "dark" / "light" / "system" — explicit preference. Defaults to
-    /// "dark" because the desktop UI ships dark by default and the design
-    /// tokens are tuned for it.
+    /// "light" because that's what desktop ships (Phase 3 visual parity
+    /// rewrite — pre-3 default was dark, which made the Android UI look
+    /// nothing like desktop on first launch).
     /// </summary>
-    public static string GetTheme() => GetString(KeyTheme) ?? "dark";
+    public static string GetTheme() => GetString(KeyTheme) ?? "light";
     public static bool SetTheme(string? value) => SetString(KeyTheme, value);
 
     // ── Internals ───────────────────────────────────────────────────────────

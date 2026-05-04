@@ -74,6 +74,44 @@ internal static class Localization
     public static string StatusDisconnected => Ru ? "Отключено" : "Disconnected";
     public static string ButtonConnect => Ru ? "Подключить" : "Connect";
     public static string ButtonDisconnect => Ru ? "Отключить" : "Disconnect";
+    public static string ButtonConnecting => Ru ? "Подключение…" : "Connecting…";
+
+    // ── SimplePage parity (Phase 3) ────────────────────────────────────
+
+    public static string SimpleStatusTitleOn => Ru ? "Подключено" : "Connected";
+    public static string SimpleStatusTitleOff => Ru ? "Не подключено" : "Not connected";
+    public static string SimpleStatusDescOn => Ru
+        ? "Трафик идёт через VPN-туннель."
+        : "Traffic is routed through the VPN tunnel.";
+    public static string SimpleStatusDescOff => Ru
+        ? "Трафик идёт напрямую — выбери конфиг и запусти туннель."
+        : "Traffic goes direct — pick a config and start the tunnel.";
+
+    public static string SmpConfigRowLabel => Ru ? "Конфиг · Режим" : "Config · Mode";
+    public static string SmpSourceManual => Ru ? "вручную" : "manual";
+    public static string SmpSourceSubscription => Ru ? "подписка" : "subscription";
+    public static string SmpInputLabel => Ru ? "Конфиг VPN" : "VPN Config";
+    public static string SmpInputWatermark => Ru
+        ? "vless://… или https://…/sub"
+        : "vless://… or https://…/sub";
+    public static string SmpInputHint => Ru
+        ? "Приму vless://-ссылку или URL подписки (http/https)."
+        : "Accepts a vless:// share-link or subscription URL (http/https).";
+    public static string SmpTunnelModeLabel => Ru ? "Что идёт через VPN" : "What goes via VPN";
+    public static string SmpSplitOption => Ru ? "Выбранные приложения" : "Selected apps";
+    public static string SmpSplitHint => Ru
+        ? "По списку выбранных приложений (расширенные настройки)"
+        : "By selected apps list (advanced settings)";
+    public static string SmpFullOption => Ru ? "Весь трафик" : "All traffic";
+    public static string SmpFullHint => Ru
+        ? "Включая игры и банки"
+        : "Including games and banks";
+    public static string SmpAdvCardTitle => Ru ? "Расширенные настройки" : "Advanced settings";
+    public static string SmpAdvCardSubtitle => Ru
+        ? "Серверы · Подписки · Маршрутизация · Логи"
+        : "Servers · Subscriptions · Routing · Logs";
+
+    public static string SimpleConfigSummary => Ru ? "вручную · полный" : "manual · full";
 
     // ── Server input ────────────────────────────────────────────────────
 

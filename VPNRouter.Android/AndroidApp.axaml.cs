@@ -1,13 +1,12 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
-using Avalonia.Threading;
 using Avalonia.Styling;
-using Avalonia.Controls.Primitives;
-using Avalonia.Data;
+using Avalonia.Threading;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -17,61 +16,94 @@ using VPNRouter.Core.Services;
 namespace VPNRouter.Android;
 
 /// <summary>
-/// v3.0 Android port — Phase 1.H view (2026-05-04).
+/// v3.0 Phase 3 (2026-05-04) — honest visual parity with desktop SimplePage.
 ///
-/// <para>Phase 1.H major UX upgrade: parity with desktop app's main
-/// connection flow.
-/// <list type="bullet">
-///   <item><b>Subscription URL</b> input — paste an https:// link, app
-///   fetches the server pool via <see cref="SubscriptionFetcher"/>,
-///   shows result in a ListBox. User picks one server → that becomes
-///   active.</item>
-///   <item><b>Manual <c>vless://</c></b> still supported — same input
-///   field auto-detects URI vs URL.</item>
-///   <item><b>RU/EN bilingual</b> — labels mirror desktop's
-///   <c>Strings.cs</c> patterns. Auto-detects from <see cref="Localization"/>
-///   on init, user can flip via top-right toggle.</item>
-///   <item><b>Dark theme by default</b> — matches desktop's tuned
-///   palette. Light variant exposed via Settings (Phase 1.I).</item>
-/// </list></para>
+/// <para>User feedback 2026-05-04: «Приложение не выглядит так как выглядит
+/// на ПК, совершенно разный интерфейс и оформление». Phase 2's
+/// "tokens applied = parity" was wrong. Desktop SimplePage has a
+/// specific structure — status card with dot, config row button with
+/// flag icon + chevron, collapsible form, three-variant CTA button,
+/// "Расширенные настройки" card — and Phase 2's hand-rolled view
+/// looked nothing like it.</para>
 ///
-/// <para>Phase 1.D state model (intent-only Connect/Disconnect) and
-/// Phase 1.G UI scaffolding still apply. Phase 1.I will swap intent
-/// for libbox-callback-driven status sync.</para>
+/// <para>This rewrite mirrors <c>VPNRouter.App/Views/Pages/SimplePage.axaml</c>
+/// section-by-section:</para>
+///
+/// <list type="number">
+///   <item>Status card: dot (Success/Warning/Muted) + bold title +
+///   description (matches lines 42-72 of SimplePage)</item>
+///   <item>Config row tappable button: flag icon, label + value
+///   "вручную · полный", chevron (lines 74-120)</item>
+///   <item>Collapsible inline form: input + radio buttons for tunnel
+///   mode + autostart link card (lines 122-220)</item>
+///   <item>CTA button — three mutually exclusive variants by state
+///   (lines 222-266)</item>
+///   <item>Расширенные настройки card → Android version: subscription
+///   list page link (lines 268-304)</item>
+/// </list>
+///
+/// <para>Light theme by default to match desktop's default appearance.
+/// All colors/radii/spacing pulled from the linked Tokens.axaml.</para>
 /// </summary>
 public partial class AndroidApp : Avalonia.Application
 {
-    private TextBlock? _statusBlock;
-    private Avalonia.Controls.Button? _toggleButton;
-    private TextBox? _serverInputBox;
-    private TextBlock? _serverInputStatus;
-    private Avalonia.Controls.Button? _saveServerButton;
-    private Avalonia.Controls.Button? _refreshSubButton;
-    private ListBox? _serverList;
-    private TextBlock? _serverListHeader;
-    private Avalonia.Controls.Button? _languageToggle;
-    private TextBlock? _titleBlock;
-    private TextBlock? _subtitleBlock;
-    private TextBlock? _serverHeaderBlock;
-    private TextBlock? _hintBlock;
+    // Status card
+    private Ellipse? _statusDot;
+    private TextBlock? _statusTitle;
+    private TextBlock? _statusDesc;
 
+    // Config row button
+    private TextBlock? _configRowLabel;
+    private TextBlock? _configRowValue;
+    private TextBlock? _configRowChevron;
+
+    // Collapsible form
+    private Border? _formCard;
+    private TextBox? _serverInput;
+    private TextBlock? _serverInputLabel;
+    private TextBlock? _serverInputHint;
+    private TextBlock? _serverInputError;
+    private TextBlock? _tunnelModeLabel;
+    private Avalonia.Controls.RadioButton? _splitRadio;
+    private Avalonia.Controls.RadioButton? _fullRadio;
+    private TextBlock? _splitLabel;
+    private TextBlock? _splitHint;
+    private TextBlock? _fullLabel;
+    private TextBlock? _fullHint;
+
+    // Server list (subscription)
+    private TextBlock? _serverListHeader;
+    private ListBox? _serverList;
+
+    // CTA buttons (3 variants)
+    private Avalonia.Controls.Button? _ctaConnect;
+    private Avalonia.Controls.Button? _ctaConnecting;
+    private Avalonia.Controls.Button? _ctaDisconnect;
+
+    // Bottom card
+    private TextBlock? _advCardTitle;
+    private TextBlock? _advCardSubtitle;
+
+    // Header
+    private TextBlock? _brandTitle;
+    private Avalonia.Controls.Button? _languageToggle;
+
+    // State
+    private bool _formExpanded = false;
     private List<VlessServerEntry> _cachedServers = new();
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     public override void OnFrameworkInitializationCompleted()
     {
-        // Apply theme + locale BEFORE building the view so labels are
-        // localized correctly on first paint.
         Localization.LoadFromStorage();
         ApplyTheme();
 
         if (ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.ISingleViewApplicationLifetime singleView)
         {
-            singleView.MainView = BuildPhase2View();
+            singleView.MainView = BuildSimplePageView();
             MainActivity.IntentChanged += OnIntentChanged;
-            UpdateButtonState(MainActivity.IntendedConnected);
-            // Restore cached server list from previous session.
+            UpdateConnectionState(MainActivity.IntendedConnected);
             ReloadServerList();
         }
 
@@ -81,36 +113,25 @@ public partial class AndroidApp : Avalonia.Application
     private void ApplyTheme()
     {
         var pref = AndroidStorage.GetTheme();
+        // Default to Light to match desktop.
         RequestedThemeVariant = pref switch
         {
-            "light" => ThemeVariant.Light,
+            "dark" => ThemeVariant.Dark,
             "system" => ThemeVariant.Default,
-            _ => ThemeVariant.Dark, // default for parity with desktop
+            _ => ThemeVariant.Light,
         };
     }
 
-    // ── Token resolution ───────────────────────────────────────────────
+    // ── Token helpers ───────────────────────────────────────────────────
 
-    /// <summary>
-    /// Resolve a SolidColorBrush from the merged Tokens.axaml at the
-    /// current ActualThemeVariant. Falls back to Brushes.Transparent if
-    /// the key is missing — should not happen in practice (every desktop
-    /// token has both a Color and a Brush variant under both Light and
-    /// Dark dictionaries).
-    /// </summary>
     private IBrush GetBrush(string key)
     {
-        if (Resources.TryGetResource(key, ActualThemeVariant, out var v) && v is IBrush b)
-            return b;
+        if (Resources.TryGetResource(key, ActualThemeVariant, out var v) && v is IBrush b) return b;
         return Brushes.Transparent;
     }
 
     private double GetRadius(string key)
     {
-        // Tokens.axaml stores radii as `<sys:Double x:Key="RadiusXs">3</sys:Double>`
-        // outside ThemeDictionaries (theme-invariant), so the lookup uses
-        // ActualThemeVariant but Avalonia's resource resolver still finds
-        // the global value.
         if (Resources.TryGetResource(key, ActualThemeVariant, out var v))
         {
             return v switch
@@ -124,44 +145,35 @@ public partial class AndroidApp : Avalonia.Application
     }
 
     /// <summary>
-    /// v3.0 Phase 2 view (2026-05-04) — desktop visual parity.
-    /// Card-based layout with shared Arctic design tokens. Tokens
-    /// come from VPNRouter.App/Styles/Tokens.axaml linked at build
-    /// time. The whole tree uses semantic brushes (SurfaceAppBrush,
-    /// AccentSolidBrush, BorderSubtleBrush, TextMutedBrush, etc.) so
-    /// theme variants and palette tweaks propagate automatically.
-    ///
-    /// <para>Layout: header bar (title + RU/EN toggle) → status card
-    /// (status text + Connect button) → server card (input + Save/QR
-    /// + Refresh + ListBox) → bottom hint. Each card has padding,
-    /// rounded corners (RadiusLg), subtle border. Mimics desktop
-    /// SimplePage's card pattern but stacked vertically for narrow
-    /// phone screen.</para>
+    /// SimplePage-equivalent view, code-behind. Mirrors
+    /// VPNRouter.App/Views/Pages/SimplePage.axaml section-by-section.
     /// </summary>
-    private Control BuildPhase2View()
+    private Control BuildSimplePageView()
     {
-        var bgBrush = GetBrush("SurfaceAppBrush");
-        var cardBrush = GetBrush("SurfaceBaseBrush");
+        var bg = GetBrush("SurfaceAppBrush");
+        var card = GetBrush("SurfaceBaseBrush");
+        var raised = GetBrush("SurfaceRaisedBrush");
+        var sunken = GetBrush("SurfaceSunkenBrush");
         var subtleBorder = GetBrush("BorderSubtleBrush");
         var defaultBorder = GetBrush("BorderDefaultBrush");
         var textPrimary = GetBrush("TextPrimaryBrush");
         var textSecondary = GetBrush("TextSecondaryBrush");
         var textMuted = GetBrush("TextMutedBrush");
+        var accentBgSubtle = GetBrush("AccentBgSubtleBrush");
+        var accentFg = GetBrush("AccentFgBrush");
         var accentSolid = GetBrush("AccentSolidBrush");
         var accentOnSolid = GetBrush("AccentOnSolidBrush");
-        var accentBgSubtle = GetBrush("AccentBgSubtleBrush");
         var accentBorder = GetBrush("AccentBorderBrush");
-        var accentFg = GetBrush("AccentFgBrush");
-        var radiusLg = GetRadius("RadiusLg");      // 10
-        var radiusMd = GetRadius("RadiusMd");      // 8
-        var radiusSm = GetRadius("RadiusSm");      // 6
+        var radiusXs = GetRadius("RadiusXs");
+        var radiusSm = GetRadius("RadiusSm");
+        var radiusMd = GetRadius("RadiusMd");
 
-        // ── Header (title + language toggle) ────────────────────────────
-        _titleBlock = new TextBlock
+        // ── Mini-header (brand + lang toggle) ───────────────────────────
+        _brandTitle = new TextBlock
         {
-            Text = Localization.Title,
-            FontSize = 24,
-            FontWeight = FontWeight.SemiBold,
+            Text = "VPNRouter",
+            FontSize = 16,
+            FontWeight = FontWeight.Bold,
             Foreground = textPrimary,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -169,9 +181,9 @@ public partial class AndroidApp : Avalonia.Application
         _languageToggle = new Avalonia.Controls.Button
         {
             Content = Localization.LangToggleLabel,
-            FontSize = 12,
+            FontSize = 11,
             FontWeight = FontWeight.Medium,
-            Padding = new Thickness(14, 6),
+            Padding = new Thickness(12, 5),
             CornerRadius = new CornerRadius(radiusSm),
             Background = accentBgSubtle,
             Foreground = accentFg,
@@ -181,216 +193,487 @@ public partial class AndroidApp : Avalonia.Application
         };
         _languageToggle.Click += OnLanguageToggleClicked;
 
-        var headerGrid = new Grid
+        var headerRow = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(20, 24, 20, 0),
+            Margin = new Thickness(16, 12, 16, 0),
         };
-        Grid.SetColumn(_titleBlock, 0);
+        Grid.SetColumn(_brandTitle, 0);
         Grid.SetColumn(_languageToggle, 1);
-        headerGrid.Children.Add(_titleBlock);
-        headerGrid.Children.Add(_languageToggle);
+        headerRow.Children.Add(_brandTitle);
+        headerRow.Children.Add(_languageToggle);
 
-        _subtitleBlock = new TextBlock
+        // ── Status card (dot + title + description) ─────────────────────
+        _statusDot = new Ellipse
         {
-            Text = Localization.Subtitle,
-            FontSize = 12,
-            Foreground = textMuted,
-            Margin = new Thickness(20, 6, 20, 0),
-            TextWrapping = TextWrapping.Wrap,
+            Width = 10,
+            Height = 10,
+            VerticalAlignment = VerticalAlignment.Center,
+            Fill = GetBrush("TextMutedBrush"),
         };
 
-        // ── Status + Connect card ───────────────────────────────────────
-        _statusBlock = new TextBlock
+        _statusTitle = new TextBlock
         {
-            Text = Localization.StatusDisconnected,
-            FontSize = 22,
-            FontWeight = FontWeight.SemiBold,
+            Text = Localization.SimpleStatusTitleOff,
+            FontSize = 15,
+            FontWeight = FontWeight.Bold,
             Foreground = textPrimary,
-            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
         };
 
-        _toggleButton = new Avalonia.Controls.Button
+        _statusDesc = new TextBlock
         {
-            Content = Localization.ButtonConnect,
-            FontSize = 16,
-            FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(48, 14),
-            CornerRadius = new CornerRadius(radiusMd),
-            Background = accentSolid,
-            Foreground = accentOnSolid,
-            BorderThickness = new Thickness(0),
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 16, 0, 0),
+            Text = Localization.SimpleStatusDescOff,
+            FontSize = 11,
+            Foreground = textSecondary,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(20, 0, 0, 0),
+            LineHeight = 16,
         };
-        _toggleButton.Click += OnToggleClicked;
+
+        var statusHeaderRow = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 10,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { _statusDot, _statusTitle },
+        };
 
         var statusCard = new Border
         {
-            Background = cardBrush,
-            BorderBrush = subtleBorder,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(radiusLg),
-            Padding = new Thickness(20, 24),
-            Margin = new Thickness(20, 16, 20, 0),
+            BorderBrush = defaultBorder,
+            Background = card,
+            CornerRadius = new CornerRadius(radiusMd),
+            Padding = new Thickness(14),
             Child = new StackPanel
             {
-                Children = { _statusBlock, _toggleButton }
+                Spacing = 8,
+                Children = { statusHeaderRow, _statusDesc },
             }
         };
 
-        // ── Server card: input + Save/QR/Refresh + ListBox ──────────────
-        _serverHeaderBlock = new TextBlock
+        // ── Config row button (tappable, expands form) ──────────────────
+        var flagIcon = new Border
         {
-            Text = Localization.ServerHeader,
-            FontSize = 13,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = textSecondary,
-            Margin = new Thickness(0, 0, 0, 8),
+            Width = 24,
+            Height = 24,
+            CornerRadius = new CornerRadius(radiusXs),
+            Background = accentBgSubtle,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock
+            {
+                Text = "⚑",
+                FontSize = 12,
+                Foreground = accentFg,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            }
         };
 
-        _serverInputBox = new TextBox
+        _configRowLabel = new TextBlock
         {
-            Watermark = Localization.ServerInputWatermark,
-            FontSize = 13,
-            AcceptsReturn = false,
-            TextWrapping = TextWrapping.Wrap,
-            MinHeight = 64,
-            CornerRadius = new CornerRadius(radiusSm),
-            BorderBrush = defaultBorder,
+            Text = Localization.SmpConfigRowLabel,
+            FontSize = 9,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = textMuted,
+        };
+
+        _configRowValue = new TextBlock
+        {
+            Text = Localization.SimpleConfigSummary,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = textPrimary,
+            FontFamily = new FontFamily("monospace"),
+        };
+
+        _configRowChevron = new TextBlock
+        {
+            Text = "›",
+            FontSize = 14,
+            Foreground = textMuted,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var configRowGrid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            ColumnSpacing = 10,
+            Margin = new Thickness(12, 8),
+        };
+        Grid.SetColumn(flagIcon, 0);
+        configRowGrid.Children.Add(flagIcon);
+        var configRowText = new StackPanel
+        {
+            Spacing = 1,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { _configRowLabel, _configRowValue }
+        };
+        Grid.SetColumn(configRowText, 1);
+        configRowGrid.Children.Add(configRowText);
+        Grid.SetColumn(_configRowChevron, 2);
+        configRowGrid.Children.Add(_configRowChevron);
+
+        var configRowButton = new Avalonia.Controls.Button
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Padding = new Thickness(0),
             BorderThickness = new Thickness(1),
-            // Phase 2 keyboard fix: TextBox is NOT auto-focused on view
-            // attach. The Activity-level WindowSoftInputMode=StateHidden
-            // is the primary mechanism, but Focusable=true at the property
-            // level still allows tap-to-focus when user explicitly chooses.
+            BorderBrush = subtleBorder,
+            Background = raised,
+            CornerRadius = new CornerRadius(radiusSm),
+            Content = configRowGrid,
+        };
+        configRowButton.Click += OnConfigRowClicked;
+
+        // ── Collapsible form (input + tunnel mode radios + autostart) ───
+        _serverInputLabel = new TextBlock
+        {
+            Text = Localization.SmpInputLabel,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = textPrimary,
+        };
+
+        _serverInput = new TextBox
+        {
+            FontSize = 11,
+            Padding = new Thickness(10, 7),
+            AcceptsReturn = false,
+            CornerRadius = new CornerRadius(radiusXs),
+            Watermark = Localization.SmpInputWatermark,
         };
         var existingSub = AndroidStorage.GetSubscriptionUrl();
         var existingUri = AndroidStorage.GetVlessUri();
-        _serverInputBox.Text = existingSub ?? existingUri ?? string.Empty;
+        _serverInput.Text = existingSub ?? existingUri ?? string.Empty;
 
-        _saveServerButton = StyledSecondaryButton(Localization.ButtonSave);
-        _saveServerButton.Click += OnSaveServerClicked;
-
-        _refreshSubButton = StyledSecondaryButton(Localization.ButtonRefresh);
-        _refreshSubButton.Margin = new Thickness(8, 0, 0, 0);
-        _refreshSubButton.Click += OnRefreshClicked;
-
-        // Phase 2.4 — QR scan button (Bonus). Currently a placeholder
-        // that surfaces a "QR scan coming soon" toast — full ZXing
-        // integration deferred to Phase 2.5 to keep this iteration
-        // shippable. Button is wired and clickable for UX feedback.
-        var qrButton = StyledSecondaryButton("📷 QR");
-        qrButton.Margin = new Thickness(8, 0, 0, 0);
-        qrButton.Click += OnScanQrClicked;
-
-        var buttonRow = new StackPanel
+        _serverInputHint = new TextBlock
         {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 12, 0, 0),
-            Children = { _saveServerButton, qrButton, _refreshSubButton },
-        };
-
-        _serverInputStatus = new TextBlock
-        {
-            Text = Localization.ServerInputHintInitial,
-            FontSize = 11,
+            Text = Localization.SmpInputHint,
+            FontSize = 9,
             Foreground = textMuted,
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 12, 0, 0),
         };
 
-        _serverListHeader = new TextBlock
+        _serverInputError = new TextBlock
         {
-            Text = Localization.AvailableServers,
-            FontSize = 13,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = textSecondary,
-            Margin = new Thickness(0, 20, 0, 8),
+            FontSize = 10,
+            Foreground = GetBrush("DangerFgBrush"),
+            TextWrapping = TextWrapping.Wrap,
             IsVisible = false,
         };
 
+        // Save + Refresh + QR button row
+        var saveBtn = StyledSecondaryButton(Localization.ButtonSave);
+        saveBtn.Click += OnSaveClicked;
+        var refreshBtn = StyledSecondaryButton(Localization.ButtonRefresh);
+        refreshBtn.Margin = new Thickness(8, 0, 0, 0);
+        refreshBtn.Click += OnRefreshClicked;
+        var qrBtn = StyledSecondaryButton("📷 QR");
+        qrBtn.Margin = new Thickness(8, 0, 0, 0);
+        qrBtn.Click += OnScanQrClicked;
+        var actionRow = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Children = { saveBtn, qrBtn, refreshBtn },
+        };
+
+        var inputSection = new StackPanel
+        {
+            Spacing = 4,
+            Children = { _serverInputLabel, _serverInput, _serverInputHint, _serverInputError, actionRow },
+        };
+
+        // Tunnel mode (split / full)
+        _tunnelModeLabel = new TextBlock
+        {
+            Text = Localization.SmpTunnelModeLabel,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = textPrimary,
+        };
+
+        _splitLabel = new TextBlock
+        {
+            Text = Localization.SmpSplitOption,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = textPrimary,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _splitRadio = new Avalonia.Controls.RadioButton
+        {
+            GroupName = "TunnelMode",
+            IsChecked = false, // Android default: full (per Phase 3 P0 fix)
+            Content = _splitLabel,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            MinHeight = 0,
+            Padding = new Thickness(4, 0),
+        };
+        _splitHint = new TextBlock
+        {
+            Text = Localization.SmpSplitHint,
+            FontSize = 9,
+            Foreground = textMuted,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(24, 0, 0, 0),
+        };
+        _fullLabel = new TextBlock
+        {
+            Text = Localization.SmpFullOption,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = textPrimary,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _fullRadio = new Avalonia.Controls.RadioButton
+        {
+            GroupName = "TunnelMode",
+            IsChecked = true, // Android default: route everything
+            Content = _fullLabel,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            MinHeight = 0,
+            Padding = new Thickness(4, 0),
+        };
+        _fullHint = new TextBlock
+        {
+            Text = Localization.SmpFullHint,
+            FontSize = 9,
+            Foreground = textMuted,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(24, 0, 0, 0),
+        };
+
+        var tunnelSection = new StackPanel
+        {
+            Spacing = 4,
+            Children =
+            {
+                _tunnelModeLabel,
+                new StackPanel
+                {
+                    Spacing = 8,
+                    Children =
+                    {
+                        new StackPanel { Spacing = 1, Children = { _splitRadio, _splitHint } },
+                        new StackPanel { Spacing = 1, Children = { _fullRadio, _fullHint } },
+                    }
+                }
+            }
+        };
+
+        // Subscription server list (only visible when subscription has servers)
+        _serverListHeader = new TextBlock
+        {
+            Text = Localization.AvailableServers,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = textPrimary,
+            IsVisible = false,
+        };
         _serverList = new ListBox
         {
-            MaxHeight = 280,
+            MaxHeight = 240,
             IsVisible = false,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
         };
         _serverList.SelectionChanged += OnServerSelectionChanged;
 
-        var serverCard = new Border
+        var listSection = new StackPanel
         {
-            Background = cardBrush,
-            BorderBrush = subtleBorder,
+            Spacing = 4,
+            Children = { _serverListHeader, _serverList }
+        };
+
+        _formCard = new Border
+        {
+            IsVisible = _formExpanded,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(radiusLg),
-            Padding = new Thickness(20, 18),
-            Margin = new Thickness(20, 16, 20, 0),
+            BorderBrush = subtleBorder,
+            Background = card,
+            CornerRadius = new CornerRadius(radiusSm),
+            Padding = new Thickness(12),
             Child = new StackPanel
             {
-                Children =
-                {
-                    _serverHeaderBlock,
-                    _serverInputBox,
-                    buttonRow,
-                    _serverInputStatus,
-                    _serverListHeader,
-                    _serverList,
-                }
+                Spacing = 14,
+                Children = { inputSection, tunnelSection, listSection }
             }
         };
 
-        // ── Bottom hint ─────────────────────────────────────────────────
-        _hintBlock = new TextBlock
+        // ── CTA — three mutually exclusive variants ─────────────────────
+        // Disconnected (default visible): outlined accent
+        _ctaConnect = new Avalonia.Controls.Button
         {
-            Text = Localization.HintTunnel,
-            FontSize = 11,
+            Content = Localization.ButtonConnect,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Padding = new Thickness(0, 12),
+            FontSize = 12,
+            FontWeight = FontWeight.Bold,
+            Background = card,
+            Foreground = accentFg,
+            BorderBrush = accentBorder,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(radiusSm),
+            IsVisible = true,
+        };
+        _ctaConnect.Click += OnConnectClicked;
+
+        // Connecting: sunken disabled
+        _ctaConnecting = new Avalonia.Controls.Button
+        {
+            Content = Localization.ButtonConnecting,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Padding = new Thickness(0, 12),
+            FontSize = 12,
+            FontWeight = FontWeight.Bold,
+            Background = sunken,
+            Foreground = textSecondary,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(radiusSm),
+            IsEnabled = false,
+            IsVisible = false,
+        };
+
+        // Connected: accent solid (bg blue, text white) — per design NOT red
+        _ctaDisconnect = new Avalonia.Controls.Button
+        {
+            Content = Localization.ButtonDisconnect,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Padding = new Thickness(0, 12),
+            FontSize = 12,
+            FontWeight = FontWeight.Bold,
+            Background = accentSolid,
+            Foreground = accentOnSolid,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(radiusSm),
+            IsVisible = false,
+        };
+        _ctaDisconnect.Click += OnConnectClicked;
+
+        // ── Расширенные настройки card (placeholder navigation) ─────────
+        _advCardTitle = new TextBlock
+        {
+            Text = Localization.SmpAdvCardTitle,
+            FontSize = 12,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = textPrimary,
+        };
+        _advCardSubtitle = new TextBlock
+        {
+            Text = Localization.SmpAdvCardSubtitle,
+            FontSize = 9,
             Foreground = textMuted,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            TextAlignment = TextAlignment.Center,
-            Margin = new Thickness(20, 24, 20, 24),
             TextWrapping = TextWrapping.Wrap,
         };
-
-        var stack = new StackPanel
+        var chevronCircle = new Border
         {
+            Width = 28,
+            Height = 28,
+            CornerRadius = new CornerRadius(radiusSm),
+            Background = accentBgSubtle,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock
+            {
+                Text = "›",
+                FontSize = 15,
+                FontWeight = FontWeight.Bold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = accentFg,
+            }
+        };
+        var advGrid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 10,
+            Margin = new Thickness(14, 12),
+        };
+        var advText = new StackPanel
+        {
+            Spacing = 3,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { _advCardTitle, _advCardSubtitle }
+        };
+        Grid.SetColumn(advText, 0);
+        advGrid.Children.Add(advText);
+        Grid.SetColumn(chevronCircle, 1);
+        advGrid.Children.Add(chevronCircle);
+        var advCardButton = new Avalonia.Controls.Button
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Padding = new Thickness(0),
+            BorderThickness = new Thickness(1),
+            BorderBrush = defaultBorder,
+            Background = card,
+            CornerRadius = new CornerRadius(radiusMd),
+            Content = advGrid,
+        };
+        advCardButton.Click += OnAdvCardClicked;
+
+        // ── Inner stack with all sections, max 420 wide on tablets ──────
+        var innerStack = new StackPanel
+        {
+            Spacing = 14,
             Children =
             {
-                headerGrid,
-                _subtitleBlock,
                 statusCard,
-                serverCard,
-                _hintBlock,
+                configRowButton,
+                _formCard,
+                _ctaConnect,
+                _ctaConnecting,
+                _ctaDisconnect,
+                advCardButton,
             }
         };
 
-        var scrollWrapper = new ScrollViewer
+        var innerWrapper = new Grid
         {
-            Content = stack,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Background = bgBrush,
+            MaxWidth = 420,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Children = { innerStack }
         };
 
-        return scrollWrapper;
+        var outerGrid = new Grid
+        {
+            Margin = new Thickness(16, 0, 16, 0),
+            Children = { innerWrapper }
+        };
+
+        var contentStack = new StackPanel
+        {
+            Spacing = 0,
+            Children = { headerRow, outerGrid }
+        };
+
+        return new ScrollViewer
+        {
+            Content = contentStack,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Padding = new Thickness(0, 0, 0, 16),
+            Background = bg,
+        };
     }
 
-    /// <summary>
-    /// Style helper for "secondary" buttons (Save, Refresh, QR) — outline
-    /// with subtle border, neutral surface bg, semi-bold label. Mirrors
-    /// desktop's "secondary action" button pattern.
-    /// </summary>
     private Avalonia.Controls.Button StyledSecondaryButton(string label)
     {
         return new Avalonia.Controls.Button
         {
             Content = label,
-            FontSize = 13,
+            FontSize = 12,
             FontWeight = FontWeight.Medium,
-            Padding = new Thickness(16, 8),
-            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Padding = new Thickness(14, 7),
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
             Background = GetBrush("SurfaceRaisedBrush"),
             Foreground = GetBrush("TextPrimaryBrush"),
             BorderBrush = GetBrush("BorderDefaultBrush"),
@@ -398,108 +681,102 @@ public partial class AndroidApp : Avalonia.Application
         };
     }
 
-    /// <summary>
-    /// Phase 2.4 placeholder — full ZXing camera scanner is queued
-    /// for Phase 2.5. For now this surfaces a "coming soon" hint
-    /// in the input-status line so users discover the planned feature.
-    /// </summary>
-    private void OnScanQrClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    // ── Event handlers ─────────────────────────────────────────────────
+
+    private void OnConfigRowClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (_serverInputStatus is null) return;
-        _serverInputStatus.Text = Localization.QrComingSoon;
-        _serverInputStatus.Opacity = 0.85;
+        _formExpanded = !_formExpanded;
+        if (_formCard is not null) _formCard.IsVisible = _formExpanded;
+        if (_configRowChevron is not null) _configRowChevron.Text = _formExpanded ? "⌄" : "›";
     }
 
-    // ── Connect / Disconnect ────────────────────────────────────────────
-
-    private void OnToggleClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private void OnConnectClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         var activity = MainActivity.Instance;
         if (activity is null) return;
-
-        if (MainActivity.IntendedConnected)
-            activity.RequestDisconnect();
-        else
-            activity.RequestConnect();
+        if (MainActivity.IntendedConnected) activity.RequestDisconnect();
+        else activity.RequestConnect();
     }
 
     private void OnIntentChanged(bool connected)
     {
-        Dispatcher.UIThread.Post(() => UpdateButtonState(connected));
+        Dispatcher.UIThread.Post(() => UpdateConnectionState(connected));
     }
 
-    private void UpdateButtonState(bool connected)
+    private void UpdateConnectionState(bool connected)
     {
-        if (_toggleButton is null || _statusBlock is null) return;
+        if (_statusDot is null) return;
 
         if (connected)
         {
-            _toggleButton.Content = Localization.ButtonDisconnect;
-            _statusBlock.Text = Localization.StatusConnected;
+            _statusDot.Fill = GetBrush("SuccessSolidBrush");
+            if (_statusTitle is not null) _statusTitle.Text = Localization.SimpleStatusTitleOn;
+            if (_statusDesc is not null) _statusDesc.Text = Localization.SimpleStatusDescOn;
+            if (_ctaConnect is not null) _ctaConnect.IsVisible = false;
+            if (_ctaConnecting is not null) _ctaConnecting.IsVisible = false;
+            if (_ctaDisconnect is not null) _ctaDisconnect.IsVisible = true;
         }
         else
         {
-            _toggleButton.Content = Localization.ButtonConnect;
-            _statusBlock.Text = Localization.StatusDisconnected;
+            _statusDot.Fill = GetBrush("TextMutedBrush");
+            if (_statusTitle is not null) _statusTitle.Text = Localization.SimpleStatusTitleOff;
+            if (_statusDesc is not null) _statusDesc.Text = Localization.SimpleStatusDescOff;
+            if (_ctaConnect is not null) _ctaConnect.IsVisible = true;
+            if (_ctaConnecting is not null) _ctaConnecting.IsVisible = false;
+            if (_ctaDisconnect is not null) _ctaDisconnect.IsVisible = false;
         }
+        UpdateConfigSummary();
     }
 
-    // ── Save / Refresh server input ─────────────────────────────────────
-
-    /// <summary>
-    /// Auto-detect input type:
-    ///   - <c>vless://...</c> → manual single server (validate + store)
-    ///   - <c>http(s)://...</c> → subscription URL (store, then user taps Refresh)
-    ///   - empty → clear stored values
-    /// Save does NOT fetch — Refresh does. This split lets the user save
-    /// a subscription URL without immediately hitting the network.
-    /// </summary>
-    private void OnSaveServerClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private void UpdateConfigSummary()
     {
-        if (_serverInputBox is null || _serverInputStatus is null) return;
+        if (_configRowValue is null) return;
+        var mode = _fullRadio?.IsChecked == true ? Localization.SmpFullOption : Localization.SmpSplitOption;
+        var src = AndroidStorage.GetSubscriptionUrl() != null ? Localization.SmpSourceSubscription : Localization.SmpSourceManual;
+        _configRowValue.Text = $"{src} · {mode.ToLower()}";
+    }
 
-        var raw = (_serverInputBox.Text ?? string.Empty).Trim();
+    private void OnSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_serverInput is null || _serverInputError is null) return;
+        var raw = (_serverInput.Text ?? string.Empty).Trim();
+        _serverInputError.IsVisible = false;
 
         if (string.IsNullOrWhiteSpace(raw))
         {
-            // Clear everything — fall back to placeholder on Connect.
             AndroidStorage.SetVlessUri(null);
             AndroidStorage.SetSubscriptionUrl(null);
             AndroidStorage.SetServers(null);
             AndroidStorage.SetSelectedServerName(null);
             _cachedServers = new List<VlessServerEntry>();
             UpdateServerListView();
-            _serverInputStatus.Text = Localization.SaveStatusCleared;
-            _serverInputStatus.Opacity = 0.65;
+            UpdateConfigSummary();
             return;
         }
 
         if (raw.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
         {
-            // Manual single server.
             try
             {
                 var parsed = VlessUriParser.Parse(raw);
                 if (string.IsNullOrEmpty(parsed.Server) || parsed.Port <= 0)
                 {
-                    _serverInputStatus.Text = Localization.SaveStatusUriBadHost;
-                    _serverInputStatus.Opacity = 0.95;
+                    _serverInputError.Text = Localization.SaveStatusUriBadHost;
+                    _serverInputError.IsVisible = true;
                     return;
                 }
                 AndroidStorage.SetVlessUri(raw);
-                // Manual URI wins over subscription selection.
                 AndroidStorage.SetSubscriptionUrl(null);
                 AndroidStorage.SetServers(null);
                 AndroidStorage.SetSelectedServerName(null);
                 _cachedServers = new List<VlessServerEntry>();
                 UpdateServerListView();
-                _serverInputStatus.Text = string.Format(Localization.SaveStatusUriOk, parsed.Server, parsed.Port);
-                _serverInputStatus.Opacity = 0.65;
+                UpdateConfigSummary();
             }
             catch (Exception ex)
             {
-                _serverInputStatus.Text = string.Format(Localization.SaveStatusUriInvalid, ex.Message);
-                _serverInputStatus.Opacity = 0.95;
+                _serverInputError.Text = string.Format(Localization.SaveStatusUriInvalid, ex.Message);
+                _serverInputError.IsVisible = true;
             }
             return;
         }
@@ -507,94 +784,65 @@ public partial class AndroidApp : Avalonia.Application
         if (raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             raw.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
-            // Subscription URL — just store. Refresh button does the fetch.
             AndroidStorage.SetSubscriptionUrl(raw);
             AndroidStorage.SetVlessUri(null);
-            _serverInputStatus.Text = Localization.SaveStatusSubStored;
-            _serverInputStatus.Opacity = 0.65;
+            UpdateConfigSummary();
             return;
         }
 
-        _serverInputStatus.Text = Localization.SaveStatusUnknown;
-        _serverInputStatus.Opacity = 0.95;
+        _serverInputError.Text = Localization.SaveStatusUnknown;
+        _serverInputError.IsVisible = true;
     }
 
-    /// <summary>
-    /// Fetch the stored subscription URL and populate the server list.
-    /// No-op if no URL is stored. Async/await stays on the dispatcher
-    /// thread thanks to Avalonia's SynchronizationContext.
-    /// </summary>
     private async void OnRefreshClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (_serverInputStatus is null || _refreshSubButton is null) return;
-
+        if (_serverInputError is null) return;
         var url = AndroidStorage.GetSubscriptionUrl();
-
-        // If user typed a URL but hasn't tapped Save, use the live text.
-        if (string.IsNullOrEmpty(url) && _serverInputBox is not null)
+        if (string.IsNullOrEmpty(url) && _serverInput is not null)
         {
-            var raw = (_serverInputBox.Text ?? string.Empty).Trim();
+            var raw = (_serverInput.Text ?? string.Empty).Trim();
             if (raw.StartsWith("http", StringComparison.OrdinalIgnoreCase))
             {
                 AndroidStorage.SetSubscriptionUrl(raw);
                 url = raw;
             }
         }
-
         if (string.IsNullOrWhiteSpace(url))
         {
-            _serverInputStatus.Text = Localization.RefreshNeedsUrl;
-            _serverInputStatus.Opacity = 0.85;
+            _serverInputError.Text = Localization.RefreshNeedsUrl;
+            _serverInputError.IsVisible = true;
             return;
         }
 
-        _refreshSubButton.IsEnabled = false;
-        _serverInputStatus.Text = Localization.RefreshFetching;
-        _serverInputStatus.Opacity = 0.65;
-
+        _serverInputError.IsVisible = false;
         try
         {
             var servers = await SubscriptionFetcher.FetchAsync(url, logger: null, ct: System.Threading.CancellationToken.None).ConfigureAwait(true);
             var list = new List<VlessServerEntry>(servers);
-
             AndroidStorage.SetServers(list);
             _cachedServers = list;
             UpdateServerListView();
-
-            // Auto-select first server if nothing's currently selected.
             var prevSelected = AndroidStorage.GetSelectedServerName();
             var hasPrev = !string.IsNullOrEmpty(prevSelected) &&
                           list.Exists(s => string.Equals(s.Name, prevSelected, StringComparison.OrdinalIgnoreCase));
             if (!hasPrev && list.Count > 0)
             {
                 AndroidStorage.SetSelectedServerName(list[0].Name);
-                if (_serverList is not null)
-                    _serverList.SelectedIndex = 0;
+                if (_serverList is not null) _serverList.SelectedIndex = 0;
             }
-
-            _serverInputStatus.Text = string.Format(Localization.RefreshOk, list.Count);
-            _serverInputStatus.Opacity = 0.65;
+            UpdateConfigSummary();
         }
         catch (Exception ex)
         {
-            _serverInputStatus.Text = string.Format(Localization.RefreshFailed, ex.Message);
-            _serverInputStatus.Opacity = 0.95;
-        }
-        finally
-        {
-            _refreshSubButton.IsEnabled = true;
+            _serverInputError.Text = string.Format(Localization.RefreshFailed, ex.Message);
+            _serverInputError.IsVisible = true;
         }
     }
 
     private void OnServerSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (_serverList is null || _serverList.SelectedItem is not VlessServerEntry entry) return;
-        AndroidStorage.SetSelectedServerName(entry.Name);
-        if (_serverInputStatus is not null)
-        {
-            _serverInputStatus.Text = string.Format(Localization.ServerSelected, entry.Name, entry.Server, entry.Port);
-            _serverInputStatus.Opacity = 0.65;
-        }
+        if (_serverList?.SelectedItem is VlessServerEntry entry)
+            AndroidStorage.SetSelectedServerName(entry.Name);
     }
 
     private void ReloadServerList()
@@ -606,29 +854,25 @@ public partial class AndroidApp : Avalonia.Application
     private void UpdateServerListView()
     {
         if (_serverList is null || _serverListHeader is null) return;
-
         var visible = _cachedServers.Count > 0;
         _serverList.IsVisible = visible;
         _serverListHeader.IsVisible = visible;
-
         _serverList.ItemsSource = _cachedServers;
-        // ItemTemplate not bound here — VlessServerEntry.ToString fallback
-        // is verbose. Configure DisplayMember-style binding via simple
-        // template:
         _serverList.ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<VlessServerEntry>(
             (item, _) =>
             {
                 var name = new TextBlock
                 {
                     Text = string.IsNullOrEmpty(item?.Name) ? (item?.Server ?? "?") : item.Name,
-                    FontSize = 14,
+                    FontSize = 12,
                     FontWeight = FontWeight.Medium,
+                    Foreground = GetBrush("TextPrimaryBrush"),
                 };
                 var sub = new TextBlock
                 {
                     Text = $"{item?.Server}:{item?.Port}  ·  {item?.Protocol ?? "vless"}",
-                    FontSize = 11,
-                    Opacity = 0.6,
+                    FontSize = 10,
+                    Foreground = GetBrush("TextMutedBrush"),
                 };
                 return new StackPanel
                 {
@@ -636,10 +880,7 @@ public partial class AndroidApp : Avalonia.Application
                     Margin = new Thickness(8, 6),
                     Children = { name, sub }
                 };
-            },
-            supportsRecycling: true);
-
-        // Restore previous selection.
+            }, supportsRecycling: true);
         var sel = AndroidStorage.GetSelectedServerName();
         if (!string.IsNullOrEmpty(sel))
         {
@@ -654,31 +895,44 @@ public partial class AndroidApp : Avalonia.Application
         }
     }
 
-    // ── Language toggle ─────────────────────────────────────────────────
+    private void OnAdvCardClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        // Phase 3 placeholder: would open an Advanced settings page on Android.
+        // For now expand the inline form (already exists).
+        if (!_formExpanded) OnConfigRowClicked(sender, e);
+    }
+
+    private void OnScanQrClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_serverInputError is null) return;
+        _serverInputError.Text = Localization.QrComingSoon;
+        _serverInputError.IsVisible = true;
+    }
 
     private void OnLanguageToggleClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         Localization.ToggleAndPersist();
-        // Refresh all visible localized strings.
-        if (_titleBlock is not null) _titleBlock.Text = Localization.Title;
-        if (_subtitleBlock is not null) _subtitleBlock.Text = Localization.Subtitle;
-        if (_serverHeaderBlock is not null) _serverHeaderBlock.Text = Localization.ServerHeader;
-        if (_serverInputBox is not null) _serverInputBox.Watermark = Localization.ServerInputWatermark;
-        if (_saveServerButton is not null) _saveServerButton.Content = Localization.ButtonSave;
-        if (_refreshSubButton is not null) _refreshSubButton.Content = Localization.ButtonRefresh;
-        if (_serverListHeader is not null) _serverListHeader.Text = Localization.AvailableServers;
+        if (_brandTitle is not null) _brandTitle.Text = "VPNRouter";
         if (_languageToggle is not null) _languageToggle.Content = Localization.LangToggleLabel;
-        if (_hintBlock is not null) _hintBlock.Text = Localization.HintTunnel;
-        // Phase 1.H polish: refresh the input-status line too. We can't
-        // know if it currently shows the initial hint vs a save/refresh
-        // result, so we always reset it to the initial localized hint —
-        // a small UX trade (loses last action message) for full RU/EN
-        // coverage.
-        if (_serverInputStatus is not null)
-        {
-            _serverInputStatus.Text = Localization.ServerInputHintInitial;
-            _serverInputStatus.Opacity = 0.65;
-        }
-        UpdateButtonState(MainActivity.IntendedConnected);
+        if (_statusTitle is not null)
+            _statusTitle.Text = MainActivity.IntendedConnected ? Localization.SimpleStatusTitleOn : Localization.SimpleStatusTitleOff;
+        if (_statusDesc is not null)
+            _statusDesc.Text = MainActivity.IntendedConnected ? Localization.SimpleStatusDescOn : Localization.SimpleStatusDescOff;
+        if (_configRowLabel is not null) _configRowLabel.Text = Localization.SmpConfigRowLabel;
+        if (_serverInputLabel is not null) _serverInputLabel.Text = Localization.SmpInputLabel;
+        if (_serverInput is not null) _serverInput.Watermark = Localization.SmpInputWatermark;
+        if (_serverInputHint is not null) _serverInputHint.Text = Localization.SmpInputHint;
+        if (_tunnelModeLabel is not null) _tunnelModeLabel.Text = Localization.SmpTunnelModeLabel;
+        if (_splitLabel is not null) _splitLabel.Text = Localization.SmpSplitOption;
+        if (_splitHint is not null) _splitHint.Text = Localization.SmpSplitHint;
+        if (_fullLabel is not null) _fullLabel.Text = Localization.SmpFullOption;
+        if (_fullHint is not null) _fullHint.Text = Localization.SmpFullHint;
+        if (_serverListHeader is not null) _serverListHeader.Text = Localization.AvailableServers;
+        if (_advCardTitle is not null) _advCardTitle.Text = Localization.SmpAdvCardTitle;
+        if (_advCardSubtitle is not null) _advCardSubtitle.Text = Localization.SmpAdvCardSubtitle;
+        if (_ctaConnect is not null) _ctaConnect.Content = Localization.ButtonConnect;
+        if (_ctaConnecting is not null) _ctaConnecting.Content = Localization.ButtonConnecting;
+        if (_ctaDisconnect is not null) _ctaDisconnect.Content = Localization.ButtonDisconnect;
+        UpdateConfigSummary();
     }
 }

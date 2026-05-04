@@ -51,7 +51,26 @@ public static class AndroidConfigBuilder
     public static string BuildConfigJson(VlessServerEntry entry)
     {
         var settings = new AppSettings();
-        settings.App.RoutingMode = "split";       // Android: VpnService allow-list governs which apps go through TUN
+        // v3.0 Phase 3 (2026-05-04) — P0 fix.
+        //
+        // Pre-3 RoutingMode="split" was wrong on Android. Split-tunnel on
+        // desktop uses sing-box's process_name rules to decide which app's
+        // traffic gets proxied; the rest falls through to `route.final =
+        // direct` and the `direct` outbound. On Android there are NO
+        // process_name rules (Android's per-app filter is at the
+        // VpnService.Builder.addAllowedApplication layer, not inside
+        // sing-box), so the empty rule set + final=direct means
+        // EVERYTHING goes to `direct` outbound — i.e. the VLESS server
+        // is never reached, traffic is just looped through the TUN back
+        // out the local interface. User-visible: VPN status icon shows
+        // up but no traffic actually proxies.
+        //
+        // Fix: RoutingMode="full" so every routed packet reaches
+        // `route.final = proxy` → VLESS outbound → upstream server.
+        // Per-app filtering is still possible via
+        // VpnService.Builder.addAllowed/Disallowed before establish() —
+        // wired in VpnRouterService.openTun().
+        settings.App.RoutingMode = "full";
         settings.App.LogLevel = "info";
         settings.App.ConfigMode = "generated";
         settings.Vless.Servers.Add(entry);

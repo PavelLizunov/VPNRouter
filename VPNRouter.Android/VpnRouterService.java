@@ -365,9 +365,32 @@ public final class VpnRouterService extends VpnService {
             return true;
         }
 
+        /**
+         * v3.0 Phase 3 (2026-05-04) — P0 fix.
+         *
+         * libbox calls this for every socket the sing-box runtime opens to
+         * reach an upstream server (the VLESS endpoint, the
+         * direct-outbound for split-tunnel, the DNS DoH endpoints, etc).
+         * Pre-3 we were a no-op, which meant those sockets had NO protect()
+         * marker and the kernel sent them BACK through our own VpnService
+         * TUN → infinite loop → all upstream sockets timed out → DNS
+         * resolution + every routed connection failed.
+         *
+         * <p>Symptom user reported 2026-05-04: "VPN through the app
+         * doesn't work" + ERR_NAME_NOT_RESOLVED across all apps in
+         * logcat (YouTube Music, Auth, Yandex Maps, etc).</p>
+         *
+         * <p>The fix is the canonical sagernet/sing-box-for-android
+         * pattern: forward to {@code VpnService.protect(int)}, which
+         * marks the fd as exempt from VPN routing rules so the kernel
+         * uses the underlying physical interface (wlan0 / cellular)
+         * for it.</p>
+         */
         @Override
         public void autoDetectInterfaceControl(int fd) throws Exception {
-            // let kernel handle it
+            if (!service.protect(fd)) {
+                throw new Exception("VpnService.protect(" + fd + ") failed");
+            }
         }
 
         @Override
