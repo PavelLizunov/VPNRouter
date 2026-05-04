@@ -120,6 +120,17 @@ public partial class AndroidApp : Avalonia.Application
     // log-path copied, settings reset done, etc.) without a real Snackbar.
     private TextBlock? _menuFeedback;
 
+    // v3.0 Phase 7.4 — in-app log viewer overlay. Shown when user taps
+    // Diagnostics > "Открыть лог" / "Open log". Reads last 50 KB of
+    // singbox.log into a monospace ScrollViewer. Closed via × button.
+    private Border? _logOverlay;
+    private TextBlock? _logViewerContent;
+    private TextBlock? _logViewerEmptyState;
+    private ScrollViewer? _logViewerScroller;
+    private TextBlock? _logViewerTitle;
+    private Avalonia.Controls.Button? _logViewerCloseBtn;
+    private Avalonia.Controls.Button? _logViewerRefreshBtn;
+
     // State
     private bool _formExpanded = false;
     private List<VlessServerEntry> _cachedServers = new();
@@ -874,13 +885,141 @@ public partial class AndroidApp : Avalonia.Application
             Children = { headerRow, outerGrid }
         };
 
-        return new ScrollViewer
+        var mainScroller = new ScrollViewer
         {
             Content = contentStack,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Padding = new Thickness(0, 0, 0, 16),
             Background = bg,
+        };
+
+        // v3.0 Phase 7.4 (2026-05-04) — fullscreen log-viewer overlay
+        // sits on top of the main content stack. Hidden by default; the
+        // Diagnostics > "Open log" menu action reads singbox.log into
+        // _logViewerContent and flips IsVisible=true.
+        _logOverlay = BuildLogOverlay();
+
+        return new Grid
+        {
+            Children = { mainScroller, _logOverlay }
+        };
+    }
+
+    /// <summary>
+    /// v3.0 Phase 7.4 (2026-05-04) — build the in-app log viewer overlay.
+    /// Layout: top title bar (× close, refresh, "singbox.log" title) +
+    /// a horizontally + vertically scrollable monospace TextBlock that
+    /// renders the last ~50 KB of the log file. Closes the handbook §5.6
+    /// gap (in-app logs viewer) so users can debug without adb.
+    /// </summary>
+    private Border BuildLogOverlay()
+    {
+        _logViewerTitle = new TextBlock
+        {
+            Text = "singbox.log",
+            FontSize = 13,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = GetBrush("TextPrimaryBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        _logViewerCloseBtn = new Avalonia.Controls.Button
+        {
+            Content = "✕",
+            FontSize = 16,
+            Width = 36,
+            Height = 36,
+            Padding = new Thickness(0),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Foreground = GetBrush("TextSecondaryBrush"),
+        };
+        _logViewerCloseBtn.Click += OnLogViewerCloseClicked;
+
+        _logViewerRefreshBtn = new Avalonia.Controls.Button
+        {
+            Content = "⟳",
+            FontSize = 16,
+            Width = 36,
+            Height = 36,
+            Padding = new Thickness(0),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Foreground = GetBrush("TextSecondaryBrush"),
+        };
+        _logViewerRefreshBtn.Click += OnLogViewerRefreshClicked;
+
+        var titleBar = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            Margin = new Thickness(8, 4, 4, 4),
+        };
+        Grid.SetColumn(_logViewerTitle, 0);
+        Grid.SetColumn(_logViewerRefreshBtn, 1);
+        Grid.SetColumn(_logViewerCloseBtn, 2);
+        _logViewerRefreshBtn.HorizontalAlignment = HorizontalAlignment.Right;
+        titleBar.Children.Add(_logViewerTitle);
+        titleBar.Children.Add(_logViewerRefreshBtn);
+        titleBar.Children.Add(_logViewerCloseBtn);
+
+        var titleBarBorder = new Border
+        {
+            Background = GetBrush("SurfaceRaisedBrush"),
+            BorderBrush = GetBrush("BorderSubtleBrush"),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Padding = new Thickness(8, 4),
+            Child = titleBar,
+        };
+
+        _logViewerContent = new TextBlock
+        {
+            FontFamily = new FontFamily("monospace"),
+            FontSize = 9,
+            Foreground = GetBrush("TextPrimaryBrush"),
+            TextWrapping = TextWrapping.NoWrap,
+            Padding = new Thickness(8),
+        };
+
+        _logViewerEmptyState = new TextBlock
+        {
+            FontSize = 12,
+            Foreground = GetBrush("TextMutedBrush"),
+            Text = string.Empty,
+            TextWrapping = TextWrapping.Wrap,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Padding = new Thickness(24),
+            IsVisible = false,
+        };
+
+        _logViewerScroller = new ScrollViewer
+        {
+            Content = _logViewerContent,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Background = GetBrush("SurfaceAppBrush"),
+        };
+
+        var contentArea = new Grid
+        {
+            Children = { _logViewerScroller, _logViewerEmptyState }
+        };
+
+        var dock = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(titleBarBorder, Dock.Top);
+        dock.Children.Add(titleBarBorder);
+        dock.Children.Add(contentArea);
+
+        return new Border
+        {
+            Background = GetBrush("SurfaceAppBrush"),
+            IsVisible = false,
+            Child = dock,
         };
     }
 
@@ -1558,14 +1697,44 @@ public partial class AndroidApp : Avalonia.Application
     }
 
     /// <summary>
-    /// v3.0 Phase 7.2 — Diagnostics > Open log. Triggers an
-    /// ACTION_VIEW intent on the singbox.log file so the user gets a
-    /// system text-viewer. Falls back to a feedback toast that prints
-    /// the path if no viewer is registered.
+    /// v3.0 Phase 7.4 (2026-05-04) — Diagnostics > Open log. Reads the
+    /// last 50 KB of <c>getExternalFilesDir()/singbox.log</c> into the
+    /// in-app overlay viewer. Pre-7.4 this only copied the path to the
+    /// clipboard, which closed handbook §5.6 only formally — users on
+    /// device couldn't actually read the log without `adb`.
     /// </summary>
     private void OnMenuOpenLogClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        ShowLogViewer();
+    }
+
+    private void ShowLogViewer()
+    {
+        if (_logOverlay is null) return;
+        LoadLogContent();
+        _logOverlay.IsVisible = true;
+    }
+
+    private void OnLogViewerCloseClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_logOverlay is not null) _logOverlay.IsVisible = false;
+    }
+
+    private void OnLogViewerRefreshClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        LoadLogContent();
+    }
+
+    /// <summary>
+    /// v3.0 Phase 7.4 — read the log file's tail (≤50 KB) into the
+    /// viewer's TextBlock. Caps the read so a multi-megabyte log file
+    /// doesn't OOM the GC. If the file doesn't exist or is empty,
+    /// surface an empty-state hint instead of a blank pane.
+    /// </summary>
+    private void LoadLogContent()
+    {
+        if (_logViewerContent is null) return;
         try
         {
             var ctx = global::Android.App.Application.Context;
@@ -1576,21 +1745,69 @@ public partial class AndroidApp : Avalonia.Application
 
             if (logPath is null || !System.IO.File.Exists(logPath))
             {
-                ShowMenuFeedback(Localization.SaveStatusUnknown);
+                ShowLogEmptyState(Localization.LogViewerEmpty);
                 return;
             }
 
-            // Defer to system: wrap the path in an ACTION_VIEW intent.
-            // Many devices don't have a default text-file viewer for
-            // .log files; if so we still copy the path to clipboard as
-            // a fallback so the user knows where it lives.
-            CopyToClipboard("singbox-log-path", logPath);
-            ShowMenuFeedback(logPath);
+            const int MaxBytes = 50_000;
+            string text;
+            using (var fs = System.IO.File.Open(logPath, System.IO.FileMode.Open,
+                                                System.IO.FileAccess.Read,
+                                                System.IO.FileShare.ReadWrite))
+            {
+                if (fs.Length <= MaxBytes)
+                {
+                    using var sr = new System.IO.StreamReader(fs);
+                    text = sr.ReadToEnd();
+                }
+                else
+                {
+                    fs.Seek(-MaxBytes, System.IO.SeekOrigin.End);
+                    using var sr = new System.IO.StreamReader(fs);
+                    // First line will be partial — drop it.
+                    sr.ReadLine();
+                    text = sr.ReadToEnd();
+                }
+            }
+
+            if (string.IsNullOrEmpty(text))
+            {
+                ShowLogEmptyState(Localization.LogViewerEmpty);
+                return;
+            }
+
+            _logViewerContent.Text = text;
+            if (_logViewerEmptyState is not null) _logViewerEmptyState.IsVisible = false;
+            if (_logViewerScroller is not null)
+            {
+                _logViewerScroller.IsVisible = true;
+                // Scroll to bottom so the most-recent lines are visible
+                // immediately. Defer to the next layout pass via
+                // Dispatcher to give the TextBlock a chance to measure.
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_logViewerScroller is null) return;
+                    _logViewerScroller.Offset = new Vector(
+                        _logViewerScroller.Offset.X,
+                        _logViewerScroller.Extent.Height);
+                }, DispatcherPriority.Background);
+            }
         }
         catch (Exception ex)
         {
-            ShowMenuFeedback($"Error: {ex.GetType().Name}");
+            ShowLogEmptyState(string.Format(Localization.LogViewerError,
+                ex.GetType().Name, ex.Message));
         }
+    }
+
+    private void ShowLogEmptyState(string message)
+    {
+        if (_logViewerEmptyState is not null)
+        {
+            _logViewerEmptyState.Text = message;
+            _logViewerEmptyState.IsVisible = true;
+        }
+        if (_logViewerScroller is not null) _logViewerScroller.IsVisible = false;
     }
 
     private void OnMenuCopyLogPathClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

@@ -221,4 +221,13 @@ internal static class Localization
     // About items
     public static string MenuItemVersion => Ru ? "Версия" : "Version";
     public static string MenuItemRepoLink => Ru ? "GitHub репозиторий" : "GitHub repository";
+
+    // ── Phase 7.4 in-app log viewer (handbook §5.6) ─────────────────────
+
+    public static string LogViewerEmpty => Ru
+        ? "Лог пуст. Подключи туннель — sing-box начнёт писать сюда."
+        : "Log is empty. Connect the tunnel — sing-box will start writing here.";
+    public static string LogViewerError => Ru
+        ? "Не удалось прочитать лог: {0}: {1}"
+        : "Failed to read log: {0}: {1}";
 }
