@@ -196,6 +196,35 @@ if ($shaAsset) {
     Warn "No .sha256 sidecar for this release - skipping hash verification"
 }
 
+# == Snapshot Service state BEFORE killing processes =====================
+# v2.31.8 — bug fix: previously the Stop-Process loop below killed the
+# VPNRouter.Service.exe process directly, which made the Service Control
+# Manager report Status=Stopped on the next Get-Service call. The
+# `if ($svc.Status -eq 'Running')` branch then never matched, $svcWasRunning
+# stayed false, and the post-install Start-Service block at the bottom was
+# skipped — leaving the user's Service in Stopped state after every
+# upgrade. Symptom: «службу пришлось руками запускать после обновления».
+# Capture the running state BEFORE we touch anything else.
+$svc = Get-Service -Name VPNRouter -ErrorAction SilentlyContinue
+$svcWasRunning = ($svc -and $svc.Status -eq 'Running')
+
+# == Stop service GRACEFULLY first if it was running =====================
+# Stop-Service waits for the SCM-tracked stop transition so when we
+# subsequently kill any leftover VPNRouter.Service.exe process (defensive)
+# the SCM already knows the service is intentionally Stopped, not crashed.
+if ($svcWasRunning) {
+    Say "Stopping VPNRouter service (was running) before file replacement..."
+    Stop-Service -Name VPNRouter -Force -ErrorAction SilentlyContinue
+    # Wait up to 10 s for SCM to confirm Stopped state.
+    $tries = 0
+    while ($tries -lt 20) {
+        $svc.Refresh()
+        if ($svc.Status -eq 'Stopped') { break }
+        Start-Sleep -Milliseconds 500
+        $tries++
+    }
+}
+
 # == Stop running VPNRouter / sing-box ===================================
 $stopped = @()
 foreach ($name in @("VPNRouter.App", "VPNRouter.CLI", "VPNRouter.Service", "VPNRouter.GUI", "sing-box")) {
@@ -208,17 +237,6 @@ foreach ($name in @("VPNRouter.App", "VPNRouter.CLI", "VPNRouter.Service", "VPNR
     }
 }
 if ($stopped.Count -gt 0) { Say "Stopped running: $($stopped -join ', ')" }
-
-# == Stop service if installed ===========================================
-$svc = Get-Service -Name VPNRouter -ErrorAction SilentlyContinue
-$svcWasRunning = $false
-if ($svc) {
-    if ($svc.Status -eq 'Running') {
-        Say "Stopping VPNRouter service..."
-        Stop-Service -Name VPNRouter -Force -ErrorAction SilentlyContinue
-        $svcWasRunning = $true
-    }
-}
 
 Start-Sleep -Milliseconds 500
 
