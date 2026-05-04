@@ -131,6 +131,24 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.Button? _logViewerCloseBtn;
     private Avalonia.Controls.Button? _logViewerRefreshBtn;
 
+    // v3.0 Phase 7.5 — per-app filter picker overlay (handbook §5.5).
+    // Tap "Selected apps" radio → "Choose apps…" button → this overlay.
+    // ListBox of installed apps with a search filter + system-apps
+    // toggle. CheckBox per row, indeterminate state shown only during
+    // initial Set() seeding (~50 ms).
+    private Border? _appPickerOverlay;
+    private TextBox? _appPickerSearch;
+    private Avalonia.Controls.CheckBox? _appPickerSystemToggle;
+    private TextBlock? _appPickerCount;
+    private ListBox? _appPickerList;
+    private Avalonia.Controls.Button? _appPickerSaveBtn;
+    private Avalonia.Controls.Button? _appPickerCloseBtn;
+    private Avalonia.Controls.Button? _perAppPickButton;
+    private TextBlock? _perAppCountLabel;
+    private List<AppListLoader.AppEntry> _appPickerCache = new();
+    private HashSet<string> _appPickerSelected = new(System.StringComparer.OrdinalIgnoreCase);
+    private bool _appPickerSystemAppsVisible = false;
+
     // State
     private bool _formExpanded = false;
     private List<VlessServerEntry> _cachedServers = new();
@@ -621,13 +639,17 @@ public partial class AndroidApp : Avalonia.Application
         _splitRadio = new Avalonia.Controls.RadioButton
         {
             GroupName = "TunnelMode",
-            IsChecked = false, // Android default: full (per Phase 3 P0 fix)
+            // v3.0 Phase 7.5 — radio state seeded from stored per-app
+            // mode. "include" → split; everything else → full. Lets the
+            // user reopen the form and see their saved choice.
+            IsChecked = AndroidStorage.GetPerAppMode() == "include",
             Content = _splitLabel,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
             MinHeight = 0,
             Padding = new Thickness(4, 0),
         };
+        _splitRadio.IsCheckedChanged += OnTunnelModeRadioChanged;
         _splitHint = new TextBlock
         {
             Text = Localization.SmpSplitHint,
@@ -647,13 +669,15 @@ public partial class AndroidApp : Avalonia.Application
         _fullRadio = new Avalonia.Controls.RadioButton
         {
             GroupName = "TunnelMode",
-            IsChecked = true, // Android default: route everything
+            // v3.0 Phase 7.5 — full mode = mode != "include".
+            IsChecked = AndroidStorage.GetPerAppMode() != "include",
             Content = _fullLabel,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
             MinHeight = 0,
             Padding = new Thickness(4, 0),
         };
+        _fullRadio.IsCheckedChanged += OnTunnelModeRadioChanged;
         _fullHint = new TextBlock
         {
             Text = Localization.SmpFullHint,
@@ -662,6 +686,33 @@ public partial class AndroidApp : Avalonia.Application
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(24, 0, 0, 0),
         };
+
+        // v3.0 Phase 7.5 — "Choose apps…" button + selection counter
+        // pair, only visible when "Selected apps" radio is checked.
+        // Tap → opens the app picker overlay defined later in this file.
+        _perAppPickButton = StyledSecondaryButton(Localization.PerAppPickButton);
+        _perAppPickButton.Click += OnPerAppPickButtonClicked;
+        _perAppPickButton.HorizontalAlignment = HorizontalAlignment.Stretch;
+        _perAppPickButton.Margin = new Thickness(24, 4, 0, 0);
+
+        var initialPerAppCount = AndroidStorage.GetPerAppPackages().Count;
+        _perAppCountLabel = new TextBlock
+        {
+            Text = string.Format(Localization.PerAppCount, initialPerAppCount),
+            FontSize = 9,
+            Foreground = textMuted,
+            Margin = new Thickness(24, 2, 0, 0),
+        };
+
+        var perAppStack = new StackPanel
+        {
+            Spacing = 0,
+            IsVisible = AndroidStorage.GetPerAppMode() == "include",
+            Children = { _perAppPickButton, _perAppCountLabel },
+        };
+        // Tag the stack so OnTunnelModeRadioChanged can flip its
+        // visibility — using Tag avoids storing yet another field.
+        _splitRadio.Tag = perAppStack;
 
         var tunnelSection = new StackPanel
         {
@@ -674,7 +725,7 @@ public partial class AndroidApp : Avalonia.Application
                     Spacing = 8,
                     Children =
                     {
-                        new StackPanel { Spacing = 1, Children = { _splitRadio, _splitHint } },
+                        new StackPanel { Spacing = 1, Children = { _splitRadio, _splitHint, perAppStack } },
                         new StackPanel { Spacing = 1, Children = { _fullRadio, _fullHint } },
                     }
                 }
@@ -899,10 +950,13 @@ public partial class AndroidApp : Avalonia.Application
         // Diagnostics > "Open log" menu action reads singbox.log into
         // _logViewerContent and flips IsVisible=true.
         _logOverlay = BuildLogOverlay();
+        // v3.0 Phase 7.5 (2026-05-04) — fullscreen per-app picker
+        // overlay. Triggered from the "Choose apps…" button in the form.
+        _appPickerOverlay = BuildAppPickerOverlay();
 
         return new Grid
         {
-            Children = { mainScroller, _logOverlay }
+            Children = { mainScroller, _logOverlay, _appPickerOverlay }
         };
     }
 
@@ -1384,9 +1438,22 @@ public partial class AndroidApp : Avalonia.Application
             AndroidStorage.SetSelectedServerName(entry.Name);
     }
 
-    private void ReloadServerList()
+    private async void ReloadServerList()
     {
-        _cachedServers = AndroidStorage.GetServers();
+        // v3.0 Phase 7.6 (2026-05-04) — disk + JSON deserialize off the
+        // UI thread. SharedPreferences GetString is fast (cached), but
+        // JsonConvert.DeserializeObject<List<VlessServerEntry>> on a
+        // 100-entry subscription cache can stall the UI for 100-200 ms
+        // on slower phones, contributing to the "app lags" complaint.
+        // Move to Task.Run; UI updates on the captured context.
+        try
+        {
+            _cachedServers = await System.Threading.Tasks.Task.Run(AndroidStorage.GetServers);
+        }
+        catch
+        {
+            _cachedServers = new List<VlessServerEntry>();
+        }
         UpdateServerListView();
     }
 
@@ -1808,6 +1875,350 @@ public partial class AndroidApp : Avalonia.Application
             _logViewerEmptyState.IsVisible = true;
         }
         if (_logViewerScroller is not null) _logViewerScroller.IsVisible = false;
+    }
+
+    // ── Phase 7.5 — Per-app filter UI (handbook §5.5) ───────────────────
+
+    private void OnTunnelModeRadioChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        // IsChecked changes fire on BOTH the previously-selected and the
+        // newly-selected radio when group toggles, so dedupe by checking
+        // the actual state.
+        var splitOn = _splitRadio?.IsChecked == true;
+
+        // Persist the corresponding per-app mode. "Selected apps" radio
+        // → "include" (only listed packages route through tunnel);
+        // "All traffic" → "off" (full routing, no filter).
+        var newMode = splitOn ? "include" : "off";
+        if (AndroidStorage.GetPerAppMode() != newMode)
+        {
+            AndroidStorage.SetPerAppMode(newMode);
+        }
+
+        // Show/hide the "Choose apps…" sub-stack we tagged on the split
+        // radio in BuildSimplePageView.
+        if (_splitRadio?.Tag is StackPanel perAppStack)
+        {
+            perAppStack.IsVisible = splitOn;
+        }
+    }
+
+    private void OnPerAppPickButtonClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        ShowAppPicker();
+    }
+
+    private async void ShowAppPicker()
+    {
+        if (_appPickerOverlay is null) return;
+
+        // Seed the selection set from storage so check states match what
+        // the user previously saved.
+        _appPickerSelected = new HashSet<string>(AndroidStorage.GetPerAppPackages(),
+                                                 System.StringComparer.OrdinalIgnoreCase);
+
+        if (_appPickerSearch is not null) _appPickerSearch.Text = string.Empty;
+        if (_appPickerSystemToggle is not null)
+            _appPickerSystemToggle.IsChecked = _appPickerSystemAppsVisible;
+
+        // Show the overlay first with a "Loading…" placeholder, then
+        // load apps off the UI thread (PackageManager.GetInstalledApplications
+        // can take 100-500 ms on slower devices).
+        UpdateAppPickerCount();
+        if (_appPickerList is not null)
+        {
+            _appPickerList.ItemsSource = new[] { Localization.PerAppLoading };
+        }
+        _appPickerOverlay.IsVisible = true;
+
+        try
+        {
+            _appPickerCache = await System.Threading.Tasks.Task.Run(() =>
+                _appPickerSystemAppsVisible
+                    ? AppListLoader.ListAllApps()
+                    : AppListLoader.ListUserApps());
+        }
+        catch
+        {
+            _appPickerCache = new List<AppListLoader.AppEntry>();
+        }
+        ApplyAppPickerFilter();
+    }
+
+    private void OnAppPickerCloseClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_appPickerOverlay is not null) _appPickerOverlay.IsVisible = false;
+    }
+
+    private void OnAppPickerSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        AndroidStorage.SetPerAppPackages(_appPickerSelected);
+        if (_perAppCountLabel is not null)
+            _perAppCountLabel.Text = string.Format(Localization.PerAppCount, _appPickerSelected.Count);
+        if (_appPickerOverlay is not null) _appPickerOverlay.IsVisible = false;
+    }
+
+    private void OnAppPickerSystemToggleChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var newValue = _appPickerSystemToggle?.IsChecked == true;
+        if (newValue == _appPickerSystemAppsVisible) return;
+        _appPickerSystemAppsVisible = newValue;
+        // Reload list with the new include-system flag. This might take a
+        // beat on slow devices; reuse the show flow for the loading state.
+        _ = ReloadAppPickerCacheAsync();
+    }
+
+    private async System.Threading.Tasks.Task ReloadAppPickerCacheAsync()
+    {
+        if (_appPickerList is null) return;
+        _appPickerList.ItemsSource = new[] { Localization.PerAppLoading };
+        try
+        {
+            _appPickerCache = await System.Threading.Tasks.Task.Run(() =>
+                _appPickerSystemAppsVisible
+                    ? AppListLoader.ListAllApps()
+                    : AppListLoader.ListUserApps());
+        }
+        catch
+        {
+            _appPickerCache = new List<AppListLoader.AppEntry>();
+        }
+        ApplyAppPickerFilter();
+    }
+
+    private void OnAppPickerSearchChanged(object? sender, Avalonia.Controls.TextChangedEventArgs e)
+    {
+        ApplyAppPickerFilter();
+    }
+
+    /// <summary>
+    /// Apply the current search term to <see cref="_appPickerCache"/> and
+    /// refresh the ListBox with a row factory that builds CheckBox + label
+    /// per visible app. Each row's CheckedChanged updates
+    /// <see cref="_appPickerSelected"/> immediately so Save just persists
+    /// the in-memory set.
+    /// </summary>
+    private void ApplyAppPickerFilter()
+    {
+        if (_appPickerList is null) return;
+        var search = _appPickerSearch?.Text?.Trim() ?? string.Empty;
+        var filtered = string.IsNullOrEmpty(search)
+            ? _appPickerCache
+            : _appPickerCache.Where(a =>
+                a.Label.Contains(search, System.StringComparison.OrdinalIgnoreCase)
+                || a.PackageName.Contains(search, System.StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var rows = filtered.Select(BuildAppRow).ToList();
+        _appPickerList.ItemsSource = rows;
+        UpdateAppPickerCount();
+    }
+
+    private Control BuildAppRow(AppListLoader.AppEntry app)
+    {
+        var label = new TextBlock
+        {
+            Text = app.Label,
+            FontSize = 12,
+            Foreground = GetBrush("TextPrimaryBrush"),
+            TextWrapping = TextWrapping.NoWrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var pkgLine = new TextBlock
+        {
+            Text = app.PackageName,
+            FontSize = 9,
+            Foreground = GetBrush("TextMutedBrush"),
+            TextWrapping = TextWrapping.NoWrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var rowText = new StackPanel
+        {
+            Spacing = 1,
+            Children = { label, pkgLine },
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var checkbox = new Avalonia.Controls.CheckBox
+        {
+            IsChecked = _appPickerSelected.Contains(app.PackageName),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        checkbox.IsCheckedChanged += (_, __) =>
+        {
+            if (checkbox.IsChecked == true)
+                _appPickerSelected.Add(app.PackageName);
+            else
+                _appPickerSelected.Remove(app.PackageName);
+            UpdateAppPickerCount();
+        };
+
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            ColumnSpacing = 8,
+            Margin = new Thickness(8, 4),
+        };
+        Grid.SetColumn(checkbox, 0);
+        Grid.SetColumn(rowText, 1);
+        grid.Children.Add(checkbox);
+        grid.Children.Add(rowText);
+
+        // Tap anywhere on the row toggles the check.
+        var clickable = new Border
+        {
+            Background = Brushes.Transparent,
+            Child = grid,
+        };
+        clickable.PointerPressed += (_, __) =>
+        {
+            checkbox.IsChecked = !(checkbox.IsChecked == true);
+        };
+        return clickable;
+    }
+
+    private void UpdateAppPickerCount()
+    {
+        if (_appPickerCount is not null)
+            _appPickerCount.Text = string.Format(Localization.PerAppCount, _appPickerSelected.Count);
+    }
+
+    private Border BuildAppPickerOverlay()
+    {
+        var title = new TextBlock
+        {
+            Text = Localization.PerAppTitle,
+            FontSize = 13,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = GetBrush("TextPrimaryBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        _appPickerCloseBtn = new Avalonia.Controls.Button
+        {
+            Content = "✕",
+            FontSize = 16,
+            Width = 36,
+            Height = 36,
+            Padding = new Thickness(0),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Foreground = GetBrush("TextSecondaryBrush"),
+        };
+        _appPickerCloseBtn.Click += OnAppPickerCloseClicked;
+
+        var titleBar = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            Margin = new Thickness(8, 4, 4, 4),
+        };
+        Grid.SetColumn(title, 0);
+        Grid.SetColumn(_appPickerCloseBtn, 1);
+        titleBar.Children.Add(title);
+        titleBar.Children.Add(_appPickerCloseBtn);
+
+        var titleBarBorder = new Border
+        {
+            Background = GetBrush("SurfaceRaisedBrush"),
+            BorderBrush = GetBrush("BorderSubtleBrush"),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Padding = new Thickness(8, 4),
+            Child = titleBar,
+        };
+
+        _appPickerSearch = new TextBox
+        {
+            Watermark = Localization.PerAppSearchHint,
+            FontSize = 12,
+            Padding = new Thickness(10, 6),
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            BorderBrush = GetBrush("BorderSubtleBrush"),
+            BorderThickness = new Thickness(1),
+        };
+        _appPickerSearch.TextChanged += OnAppPickerSearchChanged;
+
+        _appPickerSystemToggle = new Avalonia.Controls.CheckBox
+        {
+            Content = new TextBlock
+            {
+                Text = Localization.PerAppSystemAppsToggle,
+                FontSize = 11,
+                Foreground = GetBrush("TextSecondaryBrush"),
+                TextWrapping = TextWrapping.Wrap,
+            },
+            IsChecked = _appPickerSystemAppsVisible,
+            MinHeight = 0,
+            Padding = new Thickness(4, 0),
+        };
+        _appPickerSystemToggle.IsCheckedChanged += OnAppPickerSystemToggleChanged;
+
+        _appPickerCount = new TextBlock
+        {
+            Text = string.Format(Localization.PerAppCount, 0),
+            FontSize = 10,
+            Foreground = GetBrush("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var filterRow = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 8,
+            Margin = new Thickness(8, 6, 8, 0),
+        };
+        Grid.SetColumn(_appPickerSearch, 0);
+        Grid.SetColumn(_appPickerCount, 1);
+        filterRow.Children.Add(_appPickerSearch);
+        filterRow.Children.Add(_appPickerCount);
+
+        var togglesRow = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Margin = new Thickness(8, 4, 8, 4),
+            Children = { _appPickerSystemToggle },
+        };
+
+        _appPickerList = new ListBox
+        {
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+        };
+
+        _appPickerSaveBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.PerAppSaveButton,
+            FontSize = 12,
+            FontWeight = FontWeight.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Padding = new Thickness(0, 12),
+            Margin = new Thickness(8, 6, 8, 8),
+            Background = GetBrush("AccentSolidBrush"),
+            Foreground = GetBrush("AccentOnSolidBrush"),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            BorderThickness = new Thickness(0),
+        };
+        _appPickerSaveBtn.Click += OnAppPickerSaveClicked;
+
+        var dock = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(titleBarBorder, Dock.Top);
+        DockPanel.SetDock(filterRow, Dock.Top);
+        DockPanel.SetDock(togglesRow, Dock.Top);
+        DockPanel.SetDock(_appPickerSaveBtn, Dock.Bottom);
+        dock.Children.Add(titleBarBorder);
+        dock.Children.Add(filterRow);
+        dock.Children.Add(togglesRow);
+        dock.Children.Add(_appPickerSaveBtn);
+        dock.Children.Add(_appPickerList);
+
+        return new Border
+        {
+            Background = GetBrush("SurfaceAppBrush"),
+            IsVisible = false,
+            Child = dock,
+        };
     }
 
     private void OnMenuCopyLogPathClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

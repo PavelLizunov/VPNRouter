@@ -94,6 +94,9 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
     private const string ActionStop = "com.ninitux.vpnrouter.STOP";
     private const string ExtraConfigJson = "config_json";
     private const string ExtraAllowedPackages = "allowed_packages";
+    // v3.0 Phase 7.5 — per-app filter intent extras (handbook §5.5).
+    private const string ExtraPerAppMode = "per_app_mode";
+    private const string ExtraPerAppPackages = "per_app_packages";
     // v3.0 Phase 1.I — broadcasts from VpnRouterService so the UI can
     // mirror REAL tunnel state, not just intent.
     private const string ActionTunnelUp = "com.ninitux.vpnrouter.TUNNEL_UP";
@@ -386,6 +389,13 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
             return;
         }
 
+        // v3.0 Phase 7.5 (2026-05-04) — per-app filter (handbook §5.5).
+        // Read user's saved selection and forward to VpnRouterService.
+        var perAppMode = AndroidStorage.GetPerAppMode();
+        var perAppPackages = AndroidStorage.GetPerAppPackages().ToArray();
+        global::Android.Util.Log.Info("VpnRouter",
+            $"Phase 7.5: per-app mode={perAppMode}, packages={perAppPackages.Length}");
+
         // VpnRouterService is a Java class (VpnRouterService.java) — we
         // address it via fully-qualified component name rather than
         // typeof() because the .NET Android side has no C# binding for it.
@@ -393,7 +403,9 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
             .SetClassName(PackageName!, "com.ninitux.vpnrouter.VpnRouterService")
             .SetAction(ActionStart)
             .PutExtra(ExtraConfigJson, configJson)
-            .PutExtra(ExtraAllowedPackages, Array.Empty<string>());
+            .PutExtra(ExtraAllowedPackages, Array.Empty<string>())
+            .PutExtra(ExtraPerAppMode, perAppMode)
+            .PutExtra(ExtraPerAppPackages, perAppPackages);
 
         if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
         {

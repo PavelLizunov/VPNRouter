@@ -150,6 +150,54 @@ public static class AndroidStorage
     public static string GetTheme() => GetString(KeyTheme) ?? "light";
     public static bool SetTheme(string? value) => SetString(KeyTheme, value);
 
+    // ── Phase 7.5 (2026-05-04): per-app filter (handbook §5.5) ──────────
+    //
+    // Mode values:
+    //   "off"     → no per-app filter; whole VpnService routes via tunnel
+    //              (matching desktop's "All traffic" tunnel mode).
+    //   "include" → ONLY listed packages are routed via the tunnel; all
+    //              others use the underlying network directly.
+    //   "exclude" → listed packages BYPASS the tunnel (useful for banking
+    //              apps that block VPN, or known-CDN apps that don't
+    //              benefit from proxying).
+    // The package list itself is a JSON-serialized List<string> so we can
+    // round-trip through SharedPreferences without inventing a delimiter.
+    private const string KeyPerAppMode = "per_app_mode";
+    private const string KeyPerAppPackages = "per_app_packages";
+
+    public static string GetPerAppMode() => GetString(KeyPerAppMode) ?? "off";
+    public static bool SetPerAppMode(string? value) => SetString(KeyPerAppMode, value);
+
+    public static List<string> GetPerAppPackages()
+    {
+        try
+        {
+            var json = GetString(KeyPerAppPackages);
+            if (string.IsNullOrWhiteSpace(json)) return new List<string>();
+            var list = JsonConvert.DeserializeObject<List<string>>(json);
+            return list ?? new List<string>();
+        }
+        catch
+        {
+            return new List<string>();
+        }
+    }
+
+    public static bool SetPerAppPackages(IEnumerable<string>? packages)
+    {
+        try
+        {
+            if (packages is null) return SetString(KeyPerAppPackages, null);
+            var list = new List<string>(packages);
+            var json = JsonConvert.SerializeObject(list);
+            return SetString(KeyPerAppPackages, json);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     // ── Internals ───────────────────────────────────────────────────────────
 
     private static string? GetString(string key)

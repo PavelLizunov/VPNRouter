@@ -230,4 +230,20 @@ internal static class Localization
     public static string LogViewerError => Ru
         ? "Не удалось прочитать лог: {0}: {1}"
         : "Failed to read log: {0}: {1}";
+
+    // ── Phase 7.5 per-app filter (handbook §5.5) ────────────────────────
+
+    public static string PerAppTitle => Ru ? "Фильтр по приложениям" : "Per-app filter";
+    public static string PerAppModeOff => Ru ? "Выключен" : "Off";
+    public static string PerAppModeInclude => Ru ? "Только выбранные" : "Selected only";
+    public static string PerAppModeExclude => Ru ? "Кроме выбранных" : "Exclude selected";
+    public static string PerAppPickButton => Ru ? "Выбрать приложения…" : "Choose apps…";
+    public static string PerAppCount => Ru ? "Выбрано: {0}" : "Selected: {0}";
+    public static string PerAppLoading => Ru ? "Загружаю список приложений…" : "Loading app list…";
+    public static string PerAppSaveButton => Ru ? "Готово" : "Done";
+    public static string PerAppSearchHint => Ru ? "Поиск" : "Search";
+    public static string PerAppSystemAppsToggle => Ru ? "Системные приложения" : "System apps";
+    public static string PerAppEmptyHint => Ru
+        ? "Ничего не выбрано. Если режим — «Только выбранные», то весь трафик пойдёт мимо туннеля."
+        : "Nothing selected. If mode is \"Selected only\", all traffic bypasses the tunnel.";
 }

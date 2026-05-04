@@ -88,7 +88,15 @@ public final class VpnRouterService extends VpnService {
     public static final String ACTION_START = "com.ninitux.vpnrouter.START";
     public static final String ACTION_STOP = "com.ninitux.vpnrouter.STOP";
     public static final String EXTRA_CONFIG_JSON = "config_json";
+    // v3.0 Phase 7.5 (2026-05-04) — per-app filter (handbook §5.5).
+    // EXTRA_PER_APP_MODE: "off" / "include" / "exclude". When "include",
+    // ONLY the EXTRA_PER_APP_PACKAGES list routes via the tunnel; when
+    // "exclude", those packages BYPASS it. Pre-7.5 we shipped the
+    // EXTRA_ALLOWED_PACKAGES name (kept for back-compat) but always
+    // empty — TunOptions.includePackage came from libbox alone.
     public static final String EXTRA_ALLOWED_PACKAGES = "allowed_packages";
+    public static final String EXTRA_PER_APP_MODE = "per_app_mode";
+    public static final String EXTRA_PER_APP_PACKAGES = "per_app_packages";
     // v3.0 Phase 1.I — broadcasts so the Avalonia UI can flip its button
     // label on real tunnel-state events instead of intent-only.
     public static final String ACTION_TUNNEL_UP = "com.ninitux.vpnrouter.TUNNEL_UP";
@@ -104,6 +112,8 @@ public final class VpnRouterService extends VpnService {
 
     private String pendingConfigJson;
     private String[] pendingAllowedPackages;
+    private String pendingPerAppMode;
+    private String[] pendingPerAppPackages;
     private CommandServer commandServer;
     private ParcelFileDescriptor currentPfd;
 
@@ -113,6 +123,8 @@ public final class VpnRouterService extends VpnService {
         if (ACTION_START.equals(action)) {
             pendingConfigJson = intent.getStringExtra(EXTRA_CONFIG_JSON);
             pendingAllowedPackages = intent.getStringArrayExtra(EXTRA_ALLOWED_PACKAGES);
+            pendingPerAppMode = intent.getStringExtra(EXTRA_PER_APP_MODE);
+            pendingPerAppPackages = intent.getStringArrayExtra(EXTRA_PER_APP_PACKAGES);
             startTunnel();
         } else if (ACTION_STOP.equals(action)) {
             stopTunnel();
@@ -333,10 +345,43 @@ public final class VpnRouterService extends VpnService {
         addPackages(builder, options.getIncludePackage(), true);
         addPackages(builder, options.getExcludePackage(), false);
 
-        // Exclude self so we don't loop our own traffic back through the TUN.
-        try {
-            builder.addDisallowedApplication(getPackageName());
-        } catch (PackageManager.NameNotFoundException ignored) {}
+        // v3.0 Phase 7.5 (2026-05-04) — per-app filter (handbook §5.5).
+        // Apply user's package allow/disallow list from the Activity-side
+        // settings. "include" → only listed packages route via tunnel.
+        // "exclude" → listed packages bypass tunnel. "off" / null →
+        // no filter (existing behaviour).
+        //
+        // Note: Android's VpnService.Builder doesn't allow mixing
+        // addAllowedApplication + addDisallowedApplication on the same
+        // Builder (throws IllegalArgumentException), so we pick one path.
+        if ("include".equalsIgnoreCase(pendingPerAppMode) && pendingPerAppPackages != null) {
+            for (String pkg : pendingPerAppPackages) {
+                if (pkg == null || pkg.isEmpty()) continue;
+                try {
+                    builder.addAllowedApplication(pkg);
+                } catch (PackageManager.NameNotFoundException ignored) {}
+            }
+            // Per-app include doesn't require self-disallow because if
+            // we're not in the allowed list, we're already excluded.
+        } else if ("exclude".equalsIgnoreCase(pendingPerAppMode) && pendingPerAppPackages != null) {
+            for (String pkg : pendingPerAppPackages) {
+                if (pkg == null || pkg.isEmpty()) continue;
+                try {
+                    builder.addDisallowedApplication(pkg);
+                } catch (PackageManager.NameNotFoundException ignored) {}
+            }
+            // Self-disallow is still important here so VpnRouter's own
+            // traffic doesn't loop through its own TUN.
+            try {
+                builder.addDisallowedApplication(getPackageName());
+            } catch (PackageManager.NameNotFoundException ignored) {}
+        } else {
+            // Mode off / null — keep the original always-self-disallow
+            // safety net.
+            try {
+                builder.addDisallowedApplication(getPackageName());
+            } catch (PackageManager.NameNotFoundException ignored) {}
+        }
 
         ParcelFileDescriptor pfd = builder.establish();
         if (pfd == null) {
