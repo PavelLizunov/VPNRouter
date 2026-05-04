@@ -453,8 +453,17 @@ public static class TcpTlsProbe
                 break;
         }
 
-        Logger?.Debug(
-            "TcpTlsProbe.ProbeServerAsync done: name={Name} host={Host} port={Port} protocol={Protocol} status={Status} latency={LatencyMs}ms err={Error}",
+        // v2.31.6-r17 (iter#7 follow-up): bumped from Debug → Information.
+        // r16 MCP test confirmed Debug entries were filtered out by the
+        // default LoggerConfiguration MinimumLevel = Information, so the
+        // user-visible "verify logs" file showed only VlessDeepVerifier
+        // results (Information) and missed every quick-probe outcome
+        // (Debug). Information level for the probe end record makes the
+        // log file actionable for diagnosing Test all batch results
+        // without bumping the global minimum (which would also unleash
+        // 48 other Debug calls across the codebase).
+        Logger?.Information(
+            "[TcpTlsProbe] {Name} {Host}:{Port} protocol={Protocol} status={Status} latency={LatencyMs}ms err={Error}",
             server.Name, host, port, protocol, result.Status, result.LatencyMs, result.Error ?? "-");
         return result;
     }

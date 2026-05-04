@@ -37,8 +37,15 @@ gate скрывает UX bugs — нужен human-in-the-loop перед stable
 
 1. Pick version `vX.Y.Z` (patch bump vs. current stable).
 2. Ship first iteration as `vX.Y.Z-r1` prerelease (autonomously, no confirm).
-3. **Verify** через MCP+UIA где testable, или explicit "Core-only / not UI-testable" label.
-   Доложить status-summary user'у.
+3. **MCP test обязательно после каждого ship** (правило 2026-05-04 от
+   user'а). Не "где testable" — а полноценный computer-use тест по
+   change scenario из release notes. У claude'а есть
+   `mcp__vpnrouter-test__*` для window/mouse/keyboard/screenshot и
+   Bash для tail logs. Только Core-only fix (без UI surface) можно
+   skipnуть, и то с явной "Core-only / not UI-testable" пометкой
+   в докладе. Detailed test report user'у — скриншоты, выдержки логов,
+   PASS/FAIL по каждому пункту. Если MCP test упал — fix + ship -r(N+1)
+   автономно, не ждём user'а на verification round.
 4. Ship fix as `vX.Y.Z-r2`, **delete previous candidate**:
    ```bash
    gh release delete "vX.Y.Z-r1" --yes --repo PavelLizunov/VPNRouter

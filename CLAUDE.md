@@ -97,9 +97,22 @@ Open Tasks / Last session log.
 
 1. **Default = autonomous до stable.** Code change → build → tests → commit →
    push в оба remote → ship -rN → mac/linux CI → finalize prerelease → delete
-   previous -rN → MCP verify где testable → **доложить user'у + ждать cut**.
-   Без вопросов между intermediate шагами. **Cut stable НЕ autonomous** —
-   только по явной команде. См. rule #6.
+   previous -rN → **MCP+UIA test (mandatory, см. rule #1a)** → доложить
+   user'у с детальным test report'ом + ждать cut. Без вопросов между
+   intermediate шагами. **Cut stable НЕ autonomous** — только по явной
+   команде. См. rule #6.
+
+   **1a. MCP test после каждого ship — обязательно, не "где testable".**
+   Установлено user'ом 2026-05-04 после iter#7. Flow: ship -rN → CI green →
+   12 assets → НЕМЕДЛЕННО запускаю VPNRouter (или auto-update) → MCP
+   computer-use тестит изменение по сценарию который описан в release
+   notes / commit message → скриншоты + PASS/FAIL по каждому пункту →
+   доклад user'у. Без user prompt'а — это часть ship cycle. У меня есть
+   `mcp__vpnrouter-test__*` (window control / mouse / keyboard /
+   screenshot) + Bash для logs → нет нужды просить user'а скрин или
+   "проверь сам". Если изменение Core-only без UI surface (parser,
+   migration helper, etc.) — explicit "Core-only / not UI-testable"
+   label в докладе. Иначе MCP-test обязателен.
 2. **Push в ОБА remote** после commit'а: `git push github HEAD:main && git push origin HEAD:main`.
    Forgejo через VPN — может быть down, retry позже автоматически.
 3. **Никогда `--no-verify` / `--no-gpg-sign`** без явного запроса. Если pre-commit
