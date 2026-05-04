@@ -249,12 +249,15 @@ tuic://62736735-6c4f-4490-bf28-62e0655c826a:FcYSKt62nIMKxjhSxED7rEpWem5XQrdj@93.
 
 | Server | Verify | Expect | Status |
 |---|---|---|---|
-| VLESS+Reality+gRPC TCP 8444 | curl through tunnel | server IP | TODO |
-| Hysteria2+Salamander UDP 9443 | curl through tunnel | server IP | TODO |
-| TUIC v5 UDP 9444 | curl through tunnel | server IP | TODO |
+| VLESS+Reality+TCP+Vision (placeholder de-01:443) | https://1.1.1.1 page renders | Cloudflare logo + lock icon | ✅ PASS (Phase 6.3) |
+| VLESS+Reality+gRPC TCP 8444 (is-01-grpc-test) | https://1.1.1.1 page renders | Cloudflare logo + lock icon | ❌ FAIL — handshake EOF before TLS |
+| Hysteria2+Salamander UDP 9443 (is-01-hy2-test) | https://1.1.1.1 page renders | Cloudflare logo + lock icon | ✅ PASS (Phase 6.4) |
+| TUIC v5 UDP 9444 (is-01-tuic-test) | https://1.1.1.1 page renders | Cloudflare logo + lock icon | ✅ PASS (Phase 6.4 + insecure parser fix) |
 
-Если все 3 работают на desktop, но НЕ работают на Android — значит проблема
-Android-специфичная (не server-side).
+3 из 4 → Android port'a routing solid; gRPC fail — server-side gRPC mode
+quirk (URI carries `mode=gun` + `serviceName=TunService`, sing-box gRPC
+transport doesn't have a "mode" field — упоминается только в v2ray-core).
+Logged как §5.7 follow-up.
 
 ### 3.5 Build / SCP / install loop
 
@@ -308,29 +311,49 @@ Consent dialog OK button      | 935 | 1100
 
 ## 5. Open issues (приоритет от critical вниз)
 
-### 5.1 P0 — VPN routing не работает
+### 5.1 ✅ RESOLVED — VPN routing (Phase 6)
 
-**Симптом**: tun0 UP, libbox start successful, но `curl` через тунель
-hang без ответа.
+**Resolution**: Three layered fixes shipped in commits `7dfef98` (6.1+6.2+6.3) +
+`520d78f` (6.4). VPN now routes both UDP and TCP through the proxy on a
+non-rooted Android 12 device.
 
-**Что попробовано (Phase 1-5)**:
-- protect(fd) → ✓ done
-- RoutingMode "full" → ✓ done
-- tun.auto_route=false → ✓ done
-- getInterfaces() реальный → ✓ done
-- systemCertificates() → ✓ done
-- useProcFS() < Q → ✓ done
-- pfd.getFd() peek not detach → ✓ done
-- Libbox.redirectStderr → ✓ done но файл пустой = no Go panic
+**Fix layers**:
+1. **6.1 — log.output to externally-readable file**. Pre-fix `Libbox.redirectStderr`
+   only captured Go-runtime panics, never sing-box's internal logger output.
+   Set `log.output = getExternalFilesDir()/singbox.log` so the actual sing-box
+   error stream lands in a world-readable file.
+2. **6.2 — startDefaultInterfaceMonitor with NetworkCallback**. Pre-fix the
+   stub no-op'd. Symptom (visible after 6.1): "no available network interface"
+   on every upstream dial. Fix: ConnectivityManager.NetworkCallback wired with
+   API-version-aware registration (registerBestMatchingNetworkCallback on 31+,
+   requestNetwork on 28-30, registerDefaultNetworkCallback below). Calls
+   InterfaceUpdateListener.updateDefaultInterface(name, index, false, false)
+   on every callback fire.
+3. **6.3 — TUN stack=gvisor + MTU 1500**. Pre-fix TUN inherited `stack="system"`
+   from desktop ConfigGenerator. system stack needs CAP_NET_ADMIN/CAP_NET_RAW
+   which Android doesn't grant non-root apps → TCP SYN packets dropped before
+   reaching the TCP handler (UDP still flowed because Linux raw sockets aren't
+   needed for UDP receive). Switch to `gvisor` (pure user-mode TCP/IP stack
+   shipped with libbox.aar via with_gvisor build tag). Drop MTU 9000 → 1500
+   to match Android VpnService.Builder + underlying network limits.
+4. **6.4 — multi-protocol parser**. Surfaced VPNRouter.Core's existing
+   ServerUriParser (Hysteria2 / TUIC / SS) in Android. Plus Core fix for
+   ParseTuic to accept `insecure=1` (was only checking `allowInsecure=1`).
 
-**НЕ попробовано (Phase 6)**:
-- ❌ sing-box `log.output = getExternalFilesDir()/singbox.log` — реальный
-  log из sing-box (не Go stderr). Это **must-do next**.
-- ❌ Тест с 3 предоставленных серверов — может de-01:443 (текущий) blocking
-- ❌ Сравнить generated `current.json` Android vs Desktop bit-by-bit
-- ❌ Использовать `Libbox.newService` если bumped libbox version
-- ❌ DefaultNetworkMonitor — implement properly (Phase 5 stub) — без него
-  libbox не реагирует на network changes, может застревать на startup
+**Verified on KYOCERA A101BM (Android 12 / API 31)** with 3 of 4 protocols
+passing the browser → https://1.1.1.1 visibility test. 28 TCP "inbound
+connection" + 34 UDP "inbound packet connection" events observed in singbox.log
+during the placeholder test session (proves both protocols flow).
+
+### 5.7 NEW P2 — VLESS+Reality+gRPC handshake EOF
+
+is-01-grpc-test (URI: `mode=gun&serviceName=TunService`) fails with the
+DNS-over-HTTPS proxy returning EOF before the TLS layer. Other VLESS+Reality
+configs work; Hysteria2 + TUIC work. Test server may use a v2ray-core gRPC
+mode that sing-box's gRPC transport doesn't speak the same way. Investigate:
+- Compare singbox check output for the dumped config
+- Try with `mode=multi` if server supports
+- Review reference repo's gRPC reality-test config for hints
 
 ### 5.2 P1 — Chip state semantic
 
@@ -364,31 +387,38 @@ Read sing-box log file + tail в TextBox. Без adb logcat.
 
 ---
 
-## 6. Текущий state (после Phase 5c, commit 1c3b8cc)
+## 6. Текущий state (после Phase 6.4, commits 7dfef98 + 520d78f)
 
 ### Готово
 - `VpnRouterService.java` rewrite по reference impl
   (real getInterfaces / systemCertificates / useProcFS / protect / peek-fd)
+- DefaultInterfaceMonitor wired (Phase 6.2 — NetworkCallback per API tier)
 - AndroidApp.axaml.cs sub-header (mascot + brand + chips + kebab)
 - Real PNG mascot с RGB-invert (LoadMascot + TryBuildInverted)
 - Light theme default
 - 3-variant CTA button (outlined / sunken / accent-solid)
 - Status card / Config row / Form / Adv settings card
+- **VPN routing works** (Phase 6.1+6.2+6.3) — TCP + UDP both flow through proxy
+- Multi-protocol input (VLESS / Hysteria2 / TUIC / SS via ServerUriParser)
+- Debug helper: `getExternalFilesDir()/test-uri.txt` overrides URI without
+  rebuilding APK
 
 ### Известные недоработки
-- VPN routing не работает (curl timeout)
-- Chips static (должны быть 3-state)
-- Kebab menu только 2 пункта (должно 4 секции)
-- Form по умолчанию collapsed
-- Per-app filter не реализован
-- In-app logs viewer не реализован
+- VLESS+Reality+gRPC fails (test server compat issue, see §5.7)
+- Chips static (должны быть 3-state) — §5.2
+- Kebab menu только 2 пункта (должно 4 секции) — §5.3
+- Form по умолчанию collapsed — §5.4
+- Per-app filter не реализован — §5.5
+- In-app logs viewer не реализован — §5.6
 
-### Файлы изменённые в Phase 5
-- `VPNRouter.Android/VpnRouterService.java` — full rewrite
-- `VPNRouter.Android/AndroidApp.axaml.cs` — mascot LoadMascot helper
-- `VPNRouter.Android/VPNRouter.Android.csproj` — link mascot PNG
-- `VPNRouter.Android/AndroidConfigBuilder.cs` — RoutingMode "full",
-  tun.auto_route=false, log.level=debug
+### Файлы изменённые в Phase 6
+- `VPNRouter.Android/VpnRouterService.java` — startDefaultInterfaceMonitor wiring
+- `VPNRouter.Android/AndroidConfigBuilder.cs` — log.output param + stack=gvisor + MTU 1500
+- `VPNRouter.Android/AndroidManifest.xml` — CHANGE_NETWORK_STATE permission
+- `VPNRouter.Android/MainActivity.cs` — singboxLogPath compute + test-uri.txt override
+- `VPNRouter.Android/AndroidApp.axaml.cs` — IsSupportedScheme gate
+- `VPNRouter.Android/AndroidStorage.cs` — ServerUriParser.Parse instead of VlessUriParser
+- `VPNRouter.Core/Services/ServerUriParser.cs` — TUIC insecure flag (3 spelling variants)
 
 ---
 
@@ -396,9 +426,9 @@ Read sing-box log file + tail в TextBox. Без adb logcat.
 
 ```
 1. cd C:\Project\VPNRouter\.claude\worktrees\suspicious-kepler-fa08e0
-2. git pull origin main  (current head: 1c3b8cc)
-3. Read this handbook fully
-4. Pick top P0/P1 from §5
+2. git pull origin main  (current head: 520d78f)
+3. Read this handbook fully (especially §5 + §3.4 test results)
+4. Pick top P1/P2 from §5 (P0 §5.1 closed)
 5. Apply 3.1 checklist before commit
 6. Apply 3.3 VPN test ritual after each ship
 7. Update §4 Coordinate map if UI changes
@@ -406,21 +436,32 @@ Read sing-box log file + tail в TextBox. Без adb logcat.
 
 ### Recommended first action
 
-**Phase 6.1 — sing-box log to file для real debug**:
-1. В `AndroidConfigBuilder.PatchLogPathForAndroid` установить
-   `log.output = getExternalFilesDir()/singbox.log` (нужен Context — pass
-   in BuildConfigJson(entry, context))
-2. Re-test Connect → `cat /sdcard/Android/data/com.ninitux.vpnrouter/files/singbox.log`
-3. Реальный sing-box error finally visible
-4. Применить fix per error
+**Phase 7.1 — Chip 3-state semantic** (§5.2). The functional meaning user
+called out:
+  green = enabled, yellow = connecting, gray = disabled.
+Currently chips are static decoration. Implementation sketch:
+1. Add `enum VpnChipState { On / Connecting / Off }` (mirror desktop's
+   pattern in MainWindowViewModel).
+2. Bind to `MainActivity.IntentChanged` for VPN; future Zapret/TG state
+   bindings come from VpnEngine signals once Phase 7 wires them.
+3. Replace static `MakeChip(label, bg, fg)` with state-aware factory:
+   - On → SuccessSurfaceBrush + SuccessForegroundBrush + green dot
+   - Connecting → WarningSurfaceBrush + pulse animation (Avalonia Style
+     KeyFrame on Opacity)
+   - Off → MutedSurfaceBrush + MutedForegroundBrush + gray dot
 
-**Phase 6.2 — повторить с 3 user-предоставленных серверов**:
-- VLESS+Reality+gRPC, Hysteria2+Salamander, TUIC v5
-- Если хотя бы 1 работает → проблема server-specific (текущий de-01:443)
-- Если все 3 fail → проблема Android-фундаментальная
+**Phase 7.2 — Full kebab menu sections** (§5.3). Mirror desktop's
+MainWindow.axaml:380+ ContextMenu structure: Вид / Диагностика /
+Устранение неполадок / О приложении.
+
+**Phase 7.3 — Form expand state default** (§5.4) when subscription not
+configured (matches desktop initial-launch UX).
+
+Phase 6 cycle (routing + multi-protocol) is closed. Future Android
+sessions are UI parity polish, not core plumbing.
 
 ---
 
-**Last updated**: 2026-05-04 после Phase 5c.
+**Last updated**: 2026-05-04 после Phase 6.4 (520d78f).
 **Maintainer**: Claude (continuing).
 **User**: Pavel (provides feedback + steers priorities).
