@@ -277,18 +277,37 @@ public class SingBoxManager : IDisposable
         LaunchProcess(exePath);
     }
 
-    public void ReloadConfig(SingBoxConfig config) =>
-        ReloadConfigJson(ConfigGenerator.Serialize(config));
+    public void ReloadConfig(SingBoxConfig config, bool forceRestart = false) =>
+        ReloadConfigJson(ConfigGenerator.Serialize(config), forceRestart);
 
-    public void ReloadConfigJson(string configJson)
+    /// <summary>
+    /// Apply a new sing-box config. By default tries hot-reload first
+    /// (Clash API <c>PUT /configs</c>) and only falls back to a full
+    /// kill+restart if hot-reload is unavailable.
+    ///
+    /// <para>v2.31.7-r1: <paramref name="forceRestart"/> bypasses the
+    /// hot-reload attempt entirely and goes straight to kill+restart.
+    /// Required for structural changes — namely RoutingMode and TUN
+    /// fingerprint flips — where hot-reload swaps the in-memory config
+    /// successfully (HTTP 204) but does NOT re-lay TUN routes / DNS
+    /// settings, so the OS-level routing keeps the old behaviour even
+    /// though sing-box reports the new config. Brat-2026-05-04 logs
+    /// caught the silent failure on a split → full mode switch:
+    /// VpnEngine logged «Forced full restart» but PID stayed the same
+    /// because <c>ReloadConfigJson</c> ran <c>TryHotReload</c> first
+    /// regardless of caller intent.</para>
+    /// </summary>
+    public void ReloadConfigJson(string configJson, bool forceRestart = false)
     {
-        _logger.Information("[SingBoxManager] Reloading config");
+        _logger.Information("[SingBoxManager] Reloading config{Mode}",
+            forceRestart ? " (force restart, no hot-reload attempt)" : "");
         _currentConfigPath = WriteJsonToDisk(configJson);
 
-        if (TryHotReload())
+        if (!forceRestart && TryHotReload())
             return;
 
-        _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
+        if (!forceRestart)
+            _logger.Warning("[SingBoxManager] Hot-reload unavailable — restarting sing-box");
         Restart();
     }
 

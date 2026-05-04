@@ -426,13 +426,54 @@ public class UpdateChecker
             "ping -n 1 -w 500 127.0.0.1 >nul",
             "goto waitloop",
             ":parentgone",
-            "echo [%TIME%] parent gone, killing sing-box and copying files >>\"%LOG%\"",
+            "echo [%TIME%] parent gone, checking VPNRouter Windows Service >>\"%LOG%\"",
+            // v2.31.7-r1: stop the Windows Service if it's running before
+            // the file copy, otherwise the Service holds locks on
+            // VPNRouter.Service.dll, VPNRouter.Core.dll and friends. xcopy
+            // /R skips locked files silently → mixed-version DLL set after
+            // restart. spark-wraith 2026-05-04: «впн не хочет обновляться
+            // сам» traced to exactly this. We restart the Service after
+            // the copy if it was running pre-update.
+            "set \"SVC_WAS_RUNNING=0\"",
+            "sc query VPNRouter >nul 2>&1",
+            "if errorlevel 1 (",
+            "  echo [%TIME%] VPNRouter Service not installed >>\"%LOG%\"",
+            ") else (",
+            "  sc query VPNRouter | find \"RUNNING\" >nul",
+            "  if errorlevel 1 (",
+            "    echo [%TIME%] VPNRouter Service installed but not RUNNING — leaving alone >>\"%LOG%\"",
+            "  ) else (",
+            "    set \"SVC_WAS_RUNNING=1\"",
+            "    echo [%TIME%] VPNRouter Service RUNNING — stopping for file copy >>\"%LOG%\"",
+            "    sc stop VPNRouter >>\"%LOG%\" 2>&1",
+            "    set /a SVC_TRIES=0",
+            "    :svcstoploop",
+            "    sc query VPNRouter | find \"STOPPED\" >nul",
+            "    if not errorlevel 1 goto svcgone",
+            "    set /a SVC_TRIES+=1",
+            "    if %SVC_TRIES% gtr 20 (",
+            "      echo [%TIME%] Service still not STOPPED after 10 s — proceeding anyway >>\"%LOG%\"",
+            "      goto svcgone",
+            "    )",
+            "    ping -n 1 -w 500 127.0.0.1 >nul",
+            "    goto svcstoploop",
+            "    :svcgone",
+            "    echo [%TIME%] Service stop confirmed >>\"%LOG%\"",
+            "  )",
+            ")",
+            "echo [%TIME%] killing sing-box and copying files >>\"%LOG%\"",
             "taskkill /IM sing-box.exe /F >nul 2>&1",
             // Give Windows a moment to release file handles after parent exit.
             "ping -n 1 -w 750 127.0.0.1 >nul",
             "xcopy \"%SRC%\\*\" \"%DST%\\\" /E /Y /Q /R /I >>\"%LOG%\" 2>&1",
             "set XCOPY_EXIT=%ERRORLEVEL%",
             "echo [%TIME%] xcopy exit=%XCOPY_EXIT% >>\"%LOG%\"",
+            // Restart Service if it was running pre-update — preserves the
+            // user's «set-and-forget» Service-mode install across upgrades.
+            "if \"%SVC_WAS_RUNNING%\"==\"1\" (",
+            "  echo [%TIME%] restarting VPNRouter Service >>\"%LOG%\"",
+            "  sc start VPNRouter >>\"%LOG%\" 2>&1",
+            ")",
             // Drop install receipt so next launch can detect failed update.
             // Format mirrors Linux receipt: line 1 = timestamp, line 2 = version.
             // Stale receipt (already there from a prior successful update) is

@@ -861,7 +861,15 @@ public class VpnEngine : IDisposable
             else
                 _logger?.Warning("[VpnEngine] Hot-reload failed, falling back to full restart");
 
-            _singBox.ReloadConfigJson(configJson);
+            // v2.31.7-r1: pass through forceRestart so the structural-change
+            // intent actually reaches sing-box. Pre-r1 ReloadConfigJson always
+            // ran TryHotReload() first regardless of caller intent — when
+            // hot-reload happened to succeed (HTTP 204), the kill+restart
+            // path never ran and TUN routes for the new RoutingMode were
+            // never laid. Caught in brat-2026-05-04 16:17:32 logs (split →
+            // full switch where PID stayed the same despite the «Forced full
+            // restart» log line).
+            _singBox.ReloadConfigJson(configJson, forceRestart);
             // Update cached trackers post-restart so subsequent Apply calls
             // see the new baseline for both RoutingMode and TUN fingerprint.
             ActiveRoutingMode = newRoutingMode;
