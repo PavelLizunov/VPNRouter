@@ -39,7 +39,17 @@ public static class AndroidConfigBuilder
     public static string BuildConfigJson(string vlessUri)
     {
         var entry = VlessUriParser.Parse(vlessUri);
+        return BuildConfigJson(entry);
+    }
 
+    /// <summary>
+    /// v3.0 Phase 1.H (2026-05-04) — overload that takes an already-parsed
+    /// <see cref="VlessServerEntry"/>. Used by the subscription path which
+    /// gets entries straight from <see cref="SubscriptionFetcher"/> without
+    /// round-tripping back to a URI string.
+    /// </summary>
+    public static string BuildConfigJson(VlessServerEntry entry)
+    {
         var settings = new AppSettings();
         settings.App.RoutingMode = "split";       // Android: VpnService allow-list governs which apps go through TUN
         settings.App.LogLevel = "info";

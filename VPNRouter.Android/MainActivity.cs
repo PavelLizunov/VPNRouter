@@ -85,6 +85,14 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
     private const string ActionStop = "com.ninitux.vpnrouter.STOP";
     private const string ExtraConfigJson = "config_json";
     private const string ExtraAllowedPackages = "allowed_packages";
+    // v3.0 Phase 1.I — broadcasts from VpnRouterService so the UI can
+    // mirror REAL tunnel state, not just intent.
+    private const string ActionTunnelUp = "com.ninitux.vpnrouter.TUNNEL_UP";
+    private const string ActionTunnelDown = "com.ninitux.vpnrouter.TUNNEL_DOWN";
+    private const string ActionTunnelError = "com.ninitux.vpnrouter.TUNNEL_ERROR";
+    private const string ExtraErrorMessage = "error_message";
+
+    private TunnelStateReceiver? _tunnelReceiver;
 
     /// <summary>
     /// Singleton-ish reference so the Avalonia button handlers in
@@ -118,13 +126,72 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
     {
         base.OnCreate(savedInstanceState);
         Instance = this;
+
+        // v3.0 Phase 1.I — listen for tunnel-up / tunnel-down / tunnel-error
+        // broadcasts from VpnRouterService.java so the UI button reflects
+        // REAL tunnel state. Pre-1.I the button only showed intent ("we
+        // asked the OS to start"), now it shows actual.
+        _tunnelReceiver = new TunnelStateReceiver();
+        var filter = new IntentFilter();
+        filter.AddAction(ActionTunnelUp);
+        filter.AddAction(ActionTunnelDown);
+        filter.AddAction(ActionTunnelError);
+        // Android 13+ requires explicit RECEIVER_NOT_EXPORTED for unprotected
+        // broadcasts (we set Intent.SetPackage in the broadcaster, so this
+        // is process-local — safe).
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu)
+        {
+            RegisterReceiver(_tunnelReceiver, filter, ReceiverFlags.NotExported);
+        }
+        else
+        {
+            RegisterReceiver(_tunnelReceiver, filter);
+        }
     }
 
     protected override void OnDestroy()
     {
+        if (_tunnelReceiver is not null)
+        {
+            try { UnregisterReceiver(_tunnelReceiver); } catch { /* no-op */ }
+            _tunnelReceiver = null;
+        }
         if (ReferenceEquals(Instance, this))
             Instance = null;
         base.OnDestroy();
+    }
+
+    /// <summary>
+    /// v3.0 Phase 1.I — receives tunnel state broadcasts from the
+    /// foreground VpnRouterService. Updates <see cref="_intendedConnected"/>
+    /// (now misnamed — it's the real state, not just intent — but the
+    /// existing IntentChanged event keeps its name for back-compat with
+    /// the AndroidApp UI).
+    /// </summary>
+    private sealed class TunnelStateReceiver : global::Android.Content.BroadcastReceiver
+    {
+        public override void OnReceive(Context? context, Intent? intent)
+        {
+            var action = intent?.Action;
+            if (string.IsNullOrEmpty(action)) return;
+
+            switch (action)
+            {
+                case ActionTunnelUp:
+                    global::Android.Util.Log.Info("VpnRouter", "Phase 1.I: ACTION_TUNNEL_UP received");
+                    SetIntent(true);
+                    break;
+                case ActionTunnelDown:
+                    global::Android.Util.Log.Info("VpnRouter", "Phase 1.I: ACTION_TUNNEL_DOWN received");
+                    SetIntent(false);
+                    break;
+                case ActionTunnelError:
+                    var msg = intent?.GetStringExtra(ExtraErrorMessage) ?? "(no detail)";
+                    global::Android.Util.Log.Warn("VpnRouter", $"Phase 1.I: ACTION_TUNNEL_ERROR — {msg}");
+                    SetIntent(false);
+                    break;
+            }
+        }
     }
 
     /// <summary>
@@ -190,34 +257,40 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
 
     private void StartTunnelService()
     {
-        // v3.0 Phase 1.F (2026-05-04): prefer the persisted VLESS URI
-        // from AndroidStorage; fall back to PlaceholderVlessUri if
-        // none stored. Phase 3 (full UI port) will add a settings
-        // page where the user can paste a vless:// URI / subscription
-        // URL; for now you can pre-populate the SharedPreferences
-        // entry via adb:
-        //
-        //   adb shell run-as com.ninitux.vpnrouter \
-        //       sh -c "echo '<root><string name=\"vless_uri\">vless://...</string></root>' > files/shared_prefs/vpnrouter_settings.xml"
-        //
-        // — or by calling AndroidStorage.SetVlessUri from a future
-        // Avalonia settings UI.
-        var vlessUri = AndroidStorage.GetVlessUri() ?? PlaceholderVlessUri;
-        var usingPlaceholder = vlessUri == PlaceholderVlessUri;
-        global::Android.Util.Log.Info("VpnRouter",
-            usingPlaceholder
-                ? "Phase 1.F: no stored VLESS URI — falling back to placeholder"
-                : "Phase 1.F: using stored VLESS URI from SharedPreferences");
-
-        string configJson;
+        // v3.0 Phase 1.H (2026-05-04): resolve the active server from
+        // AndroidStorage. Three sources, in priority order:
+        //   1. Subscription server selected by Name (Phase 1.H)
+        //   2. Manual vless:// URI (Phase 1.F)
+        //   3. Hardcoded placeholder (smoke-test fallback)
+        // AndroidStorage.GetActiveServer encapsulates 1+2; if it returns
+        // null we fall back to placeholder.
+        VPNRouter.Core.Models.VlessServerEntry entry;
         try
         {
-            configJson = AndroidConfigBuilder.BuildConfigJson(vlessUri);
+            entry = AndroidStorage.GetActiveServer()
+                ?? VPNRouter.Core.Services.VlessUriParser.Parse(PlaceholderVlessUri);
         }
         catch (Exception ex)
         {
             global::Android.Util.Log.Error("VpnRouter",
-                $"Phase 1.E: failed to generate sing-box config — {ex.GetType().Name}: {ex.Message}");
+                $"Phase 1.H: failed to resolve server entry — {ex.GetType().Name}: {ex.Message}");
+            SetIntent(false);
+            return;
+        }
+
+        var label = string.IsNullOrEmpty(entry.Name) ? entry.Server : entry.Name;
+        global::Android.Util.Log.Info("VpnRouter",
+            $"Phase 1.H: using server {label} ({entry.Server}:{entry.Port})");
+
+        string configJson;
+        try
+        {
+            configJson = AndroidConfigBuilder.BuildConfigJson(entry);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("VpnRouter",
+                $"Phase 1.H: failed to generate sing-box config — {ex.GetType().Name}: {ex.Message}");
             SetIntent(false);
             return;
         }

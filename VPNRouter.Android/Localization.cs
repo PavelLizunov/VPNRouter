@@ -1,0 +1,133 @@
+using System;
+using System.Globalization;
+
+namespace VPNRouter.Android;
+
+/// <summary>
+/// v3.0 Phase 1.H (2026-05-04) — bilingual UI strings (RU/EN), mirrors
+/// the desktop <c>VPNRouter.App.Localization.Strings</c> pattern. Static
+/// getters branch on the <see cref="Ru"/> flag.
+///
+/// <para>Initial language is resolved in this priority order:
+/// <list type="number">
+///   <item>Explicit user choice persisted via
+///   <see cref="AndroidStorage.GetLanguage"/> (last toggle).</item>
+///   <item>System Locale (CultureInfo.CurrentUICulture.TwoLetterISOLanguageName)
+///   — "ru" → Ru=true, anything else → English.</item>
+///   <item>Fallback: English.</item>
+/// </list></para>
+///
+/// <para><see cref="ToggleAndPersist"/> flips Ru and writes the choice
+/// back to SharedPreferences so the next app launch starts in the same
+/// language. Phase 2 will swap to a fully reactive scheme (INotifyPropertyChanged
+/// on a singleton VM); for Phase 1.H the AndroidApp manually re-reads
+/// each label after toggle.</para>
+/// </summary>
+internal static class Localization
+{
+    public static bool Ru { get; private set; }
+
+    public static void LoadFromStorage()
+    {
+        var stored = AndroidStorage.GetLanguage();
+        if (string.Equals(stored, "ru", StringComparison.OrdinalIgnoreCase))
+        {
+            Ru = true;
+            return;
+        }
+        if (string.Equals(stored, "en", StringComparison.OrdinalIgnoreCase))
+        {
+            Ru = false;
+            return;
+        }
+
+        // No explicit choice — guess from system Locale.
+        try
+        {
+            var lang = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+            Ru = string.Equals(lang, "ru", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            Ru = false;
+        }
+    }
+
+    public static void ToggleAndPersist()
+    {
+        Ru = !Ru;
+        AndroidStorage.SetLanguage(Ru ? "ru" : "en");
+    }
+
+    // ── Header ─────────────────────────────────────────────────────────
+
+    public static string Title => "VPNRouter v3.0";
+    public static string Subtitle => Ru
+        ? "Android · вставь VLESS-URI или подписочный URL и подключись"
+        : "Android · paste a VLESS URI or subscription URL and connect";
+
+    public static string LangToggleLabel => Ru ? "EN" : "RU";
+
+    // ── Status / Connect button ─────────────────────────────────────────
+
+    public static string StatusConnected => Ru ? "Подключено" : "Connected";
+    public static string StatusDisconnected => Ru ? "Отключено" : "Disconnected";
+    public static string ButtonConnect => Ru ? "Подключить" : "Connect";
+    public static string ButtonDisconnect => Ru ? "Отключить" : "Disconnect";
+
+    // ── Server input ────────────────────────────────────────────────────
+
+    public static string ServerHeader => Ru ? "Сервер" : "Server";
+    public static string ServerInputWatermark => Ru
+        ? "vless://… или https://…/sub"
+        : "vless://… or https://…/sub";
+    public static string ButtonSave => Ru ? "Сохранить" : "Save";
+    public static string ButtonRefresh => Ru ? "Обновить" : "Refresh";
+
+    public static string ServerInputHintInitial => Ru
+        ? "Введи vless://-ссылку или подписочный URL и нажми «Сохранить». Для подписки потом «Обновить»."
+        : "Paste a vless:// share-link or a subscription URL, then tap Save. For a subscription URL, tap Refresh after.";
+
+    public static string SaveStatusCleared => Ru
+        ? "Сервер очищен. Будет использован встроенный placeholder."
+        : "Server cleared. The built-in placeholder will be used.";
+    public static string SaveStatusUriBadHost => Ru
+        ? "URI распарсен, но не хватает host или порта. Проверь."
+        : "Parsed but missing host or port — please double-check.";
+    public static string SaveStatusUriOk => Ru
+        ? "Сохранено. Сервер: {0}:{1}. Жми «Подключить»."
+        : "Saved. Server: {0}:{1}. Tap Connect.";
+    public static string SaveStatusUriInvalid => Ru
+        ? "Невалидный VLESS URI: {0}"
+        : "Invalid VLESS URI: {0}";
+    public static string SaveStatusSubStored => Ru
+        ? "URL подписки сохранён. Жми «Обновить» чтобы скачать список серверов."
+        : "Subscription URL saved. Tap Refresh to fetch the server list.";
+    public static string SaveStatusUnknown => Ru
+        ? "Не похоже ни на vless://, ни на http(s):// — проверь ввод."
+        : "Doesn't look like vless:// or http(s):// — check the input.";
+
+    public static string RefreshNeedsUrl => Ru
+        ? "Сначала сохрани подписочный URL (https://…)."
+        : "Save a subscription URL first (https://…).";
+    public static string RefreshFetching => Ru ? "Скачиваю…" : "Fetching…";
+    public static string RefreshOk => Ru
+        ? "Получено серверов: {0}. Выбери из списка ниже."
+        : "Fetched {0} servers. Pick one below.";
+    public static string RefreshFailed => Ru
+        ? "Не удалось скачать: {0}"
+        : "Refresh failed: {0}";
+
+    // ── Server list ─────────────────────────────────────────────────────
+
+    public static string AvailableServers => Ru ? "Доступные серверы" : "Available servers";
+    public static string ServerSelected => Ru
+        ? "Выбран: {0} ({1}:{2})"
+        : "Selected: {0} ({1}:{2})";
+
+    // ── Bottom hint ─────────────────────────────────────────────────────
+
+    public static string HintTunnel => Ru
+        ? "Состояние туннеля повторяет иконку 🔑 в строке состояния."
+        : "Tunnel state mirrors the system VPN-key icon in the status bar.";
+}

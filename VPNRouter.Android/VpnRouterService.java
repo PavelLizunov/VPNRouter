@@ -61,6 +61,12 @@ public final class VpnRouterService extends VpnService {
     public static final String ACTION_STOP = "com.ninitux.vpnrouter.STOP";
     public static final String EXTRA_CONFIG_JSON = "config_json";
     public static final String EXTRA_ALLOWED_PACKAGES = "allowed_packages";
+    // v3.0 Phase 1.I (2026-05-04) — broadcasts so the Avalonia UI can flip
+    // its button label on real tunnel-state events instead of intent-only.
+    public static final String ACTION_TUNNEL_UP = "com.ninitux.vpnrouter.TUNNEL_UP";
+    public static final String ACTION_TUNNEL_DOWN = "com.ninitux.vpnrouter.TUNNEL_DOWN";
+    public static final String ACTION_TUNNEL_ERROR = "com.ninitux.vpnrouter.TUNNEL_ERROR";
+    public static final String EXTRA_ERROR_MESSAGE = "error_message";
 
     private static final int NOTIFICATION_ID = 100;
     private static final String NOTIFICATION_CHANNEL_ID = "vpnrouter_tunnel";
@@ -97,8 +103,16 @@ public final class VpnRouterService extends VpnService {
         try {
             ensureLibboxSetup();
             startLibboxService();
+            // v3.0 Phase 1.I — broadcast tunnel-up so UI flips to "Connected"
+            // on REAL state, not just intent.
+            sendBroadcast(new Intent(ACTION_TUNNEL_UP).setPackage(getPackageName()));
         } catch (Exception e) {
             Log.e(LOG_TAG, "startTunnel failed: " + e.getClass().getName() + ": " + e.getMessage(), e);
+            // Phase 1.I — let the UI know we failed so it can revert the
+            // optimistic "Connected" intent state.
+            Intent err = new Intent(ACTION_TUNNEL_ERROR).setPackage(getPackageName());
+            err.putExtra(EXTRA_ERROR_MESSAGE, e.getClass().getSimpleName() + ": " + e.getMessage());
+            sendBroadcast(err);
             stopSelf();
         }
     }
@@ -163,11 +177,13 @@ public final class VpnRouterService extends VpnService {
 
     private void stopTunnel() {
         if (commandServer != null) {
-            try {
-                commandServer.closeService();
-            } catch (Exception e) {
-                Log.w(LOG_TAG, "closeService threw: " + e.getMessage());
-            }
+            // v3.0 Phase 1.I (2026-05-04) — order matters here. Reference
+            // impl in sing-box-for-android (BoxService.kt) calls close()
+            // directly without closeService() first; closeService() throws
+            // "invalid argument" on Android 12+ when the libbox service
+            // is mid-startup or already closing. Skip closeService and
+            // rely on close() to tear down both the command server and
+            // the underlying sing-box service in one step.
             try {
                 commandServer.close();
             } catch (Exception e) {
@@ -176,6 +192,13 @@ public final class VpnRouterService extends VpnService {
             commandServer = null;
         }
         stopForeground(STOP_FOREGROUND_REMOVE);
+        // v3.0 Phase 1.I — broadcast tunnel-down so UI flips to
+        // "Disconnected" on real state.
+        try {
+            sendBroadcast(new Intent(ACTION_TUNNEL_DOWN).setPackage(getPackageName()));
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "broadcast tunnel-down threw: " + e.getMessage());
+        }
     }
 
     @Override
