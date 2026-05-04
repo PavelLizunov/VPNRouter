@@ -4,6 +4,7 @@ using Android.Content;
 using Android.Content.PM;
 using Android.Net;
 using Android.OS;
+using Android.Views;
 using Avalonia;
 using Avalonia.Android;
 
@@ -41,6 +42,14 @@ namespace VPNRouter.Android;
     // descendant.
     Theme = "@style/Theme.AppCompat.Light.NoActionBar",
     LaunchMode = LaunchMode.SingleTask,
+    // v3.0 Phase 2 (2026-05-04) — soft-input policy.
+    //   StateHidden: keyboard NOT auto-shown when activity opens. Pre-2,
+    //     the multi-line TextBox auto-grabbed focus → keyboard popped up
+    //     unexpectedly when user just wanted to read the screen.
+    //   AdjustResize: when keyboard DOES appear (user taps input), the
+    //     view resizes so the focused field stays visible above the keys
+    //     instead of being covered.
+    WindowSoftInputMode = SoftInput.StateHidden | SoftInput.AdjustResize,
     ConfigurationChanges =
         ConfigChanges.ScreenSize |
         ConfigChanges.SmallestScreenSize |

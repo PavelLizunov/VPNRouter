@@ -1,16 +1,29 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="VPNRouter.Android.AndroidApp"
-             RequestedThemeVariant="Default">
+             RequestedThemeVariant="Dark">
 
     <!--
-      v3.0 Phase 0 — minimal Avalonia App for Android.
-      Phase 3 will share App.axaml and design tokens with the
-      desktop VPNRouter.App project (link the same XAML files).
+      v3.0 Phase 2 (2026-05-04) — visual parity with desktop.
+      The same Arctic / Glacier design tokens are used on both
+      platforms. Tokens.axaml is linked from VPNRouter.App at build
+      time (see csproj <AvaloniaResource Link="Styles\Tokens.axaml">),
+      so any palette tweak in desktop applies to mobile automatically.
+
+      RequestedThemeVariant=Dark by default. AndroidStorage.GetTheme()
+      can override at runtime via Application.Current.RequestedThemeVariant.
     -->
 
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://VPNRouter.Android/Styles/Tokens.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
     <Application.Styles>
-        <FluentTheme />
+        <FluentTheme/>
     </Application.Styles>
 
 </Application>

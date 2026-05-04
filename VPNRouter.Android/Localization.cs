@@ -125,6 +125,12 @@ internal static class Localization
         ? "Выбран: {0} ({1}:{2})"
         : "Selected: {0} ({1}:{2})";
 
+    // ── QR scan (Phase 2.4 placeholder) ────────────────────────────────
+
+    public static string QrComingSoon => Ru
+        ? "QR-сканер появится в следующем апдейте — пока вставляй URI вручную."
+        : "QR scanner is coming in the next update — paste the URI manually for now.";
+
     // ── Bottom hint ─────────────────────────────────────────────────────
 
     public static string HintTunnel => Ru

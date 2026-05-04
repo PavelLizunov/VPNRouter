@@ -1,11 +1,13 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.Styling;
 using Avalonia.Controls.Primitives;
+using Avalonia.Data;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -66,7 +68,7 @@ public partial class AndroidApp : Avalonia.Application
 
         if (ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.ISingleViewApplicationLifetime singleView)
         {
-            singleView.MainView = BuildPhase1hView();
+            singleView.MainView = BuildPhase2View();
             MainActivity.IntentChanged += OnIntentChanged;
             UpdateButtonState(MainActivity.IntendedConnected);
             // Restore cached server list from previous session.
@@ -87,20 +89,80 @@ public partial class AndroidApp : Avalonia.Application
         };
     }
 
+    // ── Token resolution ───────────────────────────────────────────────
+
     /// <summary>
-    /// v3.0 Phase 1.H view: header + status/connect + URL/URI input +
-    /// server ListBox + language toggle. Wrapped in ScrollViewer because
-    /// soft keyboard + landscape can otherwise push the bottom items
-    /// off-screen.
+    /// Resolve a SolidColorBrush from the merged Tokens.axaml at the
+    /// current ActualThemeVariant. Falls back to Brushes.Transparent if
+    /// the key is missing — should not happen in practice (every desktop
+    /// token has both a Color and a Brush variant under both Light and
+    /// Dark dictionaries).
     /// </summary>
-    private Control BuildPhase1hView()
+    private IBrush GetBrush(string key)
     {
-        // ── Header bar (title + language toggle) ────────────────────────
+        if (Resources.TryGetResource(key, ActualThemeVariant, out var v) && v is IBrush b)
+            return b;
+        return Brushes.Transparent;
+    }
+
+    private double GetRadius(string key)
+    {
+        // Tokens.axaml stores radii as `<sys:Double x:Key="RadiusXs">3</sys:Double>`
+        // outside ThemeDictionaries (theme-invariant), so the lookup uses
+        // ActualThemeVariant but Avalonia's resource resolver still finds
+        // the global value.
+        if (Resources.TryGetResource(key, ActualThemeVariant, out var v))
+        {
+            return v switch
+            {
+                double d => d,
+                int i => i,
+                _ => 8.0
+            };
+        }
+        return 8.0;
+    }
+
+    /// <summary>
+    /// v3.0 Phase 2 view (2026-05-04) — desktop visual parity.
+    /// Card-based layout with shared Arctic design tokens. Tokens
+    /// come from VPNRouter.App/Styles/Tokens.axaml linked at build
+    /// time. The whole tree uses semantic brushes (SurfaceAppBrush,
+    /// AccentSolidBrush, BorderSubtleBrush, TextMutedBrush, etc.) so
+    /// theme variants and palette tweaks propagate automatically.
+    ///
+    /// <para>Layout: header bar (title + RU/EN toggle) → status card
+    /// (status text + Connect button) → server card (input + Save/QR
+    /// + Refresh + ListBox) → bottom hint. Each card has padding,
+    /// rounded corners (RadiusLg), subtle border. Mimics desktop
+    /// SimplePage's card pattern but stacked vertically for narrow
+    /// phone screen.</para>
+    /// </summary>
+    private Control BuildPhase2View()
+    {
+        var bgBrush = GetBrush("SurfaceAppBrush");
+        var cardBrush = GetBrush("SurfaceBaseBrush");
+        var subtleBorder = GetBrush("BorderSubtleBrush");
+        var defaultBorder = GetBrush("BorderDefaultBrush");
+        var textPrimary = GetBrush("TextPrimaryBrush");
+        var textSecondary = GetBrush("TextSecondaryBrush");
+        var textMuted = GetBrush("TextMutedBrush");
+        var accentSolid = GetBrush("AccentSolidBrush");
+        var accentOnSolid = GetBrush("AccentOnSolidBrush");
+        var accentBgSubtle = GetBrush("AccentBgSubtleBrush");
+        var accentBorder = GetBrush("AccentBorderBrush");
+        var accentFg = GetBrush("AccentFgBrush");
+        var radiusLg = GetRadius("RadiusLg");      // 10
+        var radiusMd = GetRadius("RadiusMd");      // 8
+        var radiusSm = GetRadius("RadiusSm");      // 6
+
+        // ── Header (title + language toggle) ────────────────────────────
         _titleBlock = new TextBlock
         {
             Text = Localization.Title,
-            FontSize = 26,
+            FontSize = 24,
             FontWeight = FontWeight.SemiBold,
+            Foreground = textPrimary,
             VerticalAlignment = VerticalAlignment.Center,
         };
 
@@ -108,8 +170,13 @@ public partial class AndroidApp : Avalonia.Application
         {
             Content = Localization.LangToggleLabel,
             FontSize = 12,
-            Padding = new Thickness(12, 6),
-            HorizontalAlignment = HorizontalAlignment.Right,
+            FontWeight = FontWeight.Medium,
+            Padding = new Thickness(14, 6),
+            CornerRadius = new CornerRadius(radiusSm),
+            Background = accentBgSubtle,
+            Foreground = accentFg,
+            BorderBrush = accentBorder,
+            BorderThickness = new Thickness(1),
             VerticalAlignment = VerticalAlignment.Center,
         };
         _languageToggle.Click += OnLanguageToggleClicked;
@@ -117,7 +184,7 @@ public partial class AndroidApp : Avalonia.Application
         var headerGrid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(24, 32, 24, 0),
+            Margin = new Thickness(20, 24, 20, 0),
         };
         Grid.SetColumn(_titleBlock, 0);
         Grid.SetColumn(_languageToggle, 1);
@@ -128,41 +195,59 @@ public partial class AndroidApp : Avalonia.Application
         {
             Text = Localization.Subtitle,
             FontSize = 12,
-            Opacity = 0.6,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            TextAlignment = TextAlignment.Center,
-            Margin = new Thickness(24, 4, 24, 0),
+            Foreground = textMuted,
+            Margin = new Thickness(20, 6, 20, 0),
             TextWrapping = TextWrapping.Wrap,
         };
 
-        // ── Status + Connect button ─────────────────────────────────────
+        // ── Status + Connect card ───────────────────────────────────────
         _statusBlock = new TextBlock
         {
             Text = Localization.StatusDisconnected,
-            FontSize = 18,
+            FontSize = 22,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = textPrimary,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 32, 0, 0),
         };
 
         _toggleButton = new Avalonia.Controls.Button
         {
             Content = Localization.ButtonConnect,
-            FontSize = 18,
-            Padding = new Thickness(48, 16),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 16, 0, 0),
+            FontSize = 16,
+            FontWeight = FontWeight.SemiBold,
+            Padding = new Thickness(48, 14),
+            CornerRadius = new CornerRadius(radiusMd),
+            Background = accentSolid,
+            Foreground = accentOnSolid,
+            BorderThickness = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(0, 16, 0, 0),
         };
         _toggleButton.Click += OnToggleClicked;
 
-        // ── Server input + Save / Refresh buttons ───────────────────────
+        var statusCard = new Border
+        {
+            Background = cardBrush,
+            BorderBrush = subtleBorder,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(radiusLg),
+            Padding = new Thickness(20, 24),
+            Margin = new Thickness(20, 16, 20, 0),
+            Child = new StackPanel
+            {
+                Children = { _statusBlock, _toggleButton }
+            }
+        };
+
+        // ── Server card: input + Save/QR/Refresh + ListBox ──────────────
         _serverHeaderBlock = new TextBlock
         {
             Text = Localization.ServerHeader,
-            FontSize = 14,
+            FontSize = 13,
             FontWeight = FontWeight.SemiBold,
-            Opacity = 0.8,
-            Margin = new Thickness(24, 32, 24, 8),
+            Foreground = textSecondary,
+            Margin = new Thickness(0, 0, 0, 8),
         };
 
         _serverInputBox = new TextBox
@@ -171,102 +256,158 @@ public partial class AndroidApp : Avalonia.Application
             FontSize = 13,
             AcceptsReturn = false,
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(24, 0, 24, 0),
-            MinHeight = 80,
+            MinHeight = 64,
+            CornerRadius = new CornerRadius(radiusSm),
+            BorderBrush = defaultBorder,
+            BorderThickness = new Thickness(1),
+            // Phase 2 keyboard fix: TextBox is NOT auto-focused on view
+            // attach. The Activity-level WindowSoftInputMode=StateHidden
+            // is the primary mechanism, but Focusable=true at the property
+            // level still allows tap-to-focus when user explicitly chooses.
         };
-
-        // Pre-fill with whichever was last stored: subscription URL takes
-        // priority because it's typically what the user pastes (one URL =
-        // many servers); fall back to manual URI.
         var existingSub = AndroidStorage.GetSubscriptionUrl();
         var existingUri = AndroidStorage.GetVlessUri();
         _serverInputBox.Text = existingSub ?? existingUri ?? string.Empty;
 
-        _saveServerButton = new Avalonia.Controls.Button
-        {
-            Content = Localization.ButtonSave,
-            FontSize = 14,
-            Padding = new Thickness(20, 8),
-        };
+        _saveServerButton = StyledSecondaryButton(Localization.ButtonSave);
         _saveServerButton.Click += OnSaveServerClicked;
 
-        _refreshSubButton = new Avalonia.Controls.Button
-        {
-            Content = Localization.ButtonRefresh,
-            FontSize = 14,
-            Padding = new Thickness(20, 8),
-            Margin = new Thickness(8, 0, 0, 0),
-        };
+        _refreshSubButton = StyledSecondaryButton(Localization.ButtonRefresh);
+        _refreshSubButton.Margin = new Thickness(8, 0, 0, 0);
         _refreshSubButton.Click += OnRefreshClicked;
+
+        // Phase 2.4 — QR scan button (Bonus). Currently a placeholder
+        // that surfaces a "QR scan coming soon" toast — full ZXing
+        // integration deferred to Phase 2.5 to keep this iteration
+        // shippable. Button is wired and clickable for UX feedback.
+        var qrButton = StyledSecondaryButton("📷 QR");
+        qrButton.Margin = new Thickness(8, 0, 0, 0);
+        qrButton.Click += OnScanQrClicked;
 
         var buttonRow = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(24, 8, 24, 0),
-            Children = { _saveServerButton, _refreshSubButton },
+            Margin = new Thickness(0, 12, 0, 0),
+            Children = { _saveServerButton, qrButton, _refreshSubButton },
         };
 
         _serverInputStatus = new TextBlock
         {
             Text = Localization.ServerInputHintInitial,
             FontSize = 11,
-            Opacity = 0.65,
+            Foreground = textMuted,
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(24, 8, 24, 0),
+            Margin = new Thickness(0, 12, 0, 0),
         };
 
-        // ── Subscription server list ────────────────────────────────────
         _serverListHeader = new TextBlock
         {
             Text = Localization.AvailableServers,
-            FontSize = 14,
+            FontSize = 13,
             FontWeight = FontWeight.SemiBold,
-            Opacity = 0.8,
-            Margin = new Thickness(24, 24, 24, 8),
-            IsVisible = false, // shown after first successful refresh
+            Foreground = textSecondary,
+            Margin = new Thickness(0, 20, 0, 8),
+            IsVisible = false,
         };
 
         _serverList = new ListBox
         {
-            Margin = new Thickness(24, 0, 24, 0),
             MaxHeight = 280,
             IsVisible = false,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
         };
         _serverList.SelectionChanged += OnServerSelectionChanged;
+
+        var serverCard = new Border
+        {
+            Background = cardBrush,
+            BorderBrush = subtleBorder,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(radiusLg),
+            Padding = new Thickness(20, 18),
+            Margin = new Thickness(20, 16, 20, 0),
+            Child = new StackPanel
+            {
+                Children =
+                {
+                    _serverHeaderBlock,
+                    _serverInputBox,
+                    buttonRow,
+                    _serverInputStatus,
+                    _serverListHeader,
+                    _serverList,
+                }
+            }
+        };
 
         // ── Bottom hint ─────────────────────────────────────────────────
         _hintBlock = new TextBlock
         {
             Text = Localization.HintTunnel,
             FontSize = 11,
-            Opacity = 0.5,
+            Foreground = textMuted,
             HorizontalAlignment = HorizontalAlignment.Center,
             TextAlignment = TextAlignment.Center,
-            Margin = new Thickness(24, 32, 24, 24),
+            Margin = new Thickness(20, 24, 20, 24),
             TextWrapping = TextWrapping.Wrap,
         };
 
         var stack = new StackPanel
         {
-            Spacing = 0,
-            Margin = new Thickness(0),
             Children =
             {
-                headerGrid, _subtitleBlock,
-                _statusBlock, _toggleButton,
-                _serverHeaderBlock, _serverInputBox, buttonRow, _serverInputStatus,
-                _serverListHeader, _serverList,
-                _hintBlock
-            },
+                headerGrid,
+                _subtitleBlock,
+                statusCard,
+                serverCard,
+                _hintBlock,
+            }
         };
 
-        return new ScrollViewer
+        var scrollWrapper = new ScrollViewer
         {
             Content = stack,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Background = bgBrush,
         };
+
+        return scrollWrapper;
+    }
+
+    /// <summary>
+    /// Style helper for "secondary" buttons (Save, Refresh, QR) — outline
+    /// with subtle border, neutral surface bg, semi-bold label. Mirrors
+    /// desktop's "secondary action" button pattern.
+    /// </summary>
+    private Avalonia.Controls.Button StyledSecondaryButton(string label)
+    {
+        return new Avalonia.Controls.Button
+        {
+            Content = label,
+            FontSize = 13,
+            FontWeight = FontWeight.Medium,
+            Padding = new Thickness(16, 8),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = GetBrush("SurfaceRaisedBrush"),
+            Foreground = GetBrush("TextPrimaryBrush"),
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(1),
+        };
+    }
+
+    /// <summary>
+    /// Phase 2.4 placeholder — full ZXing camera scanner is queued
+    /// for Phase 2.5. For now this surfaces a "coming soon" hint
+    /// in the input-status line so users discover the planned feature.
+    /// </summary>
+    private void OnScanQrClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_serverInputStatus is null) return;
+        _serverInputStatus.Text = Localization.QrComingSoon;
+        _serverInputStatus.Opacity = 0.85;
     }
 
     // ── Connect / Disconnect ────────────────────────────────────────────

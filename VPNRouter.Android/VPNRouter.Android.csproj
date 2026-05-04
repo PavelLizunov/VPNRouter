@@ -36,6 +36,19 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- v3.0 Phase 2 (2026-05-04): link the desktop design tokens so
+         the Android UI shares the same Arctic palette + radii + spacing.
+         Avalonia 11 supports cross-project resource linking via
+         <AvaloniaResource> with a Link metadata; the file path inside
+         the APK becomes /Styles/Tokens.axaml regardless of where it
+         lives on disk. Loaded from AndroidApp.axaml via:
+           <ResourceInclude Source="avares://VPNRouter.Android/Styles/Tokens.axaml"/>
+    -->
+    <AvaloniaResource Include="..\VPNRouter.App\Styles\Tokens.axaml"
+                      Link="Styles\Tokens.axaml" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- v3.0 Phase 1.E (2026-05-04): link VPNRouter.Core sources
          directly into this project rather than using a ProjectReference
          to a multi-target Core build.
