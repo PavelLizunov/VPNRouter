@@ -150,8 +150,22 @@ sealed class Program
         }
         catch { /* never block app startup over a cosmetic sc.exe fix */ }
 
-        // Defensive cleanup: kill orphan sing-box / older VPNRouter instances
-        // left behind by failed updates or v2.3.x→v2.4.x migration.
+        // v2.31.7-r2 — single-instance enforcement. Replaces the brutal
+        // OrphanCleanup-killing-VPNRouter.App approach. If a second
+        // launch happens (user clicks taskbar / Start Menu shortcut /
+        // autostart fired again / explorer relaunched), signal the
+        // existing instance to surface and exit silently. spark-wraith
+        // 2026-05-04: «не открывается, не показывается нигде» traced to
+        // the kill-and-restart cycle interacting badly with Windows
+        // ForegroundLockTimeout — the fresh window often didn't reach
+        // foreground.
+        if (!VPNRouter.App.Services.SingleInstance.TryAcquireOrSignal(Serilog.Log.Logger))
+            return;
+
+        // Defensive cleanup: kill orphan sing-box left behind by failed
+        // updates or hard crashes. After r2 the Mutex prevents twin
+        // VPNRouter.App instances, but a stale sing-box (started by a
+        // previous Service or crashed parent) can still linger.
         try { OrphanCleanup.KillOrphans(); } catch { }
 
         // Clean leftover firewall kill-switch rules that may block internet

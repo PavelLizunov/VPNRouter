@@ -112,6 +112,24 @@ public partial class App : Application
             // Setup tray icon
             SetupTrayIcon(desktop);
 
+            // v2.31.7-r2 — wire single-instance show-window handler.
+            // Fired (on UI thread) when a second-instance launch signals
+            // us via the named pipe. Brings the window out of any state
+            // (minimised / hidden behind / on another virtual desktop)
+            // to the foreground, working around Windows
+            // ForegroundLockTimeout via WindowForegroundHelper.
+            VPNRouter.App.Services.SingleInstance.ShowWindowRequested += () =>
+            {
+                VPNRouter.App.Services.WindowForegroundHelper.BringToFront(desktop.MainWindow);
+            };
+
+            // Release the single-instance Mutex on graceful shutdown so
+            // the next launch sees a clean slot and can claim it.
+            desktop.Exit += (_, _) =>
+            {
+                try { VPNRouter.App.Services.SingleInstance.Release(); } catch { }
+            };
+
             // --minimized: start hidden in tray (autostart on logon)
             if (Program.StartMinimized)
                 mainWindow.Hide();
