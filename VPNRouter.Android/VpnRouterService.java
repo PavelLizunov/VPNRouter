@@ -161,6 +161,21 @@ public final class VpnRouterService extends VpnService {
         options.setFixAndroidStack(false);
         Libbox.setup(options);
 
+        // v3.0 Phase 5b — redirect Go-side stderr to externally-readable
+        // path so we can pull it via plain adb shell cat (no root, no
+        // run-as). getExternalFilesDir() returns
+        // /sdcard/Android/data/<pkg>/files/ which is world-readable and
+        // doesn't require WRITE_EXTERNAL_STORAGE on Android Q+.
+        try {
+            File extDir = getExternalFilesDir(null);
+            File targetDir = (extDir != null) ? extDir : workingDir;
+            File stderrFile = new File(targetDir, "singbox.stderr.log");
+            Libbox.redirectStderr(stderrFile.getAbsolutePath());
+            Log.i(LOG_TAG, "Phase 5b: stderr → " + stderrFile.getAbsolutePath());
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "redirectStderr failed: " + e.getMessage());
+        }
+
         libboxSetupDone = true;
         Log.i(LOG_TAG, "libbox setup OK (base=" + filesDir.getAbsolutePath() + ")");
     }
