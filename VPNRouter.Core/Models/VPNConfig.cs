@@ -411,6 +411,16 @@ public class RuleSetEntry
 
     [JsonProperty("download_detour", NullValueHandling = NullValueHandling.Ignore)]
     public string? DownloadDetour { get; set; }
+
+    /// <summary>
+    /// v2.31.6-r18: explicit refresh interval for remote rule sets (e.g.
+    /// "168h" = weekly). sing-box default is "24h" if absent — explicit
+    /// value documents intent + lets us bump cadence per rule_set without
+    /// bumping every one. Format per sing-box: Go duration string ("24h",
+    /// "168h", "1h30m"). Ignored for local rule sets.
+    /// </summary>
+    [JsonProperty("update_interval", NullValueHandling = NullValueHandling.Ignore)]
+    public string? UpdateInterval { get; set; }
 }
 
 /// <summary>sing-box 1.12+ route rule — uses action-based format</summary>

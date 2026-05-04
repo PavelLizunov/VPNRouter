@@ -301,9 +301,15 @@ public static class Strings
     public static string FlushDnsLabel => Ru
         ? "Очищать DNS кэш при подключении"
         : "Flush DNS cache on connect";
+    // v2.31.6-r18: hint expanded — user feedback iter#7 audit asked
+    // why ISP DNS sometimes appears in browserleaks.com / ipleak.net.
+    // Default split-tunnel sends non-routed apps' DNS through Cloudflare
+    // DoH on the real NIC (not ISP, but leak-tests interpret "Cloudflare
+    // DoH client = real IP" as a leak). Strict DNS forces all DNS through
+    // the VPN tunnel for that perfect-on-tests outcome.
     public static string StrictDnsLabel => Ru
-        ? "Строгий DNS (весь DNS через VPN, без утечек)"
-        : "Strict DNS (all DNS via VPN, no leaks)";
+        ? "Строгий DNS (весь DNS через VPN — рекомендуется при leak-тестах)"
+        : "Strict DNS (all DNS via VPN — recommended for leak tests)";
 
     // ── Updates ──
     public static string CheckForUpdates => Ru ? "Проверить обновления" : "Check for updates";
@@ -1094,8 +1100,8 @@ public static class Strings
         ? "Отключить IPv6 на маршруте VPN (избегает DNS-утечек через IPv6)"
         : "Disable IPv6 on the VPN route (avoids DNS leaks via IPv6)";
     public static string TipLeakStrictDns => Ru
-        ? "Перехватывать весь DNS, включая системный"
-        : "Hijack all DNS including system resolvers";
+        ? "Включи если на browserleaks.com / ipleak.net видишь свой ISP DNS или DNS-сервер не из VPN. По умолчанию приложения вне списка маршрутизации идут через Cloudflare DoH на реальном NIC — leak-тесты могут это засчитать как утечку. Strict DNS отправляет ВЕСЬ DNS-трафик через туннель."
+        : "Enable if browserleaks.com / ipleak.net shows your ISP DNS or a non-VPN resolver. By default, apps not in the routing list use Cloudflare DoH on the real NIC — leak tests may flag this as a leak. Strict DNS routes ALL DNS through the tunnel.";
     public static string TipLeakFlushDns => Ru
         ? "Очищать кэш DNS при старте VPN"
         : "Flush DNS cache when VPN starts";

@@ -120,7 +120,13 @@ public static class ConfigGenerator
 
     private static void ApplyAdBlock(SingBoxConfig config)
     {
-        // 1. Remote rule_set — downloaded and cached by sing-box
+        // 1. Remote rule_set — downloaded and cached by sing-box.
+        // v2.31.6-r18: explicit `update_interval=168h` (= weekly). Pre-r18
+        // we relied on sing-box's implicit 24h default — fine, but invisible
+        // to anyone reading the generated `current.json`. With this we make
+        // the refresh cadence auditable and free to tune. The REIJI007
+        // upstream is updated daily-ish; weekly cache is a reasonable
+        // freshness/bandwidth trade for ~300K-domain blocklist.
         config.Route.RuleSet ??= new List<RuleSetEntry>();
         config.Route.RuleSet.Add(new RuleSetEntry
         {
@@ -128,7 +134,8 @@ public static class ConfigGenerator
             Tag = AdBlockRuleSetTag,
             Format = "binary",
             Url = AdBlockRuleSetUrl,
-            DownloadDetour = "direct"
+            DownloadDetour = "direct",
+            UpdateInterval = "168h"
         });
 
         // 2. DNS rule — reject DNS queries for ad domains (before other rules)
