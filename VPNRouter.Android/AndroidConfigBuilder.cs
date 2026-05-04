@@ -38,7 +38,8 @@ public static class AndroidConfigBuilder
     /// <returns>Pretty-printed sing-box 1.13+ JSON.</returns>
     public static string BuildConfigJson(string vlessUri, string? logOutputPath = null)
     {
-        var entry = VlessUriParser.Parse(vlessUri);
+        // v3.0 Phase 6.4 — multi-protocol parser (vless/hysteria2/tuic/ss).
+        var entry = ServerUriParser.Parse(vlessUri);
         return BuildConfigJson(entry, logOutputPath);
     }
 

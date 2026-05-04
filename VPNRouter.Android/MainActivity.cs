@@ -273,11 +273,46 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
         //   3. Hardcoded placeholder (smoke-test fallback)
         // AndroidStorage.GetActiveServer encapsulates 1+2; if it returns
         // null we fall back to placeholder.
+        // v3.0 Phase 6.4 (2026-05-04) — debug override path. If
+        // <c>getExternalFilesDir()/test-uri.txt</c> exists, parse it as
+        // the URI to use (bypasses storage + placeholder). Lets me ship
+        // a fixed APK and rotate the test URI via plain
+        // <c>adb push</c> — no UI tapping per protocol.
+        // Production builds: file won't exist, control falls through to
+        // storage → placeholder as before.
         VPNRouter.Core.Models.VlessServerEntry entry;
         try
         {
-            entry = AndroidStorage.GetActiveServer()
-                ?? VPNRouter.Core.Services.VlessUriParser.Parse(PlaceholderVlessUri);
+            string? testUri = null;
+            try
+            {
+                var extDir = GetExternalFilesDir(null);
+                if (extDir is not null)
+                {
+                    var path = System.IO.Path.Combine(extDir.AbsolutePath, "test-uri.txt");
+                    if (System.IO.File.Exists(path))
+                    {
+                        testUri = System.IO.File.ReadAllText(path).Trim();
+                        global::Android.Util.Log.Info("VpnRouter",
+                            $"Phase 6.4: test-uri.txt override active ({testUri.Length} chars)");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Warn("VpnRouter",
+                    $"Phase 6.4: test-uri.txt read failed — {ex.GetType().Name}: {ex.Message}");
+            }
+
+            if (!string.IsNullOrEmpty(testUri))
+            {
+                entry = VPNRouter.Core.Services.ServerUriParser.Parse(testUri);
+            }
+            else
+            {
+                entry = AndroidStorage.GetActiveServer()
+                    ?? VPNRouter.Core.Services.ServerUriParser.Parse(PlaceholderVlessUri);
+            }
         }
         catch (Exception ex)
         {

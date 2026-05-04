@@ -118,7 +118,10 @@ public static class AndroidStorage
         {
             try
             {
-                return VPNRouter.Core.Services.VlessUriParser.Parse(manualUri);
+                // v3.0 Phase 6.4 (2026-05-04) — accept any supported scheme
+                // (vless / hysteria2 / tuic / ss), not just vless. Mirrors
+                // desktop simple-mode paste (Phase v2.30.1-r3+).
+                return VPNRouter.Core.Services.ServerUriParser.Parse(manualUri);
             }
             catch
             {

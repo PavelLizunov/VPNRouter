@@ -967,11 +967,15 @@ public partial class AndroidApp : Avalonia.Application
             return;
         }
 
-        if (raw.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
+        // v3.0 Phase 6.4 (2026-05-04) — accept all supported share-link
+        // schemes (vless, hysteria2, hy2, tuic, ss), not just vless. The
+        // parser does the actual scheme-dispatch; we only need a coarse
+        // is-this-a-share-link gate before deciding URI vs subscription.
+        if (ServerUriParser.IsSupportedScheme(raw))
         {
             try
             {
-                var parsed = VlessUriParser.Parse(raw);
+                var parsed = ServerUriParser.Parse(raw);
                 if (string.IsNullOrEmpty(parsed.Server) || parsed.Port <= 0)
                 {
                     _serverInputError.Text = Localization.SaveStatusUriBadHost;

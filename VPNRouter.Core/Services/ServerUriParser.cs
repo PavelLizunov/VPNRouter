@@ -199,7 +199,20 @@ public static class ServerUriParser
             {
                 Enabled = true,
                 ServerName = query["sni"] ?? server,
-                Insecure = query["allowInsecure"] == "1",
+                // v3.0 Phase 6.4 (2026-05-04) — accept all 3 spelling
+                // variants seen in the wild. v2rayN/v2rayNG/Hiddify share
+                // links emit "insecure=1"; older Clash forks use
+                // "allowInsecure=1"; the TUIC spec itself documents
+                // "allow_insecure=true". sing-box only takes a single
+                // bool, so we set Insecure=true if ANY of these reads
+                // truthy. Pre-6.4 only allowInsecure was checked, which
+                // meant `tuic://...?insecure=1` URIs always hit
+                // "x509: certificate signed by unknown authority"
+                // because we silently flipped insecure → false.
+                Insecure = query["insecure"] == "1"
+                        || query["allowInsecure"] == "1"
+                        || string.Equals(query["allow_insecure"], "true",
+                                         StringComparison.OrdinalIgnoreCase),
                 Alpn = query["alpn"] ?? "h3",
             },
         };
