@@ -181,4 +181,33 @@ internal static class Localization
     public static string HintTunnel => Ru
         ? "Состояние туннеля повторяет иконку 🔑 в строке состояния."
         : "Tunnel state mirrors the system VPN-key icon in the status bar.";
+
+    // ── Phase 7.2 kebab menu — full sections ────────────────────────────
+
+    // Section headers
+    public static string MenuSectionView => Ru ? "Вид" : "Appearance";
+    public static string MenuSectionDiagnostics => Ru ? "Диагностика" : "Diagnostics";
+    public static string MenuSectionTroubleshooting => Ru ? "Устранение неполадок" : "Troubleshooting";
+    public static string MenuSectionAbout => Ru ? "О приложении" : "About";
+
+    // Diagnostics items
+    public static string MenuItemOpenLogs => Ru ? "Открыть лог" : "Open log";
+    public static string MenuItemCopyLogPath => Ru ? "Скопировать путь к логу" : "Copy log path";
+    public static string MenuItemUpdateCheck => Ru ? "Проверить обновления" : "Check for updates";
+    public static string MenuItemUpdateComingSoon => Ru
+        ? "Авто-обновление появится в следующем апдейте."
+        : "Auto-update is coming in the next release.";
+
+    // Troubleshooting items
+    public static string MenuItemResetSettings => Ru ? "Сбросить настройки" : "Reset settings";
+    public static string MenuItemResetConfirm => Ru
+        ? "Все настройки будут удалены. Продолжить?"
+        : "All settings will be cleared. Continue?";
+    public static string MenuItemResetDone => Ru
+        ? "Настройки сброшены. Перезапусти приложение."
+        : "Settings cleared. Restart the app.";
+
+    // About items
+    public static string MenuItemVersion => Ru ? "Версия" : "Version";
+    public static string MenuItemRepoLink => Ru ? "GitHub репозиторий" : "GitHub repository";
 }

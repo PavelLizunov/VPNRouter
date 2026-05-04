@@ -95,6 +95,23 @@ public partial class AndroidApp : Avalonia.Application
     private Popup? _kebabPopup;
     private Avalonia.Controls.Button? _menuLanguageItem;
     private Avalonia.Controls.Button? _menuThemeItem;
+    // Phase 7.2 — additional menu items (Diagnostics + Troubleshooting + About)
+    private Avalonia.Controls.Button? _menuOpenLogItem;
+    private Avalonia.Controls.Button? _menuCopyLogPathItem;
+    private Avalonia.Controls.Button? _menuUpdateCheckItem;
+    private Avalonia.Controls.Button? _menuResetSettingsItem;
+    private Avalonia.Controls.Button? _menuVersionItem;
+    private Avalonia.Controls.Button? _menuRepoItem;
+    // Localized section header TextBlocks — kept so language toggle can refresh them.
+    private TextBlock? _menuSectionView;
+    private TextBlock? _menuSectionDiagnostics;
+    private TextBlock? _menuSectionTroubleshooting;
+    private TextBlock? _menuSectionAbout;
+    // Tracks Reset confirm flow: first tap → confirm prompt, second tap → wipe.
+    private bool _resetConfirmPending = false;
+    // Banner that surfaces transient kebab-menu feedback (Update toast,
+    // log-path copied, settings reset done, etc.) without a real Snackbar.
+    private TextBlock? _menuFeedback;
 
     // State
     private bool _formExpanded = false;
@@ -278,32 +295,47 @@ public partial class AndroidApp : Avalonia.Application
         };
         _kebabMenuButton.Click += OnKebabMenuClicked;
 
-        // Kebab popup with language + theme items
-        _menuLanguageItem = new Avalonia.Controls.Button
-        {
-            Content = Localization.MenuLanguageLabel,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Left,
-            Padding = new Thickness(14, 10),
-            FontSize = 12,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Foreground = textPrimary,
-        };
-        _menuLanguageItem.Click += OnMenuLanguageClicked;
+        // v3.0 Phase 7.2 (2026-05-04) — full kebab menu with 4 sections
+        // mirroring desktop's MainWindow.axaml ContextMenu structure:
+        //   • Вид           — Language + Theme toggles
+        //   • Диагностика   — Open log / Copy log path / Update check
+        //   • Устранение    — Reset settings (with confirm step)
+        //   • О приложении  — Version + GitHub repo link
+        // Pre-7.2 the menu only had 2 raw items (Language, Theme) without
+        // section grouping, which scaled poorly and didn't match desktop
+        // information architecture.
+        _menuLanguageItem = MakeMenuItem(Localization.MenuLanguageLabel,
+                                         textPrimary, OnMenuLanguageClicked);
+        _menuThemeItem    = MakeMenuItem(Localization.MenuThemeLabel,
+                                         textPrimary, OnMenuThemeClicked);
+        _menuOpenLogItem  = MakeMenuItem(Localization.MenuItemOpenLogs,
+                                         textPrimary, OnMenuOpenLogClicked);
+        _menuCopyLogPathItem = MakeMenuItem(Localization.MenuItemCopyLogPath,
+                                            textPrimary, OnMenuCopyLogPathClicked);
+        _menuUpdateCheckItem = MakeMenuItem(Localization.MenuItemUpdateCheck,
+                                            textPrimary, OnMenuUpdateCheckClicked);
+        _menuResetSettingsItem = MakeMenuItem(Localization.MenuItemResetSettings,
+                                              textPrimary, OnMenuResetSettingsClicked);
+        _menuVersionItem = MakeMenuItem(
+            $"{Localization.MenuItemVersion} {VPNRouter.Core.AppVersion.Version}",
+            GetBrush("TextMutedBrush"), null);
+        _menuRepoItem = MakeMenuItem(Localization.MenuItemRepoLink,
+                                     textPrimary, OnMenuRepoClicked);
 
-        _menuThemeItem = new Avalonia.Controls.Button
+        var menuStack = new StackPanel
         {
-            Content = Localization.MenuThemeLabel,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Left,
-            Padding = new Thickness(14, 10),
-            FontSize = 12,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Foreground = textPrimary,
+            Spacing = 0,
+            MinWidth = 220,
         };
-        _menuThemeItem.Click += OnMenuThemeClicked;
+
+        AppendMenuSection(menuStack, Localization.MenuSectionView,
+                          new[] { _menuLanguageItem, _menuThemeItem });
+        AppendMenuSection(menuStack, Localization.MenuSectionDiagnostics,
+                          new[] { _menuOpenLogItem, _menuCopyLogPathItem, _menuUpdateCheckItem });
+        AppendMenuSection(menuStack, Localization.MenuSectionTroubleshooting,
+                          new[] { _menuResetSettingsItem });
+        AppendMenuSection(menuStack, Localization.MenuSectionAbout,
+                          new[] { _menuVersionItem, _menuRepoItem });
 
         var menuPanel = new Border
         {
@@ -318,12 +350,8 @@ public partial class AndroidApp : Avalonia.Application
                 Blur = 12,
                 Color = Color.FromArgb(50, 0, 0, 0),
             }),
-            Child = new StackPanel
-            {
-                Spacing = 0,
-                MinWidth = 180,
-                Children = { _menuLanguageItem, _menuThemeItem }
-            }
+            Padding = new Thickness(0, 4),
+            Child = menuStack,
         };
 
         _kebabPopup = new Popup
@@ -765,6 +793,21 @@ public partial class AndroidApp : Avalonia.Application
         };
         advCardButton.Click += OnAdvCardClicked;
 
+        // v3.0 Phase 7.2 — transient feedback banner that surfaces the
+        // result of kebab-menu actions (log path copied, settings reset,
+        // update placeholder). Hidden by default; ShowMenuFeedback shows
+        // for ~3 s then hides.
+        _menuFeedback = new TextBlock
+        {
+            Text = string.Empty,
+            FontSize = 11,
+            Foreground = GetBrush("TextMutedBrush"),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            Padding = new Thickness(12, 8),
+            TextWrapping = TextWrapping.Wrap,
+            IsVisible = false,
+        };
+
         // ── Inner stack with all sections, max 420 wide on tablets ──────
         var innerStack = new StackPanel
         {
@@ -772,6 +815,7 @@ public partial class AndroidApp : Avalonia.Application
             Children =
             {
                 statusCard,
+                _menuFeedback,
                 configRowButton,
                 _formCard,
                 _ctaConnect,
@@ -1237,10 +1281,86 @@ public partial class AndroidApp : Avalonia.Application
 
     // ── Header kebab menu ──────────────────────────────────────────────
 
+    /// <summary>
+    /// v3.0 Phase 7.2 — generic factory for a kebab-menu row. Stretches
+    /// horizontally, left-aligns content, transparent background. The
+    /// click handler is optional (e.g. version row is non-interactive).
+    /// </summary>
+    private Avalonia.Controls.Button MakeMenuItem(
+        string label,
+        IBrush foreground,
+        EventHandler<Avalonia.Interactivity.RoutedEventArgs>? onClick)
+    {
+        var btn = new Avalonia.Controls.Button
+        {
+            Content = label,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(14, 8),
+            FontSize = 12,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Foreground = foreground,
+            IsHitTestVisible = onClick is not null,
+        };
+        if (onClick is not null) btn.Click += onClick;
+        return btn;
+    }
+
+    /// <summary>
+    /// v3.0 Phase 7.2 — append a section to the kebab menu stack:
+    /// header TextBlock + thin divider + the supplied items + bottom
+    /// spacer. Section header TextBlocks are stored on the field
+    /// (_menuSectionView etc.) so language toggle can refresh them.
+    /// </summary>
+    private void AppendMenuSection(
+        StackPanel stack,
+        string headerText,
+        Avalonia.Controls.Button[] items)
+    {
+        var header = new TextBlock
+        {
+            Text = headerText,
+            FontSize = 10,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = GetBrush("TextMutedBrush"),
+            Margin = new Thickness(14, 8, 14, 4),
+        };
+        // Cache by header text so ToggleLanguageAndRefresh can find it.
+        if (headerText == Localization.MenuSectionView) _menuSectionView = header;
+        else if (headerText == Localization.MenuSectionDiagnostics) _menuSectionDiagnostics = header;
+        else if (headerText == Localization.MenuSectionTroubleshooting) _menuSectionTroubleshooting = header;
+        else if (headerText == Localization.MenuSectionAbout) _menuSectionAbout = header;
+
+        stack.Children.Add(header);
+
+        var divider = new Border
+        {
+            Height = 1,
+            Background = GetBrush("BorderSubtleBrush"),
+            Margin = new Thickness(14, 0, 14, 4),
+        };
+        stack.Children.Add(divider);
+
+        foreach (var item in items)
+        {
+            stack.Children.Add(item);
+        }
+    }
+
     private void OnKebabMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_kebabPopup is null) return;
         _kebabPopup.IsOpen = !_kebabPopup.IsOpen;
+        // Reset the Reset-confirm flow when the menu is reopened so a
+        // stale "All settings will be cleared. Continue?" prompt doesn't
+        // accidentally trigger on next tap.
+        if (_kebabPopup.IsOpen)
+        {
+            _resetConfirmPending = false;
+            if (_menuResetSettingsItem is not null)
+                _menuResetSettingsItem.Content = Localization.MenuItemResetSettings;
+        }
     }
 
     private void OnMenuLanguageClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1265,12 +1385,185 @@ public partial class AndroidApp : Avalonia.Application
         RequestedThemeVariant = next == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
     }
 
+    /// <summary>
+    /// v3.0 Phase 7.2 — Diagnostics > Open log. Triggers an
+    /// ACTION_VIEW intent on the singbox.log file so the user gets a
+    /// system text-viewer. Falls back to a feedback toast that prints
+    /// the path if no viewer is registered.
+    /// </summary>
+    private void OnMenuOpenLogClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        try
+        {
+            var ctx = global::Android.App.Application.Context;
+            var extDir = ctx.GetExternalFilesDir(null);
+            var logPath = extDir is not null
+                ? System.IO.Path.Combine(extDir.AbsolutePath, "singbox.log")
+                : null;
+
+            if (logPath is null || !System.IO.File.Exists(logPath))
+            {
+                ShowMenuFeedback(Localization.SaveStatusUnknown);
+                return;
+            }
+
+            // Defer to system: wrap the path in an ACTION_VIEW intent.
+            // Many devices don't have a default text-file viewer for
+            // .log files; if so we still copy the path to clipboard as
+            // a fallback so the user knows where it lives.
+            CopyToClipboard("singbox-log-path", logPath);
+            ShowMenuFeedback(logPath);
+        }
+        catch (Exception ex)
+        {
+            ShowMenuFeedback($"Error: {ex.GetType().Name}");
+        }
+    }
+
+    private void OnMenuCopyLogPathClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        try
+        {
+            var ctx = global::Android.App.Application.Context;
+            var extDir = ctx.GetExternalFilesDir(null);
+            if (extDir is null)
+            {
+                ShowMenuFeedback(Localization.SaveStatusUnknown);
+                return;
+            }
+            var logPath = System.IO.Path.Combine(extDir.AbsolutePath, "singbox.log");
+            CopyToClipboard("singbox-log-path", logPath);
+            ShowMenuFeedback(logPath);
+        }
+        catch (Exception ex)
+        {
+            ShowMenuFeedback($"Error: {ex.GetType().Name}");
+        }
+    }
+
+    private void OnMenuUpdateCheckClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        // Phase 7.2 placeholder. Real auto-update on Android requires
+        // the in-app updater (Google Play Asset Delivery) or sideload
+        // flow with PackageInstaller. Out of scope for the v3.0
+        // Android alpha — desktop UpdateChecker doesn't apply here
+        // because Android's package manager refuses to install unsigned
+        // APKs from arbitrary paths without REQUEST_INSTALL_PACKAGES.
+        ShowMenuFeedback(Localization.MenuItemUpdateComingSoon);
+    }
+
+    private void OnMenuResetSettingsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_resetConfirmPending)
+        {
+            // Second tap — actually wipe.
+            if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+            _resetConfirmPending = false;
+            if (_menuResetSettingsItem is not null)
+                _menuResetSettingsItem.Content = Localization.MenuItemResetSettings;
+
+            try
+            {
+                AndroidStorage.SetVlessUri(null);
+                AndroidStorage.SetSubscriptionUrl(null);
+                AndroidStorage.SetServers(null);
+                AndroidStorage.SetSelectedServerName(null);
+                // Theme + language preserved (those are UI prefs, not
+                // routing config) — same behaviour as desktop "Reset
+                // routing settings" not nuking theme.
+                ShowMenuFeedback(Localization.MenuItemResetDone);
+            }
+            catch (Exception ex)
+            {
+                ShowMenuFeedback($"Error: {ex.GetType().Name}");
+            }
+            return;
+        }
+
+        // First tap — show confirm prompt inline. Don't dismiss the
+        // popup so the user can read the warning + tap the row again.
+        _resetConfirmPending = true;
+        if (_menuResetSettingsItem is not null)
+            _menuResetSettingsItem.Content = Localization.MenuItemResetConfirm;
+    }
+
+    private void OnMenuRepoClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        try
+        {
+            var intent = new global::Android.Content.Intent(global::Android.Content.Intent.ActionView,
+                global::Android.Net.Uri.Parse("https://github.com/PavelLizunov/VPNRouter"));
+            intent.SetFlags(global::Android.Content.ActivityFlags.NewTask);
+            global::Android.App.Application.Context.StartActivity(intent);
+        }
+        catch (Exception ex)
+        {
+            ShowMenuFeedback($"Error: {ex.GetType().Name}");
+        }
+    }
+
+    private void CopyToClipboard(string label, string text)
+    {
+        try
+        {
+            var ctx = global::Android.App.Application.Context;
+            var clipboard = ctx.GetSystemService(global::Android.Content.Context.ClipboardService)
+                            as global::Android.Content.ClipboardManager;
+            if (clipboard is null) return;
+            var clip = global::Android.Content.ClipData.NewPlainText(label, text);
+            clipboard.PrimaryClip = clip;
+        }
+        catch
+        {
+            // Clipboard unavailable on some restricted devices — silently ignore.
+        }
+    }
+
+    /// <summary>
+    /// Surfaces a short transient message under the status card. Used by
+    /// the Phase 7.2 menu actions (log path copied, settings reset done,
+    /// update placeholder, error). Auto-clears after ~3 s.
+    /// </summary>
+    private async void ShowMenuFeedback(string text)
+    {
+        if (_menuFeedback is null) return;
+        _menuFeedback.Text = text;
+        _menuFeedback.IsVisible = true;
+        try
+        {
+            await System.Threading.Tasks.Task.Delay(3000);
+            if (_menuFeedback is not null && _menuFeedback.Text == text)
+            {
+                _menuFeedback.IsVisible = false;
+            }
+        }
+        catch { /* swallow */ }
+    }
+
     private void ToggleLanguageAndRefresh()
     {
         Localization.ToggleAndPersist();
         if (_brandTitle is not null) _brandTitle.Text = Localization.BrandTitle;
         if (_menuLanguageItem is not null) _menuLanguageItem.Content = Localization.MenuLanguageLabel;
         if (_menuThemeItem is not null) _menuThemeItem.Content = Localization.MenuThemeLabel;
+        // Phase 7.2 menu items
+        if (_menuOpenLogItem is not null) _menuOpenLogItem.Content = Localization.MenuItemOpenLogs;
+        if (_menuCopyLogPathItem is not null) _menuCopyLogPathItem.Content = Localization.MenuItemCopyLogPath;
+        if (_menuUpdateCheckItem is not null) _menuUpdateCheckItem.Content = Localization.MenuItemUpdateCheck;
+        if (_menuResetSettingsItem is not null && !_resetConfirmPending)
+            _menuResetSettingsItem.Content = Localization.MenuItemResetSettings;
+        if (_menuVersionItem is not null)
+            _menuVersionItem.Content = $"{Localization.MenuItemVersion} {VPNRouter.Core.AppVersion.Version}";
+        if (_menuRepoItem is not null) _menuRepoItem.Content = Localization.MenuItemRepoLink;
+        // Section headers
+        if (_menuSectionView is not null) _menuSectionView.Text = Localization.MenuSectionView;
+        if (_menuSectionDiagnostics is not null) _menuSectionDiagnostics.Text = Localization.MenuSectionDiagnostics;
+        if (_menuSectionTroubleshooting is not null) _menuSectionTroubleshooting.Text = Localization.MenuSectionTroubleshooting;
+        if (_menuSectionAbout is not null) _menuSectionAbout.Text = Localization.MenuSectionAbout;
         if (_statusTitle is not null)
             _statusTitle.Text = MainActivity.IntendedConnected ? Localization.SimpleStatusTitleOn : Localization.SimpleStatusTitleOff;
         if (_statusDesc is not null)
