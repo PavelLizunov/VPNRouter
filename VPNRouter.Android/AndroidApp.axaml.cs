@@ -100,6 +100,23 @@ public partial class AndroidApp : Avalonia.Application
     private bool _formExpanded = false;
     private List<VlessServerEntry> _cachedServers = new();
 
+    /// <summary>
+    /// v3.0 Phase 7.1 (2026-05-04) — chip semantic state. Mirrors desktop's
+    /// status-chip pattern (`On` = green, `Connecting` = yellow + pulse,
+    /// `Off` = gray). Pre-7.1 chips were static decoration; user requested
+    /// they reflect the real connection lifecycle:
+    /// <list type="bullet">
+    ///   <item><c>VPN</c>: Off → user taps Connect → Connecting → tunnel
+    ///   broadcast UP → On. Reverts to Off on TUNNEL_DOWN / TUNNEL_ERROR.</item>
+    ///   <item><c>Zapret</c>, <c>TG</c>: stay Off (Android port doesn't
+    ///   support those features yet — chips reserved for parity with
+    ///   desktop layout).</item>
+    /// </list>
+    /// </summary>
+    private enum ChipState { Off, Connecting, On }
+    private ChipState _vpnChipState = ChipState.Off;
+    private System.Threading.CancellationTokenSource? _vpnPulseCts;
+
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     public override void OnFrameworkInitializationCompleted()
@@ -219,8 +236,11 @@ public partial class AndroidApp : Avalonia.Application
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        _vpnChip = MakeChip("VPN", GetBrush("SuccessBgBrush"), GetBrush("SuccessFgBrush"));
-        _zapretChip = MakeChip("Zapret", GetBrush("WarningBgBrush"), GetBrush("WarningFgBrush"));
+        // v3.0 Phase 7.1 — start all chips in Off state. VPN chip transitions
+        // through Connecting → On as the tunnel comes up. Zapret + TG stay Off
+        // because those features aren't ported yet.
+        _vpnChip = MakeChip("VPN", GetBrush("SurfaceSunkenBrush"), textMuted);
+        _zapretChip = MakeChip("Zapret", GetBrush("SurfaceSunkenBrush"), textMuted);
         _tgChip = MakeChip("TG", GetBrush("SurfaceSunkenBrush"), textMuted);
 
         var chipRow = new StackPanel
@@ -907,8 +927,21 @@ public partial class AndroidApp : Avalonia.Application
     {
         var activity = MainActivity.Instance;
         if (activity is null) return;
-        if (MainActivity.IntendedConnected) activity.RequestDisconnect();
-        else activity.RequestConnect();
+        if (MainActivity.IntendedConnected)
+        {
+            activity.RequestDisconnect();
+        }
+        else
+        {
+            // v3.0 Phase 7.1 — flip VPN chip to Connecting immediately so
+            // the user gets feedback while the system VPN consent dialog
+            // is on screen (most visible during first-launch consent
+            // flow). IntentChanged(true) will follow and transition Off →
+            // skipped → On in the normal happy path; on consent decline
+            // or TUNNEL_ERROR it bounces back to Off.
+            SetVpnChipState(ChipState.Connecting);
+            activity.RequestConnect();
+        }
     }
 
     private void OnIntentChanged(bool connected)
@@ -928,6 +961,7 @@ public partial class AndroidApp : Avalonia.Application
             if (_ctaConnect is not null) _ctaConnect.IsVisible = false;
             if (_ctaConnecting is not null) _ctaConnecting.IsVisible = false;
             if (_ctaDisconnect is not null) _ctaDisconnect.IsVisible = true;
+            SetVpnChipState(ChipState.On);
         }
         else
         {
@@ -937,8 +971,83 @@ public partial class AndroidApp : Avalonia.Application
             if (_ctaConnect is not null) _ctaConnect.IsVisible = true;
             if (_ctaConnecting is not null) _ctaConnecting.IsVisible = false;
             if (_ctaDisconnect is not null) _ctaDisconnect.IsVisible = false;
+            SetVpnChipState(ChipState.Off);
         }
         UpdateConfigSummary();
+    }
+
+    /// <summary>
+    /// v3.0 Phase 7.1 (2026-05-04) — flip VPN chip background + foreground
+    /// (and start/stop the Connecting pulse animation) to reflect the
+    /// current tunnel lifecycle phase. Idempotent: calling with the same
+    /// state is a no-op.
+    /// </summary>
+    private void SetVpnChipState(ChipState state)
+    {
+        if (_vpnChip is null) return;
+        if (_vpnChipState == state) return;
+        _vpnChipState = state;
+
+        // Stop any in-flight pulse first — Connecting → On, Connecting → Off,
+        // Off → On all need to clear the animation that was driving Opacity.
+        _vpnPulseCts?.Cancel();
+        _vpnPulseCts = null;
+        _vpnChip.Opacity = 1.0;
+
+        IBrush bg, fg;
+        switch (state)
+        {
+            case ChipState.On:
+                bg = GetBrush("SuccessBgBrush");
+                fg = GetBrush("SuccessFgBrush");
+                break;
+            case ChipState.Connecting:
+                bg = GetBrush("WarningBgBrush");
+                fg = GetBrush("WarningFgBrush");
+                StartChipPulse(_vpnChip);
+                break;
+            default: // Off
+                bg = GetBrush("SurfaceSunkenBrush");
+                fg = GetBrush("TextMutedBrush");
+                break;
+        }
+        _vpnChip.Background = bg;
+        _vpnChip.Foreground = fg;
+    }
+
+    /// <summary>
+    /// v3.0 Phase 7.1 — drive a soft "breathing" Opacity animation
+    /// (1.0 ↔ 0.55 over 1.2 s, cycling indefinitely). Cancelled via
+    /// <c>_vpnPulseCts</c>. Avalonia's Animation API handles the easing
+    /// curve — we just kick off the loop.
+    /// </summary>
+    private void StartChipPulse(Visual target)
+    {
+        var cts = new System.Threading.CancellationTokenSource();
+        _vpnPulseCts = cts;
+        var anim = new Avalonia.Animation.Animation
+        {
+            Duration = System.TimeSpan.FromMilliseconds(1200),
+            IterationCount = Avalonia.Animation.IterationCount.Infinite,
+            PlaybackDirection = Avalonia.Animation.PlaybackDirection.Alternate,
+            Easing = new Avalonia.Animation.Easings.QuadraticEaseInOut(),
+            Children =
+            {
+                new Avalonia.Animation.KeyFrame
+                {
+                    Cue = new Avalonia.Animation.Cue(0d),
+                    Setters = { new Avalonia.Styling.Setter(Visual.OpacityProperty, 1.0) },
+                },
+                new Avalonia.Animation.KeyFrame
+                {
+                    Cue = new Avalonia.Animation.Cue(1d),
+                    Setters = { new Avalonia.Styling.Setter(Visual.OpacityProperty, 0.55) },
+                },
+            },
+        };
+        // Fire-and-forget — the animation drives the visual and gets
+        // cancelled when cts.Cancel() is called from SetVpnChipState.
+        _ = anim.RunAsync(target, cts.Token);
     }
 
     private void UpdateConfigSummary()
