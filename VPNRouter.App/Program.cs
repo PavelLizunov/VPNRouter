@@ -150,6 +150,42 @@ sealed class Program
         }
         catch { /* never block app startup over a cosmetic sc.exe fix */ }
 
+        // v2.31.8-r1 — install health check (mixed-version DLL detection).
+        // BEFORE single-instance / heavy DLL loading, verify all
+        // VPNRouter.*.dll on disk share the same source-commit hash. If
+        // they don't, the user landed in the auto-update-with-Service-
+        // running trap from pre-v2.31.7 (Bug 2): old broken updater
+        // kept Service running, xcopy /R skipped Service-locked files,
+        // result was mixed-version DLLs that crash or silently report
+        // the old AppVersion. Manual install.ps1 rescue is "not an
+        // option per user feedback — the new version itself must
+        // self-heal. We auto-spawn the install.ps1 web one-liner; loop
+        // prevention via timestamped marker.
+        try
+        {
+            var health = VPNRouter.App.Services.InstallHealthCheck.Check();
+            if (!health.IsHealthy)
+            {
+                Console.Error.WriteLine($"[health] {health.Diagnostic} — triggering self-repair");
+                var plan = VPNRouter.App.Services.SelfRepair.Plan();
+                if (plan.ShouldRun)
+                {
+                    VPNRouter.App.Services.SelfRepair.Run();
+                    return;
+                }
+                Console.Error.WriteLine($"[health] self-repair declined: {plan.Reason}");
+                // Fall through — let the user see the broken state
+                // instead of looping. CrashReporter will catch any DLL
+                // mismatch crash.
+            }
+        }
+        catch (Exception ex)
+        {
+            // Health check / self-repair must NEVER block app start
+            // outright. Worst case: log and continue.
+            try { Console.Error.WriteLine($"[health] check failed: {ex.Message}"); } catch { }
+        }
+
         // v2.31.7-r2 — single-instance enforcement. Replaces the brutal
         // OrphanCleanup-killing-VPNRouter.App approach. If a second
         // launch happens (user clicks taskbar / Start Menu shortcut /
