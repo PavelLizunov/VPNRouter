@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 
 namespace VPNRouter.App.Services;
 
@@ -58,13 +59,60 @@ public static class InstallHealthCheck
         appDir ??= AppContext.BaseDirectory;
         var hashes = new Dictionary<string, string>();
 
+        // v2.31.8-r6 PRIMARY check: compare App.exe's compile-time
+        // AppVersion.Version literal against Core.dll's runtime
+        // AppVersion.Version reflection read.
+        //
+        // Rationale: when App.exe is BUILT, references to
+        // VPNRouter.Core.AppVersion.Version (a `const string`) get
+        // INLINED into App.exe's IL — so App.exe's view is forever the
+        // value Core.dll had at App.exe's build time. At RUNTIME,
+        // however, GetField+GetRawConstantValue on the loaded Core.dll
+        // type reads the value from Core.dll's metadata as it currently
+        // exists on disk. If they differ, the on-disk Core.dll was NOT
+        // rebuilt at the same time as App.exe → mixed-version state.
+        //
+        // This check works EVEN when ProductVersion is empty / unreadable
+        // (we observed this in user's environment — Service-locked DLLs
+        // returned empty ProductVersion via FileVersionInfo, leading our
+        // ProductVersion-based check to false-negative as "all DLLs
+        // empty == healthy"). The compile-time-vs-runtime check uses
+        // the always-present const value which doesn't depend on
+        // version-info resource being intact.
+        try
+        {
+            var compiled = VPNRouter.Core.AppVersion.Version;
+            var runtimeField = typeof(VPNRouter.Core.AppVersion)
+                .GetField(nameof(VPNRouter.Core.AppVersion.Version),
+                          BindingFlags.Public | BindingFlags.Static);
+            var runtime = runtimeField?.GetRawConstantValue() as string ?? string.Empty;
+            hashes["compiled-AppVersion"] = compiled;
+            hashes["runtime-AppVersion"]  = runtime;
+
+            if (!string.IsNullOrEmpty(runtime) &&
+                !string.Equals(compiled, runtime, StringComparison.Ordinal))
+            {
+                return new Report(
+                    IsHealthy: false,
+                    Diagnostic: $"AppVersion mismatch: App.exe compiled with '{compiled}', Core.dll on disk reports '{runtime}'",
+                    Hashes: hashes);
+            }
+        }
+        catch (Exception ex)
+        {
+            hashes["AppVersion-check-error"] = ex.Message;
+            // Don't return — fall through to ProductVersion-based check.
+        }
+
+        // Secondary check: per-DLL ProductVersion (commit-hash) consistency.
+        // Catches mismatches when the AppVersion string happens to match
+        // (e.g. two builds with the same -rN tag but different commits)
+        // and surfaces a more detailed diagnostic.
         foreach (var dll in TrackedDlls)
         {
             var path = Path.Combine(appDir, dll);
             if (!File.Exists(path))
             {
-                // DLL missing entirely — different failure mode than
-                // mixed-version, but worth flagging.
                 hashes[dll] = "<missing>";
                 continue;
             }
@@ -73,12 +121,6 @@ public static class InstallHealthCheck
             {
                 var info = FileVersionInfo.GetVersionInfo(path);
                 var pv = info.ProductVersion ?? string.Empty;
-                // ProductVersion has the InformationalVersion form
-                // "<semver>+<commit>". The +commit suffix is what
-                // identifies the source revision uniquely. If a build
-                // doesn't carry +commit (rare — dev / inspect builds),
-                // fall back to the full ProductVersion which still
-                // changes every build.
                 var plusIdx = pv.IndexOf('+');
                 hashes[dll] = plusIdx >= 0 ? pv[(plusIdx + 1)..] : pv;
             }
@@ -88,22 +130,24 @@ public static class InstallHealthCheck
             }
         }
 
-        // Need at least 2 DLLs found to compare; if only 1 (e.g. minimal
-        // dev tree), we can't diagnose mixed state.
-        var present = hashes.Where(kv => !kv.Value.StartsWith("<"))
+        var present = hashes.Where(kv => TrackedDlls.Contains(kv.Key)
+                                          && !string.IsNullOrEmpty(kv.Value)
+                                          && !kv.Value.StartsWith("<"))
                             .ToDictionary(kv => kv.Key, kv => kv.Value);
         if (present.Count < 2)
-            return new Report(true, $"only {present.Count} DLL(s) found — skipping mixed-version check", hashes);
+            return new Report(true,
+                $"AppVersion match (compile==runtime); only {present.Count} DLL ProductVersion(s) populated — skipping commit-hash cross-check",
+                hashes);
 
         var distinct = present.Values.Distinct().ToList();
         if (distinct.Count == 1)
-            return new Report(true, $"all {present.Count} match @ {Trim(distinct[0])}", hashes);
+            return new Report(true,
+                $"AppVersion match + all {present.Count} DLL ProductVersions @ {Trim(distinct[0])}",
+                hashes);
 
-        // Mixed state detected — list what we saw so the log shows the
-        // exact split.
         var summary = string.Join(", ",
             present.Select(kv => $"{kv.Key.Replace("VPNRouter.", "").Replace(".dll", "")}={Trim(kv.Value)}"));
-        return new Report(false, $"mixed-version DLLs: {summary}", hashes);
+        return new Report(false, $"mixed-version DLLs (commit hashes): {summary}", hashes);
     }
 
     private static string Trim(string h) => h.Length > 7 ? h[..7] : h;
