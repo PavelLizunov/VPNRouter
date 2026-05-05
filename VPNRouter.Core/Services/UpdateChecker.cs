@@ -388,10 +388,20 @@ public class UpdateChecker
         // helper xcopy can't recover from.
         TryWriteInstallReceipt();
 
-        // Helper script + log live in %TEMP% (always user-writable).
+        // Helper script lives in %TEMP% (always user-writable).
+        // v2.31.8-r5: helper LOG moved from %TEMP% to LogsDir/update.log so
+        // CheckInstallReceipt's «See {LogsDir}/update.log for details»
+        // banner reference actually points to a real file. Pre-r5 the
+        // banner referenced LogsDir/update.log but Windows helper wrote
+        // to %TEMP%\vpnrouter-update-{pid}.log — different path, file
+        // never appeared at the documented location, user was left
+        // looking for nothing. Linux helper has always used LogsDir;
+        // now Windows matches.
         var tempDir = Path.GetTempPath();
         var helperPath = Path.Combine(tempDir, $"vpnrouter-update-{parentPid}.cmd");
-        var helperLog  = Path.Combine(tempDir, $"vpnrouter-update-{parentPid}.log");
+        var logsDir = AppPaths.LogsDir;
+        try { Directory.CreateDirectory(logsDir); } catch { /* helper will surface via .cmd echo */ }
+        var helperLog = Path.Combine(logsDir, "update.log");
 
         // Build the .cmd. Notes:
         // - SET LF to a single newline so we can echo blank lines if needed.

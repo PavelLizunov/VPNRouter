@@ -48,6 +48,17 @@ param(
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
+# v2.31.8-r5 — silence Invoke-WebRequest progress bar.
+# PowerShell 5.1 (Windows PowerShell, default on Win10/11 LTSC) renders
+# Invoke-WebRequest progress as a *console banner* by default, which on
+# large downloads (Windows install ZIP is ~60 MB) slows the transfer
+# 10-100x because every byte triggers a banner repaint. User-reported
+# 2026-05-05: install.ps1 hung at "Writing request stream...
+# (Number of bytes written: 50707483)" mid-download. Setting this to
+# SilentlyContinue restores native socket throughput. Standard fix
+# documented in Microsoft's IWR perf KB.
+$ProgressPreference = 'SilentlyContinue'
+
 # == Config ==============================================================
 $GitHubRepo    = "PavelLizunov/VPNRouter"
 $GitHubApi     = "https://api.github.com/repos/$GitHubRepo"
