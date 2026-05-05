@@ -283,11 +283,17 @@ Ok "Installed $resolvedVersion to $InstallRoot"
 Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
 
 # == Start Menu shortcut =================================================
+# v2.31.9-r1: TargetPath now points at VPNRouter.GUI.exe (the Go stub
+# trampoline) instead of VPNRouter.App.exe directly. Every shortcut-
+# initiated launch now passes through the trampoline's integrity check
+# + auto-repair before reaching App.exe. IconLocation still references
+# App.exe — the Go stub doesn't carry an icon resource and we want
+# Start Menu to show the penguin icon, not a generic app glyph.
 Say "Creating Start Menu shortcut..."
 $lnkPath = Join-Path $StartMenuDir "VPNRouter.lnk"
 $wsh = New-Object -ComObject WScript.Shell
 $lnk = $wsh.CreateShortcut($lnkPath)
-$lnk.TargetPath       = Join-Path $AppDir "VPNRouter.App.exe"
+$lnk.TargetPath       = Join-Path $AppDir "VPNRouter.GUI.exe"
 $lnk.WorkingDirectory = $AppDir
 $lnk.IconLocation     = "$(Join-Path $AppDir 'VPNRouter.App.exe'),0"
 $lnk.Description      = "Virtual Penguin Network - split-tunnel VPN router"
@@ -337,9 +343,13 @@ if ($Service) {
 }
 
 # == Launch ==============================================================
+# v2.31.9-r1: launch via the trampoline stub so the integrity check runs
+# even on first launch right after install (covers the rare case where
+# the just-extracted ZIP somehow lands a mismatched DLL set, plus keeps
+# the launch flow uniform with the Start Menu shortcut path).
 if (-not $NoLaunch) {
     Say "Launching VPNRouter..."
-    Start-Process (Join-Path $AppDir "VPNRouter.App.exe")
+    Start-Process (Join-Path $AppDir "VPNRouter.GUI.exe")
 }
 
 # == Summary =============================================================

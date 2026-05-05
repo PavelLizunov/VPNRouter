@@ -217,6 +217,25 @@ sealed class Program
         catch { }
 #endif
 
+#if PLATFORM_WINDOWS
+        // v2.31.9-r1 — Start Menu shortcut self-heal. install.ps1 pre-r1
+        // wrote shortcuts targeting VPNRouter.App.exe directly, bypassing
+        // the trampoline integrity check on every daily launch. Existing
+        // users upgrading via in-app Update don't get a fresh install.ps1
+        // pass (helper.cmd doesn't touch the shortcut), so we patch on
+        // their first v2.31.9+ launch. Idempotent + try/catch — never
+        // blocks startup.
+        try
+        {
+            if (VPNRouter.App.Services.ShortcutSelfHeal.EnsureTrampolineTarget())
+            {
+                try { Console.Error.WriteLine("[shortcut] Start Menu shortcut migrated to VPNRouter.GUI.exe (trampoline)"); }
+                catch { }
+            }
+        }
+        catch { /* never block app startup over a cosmetic shortcut fix */ }
+#endif
+
         // v2.25.13 — autostart path self-heal. v2.29.0 extended to Mac+Linux.
         // If user enabled "Start with system" at an earlier install location
         // and later reinstalled / moved the binary, the autostart entry
