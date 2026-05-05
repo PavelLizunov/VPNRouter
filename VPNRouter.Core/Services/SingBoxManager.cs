@@ -232,7 +232,7 @@ public class SingBoxManager : IDisposable
                 try
                 {
                     TunAdapterDiagnostics.DisableOrphanedAdapter(
-                        _logger, "VPNRouter-TUN", "SingBoxManager.StopInternal.early");
+                        _logger, DefaultTunInterfaceName, "SingBoxManager.StopInternal.early");
                 }
                 catch (Exception ex)
                 {
@@ -270,6 +270,25 @@ public class SingBoxManager : IDisposable
         // Keep the TUN lock across restart so another instance can't slip in
         // during the brief window between Stop and LaunchProcess.
         StopInternal(releaseLock: false);
+
+        // v2.31.9-r4 — give Windows a beat to tear down the wintun handle
+        // before the next sing-box tries to open it. brat-2026-05-05 logged
+        // a FATAL "configure tun interface: The device is not ready for
+        // use" 16 seconds after a Restart() launched the new process; the
+        // crash tail showed `inbound/tun[tun-in]: open interface take too
+        // much time to finish!` — a kernel-level wintun teardown that
+        // hadn't settled by the time the new process tried to claim the
+        // device. The pre-existing
+        // <see cref="TunAdapterDiagnostics.DisableOrphanedAdapter"/> r5
+        // commentary cites a ~22 s lag between netsh disable and Windows
+        // releasing the handle. We don't wait that long here (would
+        // freeze the UI on every restart) but a small settle delay +
+        // the LaunchProcess pre-enable below cover the common case.
+        // Linux/macOS: no wintun, no race.
+        if (OperatingSystem.IsWindows())
+        {
+            try { Thread.Sleep(750); } catch { }
+        }
 
         var exePath = OperatingSystem.IsWindows()
             ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
@@ -522,8 +541,43 @@ public class SingBoxManager : IDisposable
         }
     }
 
+    /// <summary>The default TUN adapter name when not overridden by user
+    /// config. Hard-coded to keep <see cref="SingBoxManager"/>'s API
+    /// surface narrow (it only knows <see cref="SingBoxSettings"/>, not
+    /// <c>AppSettings.Tun.InterfaceName</c>). Same default used by
+    /// <see cref="OnProcessExited"/>'s orphan cleanup.</summary>
+    private const string DefaultTunInterfaceName = "VPNRouter-TUN";
+
     private void LaunchProcess(string exePath)
     {
+        // v2.31.9-r4 — pre-launch TUN adapter readiness for Windows. EVERY
+        // start path passes through here (user Start, Apply hot-reload-
+        // fallback restart, HealthMonitor crash recovery), so this is
+        // the single chokepoint where we ensure the wintun adapter is
+        // in a state sing-box can open.
+        //
+        // Pre-r4 only <see cref="VpnEngine.StartAsync"/> called
+        // <see cref="TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent"/>
+        // — auto-restart paths (Apply, HealthMonitor) skipped it, so a
+        // disabled adapter from a prior r5 cleanup would FATAL the
+        // next process with "configure tun interface: The device is
+        // not ready for use". brat-2026-05-05 hit this on Apply.
+        //
+        // Idempotent + bounded (3 s netsh timeout). Linux/macOS no-op.
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent(
+                    _logger, DefaultTunInterfaceName, "SingBoxManager.LaunchProcess");
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex,
+                    "[SingBoxManager] pre-launch adapter readiness check failed (non-fatal)");
+            }
+        }
+
         ProcessStartInfo psi;
 
         if (OperatingSystem.IsMacOS())
@@ -710,7 +764,7 @@ public class SingBoxManager : IDisposable
                 // — the worst case is the same orphan-adapter problem
                 // the user already sees today.
                 TunAdapterDiagnostics.DisableOrphanedAdapter(
-                    _logger, "VPNRouter-TUN", "SingBoxManager.OnProcessExited");
+                    _logger, DefaultTunInterfaceName, "SingBoxManager.OnProcessExited");
             }
             catch (Exception ex)
             {
