@@ -712,6 +712,20 @@ public class VpnEngine : IDisposable
                 }
             }
 
+            // v2.31.8-r4: snapshot the previous process set before the
+            // re-scan overwrites _scanResult. Used by the structural-change
+            // detection below to escalate to forceRestart when the process
+            // list changed — Clash API hot-reload only swaps the in-memory
+            // config; established TCP connections from already-running apps
+            // keep their original outbound (direct or proxy) and only NEW
+            // sockets observe the new rules. User report: «работаю в split
+            // tunnel, меняю список приложений, нажимаю применить — VPN
+            // route не подхватывается, надо stop+start». Forcing a full
+            // restart tears down the TUN adapter so existing TCP sockets
+            // get cancelled, and apps reconnect under the new rules.
+            var oldProcessSet = (_scanResult?.ProcessNames ?? new List<string>())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             // Re-scan processes
             _scanResult = _scanner.ScanForProfile(_activeProfile!);
 
@@ -844,6 +858,30 @@ public class VpnEngine : IDisposable
                 _logger?.Information(
                     "[VpnEngine] TUN settings change detected — escalating to full restart. Old fingerprint {Old}, new {New}",
                     TunFingerprint, newTunFingerprint);
+                forceRestart = true;
+            }
+
+            // v2.31.8-r4: detect process list mutations that hot-reload can't
+            // honour for ALREADY-OPEN sockets. Adding an app to the split-
+            // tunnel list while that app is currently running with established
+            // TCP connections to the internet — hot-reload accepts the new
+            // route rule (HTTP 204), sing-box's matcher knows the new rule,
+            // but the existing connections were routed at SYN-time according
+            // to the old rules and stay on that path until the app closes
+            // and re-opens them. End-user perception: «нажал применить, но
+            // ничего не изменилось — пришлось stop+start». Forcing a full
+            // restart cancels all in-flight TCP via the TUN tear-down so
+            // apps reconnect under the new rules immediately.
+            var newProcessSet = (_scanResult?.ProcessNames ?? new List<string>())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (!oldProcessSet.SetEquals(newProcessSet))
+            {
+                var added = newProcessSet.Except(oldProcessSet).ToList();
+                var removed = oldProcessSet.Except(newProcessSet).ToList();
+                _logger?.Information(
+                    "[VpnEngine] Process list change detected (+{AddedCount}: {Added} / -{RemovedCount}: {Removed}) — escalating to full restart so existing TCP connections rejoin under new rules",
+                    added.Count, string.Join(",", added),
+                    removed.Count, string.Join(",", removed));
                 forceRestart = true;
             }
 
