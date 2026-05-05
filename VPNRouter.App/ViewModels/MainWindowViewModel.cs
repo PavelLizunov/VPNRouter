@@ -3786,19 +3786,51 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             if (ct.IsCancellationRequested) return;
 
-            RebuildSubscriptionPool();
-            SaveSettings();
+            // v2.31.8-r3: compare against UnderlyingEntry.Servers BEFORE
+            // RebuildSubscriptionPool — the previous code rebuilt the
+            // SubscriptionServers ObservableCollection unconditionally on
+            // every hourly refresh. Clear() drops the
+            // SelectedSubscriptionServer reference, then the
+            // "restore selection" line at the end of
+            // RebuildSubscriptionPool re-assigns SelectedSubscriptionServer
+            // to a NEW ServerViewModel instance. The setter fires
+            // OnSelectedSubscriptionServerChanged, which (when IsConnected
+            // && IsSubscribeMode) triggers ReconnectAsync — full sing-box
+            // stop+start cycle, ~3-4 s VPN downtime EVERY HOUR even when
+            // the server set didn't change.
+            //
+            // Caught in brat-2026-05-05 logs: every hourly SubRefresh tick
+            // disconnected/reconnected the tunnel even though the
+            // "No UUID changes, no reconnect needed" log line was emitted
+            // right after. Symptom user-reported: long-running TCP
+            // connections (e.g. claude.exe → Anthropic API) failed during
+            // each window, sometimes returning 403 because traffic
+            // briefly fell back to direct route during the gap.
+            //
+            // Fix: compute afterUuids from UnderlyingEntry.Servers (the
+            // model layer that the fetch actually populated), make the
+            // change decision FIRST, and only call RebuildSubscriptionPool
+            // when something actually changed. SaveSettings still runs in
+            // both branches so the refreshed LastRefreshedAt timestamp
+            // lands in YAML.
+            var afterUuids = enabled
+                .SelectMany(s => s.UnderlyingEntry.Servers
+                    ?? Enumerable.Empty<VPNRouter.Core.Models.VlessServerEntry>())
+                .Select(srv => srv.Uuid ?? string.Empty)
+                .OrderBy(u => u, StringComparer.Ordinal)
+                .ToList();
+            var changed = !beforeUuids.SequenceEqual(afterUuids, StringComparer.Ordinal);
 
-            var afterUuids = SubscriptionServers.Select(s => s.Uuid).OrderBy(u => u).ToList();
-            var changed = !beforeUuids.SequenceEqual(afterUuids);
+            SaveSettings();
 
             if (!changed)
             {
-                _logger.Information("[SubRefresh] No UUID changes, no reconnect needed");
+                _logger.Information("[SubRefresh] No UUID changes, skipping rebuild and reconnect");
                 return;
             }
 
-            _logger.Information("[SubRefresh] Servers changed, reconnecting...");
+            _logger.Information("[SubRefresh] Servers changed, rebuilding pool and reconnecting...");
+            RebuildSubscriptionPool();
             var reconnectName = SelectedSubscriptionServer?.Name ?? "subscription";
             await ReconnectAsync(reconnectName);
         }
