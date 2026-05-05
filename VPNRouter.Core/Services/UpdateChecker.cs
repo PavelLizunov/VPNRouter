@@ -418,6 +418,27 @@ public class UpdateChecker
         var cmd = string.Join("\r\n", new[]
         {
             "@echo off",
+            // v2.31.8-r10 — CRITICAL FIX. Pre-r10 helper.cmd had a CMD
+            // parser bug: the nested `if errorlevel 1 (...) else (...)`
+            // block referenced `%SVC_TRIES%` (initialised inside the else
+            // branch) at PARSE time. CMD pre-expands all %...% references
+            // when parsing a parenthesised block, so SVC_TRIES — not yet
+            // defined — became empty, the line `if %SVC_TRIES% gtr 20`
+            // turned into `if  gtr 20` → "20 was unexpected at this time"
+            // → entire helper aborted right after «checking Service»
+            // log line. Net effect: 100% of v2.31.7 user upgrades to
+            // v2.31.8 silently failed; the partial helper run renamed
+            // nothing, copied nothing, just exited; install receipt
+            // detected mismatch on next launch → banner.
+            //
+            // Discovered via probe-driven trace 2026-05-05:
+            //   sc query VPNRouter  1>nul 2>&1
+            //   20 was unexpected at this time.
+            //
+            // Fix: setlocal EnableDelayedExpansion + use !VAR! everywhere
+            // a variable is set inside the same parsed block. Affects
+            // TRIES, SVC_TRIES, SVC_WAS_RUNNING, XCOPY_EXIT.
+            "setlocal EnableDelayedExpansion",
             $"set \"LOG={helperLog}\"",
             $"set \"PARENT_PID={parentPid}\"",
             $"set \"SRC={extractedDir.TrimEnd('\\')}\"",
@@ -429,7 +450,7 @@ public class UpdateChecker
             "tasklist /FI \"PID eq %PARENT_PID%\" 2>nul | find \"%PARENT_PID%\" >nul",
             "if errorlevel 1 goto parentgone",
             "set /a TRIES+=1",
-            "if %TRIES% gtr 60 (",
+            "if !TRIES! gtr 60 (",
             "  echo [%TIME%] parent %PARENT_PID% still alive after 30 s, proceeding anyway >>\"%LOG%\"",
             "  goto parentgone",
             ")",
@@ -474,8 +495,8 @@ public class UpdateChecker
             "    sc query VPNRouter | find \"STOPPED\" >nul",
             "    if not errorlevel 1 goto svcgone",
             "    set /a SVC_TRIES+=1",
-            "    if %SVC_TRIES% gtr 20 (",
-            "      echo [%TIME%] Service still not STOPPED after 10 s — proceeding anyway >>\"%LOG%\"",
+            "    if !SVC_TRIES! gtr 20 (",
+            "      echo [%TIME%] Service still not STOPPED after 10 s, proceeding anyway >>\"%LOG%\"",
             "      goto svcgone",
             "    )",
             "    ping -n 1 -w 500 127.0.0.1 >nul",
@@ -489,11 +510,11 @@ public class UpdateChecker
             // Give Windows a moment to release file handles after parent exit.
             "ping -n 1 -w 750 127.0.0.1 >nul",
             "xcopy \"%SRC%\\*\" \"%DST%\\\" /E /Y /Q /R /I >>\"%LOG%\" 2>&1",
-            "set XCOPY_EXIT=%ERRORLEVEL%",
-            "echo [%TIME%] xcopy exit=%XCOPY_EXIT% >>\"%LOG%\"",
+            "set XCOPY_EXIT=!ERRORLEVEL!",
+            "echo [%TIME%] xcopy exit=!XCOPY_EXIT! >>\"%LOG%\"",
             // Restart Service if it was running pre-update — preserves the
-            // user's «set-and-forget» Service-mode install across upgrades.
-            "if \"%SVC_WAS_RUNNING%\"==\"1\" (",
+            // user's set-and-forget Service-mode install across upgrades.
+            "if \"!SVC_WAS_RUNNING!\"==\"1\" (",
             "  echo [%TIME%] restarting VPNRouter Service >>\"%LOG%\"",
             "  sc start VPNRouter >>\"%LOG%\" 2>&1",
             // v2.31.8-r7: restore Service failure recovery actions
