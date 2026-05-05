@@ -297,6 +297,18 @@ jobs:
           # deterministic byte content on GitHub Pages.
           sed 's/\r$//' packaging/windows/install.ps1   > gh-pages-dir/install.ps1
           sed 's/\r$//' packaging/windows/uninstall.ps1 > gh-pages-dir/uninstall.ps1
+          # v2.31.8-r8: repair.cmd is a self-contained recovery tool for
+          # users with broken installs (mixed-version DLLs, app crashes
+          # at launch, "did not take effect" loop). Browser-downloadable;
+          # right-click → Run as administrator → ~60 s automated repair.
+          # CRLF line endings preserved (cmd.exe is fine with either,
+          # but a copy-via-browser may get LF normalised; explicit
+          # restoration is defensive). Mode 755 so it's executable on
+          # case the user runs it via WSL/Cygwin.
+          sed 's/\r$//' packaging/windows/repair.cmd > /tmp/repair-lf.cmd
+          # Re-add CRLF for genuine Windows execution semantics.
+          sed 's/$/\r/' /tmp/repair-lf.cmd > gh-pages-dir/repair.cmd
+          chmod 755 gh-pages-dir/repair.cmd
           chmod 644 gh-pages-dir/install.ps1 gh-pages-dir/uninstall.ps1
           # Simple landing page at gh-pages root linking to the installer +
           # apt repo. Prevents the 404 that Pages currently returns for `/`.
