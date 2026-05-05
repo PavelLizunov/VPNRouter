@@ -125,15 +125,27 @@ if ($LASTEXITCODE -ne 0) { throw "Service publish failed" }
 # ── Build backwards-compat launcher stub (VPNRouter.GUI.exe) ──
 # Old auto-updater (v2.3.x) and old shortcuts expect VPNRouter.GUI.exe.
 # Native Go exe — ~2MB, zero runtime dependency, runs on machines without .NET 8.
+#
+# v2.31.9-r1 trampoline: stub now ALSO performs integrity check (PE
+# version-info read of App/Core/Service.dll) before launching App.exe,
+# and self-repairs on mixed-version damage by spawning install.ps1.
+# `ChannelHint` ldflag carries the build's channel forward so a repair
+# triggered from a -rN binary lands back on the prerelease channel.
+# `main.go` only — package contains integrity.go, marker.go, repair.go,
+# integrity_test.go alongside but the build target is the whole pkg.
 Write-Host "[4b/9] Building VPNRouter.GUI launcher stub (Go native)..." -ForegroundColor Yellow
 $stubExe = Join-Path $DistDir "VPNRouter.GUI.exe"
 $env:GOOS = "windows"
 $env:GOARCH = "amd64"
+# Channel inferred from -Version: anything with "-r" suffix → prerelease.
+if ($Version -match '-r\d+$') { $stubChannel = "prerelease" } else { $stubChannel = "stable" }
+$stubLdflags = "-s -w -H windowsgui -X main.ChannelHint=$stubChannel"
 Push-Location "$Root\VPNRouter.GUI"
-go build -ldflags="-s -w -H windowsgui" -o $stubExe .\main.go 2>&1 | Out-Null
+go build -ldflags="$stubLdflags" -o $stubExe . 2>&1 | Out-Null
 $stubExitCode = $LASTEXITCODE
 Pop-Location
 if ($stubExitCode -ne 0) { throw "GUI stub build failed (is Go installed?)" }
+Write-Host "       Stub channel: $stubChannel" -ForegroundColor Gray
 
 # ── Publish framework-dependent to temp dir (to identify app-only files) ──
 Write-Host "[5/9] Building app file list (framework-dependent)..." -ForegroundColor Yellow

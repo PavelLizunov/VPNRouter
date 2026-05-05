@@ -67,6 +67,12 @@ const (
 	copyAttemptWait = 500 * time.Millisecond
 )
 
+// trampolineRepairDeadline bounds how long we wait for install.ps1 to
+// finish before giving up + launching App.exe with the (still damaged)
+// state. 5 minutes is comfortable: a normal install runs ~20-40 s; the
+// long tail is ~2 min on slow VPN.
+const trampolineRepairDeadline = 5 * time.Minute
+
 func main() {
 	self, err := os.Executable()
 	if err != nil {
@@ -74,9 +80,29 @@ func main() {
 	}
 	dir := filepath.Dir(self)
 
-	// Bootstrap mode: if _bootstrap/ exists, this is a post-update
-	// relaunch from a pre-r6 broken ApplyUpdateWindows that couldn't
-	// replace locked DLLs in-process. We finish the job here.
+	// Open trampoline log for postmortem. Append-mode + UTC timestamps
+	// so multiple launches stack cleanly. Separate file from the legacy
+	// bootstrap log to keep grep contexts small.
+	trampolineLog := filepath.Join(os.TempDir(), "vpnrouter-trampoline.log")
+	logFile, _ := os.OpenFile(trampolineLog,
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if logFile != nil {
+		defer logFile.Close()
+	}
+	logf := func(format string, args ...interface{}) {
+		if logFile == nil {
+			return
+		}
+		fmt.Fprintf(logFile, "[%s] %s\n",
+			time.Now().UTC().Format("2006-01-02 15:04:05"),
+			fmt.Sprintf(format, args...))
+	}
+	logf("trampoline start dir=%s channel=%s", dir, ChannelHint)
+
+	// ── Legacy bootstrap mode ────────────────────────────────────────
+	// If _bootstrap/ exists this is a post-update relaunch from a pre-r6
+	// broken ApplyUpdateWindows that couldn't replace locked DLLs
+	// in-process. We finish the job here.
 	bootstrapDir := filepath.Join(dir, "_bootstrap")
 	if info, err := os.Stat(bootstrapDir); err == nil && info.IsDir() {
 		// Best-effort log so postmortem is possible. Failures here are
@@ -85,8 +111,44 @@ func main() {
 		_ = runBootstrap(dir, bootstrapDir, logPath)
 	}
 
+	// ── v2.31.9-r1: integrity check + auto-repair ───────────────────
+	// We read each tracked DLL's ProductVersion (auto-embedded commit
+	// hash via AssemblyInformationalVersionAttribute). If 2+ DLLs
+	// disagree the install is mixed-version → trigger repair.
+	//
+	// Marker-file cooldown (10 min) prevents loops when repair fails
+	// silently. Missing DLLs / unreadable version-info are NOT damage
+	// — we only repair on a clear hash mismatch.
+	rep := CheckIntegrity(dir)
+	logf("integrity hashes=%v skip=%v mismatched=%v",
+		rep.Hashes, rep.SkipReasons, rep.Mismatched)
+
+	if rep.Mismatched {
+		if recentRepair() {
+			logf("mismatch detected but repair marker recent (<%v); falling through", RepairCooldown)
+		} else {
+			logf("mismatch confirmed; running repair (prerelease=%v)", IsPrerelease())
+			touchMarker()
+			elapsed, runErr := RunRepair(IsPrerelease(), trampolineRepairDeadline)
+			if runErr != nil {
+				logf("repair returned error after %v: %v", elapsed, runErr)
+			} else {
+				logf("repair returned ok in %v", elapsed)
+			}
+			// Re-check integrity for postmortem visibility (does NOT
+			// gate the App.exe launch — install.ps1 may have launched
+			// it already, or repair may have failed; either way we
+			// fall through and let App.exe / SingleInstance sort it).
+			postRep := CheckIntegrity(dir)
+			logf("post-repair hashes=%v mismatched=%v",
+				postRep.Hashes, postRep.Mismatched)
+		}
+	}
+
+	// ── Phase C: launch App.exe ─────────────────────────────────────
 	target := filepath.Join(dir, "VPNRouter.App.exe")
 	if _, err := os.Stat(target); err != nil {
+		logf("App.exe missing at %s, exiting (CLR error path)", target)
 		os.Exit(2)
 	}
 
@@ -98,8 +160,10 @@ func main() {
 		CreationFlags: 0x00000008, // DETACHED_PROCESS — stub exits, app keeps running
 	}
 	if err := cmd.Start(); err != nil {
+		logf("CreateProcess App.exe failed: %v", err)
 		os.Exit(3)
 	}
+	logf("App.exe launched pid=%d", cmd.Process.Pid)
 	os.Exit(0)
 }
 
