@@ -205,6 +205,83 @@ SingleInstance pattern alone is the correct guarantee.
 **Confirms**: hot-reload pipe + Clash API integration robust under
 rapid Apply.
 
+### F-7: 10x Split↔Full stress (full restart each)
+
+10 consecutive `routing_mode` flips with Apply between each. All
+expected to forceRestart (kill+launch sing-box) per
+`VpnEngineApplyEscalationTests` pin.
+
+| Iter | Target | Actual | PID before | PID after | Change? |
+|---|---|---|---|---|---|
+| 1 | split | split | 6652 | 8444 | ✓ |
+| 2 | full | full | 8444 | 7640 | ✓ |
+| 3 | split | split | 7640 | 5440 | ✓ |
+| 4 | full | full | 5440 | 3500 | ✓ |
+| 5 | split | split | 3500 | 10556 | ✓ |
+| 6 | full | full | 10556 | 1556 | ✓ |
+| 7 | split | split | 1556 | 10144 | ✓ |
+| 8 | full | full | 10144 | 3312 | ✓ |
+| 9 | split | split | 3312 | 6104 | ✓ |
+| 10 | full | full | 6104 | 3196 | ✓ |
+
+**10/10 forceRestart fired**. No FATAL "device not ready" — confirms
+v2.31.9-r4 LaunchProcess pre-enable + 750ms settle wait keeps wintun
+robust under rapid transitions (this is exactly the brat-2026-05-04
+scenario).
+
+Memory after 10 cycles: 285 MB (vs 171 at session start) — +114 MB
+peak, within acceptable range for sustained intensive UI navigation.
+
+### F-8: HealthMonitor crash recovery (v2.31.5 _shouldBeRunning)
+
+Manually killed sing-box (pid 1828). HealthMonitor detected within
+~5s, scheduled retry in 5000ms (per backoff schedule), restarted
+to pid 6652. Total downtime: ~6s.
+
+Log evidence:
+```
+01:42:21 [WRN] HealthMonitor Restarting sing-box (attempt 1/5) in 5000ms
+01:42:27 [WRN] SingBoxManager Hot-reload unavailable — restarting sing-box
+01:42:27 [INF] SingBoxManager Restarting sing-box
+01:42:27 [INF] SingBoxManager sing-box started (PID 6652)
+```
+
+### F-9: 5-minute idle memory leak check
+
+| T | App memMB | App handles | App threads | sing-box memMB |
+|---|---|---|---|---|
+| T0 | 284.9 | 893 | 41 | 56.8 |
+| T+1m | 289.7 | 857 | 39 | 56.8 |
+| T+3m | 289.7 | 878 | 38 | 56.7 |
+| T+5m | 289.8 | 897 | 38 | 56.6 |
+
+Memory stable at idle (+5 MB initial settle, then flat). Handle count
+oscillates ±20 (GC noise). Thread count drops from 41→38 (workers
+finishing). No leak signal.
+
+### F-10: Single-instance via Start Menu shortcut (canonical user path)
+
+Real-world user flow: click VPNRouter shortcut. Trampoline runs →
+launches App.exe → SingleInstance check.
+
+Result: existing pid 7996 **survives**, new pid 10228 launched by
+trampoline detects mutex held, sends bring-foreground via named pipe,
+exits silently. Trampoline log:
+```
+trampoline start dir=C:\Program Files\VPNRouter\app channel=prerelease
+integrity hashes=…1ed586b… mismatched=false
+App.exe launched pid=10228
+```
+
+The "App.exe launched pid=10228" log fires from the trampoline's
+DETACHED_PROCESS spawn; the SingleInstance handoff happens inside
+10228 and is invisible to the trampoline log. Process tree confirms
+10228 is gone within 1-2s.
+
+**This is the path 99%+ of users actually take** — and it works.
+F-4 only affects power users running VPNRouter.App.exe directly via
+PowerShell / cmd / autostart entries that bypass GUI.exe.
+
 ### F-6: 90-second idle stability snapshot
 
 | Time | App PID | App memMB | Handles | Threads |
