@@ -239,6 +239,35 @@ public sealed class RuleSetCacheManagerTests : IDisposable
                 cacheDir: _tempCacheDir));
     }
 
+    /// <summary>
+    /// brat-2026-05-05 regression pin. Pre-r3 sing-box was fed a
+    /// <c>type:remote</c> rule-set with the URL embedded; on TLS
+    /// timeout it crashed FATAL. Post-r3 the rule-set MUST be
+    /// <c>type:local</c> with a path that exists on disk.
+    /// </summary>
+    [Fact]
+    public async Task EnsureLocal_AdBlockUrl_AfterFetch_FileExistsAndIsBinary()
+    {
+        var filename = "adblock_reject.srs";
+        // Simulate a real .srs blob (binary). 4 KB is enough to assert
+        // we actually wrote the response bytes through the atomic-write path.
+        var fakeSrs = new byte[4096];
+        new Random(42).NextBytes(fakeSrs);
+        var handler = new StaticResponseHandler(HttpStatusCode.OK, fakeSrs);
+        var client = new HttpClient(handler);
+
+        var path = await RuleSetCacheManager.EnsureLocalAsync(
+            "https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs",
+            filename,
+            httpClient: client,
+            cacheDir: _tempCacheDir);
+
+        Assert.NotNull(path);
+        Assert.EndsWith(filename, path);
+        Assert.True(File.Exists(path));
+        Assert.Equal(fakeSrs, await File.ReadAllBytesAsync(path));
+    }
+
     [Fact]
     public async Task EnsureLocal_CancellationDuringFetch_ReturnsNull_NoCache()
     {
