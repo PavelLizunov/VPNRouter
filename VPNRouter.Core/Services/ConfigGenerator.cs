@@ -117,25 +117,42 @@ public static class ConfigGenerator
     private const string AdBlockRuleSetTag = "vpnrouter-adblock";
     private const string AdBlockRuleSetUrl =
         "https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs";
+    private const string AdBlockRuleSetFilename = "adblock_reject.srs";
 
     private static void ApplyAdBlock(SingBoxConfig config)
     {
-        // 1. Remote rule_set — downloaded and cached by sing-box.
-        // v2.31.6-r18: explicit `update_interval=168h` (= weekly). Pre-r18
-        // we relied on sing-box's implicit 24h default — fine, but invisible
-        // to anyone reading the generated `current.json`. With this we make
-        // the refresh cadence auditable and free to tune. The REIJI007
-        // upstream is updated daily-ish; weekly cache is a reasonable
-        // freshness/bandwidth trade for ~300K-domain blocklist.
+        // v2.31.9-r3: replace the prior `type:remote` rule-set with a
+        // C#-managed local cache. Pre-r3 sing-box fetched
+        // raw.githubusercontent.com synchronously at startup; a TLS
+        // handshake timeout (slow / GeoIP-blocked / GFW user) was FATAL
+        // and HealthMonitor looped on the same crash. brat-2026-05-05
+        // logged 4 FATALs in 90 seconds before fluke-success.
+        //
+        // Now we ensure the .srs is on disk *first* (with bounded timeout
+        // + stale-fallback in RuleSetCacheManager), and reference it as
+        // `type:local`. If the cache manager returns null (no cached
+        // copy AND fetch failed), we OMIT the rule-set entirely —
+        // losing ad blocking is fine; losing the entire VPN is not.
+        var localPath = RuleSetCacheManager.EnsureLocal(
+            AdBlockRuleSetUrl,
+            AdBlockRuleSetFilename);
+        if (string.IsNullOrEmpty(localPath))
+        {
+            // Graceful degradation: skip the rule-set. The DNS + Route
+            // rules below would hang sing-box on missing tag, so skip
+            // them too — done by early-return.
+            Serilog.Log.Logger.Warning(
+                "[ConfigGenerator] AdBlock rule-set unavailable (offline + no cache); generating config WITHOUT ad blocking");
+            return;
+        }
+
         config.Route.RuleSet ??= new List<RuleSetEntry>();
         config.Route.RuleSet.Add(new RuleSetEntry
         {
-            Type = "remote",
+            Type = "local",
             Tag = AdBlockRuleSetTag,
             Format = "binary",
-            Url = AdBlockRuleSetUrl,
-            DownloadDetour = "direct",
-            UpdateInterval = "168h"
+            Path = localPath,
         });
 
         // 2. DNS rule — reject DNS queries for ad domains (before other rules)
