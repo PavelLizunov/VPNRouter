@@ -218,6 +218,34 @@ public static class ConfigGenerator
         {
             var rule = rules[idx];
             if (!rule.Enabled) continue;
+
+            // v2.31.9-r5: for geosite/geoip rules, register rule-set FIRST
+            // (which may fail gracefully if offline — see
+            // RuleSetCacheManager). If no rule-sets registered, skip the
+            // route rule too — emitting a route rule that references a
+            // missing rule-set tag would FATAL sing-box at startup.
+            var isGeoType =
+                rule.Type.Equals("geosite", StringComparison.OrdinalIgnoreCase) ||
+                rule.Type.Equals("geoip", StringComparison.OrdinalIgnoreCase);
+            if (isGeoType)
+            {
+                var registered = EnsureCustomRuleSetEntry(config, rule.Type, rule.Value);
+                if (registered.Count == 0)
+                {
+                    // Cache miss + fetch fail for ALL referenced names —
+                    // skip this whole rule so we don't emit a route rule
+                    // that would crash sing-box. Better to lose a custom
+                    // rule than the entire VPN.
+                    continue;
+                }
+                // Note: if SOME names registered and others didn't, the
+                // built route rule below still references the original
+                // (full) value list. sing-box will warn about the missing
+                // tags but won't FATAL — `route.rule_set` ignores unknown
+                // tags as of 1.13.x. Future polish: filter the rule's
+                // value list to the registered subset.
+            }
+
             var built = BuildCustomRouteRule(rule);
             if (built == null) continue;
             config.Route.Rules.Insert(insertAt, built);
@@ -230,14 +258,6 @@ public static class ConfigGenerator
                 var dnsReject = BuildCustomDnsRejectRule(rule);
                 if (dnsReject != null)
                     config.Dns.Rules.Insert(0, dnsReject);
-            }
-
-            // For geosite/geoip rules, register the rule_set entry so
-            // sing-box knows where to load it from.
-            if (rule.Type.Equals("geosite", StringComparison.OrdinalIgnoreCase) ||
-                rule.Type.Equals("geoip", StringComparison.OrdinalIgnoreCase))
-            {
-                EnsureCustomRuleSetEntry(config, rule.Type, rule.Value);
             }
         }
     }
@@ -409,10 +429,25 @@ public static class ConfigGenerator
     };
 
     /// <summary>v2.30.0 — register the rule_set entry that sing-box
-    /// needs to load the .srs file. Falls back to remote URL with
-    /// SagerNet's standard path layout. The .srs files get downloaded
-    /// + cached by sing-box itself on first use; we don't pre-download.</summary>
-    private static void EnsureCustomRuleSetEntry(SingBoxConfig config, string type, string value)
+    /// needs to load the .srs file.
+    ///
+    /// <para>v2.31.9-r5: same hardening as <see cref="ApplyAdBlock"/>.
+    /// Pre-r5 these were <c>type:remote</c> with
+    /// <c>download_detour:direct</c> pointing at SagerNet's GitHub raw.
+    /// Same fragility as the AdBlock rule-set: TLS handshake timeout
+    /// during sing-box startup = FATAL = HealthMonitor crash loop. Now
+    /// pre-fetched via <see cref="RuleSetCacheManager"/> with stale
+    /// fallback; rule-sets that can't be fetched (and have no cache)
+    /// are silently skipped — config still passes <c>sing-box check</c>
+    /// because the route rule referencing the missing tag is also
+    /// skipped at the call site (see
+    /// <see cref="ApplyCustomRules"/>).</para>
+    ///
+    /// <para>Returns the list of TAGs that were successfully registered.
+    /// Caller compares this against the input <paramref name="value"/>
+    /// list to decide which route rules to emit / skip.</para>
+    /// </summary>
+    private static List<string> EnsureCustomRuleSetEntry(SingBoxConfig config, string type, string value)
     {
         config.Route.RuleSet ??= new List<RuleSetEntry>();
 
@@ -427,19 +462,36 @@ public static class ConfigGenerator
             ? "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-"
             : "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-";
 
+        var registered = new List<string>();
         foreach (var name in values)
         {
             var tag = prefix + name;
-            if (config.Route.RuleSet.Any(rs => rs.Tag == tag)) continue;
+            if (config.Route.RuleSet.Any(rs => rs.Tag == tag))
+            {
+                registered.Add(tag);
+                continue;
+            }
+
+            var srsName = (isSite ? "user-geosite-" : "user-geoip-") + name + ".srs";
+            var localPath = RuleSetCacheManager.EnsureLocal(urlBase + name + ".srs", srsName);
+            if (string.IsNullOrEmpty(localPath))
+            {
+                Serilog.Log.Logger.Warning(
+                    "[ConfigGenerator] Custom rule-set '{Tag}' unavailable (offline + no cache); rule will be omitted",
+                    tag);
+                continue;
+            }
+
             config.Route.RuleSet.Add(new RuleSetEntry
             {
-                Type = "remote",
+                Type = "local",
                 Tag = tag,
                 Format = "binary",
-                Url = urlBase + name + ".srs",
-                DownloadDetour = "direct",
+                Path = localPath,
             });
+            registered.Add(tag);
         }
+        return registered;
     }
 
     private static bool TryParsePortRange(string s, out int min, out int max)
