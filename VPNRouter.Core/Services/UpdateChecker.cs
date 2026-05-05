@@ -455,6 +455,19 @@ public class UpdateChecker
             "  ) else (",
             "    set \"SVC_WAS_RUNNING=1\"",
             "    echo [%TIME%] VPNRouter Service RUNNING — stopping for file copy >>\"%LOG%\"",
+            // v2.31.8-r7: disable Service failure recovery actions BEFORE
+            // sc stop. ServiceInstaller registers "restart 3x/60s" recovery
+            // for unexpected exits. On slow VMs / large xcopy operations
+            // (272 files, ~50 MB), if SCM treats the stop as a failure
+            // (rare but possible — Service.exe exit code edge cases) the
+            // recovery scheduler queues a restart 60 s later. If the
+            // restart fires DURING xcopy, Core.dll/Service.dll relock and
+            // /R silently skips them → mixed-version DLLs land. Disabling
+            // failure actions guarantees no auto-restart can fire mid-
+            // update. Re-enable after our explicit sc start so future
+            // crashes still get auto-recovered.
+            "    echo [%TIME%] disabling Service failure recovery during update >>\"%LOG%\"",
+            "    sc failure VPNRouter reset= 0 actions= \"\" >>\"%LOG%\" 2>&1",
             "    sc stop VPNRouter >>\"%LOG%\" 2>&1",
             "    set /a SVC_TRIES=0",
             "    :svcstoploop",
@@ -483,6 +496,14 @@ public class UpdateChecker
             "if \"%SVC_WAS_RUNNING%\"==\"1\" (",
             "  echo [%TIME%] restarting VPNRouter Service >>\"%LOG%\"",
             "  sc start VPNRouter >>\"%LOG%\" 2>&1",
+            // v2.31.8-r7: restore Service failure recovery actions
+            // (matches the values ServiceInstaller / WindowsServiceHelper
+            // configure on install: restart 3 times with 60 s delay,
+            // 24 h reset window). Without this restore, a future
+            // unexpected sing-box-driven Service crash would not auto-
+            // restart and the user would be left disconnected.
+            "  echo [%TIME%] restoring Service failure recovery actions >>\"%LOG%\"",
+            "  sc failure VPNRouter reset= 86400 actions= restart/60000/restart/60000/restart/60000 >>\"%LOG%\" 2>&1",
             ")",
             // Drop install receipt so next launch can detect failed update.
             // Format mirrors Linux receipt: line 1 = timestamp, line 2 = version.
