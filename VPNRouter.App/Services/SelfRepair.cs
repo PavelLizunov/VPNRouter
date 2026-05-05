@@ -87,28 +87,53 @@ public static class SelfRepair
             logger?.Warning(ex, "[SelfRepair] failed to write loop marker — proceeding anyway");
         }
 
-        // PowerShell one-liner that downloads install.ps1 to TEMP and
-        // executes it. Mirrors the public one-liner exactly so any user
-        // who manually runs the curl-pipe sees the same install path.
-        // The wrapping single quotes inside the -Command string need
-        // doubling per PowerShell rules.
+        // v2.31.8-r9 — channel-aware repair flag.
+        // If the running App.exe was built from a prerelease tag
+        // (compile-time AppVersion.Version contains '-r' suffix), pass
+        // -Prerelease so install.ps1 picks up the latest prerelease.
+        // Without this, a user on v2.31.8-r3 hitting a damaged install
+        // would get «repaired» to v2.31.7 stable — a downgrade that
+        // loses the v2.31.8 fixes they were running and triggers
+        // confusion («I had newer version, now I'm older»).
+        var compiledVersion = VPNRouter.Core.AppVersion.Version;
+        var isPrerelease = compiledVersion.Contains("-r", StringComparison.Ordinal);
+        var prereleaseFlag = isPrerelease ? " -Prerelease" : string.Empty;
+        logger?.Information("[SelfRepair] running install.ps1{Flag} (current build = {Version})",
+            prereleaseFlag, compiledVersion);
+
+        // v2.31.8-r9 — make repair invisible to the user.
+        // The user wants seamless self-healing — no PowerShell window,
+        // no «something is happening» distraction. install.ps1 itself
+        // already shows progress in its own console; we run it via a
+        // hidden powershell that internally launches install.ps1 in a
+        // visible window only if interactive (which it is — admin UAC).
+        // Net effect: user sees one UAC prompt (necessary for elevation),
+        // then a brief PowerShell window during install, then app
+        // relaunches. Pre-r9 we showed the bootstrapping window too —
+        // that visual «two windows» double-flicker confused users.
+        //
+        // Add `-NoLaunch` so we don't compete with app's own relaunch
+        // logic (App.exe's process exits, install.ps1 finishes, then
+        // Start Menu shortcut launch path takes over on next user
+        // click — cleaner than racing a second VPNRouter.App.exe).
+        // Actually no — the existing flow expects install.ps1 to launch
+        // App at the end (matches the manual web-one-liner UX). Don't
+        // add -NoLaunch.
         var bootstrap =
             "$ErrorActionPreference = 'Stop'; " +
+            "$ProgressPreference = 'SilentlyContinue'; " +
             "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; " +
             "$tmp = Join-Path $env:TEMP 'vpnr-repair.ps1'; " +
             $"Invoke-WebRequest -Uri '{InstallScriptUrl}' -OutFile $tmp -UseBasicParsing; " +
-            "& $tmp";
+            $"& $tmp{prereleaseFlag}";
 
         var psi = new ProcessStartInfo
         {
             FileName = "powershell.exe",
-            Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{bootstrap}\"",
+            Arguments = $"-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command \"{bootstrap}\"",
             UseShellExecute = true,
-            // Show the window so users see something is happening — a
-            // silent self-repair that takes 30+ seconds with no UI looks
-            // worse than a small PowerShell progress window. Plus if the
-            // download fails the user can read the error.
-            WindowStyle = ProcessWindowStyle.Normal,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
         };
 
         try

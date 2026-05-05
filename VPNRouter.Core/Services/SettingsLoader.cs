@@ -29,7 +29,38 @@ public static class SettingsLoader
         }
 
         var yaml = File.ReadAllText(configPath);
-        return Parse(yaml);
+        // v2.31.8-r9 — graceful fallback on corrupt YAML. Pre-r9 a
+        // malformed config.yaml (truncated mid-write, manual edit
+        // mistake, accidental BOM, etc.) propagated InvalidDataException
+        // up through MainWindowViewModel..ctor and crashed App.exe at
+        // launch. User-facing symptom: «приложение не запускается»,
+        // no UI, no banner, no clue. Now we catch the parse error,
+        // rename the broken file to a timestamped backup, and proceed
+        // with defaults. Next normal save persists the new clean
+        // settings; user keeps a forensic copy at config.yaml.broken-*
+        // if they want to recover specific values.
+        try
+        {
+            return Parse(yaml);
+        }
+        catch (Exception parseEx)
+        {
+            try
+            {
+                var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                var backup = $"{configPath}.broken-{stamp}";
+                File.Move(configPath, backup, overwrite: false);
+                Console.Error.WriteLine(
+                    $"[SettingsLoader] config.yaml parse failed ({parseEx.GetType().Name}: {parseEx.Message}). " +
+                    $"Renamed to {backup}; using defaults for this session.");
+            }
+            catch
+            {
+                // If we can't rename (locked / permission), fall through
+                // anyway — better defaults-with-no-backup than crash.
+            }
+            return CreateDefaults();
+        }
     }
 
     public static AppSettings Parse(string yaml)
