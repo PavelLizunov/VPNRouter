@@ -70,13 +70,37 @@ public static class SingleInstance
     {
         try
         {
+            // v2.31.10-r1 — fix to v2.31.7-r2 mutex-not-owned bug. Pre-r1
+            // we used `initiallyOwned: false` AND only called WaitOne(0)
+            // in the `!createdNew` branch. That meant the FIRST instance
+            // created the mutex but NEVER acquired it. The second
+            // instance saw createdNew=false, called WaitOne(0), and it
+            // returned true (mutex unowned!) — second instance fell
+            // through to the "first instance" path and the original got
+            // killed by OrphanCleanup. F-4 night-shift 2026-05-06.
+            //
+            // Fix: ALWAYS call WaitOne(0). It's the atomic acquisition
+            // primitive — succeeds iff no other process owns the mutex.
+            // The createdNew flag becomes useful only for diagnostic
+            // logging (distinguishes fresh-create from inherit-existing).
             _mutex = new Mutex(initiallyOwned: false, MutexName, out var createdNew);
 
-            // createdNew=false means another process (or a previous run
-            // that didn't release it) already holds the Mutex. Try to
-            // acquire it without blocking — if WaitOne(0) returns false,
-            // another LIVE instance is holding it.
-            if (!createdNew && !_mutex.WaitOne(0))
+            bool acquired;
+            try
+            {
+                acquired = _mutex.WaitOne(0);
+            }
+            catch (AbandonedMutexException)
+            {
+                // Previous owner died without releasing. Per .NET docs,
+                // ownership transfers to us anyway. Safe for our use
+                // case (process-singleton); we don't share state via
+                // the mutex itself.
+                logger?.Information("[SingleInstance] previous owner abandoned the mutex — claiming ownership");
+                acquired = true;
+            }
+
+            if (!acquired)
             {
                 logger?.Information("[SingleInstance] another instance detected — signalling it to surface");
                 TrySignalShow(logger);
@@ -89,7 +113,7 @@ public static class SingleInstance
             // second-instance launches can reach us.
             _serverCts = new CancellationTokenSource();
             _ = Task.Run(() => RunPipeServerLoop(_serverCts.Token, logger));
-            logger?.Debug("[SingleInstance] acquired single-instance slot");
+            logger?.Debug("[SingleInstance] acquired single-instance slot (createdNew={CreatedNew})", createdNew);
             return true;
         }
         catch (Exception ex)

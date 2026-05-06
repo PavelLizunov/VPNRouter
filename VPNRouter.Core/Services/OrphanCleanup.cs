@@ -14,9 +14,13 @@ namespace VPNRouter.Core.Services;
 public static class OrphanCleanup
 {
     /// <summary>
-    /// Kill any orphan sing-box.exe and other VPNRouter.App.exe instances
-    /// that don't belong to the current process. Safe to call on startup
-    /// before the VPN engine initializes.
+    /// Kill orphan sing-box.exe + VPNRouter.GUI.exe stubs. Safe to call
+    /// on startup before the VPN engine initializes.
+    ///
+    /// <para>v2.31.10-r1: VPNRouter.App.exe siblings are NO LONGER killed
+    /// here — that responsibility moved to <c>SingleInstance</c> which
+    /// correctly leaves the original alive and exits the new launch
+    /// silently. See F-4 in plans/session-night-shift-2026-05-06.md.</para>
     ///
     /// <para>v2.27.2: optionally emits <see cref="TunAdapterDiagnostics"/>
     /// log lines before and after the sing-box sweep so we can correlate
@@ -26,23 +30,29 @@ public static class OrphanCleanup
     /// </summary>
     public static void KillOrphans(ILogger? logger = null)
     {
-        var selfPid = Environment.ProcessId;
-
         // Before: capture the adapter inventory so we know what was
         // present at startup. If a user ships us their log after a bad
         // experience, this is the "was there a leak?" data point.
         if (OperatingSystem.IsWindows())
             TunAdapterDiagnostics.LogAdapterState(logger, "OrphanCleanup.before");
 
-        // 1. Kill any other VPNRouter.App.exe instances (different PID).
-        // This prevents the "two instances after update" symptom.
-        KillByName("VPNRouter.App", selfPid);
+        // v2.31.10-r1 (F-4): we used to KillByName("VPNRouter.App",
+        // selfPid) here as a defensive belt against "two instances after
+        // update". That predates SingleInstance (v2.31.7-r2). With
+        // SingleInstance in place, this kill is at best redundant and
+        // at worst a footgun — when the SingleInstance check has any
+        // race or bug (as in the v2.31.7..v2.31.9 mutex-not-owned bug),
+        // OrphanCleanup gleefully kills the ORIGINAL instance and
+        // leaves the brand-new one as sole survivor. The OPPOSITE of
+        // what SingleInstance is supposed to guarantee. SingleInstance
+        // is the correct gate; killing live VPNRouter.App siblings here
+        // is never desirable. Removed.
 
-        // 2. Kill any sing-box.exe processes. We're starting fresh —
+        // 1. Kill any sing-box.exe processes. We're starting fresh —
         // the engine will spawn its own sing-box if needed.
         KillByName("sing-box", null);
 
-        // 3. Kill any leftover VPNRouter.GUI.exe (legacy WinForms or Go stub).
+        // 2. Kill any leftover VPNRouter.GUI.exe (legacy WinForms or Go stub).
         // Stub should self-exit but defensive in case it's hung.
         KillByName("VPNRouter.GUI", null);
 

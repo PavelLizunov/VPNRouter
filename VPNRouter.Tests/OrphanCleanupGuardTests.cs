@@ -30,10 +30,7 @@ namespace VPNRouter.Tests;
 /// </summary>
 public sealed class OrphanCleanupGuardTests
 {
-    [Fact(Skip = "Pending F-4 fix in v2.31.10. Currently fails because " +
-                  "OrphanCleanup.KillOrphans contains the dangerous " +
-                  "KillByName(\"VPNRouter.App\", ...) call. Remove Skip " +
-                  "after the fix lands. See plans/session-night-shift-2026-05-06.md")]
+    [Fact]
     public void OrphanCleanup_DoesNotKillVPNRouterAppProcesses()
     {
         var src = LoadOrphanCleanupSource();
