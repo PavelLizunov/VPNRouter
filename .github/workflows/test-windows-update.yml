@@ -136,21 +136,23 @@ jobs:
           "cliExe=$cliExe"   >> $env:GITHUB_OUTPUT
           "stagedDir=$stagedDir" >> $env:GITHUB_OUTPUT
 
-      - name: Capture pre-update state (file mtime, version-info)
-        id: preupdate
+      - name: Reset receipt + update.log (so we see only this run's output)
         shell: pwsh
         run: |
-          $coreDll = Join-Path "${{ steps.layout.outputs.appDir }}" "VPNRouter.Core.dll"
-          if (-not (Test-Path $coreDll)) { throw "Pre-update Core.dll missing at $coreDll" }
-          $mtime = (Get-Item $coreDll).LastWriteTimeUtc.ToString("o")
-          Write-Host "Pre-update Core.dll mtime: $mtime"
-          "coreMtime=$mtime" >> $env:GITHUB_OUTPUT
-
           # Wipe any prior receipt + update.log so post-update assertions
           # see ONLY this run's helper output.
           Remove-Item "$env:ProgramData\VPNRouter\.update-installed-version" -Force -ErrorAction SilentlyContinue
           Remove-Item "$env:ProgramData\VPNRouter\logs\update.log"           -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path "$env:ProgramData\VPNRouter\logs" | Out-Null
+
+          # Sanity: confirm the install we just laid out has Core.dll where
+          # we expect. We deliberately do NOT capture mtime — xcopy preserves
+          # source timestamps, and source = dest = same build, so a "did it
+          # advance" check would always be a false negative. The helper's
+          # own `xcopy exit=N` log line is the ground truth and is checked
+          # in the post-update assertion step instead.
+          $coreDll = Join-Path "${{ steps.layout.outputs.appDir }}" "VPNRouter.Core.dll"
+          if (-not (Test-Path $coreDll)) { throw "Pre-update Core.dll missing at $coreDll" }
 
       - name: Trigger update (CLI test-update with --staged-dir)
         shell: pwsh
@@ -219,25 +221,45 @@ jobs:
       - name: Assert files were replaced
         shell: pwsh
         run: |
-          # The staged update was generated from the same build, so the
-          # binaries are byte-identical — but mtime advances because the
-          # helper.cmd's xcopy copies fresh files. Confirm the copy actually
-          # happened by looking for a forward mtime jump on Core.dll.
+          # The helper.cmd writes its own ground-truth status to update.log:
+          #   "<n> File(s) copied" — xcopy's own success line
+          #   "xcopy exit=<N>"     — our wrapper, 0 = success
+          # We don't check mtime because xcopy preserves source timestamps,
+          # and source + dest were generated from the same build, so a
+          # mtime-advance check is always a false negative.
+          $log = "$env:ProgramData\VPNRouter\logs\update.log"
+          $content = Get-Content $log -Raw
+          if ($content -notmatch 'xcopy exit=(\d+)') {
+            throw "update.log has no 'xcopy exit=N' line — helper.cmd never reached the copy step"
+          }
+          $xcopyExit = [int]$Matches[1]
+          if ($xcopyExit -ne 0) {
+            # 4 = error, 5 = disk write fail. Exit 1 in xcopy means "no files
+            # found" — also a failure for our purposes.
+            throw "xcopy exit=$xcopyExit (expected 0). update.log contents: $content"
+          }
+          Write-Host "OK: xcopy exit=0"
+
+          if ($content -notmatch '(\d+) File\(s\) copied') {
+            throw "update.log has no 'N File(s) copied' line — xcopy may have crashed before reporting"
+          }
+          $copiedCount = [int]$Matches[1]
+          if ($copiedCount -lt 50) {
+            # Sanity: a real update copy should land 90+ files (DLLs, exes,
+            # sing-box, profiles). Anything under 50 is suspicious.
+            throw "Only $copiedCount files copied — expected 90+. helper.cmd may be skipping content."
+          }
+          Write-Host "OK: $copiedCount files copied"
+
+          # The dir layout assertions: Core.dll + sing-box.exe must still
+          # exist post-copy (xcopy /Y overwrites; if it had wiped them
+          # they'd be gone).
           $coreDll = Join-Path "${{ steps.layout.outputs.appDir }}" "VPNRouter.Core.dll"
           if (-not (Test-Path $coreDll)) {
             throw "Post-update Core.dll missing at $coreDll — xcopy may have wiped/skipped"
           }
-          $newMtime = (Get-Item $coreDll).LastWriteTimeUtc
-          $oldMtime = [DateTime]::Parse("${{ steps.preupdate.outputs.coreMtime }}").ToUniversalTime()
-          Write-Host "Pre-update  mtime: $($oldMtime.ToString('o'))"
-          Write-Host "Post-update mtime: $($newMtime.ToString('o'))"
-          if ($newMtime -le $oldMtime) {
-            throw "Core.dll mtime did not advance — xcopy did not actually replace the file"
-          }
-          Write-Host "OK: Core.dll mtime advanced (file was replaced)"
+          Write-Host "OK: Core.dll present at $coreDll"
 
-          # sing-box is a separate concern: the helper kills it before
-          # copy and leaves the new one in place. Should be present.
           $sb = Join-Path "${{ steps.layout.outputs.appDir }}" "sing-box.exe"
           if (-not (Test-Path $sb)) {
             throw "sing-box.exe missing post-update at $sb"
