@@ -429,6 +429,11 @@ public class UpdateChecker
         var cmd = string.Join("\r\n", new[]
         {
             "@echo off",
+            // INTENTIONALLY BROKEN — this commit reproduces the v2.31.7-r10
+            // CMD parser bug shape ("20 was unexpected at this time") to
+            // prove the test-windows-update.yml gate catches it. Will be
+            // reverted in the immediately-following restore commit.
+            "if  gtr 20 echo broken",
             // v2.31.8-r10 — CRITICAL FIX. Pre-r10 helper.cmd had a CMD
             // parser bug: the nested `if errorlevel 1 (...) else (...)`
             // block referenced `%SVC_TRIES%` (initialised inside the else
