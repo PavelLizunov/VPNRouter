@@ -176,45 +176,66 @@ jobs:
         id: wait
         shell: pwsh
         run: |
-          $log = "$env:ProgramData\VPNRouter\logs\update.log"
+          $updateLog = "$env:ProgramData\VPNRouter\logs\update.log"
+          $stderrLog = "$env:ProgramData\VPNRouter\logs\helper-stderr.log"
           $deadline = (Get-Date).AddMinutes(5)
           $sawDone = $false
 
-          while ((Get-Date) -lt $deadline) {
-            if (Test-Path $log) {
-              $content = Get-Content $log -Raw -ErrorAction SilentlyContinue
-              if ($content) {
-                # Known CMD parser failure modes — fail fast, don't burn 5 min.
-                # The v2.31.7-r10 bug surfaced as 'unexpected at this time'.
-                # Other CMD lexer errors typically include 'syntax of the
-                # command is incorrect' or 'cannot find the path specified'
-                # in the wrong context.
-                if ($content -match 'was unexpected at this time') {
-                  Write-Host "::error::CMD parser failure detected in helper.cmd"
-                  Write-Host "::group::update.log"
-                  Write-Host $content
+          # Known CMD parser failure modes — match either source.
+          # 'was unexpected at this time' = the v2.31.7-r10 signature
+          # (empty if-condition from %VAR% pre-expansion bug).
+          # The CI-only stderr capture (UpdateChecker.cs skipRelaunchForCi)
+          # tees cmd.exe stderr to helper-stderr.log so we catch parser
+          # errors that abort BEFORE the helper writes its own update.log.
+          $failPattern = 'was unexpected at this time|syntax of the command is incorrect'
+
+          function Check-FailPatterns {
+            foreach ($p in @($updateLog, $stderrLog)) {
+              if (Test-Path $p) {
+                $c = Get-Content $p -Raw -ErrorAction SilentlyContinue
+                if ($c -and $c -match $failPattern) {
+                  Write-Host "::error::CMD parser failure detected in $p"
+                  Write-Host "::group::$p"
+                  Write-Host $c
                   Write-Host "::endgroup::"
-                  throw "helper.cmd CMD parser bug — likely missing EnableDelayedExpansion / wrong %VAR% vs !VAR! usage"
+                  return $true
                 }
-                if ($content -match 'helper done') {
-                  $sawDone = $true
-                  break
-                }
+              }
+            }
+            return $false
+          }
+
+          while ((Get-Date) -lt $deadline) {
+            if (Check-FailPatterns) {
+              throw "helper.cmd CMD parser bug — likely missing EnableDelayedExpansion / wrong %VAR% vs !VAR! usage in a parenthesized block. See log dump above."
+            }
+            if (Test-Path $updateLog) {
+              $c = Get-Content $updateLog -Raw -ErrorAction SilentlyContinue
+              if ($c -and $c -match 'helper done') {
+                $sawDone = $true
+                break
               }
             }
             Start-Sleep -Seconds 3
           }
 
-          if (-not (Test-Path $log)) {
-            throw "update.log never appeared at $log after 5 min — helper.cmd may not have launched"
+          # Whether or not we saw 'helper done', dump everything we have
+          # for postmortem visibility.
+          foreach ($p in @($updateLog, $stderrLog)) {
+            if (Test-Path $p) {
+              Write-Host "::group::Final $p"
+              Get-Content $p
+              Write-Host "::endgroup::"
+            } else {
+              Write-Host "::warning::$p was not created"
+            }
           }
 
-          Write-Host "::group::Final update.log"
-          Get-Content $log
-          Write-Host "::endgroup::"
-
+          if (-not (Test-Path $updateLog)) {
+            throw "update.log never appeared at $updateLog after 5 min — helper.cmd may not have launched, or aborted before its first echo. Check helper-stderr.log dump above."
+          }
           if (-not $sawDone) {
-            throw "helper.cmd did not log 'helper done' within 5 min — see update.log above"
+            throw "helper.cmd did not log 'helper done' within 5 min — see update.log dump above"
           }
           Write-Host "OK: helper.cmd completed cleanly"
 

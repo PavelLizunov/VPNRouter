@@ -429,11 +429,6 @@ public class UpdateChecker
         var cmd = string.Join("\r\n", new[]
         {
             "@echo off",
-            // INTENTIONALLY BROKEN — this commit reproduces the v2.31.7-r10
-            // CMD parser bug shape ("20 was unexpected at this time") to
-            // prove the test-windows-update.yml gate catches it. Will be
-            // reverted in the immediately-following restore commit.
-            "if  gtr 20 echo broken",
             // v2.31.8-r10 — CRITICAL FIX. Pre-r10 helper.cmd had a CMD
             // parser bug: the nested `if errorlevel 1 (...) else (...)`
             // block referenced `%SVC_TRIES%` (initialised inside the else
@@ -559,13 +554,24 @@ public class UpdateChecker
 
         File.WriteAllText(helperPath, cmd);
 
+        // CI mode: tee cmd.exe's own stdout+stderr into a sidecar log so the
+        // workflow can detect CMD-parser errors (e.g. "<x> was unexpected at
+        // this time") that abort the helper BEFORE it manages to write to
+        // its own update.log. Without this, parser bugs only surface as a
+        // 5-minute timeout-on-missing-helper-done — slow + uninformative.
+        // Production is unchanged because CreateNoWindow=true makes cmd.exe
+        // output invisible anyway.
+        var argString = skipRelaunchForCi
+            ? $"/c \"\"{helperPath}\" > \"{Path.Combine(logsDir, "helper-stderr.log")}\" 2>&1\""
+            : $"/c \"{helperPath}\"";
+
         // Launch the helper detached. UseShellExecute=true with no Window
         // ensures the cmd doesn't keep our parent process attached to its
         // console. WorkingDirectory irrelevant.
         Process.Start(new ProcessStartInfo
         {
             FileName = "cmd.exe",
-            Arguments = $"/c \"{helperPath}\"",
+            Arguments = argString,
             UseShellExecute = true,
             CreateNoWindow = true,
             WindowStyle = ProcessWindowStyle.Hidden,
