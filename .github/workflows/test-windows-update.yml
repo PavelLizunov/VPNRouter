@@ -39,6 +39,16 @@ on:
   push:
     tags:
       - "v*-r*"
+  # Auto-run on PRs that touch the update path or this workflow itself.
+  # Keeps regression coverage tight without burning CI minutes on every PR.
+  pull_request:
+    paths:
+      - "VPNRouter.Core/Services/UpdateChecker.cs"
+      - "VPNRouter.CLI/Commands/TestUpdateCommand.cs"
+      - "VPNRouter.CLI/Program.cs"
+      - "VPNRouter.Core/AppVersion.cs"
+      - "build.ps1"
+      - ".github/workflows/test-windows-update.yml"
 
 permissions:
   contents: read
