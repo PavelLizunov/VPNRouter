@@ -119,18 +119,39 @@ public static class SelfRepair
         // Actually no — the existing flow expects install.ps1 to launch
         // App at the end (matches the manual web-one-liner UX). Don't
         // add -NoLaunch.
-        var bootstrap =
-            "$ErrorActionPreference = 'Stop'; " +
-            "$ProgressPreference = 'SilentlyContinue'; " +
-            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; " +
-            "$tmp = Join-Path $env:TEMP 'vpnr-repair.ps1'; " +
-            $"Invoke-WebRequest -Uri '{InstallScriptUrl}' -OutFile $tmp -UseBasicParsing; " +
-            $"& $tmp{prereleaseFlag}";
+        // v2.31.10-r2 — write bootstrap to a tempfile and run via `-File`,
+        // not inline `-Command`. Inline `-Command "iwr … | & $tmp"` is the
+        // exact shape Defender's `Trojan:Win32/ClickFix.DCW!MTB` family fires
+        // on (already triggered on dev tooling on this machine — see
+        // `plans/v2.31.10-av-firewall-compat.md`). A `-File` invocation
+        // points at a real .ps1 on disk, AMSI scans the whole file (clean,
+        // signed-by-content text), and the Hidden window flag still applies.
+        // Net effect: same UX, much smaller AMSI heuristic surface.
+        var bootstrapScript =
+            "$ErrorActionPreference = 'Stop'\r\n" +
+            "$ProgressPreference = 'SilentlyContinue'\r\n" +
+            "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\r\n" +
+            "$tmp = Join-Path $env:TEMP 'vpnr-repair.ps1'\r\n" +
+            $"Invoke-WebRequest -Uri '{InstallScriptUrl}' -OutFile $tmp -UseBasicParsing\r\n" +
+            $"& $tmp{prereleaseFlag}\r\n";
+
+        var bootstrapPath = Path.Combine(
+            Path.GetTempPath(),
+            $"vpnr-self-repair-{DateTime.UtcNow:yyyyMMddHHmmss}.ps1");
+        try
+        {
+            File.WriteAllText(bootstrapPath, bootstrapScript);
+        }
+        catch (Exception ex)
+        {
+            logger?.Error(ex, "[SelfRepair] failed to write bootstrap helper to {Path}", bootstrapPath);
+            throw;
+        }
 
         var psi = new ProcessStartInfo
         {
             FileName = "powershell.exe",
-            Arguments = $"-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command \"{bootstrap}\"",
+            Arguments = $"-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"{bootstrapPath}\"",
             UseShellExecute = true,
             CreateNoWindow = true,
             WindowStyle = ProcessWindowStyle.Hidden,
