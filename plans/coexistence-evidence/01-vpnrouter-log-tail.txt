@@ -1,0 +1,50 @@
+﻿[2026-05-06 17:01:03] [WARNI] [singbox] +0300 2026-05-06 17:01:01 INFO [870424616 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:49725
+[2026-05-06 17:01:03] [WARNI] [singbox] +0300 2026-05-06 17:01:01 INFO [870424616 0ms] inbound/tun[tun-in]: inbound connection to 23.11.40.157:80
+[2026-05-06 17:01:03] [WARNI] [singbox] +0300 2026-05-06 17:01:01 INFO [870424616 0ms] router: found process path: C:\Windows\System32\svchost.exe
+[2026-05-06 17:01:03] [WARNI] [singbox] +0300 2026-05-06 17:01:01 INFO [870424616 0ms] outbound/direct[direct]: outbound connection to 23.11.40.157:80
+[2026-05-06 17:01:03] [WARNI] [SingBoxManager] === end sing-box crash tail ===
+[2026-05-06 17:01:03] [INFOR] [Firewall] ENABLED 0 block rules (VPN down â€” leak protection active)
+[2026-05-06 17:01:03] [WARNI] [HealthMonitor] Restarting sing-box (attempt 1/5) in 5000ms
+[2026-05-06 17:01:05] [INFOR] [HealthMonitor] Debounce elapsed â€” rescanning processes
+[2026-05-06 17:01:05] [INFOR] [ProcessScanner] Resolved 1 process names for profile 'FullTunnel'
+[2026-05-06 17:01:08] [INFOR] [ProcessScanner] Resolved 1 process names for profile 'FullTunnel'
+[2026-05-06 17:01:08] [INFOR] [SingBoxManager] Reloading config
+[2026-05-06 17:01:08] [WARNI] [SingBoxManager] Hot-reload unavailable â€” restarting sing-box
+[2026-05-06 17:01:08] [INFOR] [SingBoxManager] Restarting sing-box
+[2026-05-06 17:01:08] [INFOR] [SingBoxManager] Stopping sing-box (PID null)
+[2026-05-06 17:01:08] [INFOR] [SingBoxManager] Stop called but sing-box already exited (process=HasExited) â€” running cleanup-only path
+[2026-05-06 17:01:08] [INFOR] [SingBoxManager] sing-box started (PID 10712)
+[2026-05-06 17:01:08] [INFOR] [Firewall] Disabled 0 block rules (VPN up â€” TUN handles routing)
+[2026-05-06 17:01:08] [INFOR] [HealthMonitor] sing-box restarted successfully
+[2026-05-06 17:01:19] [INFOR] [HealthMonitor] Debounce elapsed â€” rescanning processes
+[2026-05-06 17:01:19] [INFOR] [ProcessScanner] Resolved 1 process names for profile 'FullTunnel'
+[2026-05-06 17:01:32] [INFOR] [HealthMonitor] Debounce elapsed â€” rescanning processes
+[2026-05-06 17:01:32] [INFOR] [ProcessScanner] Resolved 1 process names for profile 'FullTunnel'
+[2026-05-06 17:01:47] [INFOR] [HealthMonitor] Debounce elapsed â€” rescanning processes
+[2026-05-06 17:01:47] [INFOR] [ProcessScanner] Resolved 1 process names for profile 'FullTunnel'
+[2026-05-06 17:01:52] [INFOR] [HealthMonitor] Debounce elapsed â€” rescanning processes
+[2026-05-06 17:01:52] [INFOR] [ProcessScanner] Resolved 1 process names for profile 'FullTunnel'
+[2026-05-06 17:02:08] [INFOR] [HealthMonitor] Debounce elapsed â€” rescanning processes
+[2026-05-06 17:02:08] [INFOR] [ProcessScanner] Resolved 1 process names for profile 'FullTunnel'
+[2026-05-06 17:02:20] [INFOR] [HealthMonitor] Debounce elapsed â€” rescanning processes
+[2026-05-06 17:02:20] [INFOR] [ProcessScanner] Resolved 1 process names for profile 'FullTunnel'
+[2026-05-06 17:02:31] [INFOR] [HealthMonitor] Debounce elapsed â€” rescanning processes
+[2026-05-06 17:02:31] [INFOR] [ProcessScanner] Resolved 1 process names for profile 'FullTunnel'
+[2026-05-06 17:02:45] [INFOR] [Service] Stopping...
+[2026-05-06 17:02:45] [INFOR] [VpnEngine] Stopping...
+[2026-05-06 17:02:45] [INFOR] [Service] Stopping...
+[2026-05-06 17:02:45] [INFOR] [DnsHardening] Restored to original values
+[2026-05-06 17:02:45] [INFOR] [HealthMonitor] Stopped
+[2026-05-06 17:02:45] [INFOR] [ETW] Stopping process monitor
+[2026-05-06 17:02:45] [INFOR] [Firewall] Disabled 0 block rules (VPN up â€” TUN handles routing)
+[2026-05-06 17:02:45] [INFOR] [Firewall] All VPNRouter firewall rules deleted
+[2026-05-06 17:02:45] [INFOR] [SingBoxManager] Stopping sing-box (PID 10712)
+[2026-05-06 17:02:45] [INFOR] [SingBoxManager] sing-box stopped
+[2026-05-06 17:02:45] [INFOR] [Firewall] All VPNRouter firewall rules deleted
+[2026-05-06 17:02:45] [INFOR] [TunDiag] VpnEngine.after-stop: no VPNRouter-TUN or sing-box-tun adapters found
+[2026-05-06 17:02:45] [INFOR] [VpnEngine] Stopped
+[2026-05-06 17:02:45] [INFOR] [Service] Stopped
+[2026-05-06 17:02:45] [INFOR] [VpnEngine] Stopped
+[2026-05-06 17:02:45] [INFOR] [Service] Stop requested
+[2026-05-06 17:02:45] [INFOR] [Service] Stopped
+[2026-05-06 17:02:45] [INFOR] [Startup] VPNRouter Service exited cleanly

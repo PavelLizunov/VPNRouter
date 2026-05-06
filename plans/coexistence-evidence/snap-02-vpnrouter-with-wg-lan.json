@@ -1,0 +1,59 @@
+﻿{
+    "timestamp":  "2026-05-06T17:05:37.4490183+03:00",
+    "wg_adapter_subnets":  {
+                               "InterfaceAlias":  "wg-lan",
+                               "IPAddress":  "10.99.99.2",
+                               "PrefixLength":  32
+                           },
+    "default_routes":  {
+                           "InterfaceAlias":  "Ethernet",
+                           "NextHop":  "10.0.2.2",
+                           "RouteMetric":  0,
+                           "ifMetric":  null
+                       },
+    "vpnrouter_procs":  [
+                            {
+                                "Name":  "sing-box",
+                                "Id":  6928,
+                                "StartTime":  "\/Date(1778076305275)\/"
+                            },
+                            {
+                                "Name":  "VPNRouter.App",
+                                "Id":  9604,
+                                "StartTime":  "\/Date(1778076061566)\/"
+                            }
+                        ],
+    "adapters":  [
+                     {
+                         "Name":  "wg-lan",
+                         "Status":  "Up",
+                         "InterfaceDescription":  "WireGuard Tunnel",
+                         "ifIndex":  14,
+                         "MacAddress":  ""
+                     },
+                     {
+                         "Name":  "Ethernet",
+                         "Status":  "Up",
+                         "InterfaceDescription":  "Intel(R) PRO/1000 MT Desktop Adapter",
+                         "ifIndex":  10,
+                         "MacAddress":  "08-00-27-D4-2A-DD"
+                     },
+                     {
+                         "Name":  "VPNRouter-TUN",
+                         "Status":  "Up",
+                         "InterfaceDescription":  "sing-tun Tunnel",
+                         "ifIndex":  4,
+                         "MacAddress":  ""
+                     }
+                 ],
+    "label":  "02-vpnrouter-with-wg-lan",
+    "ipify":  {
+                  "ip":  "104.194.156.93",
+                  "ok":  true
+              },
+    "wg_services":  {
+                        "Name":  "WireGuardTunnel$wg-lan",
+                        "Status":  4,
+                        "StartType":  2
+                    }
+}

@@ -1,0 +1,226 @@
+﻿+0300 2026-05-06 17:08:25 INFO network: updated default interface Ethernet, index 10
++0300 2026-05-06 17:08:25 INFO inbound/tun[tun-in]: started at VPNRouter-TUN
++0300 2026-05-06 17:08:25 INFO outbound/vless[vless-is-01 443 main-brat]: outbound connection to www.gstatic.com:80
++0300 2026-05-06 17:08:25 INFO outbound/vless[vless-is-01 8444 main-brat]: outbound connection to www.gstatic.com:80
++0300 2026-05-06 17:08:25 INFO outbound/vless[vless-is-01 8443 main-brat]: outbound connection to www.gstatic.com:80
++0300 2026-05-06 17:08:25 INFO clash-api: restful api listening at 127.0.0.1:9090
++0300 2026-05-06 17:08:25 INFO sing-box started (0.19s)
++0300 2026-05-06 17:08:25 INFO [2098987515 0ms] inbound/tun[tun-in]: inbound packet connection from 172.19.0.1:50443
++0300 2026-05-06 17:08:25 INFO [2098987515 0ms] inbound/tun[tun-in]: inbound packet connection to 192.0.2.1:51820
++0300 2026-05-06 17:08:25 INFO [2098987515 0ms] outbound/direct[direct]: outbound packet connection
++0300 2026-05-06 17:08:38 INFO router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:38 INFO [1973191651 0ms] inbound/tun[tun-in]: inbound packet connection from 172.19.0.1:58333
++0300 2026-05-06 17:08:38 INFO [1973191651 0ms] inbound/tun[tun-in]: inbound packet connection to 172.19.0.2:53
++0300 2026-05-06 17:08:38 INFO [1973191651 0ms] router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:38 INFO [1973191651 0ms] outbound/direct[dns-direct]: outbound connection to 1.1.1.1:443
++0300 2026-05-06 17:08:38 INFO router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:38 INFO [4165690477 0ms] inbound/tun[tun-in]: inbound packet connection from 172.19.0.1:62929
++0300 2026-05-06 17:08:38 INFO [4165690477 0ms] inbound/tun[tun-in]: inbound packet connection to 172.19.0.2:53
++0300 2026-05-06 17:08:38 INFO [4165690477 0ms] router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:38 INFO router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:38 INFO [3059272626 0ms] inbound/tun[tun-in]: inbound packet connection from 172.19.0.1:60673
++0300 2026-05-06 17:08:38 INFO [3059272626 0ms] inbound/tun[tun-in]: inbound packet connection to 172.19.0.2:53
++0300 2026-05-06 17:08:38 INFO [3059272626 0ms] router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:38 INFO router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:38 INFO [2515060048 0ms] inbound/tun[tun-in]: inbound packet connection from 172.19.0.1:59790
++0300 2026-05-06 17:08:38 INFO [2515060048 0ms] inbound/tun[tun-in]: inbound packet connection to 172.19.0.2:53
++0300 2026-05-06 17:08:38 INFO [2515060048 0ms] router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:38 INFO [1973191651 253ms] dns: exchanged A dns.msftncsi.com. 10 IN A 131.107.255.255
++0300 2026-05-06 17:08:38 INFO [3059272626 200ms] dns: exchanged CNAME www.msftconnecttest.com. 5 IN CNAME www.msftconnecttest.com.edgesuite.net.
++0300 2026-05-06 17:08:38 INFO [3059272626 200ms] dns: exchanged CNAME www.msftconnecttest.com.edgesuite.net. 5 IN CNAME a39.d.akamai.net.
++0300 2026-05-06 17:08:38 INFO [3059272626 200ms] dns: exchanged A a39.d.akamai.net. 5 IN A 23.216.77.168
++0300 2026-05-06 17:08:38 INFO [3059272626 200ms] dns: exchanged A a39.d.akamai.net. 5 IN A 23.216.77.161
++0300 2026-05-06 17:08:38 INFO [3059272626 200ms] dns: exchanged A a39.d.akamai.net. 5 IN A 23.216.77.181
++0300 2026-05-06 17:08:38 INFO [3059272626 200ms] dns: exchanged A a39.d.akamai.net. 5 IN A 23.216.77.178
++0300 2026-05-06 17:08:38 INFO [3059272626 200ms] dns: exchanged A a39.d.akamai.net. 5 IN A 23.216.77.174
++0300 2026-05-06 17:08:38 INFO [3059272626 200ms] dns: exchanged A a39.d.akamai.net. 5 IN A 23.216.77.160
++0300 2026-05-06 17:08:38 INFO [3059272626 200ms] dns: exchanged A a39.d.akamai.net. 5 IN A 23.216.77.172
++0300 2026-05-06 17:08:38 INFO [3059272626 200ms] dns: exchanged A a39.d.akamai.net. 5 IN A 23.216.77.165
++0300 2026-05-06 17:08:38 INFO [3059272626 200ms] dns: exchanged A a39.d.akamai.net. 5 IN A 23.216.77.173
++0300 2026-05-06 17:08:38 INFO [4165690477 200ms] dns: exchanged CNAME ipv6.msftconnecttest.com. 988 IN CNAME ipv6.msftconnecttest.com.edgesuite.net.
++0300 2026-05-06 17:08:38 INFO [4165690477 200ms] dns: exchanged CNAME ipv6.msftconnecttest.com.edgesuite.net. 988 IN CNAME a1968.i6g1.akamai.net.
++0300 2026-05-06 17:08:38 INFO [4165690477 200ms] dns: exchanged SOA i6g1.akamai.net. 988 IN SOA n0i6g1.akamai.net. hostmaster.akamai.com. 1778076509 1000 1000 1000 1800
++0300 2026-05-06 17:08:38 INFO router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:38 INFO [1385527535 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:57155
++0300 2026-05-06 17:08:38 INFO [1385527535 0ms] inbound/tun[tun-in]: inbound connection to 23.216.77.168:80
++0300 2026-05-06 17:08:38 INFO [1385527535 0ms] router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:38 INFO [1385527535 0ms] outbound/direct[direct]: outbound connection to 23.216.77.168:80
++0300 2026-05-06 17:08:38 INFO [2515060048 56ms] dns: exchanged A claude.ai. 39 IN A 160.79.104.10
++0300 2026-05-06 17:08:38 INFO [1973191651 548ms] dns: exchanged A api.anthropic.com. 124 IN A 160.79.104.10
++0300 2026-05-06 17:08:38 INFO router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:08:38 INFO [3969329862 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:57157
++0300 2026-05-06 17:08:38 INFO [3969329862 0ms] inbound/tun[tun-in]: inbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:38 INFO [3969329862 0ms] router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:08:38 INFO [3969329862 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:38 INFO [1973191651 631ms] dns: exchanged A www.gstatic.com. 115 IN A 142.250.154.94
++0300 2026-05-06 17:08:38 INFO router: found process path: C:\Program Files\VPNRouter\app\VPNRouter.App.exe
++0300 2026-05-06 17:08:38 INFO [1177841269 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:57159
++0300 2026-05-06 17:08:38 INFO [1177841269 0ms] inbound/tun[tun-in]: inbound connection to 142.250.154.94:443
++0300 2026-05-06 17:08:38 INFO [1177841269 0ms] router: found process path: C:\Program Files\VPNRouter\app\VPNRouter.App.exe
++0300 2026-05-06 17:08:38 INFO [1177841269 0ms] outbound/direct[direct]: outbound connection to 142.250.154.94:443
++0300 2026-05-06 17:08:38 INFO [1973191651 716ms] dns: exchanged CNAME licensing.mp.microsoft.com. 8 IN CNAME consumer-licensing-aks2aks.md.mp.microsoft.com.akadns.net.
++0300 2026-05-06 17:08:38 INFO [1973191651 716ms] dns: exchanged CNAME consumer-licensing-aks2aks.md.mp.microsoft.com.akadns.net. 8 IN CNAME licensing-prod-frontdoor-geomap.trafficmanager.net.
++0300 2026-05-06 17:08:38 INFO [1973191651 716ms] dns: exchanged CNAME licensing-prod-frontdoor-geomap.trafficmanager.net. 8 IN CNAME neu-1.frontdoor.licensing.commerce.microsoft.com.
++0300 2026-05-06 17:08:38 INFO [1973191651 716ms] dns: exchanged A neu-1.frontdoor.licensing.commerce.microsoft.com. 8 IN A 135.236.136.184
++0300 2026-05-06 17:08:38 INFO router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:38 INFO [2026564325 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:57161
++0300 2026-05-06 17:08:38 INFO [2026564325 0ms] inbound/tun[tun-in]: inbound connection to 135.236.136.184:443
++0300 2026-05-06 17:08:38 INFO [2026564325 0ms] router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:38 INFO [2026564325 0ms] outbound/direct[direct]: outbound connection to 135.236.136.184:443
++0300 2026-05-06 17:08:39 INFO [1973191651 908ms] dns: exchanged CNAME client.wns.windows.com. 109 IN CNAME wns.notify.trafficmanager.net.
++0300 2026-05-06 17:08:39 INFO [1973191651 908ms] dns: exchanged A wns.notify.trafficmanager.net. 109 IN A 172.211.123.249
++0300 2026-05-06 17:08:39 INFO router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:39 INFO [3281461267 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:57163
++0300 2026-05-06 17:08:39 INFO [3281461267 0ms] inbound/tun[tun-in]: inbound connection to 172.211.123.249:443
++0300 2026-05-06 17:08:39 INFO [3281461267 0ms] router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:39 INFO [3281461267 0ms] outbound/direct[direct]: outbound connection to 172.211.123.249:443
++0300 2026-05-06 17:08:39 INFO [3969329862 398ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:39 INFO [1973191651 1.76s] dns: cached A claude.ai. 37 IN A 160.79.104.10
++0300 2026-05-06 17:08:39 INFO router: found process path: C:\Program Files\WindowsApps\Claude_1.5354.0.0_x64__pzs8sxrjxfjjc\app\claude.exe
++0300 2026-05-06 17:08:39 INFO [2321455254 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:61539
++0300 2026-05-06 17:08:39 INFO [2321455254 0ms] inbound/tun[tun-in]: inbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:39 INFO [2321455254 0ms] router: found process path: C:\Program Files\WindowsApps\Claude_1.5354.0.0_x64__pzs8sxrjxfjjc\app\claude.exe
++0300 2026-05-06 17:08:39 INFO [2321455254 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:40 INFO [1973191651 2.5s] dns: exchanged A api.ipify.org. 214 IN A 172.67.74.152
++0300 2026-05-06 17:08:40 INFO [1973191651 2.5s] dns: exchanged A api.ipify.org. 214 IN A 104.26.13.205
++0300 2026-05-06 17:08:40 INFO [1973191651 2.5s] dns: exchanged A api.ipify.org. 214 IN A 104.26.12.205
++0300 2026-05-06 17:08:40 INFO router: found process path: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
++0300 2026-05-06 17:08:40 INFO [756256897 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:61541
++0300 2026-05-06 17:08:40 INFO [756256897 0ms] inbound/tun[tun-in]: inbound connection to 172.67.74.152:443
++0300 2026-05-06 17:08:40 INFO [756256897 0ms] router: found process path: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
++0300 2026-05-06 17:08:40 INFO [756256897 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 172.67.74.152:443
++0300 2026-05-06 17:08:40 INFO [2321455254 366ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:40 INFO router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] inbound/tun[tun-in]: inbound packet connection from 172.19.0.1:50403
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] inbound/tun[tun-in]: inbound packet connection to 172.19.0.2:53
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] dns: cached CNAME www.msftconnecttest.com. 2 IN CNAME www.msftconnecttest.com.edgesuite.net.
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] dns: cached CNAME www.msftconnecttest.com.edgesuite.net. 2 IN CNAME a39.d.akamai.net.
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] dns: cached A a39.d.akamai.net. 2 IN A 23.216.77.168
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] dns: cached A a39.d.akamai.net. 2 IN A 23.216.77.161
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] dns: cached A a39.d.akamai.net. 2 IN A 23.216.77.181
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] dns: cached A a39.d.akamai.net. 2 IN A 23.216.77.178
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] dns: cached A a39.d.akamai.net. 2 IN A 23.216.77.174
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] dns: cached A a39.d.akamai.net. 2 IN A 23.216.77.160
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] dns: cached A a39.d.akamai.net. 2 IN A 23.216.77.172
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] dns: cached A a39.d.akamai.net. 2 IN A 23.216.77.165
++0300 2026-05-06 17:08:40 INFO [2364790878 0ms] dns: cached A a39.d.akamai.net. 2 IN A 23.216.77.173
++0300 2026-05-06 17:08:40 INFO router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:40 INFO [1841488047 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:61543
++0300 2026-05-06 17:08:40 INFO [1841488047 0ms] inbound/tun[tun-in]: inbound connection to 23.50.131.36:80
++0300 2026-05-06 17:08:40 INFO [1841488047 0ms] router: found process path: C:\Windows\System32\svchost.exe
++0300 2026-05-06 17:08:40 INFO [1841488047 0ms] outbound/direct[direct]: outbound connection to 23.50.131.36:80
++0300 2026-05-06 17:08:40 INFO [756256897 409ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 172.67.74.152:443
++0300 2026-05-06 17:08:44 ERROR [756256897 4.0s] connection: connection upload closed: raw-read tcp4 172.19.0.1:57149->172.19.0.2:10006: An existing connection was forcibly closed by the remote host.
++0300 2026-05-06 17:08:44 INFO router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:08:44 INFO [1373780226 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:61545
++0300 2026-05-06 17:08:44 INFO [1373780226 0ms] inbound/tun[tun-in]: inbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:44 INFO [1373780226 0ms] router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:08:44 INFO [1373780226 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:44 INFO [1373780226 366ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:44 INFO router: found process path: C:\Program Files\WindowsApps\Claude_1.5354.0.0_x64__pzs8sxrjxfjjc\app\claude.exe
++0300 2026-05-06 17:08:44 INFO [1030298782 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:50642
++0300 2026-05-06 17:08:44 INFO [1030298782 0ms] inbound/tun[tun-in]: inbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:44 INFO [1030298782 0ms] router: found process path: C:\Program Files\WindowsApps\Claude_1.5354.0.0_x64__pzs8sxrjxfjjc\app\claude.exe
++0300 2026-05-06 17:08:44 INFO [1030298782 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:45 INFO [1030298782 384ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:48 INFO router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:08:48 INFO [1753569707 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:65504
++0300 2026-05-06 17:08:48 INFO [1753569707 0ms] inbound/tun[tun-in]: inbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:48 INFO [1753569707 0ms] router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:08:48 INFO [1753569707 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:48 INFO router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:08:48 INFO [1443323771 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:65506
++0300 2026-05-06 17:08:48 INFO [1443323771 0ms] inbound/tun[tun-in]: inbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:48 INFO [1443323771 0ms] router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:08:48 INFO [1443323771 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:48 INFO [1753569707 373ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:48 INFO [1443323771 380ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:08:51 INFO router: found process path: C:\Program Files\WindowsApps\Claude_1.5354.0.0_x64__pzs8sxrjxfjjc\app\claude.exe
++0300 2026-05-06 17:08:51 INFO [1822722963 0ms] inbound/tun[tun-in]: inbound packet connection from 172.19.0.1:63328
++0300 2026-05-06 17:08:51 INFO [1822722963 0ms] inbound/tun[tun-in]: inbound packet connection to 160.79.104.10:443
++0300 2026-05-06 17:08:51 INFO [1822722963 0ms] router: found process path: C:\Program Files\WindowsApps\Claude_1.5354.0.0_x64__pzs8sxrjxfjjc\app\claude.exe
++0300 2026-05-06 17:08:51 INFO [1822722963 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound packet connection to 160.79.104.10:443
++0300 2026-05-06 17:08:51 INFO [1822722963 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound packet connection to 160.79.104.10:443
++0300 2026-05-06 17:08:55 INFO [1973191651 17.77s] dns: exchanged A browser-intake-us5-datadoghq.com. 273 IN A 34.149.66.154
++0300 2026-05-06 17:08:55 INFO router: found process path: C:\Program Files\WindowsApps\Claude_1.5354.0.0_x64__pzs8sxrjxfjjc\app\claude.exe
++0300 2026-05-06 17:08:55 INFO [1806539141 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:55235
++0300 2026-05-06 17:08:55 INFO [1806539141 0ms] inbound/tun[tun-in]: inbound connection to 34.149.66.154:443
++0300 2026-05-06 17:08:55 INFO [1806539141 0ms] router: found process path: C:\Program Files\WindowsApps\Claude_1.5354.0.0_x64__pzs8sxrjxfjjc\app\claude.exe
++0300 2026-05-06 17:08:55 INFO [1806539141 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 34.149.66.154:443
++0300 2026-05-06 17:08:56 INFO [1806539141 398ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 34.149.66.154:443
++0300 2026-05-06 17:08:59 INFO [1973191651 21.16s] dns: exchanged A http-intake.logs.us5.datadoghq.com. 295 IN A 34.149.66.137
++0300 2026-05-06 17:08:59 INFO router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:08:59 INFO [2184336588 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:55237
++0300 2026-05-06 17:08:59 INFO [2184336588 0ms] inbound/tun[tun-in]: inbound connection to 34.149.66.137:443
++0300 2026-05-06 17:08:59 INFO [2184336588 0ms] router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:08:59 INFO [2184336588 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 34.149.66.137:443
++0300 2026-05-06 17:08:59 INFO [2184336588 388ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 34.149.66.137:443
++0300 2026-05-06 17:09:01 INFO router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:01 INFO [137119564 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:55239
++0300 2026-05-06 17:09:01 INFO [137119564 0ms] inbound/tun[tun-in]: inbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:01 INFO [137119564 0ms] router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:01 INFO [137119564 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:01 INFO [3059272626 23.64s] dns: exchanged A dns.msftncsi.com. 19 IN A 131.107.255.255
++0300 2026-05-06 17:09:01 INFO [137119564 366ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:02 INFO router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:02 INFO [1609615841 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:55241
++0300 2026-05-06 17:09:02 INFO [1609615841 0ms] inbound/tun[tun-in]: inbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:02 INFO [1609615841 0ms] router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:02 INFO [1609615841 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:02 INFO [1609615841 411ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:03 INFO [1973191651 24.85s] dns: exchanged A github.com. 30 IN A 140.82.121.3
++0300 2026-05-06 17:09:03 INFO router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:03 INFO [1538318521 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:55243
++0300 2026-05-06 17:09:03 INFO [1538318521 0ms] inbound/tun[tun-in]: inbound connection to 140.82.121.3:443
++0300 2026-05-06 17:09:03 INFO [1538318521 0ms] router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:03 INFO [1538318521 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 140.82.121.3:443
++0300 2026-05-06 17:09:03 INFO [1538318521 365ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 140.82.121.3:443
++0300 2026-05-06 17:09:04 INFO router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:04 INFO [3327408915 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:55245
++0300 2026-05-06 17:09:04 INFO [3327408915 0ms] inbound/tun[tun-in]: inbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:04 INFO [3327408915 0ms] router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:04 INFO [3327408915 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:04 INFO router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:04 INFO [1499771501 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:55247
++0300 2026-05-06 17:09:04 INFO [1499771501 0ms] inbound/tun[tun-in]: inbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:04 INFO [1499771501 0ms] router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:04 INFO [1499771501 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:04 INFO [3327408915 362ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:05 INFO [1499771501 361ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:11 INFO router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:11 INFO [2242709831 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:55249
++0300 2026-05-06 17:09:11 INFO [2242709831 0ms] inbound/tun[tun-in]: inbound connection to 34.149.66.137:443
++0300 2026-05-06 17:09:11 INFO [2242709831 0ms] router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:11 INFO [2242709831 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 34.149.66.137:443
++0300 2026-05-06 17:09:11 INFO [2242709831 373ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 34.149.66.137:443
++0300 2026-05-06 17:09:13 INFO [1973191651 35.58s] dns: cached CNAME ipv6.msftconnecttest.com. 952 IN CNAME ipv6.msftconnecttest.com.edgesuite.net.
++0300 2026-05-06 17:09:13 INFO [1973191651 35.58s] dns: cached CNAME ipv6.msftconnecttest.com.edgesuite.net. 952 IN CNAME a1968.i6g1.akamai.net.
++0300 2026-05-06 17:09:13 INFO [1973191651 35.58s] dns: cached SOA i6g1.akamai.net. 952 IN SOA n0i6g1.akamai.net. hostmaster.akamai.com. 1778076509 1000 1000 1000 1800
++0300 2026-05-06 17:09:14 INFO [3059272626 36.67s] dns: cached CNAME ipv6.msftconnecttest.com. 951 IN CNAME ipv6.msftconnecttest.com.edgesuite.net.
++0300 2026-05-06 17:09:14 INFO [3059272626 36.67s] dns: cached CNAME ipv6.msftconnecttest.com.edgesuite.net. 951 IN CNAME a1968.i6g1.akamai.net.
++0300 2026-05-06 17:09:14 INFO [3059272626 36.67s] dns: cached SOA i6g1.akamai.net. 951 IN SOA n0i6g1.akamai.net. hostmaster.akamai.com. 1778076509 1000 1000 1000 1800
++0300 2026-05-06 17:09:14 INFO [1973191651 36.72s] dns: cached CNAME ipv6.msftconnecttest.com. 951 IN CNAME ipv6.msftconnecttest.com.edgesuite.net.
++0300 2026-05-06 17:09:14 INFO [1973191651 36.72s] dns: cached CNAME ipv6.msftconnecttest.com.edgesuite.net. 951 IN CNAME a1968.i6g1.akamai.net.
++0300 2026-05-06 17:09:14 INFO [1973191651 36.72s] dns: cached SOA i6g1.akamai.net. 951 IN SOA n0i6g1.akamai.net. hostmaster.akamai.com. 1778076509 1000 1000 1000 1800
++0300 2026-05-06 17:09:19 INFO router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:19 INFO [3238880520 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:55251
++0300 2026-05-06 17:09:19 INFO [3238880520 0ms] inbound/tun[tun-in]: inbound connection to 34.149.66.137:443
++0300 2026-05-06 17:09:19 INFO [3238880520 0ms] router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:19 INFO [3238880520 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 34.149.66.137:443
++0300 2026-05-06 17:09:20 INFO [3238880520 380ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 34.149.66.137:443
++0300 2026-05-06 17:09:22 INFO router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:22 INFO [2287559559 0ms] inbound/tun[tun-in]: inbound connection from 172.19.0.1:55253
++0300 2026-05-06 17:09:22 INFO [2287559559 0ms] inbound/tun[tun-in]: inbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:22 INFO [2287559559 0ms] router: found process path: C:\Users\vboxuser\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude-code\2.1.121\claude.exe
++0300 2026-05-06 17:09:22 INFO [2287559559 0ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:22 INFO [2287559559 394ms] outbound/vless[vless-is-01 443 main-brat]: outbound connection to 160.79.104.10:443
++0300 2026-05-06 17:09:49 INFO [1973191651 1m11s] dns: cached CNAME ipv6.msftconnecttest.com. 917 IN CNAME ipv6.msftconnecttest.com.edgesuite.net.
++0300 2026-05-06 17:09:49 INFO [1973191651 1m11s] dns: cached CNAME ipv6.msftconnecttest.com.edgesuite.net. 917 IN CNAME a1968.i6g1.akamai.net.
++0300 2026-05-06 17:09:49 INFO [1973191651 1m11s] dns: cached SOA i6g1.akamai.net. 917 IN SOA n0i6g1.akamai.net. hostmaster.akamai.com. 1778076509 1000 1000 1000 1800
++0300 2026-05-06 17:09:50 INFO [1973191651 1m12s] dns: cached CNAME ipv6.msftconnecttest.com. 916 IN CNAME ipv6.msftconnecttest.com.edgesuite.net.
++0300 2026-05-06 17:09:50 INFO [1973191651 1m12s] dns: cached CNAME ipv6.msftconnecttest.com.edgesuite.net. 916 IN CNAME a1968.i6g1.akamai.net.
++0300 2026-05-06 17:09:50 INFO [1973191651 1m12s] dns: cached SOA i6g1.akamai.net. 916 IN SOA n0i6g1.akamai.net. hostmaster.akamai.com. 1778076509 1000 1000 1000 1800
++0300 2026-05-06 17:09:50 INFO [4165690477 1m12s] dns: cached CNAME ipv6.msftconnecttest.com. 916 IN CNAME ipv6.msftconnecttest.com.edgesuite.net.
++0300 2026-05-06 17:09:50 INFO [4165690477 1m12s] dns: cached CNAME ipv6.msftconnecttest.com.edgesuite.net. 916 IN CNAME a1968.i6g1.akamai.net.
++0300 2026-05-06 17:09:50 INFO [4165690477 1m12s] dns: cached SOA i6g1.akamai.net. 916 IN SOA n0i6g1.akamai.net. hostmaster.akamai.com. 1778076509 1000 1000 1000 1800

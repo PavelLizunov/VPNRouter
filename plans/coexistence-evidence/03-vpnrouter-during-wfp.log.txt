@@ -1,0 +1,97 @@
+﻿2026-05-06 17:08:07.907 +03:00 [INF] [Subscription] Fetching https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
+2026-05-06 17:08:19.964 +03:00 [ERR] [Subscription] Fetch failed for https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee
+2026-05-06 17:08:19.968 +03:00 [WRN] [Subscription] Refresh returned 0 servers for https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee, keeping 0 cached server(s)
+2026-05-06 17:08:20.140 +03:00 [INF] [DnsFlusher] Windows DNS cache flushed
+2026-05-06 17:08:20.141 +03:00 [WRN] [VlessServersResolver] config_mode=subscribe but no enabled subscription has servers. Falling back to manually-configured Vless.Servers / Vless.Server.
+2026-05-06 17:08:20.141 +03:00 [INF] [VpnEngine] Loading profiles...
+2026-05-06 17:08:20.142 +03:00 [INF] [ProfileManager] Loaded 9 profiles from Local(C:\Program Files\VPNRouter\app\profiles\default.json)
+2026-05-06 17:08:20.142 +03:00 [INF] [VpnEngine] Loaded profile catalogue (9): Discord_Privacy, Messengers, AI_Tools, Browsers, Work_Suite, Streaming, Gaming, Virtualization, Privacy_Shell
+2026-05-06 17:08:20.142 +03:00 [INF] [ProfileManager] Merged 9 profiles (tolerant) â†’ 'Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Virtualization+Privacy_Shell' with 58 process rules
+2026-05-06 17:08:20.142 +03:00 [INF] [VpnEngine] Profile: Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Virtualization+Privacy_Shell (59 rules)
+2026-05-06 17:08:20.142 +03:00 [INF] [VpnEngine] Scanning processes...
+2026-05-06 17:08:20.172 +03:00 [INF] [ProcessScanner] Resolved 95 process names for profile 'Discord_Privacy+Messengers+AI_Tools+Browsers+Work_Suite+Streaming+Gaming+Virtualization+Privacy_Shell'
+2026-05-06 17:08:20.172 +03:00 [INF] [VpnEngine] Resolved 95 process names
+2026-05-06 17:08:20.184 +03:00 [INF] [VpnEngine] Auto-excluded WG/AWG subnets: 10.99.99.0/24
+2026-05-06 17:08:20.480 +03:00 [WRN] [Firewall] Skipping rule for Discord.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:20.549 +03:00 [WRN] [Firewall] Skipping rule for DiscordUpdate.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:20.615 +03:00 [WRN] [Firewall] Skipping rule for DiscordPTB.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:20.683 +03:00 [WRN] [Firewall] Skipping rule for DiscordCanary.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:20.754 +03:00 [WRN] [Firewall] Skipping rule for MyTestApp.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:20.957 +03:00 [WRN] [Firewall] Skipping rule for Ãƒâ€˜Ã¢â‚¬Å¡Ãƒâ€˜Ã¢â‚¬Â°ÃƒÂÃ‚ÂµÃƒâ€˜Ã†â€™ÃƒÂÃ‚Â·Ãƒâ€˜Ã¢â‚¬Å¾ÃƒÂÃ‚Â²Ãƒâ€˜Ã†â€™Ãƒâ€˜Ã¢â‚¬Â¡Ãƒâ€˜Ã†â€™.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.021 +03:00 [WRN] [Firewall] Skipping rule for Telegram.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.086 +03:00 [WRN] [Firewall] Skipping rule for Signal.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.151 +03:00 [WRN] [Firewall] Skipping rule for WhatsApp.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.276 +03:00 [WRN] [Firewall] Skipping rule for ChatGPT.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.339 +03:00 [WRN] [Firewall] Skipping rule for Cursor.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.401 +03:00 [WRN] [Firewall] Skipping rule for chrome.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.522 +03:00 [WRN] [Firewall] Skipping rule for firefox.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.585 +03:00 [WRN] [Firewall] Skipping rule for brave.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.647 +03:00 [WRN] [Firewall] Skipping rule for opera.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.715 +03:00 [WRN] [Firewall] Skipping rule for opera_autoupdate.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.779 +03:00 [WRN] [Firewall] Skipping rule for vivaldi.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.842 +03:00 [WRN] [Firewall] Skipping rule for yandex.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.908 +03:00 [WRN] [Firewall] Skipping rule for browser.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:21.969 +03:00 [WRN] [Firewall] Skipping rule for tor.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.035 +03:00 [WRN] [Firewall] Skipping rule for waterfox.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.099 +03:00 [WRN] [Firewall] Skipping rule for librewolf.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.163 +03:00 [WRN] [Firewall] Skipping rule for floorp.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.231 +03:00 [WRN] [Firewall] Skipping rule for ungoogled-chromium.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.299 +03:00 [WRN] [Firewall] Skipping rule for chromium.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.360 +03:00 [WRN] [Firewall] Skipping rule for arc.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.426 +03:00 [WRN] [Firewall] Skipping rule for maxthon.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.492 +03:00 [WRN] [Firewall] Skipping rule for seamonkey.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.555 +03:00 [WRN] [Firewall] Skipping rule for palemoon.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.620 +03:00 [WRN] [Firewall] Skipping rule for basilisk.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.685 +03:00 [WRN] [Firewall] Skipping rule for iridium.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.749 +03:00 [WRN] [Firewall] Skipping rule for iron.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.814 +03:00 [WRN] [Firewall] Skipping rule for cent_browser.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.876 +03:00 [WRN] [Firewall] Skipping rule for thorium.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:22.941 +03:00 [WRN] [Firewall] Skipping rule for whale.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.003 +03:00 [WRN] [Firewall] Skipping rule for zen.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.069 +03:00 [WRN] [Firewall] Skipping rule for slack.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.131 +03:00 [WRN] [Firewall] Skipping rule for Zoom.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.202 +03:00 [WRN] [Firewall] Skipping rule for Teams.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.264 +03:00 [WRN] [Firewall] Skipping rule for Code.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.328 +03:00 [WRN] [Firewall] Skipping rule for Notion.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.393 +03:00 [WRN] [Firewall] Skipping rule for Obsidian.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.459 +03:00 [WRN] [Firewall] Skipping rule for Spotify.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.521 +03:00 [WRN] [Firewall] Skipping rule for vlc.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.585 +03:00 [WRN] [Firewall] Skipping rule for steam.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.654 +03:00 [WRN] [Firewall] Skipping rule for EpicGamesLauncher.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.719 +03:00 [WRN] [Firewall] Skipping rule for Battle.net.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.783 +03:00 [WRN] [Firewall] Skipping rule for Agent.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.848 +03:00 [WRN] [Firewall] Skipping rule for VirtualBox.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.916 +03:00 [WRN] [Firewall] Skipping rule for VirtualBoxVM.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:23.981 +03:00 [WRN] [Firewall] Skipping rule for VBoxHeadless.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:24.046 +03:00 [WRN] [Firewall] Skipping rule for VBoxManage.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:24.109 +03:00 [WRN] [Firewall] Skipping rule for VBoxSVC.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:24.174 +03:00 [WRN] [Firewall] Skipping rule for VBoxNetDHCP.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:24.242 +03:00 [WRN] [Firewall] Skipping rule for VBoxNetNAT.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:24.364 +03:00 [WRN] [Firewall] Skipping rule for VBoxClient.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:24.433 +03:00 [WRN] [Firewall] Skipping rule for WindowsTerminal.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:24.496 +03:00 [WRN] [Firewall] Skipping rule for wt.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:24.560 +03:00 [WRN] [Firewall] Skipping rule for pwsh.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:24.803 +03:00 [WRN] [Firewall] Skipping rule for node.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:24.866 +03:00 [WRN] [Firewall] Skipping rule for python.exe â€” exe path not found (process not running?)
+2026-05-06 17:08:25.112 +03:00 [INF] [Firewall] Created 9 block rules (disabled â€” will enable on VPN crash)
+2026-05-06 17:08:25.112 +03:00 [INF] [VpnEngine] Firewall block rules created (disabled)
+2026-05-06 17:08:25.112 +03:00 [INF] [VpnEngine] Starting sing-box...
+2026-05-06 17:08:25.112 +03:00 [INF] [TunLock] Acquired (process owns sing-box)
+2026-05-06 17:08:25.113 +03:00 [INF] [SingBoxManager] Starting sing-box with config: C:\ProgramData\VPNRouter\config\current.json
+2026-05-06 17:08:25.214 +03:00 [INF] [SingBoxManager] sing-box started (PID 6892)
+2026-05-06 17:08:25.715 +03:00 [INF] [VpnEngine] sing-box started (PID 6892)
+2026-05-06 17:08:25.715 +03:00 [INF] [VpnEngine] sing-box started (PID 6892)
+2026-05-06 17:08:25.715 +03:00 [INF] [VpnEngine] Warming up network...
+2026-05-06 17:08:25.715 +03:00 [INF] [VpnEngine] Firewall leak protection ready (armed for VPN failure)
+2026-05-06 17:08:25.715 +03:00 [INF] [ETW] Starting process monitor session
+2026-05-06 17:08:25.715 +03:00 [INF] [PowerEventListener] Listening for SessionSwitch + PowerModeChanged
+2026-05-06 17:08:25.715 +03:00 [INF] [HealthMonitor] Started â€” check every 30s, max 5 restarts (strict mode: false)
+2026-05-06 17:08:25.724 +03:00 [INF] [ETW] Session active, listening for process events
+2026-05-06 17:08:25.802 +03:00 [INF] [DnsHardening] Applied â€” SMHNR=was unset, ParallelAAAA=was unset, TUN metric set=true
+2026-05-06 17:08:25.802 +03:00 [INF] [VpnEngine] VPN Router is running
+2026-05-06 17:08:25.805 +03:00 [INF] [SubRefresh] Starting timer (interval: 3600s)
+2026-05-06 17:08:25.806 +03:00 [INF] [SubRefresh] Starting timer (interval: 3600s)
+2026-05-06 17:08:39.076 +03:00 [INF] [VpnEngine] TUN ready after 13360ms (attempt 4)
+2026-05-06 17:08:39.076 +03:00 [INF] [VpnEngine] Connected (PID 6892)
+2026-05-06 17:08:39.076 +03:00 [INF] [SubRefresh] Starting timer (interval: 3600s)
+2026-05-06 17:08:55.722 +03:00 [INF] [HealthMonitor] VPN is up

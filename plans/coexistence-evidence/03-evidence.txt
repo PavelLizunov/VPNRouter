@@ -1,0 +1,7 @@
+﻿[ACT] /installtunnelservice exit=
+[ACT] service=Running
+[VERIFY-KS] post-WG-up internet=DIED:The remote name could not be resolved: 'api.ipify.org'
+[VPNR] Connect click sent during killswitch
+[VPNR] singbox=PID=6892 StartTime=05/06/2026 17:08:25
+[FINALLY] rescue ok=True ip=93.95.226.167
+[FINALLY] post-uninstall ok=True ip=93.95.226.167
