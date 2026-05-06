@@ -1,0 +1,277 @@
+name: Auto-Update Integration Test (Windows)
+
+# Catches auto-update breakage at CI time — before users hit it. The classic
+# example is the v2.31.7-r10 helper.cmd CMD parser bug (see
+# UpdateChecker.cs ~line 421 EnableDelayedExpansion comment), which went
+# undetected for 7 days because no test exercised the actual cmd.exe
+# helper. This workflow drives the real helper end-to-end.
+#
+# What it does:
+#   1. Builds the current branch (so it tests CURRENT helper.cmd generation).
+#   2. Generates Windows install + update ZIPs via build.ps1.
+#   3. Extracts the install ZIP to a TEST install dir (NOT Program Files).
+#   4. Stages the update ZIP as the "downloaded payload".
+#   5. Invokes VPNRouter.CLI.exe test-update --staged-dir <staged>.
+#   6. The CLI calls UpdateChecker.ApplyUpdateWindows, which generates the
+#      real helper.cmd and launches it via cmd.exe.
+#   7. We poll %ProgramData%\VPNRouter\logs\update.log until "helper done"
+#      or a known failure pattern surfaces.
+#   8. We assert: helper completed, files were replaced, no parser errors.
+#
+# Why local build instead of "previous stable -> latest published":
+#   - The bug we want to catch lives in the CURRENT branch's helper.cmd
+#     generation code. Using a previously-published stable as the FROM
+#     binary would only test ITS helper.cmd, not the one we're shipping
+#     now. Local-build-as-FROM closes that loop.
+#   - No dependency on a release existing yet, so this can run on tag
+#     push, release publish, AND PR/branch dispatches.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_label:
+        description: "Version label to bake into the test build (any string, e.g. 0.0.0-citest)"
+        required: false
+        default: ""
+        type: string
+  release:
+    types: [published]
+  push:
+    tags:
+      - "v*-r*"
+
+permissions:
+  contents: read
+
+jobs:
+  test-update:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Setup Go (for VPNRouter.GUI stub)
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Resolve test version label
+        id: ver
+        shell: pwsh
+        run: |
+          # We use whatever AppVersion.cs already has on this branch. build.ps1
+          # has a hard guard that `-Version` MUST match AppVersion.cs literal,
+          # so we can't pass an arbitrary label without bumping the source.
+          # Reading the constant directly avoids that whole class of mismatch
+          # bugs. The dispatch input is preserved for future extensions but
+          # not consumed today.
+          $line = Get-Content VPNRouter.Core/AppVersion.cs |
+                  Select-String 'public const string Version =' |
+                  Select-Object -First 1
+          if (-not $line) { throw "Could not find AppVersion.Version in VPNRouter.Core/AppVersion.cs" }
+          if ($line -notmatch '"([^"]+)"') { throw "Could not parse AppVersion line: $line" }
+          $v = $Matches[1]
+          Write-Host "Resolved AppVersion: $v"
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Build Windows install + update ZIPs
+        shell: pwsh
+        run: |
+          # build.ps1 publishes App + CLI + Service self-contained, builds
+          # the Go stub, downloads sing-box, and emits two ZIPs in repo root:
+          #   VPNRouter-v<ver>-win.zip          (install layout)
+          #   VPNRouter-update-v<ver>-win.zip   (bootstrap layout)
+          ./build.ps1 -Version "${{ steps.ver.outputs.version }}"
+
+      - name: Lay out TEST install (not Program Files)
+        id: layout
+        shell: pwsh
+        run: |
+          # Using C:\TestVPNRouter\install\ avoids Program Files file
+          # locking quirks on shared CI runners and ensures rm -rf cleanup
+          # in the always-run cleanup step.
+          $installRoot = "C:\TestVPNRouter\install"
+          $stagedDir   = "C:\TestVPNRouter\staged"
+          Remove-Item -Recurse -Force $installRoot -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force $stagedDir   -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+          New-Item -ItemType Directory -Force -Path $stagedDir   | Out-Null
+
+          $ver = "${{ steps.ver.outputs.version }}"
+          Expand-Archive -Path "VPNRouter-v$ver-win.zip" -DestinationPath $installRoot -Force
+          Expand-Archive -Path "VPNRouter-update-v$ver-win.zip" -DestinationPath $stagedDir -Force
+
+          $appDir = Join-Path $installRoot "app"
+          $cliExe = Join-Path $appDir "VPNRouter.CLI.exe"
+          if (-not (Test-Path $cliExe)) {
+            Write-Host "Install layout did not contain app\VPNRouter.CLI.exe — listing:"
+            Get-ChildItem $installRoot -Recurse | Select-Object FullName | Format-Table -AutoSize
+            throw "VPNRouter.CLI.exe not found at $cliExe"
+          }
+          $stagedGui = Join-Path $stagedDir "VPNRouter.GUI.exe"
+          $stagedBootstrap = Join-Path $stagedDir "_bootstrap"
+          if (-not (Test-Path $stagedGui)) { throw "Staged update missing VPNRouter.GUI.exe at $stagedGui" }
+          if (-not (Test-Path $stagedBootstrap)) { throw "Staged update missing _bootstrap/ at $stagedBootstrap" }
+
+          Write-Host "Test install:  $appDir"
+          Write-Host "Staged update: $stagedDir"
+          "appDir=$appDir"   >> $env:GITHUB_OUTPUT
+          "cliExe=$cliExe"   >> $env:GITHUB_OUTPUT
+          "stagedDir=$stagedDir" >> $env:GITHUB_OUTPUT
+
+      - name: Capture pre-update state (file mtime, version-info)
+        id: preupdate
+        shell: pwsh
+        run: |
+          $coreDll = Join-Path "${{ steps.layout.outputs.appDir }}" "VPNRouter.Core.dll"
+          if (-not (Test-Path $coreDll)) { throw "Pre-update Core.dll missing at $coreDll" }
+          $mtime = (Get-Item $coreDll).LastWriteTimeUtc.ToString("o")
+          Write-Host "Pre-update Core.dll mtime: $mtime"
+          "coreMtime=$mtime" >> $env:GITHUB_OUTPUT
+
+          # Wipe any prior receipt + update.log so post-update assertions
+          # see ONLY this run's helper output.
+          Remove-Item "$env:ProgramData\VPNRouter\.update-installed-version" -Force -ErrorAction SilentlyContinue
+          Remove-Item "$env:ProgramData\VPNRouter\logs\update.log"           -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path "$env:ProgramData\VPNRouter\logs" | Out-Null
+
+      - name: Trigger update (CLI test-update with --staged-dir)
+        shell: pwsh
+        env:
+          VPNROUTER_CI: "1"
+        run: |
+          $cli = "${{ steps.layout.outputs.cliExe }}"
+          $staged = "${{ steps.layout.outputs.stagedDir }}"
+          $target = "${{ steps.ver.outputs.version }}"
+
+          # CLI exits as soon as it dispatches helper.cmd. The helper then
+          # waits for THIS process tree to exit before xcopy.
+          & $cli test-update --target $target --staged-dir $staged
+          $rc = $LASTEXITCODE
+          Write-Host "test-update exit code: $rc"
+          if ($rc -ne 0) {
+            throw "test-update CLI returned $rc (expected 0). See above output."
+          }
+
+      - name: Wait for helper.cmd to complete
+        id: wait
+        shell: pwsh
+        run: |
+          $log = "$env:ProgramData\VPNRouter\logs\update.log"
+          $deadline = (Get-Date).AddMinutes(5)
+          $sawDone = $false
+
+          while ((Get-Date) -lt $deadline) {
+            if (Test-Path $log) {
+              $content = Get-Content $log -Raw -ErrorAction SilentlyContinue
+              if ($content) {
+                # Known CMD parser failure modes — fail fast, don't burn 5 min.
+                # The v2.31.7-r10 bug surfaced as 'unexpected at this time'.
+                # Other CMD lexer errors typically include 'syntax of the
+                # command is incorrect' or 'cannot find the path specified'
+                # in the wrong context.
+                if ($content -match 'was unexpected at this time') {
+                  Write-Host "::error::CMD parser failure detected in helper.cmd"
+                  Write-Host "::group::update.log"
+                  Write-Host $content
+                  Write-Host "::endgroup::"
+                  throw "helper.cmd CMD parser bug — likely missing EnableDelayedExpansion / wrong %VAR% vs !VAR! usage"
+                }
+                if ($content -match 'helper done') {
+                  $sawDone = $true
+                  break
+                }
+              }
+            }
+            Start-Sleep -Seconds 3
+          }
+
+          if (-not (Test-Path $log)) {
+            throw "update.log never appeared at $log after 5 min — helper.cmd may not have launched"
+          }
+
+          Write-Host "::group::Final update.log"
+          Get-Content $log
+          Write-Host "::endgroup::"
+
+          if (-not $sawDone) {
+            throw "helper.cmd did not log 'helper done' within 5 min — see update.log above"
+          }
+          Write-Host "OK: helper.cmd completed cleanly"
+
+      - name: Assert files were replaced
+        shell: pwsh
+        run: |
+          # The staged update was generated from the same build, so the
+          # binaries are byte-identical — but mtime advances because the
+          # helper.cmd's xcopy copies fresh files. Confirm the copy actually
+          # happened by looking for a forward mtime jump on Core.dll.
+          $coreDll = Join-Path "${{ steps.layout.outputs.appDir }}" "VPNRouter.Core.dll"
+          if (-not (Test-Path $coreDll)) {
+            throw "Post-update Core.dll missing at $coreDll — xcopy may have wiped/skipped"
+          }
+          $newMtime = (Get-Item $coreDll).LastWriteTimeUtc
+          $oldMtime = [DateTime]::Parse("${{ steps.preupdate.outputs.coreMtime }}").ToUniversalTime()
+          Write-Host "Pre-update  mtime: $($oldMtime.ToString('o'))"
+          Write-Host "Post-update mtime: $($newMtime.ToString('o'))"
+          if ($newMtime -le $oldMtime) {
+            throw "Core.dll mtime did not advance — xcopy did not actually replace the file"
+          }
+          Write-Host "OK: Core.dll mtime advanced (file was replaced)"
+
+          # sing-box is a separate concern: the helper kills it before
+          # copy and leaves the new one in place. Should be present.
+          $sb = Join-Path "${{ steps.layout.outputs.appDir }}" "sing-box.exe"
+          if (-not (Test-Path $sb)) {
+            throw "sing-box.exe missing post-update at $sb"
+          }
+          Write-Host "OK: sing-box.exe present"
+
+      - name: Assert install receipt was written
+        shell: pwsh
+        run: |
+          $receipt = "$env:ProgramData\VPNRouter\.update-installed-version"
+          if (-not (Test-Path $receipt)) {
+            throw "Install receipt missing at $receipt — TryWriteInstallReceipt did not run"
+          }
+          $content = Get-Content $receipt
+          Write-Host "Receipt content:"
+          $content | ForEach-Object { Write-Host "  $_" }
+          if ($content.Count -lt 2) {
+            throw "Receipt has < 2 lines (expected timestamp + version)"
+          }
+
+      - name: Capture logs as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-update-logs-${{ github.run_id }}
+          path: |
+            C:\ProgramData\VPNRouter\logs\*.log
+            C:\ProgramData\VPNRouter\.update-installed-version
+            C:\TestVPNRouter\install\app\VPNRouter.Core.dll
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Cleanup processes + dirs
+        if: always()
+        shell: pwsh
+        run: |
+          # Kill anything we may have left running. The CI-mode helper
+          # skips the relaunch step (see UpdateChecker.cs skipRelaunchForCi),
+          # but be defensive against stragglers.
+          Get-Process -Name VPNRouter.App, VPNRouter.GUI, VPNRouter.CLI, sing-box `
+            -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 1
+          Remove-Item -Recurse -Force "C:\TestVPNRouter"             -ErrorAction SilentlyContinue
+          Remove-Item -Recurse -Force "$env:ProgramData\VPNRouter"   -ErrorAction SilentlyContinue
+          # Leftover update helpers in TEMP — best-effort.
+          Get-ChildItem $env:TEMP -Filter "vpnrouter-update-*.cmd" -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
