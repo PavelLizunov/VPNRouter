@@ -381,8 +381,23 @@ jobs:
           fi
           MSG="Publish $( [ -n "${{ github.event.release.tag_name }}" ] && echo "${{ github.event.release.tag_name }}" || echo "apt repo sync" )"
           git commit -m "$MSG"
-          git push origin gh-pages
-          echo "Pushed to gh-pages branch"
+          # Retry with rebase on conflict — concurrent release events
+          # (e.g. delete-r3 + publish-r4 + un-draft) can race on
+          # gh-pages, leading to rejected pushes. Pull-rebase + retry up
+          # to 5 times handles benign drift; a real conflict (impossible
+          # in this workflow since only this job touches the apt subdir)
+          # would surface as rebase failure.
+          for attempt in 1 2 3 4 5; do
+            if git push origin gh-pages; then
+              echo "Pushed to gh-pages branch on attempt $attempt"
+              exit 0
+            fi
+            echo "Push rejected on attempt $attempt — pulling --rebase and retrying"
+            git pull --rebase origin gh-pages
+            sleep $((attempt * 3))
+          done
+          echo "Failed to push after 5 attempts" >&2
+          exit 1
 
       - name: Print installation snippet
         run: |
