@@ -117,6 +117,29 @@ is a feature, not a bug: it reduces update spam while we iterate.
 
 ---
 
+## Verification gate (before promoting -rN to stable)
+
+A `-rN` candidate is **READY for stable cut** only when ALL of these
+are green. Cut itself is not autonomous (see `CLAUDE.local.md` lesson
+v2.31.2).
+
+1. `dotnet build VPNRouter.sln -c Release` — 0 errors.
+2. Regression test suite green (xUnit + headless Avalonia).
+3. Mac + Linux CI workflows green on the `-rN` tag.
+4. `gh release view vX.Y.Z-rN` shows 12 assets (Win + Mac + Linux + sha256 sidecars).
+5. **`test-windows-update.yml` green on the `-rN` tag** (runs
+   automatically via `release: published` + `push: tags: v*-r*`
+   triggers; see `plans/v2.31.10-update-integration-test.md`). Catches
+   helper.cmd parser bugs of the v2.31.7-r10 class before they reach
+   users.
+6. MCP+UIA verification PASS where testable, or explicit
+   `Core-only / not UI-testable` label.
+
+If (5) is RED, **don't** promote to stable. Fix the helper.cmd
+generation or whatever surfaced, ship `-r(N+1)`, re-run.
+
+---
+
 ## Enforcement
 
 Documented in `CLAUDE.local.md` so every new Claude session picks
