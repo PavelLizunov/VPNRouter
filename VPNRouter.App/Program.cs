@@ -157,16 +157,61 @@ sealed class Program
         // running trap from pre-v2.31.7 (Bug 2): old broken updater
         // kept Service running, xcopy /R skipped Service-locked files,
         // result was mixed-version DLLs that crash or silently report
-        // the old AppVersion. Manual install.ps1 rescue is "not an
-        // option per user feedback — the new version itself must
-        // self-heal. We auto-spawn the install.ps1 web one-liner; loop
-        // prevention via timestamped marker.
+        // the old AppVersion.
+        //
+        // v2.31.10-r2 Task E: rollback FIRST, SelfRepair second. Local
+        // app.bak/ snapshot (taken pre-update by ApplyUpdateWindows) is
+        // a faster, network-free, AMSI-free recovery path. SelfRepair
+        // remains the second-line fallback when the snapshot is absent
+        // or itself damaged. See plans/v2.31.10-update-rollback.md.
         try
         {
             var health = VPNRouter.App.Services.InstallHealthCheck.Check();
-            if (!health.IsHealthy)
+            var appDir = AppContext.BaseDirectory.TrimEnd('\\', '/');
+            var installDir = System.IO.Path.GetDirectoryName(appDir) ?? string.Empty;
+            var failureMarkerPresent =
+                !string.IsNullOrEmpty(installDir) &&
+                VPNRouter.Core.Services.UpdateBackup.HasFailureMarker(installDir);
+
+            if (!health.IsHealthy || failureMarkerPresent)
             {
-                Console.Error.WriteLine($"[health] {health.Diagnostic} — triggering self-repair");
+                var trigger = failureMarkerPresent
+                    ? $"helper.cmd .update-failed marker present ({VPNRouter.Core.Services.UpdateBackup.ReadFailureMarker(installDir)})"
+                    : health.Diagnostic;
+                Console.Error.WriteLine($"[health] {trigger} — attempting local rollback first");
+
+                var rollback = !string.IsNullOrEmpty(installDir)
+                    ? VPNRouter.Core.Services.UpdateBackup.RestoreSnapshot(installDir)
+                    : new VPNRouter.Core.Services.UpdateBackup.RestoreResult(false, "no installDir");
+
+                if (rollback.Restored)
+                {
+                    Console.Error.WriteLine($"[health] rollback ok: {rollback.Reason} — relaunching with restored binaries");
+                    VPNRouter.Core.Services.UpdateBackup.ClearFailureMarker(installDir);
+                    try
+                    {
+                        // Relaunch self so the freshly-restored DLLs are
+                        // loaded fresh. Detached so our exit doesn't kill
+                        // the new instance.
+                        var guiExe = System.IO.Path.Combine(appDir, "VPNRouter.GUI.exe");
+                        var exeToLaunch = System.IO.File.Exists(guiExe)
+                            ? guiExe
+                            : System.IO.Path.Combine(appDir, "VPNRouter.App.exe");
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = exeToLaunch,
+                            UseShellExecute = true,
+                            WorkingDirectory = appDir,
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[health] post-rollback relaunch failed: {ex.Message}");
+                    }
+                    return;
+                }
+
+                Console.Error.WriteLine($"[health] rollback declined: {rollback.Reason} — falling back to SelfRepair");
                 var plan = VPNRouter.App.Services.SelfRepair.Plan();
                 if (plan.ShouldRun)
                 {
@@ -178,11 +223,37 @@ sealed class Program
                 // instead of looping. CrashReporter will catch any DLL
                 // mismatch crash.
             }
+            else
+            {
+                // Healthy launch — schedule snapshot cleanup. The pre-
+                // update snapshot served its purpose; deleting it
+                // reclaims ~50–60 MB. Done in background so a slow
+                // recursive delete (large DLL set, AV scanning) doesn't
+                // delay window-up. We DO clear the failure marker even
+                // here so a stale marker from a manual recovery doesn't
+                // trigger rollback on the next launch.
+                if (!string.IsNullOrEmpty(installDir))
+                {
+                    VPNRouter.Core.Services.UpdateBackup.ClearFailureMarker(installDir);
+                    System.Threading.Tasks.Task.Run(() =>
+                    {
+                        try
+                        {
+                            // 30 s grace period — if the user crashes in
+                            // that window we still have a usable snapshot
+                            // for the next launch's rollback path.
+                            System.Threading.Thread.Sleep(TimeSpan.FromSeconds(30));
+                            VPNRouter.Core.Services.UpdateBackup.DeleteSnapshot(installDir);
+                        }
+                        catch { /* best-effort cleanup */ }
+                    });
+                }
+            }
         }
         catch (Exception ex)
         {
-            // Health check / self-repair must NEVER block app start
-            // outright. Worst case: log and continue.
+            // Health check / rollback / self-repair must NEVER block
+            // app start outright. Worst case: log and continue.
             try { Console.Error.WriteLine($"[health] check failed: {ex.Message}"); } catch { }
         }
 
