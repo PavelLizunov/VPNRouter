@@ -312,34 +312,54 @@ No leak signals during idle.
    apply: screenshot-after-each-step, action delays, fresh-TCP for
    routing verification.
 
-### F-11: Transient YAML lag after Apply (self-converges)
+### F-11: Transient YAML lag after Apply
 
-**Spawned-task**: `Fix YAML routing_mode desync after Apply`
+**Spawned-task analysis (2026-05-06)**: real bug, narrowed to 3
+suspect callers (the "click-coord noise" hypothesis was wrong — the
+spawned task confirmed plausible stale-write paths).
 
-**Symptom**: For a brief window (~30s after Apply), `config.yaml` can
-read stale `routing_mode` while `current.json` + sing-box runtime +
-UI all reflect the new mode. Self-converges within ~30s on subsequent
-SubRefresh tick / SaveSettings call.
+**Standard Apply path is correct**: `ApplyPendingChangesInternalAsync`
+does `SaveSettings → reload → ApplyAsync`, and `SaveSettings:3120`
+writes `routing_mode` directly from `IsSplitTunnel` VM-property —
+not from stale `_settings.App`. Night-shift Test #7 confirmed this
+path works (PID changes, "Forced full restart" log).
 
-**Repro**: With VPN running, click Раздельный→Применить→read YAML
-within first 5s. Click Полный→Применить→read YAML again. Some calls
-catch the YAML in stale state.
+**Three plausible stale-write callers**:
 
-**Cold-start risk**: If user kills App during the lag window, on next
-launch the App reads YAML and starts in stale mode. Then Apply pushes
-hot-reload, YAML re-syncs.
+1. **`VpnEngine.cs:314-316`** — profile sanitization in `StartAsync`:
+   `Load → mutate ActiveProfile → Save` of the whole object. Saves
+   whatever was in YAML at Load time (including `routing_mode`).
+   Fires on Connect/Reconnect, not Apply — but `ApplyFreeConfigAsync`
+   / `ReconnectAsync` go through `StartAsync`.
 
-**Verified self-recovery**: After session settled, final YAML state
-matches expected:
+2. **`MainWindowViewModel.cs:2810`** — `SaveSettings → Load → await
+   ApplyAsync`. During the `await`, a re-click on the radio button
+   triggers another `SaveSettings`. Race window.
+
+3. **HealthMonitor `_appSettings` stale reference** — `30s =
+   HealthCheckInterval` (`AppSettings.cs:842`) matches the observed
+   ~26s lag. HealthMonitor doesn't write YAML itself, but holds an
+   old `_appSettings` reference (not refreshed in ApplyAsync) and
+   mutates it in-place via `VlessServersResolver.Resolve`. This is
+   exactly the architectural smell warned about by Rule F2 in
+   `VPNRouter.App/CLAUDE.md`. **Most likely culprit** given the
+   timing match.
+
+**Cold-start risk**: If user kills App during the lag window, next
+launch reads YAML and starts in stale mode. Apply then re-syncs.
+
+**Diagnostic next step**: add one-liner stack-trace log in
+`SaveSettings:3243`:
+```csharp
+_logger.Information("[Settings] Save: IsSplit={IS} caller={Stack}",
+    IsSplitTunnel, new StackTrace(1, false).ToString());
 ```
-routing_mode: full
-bypass_russian_traffic: true
-current.json final: proxy
-```
+Next repro will pin the caller that fired at 02:14:50, narrowing
+9 candidates to one.
 
-Spawned task investigates whether SaveSettings has a race or whether
-SubRefresh/profile reload re-pulls stale routing_mode from in-memory
-copy. Not v2.31.9 regression — pre-existing.
+**NOT a v2.31.9 regression** — pre-existing across the cycle. Defer
+to v2.31.10-r1 alongside F-4 (no AppVersion bump needed for the
+diagnostic-log step itself, but actual fix bumps to -r1).
 
 ## Final left-as-is state
 
