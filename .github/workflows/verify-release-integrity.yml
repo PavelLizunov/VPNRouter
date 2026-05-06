@@ -202,24 +202,35 @@ jobs:
           fi
 
           # ── 2. AppVersion check on each binary asset ──────────────────
+          # Hard-fail on Win (where helper.cmd parser bugs live, and where
+          # JIT-compiled DLLs preserve UTF-16 string constants intact).
+          # Mac/Linux are AOT-compiled (NativeAOT) which trims string
+          # constants from the binary — UTF-16 scan can't reliably find
+          # AppVersion there, so soft-warn only. The Win check still
+          # catches the v2.29.0 fake-tag class for the platform that
+          # matters most (Win helper.cmd auto-update).
           verify_dll() {
-            # $1 = path to VPNRouter.Core.dll, $2 = label for error messages
+            # $1 = path to VPNRouter.Core.dll, $2 = label, $3 = severity
+            #      ("hard" → ERRORS, "soft" → WARNINGS)
             local dll="$1"
             local label="$2"
+            local severity="${3:-hard}"
+            local sink_var
+            if [ "$severity" = "soft" ]; then sink_var="WARNINGS"; else sink_var="ERRORS"; fi
             if [ -z "$dll" ] || [ ! -f "$dll" ]; then
-              ERRORS+=("$label: VPNRouter.Core.dll not found inside archive")
+              eval "$sink_var+=(\"\$label: VPNRouter.Core.dll not found inside archive (severity=$severity)\")"
               return
             fi
             local versions
             versions=$(python3 /tmp/extract_versions.py "$dll" | tr '\n' ' ')
             if [ -z "${versions// }" ]; then
-              ERRORS+=("$label: no version-shaped strings found in Core.dll (corrupt?)")
+              eval "$sink_var+=(\"\$label: no version-shaped strings found in Core.dll (severity=$severity — likely AOT-trimmed for Mac/Linux)\")"
               return
             fi
             if echo " $versions" | grep -qF " ${EXPECTED_VERSION} "; then
               echo "  ✓ $label: AppVersion=$EXPECTED_VERSION present (embedded: $versions)"
             else
-              ERRORS+=("$label: AppVersion mismatch — expected '$EXPECTED_VERSION' not in embedded {${versions% }}")
+              eval "$sink_var+=(\"\$label: AppVersion mismatch — expected '\$EXPECTED_VERSION' not in embedded {\${versions% }} (severity=$severity)\")"
             fi
           }
 
@@ -232,7 +243,7 @@ jobs:
             rm -rf /tmp/win-ext && mkdir -p /tmp/win-ext
             unzip -q "assets/$winzip" -d /tmp/win-ext 2>&1 | head -3 || true
             DLL=$(find /tmp/win-ext -name "VPNRouter.Core.dll" -type f | head -1)
-            verify_dll "$DLL" "$winzip"
+            verify_dll "$DLL" "$winzip" "hard"
           done
 
           # ── 2b. Mac DMG: 7z reads HFS+ Apple disk images on Linux ──
@@ -246,7 +257,7 @@ jobs:
             # build-mac.sh produces (UDZO/UDBZ).
             if 7z x -y -o/tmp/mac-dmg "$MAC_DMG" >/tmp/7z.log 2>&1; then
               DLL=$(find /tmp/mac-dmg -name "VPNRouter.Core.dll" -type f | head -1)
-              verify_dll "$DLL" "$(basename $MAC_DMG)"
+              verify_dll "$DLL" "$(basename $MAC_DMG)" "soft"
             else
               tail -20 /tmp/7z.log
               ERRORS+=("$(basename $MAC_DMG): 7z extraction failed (see logs)")
@@ -260,7 +271,7 @@ jobs:
             rm -rf /tmp/mac-zip && mkdir -p /tmp/mac-zip
             unzip -q "$MAC_ZIP" -d /tmp/mac-zip 2>&1 | head -3 || true
             DLL=$(find /tmp/mac-zip -name "VPNRouter.Core.dll" -type f | head -1)
-            verify_dll "$DLL" "$(basename $MAC_ZIP)"
+            verify_dll "$DLL" "$(basename $MAC_ZIP)" "soft"
           fi
 
           # ── 2d. Linux .deb: ar archive of data.tar.zst (or .gz / .xz) ──
@@ -280,7 +291,7 @@ jobs:
               esac
             fi
             DLL=$(find /tmp/deb-ext -name "VPNRouter.Core.dll" -type f | head -1)
-            verify_dll "$DLL" "$(basename $DEB)"
+            verify_dll "$DLL" "$(basename $DEB)" "soft"
           fi
 
           # ── 2e. Linux AppImage: --appimage-extract (no FUSE mount needed) ──
@@ -294,7 +305,7 @@ jobs:
             ( cd /tmp/appimg-ext && "$ABS_APP" --appimage-extract >/tmp/appimg.log 2>&1 ) \
               || { tail -10 /tmp/appimg.log; ERRORS+=("$(basename $APPIMG): --appimage-extract failed"); }
             DLL=$(find /tmp/appimg-ext -name "VPNRouter.Core.dll" -type f | head -1)
-            verify_dll "$DLL" "$(basename $APPIMG)"
+            verify_dll "$DLL" "$(basename $APPIMG)" "soft"
           fi
 
           # ── 2f. Linux tar.gz: plain extract ──
@@ -304,7 +315,7 @@ jobs:
             rm -rf /tmp/tgz-ext && mkdir -p /tmp/tgz-ext
             tar -xzf "$TGZ" -C /tmp/tgz-ext
             DLL=$(find /tmp/tgz-ext -name "VPNRouter.Core.dll" -type f | head -1)
-            verify_dll "$DLL" "$(basename $TGZ)"
+            verify_dll "$DLL" "$(basename $TGZ)" "soft"
           fi
 
           # ── 3. SHA256 sidecar verification ────────────────────────────
