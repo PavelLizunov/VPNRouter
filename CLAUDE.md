@@ -122,17 +122,23 @@ Open Tasks / Last session log.
    до того как опубликован release. (Safety rail.)
 5. **`AppVersion.Version` ВСЕГДА совпадает с release tag**, включая `-rN`
    суффикс. Урок v2.25.0-r1→r2 в `CLAUDE.local.md`.
-6. **Stable cut по user-команде** (изменено 2026-05-03 после v2.31.4).
-   Verification gate (5 conditions ниже) — обязательное READY условие, но
+6. **Stable cut по user-команде** (изменено 2026-05-03 после v2.31.4,
+   расширено 2026-05-06 после v2.31.7 helper.cmd parser bug).
+   Verification gate (6 conditions ниже) — обязательное READY условие, но
    само не cut'ает. Жди explicit "cut" / "ok" / "promote" перед `vX.Y.Z`
    stable. Conditions: (a) `dotnet build -c Release` 0 errors,
    (b) regression tests зелёные, (c) Mac+Linux CI на последнем -rN зелёные,
    (d) `gh release view` показывает 12 assets, (e) MCP+UIA verify PASS
-   где testable (или explicit "Core-only / not UI-testable" label).
+   где testable (или explicit "Core-only / not UI-testable" label),
+   **(f) live update gate — install previous stable, trigger update к
+   текущему -rN, verify success (см. cut-stable skill «Mandatory pre-cut
+   live update gate» секцию + `plans/cut-stable-checklist.md`).**
    **Урок v2.31.2**: 2 из 5 stable cuts в одной session оказались
    partial-fix slips потому что MCP verify не делался — нужен
-   human-in-the-loop. Tiny / config-only / typo fixes — exception:
-   ship + flag + let user decide if нужен ceremonial stable.
+   human-in-the-loop. **Урок v2.31.7**: helper.cmd parser bug сломал 100%
+   user-upgrades, поймали через ~7 дней. Live update gate — единственный
+   способ это поймать до cut'а. Tiny / config-only / typo fixes —
+   exception: ship + flag + let user decide if нужен ceremonial stable.
 7. **process_name в sing-box case-sensitive** — не использовать `ToLowerInvariant()`.
    Дедупликация через `StringComparer.OrdinalIgnoreCase` без mutation.
 8. **`.claude/` partially editable** — `.claude/skills/<name>/SKILL.md` и

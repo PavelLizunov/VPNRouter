@@ -55,7 +55,16 @@ gate скрывает UX bugs — нужен human-in-the-loop перед stable
 6. **STOP. Wait for user "cut" / "ok" / "promote" command.** No autonomous
    stable cut — see lesson v2.31.2 ниже. Only proceed когда user явно
    подтверждает.
-7. Cut stable `vX.Y.Z` (no suffix) **по команде user'а**:
+6.5. **Live update gate — REQUIRED before cut.** Перед тем как фактически
+   cut'нуть stable (даже после user'ской команды), запустить mandatory
+   pre-cut live update gate: install previous stable в чистый temp dir,
+   trigger update к текущему -rN, verify new ProductVersion + smoke launch.
+   Если упало — НЕ cut'ать, ship `-r(N+1)` с фиксом, retry. Полная
+   процедура: cut-stable skill секция «Mandatory pre-cut live update
+   gate» + standalone `plans/cut-stable-checklist.md`. Урок v2.31.7:
+   helper.cmd CMD parser bug сломал 100% upgrades, поймали через ~7 дней
+   по user-reports — этот gate единственный способ это поймать pre-cut.
+7. Cut stable `vX.Y.Z` (no suffix) **по команде user'а** (после 6.5 PASS):
    ```bash
    gh release create vX.Y.Z <assets> --title "vX.Y.Z — ..." --notes "..."
    gh release edit "vX.Y.Z" --prerelease=false --latest
@@ -100,7 +109,8 @@ page подчищаем. Если надо восстановить старый
 
 Promote to stable **по явной команде user'а** (cut / ok / promote). Не
 autonomous — см. урок v2.31.2 в Release Process выше. Verification gate
-(build + tests + Mac/Linux CI + 12 assets + MCP verify где testable)
+(build + tests + Mac/Linux CI + 12 assets + MCP verify где testable +
+**live update gate** см. step 6.5 / cut-stable skill / `plans/cut-stable-checklist.md`)
 обязательно зелёная ПЕРЕД тем как просить разрешение, но cut только
 по подтверждению.
 
