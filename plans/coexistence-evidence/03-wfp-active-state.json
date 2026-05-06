@@ -1,0 +1,56 @@
+﻿{
+    "wg_ip":  {
+                  "IPAddress":  "10.99.99.2",
+                  "PrefixLength":  32
+              },
+    "timestamp":  "2026-05-06T17:08:05.4114700+03:00",
+    "ping_gw":  "DEAD",
+    "singbox_after_30s":  "PID=6892 StartTime=05/06/2026 17:08:25",
+    "dns":  [
+                {
+                    "InterfaceAlias":  "wg-killsw",
+                    "ServerAddresses":  [
+                                            "1.1.1.1"
+                                        ]
+                },
+                {
+                    "InterfaceAlias":  "Ethernet",
+                    "ServerAddresses":  [
+                                            "172.19.0.2",
+                                            "8.8.8.8",
+                                            "8.8.4.4",
+                                            "192.168.31.1"
+                                        ]
+                },
+                {
+                    "InterfaceAlias":  "Loopback Pseudo-Interface 1",
+                    "ServerAddresses":  [
+
+                                        ]
+                }
+            ],
+    "default_routes":  [
+                           {
+                               "InterfaceAlias":  "wg-killsw",
+                               "NextHop":  "0.0.0.0",
+                               "RouteMetric":  0
+                           },
+                           {
+                               "InterfaceAlias":  "Ethernet",
+                               "NextHop":  "10.0.2.2",
+                               "RouteMetric":  0
+                           }
+                       ],
+    "wg_service":  {
+                       "Name":  "WireGuardTunnel$wg-killsw",
+                       "Status":  4,
+                       "StartType":  2
+                   },
+    "ping_ya":  null,
+    "wg_adapter":  {
+                       "Name":  "wg-killsw",
+                       "Status":  "Up",
+                       "InterfaceDescription":  "WireGuard Tunnel",
+                       "ifIndex":  14
+                   }
+}

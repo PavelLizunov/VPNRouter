@@ -1,0 +1,8 @@
+﻿[ACT] service=Running
+[VERIFY-KS] post-AWG-up=DIED:The remote name could not be resolved: 'api.ipify.org'
+[STATE] AWG adapter: awg-killsw status=Up ifIndex=14
+[STATE] singbox-during-awg=PID=6892
+[STATE] singbox-after-25s=PID=6892
+[VERIFY-KS] after-25s=DIED
+[FINALLY] rescue ok=True ip=93.95.226.167
+[FINALLY] post-uninstall ok=True ip=93.95.226.167

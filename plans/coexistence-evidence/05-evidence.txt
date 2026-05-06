@@ -1,0 +1,9 @@
+﻿[STEP1] wg-lan3=Running
+[STEP1] internet-with-WG=93.95.226.167
+[PRE] singbox=PID=6892 TUN=Up
+[POST] singbox=STOPPED
+[POST] vpnrouter-tun=GONE
+[POST] wgsvc=Running
+[POST] wgadp=Up
+[POST] internet=104.194.156.93
+[FINALLY] post-cleanup ok=True ip=104.194.156.93

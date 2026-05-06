@@ -1,0 +1,46 @@
+﻿{
+    "adapters":  {
+                     "Name":  "Ethernet",
+                     "Status":  "Up",
+                     "InterfaceDescription":  "Intel(R) PRO/1000 MT Desktop Adapter",
+                     "ifIndex":  10,
+                     "InterfaceGuid":  "{B329AC80-4F90-4489-A096-9263F9EFE145}"
+                 },
+    "services_vpnrouter":  {
+
+                           },
+    "procs":  {
+
+              },
+    "dns":  [
+                {
+                    "InterfaceAlias":  "Ethernet",
+                    "ServerAddresses":  [
+                                            "172.19.0.2",
+                                            "8.8.8.8",
+                                            "8.8.4.4",
+                                            "192.168.31.1"
+                                        ]
+                },
+                {
+                    "InterfaceAlias":  "Loopback Pseudo-Interface 1",
+                    "ServerAddresses":  [
+
+                                        ]
+                }
+            ],
+    "timestamp":  "2026-05-06T16:57:40.7569194+03:00",
+    "default_route":  {
+                          "InterfaceAlias":  "Ethernet",
+                          "NextHop":  "10.0.2.2",
+                          "RouteMetric":  0,
+                          "ifMetric":  null
+                      },
+    "ipify":  "104.194.156.93",
+    "services_killswitch":  {
+                                "Name":  "WireGuardTunnel$wgtest",
+                                "Status":  1,
+                                "StartType":  3
+                            },
+    "routes":  "===========================================================================\r\nInterface List\r\n 10...08 00 27 d4 2a dd ......Intel(R) PRO/1000 MT Desktop Adapter\r\n  1...........................Software Loopback Interface 1\r\n===========================================================================\r\n\r\nIPv4 Route Table\r\n===========================================================================\r\nActive Routes:\r\nNetwork Destination        Netmask          Gateway       Interface  Metric\r\n          0.0.0.0          0.0.0.0         10.0.2.2        10.0.2.15     25\r\n         10.0.2.0    255.255.255.0         On-link         10.0.2.15    281\r\n        10.0.2.15  255.255.255.255         On-link         10.0.2.15    281\r\n       10.0.2.255  255.255.255.255         On-link         10.0.2.15    281\r\n        127.0.0.0        255.0.0.0         On-link         127.0.0.1    331\r\n        127.0.0.1  255.255.255.255         On-link         127.0.0.1    331\r\n  127.255.255.255  255.255.255.255         On-link         127.0.0.1    331\r\n        224.0.0.0        240.0.0.0         On-link         127.0.0.1    331\r\n        224.0.0.0        240.0.0.0         On-link         10.0.2.15    281\r\n  255.255.255.255  255.255.255.255         On-link         127.0.0.1    331\r\n  255.255.255.255  255.255.255.255         On-link         10.0.2.15    281\r\n===========================================================================\r\nPersistent Routes:\r\n  None\r\n"
+}

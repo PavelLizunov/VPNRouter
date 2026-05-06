@@ -1,0 +1,358 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true,
+    "output": "C:\\ProgramData\\VPNRouter\\logs\\singbox.log"
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "vpn-dns",
+        "type": "https",
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "proxy"
+      },
+      {
+        "tag": "local-dns",
+        "type": "https",
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "dns-direct"
+      },
+      {
+        "tag": "vpnrouter-dns-ru",
+        "type": "udp",
+        "server": "77.88.8.8",
+        "detour": "dns-direct"
+      }
+    ],
+    "rules": [
+      {
+        "action": "route",
+        "server": "vpnrouter-dns-ru",
+        "rule_set": [
+          "vpnrouter-geosite-ru"
+        ]
+      },
+      {
+        "process_name": [
+          "Discord.exe",
+          "DiscordUpdate.exe",
+          "DiscordPTB.exe",
+          "DiscordCanary.exe",
+          "MyTestApp.exe",
+          "test.exe",
+          "Ã‘â€šÃ‘â€°ÃÂµÃ‘Æ’ÃÂ·Ã‘â€žÃÂ²Ã‘Æ’Ã‘â€¡Ã‘Æ’.exe",
+          "Telegram.exe",
+          "Signal.exe",
+          "WhatsApp.exe",
+          "claude.exe",
+          "ChatGPT.exe",
+          "Cursor.exe",
+          "chrome.exe",
+          "msedge.exe",
+          "firefox.exe",
+          "brave.exe",
+          "opera.exe",
+          "opera_autoupdate.exe",
+          "vivaldi.exe",
+          "yandex.exe",
+          "browser.exe",
+          "tor.exe",
+          "waterfox.exe",
+          "librewolf.exe",
+          "floorp.exe",
+          "ungoogled-chromium.exe",
+          "chromium.exe",
+          "arc.exe",
+          "maxthon.exe",
+          "seamonkey.exe",
+          "palemoon.exe",
+          "basilisk.exe",
+          "iridium.exe",
+          "iron.exe",
+          "cent_browser.exe",
+          "thorium.exe",
+          "whale.exe",
+          "zen.exe",
+          "slack.exe",
+          "Zoom.exe",
+          "Teams.exe",
+          "Code.exe",
+          "Notion.exe",
+          "Obsidian.exe",
+          "Spotify.exe",
+          "vlc.exe",
+          "steam.exe",
+          "EpicGamesLauncher.exe",
+          "Battle.net.exe",
+          "Agent.exe",
+          "VirtualBox.exe",
+          "VirtualBoxVM.exe",
+          "VBoxHeadless.exe",
+          "VBoxManage.exe",
+          "VBoxSVC.exe",
+          "VBoxNetDHCP.exe",
+          "VBoxNetNAT.exe",
+          "VBoxTray.exe",
+          "VBoxClient.exe",
+          "WindowsTerminal.exe",
+          "wt.exe",
+          "pwsh.exe",
+          "powershell.exe",
+          "git.exe",
+          "node.exe",
+          "python.exe",
+          "notepad.exe",
+          "conhost.exe",
+          "Windscribe_2.21.7_amd64.exe"
+        ],
+        "action": "route",
+        "server": "vpn-dns"
+      }
+    ],
+    "final": "local-dns",
+    "strategy": "ipv4_only"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "VPNRouter-TUN",
+      "address": [
+        "172.19.0.1/30"
+      ],
+      "mtu": 9000,
+      "auto_route": true,
+      "strict_route": false,
+      "route_exclude_address": [
+        "10.99.99.0/24"
+      ],
+      "endpoint_independent_nat": false,
+      "stack": "system"
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "vless-de-01 443 main-brat",
+      "server": "104.194.156.93",
+      "server_port": 443,
+      "uuid": "b25684c3-90d6-454a-a911-4e0abba568b0",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.microsoft.com",
+        "insecure": false,
+        "reality": {
+          "enabled": true,
+          "public_key": "gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A",
+          "short_id": "d86e92a0c6dd2271"
+        },
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "record_fragment": true,
+        "fragment_fallback_delay": "500ms"
+      },
+      "domain_resolver": "local-dns"
+    },
+    {
+      "type": "vless",
+      "tag": "vless-de-01 2083 main-brat",
+      "server": "104.194.156.93",
+      "server_port": 2083,
+      "uuid": "b25684c3-90d6-454a-a911-4e0abba568b0",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "gateway.icloud.com",
+        "insecure": false,
+        "reality": {
+          "enabled": true,
+          "public_key": "gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A",
+          "short_id": "d86e92a0c6dd2271"
+        },
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "record_fragment": true,
+        "fragment_fallback_delay": "500ms"
+      },
+      "domain_resolver": "local-dns"
+    },
+    {
+      "type": "urltest",
+      "tag": "proxy",
+      "outbounds": [
+        "vless-de-01 443 main-brat",
+        "vless-de-01 2083 main-brat"
+      ],
+      "url": "http://www.gstatic.com/generate_204",
+      "interval": "3m",
+      "tolerance": 150,
+      "interrupt_exist_connections": false
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "direct",
+      "tag": "dns-direct",
+      "udp_fragment": true
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff",
+        "timeout": "300ms"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "ip_is_private": true,
+        "action": "route",
+        "outbound": "direct"
+      },
+      {
+        "action": "route",
+        "outbound": "direct",
+        "rule_set": [
+          "vpnrouter-geosite-ru"
+        ]
+      },
+      {
+        "action": "route",
+        "outbound": "direct",
+        "domain_suffix": [
+          ".discord.com"
+        ]
+      },
+      {
+        "action": "route",
+        "outbound": "direct",
+        "domain_suffix": [
+          "53"
+        ]
+      },
+      {
+        "action": "reject",
+        "port": [
+          53,
+          853
+        ]
+      },
+      {
+        "action": "reject",
+        "ip_cidr": [
+          "192.168.99.0/24"
+        ]
+      },
+      {
+        "process_name": [
+          "Discord.exe",
+          "DiscordUpdate.exe",
+          "DiscordPTB.exe",
+          "DiscordCanary.exe",
+          "MyTestApp.exe",
+          "test.exe",
+          "Ã‘â€šÃ‘â€°ÃÂµÃ‘Æ’ÃÂ·Ã‘â€žÃÂ²Ã‘Æ’Ã‘â€¡Ã‘Æ’.exe",
+          "Telegram.exe",
+          "Signal.exe",
+          "WhatsApp.exe",
+          "claude.exe",
+          "ChatGPT.exe",
+          "Cursor.exe",
+          "chrome.exe",
+          "msedge.exe",
+          "firefox.exe",
+          "brave.exe",
+          "opera.exe",
+          "opera_autoupdate.exe",
+          "vivaldi.exe",
+          "yandex.exe",
+          "browser.exe",
+          "tor.exe",
+          "waterfox.exe",
+          "librewolf.exe",
+          "floorp.exe",
+          "ungoogled-chromium.exe",
+          "chromium.exe",
+          "arc.exe",
+          "maxthon.exe",
+          "seamonkey.exe",
+          "palemoon.exe",
+          "basilisk.exe",
+          "iridium.exe",
+          "iron.exe",
+          "cent_browser.exe",
+          "thorium.exe",
+          "whale.exe",
+          "zen.exe",
+          "slack.exe",
+          "Zoom.exe",
+          "Teams.exe",
+          "Code.exe",
+          "Notion.exe",
+          "Obsidian.exe",
+          "Spotify.exe",
+          "vlc.exe",
+          "steam.exe",
+          "EpicGamesLauncher.exe",
+          "Battle.net.exe",
+          "Agent.exe",
+          "VirtualBox.exe",
+          "VirtualBoxVM.exe",
+          "VBoxHeadless.exe",
+          "VBoxManage.exe",
+          "VBoxSVC.exe",
+          "VBoxNetDHCP.exe",
+          "VBoxNetNAT.exe",
+          "VBoxTray.exe",
+          "VBoxClient.exe",
+          "WindowsTerminal.exe",
+          "wt.exe",
+          "pwsh.exe",
+          "powershell.exe",
+          "git.exe",
+          "node.exe",
+          "python.exe",
+          "notepad.exe",
+          "conhost.exe",
+          "Windscribe_2.21.7_amd64.exe"
+        ],
+        "action": "route",
+        "outbound": "proxy"
+      }
+    ],
+    "final": "direct",
+    "auto_detect_interface": true,
+    "default_domain_resolver": "local-dns",
+    "rule_set": [
+      {
+        "type": "local",
+        "tag": "vpnrouter-geoip-ru",
+        "format": "binary",
+        "path": "C:/ProgramData/VPNRouter/geo/geoip-ru.srs"
+      },
+      {
+        "type": "local",
+        "tag": "vpnrouter-geosite-ru",
+        "format": "binary",
+        "path": "C:/ProgramData/VPNRouter/geo/geosite-ru.srs"
+      }
+    ]
+  },
+  "experimental": {
+    "clash_api": {
+      "external_controller": "127.0.0.1:9090"
+    }
+  }
+}
