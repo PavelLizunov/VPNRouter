@@ -388,6 +388,38 @@ public class UpdateChecker
         // helper xcopy can't recover from.
         TryWriteInstallReceipt();
 
+        // v2.31.10-r2 Task E LAYER 8: pre-update snapshot for local
+        // rollback. Copies the current `app/` to a sibling `app.bak/`
+        // BEFORE the helper.cmd starts overwriting DLLs. If the next
+        // launch detects mixed-version state OR helper.cmd writes the
+        // .update-failed marker on xcopy failure, App startup will
+        // restore from app.bak/ in-process — no network, no PowerShell,
+        // no AMSI. SelfRepair stays as the second-line fallback for the
+        // case where app.bak/ itself is missing or corrupt.
+        //
+        // CreateSnapshot is called before File.WriteAllText(helperPath,
+        // cmd) so a snapshot failure is observable BEFORE we hand
+        // control to the detached helper. If it fails we log + carry on
+        // — the user is no worse off than pre-Task-E (still falls back
+        // to SelfRepair on next launch). The HelperCmdParserGuardTests
+        // pin this ordering so a future refactor can't accidentally
+        // drop the snapshot or move it after the helper kicks off.
+        var installDir = Path.GetDirectoryName(appDir.TrimEnd('\\')) ?? string.Empty;
+        if (!string.IsNullOrEmpty(installDir))
+        {
+            try
+            {
+                var snap = UpdateBackup.CreateSnapshot(installDir);
+                StatusChanged?.Invoke(snap.Success
+                    ? "Backup created — update will be reversible if it fails."
+                    : $"Backup creation skipped: {snap.Diagnostic}");
+            }
+            catch (Exception ex)
+            {
+                StatusChanged?.Invoke($"Backup creation threw {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+
         // Helper script lives in %TEMP% (always user-writable).
         // v2.31.8-r5: helper LOG moved from %TEMP% to LogsDir/update.log so
         // CheckInstallReceipt's «See {LogsDir}/update.log for details»
@@ -512,6 +544,17 @@ public class UpdateChecker
             "xcopy \"%SRC%\\*\" \"%DST%\\\" /E /Y /Q /R /I >>\"%LOG%\" 2>&1",
             "set XCOPY_EXIT=!ERRORLEVEL!",
             "echo [%TIME%] xcopy exit=!XCOPY_EXIT! >>\"%LOG%\"",
+            // v2.31.10-r2 Task E: drop a .update-failed marker into app/
+            // when xcopy reported any non-zero exit. App startup looks
+            // for this marker and triggers UpdateBackup.RestoreSnapshot
+            // before any DLL from app/ is loaded. The marker carries the
+            // exit code + timestamp so post-mortem can correlate with
+            // update.log. Empty/clean state means xcopy succeeded —
+            // marker absence is the success signal.
+            "if not \"!XCOPY_EXIT!\"==\"0\" (",
+            "  echo [%TIME%] xcopy exit !XCOPY_EXIT! — writing .update-failed marker into %DST% >>\"%LOG%\"",
+            "  > \"%DST%\\.update-failed\" echo xcopy exit=!XCOPY_EXIT! at %DATE% %TIME%",
+            ")",
             // Restart Service if it was running pre-update — preserves the
             // user's set-and-forget Service-mode install across upgrades.
             "if \"!SVC_WAS_RUNNING!\"==\"1\" (",
