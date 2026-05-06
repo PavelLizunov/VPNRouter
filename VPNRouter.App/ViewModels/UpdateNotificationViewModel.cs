@@ -166,7 +166,15 @@ public partial class UpdateNotificationViewModel : ObservableObject
             // Defensive: kill any orphan sing-box / VPNRouter.GUI processes BEFORE
             // file copy. This ensures the new instance starts clean.
             // (Killing self-process VPNRouter.App.exe is excluded by KillOrphans logic.)
-            try { OrphanCleanup.KillOrphans(); } catch { }
+            //
+            // v2.31.10-r2: pass respectTunLock: false — the update flow's
+            // helper.cmd separately stops the Windows Service before the
+            // xcopy, and at this point we WANT the running sing-box gone
+            // so file replacement can free wintun handles. If we deferred
+            // to TunLock here, Service-spawned sing-box would survive the
+            // pre-update sweep and helper.cmd would have to do it later
+            // anyway. Mirror existing user-takeover semantics on this path.
+            try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); } catch { }
 
             // Apply (replaces files, may rename locked exe to .bak)
             _updateChecker.ApplyUpdate(extractedDir);

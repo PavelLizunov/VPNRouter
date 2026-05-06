@@ -3330,7 +3330,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     try { _engine.Stop(); }
                     catch (Exception ex) { _logger.Debug(ex, "[VM] _engine.Stop"); }
 
-                    try { OrphanCleanup.KillOrphans(); }
+                    // v2.31.10-r2: pass respectTunLock:false — user clicked
+                    // Stop, so we explicitly INTEND to take down whoever
+                    // is running sing-box (even Service-spawned). Default
+                    // TunLock-aware path is for App startup; here it would
+                    // turn the Stop button into a no-op when Service held
+                    // the lock.
+                    try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); }
                     catch (Exception ex) { _logger.Debug(ex, "[VM] OrphanCleanup on stop"); }
 
 #if PLATFORM_WINDOWS
@@ -3387,7 +3393,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     _logger.Debug(ex, "[VM] Pre-start engine stop");
                 }
 
-                try { OrphanCleanup.KillOrphans(); } catch { }
+                // v2.31.10-r2: pass respectTunLock:false — user clicked
+                // Connect, so we explicitly INTEND to free the TUN lock
+                // (kill whatever is currently holding it, including
+                // Service-spawned sing-box) before our own engine tries
+                // to acquire it. Without this, default TunLock-aware
+                // skip would leave the Service-spawned sing-box alive
+                // and the next sc-stop wouldn't reach it via this VM.
+                try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); } catch { }
 
 #if PLATFORM_WINDOWS
                 try
