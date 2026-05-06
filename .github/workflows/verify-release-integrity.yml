@@ -353,7 +353,7 @@ jobs:
             {
               printf '%s\n' "<!-- verify-release-integrity: FAILED -->"
               printf '%s\n\n' "**⚠️ AUTO-FLAGGED BY CI: release integrity check failed.**"
-              printf 'Expected embedded \`AppVersion = %s\` (from tag \`%s\`).\n\n' "$EXPECTED_VERSION" "$EXPECTED_TAG"
+              printf 'Expected embedded `AppVersion = %s` (from tag `%s`).\n\n' "$EXPECTED_VERSION" "$EXPECTED_TAG"
               printf 'Failures:\n'
               for e in "${ERRORS[@]}"; do printf -- '- %s\n' "$e"; done
               printf '\nWorkflow run: %s/%s/actions/runs/%s\n\n' \
