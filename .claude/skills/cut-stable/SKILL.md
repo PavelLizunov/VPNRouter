@@ -1,7 +1,7 @@
 ---
 name: cut-stable
 description: Promote a rolling -rN candidate to stable vX.Y.Z (no suffix). Bumps AppVersion, creates fresh tag without suffix, full rebuild + Mac/Linux CI, restores Latest, deletes -rN.
-when: Latest -rN passed verification gate (build + tests + Mac/Linux CI green + 12 assets) и no user-reported regressions за ~24h. Cut autonomously. User паузит явной командой "hold stable" если хочет задержать.
+when: Latest -rN passed full verification gate (build + tests + Mac/Linux CI green + 12 assets + MCP-verify + **mandatory pre-cut live update gate**) AND user gave explicit "cut" / "ok" / "promote" command (rule 6 в `CLAUDE.md`, lessons v2.31.2 / v2.31.7). Cut НЕ autonomous.
 ---
 
 # Cut a stable release
@@ -12,15 +12,117 @@ prerelease flag.
 
 ## Pre-flight (verification gate, autonomous)
 
-Все 5 чек-боксов должны быть зелёные:
+Все 6 чек-боксов должны быть зелёные:
 1. `dotnet build -c Release` → 0 errors
 2. Regression tests зелёные (`VlessServersResolverTests`, `ConfigGeneratorEmptyServersGuardTests`, `FreeConfigAggregatorPreserveTests`)
 3. Mac CI на последнем -rN — `success`
 4. Linux CI на последнем -rN — `success`
 5. `gh release view vX.Y.Z-rN --json assets --jq '.assets|length'` → `12`
-6. (soft) No user-reported regressions за ~24h после shipping последнего -rN
+6. **Live update gate PASS** (см. секцию ниже) — обязательная mandatory.
+7. (soft) No user-reported regressions за ~24h после shipping последнего -rN
 
-Если все зелёные — cut. User паузит явной командой "hold stable".
+Если все зелёные — ждём explicit user команду "cut" / "ok" / "promote" (rule 6
+в `CLAUDE.md`). Cut НЕ autonomous. User паузит явной командой "hold stable".
+
+## Mandatory pre-cut live update gate
+
+**Why this exists**: green CI + green tests + MCP-verify of the change itself
+do NOT cover the auto-update path. v2.31.2 cut'нулся на all-green и оказался
+partial-fix (UI regression поймали только хотфиксом v2.31.3). v2.31.7 cut'нулся
+на all-green и его helper.cmd parser bug сломал 100% upgrades — поймали через
+~7 дней по user-reports. **Conclusion**: тот же binary который user скачает
+со stable должен в чистой среде успешно auto-update'нуться к ТЕКУЩЕМУ кандидату
+ПЕРЕД cut'ом. Иначе stable shipping = выпуск broken update path в production.
+
+**When to run**: после verification gate (5 первых чекбоксов) PASS, перед тем
+как просить user'а "cut" / "ok" / "promote". Если этот gate упал — НЕ просим
+cut, а ship'аем -r(N+1) с фиксом и крутим cycle заново.
+
+**Steps** (выполнять в том же VM/host где работаем над release; **не трогать
+prod-инсталляцию VPNRouter**):
+
+a) **Identify previous stable release tag**:
+   ```bash
+   gh release list --repo PavelLizunov/VPNRouter --exclude-pre-releases --limit 1
+   ```
+   Запомни tag (e.g. `v2.31.7`). Это baseline для теста.
+
+b) **Download install ZIP в чистый temp dir**:
+   ```bash
+   rm -rf /c/Temp/stable-test && mkdir -p /c/Temp/stable-test
+   gh release download <previous-stable-tag> --repo PavelLizunov/VPNRouter \
+     --pattern 'VPNRouter-*-windows-x64.zip' --dir /c/Temp/stable-test
+   ```
+
+c) **Extract + launch + initial settle**:
+   ```bash
+   cd /c/Temp/stable-test
+   powershell -Command "Expand-Archive -Path 'VPNRouter-*-windows-x64.zip' -DestinationPath ./extracted -Force"
+   powershell -Command "Start-Process -FilePath './extracted/VPNRouter.App.exe'"
+   ```
+   Wait 30s для App init (settings load, update check spin-up).
+
+d) **Trigger update к ТЕКУЩЕМУ кандидату -rN**. Два пути:
+   - **UI path** (preferred — exercises full user flow): MCP click Settings →
+     "Проверить обновления" / "Check for updates" → дождаться detection
+     -rN кандидата (ensure `Experimental` channel is on, иначе -rN
+     неvidible) → нажать "Установить" / "Install".
+   - **Programmatic** (fallback если UI broken): дёрнуть update helper
+     напрямую через CLI если такая команда есть. Если нет — UI path
+     mandatory.
+
+e) **Wait for update flow to complete**. Helper .cmd должен:
+   1. Stop running App + Service (если установлен)
+   2. xcopy new files over old install
+   3. Relaunch App
+   Ожидаемое время: 30-90s. Tail update.log:
+   ```bash
+   tail -f "$LOCALAPPDATA/VPNRouter/Logs/update.log"   # или %ProgramData%/VPNRouter/logs/update.log
+   ```
+
+f) **Verify new version installed cleanly**:
+   ```bash
+   powershell -Command "(Get-Item /c/Temp/stable-test/extracted/VPNRouter.App.exe).VersionInfo.ProductVersion"
+   ```
+   Должна быть `<candidate-rN-version>` (e.g. `2.31.8-r10`). Также:
+   ```bash
+   powershell -Command "(Get-Item /c/Temp/stable-test/extracted/VPNRouter.Core.dll).VersionInfo.FileVersion"
+   ```
+   AppVersion должна совпадать с candidate (правило #5 — string Version
+   ВКЛЮЧАЯ -rN суффикс).
+
+g) **30-second smoke**: убедись App работает после update.
+   - Если есть test профиль (free configs / saved subscription) — connect
+     → status «Подключено» → disconnect.
+   - Если нет — минимум: главное окно открывается, нет crash dialog'а,
+     status показывает «Готов» / «Ready», нет красных error toast'ов.
+   MCP screenshot для визуальной фиксации PASS.
+
+h) **Cleanup**:
+   ```bash
+   powershell -Command "Get-Process VPNRouter.App,VPNRouter.Service,sing-box -ErrorAction SilentlyContinue | Stop-Process -Force"
+   rm -rf /c/Temp/stable-test
+   ```
+
+i) **IF ANY STEP FAILS** (download error, install hang, helper crash, version
+   mismatch, App не запускается после update, smoke fails):
+   - **DO NOT CUT**. Stable cut откладывается.
+   - Diagnose root cause (logs: update.log, vpnrouter.log, Event Viewer
+     для Service, helper.cmd output).
+   - Fix в коде / helper.cmd / install.ps1.
+   - Ship `-r(N+1)` через `ship-rolling-candidate` skill.
+   - Run этот gate заново на новом -r(N+1).
+   - Repeat until PASS.
+
+**Detailed report для user'а** (часть "request cut" сообщения):
+- Previous stable tag downloaded: `vX.Y.(Z-1)` (or same Z, prior -rN cut)
+- Update path triggered: UI / programmatic
+- Helper.cmd exit code + log tail
+- ProductVersion + FileVersion после update (proof of successful flip)
+- Smoke result: connect/disconnect outcome + screenshot
+- PASS / FAIL per step (a..h)
+
+Только после PASS — просим user'а "cut" / "ok" / "promote".
 
 ## Step 1 — bump AppVersion (drop -rN suffix)
 
