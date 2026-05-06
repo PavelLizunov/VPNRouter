@@ -1,0 +1,408 @@
+name: Verify Release Integrity
+
+# Post-publish gate: verifies that every uploaded asset on a release truly
+# carries the version embedded in its release tag.
+#
+# Origin: v2.29.0 fake-tag fiasco. build.ps1 was run from a stale worktree
+# whose AppVersion.cs was still on v2.28.7, but the release was tagged
+# "v2.29.0-r1..r5" — the binary itself reported "2.28.7" while users
+# downloaded ZIPs labelled "2.29.0". build.ps1 now has Layer 1 (compares
+# -Version arg with AppVersion.cs source on disk) but that only catches
+# the local build path; manual `gh release upload` after publish, or
+# stale ZIPs left attached after a re-cut, still slip through.
+#
+# This workflow is the post-publish complement to that local Layer 1 check.
+#
+# What it does:
+#   1) Downloads every "VPNRouter-*" asset on the release.
+#   2) For each non-sha256 binary asset (Win zip, Mac dmg/zip, Linux deb/
+#      AppImage/tar.gz), extracts VPNRouter.Core.dll and scans its UTF-16
+#      string table for the embedded AppVersion.Version constant.
+#   3) Asserts the embedded version matches the release tag (after stripping
+#      the leading 'v'). Mismatch in ANY asset is a hard failure.
+#   4) Recomputes sha256 of each binary and compares to its bundled .sha256
+#      sidecar (Linux: "<hex>  <filename>"; Windows: bare hex; both formats
+#      handled).
+#   5) Counts assets — current convention is 12 (4 Win + 2 Mac + 6 Linux).
+#      Soft warning if missing (mac/linux CI may still be uploading).
+#   6) On hard failure: drafts the release (hides from users), then prepends
+#      a "VERIFY-RELEASE-INTEGRITY: FAILED" banner with the specific
+#      mismatch to the release notes.
+#
+# Loop prevention: the failure handler drafts the release FIRST (which
+# fires `release: unpublished`, not in our listener) THEN edits notes
+# (which fires `release: edited` — caught by the echo guard below: if the
+# release is currently a draft AND notes already carry the FAILED marker,
+# we skip).
+#
+# See plans/vpnrouter-release-strategy.md "Release integrity gate" for
+# rationale + escalation path. CLAUDE.local.md "Урок v2.25.0-r1→r2" has
+# adjacent context (AppVersion suffix mismatch).
+
+on:
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to verify (e.g. v2.31.10-r2). Must already exist on GitHub."
+        required: true
+        type: string
+      auto_draft_on_failure:
+        description: "Mark release as draft on failure (default true; set false for dry-run audits)"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  # Needed for `gh release edit --draft` and `gh release edit --notes-file` on failure.
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Resolve tag and version
+        id: tag
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${{ github.event.release.tag_name }}"
+          fi
+          if [ -z "${TAG:-}" ]; then
+            echo "::error::Could not resolve release tag from event"
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "::notice::Verifying tag=$TAG (expected embedded version=$VERSION)"
+
+      - name: Echo-loop guard (skip if our own draft+FAILED edit triggered this)
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # workflow_dispatch is an explicit operator action — always run.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # For release: events, skip only if BOTH:
+          #   - release is currently a draft (it was drafted by us as part
+          #     of the failure handler), AND
+          #   - notes already carry the FAILED marker (our own banner)
+          # This pattern catches the `release: edited` echo of our own
+          # notes-prepend without skipping the case where a user un-drafts
+          # the release for re-verification.
+          DATA=$(gh release view "${{ steps.tag.outputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,body 2>/dev/null || echo '{}')
+          IS_DRAFT=$(echo "$DATA" | jq -r '.isDraft // false')
+          BODY=$(echo "$DATA" | jq -r '.body // ""')
+          if [ "$IS_DRAFT" = "true" ] && \
+             echo "$BODY" | head -3 | grep -q '<!-- verify-release-integrity: FAILED -->'; then
+            echo "::notice::Release is draft and already flagged FAILED — skipping (echo guard)"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install extraction tools
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            p7zip-full file fuse libfuse2 unzip zstd jq
+
+      - name: Download release assets
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          gh release download "${{ steps.tag.outputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "VPNRouter-*" \
+            --dir assets || {
+              echo "::error::Failed to download assets for ${{ steps.tag.outputs.tag }}"
+              exit 1
+            }
+          echo "Downloaded assets:"
+          ls -lh assets
+
+      - name: Verify integrity
+        if: steps.guard.outputs.skip != 'true'
+        id: verify
+        env:
+          EXPECTED_VERSION: ${{ steps.tag.outputs.version }}
+          EXPECTED_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -uo pipefail
+          # Helper: extract every "2.X.Y[-rN]" string from the UTF-16 LE
+          # byte stream of a .NET DLL. Matches the AppVersion.cs literal,
+          # which the C# compiler writes as a UTF-16 blob in the #US heap.
+          # Other 2.X version strings (cryptographic OIDs, third-party libs)
+          # may coexist; we only assert the EXPECTED one is present, not
+          # that it's the only match.
+          cat > /tmp/extract_versions.py <<'PY'
+          import re, sys
+          data = open(sys.argv[1], 'rb').read()
+          text = data.decode('utf-16-le', errors='ignore')
+          seen = []
+          for m in re.findall(r'2\.\d+\.\d+(?:-r\d+)?', text):
+              if m not in seen:
+                  seen.append(m)
+          for s in seen:
+              print(s)
+          PY
+
+          ERRORS=()
+          WARNINGS=()
+
+          # ── 1. Asset count check ──────────────────────────────────────
+          # 12 expected: 4 Win (zip+sha256 ×2) + 2 Mac (dmg, zip — no sha256
+          # sidecars; build-mac.sh doesn't emit them) + 6 Linux (deb/AppImage/
+          # tar.gz × bin+sha256).
+          EXPECTED_FILES=(
+            "VPNRouter-v${EXPECTED_VERSION}-win.zip"
+            "VPNRouter-v${EXPECTED_VERSION}-win.zip.sha256"
+            "VPNRouter-update-v${EXPECTED_VERSION}-win.zip"
+            "VPNRouter-update-v${EXPECTED_VERSION}-win.zip.sha256"
+            "VPNRouter-v${EXPECTED_VERSION}-mac.dmg"
+            "VPNRouter-v${EXPECTED_VERSION}-mac.zip"
+            "VPNRouter-v${EXPECTED_VERSION}-linux-amd64.deb"
+            "VPNRouter-v${EXPECTED_VERSION}-linux-amd64.deb.sha256"
+            "VPNRouter-v${EXPECTED_VERSION}-linux-x86_64.AppImage"
+            "VPNRouter-v${EXPECTED_VERSION}-linux-x86_64.AppImage.sha256"
+            "VPNRouter-v${EXPECTED_VERSION}-linux.tar.gz"
+            "VPNRouter-v${EXPECTED_VERSION}-linux.tar.gz.sha256"
+          )
+          MISSING=()
+          for f in "${EXPECTED_FILES[@]}"; do
+            if [ ! -f "assets/$f" ]; then
+              MISSING+=("$f")
+            fi
+          done
+          if [ "${#MISSING[@]}" -gt 0 ]; then
+            # Soft warning: parallel CI (build-mac.yml, build-linux.yml)
+            # may still be uploading at the time of `release: published`.
+            # Each `gh release upload --clobber` fires a fresh `release:
+            # edited` that re-runs this workflow until all 12 are present.
+            WARNINGS+=("Missing ${#MISSING[@]}/${#EXPECTED_FILES[@]} expected assets — parallel CI may still be uploading:")
+            for m in "${MISSING[@]}"; do WARNINGS+=("  - $m"); done
+          else
+            echo "✓ All 12 expected assets present"
+          fi
+
+          # ── 2. AppVersion check on each binary asset ──────────────────
+          verify_dll() {
+            # $1 = path to VPNRouter.Core.dll, $2 = label for error messages
+            local dll="$1"
+            local label="$2"
+            if [ -z "$dll" ] || [ ! -f "$dll" ]; then
+              ERRORS+=("$label: VPNRouter.Core.dll not found inside archive")
+              return
+            fi
+            local versions
+            versions=$(python3 /tmp/extract_versions.py "$dll" | tr '\n' ' ')
+            if [ -z "${versions// }" ]; then
+              ERRORS+=("$label: no version-shaped strings found in Core.dll (corrupt?)")
+              return
+            fi
+            if echo " $versions" | grep -qF " ${EXPECTED_VERSION} "; then
+              echo "  ✓ $label: AppVersion=$EXPECTED_VERSION present (embedded: $versions)"
+            else
+              ERRORS+=("$label: AppVersion mismatch — expected '$EXPECTED_VERSION' not in embedded {${versions% }}")
+            fi
+          }
+
+          # ── 2a. Windows: 2 zips, plain unzip ──
+          for winzip in \
+            "VPNRouter-v${EXPECTED_VERSION}-win.zip" \
+            "VPNRouter-update-v${EXPECTED_VERSION}-win.zip"; do
+            if [ ! -f "assets/$winzip" ]; then continue; fi
+            echo "── Inspecting $winzip ──"
+            rm -rf /tmp/win-ext && mkdir -p /tmp/win-ext
+            unzip -q "assets/$winzip" -d /tmp/win-ext 2>&1 | head -3 || true
+            DLL=$(find /tmp/win-ext -name "VPNRouter.Core.dll" -type f | head -1)
+            verify_dll "$DLL" "$winzip"
+          done
+
+          # ── 2b. Mac DMG: 7z reads HFS+ Apple disk images on Linux ──
+          MAC_DMG="assets/VPNRouter-v${EXPECTED_VERSION}-mac.dmg"
+          if [ -f "$MAC_DMG" ]; then
+            echo "── Inspecting $(basename $MAC_DMG) ──"
+            rm -rf /tmp/mac-dmg && mkdir -p /tmp/mac-dmg
+            # 7z extracts dmg → folder containing VPNRouter.app/. Some
+            # DMG codecs (LZFSE) may not be supported on older p7zip
+            # versions; ubuntu-latest's p7zip-full handles all formats
+            # build-mac.sh produces (UDZO/UDBZ).
+            if 7z x -y -o/tmp/mac-dmg "$MAC_DMG" >/tmp/7z.log 2>&1; then
+              DLL=$(find /tmp/mac-dmg -name "VPNRouter.Core.dll" -type f | head -1)
+              verify_dll "$DLL" "$(basename $MAC_DMG)"
+            else
+              tail -20 /tmp/7z.log
+              ERRORS+=("$(basename $MAC_DMG): 7z extraction failed (see logs)")
+            fi
+          fi
+
+          # ── 2c. Mac ZIP: plain unzip ──
+          MAC_ZIP="assets/VPNRouter-v${EXPECTED_VERSION}-mac.zip"
+          if [ -f "$MAC_ZIP" ]; then
+            echo "── Inspecting $(basename $MAC_ZIP) ──"
+            rm -rf /tmp/mac-zip && mkdir -p /tmp/mac-zip
+            unzip -q "$MAC_ZIP" -d /tmp/mac-zip 2>&1 | head -3 || true
+            DLL=$(find /tmp/mac-zip -name "VPNRouter.Core.dll" -type f | head -1)
+            verify_dll "$DLL" "$(basename $MAC_ZIP)"
+          fi
+
+          # ── 2d. Linux .deb: ar archive of data.tar.zst (or .gz / .xz) ──
+          DEB="assets/VPNRouter-v${EXPECTED_VERSION}-linux-amd64.deb"
+          if [ -f "$DEB" ]; then
+            echo "── Inspecting $(basename $DEB) ──"
+            rm -rf /tmp/deb-ext && mkdir -p /tmp/deb-ext
+            ABS_DEB="$(realpath "$DEB")"
+            ( cd /tmp/deb-ext && ar x "$ABS_DEB" )
+            DATA=$(ls /tmp/deb-ext/data.tar.* 2>/dev/null | head -1)
+            if [ -n "$DATA" ]; then
+              case "$DATA" in
+                *.zst) ( cd /tmp/deb-ext && tar --use-compress-program='unzstd -c' -xf "$DATA" ) ;;
+                *.xz)  ( cd /tmp/deb-ext && tar -xJf "$DATA" ) ;;
+                *.gz)  ( cd /tmp/deb-ext && tar -xzf "$DATA" ) ;;
+                *)     ( cd /tmp/deb-ext && tar -xf "$DATA" ) ;;
+              esac
+            fi
+            DLL=$(find /tmp/deb-ext -name "VPNRouter.Core.dll" -type f | head -1)
+            verify_dll "$DLL" "$(basename $DEB)"
+          fi
+
+          # ── 2e. Linux AppImage: --appimage-extract (no FUSE mount needed) ──
+          APPIMG="assets/VPNRouter-v${EXPECTED_VERSION}-linux-x86_64.AppImage"
+          if [ -f "$APPIMG" ]; then
+            echo "── Inspecting $(basename $APPIMG) ──"
+            rm -rf /tmp/appimg-ext && mkdir -p /tmp/appimg-ext
+            chmod +x "$APPIMG"
+            ABS_APP="$(realpath "$APPIMG")"
+            # --appimage-extract dumps to ./squashfs-root by default.
+            ( cd /tmp/appimg-ext && "$ABS_APP" --appimage-extract >/tmp/appimg.log 2>&1 ) \
+              || { tail -10 /tmp/appimg.log; ERRORS+=("$(basename $APPIMG): --appimage-extract failed"); }
+            DLL=$(find /tmp/appimg-ext -name "VPNRouter.Core.dll" -type f | head -1)
+            verify_dll "$DLL" "$(basename $APPIMG)"
+          fi
+
+          # ── 2f. Linux tar.gz: plain extract ──
+          TGZ="assets/VPNRouter-v${EXPECTED_VERSION}-linux.tar.gz"
+          if [ -f "$TGZ" ]; then
+            echo "── Inspecting $(basename $TGZ) ──"
+            rm -rf /tmp/tgz-ext && mkdir -p /tmp/tgz-ext
+            tar -xzf "$TGZ" -C /tmp/tgz-ext
+            DLL=$(find /tmp/tgz-ext -name "VPNRouter.Core.dll" -type f | head -1)
+            verify_dll "$DLL" "$(basename $TGZ)"
+          fi
+
+          # ── 3. SHA256 sidecar verification ────────────────────────────
+          # Two formats coexist:
+          #   - Linux CI: `<64hex>  <filename>\n` (sha256sum stock format)
+          #   - Win build.ps1: `<64hex>` bare (no filename, no newline)
+          # Both: take the first whitespace-delimited token = the hash.
+          for sha in assets/*.sha256; do
+            [ -f "$sha" ] || continue
+            target="${sha%.sha256}"
+            if [ ! -f "$target" ]; then
+              ERRORS+=("$(basename $sha): no matching binary $(basename $target) found")
+              continue
+            fi
+            EXPECTED_HASH=$(awk '{print $1; exit}' "$sha" | tr -d '\r\n ')
+            ACTUAL_HASH=$(sha256sum "$target" | awk '{print $1}')
+            if [ "$EXPECTED_HASH" = "$ACTUAL_HASH" ]; then
+              echo "  ✓ $(basename $sha): hash matches ($ACTUAL_HASH)"
+            else
+              ERRORS+=("$(basename $sha): sha256 mismatch — sidecar=$EXPECTED_HASH actual=$ACTUAL_HASH")
+            fi
+          done
+
+          # ── 4. Build summary + step output ────────────────────────────
+          {
+            echo "# Release integrity verification — \`${EXPECTED_TAG}\`"
+            echo ""
+            echo "Expected embedded AppVersion: \`${EXPECTED_VERSION}\`"
+            echo ""
+            if [ "${#WARNINGS[@]}" -gt 0 ]; then
+              echo "## Warnings (soft)"
+              for w in "${WARNINGS[@]}"; do echo "- $w"; done
+              echo ""
+            fi
+            if [ "${#ERRORS[@]}" -gt 0 ]; then
+              echo "## ❌ Failures"
+              for e in "${ERRORS[@]}"; do echo "- $e"; done
+              echo ""
+            else
+              echo "## ✅ All checks passed"
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "${#ERRORS[@]}" -gt 0 ]; then
+            # Build markdown banner for the release-notes prepend.
+            {
+              printf '%s\n' "<!-- verify-release-integrity: FAILED -->"
+              printf '%s\n\n' "**⚠️ AUTO-FLAGGED BY CI: release integrity check failed.**"
+              printf 'Expected embedded `AppVersion = %s` (from tag `%s`).\n\n' "$EXPECTED_VERSION" "$EXPECTED_TAG"
+              printf 'Failures:\n'
+              for e in "${ERRORS[@]}"; do printf -- '- %s\n' "$e"; done
+              printf '\nWorkflow run: %s/%s/actions/runs/%s\n\n' \
+                "${{ github.server_url }}" "${{ github.repository }}" "${{ github.run_id }}"
+              printf -- '---\n\n'
+            } > /tmp/failure_banner.md
+            echo "FAILED=1" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "FAILED=0" >> "$GITHUB_OUTPUT"
+
+      # ── On failure: draft release first, then prepend FAILED banner ──
+      # Order matters: drafting fires `release: unpublished` (NOT in our
+      # listener — no echo loop), so we draft FIRST. Editing notes then
+      # fires `release: edited`, but the echo-loop guard at job start
+      # detects (draft + FAILED marker) and skips.
+      - name: Flag release on failure
+        if: failure() && steps.verify.outputs.FAILED == '1' && steps.guard.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          # Decide auto_draft mode. workflow_dispatch may opt out via input;
+          # release: events always draft on failure.
+          AUTO_DRAFT="true"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            AUTO_DRAFT="${{ inputs.auto_draft_on_failure }}"
+          fi
+          if [ "$AUTO_DRAFT" = "true" ]; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=true
+            echo "✓ Marked release as draft (hidden from users)"
+          else
+            echo "::notice::auto_draft_on_failure=false — release left visible"
+          fi
+
+          # Prepend FAILED banner to release notes. If a previous FAILED
+          # block exists (re-run after fix), strip it before prepending
+          # the new one so banners don't accumulate.
+          OLD_BODY=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq '.body' 2>/dev/null || echo "")
+          # Strip prior banner: from start until first "---\n\n" if marker present.
+          if echo "$OLD_BODY" | head -1 | grep -q '<!-- verify-release-integrity: FAILED -->'; then
+            STRIPPED=$(echo "$OLD_BODY" | awk 'BEGIN{drop=1} /^---$/{ if (drop) {drop=0; next} } { if (!drop) print }')
+          else
+            STRIPPED="$OLD_BODY"
+          fi
+          {
+            cat /tmp/failure_banner.md
+            printf '%s' "$STRIPPED"
+          } > /tmp/new_notes.md
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file /tmp/new_notes.md
+          echo "✓ Prepended FAILED banner to release notes"

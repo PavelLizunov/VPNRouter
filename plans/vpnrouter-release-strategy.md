@@ -144,3 +144,101 @@ generation or whatever surfaced, ship `-r(N+1)`, re-run.
 
 Documented in `CLAUDE.local.md` so every new Claude session picks
 this up without needing to re-read this file first.
+
+---
+
+## Release integrity gate (added after v2.29.0 fake-tag fiasco)
+
+**Two-layer defense** against the bug class where a release tag says
+one version but the bundled binary reports another:
+
+### Layer 1 — local pre-build (`build.ps1` line ~54-83)
+
+Before publishing anything, `build.ps1` reads `VPNRouter.Core/AppVersion.cs`
+off disk and compares the `public const string Version` literal with the
+`-Version` argument passed to the build script. Mismatch → hard abort
+with remediation hint. Catches the original v2.29.0 cause: build script
+run from a stale worktree whose AppVersion.cs hadn't been bumped.
+
+### Layer 2 — post-publish CI (`.github/workflows/verify-release-integrity.yml`)
+
+Triggered on every `release: published` AND `release: edited` event
+(the latter catches `gh release upload --clobber` invocations after
+publish, including manual operator uploads). Runs on `ubuntu-latest`
+(all checks are file-inspection — no platform-specific tooling needed).
+
+What it checks:
+
+1. **Embedded AppVersion** — for each non-sha256 binary asset (Win zip×2,
+   Mac dmg+zip, Linux deb+AppImage+tar.gz), extracts `VPNRouter.Core.dll`
+   and scans its UTF-16 LE byte stream for the AppVersion.Version
+   literal. Asserts the release tag's version (with leading `v` stripped)
+   appears among the embedded matches.
+
+2. **SHA256 sidecars** — recomputes sha256 of every binary, compares
+   to the bundled `.sha256` sidecar. Two formats supported:
+   `<hex>  <filename>\n` (Linux CI sha256sum) and bare `<hex>` (Windows
+   build.ps1 PowerShell-native).
+
+3. **Asset count** — current release-strategy convention is 12 assets
+   per release (4 Win + 2 Mac + 6 Linux). Missing assets are a SOFT
+   warning, not a failure: parallel CI may still be uploading at the
+   time of the `release: published` event. Each subsequent
+   `release: edited` re-runs the workflow until all 12 are present.
+
+On failure (version mismatch or sha256 mismatch — these are catastrophic):
+- Marks the release as a **draft** (hides from users — they can't
+  download or browse to it).
+- Prepends a `<!-- verify-release-integrity: FAILED -->` banner with
+  the specific mismatch detail to release notes.
+- Posts the same detail to the workflow run's step summary so
+  maintainers see it without hunting.
+
+### Loop prevention
+
+The failure handler edits release notes, which fires `release: edited`,
+which would re-trigger the workflow. The order of operations prevents
+loops:
+
+1. `gh release edit --draft=true` fires `release: unpublished` (NOT in
+   our listener) — does not re-trigger.
+2. `gh release edit --notes-file <banner>` fires `release: edited`. The
+   workflow's "echo-loop guard" at job start checks both:
+   - is the release currently a draft? (step 1 made it so)
+   - do the notes already carry the FAILED marker? (step 2 added it)
+
+   If both true → skip. The guard only short-circuits the echo path —
+   if a maintainer un-drafts the release for re-verification, the
+   "is draft?" check evaluates false and verification runs fresh.
+
+`workflow_dispatch` always runs (operator override), and accepts an
+`auto_draft_on_failure` boolean input to dry-run without modifying
+the release (default `true`).
+
+### Adding to the rolling-rN policy
+
+Update step 5 in the rolling-rN flow (above) to include the post-publish
+gate:
+
+> 5. Repeat steps 4 [user testing] until either the user confirms or
+>    the verification gate flags an issue. **`verify-release-integrity`
+>    runs on every publish/edit and will draft the release if the
+>    embedded AppVersion or sha256 doesn't match the tag.** A drafted
+>    release means users won't see the broken candidate; fix and ship
+>    `-r(N+1)` instead of unflagging.
+
+### Hotfix emergency path
+
+If the integrity gate flags a release that is genuinely correct (e.g.
+the workflow has a regression, false-positive on a new asset format),
+the manual escape hatch is:
+
+```bash
+# Remove the FAILED banner
+gh release edit vX.Y.Z-rN --notes "<original notes>" --repo PavelLizunov/VPNRouter
+# Un-draft
+gh release edit vX.Y.Z-rN --draft=false --repo PavelLizunov/VPNRouter
+```
+
+Re-running `verify-release-integrity` via `workflow_dispatch` is the
+preferred path (forces a re-check after asset corrections).
