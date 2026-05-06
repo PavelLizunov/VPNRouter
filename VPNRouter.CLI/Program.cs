@@ -47,6 +47,13 @@ app.Configure(config =>
     config.AddCommand<DoctorCommand>("doctor")
         .WithDescription("Health check: config, catalogue, binaries, state. Exit 0 = OK, 1 = warnings, 2 = errors");
 
+    // vpnrouter test-update — CI-only auto-update integration test driver
+    // (.github/workflows/test-windows-update.yml). Refuses to run unless
+    // VPNROUTER_CI=1 is set. Hidden from the help listing.
+    config.AddCommand<TestUpdateCommand>("test-update")
+        .WithDescription("CI-only: trigger the auto-update flow programmatically (gated by VPNROUTER_CI=1)")
+        .IsHidden();
+
     // vpnrouter service [install|uninstall|start|stop|status]
     config.AddBranch("service", svc =>
     {

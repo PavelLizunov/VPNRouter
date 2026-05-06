@@ -403,6 +403,17 @@ public class UpdateChecker
         try { Directory.CreateDirectory(logsDir); } catch { /* helper will surface via .cmd echo */ }
         var helperLog = Path.Combine(logsDir, "update.log");
 
+        // CI integration test (.github/workflows/test-windows-update.yml) sets
+        // VPNROUTER_CI=1. In that mode the helper still does the full file
+        // copy (so we exercise the actual xcopy + Service-stop dance and any
+        // CMD parser bugs surface), but skips the final `start "" GUI.exe`
+        // relaunch — otherwise the runner would spawn a stray Avalonia
+        // window that the test can't close cleanly, and the Go stub's
+        // SelfRepair path could trigger a stray install.ps1 download.
+        var skipRelaunchForCi =
+            string.Equals(Environment.GetEnvironmentVariable("VPNROUTER_CI"), "1",
+                StringComparison.Ordinal);
+
         // Build the .cmd. Notes:
         // - SET LF to a single newline so we can echo blank lines if needed.
         // - `>>"%LOG%" 2>&1` on each line so failures are visible postmortem.
@@ -530,8 +541,12 @@ public class UpdateChecker
             // Format mirrors Linux receipt: line 1 = timestamp, line 2 = version.
             // Stale receipt (already there from a prior successful update) is
             // overwritten — that's the point.
-            "echo [%TIME%] launching new VPNRouter.GUI.exe >>\"%LOG%\"",
-            $"start \"\" \"{guiExe}\"",
+            skipRelaunchForCi
+                ? "echo [%TIME%] VPNROUTER_CI=1 — skipping GUI relaunch (CI integration test mode) >>\"%LOG%\""
+                : "echo [%TIME%] launching new VPNRouter.GUI.exe >>\"%LOG%\"",
+            skipRelaunchForCi
+                ? "rem CI mode: relaunch suppressed"
+                : $"start \"\" \"{guiExe}\"",
             "echo [%TIME%] helper done >>\"%LOG%\"",
             "del /Q \"%~f0\" >nul 2>&1",
             "exit /b 0",
