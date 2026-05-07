@@ -542,6 +542,51 @@ internal static class Localization
         ? "Запускать TgProxy при старте системы"
         : "Start TgProxy on system boot";
 
+    // ── v2.32.0 (AND-CC, 2026-05-07) — Custom sing-box JSON mode ───────
+    //
+    // Mirrors desktop's ConfigMode="custom" flow (CustomConfigViewModel,
+    // ServersPage Custom sub-tab). Three labels for the segmented mode
+    // selector + watermark + hint + button captions + error messages
+    // surfaced from CustomConfigInjector.Validate.
+    public static string CcModeSubscription => Ru ? "Подписка" : "Subscription";
+    public static string CcModeManual => Ru ? "Сервер" : "Server";
+    public static string CcModeCustom => Ru ? "Свой JSON" : "Custom JSON";
+
+    public static string CcCustomLabel => Ru
+        ? "Свой sing-box JSON"
+        : "Custom sing-box JSON";
+    public static string CcCustomHint => Ru
+        ? "Вставь полный sing-box JSON-конфиг (например Hysteria2 + obfs, цепочки DNS, несколько outbounds). Перед сохранением жми «Проверить»."
+        : "Paste a full sing-box JSON config (e.g. Hysteria2 + obfs, DNS chains, multiple outbounds). Tap «Validate» before saving.";
+    public static string CcCustomWatermark => Ru
+        ? "{ \"log\": {…}, \"dns\": {…}, \"inbounds\": […], \"outbounds\": […], \"route\": {…} }"
+        : "{ \"log\": {…}, \"dns\": {…}, \"inbounds\": […], \"outbounds\": […], \"route\": {…} }";
+
+    public static string CcValidateButton => Ru ? "Проверить" : "Validate";
+    public static string CcSaveButton => Ru ? "Сохранить" : "Save";
+    public static string CcClearButton => Ru ? "Очистить" : "Clear";
+
+    public static string CcSourceCustom => Ru ? "свой JSON" : "custom JSON";
+
+    public static string CcValidationOk => Ru
+        ? "✓ JSON корректен. Найдено протоколов: {0}. Сервер: {1}."
+        : "✓ JSON is valid. Protocols: {0}. Server: {1}.";
+    public static string CcValidationFailed => Ru
+        ? "✗ Не валидно: {0}"
+        : "✗ Invalid: {0}";
+    public static string CcValidationParseError => Ru
+        ? "✗ Не удалось разобрать JSON: {0}"
+        : "✗ Could not parse JSON: {0}";
+    public static string CcSaveStatusEmpty => Ru
+        ? "Введи sing-box JSON или нажми «Очистить»."
+        : "Paste a sing-box JSON or tap «Clear».";
+    public static string CcSaveStatusOk => Ru
+        ? "Сохранено. Жми «Подключить»."
+        : "Saved. Tap Connect.";
+    public static string CcSaveStatusInvalid => Ru
+        ? "JSON не валиден — сохраняю как есть, но sing-box может его отвергнуть."
+        : "JSON is invalid — saving as-is, but sing-box may reject it.";
+
     // DBG-3 status badges (mirror desktop's ComputeAutostartStatus output)
     public static string AutostartStatusBoot => Ru
         ? "✓ Через службу Android (на старте ОС)"

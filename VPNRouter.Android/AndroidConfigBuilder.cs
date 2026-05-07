@@ -138,6 +138,64 @@ public static class AndroidConfigBuilder
     }
 
     /// <summary>
+    /// v2.32.0 (AND-CC, 2026-05-07) — build a sing-box config from a
+    /// user-pasted raw JSON. Mirrors desktop's "Custom" ConfigMode flow
+    /// (VPNRouter.Core.Services.CustomConfigInjector). The raw JSON is
+    /// run through Inject + StripUnsupportedFeatures so we get all the
+    /// sing-box 1.13 migration logic (legacy DNS schemas, dns/block
+    /// outbound types, missing default_domain_resolver, etc.) for free.
+    ///
+    /// <para>Process-name routing rules are NOT injected: Android does
+    /// per-app filtering at the VpnService.Builder layer
+    /// (addAllowed/Disallowed), not via sing-box's process_name (which
+    /// requires kernel /proc reads that don't work on non-rooted
+    /// Android). We pass an empty <c>processNames</c> set so the
+    /// injector skips that branch. The user's raw JSON's existing route
+    /// rules + outbounds are preserved verbatim.</para>
+    ///
+    /// <para><see cref="CustomConfigInjector.Inject"/> calls
+    /// <c>EnsureClashApi(...)</c> which writes the desktop default
+    /// (<c>127.0.0.1:9090</c>) — harmless on Android, libbox doesn't
+    /// expose that port to the network namespace anyway. We don't drop
+    /// it because the desktop "Stats" path may want to read it later.</para>
+    /// </summary>
+    public static string BuildConfigJsonFromCustom(string rawJson, string? logOutputPath = null)
+    {
+        var settings = new AppSettings();
+        // Same Android-specific routing semantics as the
+        // BuildConfigJson(VlessServerEntry) path: full tunnel (no
+        // process_name rules), info-level log. RoutingMode controls
+        // whether CustomConfigInjector forces route.final="direct"
+        // (split) — on Android we want it to stay whatever the user
+        // pasted, so "full" tunnel is the safer default. The user's
+        // route.final wins if they set one in the pasted JSON.
+        settings.App.RoutingMode = "full";
+        settings.App.LogLevel = "info";
+        settings.App.ConfigMode = "custom";
+        settings.App.BypassRussianTraffic = AndroidStorage.GetBypassRussianTraffic();
+        settings.App.ForceIpv4Only = AndroidStorage.GetDnsStrategy() switch
+        {
+            "prefer_ipv6" => false,
+            "prefer_ipv4" => false,
+            _ => true,
+        };
+
+        // Empty process list — Android per-app filter is at the
+        // VpnService.Builder layer, not sing-box's process_name. The
+        // injector still re-runs StripUnsupportedFeatures on the JSON
+        // so legacy schemas migrate cleanly.
+        var processNames = System.Array.Empty<string>();
+
+        var injectedJson = CustomConfigInjector.Inject(rawJson, processNames, settings);
+
+        // Reuse the desktop-→Android post-processor (auto_route=false,
+        // stack=gvisor, MTU=1500, log.output rewrite). It's tolerant of
+        // arbitrary user JSON because it parses, walks, and re-emits;
+        // anything it doesn't recognise stays untouched.
+        return PatchLogPathForAndroid(injectedJson, logOutputPath);
+    }
+
+    /// <summary>
     /// v3.0 Phase 4 (2026-05-04) — strip the desktop-only log path AND
     /// adjust the TUN inbound for Android.
     ///

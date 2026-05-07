@@ -312,20 +312,100 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
 
     private void StartTunnelService()
     {
+        // v3.0 Phase 6.1 (2026-05-04) — point sing-box log.output at a
+        // world-readable file under getExternalFilesDir() so we can pull
+        // the real sing-box errors via plain `adb shell cat` (no root,
+        // no run-as). Pre-6.1 log.output was removed → sing-box wrote
+        // to stderr → libbox.redirectStderr captured Go-runtime panics
+        // only, NOT sing-box's internal logger. Result: empty stderr
+        // file even when routing failed silently.
+        //
+        // Path: /sdcard/Android/data/com.ninitux.vpnrouter/files/singbox.log
+        string? singboxLogPath = null;
+        try
+        {
+            var extDir = GetExternalFilesDir(null);
+            if (extDir is not null)
+            {
+                singboxLogPath = System.IO.Path.Combine(extDir.AbsolutePath, "singbox.log");
+                global::Android.Util.Log.Info("VpnRouter",
+                    $"Phase 6.1: sing-box log.output → {singboxLogPath}");
+            }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter",
+                $"Phase 6.1: GetExternalFilesDir failed — {ex.GetType().Name}: {ex.Message}");
+        }
+
+        // v2.32.0 (AND-CC, 2026-05-07) — branch on stored ConfigMode.
+        // "custom" path takes a user-pasted full sing-box JSON (no URI
+        // parsing, no subscription) and runs it through Inject +
+        // StripUnsupportedFeatures so the same 1.13 migration logic
+        // desktop uses applies on Android. "subscribe" / "manual" both
+        // resolve to a single VlessServerEntry via the existing
+        // AndroidStorage.GetActiveServer flow.
+        var configMode = AndroidStorage.GetConfigMode();
+        global::Android.Util.Log.Info("VpnRouter",
+            $"AND-CC: ConfigMode={configMode}");
+
+        string configJson;
+        if (configMode == "custom")
+        {
+            var rawJson = AndroidStorage.GetCustomConfigJson();
+            if (string.IsNullOrWhiteSpace(rawJson))
+            {
+                global::Android.Util.Log.Error("VpnRouter",
+                    "AND-CC: ConfigMode=custom but custom_config_json is empty");
+                SetIntent(false);
+                return;
+            }
+
+            try
+            {
+                configJson = AndroidConfigBuilder.BuildConfigJsonFromCustom(rawJson, singboxLogPath);
+                global::Android.Util.Log.Info("VpnRouter",
+                    $"AND-CC: custom JSON injected ({rawJson.Length} → {configJson.Length} chars)");
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Error("VpnRouter",
+                    $"AND-CC: BuildConfigJsonFromCustom failed — {ex.GetType().Name}: {ex.Message}");
+                SetIntent(false);
+                return;
+            }
+
+            try
+            {
+                if (singboxLogPath is not null)
+                {
+                    var configDumpPath = System.IO.Path.Combine(
+                        System.IO.Path.GetDirectoryName(singboxLogPath)!,
+                        "config-dump.json");
+                    System.IO.File.WriteAllText(configDumpPath, configJson);
+                }
+            }
+            catch (Exception dumpEx)
+            {
+                global::Android.Util.Log.Warn("VpnRouter",
+                    $"AND-CC: config dump failed — {dumpEx.GetType().Name}: {dumpEx.Message}");
+            }
+
+            DispatchTunnelStart(configJson);
+            return;
+        }
+
+        // ── subscribe / manual path (existing v3.0 flow) ────────────────
+        //
         // v3.0 Phase 1.H (2026-05-04): resolve the active server from
         // AndroidStorage. Three sources, in priority order:
         //   1. Subscription server selected by Name (Phase 1.H)
         //   2. Manual vless:// URI (Phase 1.F)
         //   3. Hardcoded placeholder (smoke-test fallback)
-        // AndroidStorage.GetActiveServer encapsulates 1+2; if it returns
-        // null we fall back to placeholder.
-        // v3.0 Phase 6.4 (2026-05-04) — debug override path. If
-        // <c>getExternalFilesDir()/test-uri.txt</c> exists, parse it as
-        // the URI to use (bypasses storage + placeholder). Lets me ship
-        // a fixed APK and rotate the test URI via plain
-        // <c>adb push</c> — no UI tapping per protocol.
-        // Production builds: file won't exist, control falls through to
-        // storage → placeholder as before.
+        // v3.0 Phase 6.4 (2026-05-04) — debug override path via
+        // <c>getExternalFilesDir()/test-uri.txt</c>. Lets me ship a
+        // fixed APK and rotate the test URI via plain `adb push` — no
+        // UI tapping per protocol.
         VPNRouter.Core.Models.VlessServerEntry entry;
         try
         {
@@ -372,33 +452,6 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
         global::Android.Util.Log.Info("VpnRouter",
             $"Phase 1.H: using server {label} ({entry.Server}:{entry.Port})");
 
-        // v3.0 Phase 6.1 (2026-05-04) — point sing-box log.output at a
-        // world-readable file under getExternalFilesDir() so we can pull
-        // the real sing-box errors via plain `adb shell cat` (no root,
-        // no run-as). Pre-6.1 log.output was removed → sing-box wrote
-        // to stderr → libbox.redirectStderr captured Go-runtime panics
-        // only, NOT sing-box's internal logger. Result: empty stderr
-        // file even when routing failed silently.
-        //
-        // Path: /sdcard/Android/data/com.ninitux.vpnrouter/files/singbox.log
-        string? singboxLogPath = null;
-        try
-        {
-            var extDir = GetExternalFilesDir(null);
-            if (extDir is not null)
-            {
-                singboxLogPath = System.IO.Path.Combine(extDir.AbsolutePath, "singbox.log");
-                global::Android.Util.Log.Info("VpnRouter",
-                    $"Phase 6.1: sing-box log.output → {singboxLogPath}");
-            }
-        }
-        catch (Exception ex)
-        {
-            global::Android.Util.Log.Warn("VpnRouter",
-                $"Phase 6.1: GetExternalFilesDir failed — {ex.GetType().Name}: {ex.Message}");
-        }
-
-        string configJson;
         try
         {
             configJson = AndroidConfigBuilder.BuildConfigJson(entry, singboxLogPath);
@@ -432,6 +485,17 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
             return;
         }
 
+        DispatchTunnelStart(configJson);
+    }
+
+    /// <summary>
+    /// v2.32.0 (AND-CC, 2026-05-07) — extracted intent dispatch so the
+    /// custom-config and subscription/manual paths share the same
+    /// per-app filter forwarding + foreground-service launch. Pre-CC
+    /// the dispatch was inlined at the bottom of StartTunnelService.
+    /// </summary>
+    private void DispatchTunnelStart(string configJson)
+    {
         // v3.0 Phase 7.5 (2026-05-04) — per-app filter (handbook §5.5).
         // Read user's saved selection and forward to VpnRouterService.
         var perAppMode = AndroidStorage.GetPerAppMode();
