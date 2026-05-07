@@ -1068,9 +1068,14 @@ public partial class AndroidApp : Avalonia.Application
         // desktop NetworkPage). Triggered from kebab > Diagnostics > "Настройки".
         _settingsOverlay = BuildSettingsOverlay();
 
+        // v2.32.0 (AND-4) — fullscreen Server-list overlay (per-server
+        // testing UI). Defined in AndroidApp.ServerList.cs partial.
+        // Triggered from a tap on the SubscribePage card's name area.
+        _srvOverlay = BuildServerListOverlay();
+
         return new Grid
         {
-            Children = { mainScroller, _logOverlay, _appPickerOverlay, _subsOverlay, _fcOverlay, _settingsOverlay }
+            Children = { mainScroller, _logOverlay, _appPickerOverlay, _subsOverlay, _fcOverlay, _settingsOverlay, _srvOverlay }
         };
     }
 
@@ -3426,6 +3431,9 @@ public partial class AndroidApp : Avalonia.Application
         // v2.32.0 — refresh Subscribe overlay strings (title, add form,
         // refresh-all button, empty-state hint, per-card text).
         RefreshSubsLocalizedStrings();
+        // v2.32.0 (AND-4) — refresh Server-list overlay (Test all button,
+        // sort label, status text, empty hint).
+        RefreshServerListLocalizedStrings();
         UpdateConfigSummary();
     }
 

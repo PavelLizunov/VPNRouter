@@ -299,6 +299,46 @@ internal static class Localization
     public static string SubsCancelEdit => Ru ? "Отмена" : "Cancel";
     public static string SubsSaveEdit => Ru ? "Сохранить" : "Save";
 
+    // ── v2.32.0 (AND-4) Per-server testing UI (drill-down from a subscription card) ──
+    //
+    // Mirrors desktop ServersPage labels (L_TipTestTcpTls, ServerTestButtonText,
+    // L_ColPing etc.) but adapted to mobile drill-down semantics — tap card
+    // → server list overlay opens, "Test all" runs concurrent TCP+TLS,
+    // sort toggle reorders by latency.
+
+    public static string ServerListTitleFmt => Ru
+        ? "Серверы · {0}"
+        : "Servers · {0}";
+    public static string SrvTestAll => Ru ? "Тест все" : "Test all";
+    public static string SrvTestOne => Ru ? "Тест" : "Test";
+    public static string SrvTesting => Ru ? "Тестирую…" : "Testing…";
+    public static string SrvSortByLatencyAsc => Ru ? "по пингу ↑" : "by ping ↑";
+    public static string SrvSortByOriginal => Ru ? "по списку" : "as listed";
+    public static string SrvSortToggleHint => Ru ? "Сортировка" : "Sort";
+    public static string SrvProgressFmt => Ru
+        ? "Протестировано {0}/{1}"
+        : "Tested {0}/{1}";
+    public static string SrvProgressDoneFmt => Ru
+        ? "{0} рабочих из {1}"
+        : "{0} reachable of {1}";
+    public static string SrvEmptyHint => Ru
+        ? "В этой подписке пока нет серверов. Обнови подписку (↻) чтобы получить список."
+        : "This subscription has no servers yet. Refresh (↻) to fetch the list.";
+    public static string SrvNeverTested => "—";
+    public static string SrvUnreachable => "×";
+    public static string SrvTlsFailed => Ru ? "TLS×" : "TLS×";
+    public static string SrvImplausible => Ru ? "<5ms?" : "<5ms?";
+    public static string SrvTipTestRow => Ru
+        ? "Проверить TCP+TLS до сервера"
+        : "Probe TCP+TLS to this server";
+    public static string SrvTipTestAll => Ru
+        ? "Параллельно проверить все серверы (4 потока)"
+        : "Probe all servers in parallel (4 threads)";
+    public static string SrvTipSelectServer => Ru
+        ? "Выбрать как активный сервер"
+        : "Set as active server";
+    public static string SrvActiveBadge => Ru ? "активный" : "active";
+
     // ── v2.32.0 Free Configs (Android port — see plans/v2.32.0-android-free-configs.md) ──
 
     /// <summary>Kebab menu item that opens the Free Configs overlay.</summary>

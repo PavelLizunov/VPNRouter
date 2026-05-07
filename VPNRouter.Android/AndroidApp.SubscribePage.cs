@@ -340,12 +340,21 @@ public partial class AndroidApp
             TextWrapping = TextWrapping.NoWrap,
         };
         ToolTip.SetTip(metadataText, Localization.TipSubscriptionMetadata);
-        var nameStack = new StackPanel
+        // v2.32.0 (AND-4): wrap in a hit-test-friendly Border so the name
+        // area is tappable independently of the action buttons. Tap →
+        // open per-server testing overlay (drill-down).
+        var nameStack = new Border
         {
-            Spacing = 1,
+            Background = Brushes.Transparent,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { nameText, metadataText },
+            Child = new StackPanel
+            {
+                Spacing = 1,
+                VerticalAlignment = VerticalAlignment.Center,
+                Children = { nameText, metadataText },
+            },
         };
+        nameStack.PointerReleased += (s, e) => OpenServerListOverlay(sub);
 
         var spinner = new TextBlock
         {

@@ -358,6 +358,89 @@ public static class AndroidStorage
     public static bool GetAutostartTgProxy() => GetBool(KeyAutostartTgProxy, defaultValue: false);
     public static bool SetAutostartTgProxy(bool value) => SetBool(KeyAutostartTgProxy, value);
 
+    // ── v2.32.0 (AND-4): per-server TCP+TLS test history ──────────────────
+    //
+    // Side-table keyed by VlessServersResolver dedup shape ("Server:Port:Uuid:Flow").
+    // Values are ServerTestResultDto JSON-serialized — status int (matches
+    // ServerProbeStatus enum), latency ms, last-tested timestamp, optional error.
+    // Survives subscription refresh because the dedup key is content-hash based.
+    //
+    // Pre-AND-4 there was no test history on Android — desktop-only feature
+    // via ServerViewModel in-memory (lost on app restart). On Android we
+    // persist so the badge survives kill+relaunch — mobile UX expectation
+    // is "remembers what I last knew about each server".
+    private const string KeyServerTestResults = "server_test_results";
+
+    /// <summary>
+    /// v2.32.0 (AND-4): one entry in the persisted test-results map.
+    /// JSON-serialized verbatim. Status int corresponds to
+    /// <see cref="VPNRouter.Core.Services.ServerProbeStatus"/>.
+    /// </summary>
+    public sealed class ServerTestResultDto
+    {
+        [JsonProperty("status")]
+        public int Status { get; set; }
+        [JsonProperty("latency_ms")]
+        public int LatencyMs { get; set; }
+        [JsonProperty("last_tested_at")]
+        public DateTimeOffset LastTestedAt { get; set; }
+        [JsonProperty("error")]
+        public string? Error { get; set; }
+    }
+
+    /// <summary>
+    /// Build the dedup key for a server. Mirrors
+    /// <c>VlessServersResolver.Resolve</c> (Server:Port:Uuid:Flow) so test
+    /// results survive subscription refresh — same physical server in two
+    /// subscriptions (or after re-fetch) keeps its history.
+    /// </summary>
+    public static string BuildServerKey(VlessServerEntry srv)
+        => $"{srv.Server}:{srv.Port}:{srv.Uuid}:{srv.Flow}";
+
+    public static Dictionary<string, ServerTestResultDto> GetServerTestResults()
+    {
+        try
+        {
+            var json = GetString(KeyServerTestResults);
+            if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, ServerTestResultDto>(System.StringComparer.OrdinalIgnoreCase);
+            var dict = JsonConvert.DeserializeObject<Dictionary<string, ServerTestResultDto>>(json);
+            if (dict is null) return new Dictionary<string, ServerTestResultDto>(System.StringComparer.OrdinalIgnoreCase);
+            // Ensure case-insensitive comparer on read (JSON deserializer
+            // defaults to ordinal — would miss casing changes in host
+            // names which DNS treats as case-insensitive).
+            return new Dictionary<string, ServerTestResultDto>(dict, System.StringComparer.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return new Dictionary<string, ServerTestResultDto>(System.StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    public static bool SetServerTestResults(Dictionary<string, ServerTestResultDto>? results)
+    {
+        try
+        {
+            if (results is null || results.Count == 0)
+                return SetString(KeyServerTestResults, null);
+            // Opportunistic prune: drop entries older than 7 days. Keeps
+            // the JSON blob from growing unbounded across many
+            // subscription re-fetch cycles.
+            var cutoff = DateTimeOffset.UtcNow.AddDays(-7);
+            var pruned = new Dictionary<string, ServerTestResultDto>(System.StringComparer.OrdinalIgnoreCase);
+            foreach (var kvp in results)
+            {
+                if (kvp.Value.LastTestedAt < cutoff) continue;
+                pruned[kvp.Key] = kvp.Value;
+            }
+            var json = JsonConvert.SerializeObject(pruned);
+            return SetString(KeyServerTestResults, json);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     // ── Internals ───────────────────────────────────────────────────────────
 
     private static string? GetString(string key)
