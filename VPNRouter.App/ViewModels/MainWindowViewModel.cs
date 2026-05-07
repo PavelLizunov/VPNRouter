@@ -1801,6 +1801,58 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string LblAutostartZapret => Strings.AutostartZapret;
     public string LblAutostartTgProxy => Strings.AutostartTgProxy;
     public string LblAutostartUi => Strings.AutostartUi;
+
+    // v2.31.10 (autostart UX clarity): per-component status badge. Each
+    // CheckBox in the Section A "Components to auto-start with the service"
+    // block now shows a small label that names the actual delivery channel
+    // (Windows Service at boot vs App-side login bootstrap vs nothing) so a
+    // user can't tick a toggle that doesn't fire. Status is computed from
+    // (ServiceVm.IsInstalled, HasAppBootstrap{Vpn,Zapret,TgProxy}); the
+    // ServiceVm.PropertyChanged subscription in the constructor already
+    // re-fires PropertyChanged for these labels on every IsInstalled flip.
+    //
+    // Currently HasAppBootstrap* return false for all three components —
+    // the App.axaml.cs OnFrameworkInitializationCompleted path doesn't run
+    // any of VpnEngine/ZapretManager/TgProxyManager at user login. The
+    // sister DBG-2 task adds App-side bootstrap; flipping the corresponding
+    // flag to true at that point switches affected components from the red
+    // ⛔ "won't fire" badge to the amber ⚠ "fires after App login" badge.
+    internal const bool HasAppBootstrapVpn = false;
+    internal const bool HasAppBootstrapZapret = false;
+    internal const bool HasAppBootstrapTgProxy = false;
+
+    public string LblAutostartVpnStatus =>
+        ComputeAutostartStatus(ServiceVm.IsInstalled, HasAppBootstrapVpn);
+    public string LblAutostartZapretStatus =>
+        ComputeAutostartStatus(ServiceVm.IsInstalled, HasAppBootstrapZapret);
+    public string LblAutostartTgProxyStatus =>
+        ComputeAutostartStatus(ServiceVm.IsInstalled, HasAppBootstrapTgProxy);
+
+    public bool IsAutostartVpnStatusGood => ServiceVm.IsInstalled;
+    public bool IsAutostartVpnStatusWarn => !ServiceVm.IsInstalled && HasAppBootstrapVpn;
+    public bool IsAutostartVpnStatusBad => !ServiceVm.IsInstalled && !HasAppBootstrapVpn;
+
+    public bool IsAutostartZapretStatusGood => ServiceVm.IsInstalled;
+    public bool IsAutostartZapretStatusWarn => !ServiceVm.IsInstalled && HasAppBootstrapZapret;
+    public bool IsAutostartZapretStatusBad => !ServiceVm.IsInstalled && !HasAppBootstrapZapret;
+
+    public bool IsAutostartTgProxyStatusGood => ServiceVm.IsInstalled;
+    public bool IsAutostartTgProxyStatusWarn => !ServiceVm.IsInstalled && HasAppBootstrapTgProxy;
+    public bool IsAutostartTgProxyStatusBad => !ServiceVm.IsInstalled && !HasAppBootstrapTgProxy;
+
+    /// <summary>
+    /// Pure-function status dispatch — extracted as <c>internal static</c>
+    /// so it can be unit-tested without instantiating MainWindowViewModel
+    /// (which spins up file I/O, logger, etc.). Three branches matching
+    /// the three badge states surfaced in the Autostart sub-tab.
+    /// </summary>
+    internal static string ComputeAutostartStatus(bool isServiceInstalled, bool hasAppBootstrap)
+    {
+        if (isServiceInstalled) return Strings.AutostartStatusBoot;
+        return hasAppBootstrap
+            ? Strings.AutostartStatusLoginFallback
+            : Strings.AutostartStatusNoBoot;
+    }
     public string LblServerModeVless => Strings.VlessServers;
     public string LblServerModeCustom => Strings.CustomConfigJson;
     public string LblToolZapret => Strings.TabZapret;
@@ -2184,12 +2236,35 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // silently leaves Simple's UI stale until the user navigates away and
         // back. Scoped to the two properties that actually feed the computed
         // — ignores IsBusy / StatusMessage churn during install.
+        //
+        // v2.31.10 (autostart UX clarity): IsInstalled also feeds the
+        // per-component status badges (LblAutostart{Vpn,Zapret,TgProxy}Status
+        // + the IsAutostart*StatusGood/Warn/Bad triplet). When the user toggles
+        // the master service, all 12 of those bindings need a fresh read.
+        // IsRunning is intentionally not included for the new badges — the
+        // boot semantics depend on IsInstalled, not on whether SCM has a live
+        // process right now.
         ServiceVm.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(ServiceViewModel.IsInstalled)
                                or nameof(ServiceViewModel.IsRunning))
             {
                 OnPropertyChanged(nameof(SmpAutostartChecked));
+            }
+            if (e.PropertyName == nameof(ServiceViewModel.IsInstalled))
+            {
+                OnPropertyChanged(nameof(LblAutostartVpnStatus));
+                OnPropertyChanged(nameof(LblAutostartZapretStatus));
+                OnPropertyChanged(nameof(LblAutostartTgProxyStatus));
+                OnPropertyChanged(nameof(IsAutostartVpnStatusGood));
+                OnPropertyChanged(nameof(IsAutostartVpnStatusWarn));
+                OnPropertyChanged(nameof(IsAutostartVpnStatusBad));
+                OnPropertyChanged(nameof(IsAutostartZapretStatusGood));
+                OnPropertyChanged(nameof(IsAutostartZapretStatusWarn));
+                OnPropertyChanged(nameof(IsAutostartZapretStatusBad));
+                OnPropertyChanged(nameof(IsAutostartTgProxyStatusGood));
+                OnPropertyChanged(nameof(IsAutostartTgProxyStatusWarn));
+                OnPropertyChanged(nameof(IsAutostartTgProxyStatusBad));
             }
         };
 
