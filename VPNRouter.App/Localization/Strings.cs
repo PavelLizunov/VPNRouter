@@ -174,6 +174,28 @@ public static class Strings
     public static string AutostartComponentsInfoHint => Ru
         ? "Эти флаги читает служба при boot. Требуется установленная служба."
         : "These flags are read by the service at boot. Requires the service to be installed.";
+    // v2.31.10 (autostart UX clarity): per-component status badge text shown
+    // below each VPN/Zapret/TgProxy autostart CheckBox. User report — "Auto-
+    // start with Windows for tgproxy doesn't work". Without a status indicator
+    // a user toggling AutostartTgProxy=true on a host without the Service has
+    // no way to learn that the toggle is a no-op. Three states cover every
+    // permutation of (Service installed?, App-side bootstrap exists?):
+    //   • Green ✓: service installed → the existing flag-driven boot path
+    //     in VPNRouterService.AutostartTgProxyAsync handles it
+    //   • Amber ⚠: no service, but App has a per-component bootstrap (after
+    //     DBG-2 lands the App-side bootstrap for vpn/zapret/tgproxy) → fires
+    //     when the user logs into the App, not at OS boot
+    //   • Red ⛔: no service AND no App-side bootstrap → the toggle does
+    //     literally nothing; show the strongest hint to install the service
+    public static string AutostartStatusBoot => Ru
+        ? "✓ Через службу Windows (на старте ОС)"
+        : "✓ Via Windows Service (at boot)";
+    public static string AutostartStatusLoginFallback => Ru
+        ? "⚠ Служба не установлена — сработает после входа в приложение"
+        : "⚠ Service not installed — will fire after App login";
+    public static string AutostartStatusNoBoot => Ru
+        ? "⛔ Не сработает без службы Windows"
+        : "⛔ Will not fire without the Windows service";
     // v2.31.1-r1 (F-4 / UX-6): inline CTA below the warning hint when the
     // service isn't installed — pre-fix the only way to install was scrolling
     // up to the master toggle, which wasn't obvious.

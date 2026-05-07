@@ -47,6 +47,13 @@
     <ProjectReference Include="..\VPNRouter.Core\VPNRouter.Core.csproj" />
   </ItemGroup>
 
+  <!-- v2.31.10: expose internal helpers (e.g.
+       MainWindowViewModel.ComputeAutostartStatus pure-function dispatch)
+       to the test project so we can pin them without making them public. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="VPNRouter.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="..\profiles\default.json" Link="profiles\default.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

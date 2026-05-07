@@ -2058,24 +2058,95 @@
                      Content as a no-wrap TextBlock, which set the sub-card
                      min-width to the widest localised label (~180px for
                      "Start TgProxy on system boot") and blew past the
-                     ScrollViewer right edge when window dropped to ~500px. -->
-                <StackPanel Spacing="5"
-                            IsEnabled="{Binding ServiceVm.IsInstalled}">
-                  <CheckBox IsChecked="{Binding AutostartVpn}"
-                            AutomationProperties.Name="{Binding LblAutostartVpn}"
-                            MinHeight="0" Padding="4,0">
-                    <TextBlock Text="{Binding LblAutostartVpn}" TextWrapping="Wrap"/>
-                  </CheckBox>
-                  <CheckBox IsChecked="{Binding AutostartZapret}"
-                            AutomationProperties.Name="{Binding LblAutostartZapret}"
-                            MinHeight="0" Padding="4,0">
-                    <TextBlock Text="{Binding LblAutostartZapret}" TextWrapping="Wrap"/>
-                  </CheckBox>
-                  <CheckBox IsChecked="{Binding AutostartTgProxy}"
-                            AutomationProperties.Name="{Binding LblAutostartTgProxy}"
-                            MinHeight="0" Padding="4,0">
-                    <TextBlock Text="{Binding LblAutostartTgProxy}" TextWrapping="Wrap"/>
-                  </CheckBox>
+                     ScrollViewer right edge when window dropped to ~500px.
+                     v2.31.10 (autostart UX clarity): per-component status
+                     badge below each CheckBox names the actual delivery
+                     channel (Service-at-boot vs App-login vs nothing) so a
+                     user can't tick a toggle that doesn't fire. Three
+                     IsVisible-gated TextBlocks per component cover the
+                     three computed states from MainWindowViewModel. The
+                     CheckBox row stays IsEnabled-bound to ServiceVm.IsInstalled
+                     so a "no-op" toggle is also literally non-interactive,
+                     but the badge appears regardless of enabled state. -->
+                <StackPanel Spacing="5">
+                  <StackPanel Spacing="2"
+                              IsEnabled="{Binding ServiceVm.IsInstalled}">
+                    <CheckBox IsChecked="{Binding AutostartVpn}"
+                              AutomationProperties.Name="{Binding LblAutostartVpn}"
+                              MinHeight="0" Padding="4,0">
+                      <TextBlock Text="{Binding LblAutostartVpn}" TextWrapping="Wrap"/>
+                    </CheckBox>
+                    <TextBlock Text="{Binding LblAutostartVpnStatus}"
+                               TextWrapping="Wrap"
+                               FontSize="9"
+                               Margin="22,0,0,0"
+                               IsVisible="{Binding IsAutostartVpnStatusGood}"
+                               Foreground="{DynamicResource SuccessFgBrush}"/>
+                    <TextBlock Text="{Binding LblAutostartVpnStatus}"
+                               TextWrapping="Wrap"
+                               FontSize="9"
+                               Margin="22,0,0,0"
+                               IsVisible="{Binding IsAutostartVpnStatusWarn}"
+                               Foreground="{DynamicResource WarningFgBrush}"/>
+                    <TextBlock Text="{Binding LblAutostartVpnStatus}"
+                               TextWrapping="Wrap"
+                               FontSize="9"
+                               Margin="22,0,0,0"
+                               IsVisible="{Binding IsAutostartVpnStatusBad}"
+                               Foreground="{DynamicResource DangerFgBrush}"/>
+                  </StackPanel>
+                  <StackPanel Spacing="2"
+                              IsEnabled="{Binding ServiceVm.IsInstalled}">
+                    <CheckBox IsChecked="{Binding AutostartZapret}"
+                              AutomationProperties.Name="{Binding LblAutostartZapret}"
+                              MinHeight="0" Padding="4,0">
+                      <TextBlock Text="{Binding LblAutostartZapret}" TextWrapping="Wrap"/>
+                    </CheckBox>
+                    <TextBlock Text="{Binding LblAutostartZapretStatus}"
+                               TextWrapping="Wrap"
+                               FontSize="9"
+                               Margin="22,0,0,0"
+                               IsVisible="{Binding IsAutostartZapretStatusGood}"
+                               Foreground="{DynamicResource SuccessFgBrush}"/>
+                    <TextBlock Text="{Binding LblAutostartZapretStatus}"
+                               TextWrapping="Wrap"
+                               FontSize="9"
+                               Margin="22,0,0,0"
+                               IsVisible="{Binding IsAutostartZapretStatusWarn}"
+                               Foreground="{DynamicResource WarningFgBrush}"/>
+                    <TextBlock Text="{Binding LblAutostartZapretStatus}"
+                               TextWrapping="Wrap"
+                               FontSize="9"
+                               Margin="22,0,0,0"
+                               IsVisible="{Binding IsAutostartZapretStatusBad}"
+                               Foreground="{DynamicResource DangerFgBrush}"/>
+                  </StackPanel>
+                  <StackPanel Spacing="2"
+                              IsEnabled="{Binding ServiceVm.IsInstalled}">
+                    <CheckBox IsChecked="{Binding AutostartTgProxy}"
+                              AutomationProperties.Name="{Binding LblAutostartTgProxy}"
+                              MinHeight="0" Padding="4,0">
+                      <TextBlock Text="{Binding LblAutostartTgProxy}" TextWrapping="Wrap"/>
+                    </CheckBox>
+                    <TextBlock Text="{Binding LblAutostartTgProxyStatus}"
+                               TextWrapping="Wrap"
+                               FontSize="9"
+                               Margin="22,0,0,0"
+                               IsVisible="{Binding IsAutostartTgProxyStatusGood}"
+                               Foreground="{DynamicResource SuccessFgBrush}"/>
+                    <TextBlock Text="{Binding LblAutostartTgProxyStatus}"
+                               TextWrapping="Wrap"
+                               FontSize="9"
+                               Margin="22,0,0,0"
+                               IsVisible="{Binding IsAutostartTgProxyStatusWarn}"
+                               Foreground="{DynamicResource WarningFgBrush}"/>
+                    <TextBlock Text="{Binding LblAutostartTgProxyStatus}"
+                               TextWrapping="Wrap"
+                               FontSize="9"
+                               Margin="22,0,0,0"
+                               IsVisible="{Binding IsAutostartTgProxyStatusBad}"
+                               Foreground="{DynamicResource DangerFgBrush}"/>
+                  </StackPanel>
                 </StackPanel>
                 <!-- v2.31.1-r1 (F-4 / UX-6): inline CTA when service not
                      installed. Pre-fix the only install path was scrolling
