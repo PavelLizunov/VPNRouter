@@ -231,8 +231,42 @@ public class LocalProfileSource : IProfileSource
     }
 }
 
+/// <summary>
+/// v2.32.0 — schema-versioned wrapper for the on-disk
+/// <c>cache/profiles.json</c> sidecar. The raw upstream JSON
+/// (<see cref="Profiles"/>) is preserved verbatim so a future schema bump
+/// can rewrap without re-fetching.
+///
+/// <para>The file is consumed by <see cref="GitHubProfileSource.LoadAsync"/>
+/// when the upstream HTTP fetch fails; corrupt or schema-mismatched files
+/// are quarantined by <see cref="CacheRecovery"/> and skipped, so a bad
+/// cache never overrides the built-in fallback.</para>
+/// </summary>
+public sealed class ProfileCacheFile
+{
+    [JsonProperty("schema_version")]
+    public int SchemaVersion { get; set; } = GitHubProfileSource.CurrentSchemaVersion;
+
+    [JsonProperty("cached_at")]
+    public DateTime CachedAt { get; set; } = DateTime.UtcNow;
+
+    [JsonProperty("upstream_url")]
+    public string UpstreamUrl { get; set; } = string.Empty;
+
+    [JsonProperty("profiles")]
+    public ProfileCollection Profiles { get; set; } = new();
+}
+
 public class GitHubProfileSource : IProfileSource
 {
+    /// <summary>
+    /// v2.32.0 — schema for <c>cache/profiles.json</c>. v1 = wrapper with
+    /// schema_version + cached_at + upstream_url + profiles. Pre-v1 (raw
+    /// <see cref="ProfileCollection"/>) caches are quarantined on first
+    /// load post-upgrade.
+    /// </summary>
+    public const int CurrentSchemaVersion = 1;
+
     private readonly string _url;
     private readonly string _cacheDir;
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
@@ -255,22 +289,62 @@ public class GitHubProfileSource : IProfileSource
 
     public async Task<ProfileCollection?> LoadAsync(CancellationToken ct = default)
     {
-        var json = await _http.GetStringAsync(_url, ct);
-        // v2.31.0-r1 (CO-4): MaxDepth-capped deserialization on the GitHub
-        // profile URL — the channel is HTTPS but a compromised tap or
-        // typosquatted URL could feed adversarial JSON. ProfileCollection
-        // is shallow (~3 levels), 32 leaves enormous head-room.
-        var result = JsonConvert.DeserializeObject<ProfileCollection>(json, ProfileManager.SafeJsonSettings);
+        var cacheFile = Path.Combine(_cacheDir, "profiles.json");
 
-        // Cache to disk for offline fallback
-        if (result != null)
+        try
         {
-            Directory.CreateDirectory(_cacheDir);
-            var cacheFile = Path.Combine(_cacheDir, "profiles.json");
-            await File.WriteAllTextAsync(cacheFile, json, ct);
-        }
+            var json = await _http.GetStringAsync(_url, ct);
+            // v2.31.0-r1 (CO-4): MaxDepth-capped deserialization on the GitHub
+            // profile URL — the channel is HTTPS but a compromised tap or
+            // typosquatted URL could feed adversarial JSON. ProfileCollection
+            // is shallow (~3 levels), 32 leaves enormous head-room.
+            var result = JsonConvert.DeserializeObject<ProfileCollection>(json, ProfileManager.SafeJsonSettings);
 
-        return result;
+            // v2.32.0 — wrap raw upstream JSON in a schema-versioned envelope
+            // before persisting. The cache is consulted on offline starts;
+            // CacheRecovery quarantines old (pre-v1) files on first read.
+            if (result != null)
+            {
+                Directory.CreateDirectory(_cacheDir);
+                var wrapper = new ProfileCacheFile
+                {
+                    SchemaVersion = CurrentSchemaVersion,
+                    CachedAt = DateTime.UtcNow,
+                    UpstreamUrl = _url,
+                    Profiles = result,
+                };
+                var wrapperJson = JsonConvert.SerializeObject(wrapper, Formatting.Indented);
+                await File.WriteAllTextAsync(cacheFile, wrapperJson, ct);
+            }
+
+            return result;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            // v2.32.0 — upstream unreachable. Fall back to the on-disk
+            // cache via CacheRecovery so an offline launch (or a temporary
+            // GitHub outage) doesn't drop the user straight to BuiltIn
+            // profiles. CacheRecovery handles legacy raw-ProfileCollection
+            // files automatically (no schema_version → quarantine + null).
+            var loaded = CacheRecovery.LoadOrRecover<ProfileCacheFile>(
+                cacheFile,
+                CurrentSchemaVersion,
+                json => JsonConvert.DeserializeObject<ProfileCacheFile>(json, ProfileManager.SafeJsonSettings),
+                wrap => wrap.Profiles is not null,
+                Log.Logger);
+
+            if (loaded.Loaded && loaded.Value!.Profiles.Profiles.Count > 0)
+            {
+                Log.Logger.Information(
+                    "[GitHubProfileSource] HTTP failed ({Err}); using offline cache from {When:O}",
+                    ex.Message, loaded.Value.CachedAt);
+                return loaded.Value.Profiles;
+            }
+
+            // Re-throw so ProfileManager records the source as failed and
+            // moves on to the next source (Local / BuiltIn).
+            throw;
+        }
     }
 }
 
