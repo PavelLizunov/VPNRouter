@@ -246,4 +246,25 @@ internal static class Localization
     public static string PerAppEmptyHint => Ru
         ? "Ничего не выбрано. Если режим — «Только выбранные», то весь трафик пойдёт мимо туннеля."
         : "Nothing selected. If mode is \"Selected only\", all traffic bypasses the tunnel.";
+
+    // ── v3.0 v2.32.0 (2026-05-07) — exclude-mode UI strings ─────────────
+    // Mode toggle inside the picker overlay + form-side count label
+    // suffixes that distinguish "selected apps go via VPN" (include) from
+    // "selected apps bypass VPN" (exclude).
+
+    public static string PerAppPickerModeLabel => Ru ? "Режим" : "Mode";
+    public static string PerAppHintInclude => Ru
+        ? "Только выбранные приложения пойдут через VPN."
+        : "Only the selected apps go via VPN.";
+    public static string PerAppHintExclude => Ru
+        ? "Выбранные приложения пойдут мимо VPN, остальные — через."
+        : "The selected apps bypass VPN; everything else routes through it.";
+    // Form-side count label, mode-suffixed so the user can tell at a
+    // glance which interpretation applies without re-opening the picker.
+    public static string PerAppCountInclude => Ru
+        ? "Выбрано: {0} · через VPN"
+        : "Selected: {0} · via VPN";
+    public static string PerAppCountExclude => Ru
+        ? "Выбрано: {0} · мимо VPN"
+        : "Selected: {0} · bypass VPN";
 }
