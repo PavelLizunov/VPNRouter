@@ -17,6 +17,16 @@ on:
 permissions:
   contents: write
 
+# Serialize all runs across the gh-pages workspace to eliminate the
+# push-rejected race that fired on rapid back-to-back releases (r3→r4
+# delete-and-republish dance, May 2026). The retry-with-rebase fix in
+# the publish step recovers from drift, but `concurrency` makes the
+# race unable to occur in the first place. Subsequent triggers queue
+# instead of running in parallel.
+concurrency:
+  group: publish-apt-gh-pages
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-22.04
