@@ -247,7 +247,7 @@ internal static class Localization
         ? "Ничего не выбрано. Если режим — «Только выбранные», то весь трафик пойдёт мимо туннеля."
         : "Nothing selected. If mode is \"Selected only\", all traffic bypasses the tunnel.";
 
-    // ── v3.0 v2.32.0 (2026-05-07) — exclude-mode UI strings ─────────────
+    // ── v2.32.0 (2026-05-07) — exclude-mode UI strings (AND-5) ─────────
     // Mode toggle inside the picker overlay + form-side count label
     // suffixes that distinguish "selected apps go via VPN" (include) from
     // "selected apps bypass VPN" (exclude).
@@ -259,12 +259,43 @@ internal static class Localization
     public static string PerAppHintExclude => Ru
         ? "Выбранные приложения пойдут мимо VPN, остальные — через."
         : "The selected apps bypass VPN; everything else routes through it.";
-    // Form-side count label, mode-suffixed so the user can tell at a
-    // glance which interpretation applies without re-opening the picker.
     public static string PerAppCountInclude => Ru
         ? "Выбрано: {0} · через VPN"
         : "Selected: {0} · via VPN";
     public static string PerAppCountExclude => Ru
         ? "Выбрано: {0} · мимо VPN"
         : "Selected: {0} · bypass VPN";
+
+    // ── v2.32.0 (2026-05-07) — SubscribePage parity (AND-1) ────────────
+    // Mirror desktop's VPNRouter.App/Localization/Strings.cs entries
+    // (SubscriptionsSection, SubscriptionNameHint, AddSubscription,
+    // RefreshAll, SubscriptionUrlHint, TipRefreshSubscription,
+    // TipRemoveSubscription, LblNoServers, LblAddSubscriptionHint,
+    // TipSubscriptionMetadata). RU/EN copy is verbatim from desktop so
+    // bilingual users see identical wording on both platforms.
+    public static string SubscriptionsSection => Ru ? "Подписки" : "Subscriptions";
+    public static string SubscriptionNameHint => Ru ? "Имя" : "Name";
+    public static string SubscriptionUrlHint => Ru ? "URL подписки" : "Subscription URL";
+    public static string AddSubscription => Ru ? "+ Добавить" : "+ Add";
+    public static string RefreshAll => Ru ? "Обновить все" : "Refresh all";
+    public static string TipRefreshSubscription => Ru ? "Обновить подписку" : "Refresh subscription";
+    public static string TipRemoveSubscription => Ru ? "Удалить подписку" : "Remove subscription";
+    public static string TipEditSubscription => Ru ? "Изменить URL" : "Edit URL";
+    public static string LblNoSubscriptions => Ru ? "Подписок нет" : "No subscriptions";
+    public static string LblAddSubscriptionHint => Ru
+        ? "Добавьте подписку ниже"
+        : "Add a subscription below";
+    public static string TipSubscriptionMetadata => Ru
+        ? "URL · число серверов в последнем обновлении · когда был последний рефреш. «—» если ни разу не обновлялась."
+        : "URL · server count from last refresh · time since last refresh. \"—\" means it has never been refreshed.";
+    public static string SubsRemoveConfirm => Ru ? "Точно? Ещё раз — удалю" : "Sure? Tap again to delete";
+    public static string SubsNeverRefreshed => Ru ? "никогда" : "never";
+    public static string SubsServersFormat => Ru ? "{0} серверов" : "{0} servers";
+    public static string SubsRefreshing => Ru ? "Обновляю…" : "Refreshing…";
+    public static string SubsRefreshFailed => Ru ? "Ошибка: {0}" : "Failed: {0}";
+    public static string SubsRefreshAllDone => Ru
+        ? "Готово. Серверов: {0}"
+        : "Done. Servers: {0}";
+    public static string SubsCancelEdit => Ru ? "Отмена" : "Cancel";
+    public static string SubsSaveEdit => Ru ? "Сохранить" : "Save";
 }
