@@ -1,11 +1,46 @@
 # VPNRouter Android — roadmap до полного desktop-platform parity
 
-## Цель
+## Цель — две стороны одной задачи
+
+### 1. Shipping parity (один релиз = все платформы)
 
 Шипить обновления одновременно на Win + Mac + Linux + **Android** одной командой
 `build.ps1 -Version "X.Y.Z" -Upload` или `gh release create`. Same release tag,
 same release notes, same versioning scheme. Auto-update flow на каждой
 платформе подтянет соответствующий artefact.
+
+### 2. Development parity (одна правка = две платформы)
+
+Сейчас новая фича = port-once на desktop, потом второй проход для Android. Это
+double-cost + drift-risk: после v2.32 cycle мы прошли pool 5+6+7 = ~16
+manually-portированных tasks, ~10 000 строк mirror-кода. Если каждая новая
+desktop-фича дальше будет требовать второго захода — Android всегда будет
+позади на 1-2 минора. Цель: **structural sharing** — одно изменение в
+бизнес-логике или ViewModel-уровне работает на обеих платформах без manual
+mirror'а.
+
+Конкретно:
+
+- **Core layer** уже shared (✓ post Phase 1) — VPNRouter.Core используется и
+  desktop'ом, и Android'ом. Бизнес-логика автоматически parity при правке.
+- **ViewModel layer** на desktop живёт в VPNRouter.App. На Android —
+  inline в `AndroidApp.axaml.cs` (~5000 строк). Drift-risk высокий.
+  План: вынести VM-логику из VPNRouter.App в новый shared
+  `VPNRouter.Avalonia.Common` или `VPNRouter.UI` project, чтобы оба
+  app-проекта (App + Android) consumed её. Phase G ниже.
+- **XAML layer** различается — desktop XAML files vs Android C#-built UI
+  (no XAML files on Android; AndroidApp builds widgets programmatically).
+  Это структурное различие, не drift — Avalonia Mobile не любит XAML
+  files без Heavy ResourceDictionary lookups, поэтому Android ушёл в
+  C#-only построение. Long-term можно унифицировать через shared
+  `UserControl`-классы в общем project'е.
+- **Localization** — `VPNRouter.App/Localization/Strings.cs` (desktop) и
+  `VPNRouter.Android/Localization.cs` (Android) сейчас вручную mirror'ятся.
+  Phase H: переместить single source-of-truth в Core (или shared UI
+  project), оба consumed.
+
+После этих структурных шагов цикл "новая фича" сокращается с **2 заходов** до
+**1 захода + автоматическое обновление двух платформ при rebuild'е**.
 
 ## Текущая матрица состояний (post v2.32.0)
 
@@ -136,27 +171,121 @@ Long-term:
 
 Не входит в parity-shipping — это external distribution channels with their own ceremony.
 
+### Phase F — Build hygiene rules (один build = одна команда)
+
+**F.1 stale-obj/ awareness** — pool 7 Mono crash debugging session показал что
+быстрые revert-rebuild циклы оставляют corrupted typemap/JCW state в
+`VPNRouter.Android/{bin,obj}`. Симптом: `mono_method_get_unmanaged_callers_only_ftnptr`
+SIGABRT при init_android_runtime. Фикс: перед спорным rebuild'ом — `rm -rf
+bin obj`. Lesson: `plans/v2.32.0-android-pool7-mono-crash-fix.md`.
+
+**F.2 build.ps1 -AndroidAlso flag** — extension чтобы команда
+`build.ps1 -Version X.Y.Z -Upload -AndroidAlso` локально билдит APK тоже
+(для contributors без GHA secrets). При CI же APK билдится remote через
+build-android.yml (Phase A), не нужен local Android workload setup.
+
+### Phase G — Shared ViewModel layer (структурный refactor)
+
+**Самый дорогой и самый важный для long-term development parity.**
+
+**Сейчас**: `VPNRouter.App/ViewModels/MainWindowViewModel.cs` (~5900 строк) +
+`VPNRouter.Android/AndroidApp.axaml.cs` (~5500 строк после pool 7) — **две
+независимые VM-implementations**, делающие одно и то же. Каждая новая
+desktop-фича → второй заход на Android через AND-* task.
+
+**Цель**: extract VM layer в shared project (`VPNRouter.Avalonia.UI` или
+аналог). Desktop App + Android App оба consume его. Одна правка → обе
+платформы.
+
+Layout после refactor'а:
+
+```
+VPNRouter.Core              ← бизнес-логика (already shared) ✓
+VPNRouter.Avalonia.UI       ← NEW shared VM-layer + UserControl-уровень
+  ├── ViewModels/
+  │   ├── MainWindowViewModel.cs (was in App)
+  │   ├── SubscribeViewModel.cs
+  │   └── ...
+  ├── Controls/
+  │   ├── StatusCard.axaml + .cs
+  │   ├── ChipsRow.axaml + .cs
+  │   └── ...
+  └── Localization/
+      └── Strings.cs (was in App)
+VPNRouter.App               ← desktop-shell: window, page-routing, win-only
+                              specifics (HKCU\Run autostart, etc.)
+VPNRouter.Android           ← android-shell: VpnService, libbox interop,
+                              SharedPreferences, BootReceiver, etc.
+```
+
+**Effort**: 30-50 hours real refactor + extensive regression test pass.
+Sequential, рискованный. Делать **после** Phase A+B+C закроют shipping
+parity (потому что shipping parity — leverage для validating refactor:
+если после refactor'а APK всё ещё ship'ится одной командой, значит
+не сломали).
+
+### Phase H — Single localization source-of-truth
+
+**Сейчас** дублируем все строки в `VPNRouter.App/Localization/Strings.cs` И
+`VPNRouter.Android/Localization.cs`. Drift-risk: за время AND-* portов уже
+было ~3 случая где Android string отличался от desktop'а на пунктуацию.
+
+**Цель**: один файл `VPNRouter.Avalonia.UI/Localization/Strings.cs` (или в
+Core если решим что Core может содержать UI strings). Оба apps consumed.
+
+Делается тривиально как часть Phase G (вместе с extraction). Стоит
+выделить отдельной фазой потому что можно сделать **до** Phase G как
+isolated win — намного меньше effort (~2-3 hours).
+
 ---
 
 ## Predicted timeline
+
+### Shipping parity (P0 — закрывает первую цель)
 
 | Phase | Effort | Blocker |
 |---|---|---|
 | A — build-android.yml CI | 4-6 hours | Keystore generation (1-time, ~30 min on user side) |
 | B — Strategy + verify-release-integrity | 2 hours | Phase A merged |
-| C — Auto-update URL pattern verify | 2-3 hours | Phase A first ship cycle complete (live download test) |
+| C — Auto-update URL pattern verify | 2-3 hours | Phase A first ship cycle complete |
 | D — Docs + install one-liners | 2 hours | Phase A live |
-| E — F-Droid / Play | weeks | Not needed for parity |
 
-**Total для parity**: ~10-15 hours work + 1 ship cycle to validate.
+**Subtotal**: ~10-15 hours + 1 ship cycle to validate.
 
-## Tasks для следующего pool
+### Development parity (P1 — закрывает вторую цель)
 
+| Phase | Effort | Blocker | Value |
+|---|---|---|---|
+| F — Build hygiene rules | 1 hour | none | mid (lessons from past mistakes) |
+| H — Shared localization | 2-3 hours | none | mid (~3 drift cases prevented per cycle) |
+| G — Shared VM layer (big refactor) | 30-50 hours + regression | Phase A+B+C done | **HIGH** — closes 80% of double-port cost |
+
+**Subtotal**: 33-54 hours + 1-2 cycles for regression-bake.
+
+### Optional (P2)
+
+| Phase | Effort | Blocker |
+|---|---|---|
+| E — F-Droid / Play | weeks | not needed for parity |
+
+**Total для full parity (development + shipping)**: ~50-70 hours work, ~3-4 ship cycles.
+
+## Tasks для следующих pools
+
+### Pool A (shipping parity)
 1. **AND-CI** — build-android.yml + keystore setup + first APK in GH release
 2. **AND-RELEASE-STRATEGY** — verify-release-integrity.yml + release-strategy.md updates
 3. **AND-AUTOUPDATE-VALIDATE** — confirm AndroidUpdater download URL pattern + live test
-4. **AND-FIX2** — pool 7 Mono crash diagnosis (already spawned)
-5. **AND-PROFILES** — last remaining feature gap chip (already spawned)
+4. **AND-PROFILES** — last remaining feature gap chip (already spawned, not run)
+
+### Pool B (development parity, after Pool A merges)
+5. **AND-LOCALIZATION-MERGE** (Phase H) — single Strings.cs source-of-truth
+6. **AND-VM-EXTRACT-PHASE-1** (Phase G part 1) — pull simplest VMs (Status, ConfigRow) из App в shared project. Validate one platform at a time
+7. **AND-VM-EXTRACT-PHASE-2** (Phase G part 2) — bulk VM extraction
+8. **AND-VM-EXTRACT-PHASE-3** (Phase G part 3) — final cleanup + Android consumes shared VMs
+
+### Pool C (build hygiene)
+9. **AND-BUILD-HYGIENE** (Phase F) — `build.ps1 -AndroidAlso` flag + clean-obj-on-revert helper script + handbook §F.1 cross-link
 
 ## Дальше — operational changes
 

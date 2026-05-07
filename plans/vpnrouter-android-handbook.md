@@ -1,9 +1,19 @@
 # VPNRouter Android — Handbook + План работы
 
-**Status**: Draft, 2026-05-04. Phase 5c shipped. VPN routing все ещё broken.
+**Status**: Updated 2026-05-07 после v2.32.0 stable cut. Pool 5+6+7 merged
+(subscription cards, settings page, free configs, theme live-switch, app icons,
+libbox migration, autoupdate, server testing, custom config, self-repair port,
+config-export+QR, runtime diagnostics, native Zapret, network resilience).
+**Single remaining feature gap**: AND-PROFILES (curated profile chip-row).
 
 Этот файл — рабочая инструкция для следующего цикла итераций по Android-порту.
-Цель: исключить повторение ошибок, которые я делал в Phase 1-5.
+Цель: исключить повторение ошибок, которые я делал в Phase 1-5+.
+
+**Стратегическая roadmap для Android↔Desktop development+shipping parity**:
+см. `plans/vpnrouter-android-platform-parity-roadmap.md`. Цель в две стороны:
+(1) shipping parity — одна команда = релиз на все 4 платформы;
+(2) development parity — одна правка = две платформы (через shared VM layer
+extraction).
 
 ---
 
@@ -74,6 +84,29 @@ Avalonia render проходит мимо `uiautomator` (всё одно FrameLa
 (НЕ ISP IP пользователя). Любое другое — VPN broken.
 
 `tun0 UP` ≠ работающий VPN. Нужен реальный outbound IP test.
+
+### 1.6 Stale `bin/`/`obj/` после revert/rebuild — clean it FIRST (2026-05-07)
+
+После пары быстрых `git revert` + rebuild циклов в pool 7 debug session
+typemap / Java Callable Wrapper state в `VPNRouter.Android/{bin,obj}` пришёл
+в corrupt состояние. Симптом — APK билдится без errors но при launch:
+
+```
+F libc    : Fatal signal 6 (SIGABRT)
+mono_method_get_unmanaged_callers_only_ftnptr+60
+init_android_runtime+1360
+```
+
+**Не баг кода. Не нужны "fix"-патчи. Не нужно reverт'ить merges.** Просто:
+
+```bash
+rm -rf VPNRouter.Android/bin VPNRouter.Android/obj
+dotnet build VPNRouter.Android/VPNRouter.Android.csproj -c Release ...
+```
+
+Полный разбор + verification + Hysteria2 live VPN-test в
+`plans/v2.32.0-android-pool7-mono-crash-fix.md`. **При любом необъяснимом
+SIGABRT в Mono runtime init — первое действие clean rebuild, не bisect.**
 
 ---
 
