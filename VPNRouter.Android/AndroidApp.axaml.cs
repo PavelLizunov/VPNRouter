@@ -2,8 +2,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
+using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -16,6 +18,34 @@ using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Android;
+
+/// <summary>
+/// v3.0 Phase 8.2 (2026-05-07) — code-side equivalent of XAML's
+/// <c>{DynamicResource KeyName}</c>. Used to wire token brushes to
+/// Avalonia controls built in code-behind so they auto-repaint on
+/// <c>Application.RequestedThemeVariant</c> change without manually
+/// walking the visual tree.
+///
+/// <para><see cref="DynamicResourceExtension"/> implements
+/// <see cref="IBinding"/>, so handing it to <c>AvaloniaObjectExtensions.Bind</c>
+/// installs a live binding that resolves the resource through the
+/// element's logical parent chain and re-resolves on theme change.</para>
+/// </summary>
+internal static class StyledElementResourceExtensions
+{
+    /// <summary>
+    /// Bind <paramref name="prop"/> on <paramref name="element"/> to the
+    /// dynamic resource at <paramref name="key"/>. Returns the element
+    /// for fluent chaining. Replaces any prior binding at the same
+    /// property+priority.
+    /// </summary>
+    public static T BindToken<T>(this T element, AvaloniaProperty prop, string key)
+        where T : AvaloniaObject
+    {
+        element.Bind(prop, new DynamicResourceExtension(key));
+        return element;
+    }
+}
 
 /// <summary>
 /// v3.0 Phase 3 (2026-05-04) — honest visual parity with desktop SimplePage.
@@ -91,6 +121,11 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _vpnChip;
     private TextBlock? _zapretChip;
     private TextBlock? _tgChip;
+    // v3.0 Phase 8.2 (2026-05-07) — Image is invariant under DynamicResource
+    // because Bitmap source is bytes, not a brush. Theme switch must
+    // re-call LoadMascot() to get the inverted Bgra8888 variant. Stored
+    // in a field so ApplyTheme(string) can flip Source.
+    private Image? _mascotImage;
     private Avalonia.Controls.Button? _kebabMenuButton;
     private Popup? _kebabPopup;
     // v3.0 Phase 7.3 — segmented control buttons (RU|EN, Light|Dark)
@@ -245,11 +280,9 @@ public partial class AndroidApp : Avalonia.Application
 
     // ── Token helpers ───────────────────────────────────────────────────
 
-    private IBrush GetBrush(string key)
-    {
-        if (Resources.TryGetResource(key, ActualThemeVariant, out var v) && v is IBrush b) return b;
-        return Brushes.Transparent;
-    }
+    // v3.0 Phase 8.2 (2026-05-07) — GetBrush removed: every brush now
+    // rides BindToken (DynamicResource) instead of being snapshot at
+    // build time. GetRadius stays because radii are theme-invariant.
 
     private double GetRadius(string key)
     {
@@ -271,20 +304,11 @@ public partial class AndroidApp : Avalonia.Application
     /// </summary>
     private Control BuildSimplePageView()
     {
-        var bg = GetBrush("SurfaceAppBrush");
-        var card = GetBrush("SurfaceBaseBrush");
-        var raised = GetBrush("SurfaceRaisedBrush");
-        var sunken = GetBrush("SurfaceSunkenBrush");
-        var subtleBorder = GetBrush("BorderSubtleBrush");
-        var defaultBorder = GetBrush("BorderDefaultBrush");
-        var textPrimary = GetBrush("TextPrimaryBrush");
-        var textSecondary = GetBrush("TextSecondaryBrush");
-        var textMuted = GetBrush("TextMutedBrush");
-        var accentBgSubtle = GetBrush("AccentBgSubtleBrush");
-        var accentFg = GetBrush("AccentFgBrush");
-        var accentSolid = GetBrush("AccentSolidBrush");
-        var accentOnSolid = GetBrush("AccentOnSolidBrush");
-        var accentBorder = GetBrush("AccentBorderBrush");
+        // v3.0 Phase 8.2 (2026-05-07) — every Background / Foreground /
+        // BorderBrush / Fill below goes through BindToken (DynamicResource)
+        // so theme switches auto-repaint the visual tree. Cached brush
+        // locals from pre-8.2 are gone; only the radii (theme-invariant)
+        // stay as locals.
         var radiusXs = GetRadius("RadiusXs");
         var radiusSm = GetRadius("RadiusSm");
         var radiusMd = GetRadius("RadiusMd");
@@ -302,7 +326,10 @@ public partial class AndroidApp : Avalonia.Application
         //     transparent bg)
         //   - Dark theme: RGB-inverted copy (white lineart on transparent)
         // Inversion preserves alpha so anti-aliased edges stay clean.
-        var mascotImage = new Image
+        // v3.0 Phase 8.2 — store on field so ApplyTheme(string) can call
+        // _mascotImage.Source = LoadMascot() to switch between original
+        // and RGB-inverted bitmap variants.
+        _mascotImage = new Image
         {
             Source = LoadMascot(),
             Stretch = Stretch.Uniform,
@@ -311,33 +338,35 @@ public partial class AndroidApp : Avalonia.Application
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        RenderOptions.SetBitmapInterpolationMode(mascotImage, BitmapInterpolationMode.HighQuality);
+        RenderOptions.SetBitmapInterpolationMode(_mascotImage, BitmapInterpolationMode.HighQuality);
         var mascot = new Border
         {
             Width = 28,
             Height = 28,
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
-            Background = accentBgSubtle,
             VerticalAlignment = VerticalAlignment.Center,
             ClipToBounds = true,
-            Child = mascotImage,
+            Child = _mascotImage,
         };
+        mascot.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
 
         _brandTitle = new TextBlock
         {
             Text = Localization.BrandTitle,
             FontSize = 14,
             FontWeight = FontWeight.Bold,
-            Foreground = textPrimary,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        _brandTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
         // v3.0 Phase 7.1 — start all chips in Off state. VPN chip transitions
         // through Connecting → On as the tunnel comes up. Zapret + TG stay Off
         // because those features aren't ported yet.
-        _vpnChip = MakeChip("VPN", GetBrush("SurfaceSunkenBrush"), textMuted);
-        _zapretChip = MakeChip("Zapret", GetBrush("SurfaceSunkenBrush"), textMuted);
-        _tgChip = MakeChip("TG", GetBrush("SurfaceSunkenBrush"), textMuted);
+        // v3.0 Phase 8.2 — chips ride DynamicResource via MakeChip's key
+        // parameters so they auto-repaint on theme variant change.
+        _vpnChip = MakeChip("VPN", "SurfaceSunkenBrush", "TextMutedBrush");
+        _zapretChip = MakeChip("Zapret", "SurfaceSunkenBrush", "TextMutedBrush");
+        _tgChip = MakeChip("TG", "SurfaceSunkenBrush", "TextMutedBrush");
 
         var chipRow = new StackPanel
         {
@@ -367,11 +396,11 @@ public partial class AndroidApp : Avalonia.Application
             Padding = new Thickness(0),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            Foreground = textSecondary,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        _kebabMenuButton.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextSecondaryBrush");
         _kebabMenuButton.Click += OnKebabMenuClicked;
 
         // v3.0 Phase 7.2 + 7.3 (2026-05-04) — full kebab menu with 4 sections
@@ -404,18 +433,18 @@ public partial class AndroidApp : Avalonia.Application
         _menuSettingsItem = MakeMenuItem(Localization.MenuItemSettings,
                                          textPrimary, OnMenuSettingsClicked);
         _menuOpenLogItem  = MakeMenuItem(Localization.MenuItemOpenLogs,
-                                         textPrimary, OnMenuOpenLogClicked);
+                                         "TextPrimaryBrush", OnMenuOpenLogClicked);
         _menuCopyLogPathItem = MakeMenuItem(Localization.MenuItemCopyLogPath,
-                                            textPrimary, OnMenuCopyLogPathClicked);
+                                            "TextPrimaryBrush", OnMenuCopyLogPathClicked);
         _menuUpdateCheckItem = MakeMenuItem(Localization.MenuItemUpdateCheck,
-                                            textPrimary, OnMenuUpdateCheckClicked);
+                                            "TextPrimaryBrush", OnMenuUpdateCheckClicked);
         _menuResetSettingsItem = MakeMenuItem(Localization.MenuItemResetSettings,
-                                              textPrimary, OnMenuResetSettingsClicked);
+                                              "TextPrimaryBrush", OnMenuResetSettingsClicked);
         _menuVersionItem = MakeMenuItem(
             $"{Localization.MenuItemVersion} {VPNRouter.Core.AppVersion.Version}",
-            GetBrush("TextMutedBrush"), null);
+            "TextMutedBrush", null);
         _menuRepoItem = MakeMenuItem(Localization.MenuItemRepoLink,
-                                     textPrimary, OnMenuRepoClicked);
+                                     "TextPrimaryBrush", OnMenuRepoClicked);
 
         var menuStack = new StackPanel
         {
@@ -442,8 +471,6 @@ public partial class AndroidApp : Avalonia.Application
 
         var menuPanel = new Border
         {
-            Background = card,
-            BorderBrush = defaultBorder,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(radiusSm),
             BoxShadow = new BoxShadows(new BoxShadow
@@ -456,6 +483,8 @@ public partial class AndroidApp : Avalonia.Application
             Padding = new Thickness(0, 4),
             Child = menuStack,
         };
+        menuPanel.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
+        menuPanel.BindToken(Border.BorderBrushProperty, "BorderDefaultBrush");
 
         _kebabPopup = new Popup
         {
@@ -485,27 +514,29 @@ public partial class AndroidApp : Avalonia.Application
             Width = 10,
             Height = 10,
             VerticalAlignment = VerticalAlignment.Center,
-            Fill = GetBrush("TextMutedBrush"),
         };
+        // v3.0 Phase 8.2 — UpdateConnectionState re-binds Fill on every
+        // state flip; the initial value tracks the Off state.
+        _statusDot.BindToken(Avalonia.Controls.Shapes.Shape.FillProperty, "TextMutedBrush");
 
         _statusTitle = new TextBlock
         {
             Text = Localization.SimpleStatusTitleOff,
             FontSize = 15,
             FontWeight = FontWeight.Bold,
-            Foreground = textPrimary,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        _statusTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
         _statusDesc = new TextBlock
         {
             Text = Localization.SimpleStatusDescOff,
             FontSize = 11,
-            Foreground = textSecondary,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(20, 0, 0, 0),
             LineHeight = 16,
         };
+        _statusDesc.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
 
         var statusHeaderRow = new StackPanel
         {
@@ -518,8 +549,6 @@ public partial class AndroidApp : Avalonia.Application
         var statusCard = new Border
         {
             BorderThickness = new Thickness(1),
-            BorderBrush = defaultBorder,
-            Background = card,
             CornerRadius = new CornerRadius(radiusMd),
             Padding = new Thickness(14),
             Child = new StackPanel
@@ -528,41 +557,44 @@ public partial class AndroidApp : Avalonia.Application
                 Children = { statusHeaderRow, _statusDesc },
             }
         };
+        statusCard.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
+        statusCard.BindToken(Border.BorderBrushProperty, "BorderDefaultBrush");
 
         // ── Config row button (tappable, expands form) ──────────────────
+        var flagGlyph = new TextBlock
+        {
+            Text = "⚑",
+            FontSize = 12,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        flagGlyph.BindToken(TextBlock.ForegroundProperty, "AccentFgBrush");
         var flagIcon = new Border
         {
             Width = 24,
             Height = 24,
             CornerRadius = new CornerRadius(radiusXs),
-            Background = accentBgSubtle,
             VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock
-            {
-                Text = "⚑",
-                FontSize = 12,
-                Foreground = accentFg,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-            }
+            Child = flagGlyph,
         };
+        flagIcon.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
 
         _configRowLabel = new TextBlock
         {
             Text = Localization.SmpConfigRowLabel,
             FontSize = 9,
             FontWeight = FontWeight.SemiBold,
-            Foreground = textMuted,
         };
+        _configRowLabel.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
         _configRowValue = new TextBlock
         {
             Text = Localization.SimpleConfigSummary,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            Foreground = textPrimary,
             FontFamily = new FontFamily("monospace"),
         };
+        _configRowValue.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
         _configRowChevron = new TextBlock
         {
@@ -571,9 +603,9 @@ public partial class AndroidApp : Avalonia.Application
             // first launch (mirrors OnConfigRowClicked's flip logic).
             Text = _formExpanded ? "⌄" : "›",
             FontSize = 14,
-            Foreground = textMuted,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        _configRowChevron.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
         var configRowGrid = new Grid
         {
@@ -600,11 +632,11 @@ public partial class AndroidApp : Avalonia.Application
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             Padding = new Thickness(0),
             BorderThickness = new Thickness(1),
-            BorderBrush = subtleBorder,
-            Background = raised,
             CornerRadius = new CornerRadius(radiusSm),
             Content = configRowGrid,
         };
+        configRowButton.BindToken(Avalonia.Controls.Button.BackgroundProperty, "SurfaceRaisedBrush");
+        configRowButton.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "BorderSubtleBrush");
         configRowButton.Click += OnConfigRowClicked;
 
         // ── Collapsible form (input + tunnel mode radios + autostart) ───
@@ -613,8 +645,8 @@ public partial class AndroidApp : Avalonia.Application
             Text = Localization.SmpInputLabel,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            Foreground = textPrimary,
         };
+        _serverInputLabel.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
         _serverInput = new TextBox
         {
@@ -632,17 +664,17 @@ public partial class AndroidApp : Avalonia.Application
         {
             Text = Localization.SmpInputHint,
             FontSize = 9,
-            Foreground = textMuted,
             TextWrapping = TextWrapping.Wrap,
         };
+        _serverInputHint.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
         _serverInputError = new TextBlock
         {
             FontSize = 10,
-            Foreground = GetBrush("DangerFgBrush"),
             TextWrapping = TextWrapping.Wrap,
             IsVisible = false,
         };
+        _serverInputError.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
 
         // Save + Refresh + QR button row
         var saveBtn = StyledSecondaryButton(Localization.ButtonSave);
@@ -672,17 +704,17 @@ public partial class AndroidApp : Avalonia.Application
             Text = Localization.SmpTunnelModeLabel,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            Foreground = textPrimary,
         };
+        _tunnelModeLabel.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
         _splitLabel = new TextBlock
         {
             Text = Localization.SmpSplitOption,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            Foreground = textPrimary,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        _splitLabel.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
         _splitRadio = new Avalonia.Controls.RadioButton
         {
             GroupName = "TunnelMode",
@@ -702,18 +734,18 @@ public partial class AndroidApp : Avalonia.Application
         {
             Text = Localization.SmpSplitHint,
             FontSize = 9,
-            Foreground = textMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(24, 0, 0, 0),
         };
+        _splitHint.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
         _fullLabel = new TextBlock
         {
             Text = Localization.SmpFullOption,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            Foreground = textPrimary,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        _fullLabel.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
         _fullRadio = new Avalonia.Controls.RadioButton
         {
             GroupName = "TunnelMode",
@@ -732,10 +764,10 @@ public partial class AndroidApp : Avalonia.Application
         {
             Text = Localization.SmpFullHint,
             FontSize = 9,
-            Foreground = textMuted,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(24, 0, 0, 0),
         };
+        _fullHint.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
         // v3.0 Phase 7.5 — "Choose apps…" button + selection counter
         // pair, only visible when "Selected apps" radio is checked.
@@ -754,9 +786,9 @@ public partial class AndroidApp : Avalonia.Application
         {
             Text = string.Format(initialCountFmt, initialPerAppCount),
             FontSize = 9,
-            Foreground = textMuted,
             Margin = new Thickness(24, 2, 0, 0),
         };
+        _perAppCountLabel.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
         var perAppStack = new StackPanel
         {
@@ -794,9 +826,9 @@ public partial class AndroidApp : Avalonia.Application
             Text = Localization.AvailableServers,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            Foreground = textPrimary,
             IsVisible = false,
         };
+        _serverListHeader.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
         _serverList = new ListBox
         {
             MaxHeight = 240,
@@ -816,8 +848,6 @@ public partial class AndroidApp : Avalonia.Application
         {
             IsVisible = _formExpanded,
             BorderThickness = new Thickness(1),
-            BorderBrush = subtleBorder,
-            Background = card,
             CornerRadius = new CornerRadius(radiusSm),
             Padding = new Thickness(12),
             Child = new StackPanel
@@ -826,6 +856,8 @@ public partial class AndroidApp : Avalonia.Application
                 Children = { inputSection, tunnelSection, listSection }
             }
         };
+        _formCard.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
+        _formCard.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
 
         // ── CTA — three mutually exclusive variants ─────────────────────
         // Disconnected (default visible): outlined accent
@@ -837,13 +869,13 @@ public partial class AndroidApp : Avalonia.Application
             Padding = new Thickness(0, 12),
             FontSize = 12,
             FontWeight = FontWeight.Bold,
-            Background = card,
-            Foreground = accentFg,
-            BorderBrush = accentBorder,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(radiusSm),
             IsVisible = true,
         };
+        _ctaConnect.BindToken(Avalonia.Controls.Button.BackgroundProperty, "SurfaceBaseBrush");
+        _ctaConnect.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentFgBrush");
+        _ctaConnect.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "AccentBorderBrush");
         _ctaConnect.Click += OnConnectClicked;
 
         // Connecting: sunken disabled
@@ -855,13 +887,13 @@ public partial class AndroidApp : Avalonia.Application
             Padding = new Thickness(0, 12),
             FontSize = 12,
             FontWeight = FontWeight.Bold,
-            Background = sunken,
-            Foreground = textSecondary,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(radiusSm),
             IsEnabled = false,
             IsVisible = false,
         };
+        _ctaConnecting.BindToken(Avalonia.Controls.Button.BackgroundProperty, "SurfaceSunkenBrush");
+        _ctaConnecting.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextSecondaryBrush");
 
         // Connected: accent solid (bg blue, text white) — per design NOT red
         _ctaDisconnect = new Avalonia.Controls.Button
@@ -872,12 +904,12 @@ public partial class AndroidApp : Avalonia.Application
             Padding = new Thickness(0, 12),
             FontSize = 12,
             FontWeight = FontWeight.Bold,
-            Background = accentSolid,
-            Foreground = accentOnSolid,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(radiusSm),
             IsVisible = false,
         };
+        _ctaDisconnect.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentSolidBrush");
+        _ctaDisconnect.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
         _ctaDisconnect.Click += OnConnectClicked;
 
         // ── Расширенные настройки card (placeholder navigation) ─────────
@@ -886,32 +918,33 @@ public partial class AndroidApp : Avalonia.Application
             Text = Localization.SmpAdvCardTitle,
             FontSize = 12,
             FontWeight = FontWeight.SemiBold,
-            Foreground = textPrimary,
         };
+        _advCardTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
         _advCardSubtitle = new TextBlock
         {
             Text = Localization.SmpAdvCardSubtitle,
             FontSize = 9,
-            Foreground = textMuted,
             TextWrapping = TextWrapping.Wrap,
         };
+        _advCardSubtitle.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+        var chevronGlyph = new TextBlock
+        {
+            Text = "›",
+            FontSize = 15,
+            FontWeight = FontWeight.Bold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        chevronGlyph.BindToken(TextBlock.ForegroundProperty, "AccentFgBrush");
         var chevronCircle = new Border
         {
             Width = 28,
             Height = 28,
             CornerRadius = new CornerRadius(radiusSm),
-            Background = accentBgSubtle,
             VerticalAlignment = VerticalAlignment.Center,
-            Child = new TextBlock
-            {
-                Text = "›",
-                FontSize = 15,
-                FontWeight = FontWeight.Bold,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = accentFg,
-            }
+            Child = chevronGlyph,
         };
+        chevronCircle.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
         var advGrid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
@@ -934,11 +967,11 @@ public partial class AndroidApp : Avalonia.Application
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             Padding = new Thickness(0),
             BorderThickness = new Thickness(1),
-            BorderBrush = defaultBorder,
-            Background = card,
             CornerRadius = new CornerRadius(radiusMd),
             Content = advGrid,
         };
+        advCardButton.BindToken(Avalonia.Controls.Button.BackgroundProperty, "SurfaceBaseBrush");
+        advCardButton.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "BorderDefaultBrush");
         advCardButton.Click += OnAdvCardClicked;
 
         // v3.0 Phase 7.2 — transient feedback banner that surfaces the
@@ -949,12 +982,12 @@ public partial class AndroidApp : Avalonia.Application
         {
             Text = string.Empty,
             FontSize = 11,
-            Foreground = GetBrush("TextMutedBrush"),
-            Background = GetBrush("SurfaceSunkenBrush"),
             Padding = new Thickness(12, 8),
             TextWrapping = TextWrapping.Wrap,
             IsVisible = false,
         };
+        _menuFeedback.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+        _menuFeedback.BindToken(TextBlock.BackgroundProperty, "SurfaceSunkenBrush");
 
         // ── Inner stack with all sections, max 420 wide on tablets ──────
         var innerStack = new StackPanel
@@ -998,8 +1031,8 @@ public partial class AndroidApp : Avalonia.Application
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Padding = new Thickness(0, 0, 0, 16),
-            Background = bg,
         };
+        mainScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
 
         // v3.0 Phase 7.4 (2026-05-04) — fullscreen log-viewer overlay
         // sits on top of the main content stack. Hidden by default; the
@@ -1044,9 +1077,9 @@ public partial class AndroidApp : Avalonia.Application
             Text = "singbox.log",
             FontSize = 13,
             FontWeight = FontWeight.SemiBold,
-            Foreground = GetBrush("TextPrimaryBrush"),
             VerticalAlignment = VerticalAlignment.Center,
         };
+        _logViewerTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
         _logViewerCloseBtn = new Avalonia.Controls.Button
         {
@@ -1059,8 +1092,8 @@ public partial class AndroidApp : Avalonia.Application
             VerticalContentAlignment = VerticalAlignment.Center,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            Foreground = GetBrush("TextSecondaryBrush"),
         };
+        _logViewerCloseBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextSecondaryBrush");
         _logViewerCloseBtn.Click += OnLogViewerCloseClicked;
 
         _logViewerRefreshBtn = new Avalonia.Controls.Button
@@ -1074,8 +1107,8 @@ public partial class AndroidApp : Avalonia.Application
             VerticalContentAlignment = VerticalAlignment.Center,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            Foreground = GetBrush("TextSecondaryBrush"),
         };
+        _logViewerRefreshBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextSecondaryBrush");
         _logViewerRefreshBtn.Click += OnLogViewerRefreshClicked;
 
         var titleBar = new Grid
@@ -1093,26 +1126,25 @@ public partial class AndroidApp : Avalonia.Application
 
         var titleBarBorder = new Border
         {
-            Background = GetBrush("SurfaceRaisedBrush"),
-            BorderBrush = GetBrush("BorderSubtleBrush"),
             BorderThickness = new Thickness(0, 0, 0, 1),
             Padding = new Thickness(8, 4),
             Child = titleBar,
         };
+        titleBarBorder.BindToken(Border.BackgroundProperty, "SurfaceRaisedBrush");
+        titleBarBorder.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
 
         _logViewerContent = new TextBlock
         {
             FontFamily = new FontFamily("monospace"),
             FontSize = 9,
-            Foreground = GetBrush("TextPrimaryBrush"),
             TextWrapping = TextWrapping.NoWrap,
             Padding = new Thickness(8),
         };
+        _logViewerContent.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
         _logViewerEmptyState = new TextBlock
         {
             FontSize = 12,
-            Foreground = GetBrush("TextMutedBrush"),
             Text = string.Empty,
             TextWrapping = TextWrapping.Wrap,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -1120,14 +1152,15 @@ public partial class AndroidApp : Avalonia.Application
             Padding = new Thickness(24),
             IsVisible = false,
         };
+        _logViewerEmptyState.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
         _logViewerScroller = new ScrollViewer
         {
             Content = _logViewerContent,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Background = GetBrush("SurfaceAppBrush"),
         };
+        _logViewerScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
 
         var contentArea = new Grid
         {
@@ -1139,12 +1172,13 @@ public partial class AndroidApp : Avalonia.Application
         dock.Children.Add(titleBarBorder);
         dock.Children.Add(contentArea);
 
-        return new Border
+        var overlay = new Border
         {
-            Background = GetBrush("SurfaceAppBrush"),
             IsVisible = false,
             Child = dock,
         };
+        overlay.BindToken(Border.BackgroundProperty, "SurfaceAppBrush");
+        return overlay;
     }
 
     // ── v2.32.0 Settings overlay (mirrors desktop NetworkPage) ──────────
@@ -1909,40 +1943,46 @@ public partial class AndroidApp : Avalonia.Application
     /// Phase 4 — pill-style status chip (rounded background + colored
     /// label) for the sub-header VPN/Zapret/TG indicators. Mirrors
     /// desktop's chip pattern from MainWindow.axaml header.
+    ///
+    /// <para>v3.0 Phase 8.2 — takes brush KEYS (not brushes) so the
+    /// foreground + background ride <see cref="DynamicResourceExtension"/>
+    /// and auto-repaint on theme variant change.</para>
     /// </summary>
-    private TextBlock MakeChip(string label, IBrush bg, IBrush fg)
+    private TextBlock MakeChip(string label, string bgKey, string fgKey)
     {
         // Wrapped Border preferred for rounded corners, but Avalonia
         // TextBlock + StackPanel layout is simpler for now. Return a
         // TextBlock styled as a tag — uses parent StackPanel's width.
         // Note: chips render as boxes, not pills, on this font size;
         // looks similar enough on phone screen at 9pt.
-        return new TextBlock
+        var tb = new TextBlock
         {
             Text = label,
             FontSize = 9,
             FontWeight = FontWeight.SemiBold,
-            Foreground = fg,
-            Background = bg,
             Padding = new Thickness(7, 2),
             VerticalAlignment = VerticalAlignment.Center,
         };
+        tb.BindToken(TextBlock.ForegroundProperty, fgKey);
+        tb.BindToken(TextBlock.BackgroundProperty, bgKey);
+        return tb;
     }
 
     private Avalonia.Controls.Button StyledSecondaryButton(string label)
     {
-        return new Avalonia.Controls.Button
+        var btn = new Avalonia.Controls.Button
         {
             Content = label,
             FontSize = 12,
             FontWeight = FontWeight.Medium,
             Padding = new Thickness(14, 7),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
-            Background = GetBrush("SurfaceRaisedBrush"),
-            Foreground = GetBrush("TextPrimaryBrush"),
-            BorderBrush = GetBrush("BorderDefaultBrush"),
             BorderThickness = new Thickness(1),
         };
+        btn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "SurfaceRaisedBrush");
+        btn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextPrimaryBrush");
+        btn.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "BorderDefaultBrush");
+        return btn;
     }
 
     // ── Event handlers ─────────────────────────────────────────────────
@@ -1986,7 +2026,10 @@ public partial class AndroidApp : Avalonia.Application
 
         if (connected)
         {
-            _statusDot.Fill = GetBrush("SuccessSolidBrush");
+            // v3.0 Phase 8.2 — Fill goes through DynamicResource so a
+            // theme switch while connected re-resolves SuccessSolidBrush
+            // to the new variant's value automatically.
+            _statusDot.BindToken(Avalonia.Controls.Shapes.Shape.FillProperty, "SuccessSolidBrush");
             if (_statusTitle is not null) _statusTitle.Text = Localization.SimpleStatusTitleOn;
             if (_statusDesc is not null) _statusDesc.Text = Localization.SimpleStatusDescOn;
             if (_ctaConnect is not null) _ctaConnect.IsVisible = false;
@@ -1996,7 +2039,7 @@ public partial class AndroidApp : Avalonia.Application
         }
         else
         {
-            _statusDot.Fill = GetBrush("TextMutedBrush");
+            _statusDot.BindToken(Avalonia.Controls.Shapes.Shape.FillProperty, "TextMutedBrush");
             if (_statusTitle is not null) _statusTitle.Text = Localization.SimpleStatusTitleOff;
             if (_statusDesc is not null) _statusDesc.Text = Localization.SimpleStatusDescOff;
             if (_ctaConnect is not null) _ctaConnect.IsVisible = true;
@@ -2012,38 +2055,47 @@ public partial class AndroidApp : Avalonia.Application
     /// (and start/stop the Connecting pulse animation) to reflect the
     /// current tunnel lifecycle phase. Idempotent: calling with the same
     /// state is a no-op.
+    ///
+    /// <para>v3.0 Phase 8.2 (2026-05-07) — chip brushes go through
+    /// <see cref="StyledElementResourceExtensions.BindToken"/> so they
+    /// auto-repaint on theme variant change. The <paramref name="force"/>
+    /// flag lets <see cref="ApplyTheme(string)"/> re-issue the bindings
+    /// even when state hasn't changed (a theme flip needs to retain the
+    /// active state but re-pick the new variant's color).</para>
     /// </summary>
-    private void SetVpnChipState(ChipState state)
+    private void SetVpnChipState(ChipState state, bool force = false)
     {
         if (_vpnChip is null) return;
-        if (_vpnChipState == state) return;
+        if (_vpnChipState == state && !force) return;
         _vpnChipState = state;
 
         // Stop any in-flight pulse first — Connecting → On, Connecting → Off,
         // Off → On all need to clear the animation that was driving Opacity.
+        // On a forced re-bind we still want to restart the pulse if state
+        // is Connecting so the breathing animation stays in sync.
         _vpnPulseCts?.Cancel();
         _vpnPulseCts = null;
         _vpnChip.Opacity = 1.0;
 
-        IBrush bg, fg;
+        string bgKey, fgKey;
         switch (state)
         {
             case ChipState.On:
-                bg = GetBrush("SuccessBgBrush");
-                fg = GetBrush("SuccessFgBrush");
+                bgKey = "SuccessBgBrush";
+                fgKey = "SuccessFgBrush";
                 break;
             case ChipState.Connecting:
-                bg = GetBrush("WarningBgBrush");
-                fg = GetBrush("WarningFgBrush");
+                bgKey = "WarningBgBrush";
+                fgKey = "WarningFgBrush";
                 StartChipPulse(_vpnChip);
                 break;
             default: // Off
-                bg = GetBrush("SurfaceSunkenBrush");
-                fg = GetBrush("TextMutedBrush");
+                bgKey = "SurfaceSunkenBrush";
+                fgKey = "TextMutedBrush";
                 break;
         }
-        _vpnChip.Background = bg;
-        _vpnChip.Foreground = fg;
+        _vpnChip.BindToken(TextBlock.BackgroundProperty, bgKey);
+        _vpnChip.BindToken(TextBlock.ForegroundProperty, fgKey);
     }
 
     /// <summary>
@@ -2236,14 +2288,14 @@ public partial class AndroidApp : Avalonia.Application
                     Text = string.IsNullOrEmpty(item?.Name) ? (item?.Server ?? "?") : item.Name,
                     FontSize = 12,
                     FontWeight = FontWeight.Medium,
-                    Foreground = GetBrush("TextPrimaryBrush"),
                 };
+                name.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
                 var sub = new TextBlock
                 {
                     Text = $"{item?.Server}:{item?.Port}  ·  {item?.Protocol ?? "vless"}",
                     FontSize = 10,
-                    Foreground = GetBrush("TextMutedBrush"),
                 };
+                sub.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
                 return new StackPanel
                 {
                     Spacing = 2,
@@ -2292,7 +2344,7 @@ public partial class AndroidApp : Avalonia.Application
     /// </summary>
     private Avalonia.Controls.Button MakeMenuItem(
         string label,
-        IBrush foreground,
+        string foregroundKey,
         EventHandler<Avalonia.Interactivity.RoutedEventArgs>? onClick)
     {
         var btn = new Avalonia.Controls.Button
@@ -2304,9 +2356,9 @@ public partial class AndroidApp : Avalonia.Application
             FontSize = 12,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            Foreground = foreground,
             IsHitTestVisible = onClick is not null,
         };
+        btn.BindToken(Avalonia.Controls.Button.ForegroundProperty, foregroundKey);
         if (onClick is not null) btn.Click += onClick;
         return btn;
     }
@@ -2329,13 +2381,13 @@ public partial class AndroidApp : Avalonia.Application
             HorizontalContentAlignment = HorizontalAlignment.Center,
             Padding = new Thickness(0, 6),
             FontSize = 12,
-            FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal,
-            Background = active ? GetBrush("AccentBgSubtleBrush") : GetBrush("SurfaceSunkenBrush"),
-            Foreground = active ? GetBrush("AccentFgBrush") : GetBrush("TextSecondaryBrush"),
             BorderThickness = new Thickness(1),
-            BorderBrush = active ? GetBrush("BorderAccentBrush") : GetBrush("BorderSubtleBrush"),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
         };
+        // v3.0 Phase 8.2 — initial bindings; StyleSegmentButton replaces
+        // them on selection change so the active+inactive split moves
+        // (token keys differ between the two states).
+        StyleSegmentButton(btn, active);
         btn.Click += onClick;
         return btn;
     }
@@ -2375,9 +2427,9 @@ public partial class AndroidApp : Avalonia.Application
             Text = headerText,
             FontSize = 10,
             FontWeight = FontWeight.SemiBold,
-            Foreground = GetBrush("TextMutedBrush"),
             Margin = new Thickness(14, 8, 14, 4),
         };
+        header.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
         if (headerText == Localization.MenuSectionView) _menuSectionView = header;
         else if (headerText == Localization.MenuSectionDiagnostics) _menuSectionDiagnostics = header;
         else if (headerText == Localization.MenuSectionTroubleshooting) _menuSectionTroubleshooting = header;
@@ -2389,9 +2441,9 @@ public partial class AndroidApp : Avalonia.Application
         var divider = new Border
         {
             Height = 1,
-            Background = GetBrush("BorderSubtleBrush"),
             Margin = new Thickness(14, 0, 14, 4),
         };
+        divider.BindToken(Border.BackgroundProperty, "BorderSubtleBrush");
         stack.Children.Add(divider);
 
         foreach (var item in items)
@@ -2416,9 +2468,9 @@ public partial class AndroidApp : Avalonia.Application
             Text = headerText,
             FontSize = 10,
             FontWeight = FontWeight.SemiBold,
-            Foreground = GetBrush("TextMutedBrush"),
             Margin = new Thickness(14, 8, 14, 4),
         };
+        header.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
         // Cache by header text so ToggleLanguageAndRefresh can find it.
         if (headerText == Localization.MenuSectionView) _menuSectionView = header;
         else if (headerText == Localization.MenuSectionDiagnostics) _menuSectionDiagnostics = header;
@@ -2431,9 +2483,9 @@ public partial class AndroidApp : Avalonia.Application
         var divider = new Border
         {
             Height = 1,
-            Background = GetBrush("BorderSubtleBrush"),
             Margin = new Thickness(14, 0, 14, 4),
         };
+        divider.BindToken(Border.BackgroundProperty, "BorderSubtleBrush");
         stack.Children.Add(divider);
 
         foreach (var item in items)
@@ -2504,7 +2556,26 @@ public partial class AndroidApp : Avalonia.Application
         if (current == mode) return;
         AndroidStorage.SetTheme(mode);
         RequestedThemeVariant = mode == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
+
+        // v3.0 Phase 8.2 (2026-05-07) — every property bound via
+        // BindToken auto-resolves to the new theme's value through
+        // Avalonia's DynamicResource pipeline. The two surfaces that
+        // can't ride DynamicResource still need manual refresh:
+        //   1) Mascot Bitmap — Bgra8888 byte buffer, must re-load to
+        //      get the inverted dark variant (mirrors desktop's
+        //      MainWindowViewModel.LogoSource pattern).
+        //   2) Active-segment chrome — StyleSegmentButton/SetVpnChipState
+        //      pick a different brush KEY for active vs inactive, so
+        //      they need to re-bind to the right key (the theme
+        //      variant change alone wouldn't move the active segment).
+        if (_mascotImage is not null)
+        {
+            _mascotImage.Source = LoadMascot();
+        }
         RepaintThemeSegment();
+        RepaintLanguageSegment();
+        SetVpnChipState(_vpnChipState, force: true);
+        UpdateConnectionState(MainActivity.IntendedConnected);
     }
 
     /// <summary>
@@ -2528,9 +2599,16 @@ public partial class AndroidApp : Avalonia.Application
     {
         if (btn is null) return;
         btn.FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal;
-        btn.Background = active ? GetBrush("AccentBgSubtleBrush") : GetBrush("SurfaceSunkenBrush");
-        btn.Foreground = active ? GetBrush("AccentFgBrush") : GetBrush("TextSecondaryBrush");
-        btn.BorderBrush = active ? GetBrush("BorderAccentBrush") : GetBrush("BorderSubtleBrush");
+        // v3.0 Phase 8.2 — re-bind via DynamicResource so the button
+        // tracks ThemeVariant changes between calls. New bindings
+        // replace any prior binding at LocalValue priority on the same
+        // property.
+        btn.BindToken(Avalonia.Controls.Button.BackgroundProperty,
+            active ? "AccentBgSubtleBrush" : "SurfaceSunkenBrush");
+        btn.BindToken(Avalonia.Controls.Button.ForegroundProperty,
+            active ? "AccentFgBrush" : "TextSecondaryBrush");
+        btn.BindToken(Avalonia.Controls.Button.BorderBrushProperty,
+            active ? "BorderAccentBrush" : "BorderSubtleBrush");
     }
 
     /// <summary>
@@ -2882,18 +2960,18 @@ public partial class AndroidApp : Avalonia.Application
         {
             Text = app.Label,
             FontSize = 12,
-            Foreground = GetBrush("TextPrimaryBrush"),
             TextWrapping = TextWrapping.NoWrap,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        label.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
         var pkgLine = new TextBlock
         {
             Text = app.PackageName,
             FontSize = 9,
-            Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.NoWrap,
             VerticalAlignment = VerticalAlignment.Center,
         };
+        pkgLine.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
         var rowText = new StackPanel
         {
             Spacing = 1,
@@ -2970,9 +3048,9 @@ public partial class AndroidApp : Avalonia.Application
             Text = Localization.PerAppTitle,
             FontSize = 13,
             FontWeight = FontWeight.SemiBold,
-            Foreground = GetBrush("TextPrimaryBrush"),
             VerticalAlignment = VerticalAlignment.Center,
         };
+        title.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
         _appPickerCloseBtn = new Avalonia.Controls.Button
         {
@@ -2985,8 +3063,8 @@ public partial class AndroidApp : Avalonia.Application
             VerticalContentAlignment = VerticalAlignment.Center,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            Foreground = GetBrush("TextSecondaryBrush"),
         };
+        _appPickerCloseBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextSecondaryBrush");
         _appPickerCloseBtn.Click += OnAppPickerCloseClicked;
 
         var titleBar = new Grid
@@ -3001,12 +3079,12 @@ public partial class AndroidApp : Avalonia.Application
 
         var titleBarBorder = new Border
         {
-            Background = GetBrush("SurfaceRaisedBrush"),
-            BorderBrush = GetBrush("BorderSubtleBrush"),
             BorderThickness = new Thickness(0, 0, 0, 1),
             Padding = new Thickness(8, 4),
             Child = titleBar,
         };
+        titleBarBorder.BindToken(Border.BackgroundProperty, "SurfaceRaisedBrush");
+        titleBarBorder.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
 
         // v3.0 v2.32.0 — include/exclude segmented control + hint, sitting
         // between the title bar and the search box. Tap include → only the
@@ -3056,21 +3134,23 @@ public partial class AndroidApp : Avalonia.Application
             FontSize = 12,
             Padding = new Thickness(10, 6),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
-            Background = GetBrush("SurfaceSunkenBrush"),
-            BorderBrush = GetBrush("BorderSubtleBrush"),
             BorderThickness = new Thickness(1),
         };
+        _appPickerSearch.BindToken(TextBox.BackgroundProperty, "SurfaceSunkenBrush");
+        _appPickerSearch.BindToken(TextBox.BorderBrushProperty, "BorderSubtleBrush");
         _appPickerSearch.TextChanged += OnAppPickerSearchChanged;
+
+        var systemToggleLabel = new TextBlock
+        {
+            Text = Localization.PerAppSystemAppsToggle,
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        systemToggleLabel.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
 
         _appPickerSystemToggle = new Avalonia.Controls.CheckBox
         {
-            Content = new TextBlock
-            {
-                Text = Localization.PerAppSystemAppsToggle,
-                FontSize = 11,
-                Foreground = GetBrush("TextSecondaryBrush"),
-                TextWrapping = TextWrapping.Wrap,
-            },
+            Content = systemToggleLabel,
             IsChecked = _appPickerSystemAppsVisible,
             MinHeight = 0,
             Padding = new Thickness(4, 0),
@@ -3081,9 +3161,9 @@ public partial class AndroidApp : Avalonia.Application
         {
             Text = string.Format(Localization.PerAppCount, 0),
             FontSize = 10,
-            Foreground = GetBrush("TextMutedBrush"),
             VerticalAlignment = VerticalAlignment.Center,
         };
+        _appPickerCount.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
         var filterRow = new Grid
         {
@@ -3118,11 +3198,11 @@ public partial class AndroidApp : Avalonia.Application
             HorizontalContentAlignment = HorizontalAlignment.Center,
             Padding = new Thickness(0, 12),
             Margin = new Thickness(8, 6, 8, 8),
-            Background = GetBrush("AccentSolidBrush"),
-            Foreground = GetBrush("AccentOnSolidBrush"),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             BorderThickness = new Thickness(0),
         };
+        _appPickerSaveBtn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentSolidBrush");
+        _appPickerSaveBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
         _appPickerSaveBtn.Click += OnAppPickerSaveClicked;
 
         var dock = new DockPanel { LastChildFill = true };
@@ -3142,12 +3222,13 @@ public partial class AndroidApp : Avalonia.Application
         dock.Children.Add(_appPickerSaveBtn);
         dock.Children.Add(_appPickerList);
 
-        return new Border
+        var overlay = new Border
         {
-            Background = GetBrush("SurfaceAppBrush"),
             IsVisible = false,
             Child = dock,
         };
+        overlay.BindToken(Border.BackgroundProperty, "SurfaceAppBrush");
+        return overlay;
     }
 
     private void OnMenuCopyLogPathClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
