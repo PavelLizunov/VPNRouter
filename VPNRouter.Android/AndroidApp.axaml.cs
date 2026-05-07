@@ -107,6 +107,28 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _serverListHeader;
     private ListBox? _serverList;
 
+    // v2.32.0 (AND-CC, 2026-05-07) — Custom sing-box JSON mode UI.
+    // Sits below the existing input field inside the form card. Hidden
+    // unless the segmented mode selector at the top of the form picks
+    // "Custom JSON". Shows: paste TextBox (multi-line, monospace) +
+    // status banner (validation OK / error from CustomConfigInjector) +
+    // Validate / Save / Clear button row.
+    private Avalonia.Controls.Button? _ccModeSubBtn;
+    private Avalonia.Controls.Button? _ccModeManualBtn;
+    private Avalonia.Controls.Button? _ccModeCustomBtn;
+    private StackPanel? _ccModeRow;
+    private StackPanel? _ccCustomSection;
+    private StackPanel? _ccUriSection;
+    private TextBlock? _ccCustomLabel;
+    private TextBlock? _ccCustomHint;
+    private TextBox? _ccCustomInput;
+    private TextBlock? _ccCustomStatus;
+    private Avalonia.Controls.Button? _ccValidateBtn;
+    private Avalonia.Controls.Button? _ccSaveCustomBtn;
+    private Avalonia.Controls.Button? _ccClearCustomBtn;
+    /// <summary>"subscribe" | "manual" | "custom" — mirrors desktop ConfigMode.</summary>
+    private string _ccMode = "manual";
+
     // CTA buttons (3 variants)
     private Avalonia.Controls.Button? _ctaConnect;
     private Avalonia.Controls.Button? _ctaConnecting;
@@ -651,6 +673,43 @@ public partial class AndroidApp : Avalonia.Application
         configRowButton.Click += OnConfigRowClicked;
 
         // ── Collapsible form (input + tunnel mode radios + autostart) ───
+
+        // v2.32.0 (AND-CC) — three-way config-mode selector at the top
+        // of the form: Subscription | Server | Custom JSON. The
+        // "Subscription" + "Server" segments share the same single-line
+        // TextBox below (existing _serverInput); "Custom JSON" swaps it
+        // for a multi-line paste TextBox + Validate button (defined
+        // further down).
+        _ccMode = AndroidStorage.GetConfigMode();
+        if (_ccMode != "subscribe" && _ccMode != "manual" && _ccMode != "custom")
+            _ccMode = "manual";
+
+        _ccModeSubBtn = MakeSegmentButton(Localization.CcModeSubscription,
+            _ccMode == "subscribe", OnCcModeSubClicked);
+        _ccModeManualBtn = MakeSegmentButton(Localization.CcModeManual,
+            _ccMode == "manual", OnCcModeManualClicked);
+        _ccModeCustomBtn = MakeSegmentButton(Localization.CcModeCustom,
+            _ccMode == "custom", OnCcModeCustomClicked);
+
+        var ccModeGrid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,*,*"),
+            ColumnSpacing = 4,
+        };
+        Grid.SetColumn(_ccModeSubBtn, 0);
+        Grid.SetColumn(_ccModeManualBtn, 1);
+        Grid.SetColumn(_ccModeCustomBtn, 2);
+        ccModeGrid.Children.Add(_ccModeSubBtn);
+        ccModeGrid.Children.Add(_ccModeManualBtn);
+        ccModeGrid.Children.Add(_ccModeCustomBtn);
+
+        _ccModeRow = new StackPanel
+        {
+            Spacing = 4,
+            Margin = new Thickness(0, 0, 0, 4),
+            Children = { ccModeGrid }
+        };
+
         _serverInputLabel = new TextBlock
         {
             Text = Localization.SmpInputLabel,
@@ -703,10 +762,83 @@ public partial class AndroidApp : Avalonia.Application
             Children = { saveBtn, qrBtn, refreshBtn },
         };
 
+        _ccUriSection = new StackPanel
+        {
+            Spacing = 4,
+            // Hidden when ConfigMode == "custom".
+            IsVisible = _ccMode != "custom",
+            Children = { _serverInputLabel, _serverInput, _serverInputHint, _serverInputError, actionRow },
+        };
+
+        // ── Custom sing-box JSON section (AND-CC) ───────────────────────
+        // Multi-line TextBox + status banner + Validate / Save / Clear
+        // button row. Visible only when ConfigMode == "custom".
+        _ccCustomLabel = new TextBlock
+        {
+            Text = Localization.CcCustomLabel,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+        };
+        _ccCustomLabel.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
+
+        _ccCustomInput = new TextBox
+        {
+            FontSize = 10,
+            Padding = new Thickness(10, 7),
+            AcceptsReturn = true,
+            AcceptsTab = true,
+            TextWrapping = TextWrapping.NoWrap,
+            CornerRadius = new CornerRadius(radiusXs),
+            Watermark = Localization.CcCustomWatermark,
+            FontFamily = new FontFamily("monospace"),
+            MinHeight = 180,
+            MaxHeight = 360,
+            Text = AndroidStorage.GetCustomConfigJson() ?? string.Empty,
+        };
+
+        _ccCustomHint = new TextBlock
+        {
+            Text = Localization.CcCustomHint,
+            FontSize = 9,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        _ccCustomHint.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+
+        _ccCustomStatus = new TextBlock
+        {
+            Text = string.Empty,
+            FontSize = 10,
+            TextWrapping = TextWrapping.Wrap,
+            IsVisible = false,
+        };
+        _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
+
+        _ccValidateBtn = StyledSecondaryButton(Localization.CcValidateButton);
+        _ccValidateBtn.Click += OnCcValidateClicked;
+        _ccSaveCustomBtn = StyledSecondaryButton(Localization.CcSaveButton);
+        _ccSaveCustomBtn.Margin = new Thickness(8, 0, 0, 0);
+        _ccSaveCustomBtn.Click += OnCcSaveCustomClicked;
+        _ccClearCustomBtn = StyledSecondaryButton(Localization.CcClearButton);
+        _ccClearCustomBtn.Margin = new Thickness(8, 0, 0, 0);
+        _ccClearCustomBtn.Click += OnCcClearCustomClicked;
+        var ccActionRow = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Children = { _ccValidateBtn, _ccSaveCustomBtn, _ccClearCustomBtn },
+        };
+
+        _ccCustomSection = new StackPanel
+        {
+            Spacing = 4,
+            IsVisible = _ccMode == "custom",
+            Children = { _ccCustomLabel, _ccCustomInput, _ccCustomHint, _ccCustomStatus, ccActionRow },
+        };
+
         var inputSection = new StackPanel
         {
             Spacing = 4,
-            Children = { _serverInputLabel, _serverInput, _serverInputHint, _serverInputError, actionRow },
+            Children = { _ccModeRow, _ccUriSection, _ccCustomSection },
         };
 
         // Tunnel mode (split / full)
@@ -2148,7 +2280,22 @@ public partial class AndroidApp : Avalonia.Application
     {
         if (_configRowValue is null) return;
         var mode = _fullRadio?.IsChecked == true ? Localization.SmpFullOption : Localization.SmpSplitOption;
-        var src = AndroidStorage.GetSubscriptionUrl() != null ? Localization.SmpSourceSubscription : Localization.SmpSourceManual;
+        // v2.32.0 (AND-CC) — three-way source label: subscription /
+        // manual / custom JSON. Pre-CC was binary based on whether
+        // subscription_url was non-null.
+        string src;
+        switch (AndroidStorage.GetConfigMode())
+        {
+            case "subscribe":
+                src = Localization.SmpSourceSubscription;
+                break;
+            case "custom":
+                src = Localization.CcSourceCustom;
+                break;
+            default:
+                src = Localization.SmpSourceManual;
+                break;
+        }
         _configRowValue.Text = $"{src} · {mode.ToLower()}";
     }
 
@@ -2164,6 +2311,8 @@ public partial class AndroidApp : Avalonia.Application
             AndroidStorage.SetSubscriptionUrl(null);
             AndroidStorage.SetServers(null);
             AndroidStorage.SetSelectedServerName(null);
+            // Keep ConfigMode at whatever the user picked (don't auto-flip
+            // to "custom") — empty input is just a clear, not a switch.
             _cachedServers = new List<VlessServerEntry>();
             UpdateServerListView();
             UpdateConfigSummary();
@@ -2189,6 +2338,9 @@ public partial class AndroidApp : Avalonia.Application
                 AndroidStorage.SetSubscriptionUrl(null);
                 AndroidStorage.SetServers(null);
                 AndroidStorage.SetSelectedServerName(null);
+                AndroidStorage.SetConfigMode("manual");
+                _ccMode = "manual";
+                ApplyCcModeVisuals();
                 _cachedServers = new List<VlessServerEntry>();
                 UpdateServerListView();
                 UpdateConfigSummary();
@@ -2206,12 +2358,131 @@ public partial class AndroidApp : Avalonia.Application
         {
             AndroidStorage.SetSubscriptionUrl(raw);
             AndroidStorage.SetVlessUri(null);
+            AndroidStorage.SetConfigMode("subscribe");
+            _ccMode = "subscribe";
+            ApplyCcModeVisuals();
             UpdateConfigSummary();
             return;
         }
 
         _serverInputError.Text = Localization.SaveStatusUnknown;
         _serverInputError.IsVisible = true;
+    }
+
+    // ── v2.32.0 (AND-CC) — Custom sing-box JSON mode ───────────────────
+
+    private void OnCcModeSubClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => SetCcMode("subscribe");
+    private void OnCcModeManualClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => SetCcMode("manual");
+    private void OnCcModeCustomClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        => SetCcMode("custom");
+
+    private void SetCcMode(string mode)
+    {
+        if (mode != "subscribe" && mode != "manual" && mode != "custom")
+            return;
+        if (_ccMode == mode) return;
+        _ccMode = mode;
+        AndroidStorage.SetConfigMode(mode);
+        ApplyCcModeVisuals();
+        UpdateConfigSummary();
+    }
+
+    /// <summary>
+    /// Repaints the segmented mode selector + flips visibility between
+    /// the URI input section and the custom-JSON section. Mirrors the
+    /// per-app picker's <see cref="ApplyPickerModeVisuals"/> pattern.
+    /// </summary>
+    private void ApplyCcModeVisuals()
+    {
+        StyleSegment(_ccModeSubBtn, _ccMode == "subscribe");
+        StyleSegment(_ccModeManualBtn, _ccMode == "manual");
+        StyleSegment(_ccModeCustomBtn, _ccMode == "custom");
+        if (_ccUriSection is not null) _ccUriSection.IsVisible = _ccMode != "custom";
+        if (_ccCustomSection is not null) _ccCustomSection.IsVisible = _ccMode == "custom";
+    }
+
+    private void OnCcValidateClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_ccCustomInput is null || _ccCustomStatus is null) return;
+        var raw = (_ccCustomInput.Text ?? string.Empty).Trim();
+        _ccCustomStatus.IsVisible = true;
+
+        if (string.IsNullOrEmpty(raw))
+        {
+            _ccCustomStatus.Text = Localization.CcSaveStatusEmpty;
+            _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
+            return;
+        }
+
+        try
+        {
+            var (isValid, errors) = VPNRouter.Core.Services.CustomConfigInjector.Validate(raw);
+            if (!isValid)
+            {
+                _ccCustomStatus.Text = string.Format(
+                    Localization.CcValidationFailed,
+                    string.Join("; ", errors));
+                _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
+                return;
+            }
+            var (protocols, server) = VPNRouter.Core.Services.CustomConfigInjector.ParseConfigInfo(raw);
+            _ccCustomStatus.Text = string.Format(Localization.CcValidationOk, protocols, server);
+            _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "SuccessFgBrush");
+        }
+        catch (Exception ex)
+        {
+            _ccCustomStatus.Text = string.Format(Localization.CcValidationParseError, ex.Message);
+            _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
+        }
+    }
+
+    private void OnCcSaveCustomClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_ccCustomInput is null || _ccCustomStatus is null) return;
+        var raw = (_ccCustomInput.Text ?? string.Empty).Trim();
+        _ccCustomStatus.IsVisible = true;
+
+        if (string.IsNullOrEmpty(raw))
+        {
+            _ccCustomStatus.Text = Localization.CcSaveStatusEmpty;
+            _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
+            return;
+        }
+
+        var (isValid, errors) = VPNRouter.Core.Services.CustomConfigInjector.Validate(raw);
+        AndroidStorage.SetCustomConfigJson(raw);
+        AndroidStorage.SetConfigMode("custom");
+        _ccMode = "custom";
+        ApplyCcModeVisuals();
+        UpdateConfigSummary();
+
+        if (!isValid)
+        {
+            // Save anyway so the user doesn't lose their paste; they can
+            // fix-and-resave. sing-box itself surfaces the actual error
+            // when Connect runs.
+            _ccCustomStatus.Text = string.Format(
+                Localization.CcSaveStatusInvalid + " ({0})",
+                string.Join("; ", errors));
+            _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "WarningFgBrush");
+            return;
+        }
+
+        _ccCustomStatus.Text = Localization.CcSaveStatusOk;
+        _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "SuccessFgBrush");
+    }
+
+    private void OnCcClearCustomClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_ccCustomInput is not null) _ccCustomInput.Text = string.Empty;
+        if (_ccCustomStatus is not null) _ccCustomStatus.IsVisible = false;
+        AndroidStorage.SetCustomConfigJson(null);
+        // Don't flip mode away from "custom" — user might be about to
+        // paste a different config. UpdateConfigSummary still shows
+        // "custom JSON · split/full".
+        UpdateConfigSummary();
     }
 
     private async void OnRefreshClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -3412,6 +3683,20 @@ public partial class AndroidApp : Avalonia.Application
         if (_serverInputLabel is not null) _serverInputLabel.Text = Localization.SmpInputLabel;
         if (_serverInput is not null) _serverInput.Watermark = Localization.SmpInputWatermark;
         if (_serverInputHint is not null) _serverInputHint.Text = Localization.SmpInputHint;
+        // v2.32.0 (AND-CC) — refresh segmented mode selector + custom
+        // section labels. The status banner text below stays as-is —
+        // it's the result of the user's last Validate / Save tap, so
+        // shouldn't auto-translate (would lie about what was actually
+        // returned at click-time).
+        if (_ccModeSubBtn is not null) _ccModeSubBtn.Content = Localization.CcModeSubscription;
+        if (_ccModeManualBtn is not null) _ccModeManualBtn.Content = Localization.CcModeManual;
+        if (_ccModeCustomBtn is not null) _ccModeCustomBtn.Content = Localization.CcModeCustom;
+        if (_ccCustomLabel is not null) _ccCustomLabel.Text = Localization.CcCustomLabel;
+        if (_ccCustomHint is not null) _ccCustomHint.Text = Localization.CcCustomHint;
+        if (_ccCustomInput is not null) _ccCustomInput.Watermark = Localization.CcCustomWatermark;
+        if (_ccValidateBtn is not null) _ccValidateBtn.Content = Localization.CcValidateButton;
+        if (_ccSaveCustomBtn is not null) _ccSaveCustomBtn.Content = Localization.CcSaveButton;
+        if (_ccClearCustomBtn is not null) _ccClearCustomBtn.Content = Localization.CcClearButton;
         if (_tunnelModeLabel is not null) _tunnelModeLabel.Text = Localization.SmpTunnelModeLabel;
         if (_splitLabel is not null) _splitLabel.Text = Localization.SmpSplitOption;
         if (_splitHint is not null) _splitHint.Text = Localization.SmpSplitHint;

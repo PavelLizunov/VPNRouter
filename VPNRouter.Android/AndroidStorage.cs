@@ -49,6 +49,45 @@ public static class AndroidStorage
     // one-entry list.
     private const string KeySubscriptions = "subscriptions_json";
 
+    // ── v2.32.0 (AND-CC): config mode + custom sing-box JSON ────────────
+    //
+    // Three-way enum mirroring desktop's AppSettings.App.ConfigMode:
+    //   • "subscribe" — fetch server pool from a subscription URL
+    //     (KeySubscriptionUrl + KeyServersJson hold the data)
+    //   • "manual"    — single share-link URI (KeyVlessUri holds the data)
+    //   • "custom"    — user-pasted full sing-box JSON (KeyCustomConfigJson
+    //     holds the raw text, KeyCustomConfigName labels it for the UI)
+    //
+    // Pre-2.32.0 the "mode" was implicit: GetActiveServer() returned the
+    // selected subscription server first, falling back to the manual URI.
+    // With custom JSON in the mix we need an explicit selector — desktop
+    // does the same (MainWindowViewModel.cs writes ConfigMode in
+    // SaveSettings, line 1544).
+    private const string KeyConfigMode = "config_mode";              // "subscribe" | "manual" | "custom"
+    private const string KeyCustomConfigJson = "custom_config_json"; // raw user-pasted sing-box JSON
+    private const string KeyCustomConfigName = "custom_config_name"; // display name for the UI (optional)
+
+    public static string GetConfigMode()
+    {
+        var stored = GetString(KeyConfigMode);
+        if (stored == "subscribe" || stored == "manual" || stored == "custom")
+            return stored;
+
+        // Legacy fallback for installs from before AND-CC: derive from
+        // whichever single-source key happened to be populated. Subscription
+        // wins because that's the historical default flow.
+        if (!string.IsNullOrEmpty(GetString(KeySubscriptionUrl))) return "subscribe";
+        if (!string.IsNullOrEmpty(GetString(KeyVlessUri))) return "manual";
+        return "subscribe";
+    }
+    public static bool SetConfigMode(string value) => SetString(KeyConfigMode, value);
+
+    public static string? GetCustomConfigJson() => GetString(KeyCustomConfigJson);
+    public static bool SetCustomConfigJson(string? value) => SetString(KeyCustomConfigJson, value);
+
+    public static string GetCustomConfigName() => GetString(KeyCustomConfigName) ?? "custom";
+    public static bool SetCustomConfigName(string? value) => SetString(KeyCustomConfigName, value);
+
     // ── Phase 1.F: single-URI manual mode ───────────────────────────────────
 
     public static string? GetVlessUri() => GetString(KeyVlessUri);
