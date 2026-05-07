@@ -67,14 +67,11 @@ import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
 
-import io.nekohasekai.libbox.CommandServer;
-import io.nekohasekai.libbox.CommandServerHandler;
-import io.nekohasekai.libbox.SystemProxyStatus;
+import io.nekohasekai.libbox.BoxService;
 import io.nekohasekai.libbox.InterfaceUpdateListener;
 import io.nekohasekai.libbox.Libbox;
 import io.nekohasekai.libbox.LocalDNSTransport;
 import io.nekohasekai.libbox.NetworkInterfaceIterator;
-import io.nekohasekai.libbox.OverrideOptions;
 import io.nekohasekai.libbox.PlatformInterface;
 import io.nekohasekai.libbox.RoutePrefix;
 import io.nekohasekai.libbox.RoutePrefixIterator;
@@ -114,7 +111,7 @@ public final class VpnRouterService extends VpnService {
     private String[] pendingAllowedPackages;
     private String pendingPerAppMode;
     private String[] pendingPerAppPackages;
-    private CommandServer commandServer;
+    private BoxService boxService;
     private ParcelFileDescriptor currentPfd;
 
     @Override
@@ -202,37 +199,36 @@ public final class VpnRouterService extends VpnService {
 
         Libbox.checkConfig(pendingConfigJson);
 
-        // v3.0 Phase 5 — keep CommandServer path (our libbox version has
-        // no Libbox.newService(json, platform) — only the CommandServer
-        // bootstrap). The CRITICAL difference vs Pre-5 is the
-        // PlatformInterface implementation now provides real
-        // getInterfaces() / systemCertificates() / useProcFS — without
-        // these libbox can't reach upstream sockets.
+        // v2.32.0 (2026-05-07) — libbox API migration. The 1.13.x AAR
+        // dropped OverrideOptions + CommandServer.startOrReloadService;
+        // service creation now goes directly through Libbox.newService.
+        // CommandServer remains in libbox but is purely a Clash-API RPC
+        // gateway (Connections / Groups / URLTest / Stats). VPNRouter on
+        // Android drives lifecycle from the Java side via Intent
+        // broadcasts and never exposes a Clash dashboard, so we drop the
+        // CommandServer entirely. Reference: BoxService.kt in
+        // sagernet/sing-box-for-android — minimal flow is identical.
         VpnRouterPlatformInterface platformInterface = new VpnRouterPlatformInterface(this);
-        VpnRouterCommandHandler handler = new VpnRouterCommandHandler(this);
-        commandServer = Libbox.newCommandServer(handler, platformInterface);
-        commandServer.start();
+        boxService = Libbox.newService(pendingConfigJson, platformInterface);
+        boxService.start();
 
-        OverrideOptions overrides = new OverrideOptions();
-        commandServer.startOrReloadService(pendingConfigJson, overrides);
-
-        Log.i(LOG_TAG, "libbox service started successfully (Phase 5)");
+        Log.i(LOG_TAG, "libbox service started successfully (v2.32.0)");
     }
 
     private void stopTunnel() {
+        if (boxService != null) {
+            try {
+                boxService.close();
+            } catch (Exception e) {
+                Log.w(LOG_TAG, "boxService.close threw: " + e.getMessage());
+            }
+            boxService = null;
+        }
         if (currentPfd != null) {
             try { currentPfd.close(); } catch (Exception e) {
                 Log.w(LOG_TAG, "pfd.close threw: " + e.getMessage());
             }
             currentPfd = null;
-        }
-        if (commandServer != null) {
-            try {
-                commandServer.close();
-            } catch (Exception e) {
-                Log.w(LOG_TAG, "commandServer.close threw: " + e.getMessage());
-            }
-            commandServer = null;
         }
         stopForeground(STOP_FOREGROUND_REMOVE);
         try {
@@ -240,38 +236,6 @@ public final class VpnRouterService extends VpnService {
         } catch (Exception e) {
             Log.w(LOG_TAG, "broadcast tunnel-down threw: " + e.getMessage());
         }
-    }
-
-    /**
-     * v3.0 Phase 5 — CommandServerHandler stub. Required by
-     * Libbox.newCommandServer; we don't use the clash control APIs.
-     *
-     * <p>v2.32.0 (2026-05-07) — libbox.aar API drift: upstream
-     * sing-box renamed <code>serviceStop()</code> → <code>postServiceClose()</code>
-     * (post-stop hook, called AFTER libbox internals tear the service
-     * down) and dropped <code>writeDebugMessage(String)</code> in favor
-     * of <code>PlatformInterface.writeLog(String)</code>. Updated
-     * accordingly. The semantics of <code>postServiceClose</code> are
-     * post-shutdown notification — same call site as old serviceStop
-     * for our purposes (tear down the Android Service).</p>
-     */
-    private static final class VpnRouterCommandHandler implements CommandServerHandler {
-        private final VpnRouterService service;
-        VpnRouterCommandHandler(VpnRouterService service) { this.service = service; }
-
-        @Override
-        public void postServiceClose() {
-            service.stopTunnel();
-            service.stopSelf();
-        }
-        @Override
-        public void serviceReload() throws Exception {}
-        @Override
-        public SystemProxyStatus getSystemProxyStatus() {
-            return null;
-        }
-        @Override
-        public void setSystemProxyEnabled(boolean isEnabled) {}
     }
 
     @Override
@@ -799,16 +763,21 @@ public final class VpnRouterService extends VpnService {
         }
 
         @Override
-        public io.nekohasekai.libbox.ConnectionOwner findConnectionOwner(
+        public int findConnectionOwner(
                 int ipProtocol,
                 String sourceAddress, int sourcePort,
                 String destinationAddress, int destinationPort) throws Exception {
-            // Reference impl uses ConnectivityManager.getConnectionOwnerUid
-            // (Android Q+) to map a 5-tuple to the owning app uid. Used
-            // by sing-box for per-app routing rules. We don't use those
-            // rules on Android (filter at VpnService.Builder layer), so
-            // a stub error is acceptable.
-            throw new Exception("findConnectionOwner not implemented on Android");
+            // v2.32.0 (2026-05-07) — libbox API drift: return type
+            // changed from ConnectionOwner (a struct) to a raw int uid,
+            // with -1 meaning "owner unknown / unsupported". sing-box
+            // treats -1 as a fallback that disables per-uid rules for
+            // the connection. We filter at the VpnService.Builder layer
+            // (addAllowed/DisallowedApplication) and don't enable
+            // sing-box per-uid rules in our generated config, so a
+            // stub return is fine and saves the JNI round-trip into
+            // ConnectivityManager.getConnectionOwnerUid that the
+            // sagernet reference does on Android Q+.
+            return -1;
         }
 
         // ── v2.32.0 (2026-05-07) libbox API drift: PlatformInterface gained

@@ -280,9 +280,20 @@ public partial class AndroidApp : Avalonia.Application
 
     // ── Token helpers ───────────────────────────────────────────────────
 
-    // v3.0 Phase 8.2 (2026-05-07) — GetBrush removed: every brush now
-    // rides BindToken (DynamicResource) instead of being snapshot at
-    // build time. GetRadius stays because radii are theme-invariant.
+    // v3.0 Phase 8.2 (2026-05-07) — most brushes in BuildSimplePageView
+    // now ride BindToken (DynamicResource) so theme switches auto-repaint.
+    // The helper below remains for the AndroidApp.SubscribePage /
+    // AndroidApp.FreeConfigs partials (AND-1 / AND-3 ports) — they were
+    // merged before Phase 8.2 landed and snapshot the brushes at build
+    // time. Migrating those call sites to BindToken is a follow-up; for
+    // now this keeps them building. GetRadius stays unchanged because
+    // radii are theme-invariant.
+    private IBrush GetBrush(string key)
+    {
+        if (Resources.TryGetResource(key, ActualThemeVariant, out var v) && v is IBrush b)
+            return b;
+        return Brushes.Transparent;
+    }
 
     private double GetRadius(string key)
     {
@@ -431,7 +442,7 @@ public partial class AndroidApp : Avalonia.Application
         // Routing / Leak / Updates / Autostart) without scrolling past the
         // collapsed form. Listed first in the section as the most-used entry.
         _menuSettingsItem = MakeMenuItem(Localization.MenuItemSettings,
-                                         textPrimary, OnMenuSettingsClicked);
+                                         "TextPrimaryBrush", OnMenuSettingsClicked);
         _menuOpenLogItem  = MakeMenuItem(Localization.MenuItemOpenLogs,
                                          "TextPrimaryBrush", OnMenuOpenLogClicked);
         _menuCopyLogPathItem = MakeMenuItem(Localization.MenuItemCopyLogPath,
@@ -456,7 +467,7 @@ public partial class AndroidApp : Avalonia.Application
         // so it's discoverable without scrolling. Tap → close popup +
         // open the Free Configs overlay.
         _menuFreeConfigsItem = MakeMenuItem(Localization.MenuItemOpenFreeConfigs,
-                                            textPrimary, OnMenuFreeConfigsClicked);
+                                            "TextPrimaryBrush", OnMenuFreeConfigsClicked);
 
         AppendMenuSectionWithControls(menuStack, Localization.MenuSectionView,
                                       new Control[] { themeRow, langRow });
