@@ -42,7 +42,27 @@ public class TgProxyUpdater
     public TgProxyUpdater(ILogger logger) => _logger = logger;
 
     /// <summary>Check if both Python and proxy source are installed.</summary>
-    public static bool IsInstalled() => File.Exists(PythonExePath) && Directory.Exists(ProxySourceDir);
+    public static bool IsInstalled() => IsInstalled(logger: null);
+
+    /// <summary>
+    /// v2.31.10 — Logger-aware overload. When <paramref name="logger"/> is supplied
+    /// emits one structured line per probe so a missing autostart can be
+    /// diagnosed from logs without re-running with extra instrumentation.
+    /// </summary>
+    public static bool IsInstalled(ILogger? logger)
+    {
+        var pythonExePath = PythonExePath;
+        var proxySourceDir = ProxySourceDir;
+        var pythonExeExists = File.Exists(pythonExePath);
+        var proxySourceExists = Directory.Exists(proxySourceDir);
+        var overall = pythonExeExists && proxySourceExists;
+
+        logger?.Information(
+            "[TgProxy] IsInstalled: PythonExe at {PythonExePath} -> {PythonExeExists}, ProxySourceDir at {ProxySourceDir} -> {ProxySourceExists}, overall = {Overall}",
+            pythonExePath, pythonExeExists, proxySourceDir, proxySourceExists, overall);
+
+        return overall;
+    }
 
     /// <summary>Read locally installed proxy version.</summary>
     public static string? GetLocalVersion()

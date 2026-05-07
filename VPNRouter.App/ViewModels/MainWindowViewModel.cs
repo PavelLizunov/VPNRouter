@@ -4341,11 +4341,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        // v2.31.10: Service-side AutostartTgProxyAsync logs entry/decision
+        // breadcrumbs with the same shape as below. When the App-side
+        // AutostartTgProxyAsync from the DBG-2 sister task lands, lift this
+        // structured log pattern verbatim (entry → IsInstalled(_logger) →
+        // secret-len + port → ResilientStarter → outcome) so manual-start
+        // logs and autostart logs share grep'able prefixes.
+        // TODO(DBG-2 sister): once VPNRouter.App has its own
+        // AutostartTgProxyAsync, mirror the [Service] AutostartTgProxyAsync
+        // entry/decision logs in VPNRouterService.cs:331+ exactly.
+        _logger.Information("[VM] ToggleTgProxyAsync: start path entered");
+
         // Auto-download if not installed
-        if (!TgProxyUpdater.IsInstalled())
+        if (!TgProxyUpdater.IsInstalled(_logger))
         {
             await UpdateTgProxyAsync();
-            if (!TgProxyUpdater.IsInstalled()) return;
+            if (!TgProxyUpdater.IsInstalled(_logger)) return;
         }
 
         try
@@ -4356,6 +4367,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
                 TgProxySecret = Convert.ToHexString(bytes).ToLowerInvariant();
             }
+
+            _logger.Information(
+                "[VM] ToggleTgProxyAsync: secret configured (len {SecretLen}), port {Port}, calling TgProxyManager.Start",
+                TgProxySecret.Length, TgProxyPort);
 
             _tgProxy ??= new TgProxyManager(_logger);
             _tgProxy.StatsUpdated += stats =>

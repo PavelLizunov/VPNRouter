@@ -330,9 +330,18 @@ public class VPNRouterService : BackgroundService
     /// <summary>Start TgProxy Telegram proxy (independent of VPN).</summary>
     private async Task AutostartTgProxyAsync(AppSettings settings, CancellationToken ct)
     {
+        // v2.31.10 — explicit entry breadcrumb. Pre-fix the autostart could
+        // exit silently down any of three early-return branches (not
+        // installed, no secret, exception) and the only Service log we got
+        // was "TgProxy not installed" with no path / no scope, leaving us
+        // unable to tell whether the method even fired.
+        _logger.LogInformation("[Service] AutostartTgProxyAsync: entered");
         try
         {
-            if (!TgProxyUpdater.IsInstalled())
+            // Probe with structured logging — emits paths + per-component
+            // existence so a missing dir (proxy/ removed by user, Python
+            // never finished install) is visible immediately.
+            if (!TgProxyUpdater.IsInstalled(Serilog.Log.Logger))
             {
                 _logger.LogWarning("[Service] TgProxy not installed, skipping autostart");
                 return;
@@ -346,6 +355,10 @@ public class VPNRouterService : BackgroundService
                 _logger.LogWarning("[Service] TgProxy secret not configured, skipping");
                 return;
             }
+
+            _logger.LogInformation(
+                "[Service] AutostartTgProxyAsync: secret configured (len {SecretLen}), port {Port} chosen, handing to ResilientStarter",
+                secret.Length, port);
 
             _tgProxy = new TgProxyManager(Serilog.Log.Logger);
 

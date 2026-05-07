@@ -51,7 +51,9 @@ public class TgProxyManager : IDisposable
         var args = $"-m proxy.tg_ws_proxy --port {port} --host 127.0.0.1 --secret {secret}";
         if (verbose) args += " --verbose";
 
-        _logger.Information("[TgProxy] Starting: python.exe {Args}", args);
+        // v2.31.10: never put the secret in plaintext into logs. The redacted
+        // copy is what gets emitted; the real one stays on the local PSI only.
+        var redactedArgs = RedactSecretInArgs(args);
 
         var psi = new ProcessStartInfo
         {
@@ -64,10 +66,14 @@ public class TgProxyManager : IDisposable
             RedirectStandardError = true
         };
 
+        _logger.Information(
+            "[TgProxy] Spawn ProcessStartInfo: FileName={FileName}, Arguments={Arguments}, WorkingDirectory={WorkingDirectory}, CreateNoWindow={CreateNoWindow}, UseShellExecute={UseShellExecute}",
+            psi.FileName, redactedArgs, psi.WorkingDirectory, psi.CreateNoWindow, psi.UseShellExecute);
+
         _process = Process.Start(psi);
         if (_process == null)
         {
-            _logger.Error("[TgProxy] Failed to start process");
+            _logger.Error("[TgProxy] Failed to start process (Process.Start returned null)");
             throw new InvalidOperationException("Failed to start tg-ws-proxy");
         }
 
@@ -83,7 +89,66 @@ public class TgProxyManager : IDisposable
         _process.BeginOutputReadLine();
         _process.BeginErrorReadLine();
 
-        _logger.Information("[TgProxy] Started (PID {Pid})", _process.Id);
+        _logger.Information("[TgProxy] Spawned PID {Pid}", _process.Id);
+
+        // v2.31.10 — short post-spawn watchdog. Python embeddable failures
+        // (missing wheels, broken ._pth, port already in use) frequently
+        // exit within ms. Without this probe, the only signal is the
+        // generic "[TgProxy] Process exited" warning fired async, which
+        // races with the autostart-success log line above and confuses
+        // the trail. WaitForExit returns true when the process is gone
+        // — log the exit code + stderr tail explicitly.
+        try
+        {
+            if (_process.WaitForExit(2000))
+            {
+                var exitCode = _process.ExitCode;
+                _logger.Error(
+                    "[TgProxy] Process exited within 2s of spawn (PID {Pid}, ExitCode {ExitCode}) — likely startup failure",
+                    _process.Id, exitCode);
+
+                // StandardError may already be partially drained by ErrorDataReceived.
+                // Best-effort: read whatever's left. ReadToEnd on an exited process
+                // returns immediately with the remaining buffer.
+                try
+                {
+                    var stderrTail = _process.StandardError.ReadToEnd();
+                    if (!string.IsNullOrWhiteSpace(stderrTail))
+                    {
+                        _logger.Error(
+                            "[TgProxy] StandardError tail (PID {Pid}): {Stderr}",
+                            _process.Id, stderrTail.Trim());
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug(ex, "[TgProxy] StandardError drain after early exit failed");
+                }
+            }
+            else
+            {
+                _logger.Information(
+                    "[TgProxy] Process still alive after 2s probe (PID {Pid})",
+                    _process.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[TgProxy] Post-spawn WaitForExit probe raised");
+        }
+    }
+
+    /// <summary>
+    /// v2.31.10 — strip the actual <c>--secret &lt;value&gt;</c> token from
+    /// an args string, leaving <c>--secret REDACTED</c>. Used by log lines
+    /// only; the real PSI keeps the original.
+    /// </summary>
+    internal static string RedactSecretInArgs(string args)
+    {
+        if (string.IsNullOrEmpty(args)) return args;
+        // Match: --secret <non-space>+ . Replace with --secret REDACTED.
+        return System.Text.RegularExpressions.Regex.Replace(
+            args, @"--secret\s+\S+", "--secret REDACTED");
     }
 
     private void OnOutputData(object sender, DataReceivedEventArgs e)
