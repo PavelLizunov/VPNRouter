@@ -268,6 +268,107 @@ internal static class Localization
         ? "Настройки сброшены. Перезапусти приложение."
         : "Settings cleared. Restart the app.";
 
+    // ── v2.32.0 (Android-led, 2026-05-07) — config share (export / import / QR) ──
+    //
+    // Diagnostics-section menu items + the export/import/QR overlay
+    // strings. Mirrors plans/v2.32.0-android-config-share.md schema.
+
+    public static string MenuItemExportConfig => Ru ? "Экспорт конфига" : "Export config";
+    public static string MenuItemImportConfig => Ru ? "Импорт конфига" : "Import config";
+    public static string MenuItemShareQr => Ru ? "Поделиться по QR" : "Share via QR";
+
+    public static string ExportTitle => Ru ? "Экспорт конфига" : "Export config";
+    public static string ExportDescription => Ru
+        ? "Сохраним подписки, ручной URI или custom JSON в один файл .json. Файл можно перенести на другое устройство и импортировать."
+        : "Save subscriptions, manual URI or custom JSON into a single .json file. Move the file to another device and import there.";
+    public static string ExportIncludeSettings => Ru
+        ? "Включить настройки (тема, язык, маршрутизация)"
+        : "Include settings (theme, language, routing)";
+    public static string ExportIncludePerApp => Ru
+        ? "Включить per-app фильтр"
+        : "Include per-app filter";
+    public static string ExportSecretBanner => Ru
+        ? "VLESS URI / token внутри файла = пароль. Не делитесь экспортом в открытых каналах."
+        : "VLESS URI / token inside the file = password. Don't share the export over public channels.";
+    public static string ExportSaveButton => Ru ? "Сохранить файл…" : "Save file…";
+    public static string ExportCloseButton => Ru ? "Закрыть" : "Close";
+    public static string ExportSuccess => Ru
+        ? "Сохранено: {0}"
+        : "Saved: {0}";
+    public static string ExportFailed => Ru
+        ? "Не удалось сохранить: {0}"
+        : "Save failed: {0}";
+    public static string ExportPickerCancelled => Ru
+        ? "Сохранение отменено."
+        : "Save cancelled.";
+
+    public static string ImportTitle => Ru ? "Импорт конфига" : "Import config";
+    public static string ImportDescription => Ru
+        ? "Выбери файл, ранее сохранённый через «Экспорт конфига». Покажем что внутри и спросим подтверждение."
+        : "Pick a file previously saved via Export config. We'll show what's inside and ask for confirmation.";
+    public static string ImportPickButton => Ru ? "Выбрать файл…" : "Pick a file…";
+    public static string ImportPreviewLabel => Ru ? "В файле:" : "Inside the file:";
+    public static string ImportApplySettings => Ru
+        ? "Применить настройки (если есть в файле)"
+        : "Apply settings (if present in the file)";
+    public static string ImportApplyPerApp => Ru
+        ? "Применить per-app фильтр (если есть в файле)"
+        : "Apply per-app filter (if present)";
+    public static string ImportConfirmReplace => Ru
+        ? "Текущие подписки и активный конфиг будут заменены. Перед заменой сохранится резервная копия."
+        : "Current subscriptions and active config will be replaced. A backup is saved before applying.";
+    public static string ImportApplyButton => Ru ? "Импортировать" : "Import";
+    public static string ImportCancelButton => Ru ? "Отмена" : "Cancel";
+    public static string ImportCloseButton => Ru ? "Закрыть" : "Close";
+    public static string ImportPickerCancelled => Ru
+        ? "Импорт отменён."
+        : "Import cancelled.";
+    public static string ImportFailedRead => Ru
+        ? "Не удалось прочитать файл: {0}"
+        : "Failed to read the file: {0}";
+    public static string ImportFailedParse => Ru
+        ? "Файл повреждён или не от VPNRouter: {0}"
+        : "File is corrupt or not a VPNRouter export: {0}";
+    public static string ImportSuccess => Ru
+        ? "Импорт завершён. Бэкап сохранён в {0}."
+        : "Import done. Backup saved at {0}.";
+    public static string ImportPartial => Ru
+        ? "Импорт прошёл частично: {0}"
+        : "Import partially applied: {0}";
+    public static string ImportFailed => Ru
+        ? "Импорт не удался: {0}"
+        : "Import failed: {0}";
+
+    public static string QrShareTitle => Ru ? "Поделиться VLESS" : "Share VLESS";
+    public static string QrShareNoActiveServer => Ru
+        ? "Нет активного сервера — выбери в подписке или сохрани ручной URI, потом возвращайся."
+        : "No active server — pick one in a subscription or save a manual URI, then come back.";
+    public static string QrShareSecretBanner => Ru
+        ? "URI = пароль. Делись только лично и в защищённом канале."
+        : "URI = password. Share only privately and over a secure channel.";
+    public static string QrShareCopyUriButton => Ru ? "Скопировать URI" : "Copy URI";
+    public static string QrShareCopiedToast => Ru
+        ? "URI скопирован в буфер."
+        : "URI copied to clipboard.";
+    public static string QrShareScanFromClipboardLabel => Ru
+        ? "Или вставь URI с другого устройства:"
+        : "Or paste a URI from another device:";
+    public static string QrShareScanHint => Ru
+        ? "Подсказка: открой системную «Камеру» и наведи на QR — Android распознает URL и предложит скопировать."
+        : "Tip: open the system Camera app and point at a QR — Android recognises the URL and offers a copy action.";
+    public static string QrSharePasteButton => Ru ? "Применить URI" : "Apply URI";
+    public static string QrShareApplyFailed => Ru
+        ? "Не удалось распознать URI: {0}"
+        : "Could not parse URI: {0}";
+    public static string QrShareApplyOk => Ru
+        ? "URI сохранён. Подключайся."
+        : "URI saved. You can connect now.";
+    public static string QrShareCloseButton => Ru ? "Закрыть" : "Close";
+
+    public static string ConfigShareNotImplementedToast => Ru
+        ? "Эта функция требует Android 4.4+ Storage Access Framework."
+        : "This feature requires Android 4.4+ Storage Access Framework.";
+
     // About items
     public static string MenuItemVersion => Ru ? "Версия" : "Version";
     public static string MenuItemRepoLink => Ru ? "GitHub репозиторий" : "GitHub repository";
