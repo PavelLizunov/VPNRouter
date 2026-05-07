@@ -26,6 +26,12 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
                      tools:ignore="QueryAllPackagesPermission" />
+    <!-- v2.32.0 (2026-05-07) — auto-update sideload. Lets the app hand
+         a downloaded APK to the system PackageInstaller via
+         Intent.ActionView. On API 26+ the user must grant this in
+         Settings → Apps → VPNRouter → Install unknown apps; we deep-
+         link them there from the in-app banner if not yet granted. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application android:label="VPNRouter"
                  android:supportsRtl="true">
@@ -43,6 +49,27 @@
                 <action android:name="android.net.VpnService" />
             </intent-filter>
         </service>
+
+        <!-- v2.32.0 (2026-05-07) — FileProvider for the auto-update
+             sideload. Android 7.0+ rejects file:// URIs in cross-app
+             intents (StrictMode FileUriExposedException), so the
+             downloaded APK gets handed to the system PackageInstaller
+             via a content:// URI minted by androidx.core.content.FileProvider.
+             The grantUriPermissions=true + ActivityFlags.GrantReadUriPermission
+             at intent-launch time gives the installer transient read
+             access without permanently opening the cache directory.
+
+             Authority is "${applicationId}.fileprovider" so the URI
+             is namespaced under our package — different VPNRouter
+             builds (debug / release / forks) won't clash. Paths are
+             defined in res/xml/file_paths.xml. -->
+        <provider android:name="androidx.core.content.FileProvider"
+                  android:authorities="${applicationId}.fileprovider"
+                  android:exported="false"
+                  android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                       android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

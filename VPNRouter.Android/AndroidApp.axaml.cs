@@ -159,6 +159,25 @@ public partial class AndroidApp : Avalonia.Application
     // log-path copied, settings reset done, etc.) without a real Snackbar.
     private TextBlock? _menuFeedback;
 
+    // v2.32.0 (2026-05-07) — auto-update banner. Mirrors desktop's
+    // UpdateNotificationViewModel-driven card, except in code-behind
+    // because Android view tree is built imperatively. State machine:
+    //   • Hidden            — _updateBanner.IsVisible = false
+    //   • Available         — title shows version + size, action = Download
+    //   • Downloading       — title shows "Downloading… N%", action disabled
+    //   • DownloadDone      — title shows "Downloaded", action = Install
+    //   • PermissionNeeded  — title shows "Allow install" deep-link copy,
+    //                          action = Allow → opens Settings
+    //   • Failed            — title shows error message, action = Retry
+    private Border? _updateBanner;
+    private TextBlock? _updateBannerTitle;
+    private TextBlock? _updateBannerSubtitle;
+    private Avalonia.Controls.Button? _updateBannerAction;
+    private Avalonia.Controls.Button? _updateBannerDismiss;
+    private AndroidUpdateInfo? _pendingUpdate;
+    private string? _downloadedApkPath;
+    private bool _updateInFlight; // guard against double-tap during async ops
+
     // v3.0 Phase 7.4 — in-app log viewer overlay. Shown when user taps
     // Diagnostics > "Открыть лог" / "Open log". Reads last 50 KB of
     // singbox.log into a monospace ScrollViewer. Closed via × button.
@@ -261,6 +280,14 @@ public partial class AndroidApp : Avalonia.Application
             MainActivity.IntentChanged += OnIntentChanged;
             UpdateConnectionState(MainActivity.IntendedConnected);
             ReloadServerList();
+
+            // v2.32.0 (2026-05-07) — silent auto-update check on launch.
+            // Mirrors desktop's UpdateNotificationViewModel.CheckOnStartupAsync.
+            // Fire-and-forget on a background task so first-frame paint
+            // isn't blocked by network. If a newer release exists the
+            // banner surfaces under the status card; otherwise nothing
+            // happens visibly.
+            _ = Task.Run(() => RunUpdateCheckAsync(manual: false));
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -1000,6 +1027,14 @@ public partial class AndroidApp : Avalonia.Application
         _menuFeedback.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
         _menuFeedback.BindToken(TextBlock.BackgroundProperty, "SurfaceSunkenBrush");
 
+        // v2.32.0 (2026-05-07) — auto-update banner card.
+        // Style mirrors desktop's UpdateNotification card layout:
+        //   AccentBgSubtle background + AccentBorder + RadiusMd, title
+        //   (semibold) + subtitle (muted) + 2-button row (action +
+        //   dismiss). Hidden by default; surfaced by
+        //   PromptUpdateAvailable(info) once CheckAsync returns a hit.
+        BuildUpdateBanner(radiusMd);
+
         // ── Inner stack with all sections, max 420 wide on tablets ──────
         var innerStack = new StackPanel
         {
@@ -1008,6 +1043,7 @@ public partial class AndroidApp : Avalonia.Application
             {
                 statusCard,
                 _menuFeedback,
+                _updateBanner!,
                 configRowButton,
                 _formCard,
                 _ctaConnect,
@@ -1862,10 +1898,11 @@ public partial class AndroidApp : Avalonia.Application
 
     private void OnSettingsCheckUpdatesClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        // Same placeholder as the kebab > Diagnostics > "Check for updates"
-        // entry. Auto-update on Android needs PackageInstaller +
-        // REQUEST_INSTALL_PACKAGES — out of v3.0 alpha scope.
-        ShowMenuFeedback(Localization.MenuItemUpdateComingSoon);
+        // v2.32.0 (2026-05-07) — wires the Settings > Updates button to
+        // the real flow. The Settings overlay stays open so the user
+        // sees the result inline; banner appears under the status card
+        // (it's behind the overlay, but visible if user dismisses).
+        _ = RunUpdateCheckAsync(manual: true);
     }
 
     private void OnSettingsAutostartVpnChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -3267,13 +3304,10 @@ public partial class AndroidApp : Avalonia.Application
     private void OnMenuUpdateCheckClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-        // Phase 7.2 placeholder. Real auto-update on Android requires
-        // the in-app updater (Google Play Asset Delivery) or sideload
-        // flow with PackageInstaller. Out of scope for the v3.0
-        // Android alpha — desktop UpdateChecker doesn't apply here
-        // because Android's package manager refuses to install unsigned
-        // APKs from arbitrary paths without REQUEST_INSTALL_PACKAGES.
-        ShowMenuFeedback(Localization.MenuItemUpdateComingSoon);
+        // v2.32.0 (2026-05-07) — wires the kebab item to the real
+        // Android auto-update flow (AndroidUpdater + REQUEST_INSTALL_PACKAGES).
+        // Pre-2.32.0 this just showed "coming in next release" toast.
+        _ = RunUpdateCheckAsync(manual: true);
     }
 
     private void OnMenuResetSettingsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -3426,6 +3460,13 @@ public partial class AndroidApp : Avalonia.Application
         // v2.32.0 — refresh Subscribe overlay strings (title, add form,
         // refresh-all button, empty-state hint, per-card text).
         RefreshSubsLocalizedStrings();
+        // v2.32.0 (2026-05-07) — auto-update banner copy when visible.
+        // The dynamic strings (size, percent, error message) are
+        // re-built next time the banner state changes; what we refresh
+        // here are the static labels (Download / Later / subtitle).
+        if (_updateBannerDismiss is not null) _updateBannerDismiss.Content = Localization.UpdateButtonDismiss;
+        if (_updateBannerSubtitle is not null && _updateBannerSubtitle.IsVisible)
+            _updateBannerSubtitle.Text = Localization.UpdateBannerSubtitle;
         UpdateConfigSummary();
     }
 

@@ -100,6 +100,13 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <!-- v2.32.0 (2026-05-07) — FileProvider for auto-update APK
+         hand-off (Android 7+ requires content:// URIs in cross-app
+         intents). Avalonia.Android already pulls in much of AndroidX
+         transitively, but Core.Content.FileProvider isn't in the
+         transitive set, so we add it explicitly. ~50 KB on top of
+         the existing AndroidX surface. -->
+    <PackageReference Include="Xamarin.AndroidX.Core" Version="1.13.1.5" />
   </ItemGroup>
 
   <!-- libbox.aar — sing-box gomobile binding. Built locally via:
