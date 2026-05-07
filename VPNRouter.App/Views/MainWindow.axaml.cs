@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Platform;
 using VPNRouter.App.ViewModels;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.Views;
 
@@ -9,6 +10,19 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // v2.32.0 — once the window has been shown, the danger zone of
+        // Program.Main / DI / Avalonia / DLL load is behind us. Reset
+        // the launch-failure counter so a runtime crash later won't
+        // start counting toward the startup-loop tiers. Wired on
+        // Opened (not on ctor) because failures during XAML parsing /
+        // DataContext binding still happen between ctor and Opened —
+        // counting those as launch failures is correct.
+        Opened += (_, _) =>
+        {
+            try { LaunchFailureCounter.MarkStable(); }
+            catch { /* counter is advisory; never fault on it */ }
+        };
 
         // v2.21.8: Linux needs a window-level icon or the window manager
         // falls back to a generic cogwheel in the taskbar. On macOS we
