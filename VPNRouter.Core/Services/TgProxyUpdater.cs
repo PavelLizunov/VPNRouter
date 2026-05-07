@@ -42,22 +42,38 @@ public class TgProxyUpdater
     public TgProxyUpdater(ILogger logger) => _logger = logger;
 
     /// <summary>Check if both Python and proxy source are installed.</summary>
-    public static bool IsInstalled() => IsInstalledAt(TgProxyDir);
+    public static bool IsInstalled() => IsInstalledAt(TgProxyDir, logger: null);
 
     /// <summary>
-    /// Path-explicit variant of <see cref="IsInstalled"/> for unit tests
-    /// that synthesize a sandbox layout under a temp directory.
-    /// Mirrors the production check: <c>{baseDir}/python/python.exe</c>
-    /// must exist as a file AND <c>{baseDir}/proxy</c> must exist as a
-    /// directory. Internal because callers in production should always
-    /// route through <see cref="IsInstalled"/> against the real
-    /// <see cref="TgProxyDir"/>.
+    /// v2.31.10 (DBG-4) — Logger-aware overload. When <paramref name="logger"/>
+    /// is supplied emits one structured line per probe so a missing autostart
+    /// can be diagnosed from logs without re-running with extra instrumentation.
     /// </summary>
-    internal static bool IsInstalledAt(string baseDir)
+    public static bool IsInstalled(ILogger? logger) => IsInstalledAt(TgProxyDir, logger);
+
+    /// <summary>
+    /// v2.31.10 (DBG-5) — Path-explicit variant for unit tests that synthesize
+    /// a sandbox layout under a temp directory. Mirrors the production check:
+    /// <c>{baseDir}/python/python.exe</c> must exist as a file AND
+    /// <c>{baseDir}/proxy</c> must exist as a directory.
+    ///
+    /// <para>Combines DBG-5 path-injection + DBG-4 structured logging in one
+    /// method so production (<c>IsInstalled(logger)</c>) and tests
+    /// (<c>IsInstalledAt(tempDir)</c>) share the same code path.</para>
+    /// </summary>
+    internal static bool IsInstalledAt(string baseDir, ILogger? logger = null)
     {
         var pythonExe = Path.Combine(baseDir, "python", "python.exe");
         var proxyDir = Path.Combine(baseDir, "proxy");
-        return File.Exists(pythonExe) && Directory.Exists(proxyDir);
+        var pythonExeExists = File.Exists(pythonExe);
+        var proxySourceExists = Directory.Exists(proxyDir);
+        var overall = pythonExeExists && proxySourceExists;
+
+        logger?.Information(
+            "[TgProxy] IsInstalled: PythonExe at {PythonExePath} -> {PythonExeExists}, ProxySourceDir at {ProxySourceDir} -> {ProxySourceExists}, overall = {Overall}",
+            pythonExe, pythonExeExists, proxyDir, proxySourceExists, overall);
+
+        return overall;
     }
 
     /// <summary>Read locally installed proxy version.</summary>

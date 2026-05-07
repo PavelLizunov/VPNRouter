@@ -62,15 +62,20 @@ public static class ResilientStarter
         {
             ct.ThrowIfCancellationRequested();
 
+            // v2.31.10 — emit BEFORE every attempt so partial-progress is
+            // observable when a later attempt blocks. Pre-fix the log only
+            // showed the final outcome, hiding which attempt got stuck.
+            var preDelay = attempt == 1 ? 0 : backoffSeconds[attempt - 2];
+            logger?.Information(
+                "[Resilient] {Component}: attempt {Attempt}/{Max}, delay={Delay}s",
+                componentName, attempt, maxAttempts, preDelay);
+
             try
             {
                 await startFn(ct);
-                if (attempt > 1)
-                {
-                    logger?.Information(
-                        "[ResilientStarter] {Component} started on attempt {Attempt}/{Max}",
-                        componentName, attempt, maxAttempts);
-                }
+                logger?.Information(
+                    "[Resilient] {Component}: attempt {Attempt}/{Max} succeeded",
+                    componentName, attempt, maxAttempts);
                 return true;
             }
             catch (OperationCanceledException)
@@ -86,6 +91,10 @@ public static class ResilientStarter
             }
             catch (Exception ex)
             {
+                logger?.Warning(
+                    "[Resilient] {Component}: attempt {Attempt}/{Max} failed-with-{Error}",
+                    componentName, attempt, maxAttempts, ex.Message);
+
                 if (attempt == maxAttempts)
                 {
                     logger?.Error(ex,
