@@ -227,6 +227,15 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.CheckBox? _settingsAutostartZapret;
     private Avalonia.Controls.CheckBox? _settingsAutostartTgProxy;
     private Avalonia.Controls.Button? _menuSettingsItem;
+    // v2.32.0 AND-NETRES — Reliability section controls. Always-on row
+    // is text + button (no programmatic status read — the Android API
+    // for "is VPNRouter the always-on VPN package" is system-only since
+    // Android Q). Battery opt row reads PowerManager.IsIgnoringBatteryOptimizations
+    // each time the overlay opens. Auto-reconnect is a simple CheckBox
+    // bound to AndroidStorage.GetAutoReconnectOnNetworkChange.
+    private TextBlock? _reliabilityBatteryStatusLabel;
+    private Avalonia.Controls.Button? _reliabilityBatteryButton;
+    private Avalonia.Controls.CheckBox? _reliabilityAutoReconnect;
     private bool _settingsLoading = false;
 
     // v3.0 Phase 7.5 — per-app filter picker overlay (handbook §5.5).
@@ -1475,7 +1484,10 @@ public partial class AndroidApp : Avalonia.Application
 
         // Stacked sub-sections. Each returns a Border wrapping the controls
         // for that section so the visual grouping mirrors desktop's
-        // "Border + StackPanel" cards.
+        // "Border + StackPanel" cards. v2.32.0 AND-NETRES — added
+        // Reliability section between Leak and Updates: it relates to
+        // protection-style features (keep-tunnel-alive) so it sits next
+        // to Leak for thematic clustering.
         var inner = new StackPanel
         {
             Spacing = 18,
@@ -1484,6 +1496,7 @@ public partial class AndroidApp : Avalonia.Application
             {
                 BuildSettingsRoutingSection(),
                 BuildSettingsLeakSection(),
+                BuildSettingsReliabilitySection(),
                 BuildSettingsUpdatesSection(),
                 BuildSettingsAutostartSection(),
             }
@@ -1636,6 +1649,135 @@ public partial class AndroidApp : Avalonia.Application
         {
             Spacing = 8,
             Children = { sectionTitle, blockGrid, dnsHeader, _settingsDnsStrategy, dnsHint }
+        };
+        return WrapSection(stack);
+    }
+
+    /// <summary>
+    /// v2.32.0 AND-NETRES (2026-05-07) — Reliability sub-section. Surfaces
+    /// the three Android-specific knobs that keep the VPN tunnel up across
+    /// the platform-specific stress tests:
+    /// <list type="bullet">
+    ///   <item>Always-on VPN: deep-link to system VPN settings (no
+    ///   programmatic status — the API for "am I the always-on VPN
+    ///   package" is system-only since Android Q).</item>
+    ///   <item>Battery optimization: live status (PowerManager.IsIgnoringBatteryOptimizations)
+    ///   + button to either request the exclusion or open the system
+    ///   list when already excluded.</item>
+    ///   <item>Auto-reconnect on network change: persisted toggle that
+    ///   <c>VpnRouterService.fireUpdate</c> reads to decide whether to
+    ///   forward subsequent default-interface updates to libbox.</item>
+    /// </list>
+    /// </summary>
+    private Control BuildSettingsReliabilitySection()
+    {
+        var sectionTitle = MakeSectionTitle(Localization.SettingsSectionReliability);
+        var intro = new TextBlock
+        {
+            Text = Localization.SettingsReliabilityIntro,
+            FontSize = 11,
+            Foreground = GetBrush("TextSecondaryBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        // Row 1 — Always-on VPN (deep-link). No status indicator — the
+        // ConnectivityManager.getAlwaysOnVpnPackage() API is system-app
+        // only since Android Q, so we can't reliably read it from a
+        // regular app. Hint copy explains where to look.
+        var alwaysOnTitle = new TextBlock
+        {
+            Text = Localization.ReliabilityAlwaysOnTitle,
+            FontWeight = FontWeight.SemiBold,
+            FontSize = 11,
+            Foreground = GetBrush("TextPrimaryBrush"),
+        };
+        var alwaysOnHint = new TextBlock
+        {
+            Text = Localization.ReliabilityAlwaysOnHint,
+            FontSize = 10,
+            Foreground = GetBrush("TextMutedBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var alwaysOnBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.ReliabilityAlwaysOnButton,
+            FontSize = 10,
+            Padding = new Thickness(10, 5),
+            MinHeight = 0,
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        alwaysOnBtn.Click += OnReliabilityAlwaysOnClicked;
+
+        // Row 2 — Battery optimization. Live status read at section build
+        // time AND each time the overlay re-opens via ShowSettings. The
+        // button text/action flips based on whether we're already excluded.
+        var batteryTitle = new TextBlock
+        {
+            Text = Localization.ReliabilityBatteryOptTitle,
+            FontWeight = FontWeight.SemiBold,
+            FontSize = 11,
+            Foreground = GetBrush("TextPrimaryBrush"),
+        };
+        _reliabilityBatteryStatusLabel = new TextBlock
+        {
+            FontSize = 10,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var batteryHint = new TextBlock
+        {
+            Text = Localization.ReliabilityBatteryOptHint,
+            FontSize = 10,
+            Foreground = GetBrush("TextMutedBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+        _reliabilityBatteryButton = new Avalonia.Controls.Button
+        {
+            FontSize = 10,
+            Padding = new Thickness(10, 5),
+            MinHeight = 0,
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        _reliabilityBatteryButton.Click += OnReliabilityBatteryClicked;
+        UpdateBatteryOptimizationStatus();
+
+        // Row 3 — Auto-reconnect toggle.
+        _reliabilityAutoReconnect = new Avalonia.Controls.CheckBox
+        {
+            IsChecked = AndroidStorage.GetAutoReconnectOnNetworkChange(),
+            MinHeight = 0,
+            Padding = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 1, 0, 0),
+        };
+        _reliabilityAutoReconnect.IsCheckedChanged += OnReliabilityAutoReconnectChanged;
+        var autoReconnectCard = MakeCheckboxCard(_reliabilityAutoReconnect,
+            Localization.ReliabilityAutoReconnectTitle,
+            Localization.ReliabilityAutoReconnectHint);
+
+        // Row spacing: 8 between title/hint pairs, 16 between rows.
+        var alwaysOnRow = new StackPanel
+        {
+            Spacing = 4,
+            Children = { alwaysOnTitle, alwaysOnHint, alwaysOnBtn },
+        };
+        var batteryRow = new StackPanel
+        {
+            Spacing = 4,
+            Children =
+            {
+                batteryTitle,
+                _reliabilityBatteryStatusLabel,
+                batteryHint,
+                _reliabilityBatteryButton,
+            },
+        };
+
+        var stack = new StackPanel
+        {
+            Spacing = 14,
+            Children = { sectionTitle, intro, alwaysOnRow, batteryRow, autoReconnectCard },
         };
         return WrapSection(stack);
     }
@@ -2028,6 +2170,12 @@ public partial class AndroidApp : Avalonia.Application
             if (_settingsAutostartVpn is not null) _settingsAutostartVpn.IsChecked = AndroidStorage.GetAutostartVpn();
             if (_settingsAutostartZapret is not null) _settingsAutostartZapret.IsChecked = AndroidStorage.GetAutostartZapret();
             if (_settingsAutostartTgProxy is not null) _settingsAutostartTgProxy.IsChecked = AndroidStorage.GetAutostartTgProxy();
+            // AND-NETRES — re-seed reliability controls + refresh battery
+            // optimization state. The user may have changed the system-side
+            // exclusion since the overlay was last visible.
+            if (_reliabilityAutoReconnect is not null)
+                _reliabilityAutoReconnect.IsChecked = AndroidStorage.GetAutoReconnectOnNetworkChange();
+            UpdateBatteryOptimizationStatus();
         }
         finally
         {
@@ -2111,6 +2259,136 @@ public partial class AndroidApp : Avalonia.Application
     {
         if (_settingsLoading || _settingsAutostartTgProxy is null) return;
         AndroidStorage.SetAutostartTgProxy(_settingsAutostartTgProxy.IsChecked == true);
+    }
+
+    // ── v2.32.0 AND-NETRES Reliability handlers ─────────────────────────
+
+    /// <summary>
+    /// Deep-link to the Android Settings → VPN page so the user can find
+    /// the gear next to "VPNRouter" and toggle Always-on. We use
+    /// <c>Settings.ACTION_VPN_SETTINGS</c> (works on Android 4.0+).
+    /// On API 24+ the same intent surfaces the new VPN list UI; older
+    /// platforms get the per-app VPN settings dialog.
+    /// </summary>
+    private void OnReliabilityAlwaysOnClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        try
+        {
+            var activity = MainActivity.Instance;
+            if (activity is null) return;
+            var intent = new global::Android.Content.Intent(
+                global::Android.Provider.Settings.ActionVpnSettings);
+            // Settings activities run in their own task — FLAG_ACTIVITY_NEW_TASK
+            // is required when launching from a non-Activity Context, but
+            // even from the Activity it's good practice for cross-task
+            // settings deep-links.
+            intent.AddFlags(global::Android.Content.ActivityFlags.NewTask);
+            activity.StartActivity(intent);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter",
+                $"AND-NETRES: open VPN settings failed — {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Battery-optimization deep-link. If we're already excluded
+    /// (<c>PowerManager.IsIgnoringBatteryOptimizations</c> = true), open
+    /// the system's "Battery optimization" list view so the user can
+    /// inspect / revoke the exclusion. Otherwise fire
+    /// <c>ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS</c> with our
+    /// package URI to trigger the system's grant dialog. The user must
+    /// confirm the prompt — we never auto-grant ourselves anything.
+    /// </summary>
+    private void OnReliabilityBatteryClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        try
+        {
+            var activity = MainActivity.Instance;
+            if (activity is null) return;
+            bool isExempt = IsIgnoringBatteryOptimizations(activity);
+            global::Android.Content.Intent intent;
+            if (isExempt)
+            {
+                // Open the system list view so the user can revoke the
+                // exclusion if they want. ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+                // is API 23+; we already gate the whole feature at
+                // SDK 23 minimum (csproj SupportedOSPlatformVersion=23).
+                intent = new global::Android.Content.Intent(
+                    global::Android.Provider.Settings.ActionIgnoreBatteryOptimizationSettings);
+            }
+            else
+            {
+                intent = new global::Android.Content.Intent(
+                    global::Android.Provider.Settings.ActionRequestIgnoreBatteryOptimizations);
+                intent.SetData(global::Android.Net.Uri.Parse(
+                    $"package:{activity.PackageName}"));
+            }
+            intent.AddFlags(global::Android.Content.ActivityFlags.NewTask);
+            activity.StartActivity(intent);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter",
+                $"AND-NETRES: battery opt deep-link failed — {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private void OnReliabilityAutoReconnectChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_settingsLoading || _reliabilityAutoReconnect is null) return;
+        AndroidStorage.SetAutoReconnectOnNetworkChange(
+            _reliabilityAutoReconnect.IsChecked == true);
+    }
+
+    /// <summary>
+    /// Re-read the live battery-optimization state and refresh the label
+    /// + button. Called from <c>BuildSettingsReliabilitySection</c> at
+    /// build time AND from <c>ShowSettings</c> each time the overlay
+    /// re-opens, so a user who just granted/revoked the exclusion in
+    /// system settings sees the new state when they come back.
+    /// </summary>
+    private void UpdateBatteryOptimizationStatus()
+    {
+        var activity = MainActivity.Instance;
+        if (activity is null) return;
+        bool isExempt = IsIgnoringBatteryOptimizations(activity);
+
+        if (_reliabilityBatteryStatusLabel is not null)
+        {
+            _reliabilityBatteryStatusLabel.Text = isExempt
+                ? Localization.ReliabilityBatteryOptStatusExempt
+                : Localization.ReliabilityBatteryOptStatusOptimized;
+            _reliabilityBatteryStatusLabel.Foreground = GetBrush(
+                isExempt ? "SuccessFgBrush" : "WarningFgBrush");
+        }
+        if (_reliabilityBatteryButton is not null)
+        {
+            _reliabilityBatteryButton.Content = isExempt
+                ? Localization.ReliabilityBatteryOptButtonOpen
+                : Localization.ReliabilityBatteryOptButtonGrant;
+        }
+    }
+
+    private static bool IsIgnoringBatteryOptimizations(global::Android.App.Activity activity)
+    {
+        try
+        {
+            var pm = (global::Android.OS.PowerManager?)activity.GetSystemService(
+                global::Android.Content.Context.PowerService);
+            // PowerManager.IsIgnoringBatteryOptimizations is API 23+. Our
+            // minSdk is 23 (csproj SupportedOSPlatformVersion=23.0) so the
+            // call always resolves; older Androids don't reach this code
+            // path because the feature is hidden at the Reliability section
+            // gate. Returns false on null PowerManager (fallback to "warn").
+            if (pm is null) return false;
+            return pm.IsIgnoringBatteryOptimizations(activity.PackageName ?? "");
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     // ── Mascot loading + theme-aware inversion ──────────────────────────

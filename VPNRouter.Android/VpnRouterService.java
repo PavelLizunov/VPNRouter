@@ -1,6 +1,32 @@
 // VpnRouterService — Android-native service that owns the VpnService
 // lifecycle and hosts the libbox.aar runtime.
 //
+// v2.32.0 (2026-05-07) — Network-resilience hardening (AND-NETRES):
+//   • Always-on VPN compatibility: when the system starts us via
+//     <intent-filter><action android:name="android.net.VpnService"/></intent-filter>
+//     after device boot or user toggle in Settings → VPN, action is null
+//     (or VpnService.SERVICE_INTERFACE on some OEMs). Pre-NETRES we
+//     ignored these intents and stopped the service immediately. Now we
+//     reload the last-known-good config from SharedPreferences and bring
+//     the tunnel up without needing the Activity to launch first.
+//   • Doze mode hardening: wake-lock acquired during connect-init so the
+//     box service has CPU time to finish its initial dial even with the
+//     screen off. Released after success / failure.
+//   • Last-good-config persistence: after a successful boxService.start()
+//     we copy pendingConfigJson + pendingPerAppMode + pendingPerAppPackages
+//     into SharedPreferences. Always-on reads these back. Survives reboot
+//     because SharedPreferences are flushed to disk by the framework.
+//   • Auto-reconnect toggle: AndroidStorage's "auto_reconnect_on_network_change"
+//     pref controls whether fireUpdate forwards subsequent default-interface
+//     changes to libbox. ON (default) = sing-box re-binds upstream sockets
+//     on Wi-Fi ↔ cellular handoff. OFF = first-bind only, sing-box keeps
+//     using whatever interface it dialed on (less robust, included for
+//     debugging interference between libbox's own interface monitor and
+//     the platform monitor).
+//   • START_STICKY: tells the framework to recreate us if the kernel kills
+//     us under memory pressure. Pre-NETRES we used START_NOT_STICKY which
+//     is wrong for an Always-on VPN — the system would not bring us back.
+//
 // v3.0 Phase 5 (2026-05-04) — REWRITE based on sagernet/sing-box-for-android
 // reference (BoxService.kt + VPNService.kt + PlatformInterfaceWrapper.kt).
 // Pre-5 we used commandServer.startOrReloadService() with a minimal
@@ -36,7 +62,9 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
@@ -49,6 +77,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
+import android.os.PowerManager;
 import android.system.OsConstants;
 import android.util.Base64;
 import android.util.Log;
@@ -105,6 +134,20 @@ public final class VpnRouterService extends VpnService {
     private static final String NOTIFICATION_CHANNEL_ID = "vpnrouter_tunnel";
     private static final String LOG_TAG = "VpnRouter";
 
+    // v2.32.0 AND-NETRES — SharedPreferences keys read from BOTH this Java
+    // service AND the C# AndroidStorage. The "vpnrouter_settings" prefs
+    // file is the same one AndroidStorage uses (PrefsName const), so the
+    // keys must stay in sync with AndroidStorage.cs.
+    private static final String PREFS_NAME = "vpnrouter_settings";
+    private static final String KEY_LAST_GOOD_CONFIG = "last_good_config_json";
+    private static final String KEY_LAST_GOOD_PER_APP_MODE = "last_good_per_app_mode";
+    // Stored as newline-separated package names. Java doesn't ship a JSON
+    // parser in android.jar (org.json works but adds boilerplate); newline
+    // is illegal inside Android package names, so it's a safe delimiter
+    // and keeps the persistence path simple.
+    private static final String KEY_LAST_GOOD_PER_APP_PACKAGES = "last_good_per_app_packages_lines";
+    private static final String KEY_AUTO_RECONNECT = "auto_reconnect_on_network_change";
+
     private static boolean libboxSetupDone = false;
 
     private String pendingConfigJson;
@@ -113,6 +156,12 @@ public final class VpnRouterService extends VpnService {
     private String[] pendingPerAppPackages;
     private BoxService boxService;
     private ParcelFileDescriptor currentPfd;
+    // v2.32.0 AND-NETRES — wake-lock held during connect-init so the
+    // box service can finish its first dial even on a screen-off / Doze
+    // device. Acquired in startTunnel(), released when tunnel-up fires
+    // OR the start path errors. 60-second hard cap so a stuck dial can't
+    // drain battery indefinitely.
+    private PowerManager.WakeLock connectWakeLock;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -126,8 +175,34 @@ public final class VpnRouterService extends VpnService {
         } else if (ACTION_STOP.equals(action)) {
             stopTunnel();
             stopSelf();
+        } else {
+            // v2.32.0 AND-NETRES — Always-on entry path.
+            // The system starts us via the <intent-filter> declared in the
+            // AndroidManifest (action="android.net.VpnService"). On Android
+            // 7+ the system passes intent.action = VpnService.SERVICE_INTERFACE;
+            // some OEMs / older Androids fire a null-action restart. Both
+            // mean "user enabled Always-on for VPNRouter — bring the tunnel
+            // up using whatever config last worked".
+            //
+            // Pre-NETRES this path fell through and the service stopped.
+            // Result: Always-on flag was set in system Settings but the
+            // tunnel never actually established at boot.
+            Log.i(LOG_TAG, "AND-NETRES: system-initiated start (action=" + action
+                    + ") — attempting last-good config restore");
+            if (loadLastGoodConfig()) {
+                startTunnel();
+            } else {
+                Log.w(LOG_TAG, "AND-NETRES: no last-good config saved; "
+                        + "user must launch app and tap Connect at least once");
+                stopSelf();
+            }
         }
-        return START_NOT_STICKY;
+        // START_STICKY: if the kernel kills us under memory pressure, the
+        // framework recreates the service with a null intent → we hit the
+        // Always-on branch above and rebuild from last-good config. This
+        // is the right policy for a long-running VPN service that owns a
+        // foreground notification.
+        return START_STICKY;
     }
 
     @Override
@@ -138,9 +213,17 @@ public final class VpnRouterService extends VpnService {
     private void startTunnel() {
         startForeground(NOTIFICATION_ID, buildNotification());
 
+        // AND-NETRES: hold a partial wake-lock during the ~5 s connect-init
+        // window. Without it, on a screen-off / Doze device the kernel
+        // can swap us out mid-handshake and the first dial silently
+        // hangs. 60 s timeout is the fail-safe — well over the typical
+        // libbox.start time (~1-2 s on this hardware).
+        acquireConnectWakeLock();
+
         try {
             ensureLibboxSetup();
             startLibboxService();
+            persistLastGoodConfig();
             sendBroadcast(new Intent(ACTION_TUNNEL_UP).setPackage(getPackageName()));
         } catch (Exception e) {
             Log.e(LOG_TAG, "startTunnel failed: " + e.getClass().getName() + ": " + e.getMessage(), e);
@@ -148,6 +231,117 @@ public final class VpnRouterService extends VpnService {
             err.putExtra(EXTRA_ERROR_MESSAGE, e.getClass().getSimpleName() + ": " + e.getMessage());
             sendBroadcast(err);
             stopSelf();
+        } finally {
+            releaseConnectWakeLock();
+        }
+    }
+
+    /**
+     * v2.32.0 AND-NETRES — persist the just-started config so an Always-on
+     * trigger can rebuild the tunnel without going through the Activity.
+     * Called only from <code>startTunnel</code> AFTER
+     * <code>boxService.start()</code> succeeded — we never overwrite a
+     * known-good config with one that failed to start. Best-effort: if
+     * SharedPreferences write throws, the tunnel keeps running, but the
+     * next Always-on bring-up will fall back to the previous good config.
+     */
+    private void persistLastGoodConfig() {
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+            SharedPreferences.Editor editor = prefs.edit();
+            editor.putString(KEY_LAST_GOOD_CONFIG, pendingConfigJson);
+            editor.putString(KEY_LAST_GOOD_PER_APP_MODE,
+                    pendingPerAppMode != null ? pendingPerAppMode : "off");
+            if (pendingPerAppPackages != null && pendingPerAppPackages.length > 0) {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < pendingPerAppPackages.length; i++) {
+                    if (i > 0) sb.append('\n');
+                    sb.append(pendingPerAppPackages[i] != null ? pendingPerAppPackages[i] : "");
+                }
+                editor.putString(KEY_LAST_GOOD_PER_APP_PACKAGES, sb.toString());
+            } else {
+                editor.remove(KEY_LAST_GOOD_PER_APP_PACKAGES);
+            }
+            // apply() is async + non-throwing — for a "best effort" path
+            // that's the right choice. commit() would block the foreground
+            // start path on disk I/O for ~5-50 ms.
+            editor.apply();
+            Log.i(LOG_TAG, "AND-NETRES: persisted last-good config ("
+                    + pendingConfigJson.length() + " chars, perAppMode="
+                    + pendingPerAppMode + ", packages="
+                    + (pendingPerAppPackages == null ? 0 : pendingPerAppPackages.length) + ")");
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "AND-NETRES: persistLastGoodConfig threw: " + e.getMessage());
+        }
+    }
+
+    /**
+     * v2.32.0 AND-NETRES — load the last-known-good config from
+     * SharedPreferences into the same <code>pending*</code> fields the
+     * ACTION_START path uses. Returns true if a non-empty config was
+     * loaded.
+     */
+    private boolean loadLastGoodConfig() {
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+            String json = prefs.getString(KEY_LAST_GOOD_CONFIG, null);
+            if (json == null || json.isEmpty()) return false;
+
+            pendingConfigJson = json;
+            pendingPerAppMode = prefs.getString(KEY_LAST_GOOD_PER_APP_MODE, "off");
+            String packed = prefs.getString(KEY_LAST_GOOD_PER_APP_PACKAGES, null);
+            if (packed == null || packed.isEmpty()) {
+                pendingPerAppPackages = new String[0];
+            } else {
+                pendingPerAppPackages = packed.split("\n");
+            }
+            // Allowed-packages extra was the legacy slot; AND-NETRES restore
+            // path always uses the per-app filter mode/packages exclusively.
+            pendingAllowedPackages = new String[0];
+            Log.i(LOG_TAG, "AND-NETRES: loaded last-good config (" + json.length()
+                    + " chars, perAppMode=" + pendingPerAppMode
+                    + ", packages=" + pendingPerAppPackages.length + ")");
+            return true;
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "AND-NETRES: loadLastGoodConfig threw: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * v2.32.0 AND-NETRES — acquire a partial wake-lock for the connect-init
+     * window. PARTIAL_WAKE_LOCK keeps the CPU running but lets the screen
+     * sleep, exactly what we want for a background VPN bring-up. The
+     * 60-second timeout is a fail-safe in case <code>releaseConnectWakeLock</code>
+     * is somehow skipped (e.g. JVM kill mid-startup). setReferenceCounted(false)
+     * means a stray double-acquire just no-ops instead of leaking grants.
+     */
+    private void acquireConnectWakeLock() {
+        try {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm == null) return;
+            if (connectWakeLock != null && connectWakeLock.isHeld()) return;
+            connectWakeLock = pm.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "VpnRouter:tunnel-init");
+            connectWakeLock.setReferenceCounted(false);
+            connectWakeLock.acquire(60_000L);
+            Log.i(LOG_TAG, "AND-NETRES: acquired connect wake-lock (60s timeout)");
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "AND-NETRES: acquireConnectWakeLock threw: " + e.getMessage());
+        }
+    }
+
+    private void releaseConnectWakeLock() {
+        try {
+            if (connectWakeLock != null && connectWakeLock.isHeld()) {
+                connectWakeLock.release();
+                Log.i(LOG_TAG, "AND-NETRES: released connect wake-lock");
+            }
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "AND-NETRES: releaseConnectWakeLock threw: " + e.getMessage());
+        } finally {
+            connectWakeLock = null;
         }
     }
 
@@ -230,6 +424,11 @@ public final class VpnRouterService extends VpnService {
             }
             currentPfd = null;
         }
+        // AND-NETRES belt-and-suspenders — startTunnel's finally already
+        // releases this, but if a kill landed between acquire and finally
+        // (or the tunnel was running and got externally stopped) we make
+        // sure the wake-lock doesn't leak.
+        releaseConnectWakeLock();
         stopForeground(STOP_FOREGROUND_REMOVE);
         try {
             sendBroadcast(new Intent(ACTION_TUNNEL_DOWN).setPackage(getPackageName()));
@@ -415,6 +614,15 @@ public final class VpnRouterService extends VpnService {
         private InterfaceUpdateListener defaultListener;
         private ConnectivityManager.NetworkCallback defaultCallback;
         private final Handler mainHandler = new Handler(Looper.getMainLooper());
+        // v2.32.0 AND-NETRES — first-bind tracking. When the user disables
+        // the "auto-reconnect on network change" toggle, we still need to
+        // fire the FIRST updateDefaultInterface so sing-box's outbound
+        // sockets bind to a real interface and dialing works. Subsequent
+        // changes (Wi-Fi → cellular, network-loss-and-recovery) are then
+        // suppressed — sing-box keeps using its initial interface even if
+        // the kernel reports a new default. ON (default) = forward all
+        // updates; OFF = first update only.
+        private boolean firstUpdateFired = false;
 
         VpnRouterPlatformInterface(VpnRouterService service) {
             this.service = service;
@@ -713,6 +921,30 @@ public final class VpnRouterService extends VpnService {
         private void fireUpdate(ConnectivityManager cm, Network network) {
             InterfaceUpdateListener l = defaultListener;
             if (l == null) return;
+
+            // v2.32.0 AND-NETRES — auto-reconnect toggle. When OFF, fire
+            // only the first update (so sing-box's initial bind works) and
+            // ignore subsequent changes. ON / unset = pre-NETRES Phase 6.2
+            // behavior (every change forwarded). The pref is read from
+            // SharedPreferences each time rather than cached because the
+            // user can toggle it from the Reliability section while the
+            // tunnel is running.
+            if (firstUpdateFired) {
+                try {
+                    SharedPreferences prefs = service.getSharedPreferences(
+                            PREFS_NAME, Context.MODE_PRIVATE);
+                    boolean autoReconnect = prefs.getBoolean(KEY_AUTO_RECONNECT, true);
+                    if (!autoReconnect) {
+                        Log.i(LOG_TAG, "AND-NETRES: auto-reconnect OFF — "
+                                + "skipping default-interface update");
+                        return;
+                    }
+                } catch (Exception ignored) {
+                    // Pref read failed → fall through to forward (default-on
+                    // semantics), better to over-forward than under-forward.
+                }
+            }
+
             try {
                 LinkProperties lp = cm.getLinkProperties(network);
                 if (lp == null) return;
@@ -735,6 +967,7 @@ public final class VpnRouterService extends VpnService {
 
                 Log.i(LOG_TAG, "Phase 6.2: updateDefaultInterface(" + name + ", " + index + ")");
                 l.updateDefaultInterface(name, index, false, false);
+                firstUpdateFired = true;
             } catch (Exception e) {
                 Log.w(LOG_TAG, "Phase 6.2: fireUpdate threw: " + e.getMessage());
             }
@@ -753,6 +986,10 @@ public final class VpnRouterService extends VpnService {
                 defaultCallback = null;
             }
             defaultListener = null;
+            // AND-NETRES — reset the first-update guard so the next
+            // boxService.start() (e.g. after a stop+start cycle) re-fires
+            // the initial bind unconditionally even if auto-reconnect is OFF.
+            firstUpdateFired = false;
         }
 
         @Override

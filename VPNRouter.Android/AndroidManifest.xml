@@ -32,6 +32,21 @@
          Settings → Apps → VPNRouter → Install unknown apps; we deep-
          link them there from the in-app banner if not yet granted. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- v2.32.0 AND-NETRES (2026-05-07) — partial wake-lock acquired by
+         VpnRouterService.acquireConnectWakeLock during the connect-init
+         window so a screen-off / Doze device finishes the first dial.
+         60-second hard timeout; released when tunnel-up fires or
+         start path errors. WAKE_LOCK is a normal-protection-level
+         permission (granted at install, no runtime prompt). -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- v2.32.0 AND-NETRES (2026-05-07) — needed for the deep-link from
+         Settings > Reliability > "Disable battery optimization" button.
+         Without this permission the
+         Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS intent fails
+         silently on Android 6+ (the system's package-installer-style
+         dialog won't accept the request). The user still has to confirm
+         the prompt manually — we never grant ourselves the exclusion. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application android:label="VPNRouter"
                  android:supportsRtl="true">

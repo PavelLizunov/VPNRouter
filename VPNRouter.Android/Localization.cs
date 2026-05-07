@@ -481,6 +481,57 @@ internal static class Localization
     public static string SettingsSectionUpdates => Ru ? "Обновления" : "Updates";
     public static string SettingsSectionAutostart => Ru ? "Автозапуск" : "Autostart";
 
+    // ── v2.32.0 AND-NETRES (2026-05-07) Reliability section ────────────
+    //
+    // No desktop equivalent — Android-only features (Always-on VPN, Doze
+    // mode, battery optimization) live in this dedicated section. The
+    // section sits between Autostart and Updates so the kebab menu user
+    // who's looking for "stay connected at all times" plumbing finds it
+    // before they hit the Updates / Diagnostics tail.
+    public static string SettingsSectionReliability => Ru ? "Резервирование" : "Reliability";
+    public static string SettingsReliabilityIntro => Ru
+        ? "Чтобы VPN держался даже при перезагрузке телефона, в режиме энергосбережения и при смене Wi-Fi на мобильную сеть."
+        : "Keep VPN up across reboots, in battery-saver / Doze mode, and when switching Wi-Fi ↔ cellular.";
+
+    // Always-on VPN row
+    public static string ReliabilityAlwaysOnTitle => Ru
+        ? "Always-on VPN"
+        : "Always-on VPN";
+    public static string ReliabilityAlwaysOnHint => Ru
+        ? "В системных настройках Android: VPN → шестерёнка рядом с VPNRouter → «Always-on VPN». После включения туннель поднимется сам после перезагрузки и при подключении к новой сети."
+        : "In Android Settings: VPN → gear next to VPNRouter → «Always-on VPN». Once enabled, the tunnel comes up on its own after reboot and when joining a new network.";
+    public static string ReliabilityAlwaysOnButton => Ru
+        ? "Открыть настройки VPN"
+        : "Open VPN settings";
+
+    // Battery optimization row
+    public static string ReliabilityBatteryOptTitle => Ru
+        ? "Энергосбережение"
+        : "Battery optimization";
+    public static string ReliabilityBatteryOptStatusExempt => Ru
+        ? "✓ VPNRouter исключён из энергосбережения"
+        : "✓ VPNRouter is excluded from battery optimization";
+    public static string ReliabilityBatteryOptStatusOptimized => Ru
+        ? "⚠ VPNRouter в обычном энергосбережении — Android может прибить туннель в Doze"
+        : "⚠ VPNRouter is under standard battery optimization — Android may kill the tunnel in Doze";
+    public static string ReliabilityBatteryOptHint => Ru
+        ? "Android в Doze (экран выключен 30+ минут) урезает CPU фоновым процессам. Если VPNRouter не исключён, sing-box может застрять между ретрансляциями и потерять трафик."
+        : "Android Doze (screen-off for 30+ min) throttles background CPU. Without an exclusion, sing-box can stall between retransmissions and drop packets.";
+    public static string ReliabilityBatteryOptButtonGrant => Ru
+        ? "Запросить исключение"
+        : "Request exclusion";
+    public static string ReliabilityBatteryOptButtonOpen => Ru
+        ? "Открыть настройки энергосбережения"
+        : "Open battery settings";
+
+    // Auto-reconnect toggle row
+    public static string ReliabilityAutoReconnectTitle => Ru
+        ? "Авто-переподключение при смене сети"
+        : "Auto-reconnect on network change";
+    public static string ReliabilityAutoReconnectHint => Ru
+        ? "При переключении Wi-Fi ↔ мобильная sing-box сам пересвяжет upstream-сокеты с новым интерфейсом. Отключи только если подозреваешь конфликт с внутренним монитором интерфейсов libbox."
+        : "On Wi-Fi ↔ cellular handoff, sing-box re-binds upstream sockets to the new interface. Disable only if you suspect a conflict with libbox's own interface monitor.";
+
     // Routing — RoutingDescription / SplitTunnelTitle+Subtitle /
     // FullTunnelTitle+Subtitle / BypassRussianTrafficLabel+Hint
     public static string RoutingDescription => Ru
