@@ -551,6 +551,14 @@ public partial class AndroidApp : Avalonia.Application
                                             "TextPrimaryBrush", OnMenuCopyLogPathClicked);
         _menuUpdateCheckItem = MakeMenuItem(Localization.MenuItemUpdateCheck,
                                             "TextPrimaryBrush", OnMenuUpdateCheckClicked);
+        // v2.32.0 (Android-led, 2026-05-07) — config share entries. Sit
+        // in Diagnostics next to Settings + log items (resilience-related)
+        // rather than under their own header — fewer sections = easier
+        // for first-time users.
+        _menuExportConfigItem = MakeMenuItem(Localization.MenuItemExportConfig,
+                                             "TextPrimaryBrush", OnMenuExportConfigClicked);
+        _menuImportConfigItem = MakeMenuItem(Localization.MenuItemImportConfig,
+                                             "TextPrimaryBrush", OnMenuImportConfigClicked);
         _menuResetSettingsItem = MakeMenuItem(Localization.MenuItemResetSettings,
                                               "TextPrimaryBrush", OnMenuResetSettingsClicked);
         _menuVersionItem = MakeMenuItem(
@@ -576,7 +584,8 @@ public partial class AndroidApp : Avalonia.Application
         AppendMenuSection(menuStack, Localization.MenuSectionFreeConfigs,
                           new[] { _menuFreeConfigsItem });
         AppendMenuSection(menuStack, Localization.MenuSectionDiagnostics,
-                          new[] { _menuSettingsItem, _menuOpenLogItem, _menuCopyLogPathItem, _menuUpdateCheckItem });
+                          new[] { _menuSettingsItem, _menuOpenLogItem, _menuCopyLogPathItem,
+                                  _menuUpdateCheckItem, _menuExportConfigItem, _menuImportConfigItem });
         AppendMenuSection(menuStack, Localization.MenuSectionTroubleshooting,
                           new[] { _menuResetSettingsItem });
         AppendMenuSection(menuStack, Localization.MenuSectionAbout,
@@ -1294,9 +1303,18 @@ public partial class AndroidApp : Avalonia.Application
         // Triggered from a tap on the SubscribePage card's name area.
         _srvOverlay = BuildServerListOverlay();
 
+        // v2.32.0 (Android-led, 2026-05-07) — config share overlays
+        // (export / import / QR). Defined in AndroidApp.ConfigShare.cs.
+        // All three are hidden by default, surfaced via kebab menu items
+        // (export/import) or the form's 📷 QR button (QR share).
+        _cfgExportOverlay = BuildExportOverlay();
+        _cfgImportOverlay = BuildImportOverlay();
+        _cfgQrOverlay = BuildQrShareOverlay();
+
         return new Grid
         {
-            Children = { mainScroller, _logOverlay, _appPickerOverlay, _subsOverlay, _fcOverlay, _settingsOverlay, _srvOverlay }
+            Children = { mainScroller, _logOverlay, _appPickerOverlay, _subsOverlay, _fcOverlay, _settingsOverlay, _srvOverlay,
+                         _cfgExportOverlay, _cfgImportOverlay, _cfgQrOverlay }
         };
     }
 
@@ -2707,9 +2725,24 @@ public partial class AndroidApp : Avalonia.Application
 
     private void OnScanQrClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if (_serverInputError is null) return;
-        _serverInputError.Text = Localization.QrComingSoon;
-        _serverInputError.IsVisible = true;
+        // v2.32.0 (Android-led, 2026-05-07) — replaces handbook §3.4
+        // placeholder. Opens the QR share overlay with the current
+        // active server's URI rendered as a QR code + a paste-from-
+        // clipboard import field. See AndroidApp.ConfigShare.cs for
+        // the overlay logic.
+        ShowQrOverlay();
+    }
+
+    private void OnMenuExportConfigClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        ShowExportOverlay();
+    }
+
+    private void OnMenuImportConfigClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        ShowImportOverlay();
     }
 
     // ── Header kebab menu ──────────────────────────────────────────────
@@ -3767,6 +3800,9 @@ public partial class AndroidApp : Avalonia.Application
         if (_menuSectionAbout is not null) _menuSectionAbout.Text = Localization.MenuSectionAbout;
         if (_menuSectionFreeConfigs is not null) _menuSectionFreeConfigs.Text = Localization.MenuSectionFreeConfigs;
         if (_menuFreeConfigsItem is not null) _menuFreeConfigsItem.Content = Localization.MenuItemOpenFreeConfigs;
+        // v2.32.0 (Android-led) — refresh config share overlay strings
+        // (export/import/QR) along with their kebab entries.
+        RefreshConfigShareLocalization();
         if (_statusTitle is not null)
             _statusTitle.Text = MainActivity.IntendedConnected ? Localization.SimpleStatusTitleOn : Localization.SimpleStatusTitleOff;
         if (_statusDesc is not null)

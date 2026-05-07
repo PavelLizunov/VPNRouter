@@ -66,6 +66,14 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
 {
     private const int RequestVpnConsent = 0xBEEF;
 
+    // v2.32.0 (Android-led, 2026-05-07) — config share intent codes.
+    // Distinct request codes so OnActivityResult can dispatch the result
+    // to the right handler. CreateDocument is for export (write JSON to
+    // a user-picked location); OpenDocument is for import (read JSON
+    // from a user-picked file).
+    private const int RequestExportConfig = 0xC01E;
+    private const int RequestImportConfig = 0xC01F;
+
     /// <summary>
     /// Phase 1.E (2026-05-04) — placeholder VLESS-Reality URI used to
     /// smoke-test the full VPNRouter.Core → ConfigGenerator → libbox
@@ -290,6 +298,21 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
     protected override void OnActivityResult(int requestCode, Result resultCode, Intent? data)
     {
         base.OnActivityResult(requestCode, resultCode, data);
+
+        // v2.32.0 (Android-led, 2026-05-07) — config share roundtrip.
+        // Both CreateDocument (export) and OpenDocument (import) deliver
+        // their result here; we route by request code.
+        if (requestCode == RequestExportConfig)
+        {
+            HandleExportResult(resultCode, data);
+            return;
+        }
+        if (requestCode == RequestImportConfig)
+        {
+            HandleImportResult(resultCode, data);
+            return;
+        }
+
         if (requestCode != RequestVpnConsent)
         {
             return;
@@ -307,6 +330,152 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
             // User declined — keep IntendedConnected false so the button
             // resets to "Connect" and they can retry.
             SetIntent(false);
+        }
+    }
+
+    // ── v2.32.0 (Android-led, 2026-05-07) — config share intent helpers ──
+    //
+    // Public entry points the Avalonia UI calls when the user taps Export
+    // or Import. We bridge to the Android Storage Access Framework via
+    // ACTION_CREATE_DOCUMENT / ACTION_OPEN_DOCUMENT and stash the pending
+    // payload (export JSON) or callback (import) on static fields so
+    // OnActivityResult can complete the round-trip.
+    //
+    // Pre-ConfigShare: this kind of file I/O wasn't done from inside the
+    // app — only auto-update sideload, which uses a content:// URI minted
+    // by FileProvider. SAF gives us a free permission story (user picks
+    // the location, no MANAGE_EXTERNAL_STORAGE required).
+
+    /// <summary>JSON content waiting to be written to a CreateDocument
+    /// destination. Set by <see cref="RequestExportConfig"/>; consumed in
+    /// <see cref="HandleExportResult"/>; cleared on completion.</summary>
+    private static string? _pendingExportContent;
+
+    /// <summary>One-shot export-result callback. Invoked with
+    /// (ok, message) — message = success summary or error string.
+    /// Stashed in <see cref="RequestExportConfigShare"/> by the UI so
+    /// the post-result toast hits the right overlay.</summary>
+    public static Action<bool, string?>? PendingExportCallback;
+
+    /// <summary>One-shot import-result callback. Invoked with
+    /// (ok, contentOrError) — content = raw JSON bytes decoded as UTF-8
+    /// when ok, error string otherwise.</summary>
+    public static Action<bool, string?>? PendingImportCallback;
+
+    /// <summary>
+    /// Launch ACTION_CREATE_DOCUMENT (system "Save as" picker) so the user
+    /// can choose where to drop the export JSON. <paramref name="content"/>
+    /// is held until the picker resolves; the eventual write happens in
+    /// <see cref="HandleExportResult"/> via ContentResolver.OpenOutputStream.
+    /// </summary>
+    public void RequestExportConfigShare(string content, string suggestedName)
+    {
+        _pendingExportContent = content;
+        try
+        {
+            var intent = new Intent(Intent.ActionCreateDocument);
+            intent.SetType("application/json");
+            intent.AddCategory(Intent.CategoryOpenable);
+            intent.PutExtra(Intent.ExtraTitle, suggestedName);
+            StartActivityForResult(intent, RequestExportConfig);
+        }
+        catch (Exception ex)
+        {
+            _pendingExportContent = null;
+            PendingExportCallback?.Invoke(false, $"{ex.GetType().Name}: {ex.Message}");
+            PendingExportCallback = null;
+        }
+    }
+
+    /// <summary>
+    /// Launch ACTION_OPEN_DOCUMENT (system "Pick file") with mime filter
+    /// application/json. Result handled in
+    /// <see cref="HandleImportResult"/> — reads via OpenInputStream + UTF-8.
+    /// </summary>
+    public void RequestImportConfigShare()
+    {
+        try
+        {
+            var intent = new Intent(Intent.ActionOpenDocument);
+            intent.SetType("application/json");
+            intent.AddCategory(Intent.CategoryOpenable);
+            StartActivityForResult(intent, RequestImportConfig);
+        }
+        catch (Exception ex)
+        {
+            PendingImportCallback?.Invoke(false, $"{ex.GetType().Name}: {ex.Message}");
+            PendingImportCallback = null;
+        }
+    }
+
+    private void HandleExportResult(Result resultCode, Intent? data)
+    {
+        var pendingJson = _pendingExportContent;
+        _pendingExportContent = null;
+        var callback = PendingExportCallback;
+        PendingExportCallback = null;
+
+        if (resultCode != Result.Ok || data?.Data is null)
+        {
+            callback?.Invoke(false, "cancelled");
+            return;
+        }
+        if (string.IsNullOrEmpty(pendingJson))
+        {
+            callback?.Invoke(false, "no pending content");
+            return;
+        }
+
+        try
+        {
+            using var stream = ContentResolver!.OpenOutputStream(data.Data);
+            if (stream is null)
+            {
+                callback?.Invoke(false, "openOutputStream returned null");
+                return;
+            }
+            var bytes = System.Text.Encoding.UTF8.GetBytes(pendingJson);
+            stream.Write(bytes, 0, bytes.Length);
+            stream.Flush();
+            // Surface the human-readable URI so the UI can echo it.
+            callback?.Invoke(true, data.Data.ToString());
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("VpnRouter.ConfigShare",
+                $"export write failed: {ex.GetType().Name}: {ex.Message}");
+            callback?.Invoke(false, $"{ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private void HandleImportResult(Result resultCode, Intent? data)
+    {
+        var callback = PendingImportCallback;
+        PendingImportCallback = null;
+
+        if (resultCode != Result.Ok || data?.Data is null)
+        {
+            callback?.Invoke(false, "cancelled");
+            return;
+        }
+
+        try
+        {
+            using var stream = ContentResolver!.OpenInputStream(data.Data);
+            if (stream is null)
+            {
+                callback?.Invoke(false, "openInputStream returned null");
+                return;
+            }
+            using var sr = new System.IO.StreamReader(stream, System.Text.Encoding.UTF8);
+            var content = sr.ReadToEnd();
+            callback?.Invoke(true, content);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("VpnRouter.ConfigShare",
+                $"import read failed: {ex.GetType().Name}: {ex.Message}");
+            callback?.Invoke(false, $"{ex.GetType().Name}: {ex.Message}");
         }
     }
 
