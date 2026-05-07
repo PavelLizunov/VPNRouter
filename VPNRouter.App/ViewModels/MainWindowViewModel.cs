@@ -1584,7 +1584,26 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(SmpAutostartChecked));
     }
     partial void OnAutostartZapretChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
-    partial void OnAutostartTgProxyChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
+    partial void OnAutostartTgProxyChanged(bool value)
+    {
+        if (_isLoadingUI) return;
+
+        // v2.31.10-r5 — Generate secret on enable so the Service can
+        // autostart tgproxy at boot. Without this, toggling the box
+        // before ever clicking "Start" once left config.yaml's
+        // tg_proxy_secret empty → Service logged "TgProxy secret not
+        // configured, skipping" and silently returned → user saw
+        // "Auto launch with Windows for tgproxy doesn't work" with no
+        // UI feedback. Same RNG + format used by StartTgProxy below.
+        if (value && string.IsNullOrWhiteSpace(TgProxySecret))
+        {
+            var bytes = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
+            TgProxySecret = Convert.ToHexString(bytes).ToLowerInvariant();
+            TgProxyLink = TgProxyManager.BuildProxyLink("127.0.0.1", TgProxyPort, TgProxySecret);
+        }
+
+        SaveSettings();
+    }
 
     // Zapret section navigator (master-detail).
     // v2.31.6-r5 (ZAPRET-2): consolidated 7 sections → 5 per user

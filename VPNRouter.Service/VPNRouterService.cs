@@ -332,9 +332,19 @@ public class VPNRouterService : BackgroundService
     {
         try
         {
+            // v2.31.10-r5 — also surface the skip reason to Windows Event
+            // Log (Source: VPNRouter). Pre-r5 these warnings only landed
+            // in the file log, so users reporting "autostart doesn't
+            // work" had no signal in Event Viewer to point at the actual
+            // cause (App-side fix in r5 generates the secret on toggle,
+            // but legacy installs may still hit IsInstalled=false).
             if (!TgProxyUpdater.IsInstalled())
             {
                 _logger.LogWarning("[Service] TgProxy not installed, skipping autostart");
+                WriteEventLog(
+                    "TgProxy autostart skipped: tg-ws-proxy is not installed. " +
+                    "Open the Telegram tab in the desktop app and click Install.",
+                    EventLogEntryType.Warning);
                 return;
             }
 
@@ -344,6 +354,11 @@ public class VPNRouterService : BackgroundService
             if (string.IsNullOrWhiteSpace(secret))
             {
                 _logger.LogWarning("[Service] TgProxy secret not configured, skipping");
+                WriteEventLog(
+                    "TgProxy autostart skipped: tg_proxy_secret is empty in config.yaml. " +
+                    "Toggle the autostart checkbox once in v2.31.10-r5+ to auto-generate, " +
+                    "or click Start in the Telegram tab to generate via the older path.",
+                    EventLogEntryType.Warning);
                 return;
             }
 
