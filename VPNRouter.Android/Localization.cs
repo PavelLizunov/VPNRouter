@@ -105,6 +105,39 @@ internal static class Localization
         ? "Трафик идёт напрямую — выбери конфиг и запусти туннель."
         : "Traffic goes direct — pick a config and start the tunnel.";
 
+    // ── v2.32.0 (AND-DIAG, 2026-05-07) — runtime diagnostics on status card ──
+    //
+    // Mirrors desktop's RuntimeStatus surface: connection uptime appended
+    // to the status title, a "last health check" one-liner under the
+    // description, and a transient error one-liner that persists 30 s
+    // after ACTION_TUNNEL_ERROR. Format strings are tuned for narrow
+    // mobile width — short labels, no trailing period.
+
+    /// <summary>Title format when connected — args: {0}=uptime ("0:23" or "1:23:45").</summary>
+    public static string SimpleStatusTitleOnWithUptime => Ru
+        ? "Подключено · {0}"
+        : "Connected · {0}";
+
+    /// <summary>Healthy log probe — args: {0}=seconds since last successful probe.</summary>
+    public static string DiagHealthCheckOk => Ru
+        ? "✓ Проверка {0} с назад"
+        : "✓ Last check {0}s ago";
+
+    /// <summary>Stale log probe — sing-box hasn't written for &gt;60 s.</summary>
+    public static string DiagHealthCheckStale => Ru
+        ? "⚠ Проверка не отвечает"
+        : "⚠ Stale check";
+
+    /// <summary>Pending first probe — shown for the first 30 s after connect.</summary>
+    public static string DiagHealthCheckPending => Ru
+        ? "· Ожидаю первую проверку…"
+        : "· Awaiting first check…";
+
+    /// <summary>Error one-liner — args: {0}=raw error message from EXTRA_ERROR_MESSAGE.</summary>
+    public static string DiagErrorOneLiner => Ru
+        ? "Ошибка: {0}"
+        : "Error: {0}";
+
     public static string SmpConfigRowLabel => Ru ? "Конфиг · Режим" : "Config · Mode";
     public static string SmpSourceManual => Ru ? "вручную" : "manual";
     public static string SmpSourceSubscription => Ru ? "подписка" : "subscription";

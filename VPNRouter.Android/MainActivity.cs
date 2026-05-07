@@ -133,6 +133,17 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
     /// </summary>
     public static event Action<bool>? IntentChanged;
 
+    /// <summary>
+    /// v2.32.0 (AND-DIAG, 2026-05-07) — fires when VpnRouterService
+    /// broadcasts ACTION_TUNNEL_ERROR. Carries the EXTRA_ERROR_MESSAGE
+    /// payload so the UI status card can surface a one-liner under the
+    /// status dot, mirroring desktop's StatusErrorBadge pattern. Pre-DIAG
+    /// the receiver only logged the message; the user saw a silent
+    /// disconnect with no clue why. Subscribers should marshal to UI
+    /// thread (the receiver runs on a binder dispatch thread).
+    /// </summary>
+    public static event Action<string>? TunnelErrorReported;
+
     private static bool _intendedConnected;
     public static bool IntendedConnected => _intendedConnected;
 
@@ -251,6 +262,15 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
                 case ActionTunnelError:
                     var msg = intent?.GetStringExtra(ExtraErrorMessage) ?? "(no detail)";
                     global::Android.Util.Log.Warn("VpnRouter", $"Phase 1.I: ACTION_TUNNEL_ERROR — {msg}");
+                    // v2.32.0 (AND-DIAG) — propagate to UI before the
+                    // SetIntent(false) below so the status card can show
+                    // the error one-liner alongside the disconnect.
+                    try { TunnelErrorReported?.Invoke(msg); }
+                    catch (Exception ex)
+                    {
+                        global::Android.Util.Log.Warn("VpnRouter",
+                            $"AND-DIAG: TunnelErrorReported handler threw: {ex}");
+                    }
                     SetIntent(false);
                     break;
             }
