@@ -245,13 +245,22 @@ public final class VpnRouterService extends VpnService {
     /**
      * v3.0 Phase 5 — CommandServerHandler stub. Required by
      * Libbox.newCommandServer; we don't use the clash control APIs.
+     *
+     * <p>v2.32.0 (2026-05-07) — libbox.aar API drift: upstream
+     * sing-box renamed <code>serviceStop()</code> → <code>postServiceClose()</code>
+     * (post-stop hook, called AFTER libbox internals tear the service
+     * down) and dropped <code>writeDebugMessage(String)</code> in favor
+     * of <code>PlatformInterface.writeLog(String)</code>. Updated
+     * accordingly. The semantics of <code>postServiceClose</code> are
+     * post-shutdown notification — same call site as old serviceStop
+     * for our purposes (tear down the Android Service).</p>
      */
     private static final class VpnRouterCommandHandler implements CommandServerHandler {
         private final VpnRouterService service;
         VpnRouterCommandHandler(VpnRouterService service) { this.service = service; }
 
         @Override
-        public void serviceStop() throws Exception {
+        public void postServiceClose() {
             service.stopTunnel();
             service.stopSelf();
         }
@@ -263,12 +272,6 @@ public final class VpnRouterService extends VpnService {
         }
         @Override
         public void setSystemProxyEnabled(boolean isEnabled) {}
-        @Override
-        public void writeDebugMessage(String message) {
-            if (message != null && !message.isEmpty()) {
-                Log.d("Libbox", message);
-            }
-        }
     }
 
     @Override
@@ -806,6 +809,45 @@ public final class VpnRouterService extends VpnService {
             // rules on Android (filter at VpnService.Builder layer), so
             // a stub error is acceptable.
             throw new Exception("findConnectionOwner not implemented on Android");
+        }
+
+        // ── v2.32.0 (2026-05-07) libbox API drift: PlatformInterface gained
+        // three new abstract methods. Stub implementations follow:
+        //
+        //   writeLog(String)    — replaces CommandServerHandler.writeDebugMessage,
+        //                          libbox now logs through PlatformInterface
+        //   packageNameByUid(int) — used for human-readable per-uid logs
+        //   uidByPackageName(String) — inverse of above
+        //
+        // All three are best-effort log-side helpers; functional VPN does
+        // not require them to return real data. We log the writeLog
+        // calls so libbox-internal diagnostics still surface, and use
+        // PackageManager for the uid↔package mapping when convenient.
+
+        @Override
+        public void writeLog(String message) {
+            if (message != null && !message.isEmpty()) {
+                Log.d("Libbox", message);
+            }
+        }
+
+        @Override
+        public String packageNameByUid(int uid) throws Exception {
+            try {
+                String[] packages = service.getPackageManager().getPackagesForUid(uid);
+                if (packages != null && packages.length > 0) return packages[0];
+            } catch (Exception ignore) { /* best-effort */ }
+            return "uid=" + uid;
+        }
+
+        @Override
+        public int uidByPackageName(String packageName) throws Exception {
+            try {
+                return service.getPackageManager()
+                        .getApplicationInfo(packageName, 0).uid;
+            } catch (Exception ignore) {
+                return -1;
+            }
         }
     }
 
