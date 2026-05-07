@@ -414,6 +414,15 @@ public static class AndroidStorage
     private const string KeyAutostartZapret = "autostart_zapret";      // bool
     private const string KeyAutostartTgProxy = "autostart_tgproxy";    // bool
 
+    // ── v2.32.0 AND-NETRES (2026-05-07) — Reliability section settings ──
+    //
+    // The Java VpnRouterService reads these directly (same SharedPreferences
+    // file, same key strings). Keep keys in sync with VpnRouterService.java
+    // PREFS_NAME / KEY_* constants. Defaults: auto-reconnect ON because
+    // sing-box's interface monitor needs the platform default-network
+    // updates to bind upstream sockets correctly on Wi-Fi ↔ cellular handoff.
+    private const string KeyAutoReconnectOnNetworkChange = "auto_reconnect_on_network_change";
+
     // v2.32.0 SR-1 — semantic validation. Each enum getter normalises the
     // raw stored value through ValidateOrDefault, so a typoed / older /
     // hand-edited preference can't surface as an unsupported string deep
@@ -483,6 +492,11 @@ public static class AndroidStorage
     public static string GetDpiBypassMode() =>
         ValidateOrDefault(KeyDpiBypassMode, GetString(KeyDpiBypassMode), AllowedDpiBypassModes, "off");
     public static bool SetDpiBypassMode(string value) => SetString(KeyDpiBypassMode, value);
+
+    public static bool GetAutoReconnectOnNetworkChange() =>
+        GetBool(KeyAutoReconnectOnNetworkChange, defaultValue: true);
+    public static bool SetAutoReconnectOnNetworkChange(bool value) =>
+        SetBool(KeyAutoReconnectOnNetworkChange, value);
 
     // ── v2.32.0 (AND-4): per-server TCP+TLS test history ──────────────────
     //
