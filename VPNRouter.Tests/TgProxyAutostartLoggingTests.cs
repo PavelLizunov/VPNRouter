@@ -271,10 +271,18 @@ public sealed class TgProxyAutostartLoggingTests
 
         var stripped = StripLineComments(src);
 
-        // Should invoke IsInstalled(logger: null) or IsInstalled(null)
-        // from the parameterless overload's body. We match either spelling.
+        // Should delegate to a logger-aware probe with a null logger.
+        // After v2.31.10-r5 conflict resolution between DBG-4 (logger
+        // overload) and DBG-5 (path-injectable IsInstalledAt overload),
+        // both code paths funnel into IsInstalledAt(TgProxyDir, logger).
+        // The parameterless overload now reads
+        //   IsInstalled() => IsInstalledAt(TgProxyDir, logger: null)
+        // OR the pre-merge form
+        //   IsInstalled() => IsInstalled(logger: null)
+        // Both demonstrate the same contract: parameterless probe = no
+        // logger. We accept either spelling.
         Assert.Matches(
-            @"public\s+static\s+bool\s+IsInstalled\s*\(\s*\)\s*=>\s*IsInstalled\s*\(\s*(logger\s*:\s*)?null\s*\)",
+            @"public\s+static\s+bool\s+IsInstalled\s*\(\s*\)\s*=>\s*IsInstalled(At)?\s*\(\s*[^)]*?(logger\s*:\s*)?null\s*\)",
             stripped);
     }
 

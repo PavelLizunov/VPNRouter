@@ -119,7 +119,13 @@ public sealed class AutostartContractTests
         var body = ExtractMethodBody(src, "AutostartTgProxyAsync");
         Assert.NotNull(body);
 
-        Assert.Contains("TgProxyUpdater.IsInstalled()", body);
+        // Accept either the parameterless `IsInstalled()` (legacy callers)
+        // or the logger-aware `IsInstalled(Serilog.Log.Logger)` overload
+        // shipped in v2.31.10-r5 (DBG-4 logging task). Both probe the
+        // same install state — we just need the check to exist.
+        Assert.Matches(
+            @"TgProxyUpdater\.IsInstalled\s*\(\s*([A-Za-z_][\w\.]*)?\s*\)",
+            body);
         Assert.Contains("string.IsNullOrWhiteSpace(secret)", body);
 
         // Both gates must `return` rather than just log+continue.
