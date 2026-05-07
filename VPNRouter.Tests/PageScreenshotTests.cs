@@ -61,18 +61,22 @@ public class PageScreenshotTests
     [AvaloniaFact] public void SimplePage() => Capture(new SimplePage(), "page-simple");
 
     /// <summary>
-    /// NetworkPage has a left-rail navigator with 5 sections (Routing /
-    /// Leak Protection / Content / Updates / Autostart). The default
+    /// NetworkPage has a left-rail navigator with 6 sections (Routing /
+    /// Rules / Leak Protection / Content / Updates / Autostart). The default
     /// screenshot above captures Routing; this one explicitly selects
-    /// Autostart (index 4) before rendering so the v2.27 Bug C redesign
+    /// Autostart (index 5) before rendering so the v2.27 Bug C redesign
     /// surface is visible in the PNG suite. Without this we'd ship the
     /// whole UX redesign and have no visual record of what it looks like.
+    /// <para>v2.31.10: index corrected from 4 to 5 — the v2.30.0-r2 Rules
+    /// section addition shifted everything down by one, but the test stayed
+    /// on 4 (Updates) and was silently capturing the wrong page for
+    /// multiple releases.</para>
     /// </summary>
     [AvaloniaFact]
     public void NetworkPage_AutostartTab()
     {
         var vm = GetVm();
-        vm.SelectedSettingsIndex = 4; // Autostart tab
+        vm.SelectedSettingsIndex = 5; // Autostart tab
         try
         {
             ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, "page-network-autostart");
@@ -96,7 +100,7 @@ public class PageScreenshotTests
     public void NetworkPage_Autostart_Narrow720()
     {
         var vm = GetVm();
-        vm.SelectedSettingsIndex = 4;
+        vm.SelectedSettingsIndex = 5;
         try
         {
             ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, "page-network-autostart-narrow", width: 720, height: 800);
@@ -120,7 +124,7 @@ public class PageScreenshotTests
     public void NetworkPage_Autostart_Narrow500()
     {
         var vm = GetVm();
-        vm.SelectedSettingsIndex = 4;
+        vm.SelectedSettingsIndex = 5;
         try
         {
             ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, "page-network-autostart-narrow500", width: 500, height: 800);
@@ -135,12 +139,111 @@ public class PageScreenshotTests
     public void NetworkPage_Autostart_Narrow400()
     {
         var vm = GetVm();
-        vm.SelectedSettingsIndex = 4;
+        vm.SelectedSettingsIndex = 5;
         try
         {
             ScreenshotHelper.CapturePage(new NetworkPage { DataContext = vm }, "page-network-autostart-narrow400", width: 400, height: 800);
         }
         finally { vm.SelectedSettingsIndex = 0; }
+    }
+
+    /// <summary>
+    /// v2.31.10 (autostart UX clarity): renders the Network → Autostart
+    /// sub-tab with the Service NOT installed. Per-component status
+    /// badges below VPN/Zapret/TgProxy CheckBoxes show the red ⛔ "won't
+    /// fire without service" wording — this is the dominant pre-install
+    /// state for new users, and the badge is what the user-reported
+    /// "Auto-start with Windows for tgproxy doesn't work" feedback
+    /// resolves. Capturing this state explicitly so a future regression
+    /// (status badge removed, IsAutostart*StatusBad binding broken)
+    /// shows up in the visual artefact.
+    /// </summary>
+    [AvaloniaFact]
+    public void NetworkPage_AutostartTab_ServiceNotInstalled()
+    {
+        var vm = GetVm();
+        var prev = vm.SelectedSettingsIndex;
+        var prevInstalled = vm.ServiceVm.IsInstalled;
+        try
+        {
+            vm.SelectedSettingsIndex = 5;
+            vm.ServiceVm.IsInstalled = false;
+            ScreenshotHelper.CapturePage(
+                new NetworkPage { DataContext = vm },
+                "page-network-autostart-no-service");
+        }
+        finally
+        {
+            vm.ServiceVm.IsInstalled = prevInstalled;
+            vm.SelectedSettingsIndex = prev;
+        }
+    }
+
+    /// <summary>
+    /// v2.31.10 (autostart UX clarity): same Autostart sub-tab, but with
+    /// the Service installed and running. All three component badges
+    /// flip to green ✓ "via Windows Service (boot)" — this is the steady
+    /// "everything wired up" state. Pinning both branches per release
+    /// catches a regression where the binding stays stuck on one
+    /// status (e.g. ServiceVm.PropertyChanged handler unhooked or Bool
+    /// ⇄ String wiring broken).
+    /// </summary>
+    [AvaloniaFact]
+    public void NetworkPage_AutostartTab_ServiceInstalled()
+    {
+        var vm = GetVm();
+        var prev = vm.SelectedSettingsIndex;
+        var prevInstalled = vm.ServiceVm.IsInstalled;
+        var prevRunning = vm.ServiceVm.IsRunning;
+        try
+        {
+            vm.SelectedSettingsIndex = 5;
+            vm.ServiceVm.IsInstalled = true;
+            vm.ServiceVm.IsRunning = true;
+            ScreenshotHelper.CapturePage(
+                new NetworkPage { DataContext = vm },
+                "page-network-autostart-service-installed");
+        }
+        finally
+        {
+            vm.ServiceVm.IsRunning = prevRunning;
+            vm.ServiceVm.IsInstalled = prevInstalled;
+            vm.SelectedSettingsIndex = prev;
+        }
+    }
+
+    /// <summary>
+    /// v2.31.10 (autostart UX clarity): Service installed but NOT
+    /// running. Status badge logic deliberately stays on the green ✓
+    /// boot branch because the boot semantics depend on IsInstalled
+    /// alone (SCM brings the service back up at next reboot regardless
+    /// of current runtime state). This screenshot pins that intent —
+    /// if a future change makes the badge flip to amber/red just
+    /// because the service is currently stopped, the diff highlights
+    /// the regression.
+    /// </summary>
+    [AvaloniaFact]
+    public void NetworkPage_AutostartTab_ServiceInstalledStopped()
+    {
+        var vm = GetVm();
+        var prev = vm.SelectedSettingsIndex;
+        var prevInstalled = vm.ServiceVm.IsInstalled;
+        var prevRunning = vm.ServiceVm.IsRunning;
+        try
+        {
+            vm.SelectedSettingsIndex = 5;
+            vm.ServiceVm.IsInstalled = true;
+            vm.ServiceVm.IsRunning = false;
+            ScreenshotHelper.CapturePage(
+                new NetworkPage { DataContext = vm },
+                "page-network-autostart-service-installed-stopped");
+        }
+        finally
+        {
+            vm.ServiceVm.IsRunning = prevRunning;
+            vm.ServiceVm.IsInstalled = prevInstalled;
+            vm.SelectedSettingsIndex = prev;
+        }
     }
 
     /// <summary>
