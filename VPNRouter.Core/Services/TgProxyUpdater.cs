@@ -42,7 +42,23 @@ public class TgProxyUpdater
     public TgProxyUpdater(ILogger logger) => _logger = logger;
 
     /// <summary>Check if both Python and proxy source are installed.</summary>
-    public static bool IsInstalled() => File.Exists(PythonExePath) && Directory.Exists(ProxySourceDir);
+    public static bool IsInstalled() => IsInstalledAt(TgProxyDir);
+
+    /// <summary>
+    /// Path-explicit variant of <see cref="IsInstalled"/> for unit tests
+    /// that synthesize a sandbox layout under a temp directory.
+    /// Mirrors the production check: <c>{baseDir}/python/python.exe</c>
+    /// must exist as a file AND <c>{baseDir}/proxy</c> must exist as a
+    /// directory. Internal because callers in production should always
+    /// route through <see cref="IsInstalled"/> against the real
+    /// <see cref="TgProxyDir"/>.
+    /// </summary>
+    internal static bool IsInstalledAt(string baseDir)
+    {
+        var pythonExe = Path.Combine(baseDir, "python", "python.exe");
+        var proxyDir = Path.Combine(baseDir, "proxy");
+        return File.Exists(pythonExe) && Directory.Exists(proxyDir);
+    }
 
     /// <summary>Read locally installed proxy version.</summary>
     public static string? GetLocalVersion()
