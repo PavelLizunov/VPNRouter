@@ -209,6 +209,56 @@ internal static class Localization
         ? "Авто-обновление появится в следующем апдейте."
         : "Auto-update is coming in the next release.";
 
+    // ── v2.32.0 (2026-05-07) — auto-update flow (AndroidUpdater.cs) ────
+    // Mirrors VPNRouter.App/Localization/Strings.cs entries
+    // (Checking / UpToDate / UpdateAvailableMessage / UpdateDownloading /
+    // UpdateApplying / UpdateRestarting / UpdateFailed / CheckFailed)
+    // verbatim where the desktop string fits, with Android-only additions
+    // for the install-permission deep link.
+
+    public static string UpdateCheckChecking => Ru ? "Проверяю…" : "Checking…";
+    public static string UpdateCheckUpToDate => Ru
+        ? "У вас последняя версия."
+        : "You're on the latest version.";
+    public static string UpdateCheckFailed => Ru
+        ? "Не удалось проверить обновления: {0}"
+        : "Failed to check for updates: {0}";
+
+    /// <summary>Banner title — args: {0}=version, {1}=size in MB.</summary>
+    public static string UpdateBannerTitle => Ru
+        ? "Доступна v{0} · {1:F1} МБ"
+        : "v{0} available · {1:F1} MB";
+    public static string UpdateBannerSubtitle => Ru
+        ? "Нажми «Скачать» — установка запросит разрешение системы."
+        : "Tap Download — install will ask for system permission.";
+
+    public static string UpdateButtonDownload => Ru ? "Скачать" : "Download";
+    public static string UpdateButtonInstall => Ru ? "Установить" : "Install";
+    public static string UpdateButtonDismiss => Ru ? "Позже" : "Later";
+    public static string UpdateButtonRetry => Ru ? "Повторить" : "Retry";
+    public static string UpdateButtonGrantPermission => Ru ? "Разрешить" : "Allow";
+
+    /// <summary>Progress label — arg: {0}=percent 0-100.</summary>
+    public static string UpdateDownloading => Ru
+        ? "Скачивание… {0}%"
+        : "Downloading… {0}%";
+    public static string UpdateDownloadDone => Ru
+        ? "Скачано. Жми «Установить»."
+        : "Downloaded. Tap Install.";
+    public static string UpdateDownloadFailed => Ru
+        ? "Скачивание не удалось: {0}"
+        : "Download failed: {0}";
+
+    public static string UpdateInstallPermissionNeeded => Ru
+        ? "Чтобы установить APK из приложения, нужно разрешить «Установка из неизвестных источников» для VPNRouter."
+        : "To install the APK from inside the app, allow \"Install from unknown sources\" for VPNRouter.";
+    public static string UpdateInstallPermissionGranted => Ru
+        ? "Разрешение получено — жми «Установить» снова."
+        : "Permission granted — tap Install again.";
+    public static string UpdateInstallLaunchFailed => Ru
+        ? "Не удалось запустить установщик."
+        : "Failed to launch installer.";
+
     // Troubleshooting items
     public static string MenuItemResetSettings => Ru ? "Сбросить настройки" : "Reset settings";
     public static string MenuItemResetConfirm => Ru

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  v2.32.0 (2026-05-07) — FileProvider path config used by the auto-
+  update sideload (AndroidUpdater.cs). Exposes the app's internal
+  cache directory through a content:// URI so the system
+  PackageInstaller can read the freshly-downloaded APK without us
+  having to widen permissions or stage the APK on shared storage.
+
+  • cache-path "." → covers Application.Context.CacheDir
+    (where we drop update.apk).
+  • files-path "."  → reserved for future use (e.g. log export, PEM
+    upload). Not strictly needed for auto-update but cheap to include
+    and matches the desktop app's broad-but-confined update staging
+    surface.
+-->
+<paths>
+    <cache-path name="update_cache" path="." />
+    <files-path name="update_files" path="." />
+</paths>
