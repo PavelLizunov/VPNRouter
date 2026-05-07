@@ -81,18 +81,44 @@ Avalonia render проходит мимо `uiautomator` (всё одно FrameLa
 
 ### 2.1 libbox API в нашем .aar
 
-Наш `Lib/libbox.aar` (sing-box 1.13.x baseline) НЕ имеет
-`Libbox.newService(json, platformInterface)` метода. Доступно только:
+**Updated 2026-05-07 (v2.32.0)** — current `Lib/libbox.aar` is the
+sing-box 1.13.x upstream gomobile binding (~11.7 MB, classes.jar
+inspectable via `unzip` + `javap`). Old API (`startOrReloadService`,
+`OverrideOptions`, `ConnectionOwner`) is **gone**.
+
+Service lifecycle (BoxService-driven):
 
 - `Libbox.setup(SetupOptions)` — basePath/workingPath/tempPath
-- `Libbox.checkConfig(String)` — validate JSON
-- `Libbox.newCommandServer(handler, platformInterface)` → CommandServer
-- `Libbox.redirectStderr(String)` — Go-stderr → file
-- `commandServer.startOrReloadService(json, OverrideOptions)`
+- `Libbox.checkConfig(String)` — validate JSON, throws on error
+- `Libbox.newService(String json, PlatformInterface pi) → BoxService` —
+  the new entry point. No CommandServer required.
+- `boxService.start()` / `boxService.close()` — VPN up/down
+- `boxService.pause()`, `.wake()`, `.resetNetwork()`,
+  `.updateWIFIState()`, `.needWIFIState()` — optional control hooks
+- `Libbox.redirectStderr(String)` — Go-side stderr → file (still useful
+  for early-init failures before our PlatformInterface.writeLog hook
+  is reachable)
 
-`CommandServerHandler` interface methods:
-- `serviceStop()`, `serviceReload()`, `getSystemProxyStatus()`,
-  `setSystemProxyEnabled(boolean)`, `writeDebugMessage(String)`
+CommandServer is still in libbox but it's purely a Clash-API RPC layer
+(Connections / Groups / URLTest / Stats / system-proxy enable). VPNRouter
+on Android drives lifecycle via Intent broadcasts and never exposes a
+Clash dashboard, so we **drop CommandServer entirely** — the
+`Libbox.newCommandServer(handler, int port)` call from Phase 5 is gone
+in v2.32.0. If we ever need it for Stats/Connections introspection in
+the UI, the signature is `(CommandServerHandler, int port)` — the
+handler interface has 4 methods: `getSystemProxyStatus()`,
+`postServiceClose()`, `serviceReload()`, `setSystemProxyEnabled(boolean)`.
+
+`PlatformInterface` contract changes (vs Phase 5 baseline):
+
+| Method | Before | Now |
+|---|---|---|
+| `findConnectionOwner(...)` | returned `ConnectionOwner` (struct) | returns `int` (uid, -1 = unknown) |
+| `writeLog(String)` | n/a — was `CommandServerHandler.writeDebugMessage` | new — Go-side libbox logs flow here |
+| `packageNameByUid(int)` | n/a | new — required, used in human-readable per-uid logs |
+| `uidByPackageName(String)` | n/a | new — inverse of above |
+
+Remaining methods unchanged from Phase 5 (see §2.2 below).
 
 ### 2.2 PlatformInterface — что обязательно реализовать
 
@@ -108,7 +134,7 @@ Reference: `https://github.com/PavelLizunov/vpnrouter-android` →
 | `getInterfaces()` | **NO** ★ | Enumerate via ConnectivityManager.getAllNetworks() + java.net.NetworkInterface; setName/DNSServer/Type/Index/MTU/Addresses/Flags/Metered |
 | `systemCertificates()` | **NO** ★ | KeyStore("AndroidCAStore") → enumerate aliases → PEM |
 | `localDNSTransport()` | OK | return null (sing-box fallback resolves OK) |
-| `findConnectionOwner(...)` | OK | throw — мы не используем process_name rules |
+| `findConnectionOwner(...)` | OK | return -1 — sentinel for "owner unknown"; sing-box treats as fallback. Мы не используем process_name rules в Android-config'е |
 | `clearDNSCache()`, `readWIFIState()`, `includeAllNetworks()`, `underNetworkExtension()`, `start/closeDefaultInterfaceMonitor()`, `sendNotification()` | OK | no-op / sensible default |
 
 ★ = Phase 5 root-cause additions. Pre-5 пропущенные → DNS broken и TLS broken.

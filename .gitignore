@@ -90,3 +90,4 @@ VPNRouter.Tests/screenshots/*
 
 # v3.0 Android Phase 1.B — libbox.aar built locally (92 MB Go cross-compile)
 VPNRouter.Android/Lib/libbox*.aar
+test-screenshots/
