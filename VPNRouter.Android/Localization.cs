@@ -246,4 +246,79 @@ internal static class Localization
     public static string PerAppEmptyHint => Ru
         ? "Ничего не выбрано. Если режим — «Только выбранные», то весь трафик пойдёт мимо туннеля."
         : "Nothing selected. If mode is \"Selected only\", all traffic bypasses the tunnel.";
+
+    // ── v2.32.0 Free Configs (Android port — see plans/v2.32.0-android-free-configs.md) ──
+
+    /// <summary>Kebab menu item that opens the Free Configs overlay.</summary>
+    public static string MenuSectionFreeConfigs => Ru ? "Бесплатные конфиги" : "Free configs";
+    public static string MenuItemOpenFreeConfigs => Ru ? "Найти сервер" : "Find a server";
+
+    public static string FcOverlayTitle => Ru ? "Бесплатные конфиги" : "Free configs";
+    public static string FcTabSearch => Ru ? "Поиск" : "Search";
+    public static string FcTabSaved => Ru ? "★ Сохранённые" : "★ Saved";
+    public static string FcTabSavedWithCount => Ru ? "★ Сохранённые ({0})" : "★ Saved ({0})";
+
+    public static string FcSearchHint => Ru
+        ? "Соберём список ниже из публичных источников и проверим TCP+TLS до каждого. Жми «Найти» — выберем самые быстрые."
+        : "We'll pull the list below from public sources and run TCP+TLS to each. Tap Find — we'll pick the fastest.";
+    public static string FcFindButton => Ru ? "✓✓ Найти рабочие конфиги" : "✓✓ Find working configs";
+    public static string FcStopButton => Ru ? "✕ Остановить" : "✕ Stop";
+
+    public static string FcAdvancedSettings => Ru ? "Расширенные настройки" : "Advanced settings";
+    public static string FcTargetNLabel => Ru ? "Найти" : "Find";
+    public static string FcConfigsWord => Ru ? "конфигов" : "configs";
+    public static string FcWithPingUnder => Ru ? "с пингом до" : "with ping under";
+    public static string FcMsUnit => "ms";
+    public static string FcExcludeRu => Ru
+        ? "Исключить серверы в России"
+        : "Skip servers in Russia";
+
+    public static string FcColCountry => Ru ? "Страна" : "Country";
+    public static string FcColEndpoint => Ru ? "Endpoint" : "Endpoint";
+    public static string FcColLatency => Ru ? "Пинг" : "Latency";
+    public static string FcColTransport => Ru ? "Транспорт" : "Transport";
+    public static string FcColStatus => Ru ? "Статус" : "Status";
+
+    public static string FcSearchListEmptyHint => Ru
+        ? "Список пуст. Нажми «Найти рабочие конфиги» выше."
+        : "List is empty. Tap «Find working configs» above.";
+    public static string FcSavedEmptyHint => Ru
+        ? "Сохранённых конфигов пока нет. Запусти «Найти» — найденные сохранятся здесь."
+        : "No saved configs yet. Run «Find» — results will be saved here.";
+
+    public static string FcSavedClearAll => Ru ? "✕ Удалить всё" : "✕ Clear all";
+    public static string FcSavedRemoveOne => "✕";
+
+    public static string FcStatusEmpty => Ru ? "Готов к поиску." : "Ready to search.";
+    public static string FcStatusFetchingPool => Ru ? "Скачиваю pool.json…" : "Downloading pool.json…";
+    public static string FcStatusPoolLoaded => Ru
+        ? "В пуле {0} серверов. Тестирую первые {1}…"
+        : "Pool has {0} servers. Testing first {1}…";
+    public static string FcStatusPoolEmpty => Ru
+        ? "Pool пуст или недоступен. Проверь интернет."
+        : "Pool empty or unreachable. Check internet.";
+    public static string FcStatusTesting => Ru
+        ? "Найдено {0}/{1} · протестировано {2}/{3}"
+        : "Found {0}/{1} · tested {2}/{3}";
+    public static string FcStatusFound => Ru
+        ? "Найдено {0}/{1} рабочих."
+        : "Found {0}/{1} working.";
+    public static string FcStatusDoneOk => Ru
+        ? "Готово. Найдено {0} конфигов."
+        : "Done. Found {0} working configs.";
+    public static string FcStatusDoneExhausted => Ru
+        ? "Список источников исчерпан. Найдено {0} из {1}."
+        : "Sources exhausted. Found {0} of {1}.";
+    public static string FcStatusCancelled => Ru ? "Отменено пользователем." : "Cancelled by user.";
+    public static string FcStatusFailed => Ru
+        ? "Ошибка: {0}"
+        : "Error: {0}";
+
+    public static string FcConnectHint => Ru
+        ? "Выбери сервер в списке — кнопка «Подключить» активируется."
+        : "Pick a server above — the Connect button activates.";
+    public static string FcUseSelected => Ru ? "Подключить к выбранному" : "Connect to selected";
+    public static string FcUsedToast => Ru
+        ? "Сервер сохранён. Подключаюсь…"
+        : "Server saved. Connecting…";
 }

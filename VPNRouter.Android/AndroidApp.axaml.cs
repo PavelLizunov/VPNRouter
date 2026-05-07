@@ -109,11 +109,15 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.Button? _menuResetSettingsItem;
     private Avalonia.Controls.Button? _menuVersionItem;
     private Avalonia.Controls.Button? _menuRepoItem;
+    // v2.32.0 — Free Configs entry point lives in the kebab menu (no
+    // dedicated tab on Android — single-screen layout).
+    private Avalonia.Controls.Button? _menuFreeConfigsItem;
     // Localized section header TextBlocks — kept so language toggle can refresh them.
     private TextBlock? _menuSectionView;
     private TextBlock? _menuSectionDiagnostics;
     private TextBlock? _menuSectionTroubleshooting;
     private TextBlock? _menuSectionAbout;
+    private TextBlock? _menuSectionFreeConfigs;
     // Tracks Reset confirm flow: first tap → confirm prompt, second tap → wipe.
     private bool _resetConfirmPending = false;
     // Banner that surfaces transient kebab-menu feedback (Update toast,
@@ -384,8 +388,16 @@ public partial class AndroidApp : Avalonia.Application
             MinWidth = 240,
         };
 
+        // v2.32.0 — Free Configs entry. Sits between Вид and Диагностика
+        // so it's discoverable without scrolling. Tap → close popup +
+        // open the Free Configs overlay.
+        _menuFreeConfigsItem = MakeMenuItem(Localization.MenuItemOpenFreeConfigs,
+                                            textPrimary, OnMenuFreeConfigsClicked);
+
         AppendMenuSectionWithControls(menuStack, Localization.MenuSectionView,
                                       new Control[] { themeRow, langRow });
+        AppendMenuSection(menuStack, Localization.MenuSectionFreeConfigs,
+                          new[] { _menuFreeConfigsItem });
         AppendMenuSection(menuStack, Localization.MenuSectionDiagnostics,
                           new[] { _menuOpenLogItem, _menuCopyLogPathItem, _menuUpdateCheckItem });
         AppendMenuSection(menuStack, Localization.MenuSectionTroubleshooting,
@@ -953,10 +965,14 @@ public partial class AndroidApp : Avalonia.Application
         // v3.0 Phase 7.5 (2026-05-04) — fullscreen per-app picker
         // overlay. Triggered from the "Choose apps…" button in the form.
         _appPickerOverlay = BuildAppPickerOverlay();
+        // v2.32.0 — fullscreen Free Configs overlay. Triggered from the
+        // "Бесплатные конфиги" / "Free configs" entry in the kebab menu.
+        // See AndroidApp.FreeConfigs.cs + plans/v2.32.0-android-free-configs.md.
+        _fcOverlay = BuildFreeConfigsOverlay();
 
         return new Grid
         {
-            Children = { mainScroller, _logOverlay, _appPickerOverlay }
+            Children = { mainScroller, _logOverlay, _appPickerOverlay, _fcOverlay }
         };
     }
 
@@ -1614,6 +1630,7 @@ public partial class AndroidApp : Avalonia.Application
         else if (headerText == Localization.MenuSectionDiagnostics) _menuSectionDiagnostics = header;
         else if (headerText == Localization.MenuSectionTroubleshooting) _menuSectionTroubleshooting = header;
         else if (headerText == Localization.MenuSectionAbout) _menuSectionAbout = header;
+        else if (headerText == Localization.MenuSectionFreeConfigs) _menuSectionFreeConfigs = header;
 
         stack.Children.Add(header);
 
@@ -1655,6 +1672,7 @@ public partial class AndroidApp : Avalonia.Application
         else if (headerText == Localization.MenuSectionDiagnostics) _menuSectionDiagnostics = header;
         else if (headerText == Localization.MenuSectionTroubleshooting) _menuSectionTroubleshooting = header;
         else if (headerText == Localization.MenuSectionAbout) _menuSectionAbout = header;
+        else if (headerText == Localization.MenuSectionFreeConfigs) _menuSectionFreeConfigs = header;
 
         stack.Children.Add(header);
 
@@ -2306,6 +2324,18 @@ public partial class AndroidApp : Avalonia.Application
         }
     }
 
+    /// <summary>
+    /// v2.32.0 — kebab menu entry that surfaces the Free Configs overlay.
+    /// Closes the popup so the overlay opens cleanly above the main view.
+    /// Heavy work (cache load + pool fetch) is deferred to the overlay
+    /// itself.
+    /// </summary>
+    private void OnMenuFreeConfigsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        ShowFreeConfigsOverlay();
+    }
+
     private void CopyToClipboard(string label, string text)
     {
         try
@@ -2368,6 +2398,8 @@ public partial class AndroidApp : Avalonia.Application
         if (_menuSectionDiagnostics is not null) _menuSectionDiagnostics.Text = Localization.MenuSectionDiagnostics;
         if (_menuSectionTroubleshooting is not null) _menuSectionTroubleshooting.Text = Localization.MenuSectionTroubleshooting;
         if (_menuSectionAbout is not null) _menuSectionAbout.Text = Localization.MenuSectionAbout;
+        if (_menuSectionFreeConfigs is not null) _menuSectionFreeConfigs.Text = Localization.MenuSectionFreeConfigs;
+        if (_menuFreeConfigsItem is not null) _menuFreeConfigsItem.Content = Localization.MenuItemOpenFreeConfigs;
         if (_statusTitle is not null)
             _statusTitle.Text = MainActivity.IntendedConnected ? Localization.SimpleStatusTitleOn : Localization.SimpleStatusTitleOff;
         if (_statusDesc is not null)
