@@ -135,6 +135,24 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.Button? _logViewerCloseBtn;
     private Avalonia.Controls.Button? _logViewerRefreshBtn;
 
+    // v2.32.0 — Settings overlay mirroring desktop NetworkPage 4 sub-sections
+    // (Routing / Leak protection / Updates / Autostart). Triggered from kebab
+    // menu Diagnostics > "Настройки" / "Settings". Same fullscreen Border
+    // overlay pattern as Phase 7.4 log viewer + 7.5 per-app picker.
+    private Border? _settingsOverlay;
+    private Avalonia.Controls.RadioButton? _settingsSplitRadio;
+    private Avalonia.Controls.RadioButton? _settingsFullRadio;
+    private Avalonia.Controls.CheckBox? _settingsBypassRu;
+    private Avalonia.Controls.CheckBox? _settingsBlockOnVpnFail;
+    private Avalonia.Controls.ComboBox? _settingsDnsStrategy;
+    private Avalonia.Controls.CheckBox? _settingsReceivePrereleases;
+    private TextBlock? _settingsCurrentVersion;
+    private Avalonia.Controls.CheckBox? _settingsAutostartVpn;
+    private Avalonia.Controls.CheckBox? _settingsAutostartZapret;
+    private Avalonia.Controls.CheckBox? _settingsAutostartTgProxy;
+    private Avalonia.Controls.Button? _menuSettingsItem;
+    private bool _settingsLoading = false;
+
     // v3.0 Phase 7.5 — per-app filter picker overlay (handbook §5.5).
     // Tap "Selected apps" radio → "Choose apps…" button → this overlay.
     // ListBox of installed apps with a search filter + system-apps
@@ -379,6 +397,12 @@ public partial class AndroidApp : Avalonia.Application
 
         // Diagnostics + Troubleshooting + About items stay as full-width
         // labelled buttons.
+        // v2.32.0 — "Настройки" / "Settings" added to Diagnostics so the user
+        // can reach the 4-section Settings overlay (mirrors desktop NetworkPage:
+        // Routing / Leak / Updates / Autostart) without scrolling past the
+        // collapsed form. Listed first in the section as the most-used entry.
+        _menuSettingsItem = MakeMenuItem(Localization.MenuItemSettings,
+                                         textPrimary, OnMenuSettingsClicked);
         _menuOpenLogItem  = MakeMenuItem(Localization.MenuItemOpenLogs,
                                          textPrimary, OnMenuOpenLogClicked);
         _menuCopyLogPathItem = MakeMenuItem(Localization.MenuItemCopyLogPath,
@@ -410,7 +434,7 @@ public partial class AndroidApp : Avalonia.Application
         AppendMenuSection(menuStack, Localization.MenuSectionFreeConfigs,
                           new[] { _menuFreeConfigsItem });
         AppendMenuSection(menuStack, Localization.MenuSectionDiagnostics,
-                          new[] { _menuOpenLogItem, _menuCopyLogPathItem, _menuUpdateCheckItem });
+                          new[] { _menuSettingsItem, _menuOpenLogItem, _menuCopyLogPathItem, _menuUpdateCheckItem });
         AppendMenuSection(menuStack, Localization.MenuSectionTroubleshooting,
                           new[] { _menuResetSettingsItem });
         AppendMenuSection(menuStack, Localization.MenuSectionAbout,
@@ -996,9 +1020,13 @@ public partial class AndroidApp : Avalonia.Application
         // See AndroidApp.FreeConfigs.cs + plans/v2.32.0-android-free-configs.md.
         _fcOverlay = BuildFreeConfigsOverlay();
 
+        // v2.32.0 (AND-2) — fullscreen Settings overlay (4-section parity with
+        // desktop NetworkPage). Triggered from kebab > Diagnostics > "Настройки".
+        _settingsOverlay = BuildSettingsOverlay();
+
         return new Grid
         {
-            Children = { mainScroller, _logOverlay, _appPickerOverlay, _subsOverlay, _fcOverlay }
+            Children = { mainScroller, _logOverlay, _appPickerOverlay, _subsOverlay, _fcOverlay, _settingsOverlay }
         };
     }
 
@@ -1117,6 +1145,700 @@ public partial class AndroidApp : Avalonia.Application
             IsVisible = false,
             Child = dock,
         };
+    }
+
+    // ── v2.32.0 Settings overlay (mirrors desktop NetworkPage) ──────────
+    //
+    // Fullscreen Border layered over the main ScrollViewer (same pattern as
+    // Phase 7.4 log viewer). 4 stacked sub-sections in the order they
+    // appear on desktop: Routing → Leak protection → Updates → Autostart.
+    // Each control wires straight to AndroidStorage on change so there's
+    // no Apply button — autosave matches the desktop NetworkPage's
+    // "Auto-saved" footer behaviour (Strings.SettingsAutosaved).
+
+    private Border BuildSettingsOverlay()
+    {
+        // Title bar — title text + close button. Same shape as log viewer.
+        var titleText = new TextBlock
+        {
+            Text = Localization.SettingsTitle,
+            FontSize = 13,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = GetBrush("TextPrimaryBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var closeBtn = new Avalonia.Controls.Button
+        {
+            Content = "✕",
+            FontSize = 16,
+            Width = 36,
+            Height = 36,
+            Padding = new Thickness(0),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Foreground = GetBrush("TextSecondaryBrush"),
+        };
+        closeBtn.Click += OnSettingsCloseClicked;
+
+        var titleBar = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            Margin = new Thickness(8, 4, 4, 4),
+        };
+        Grid.SetColumn(titleText, 0);
+        Grid.SetColumn(closeBtn, 1);
+        titleBar.Children.Add(titleText);
+        titleBar.Children.Add(closeBtn);
+
+        var titleBarBorder = new Border
+        {
+            Background = GetBrush("SurfaceRaisedBrush"),
+            BorderBrush = GetBrush("BorderSubtleBrush"),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Padding = new Thickness(8, 4),
+            Child = titleBar,
+        };
+
+        // Stacked sub-sections. Each returns a Border wrapping the controls
+        // for that section so the visual grouping mirrors desktop's
+        // "Border + StackPanel" cards.
+        var inner = new StackPanel
+        {
+            Spacing = 18,
+            Margin = new Thickness(16, 12, 16, 16),
+            Children =
+            {
+                BuildSettingsRoutingSection(),
+                BuildSettingsLeakSection(),
+                BuildSettingsUpdatesSection(),
+                BuildSettingsAutostartSection(),
+            }
+        };
+
+        var scroller = new ScrollViewer
+        {
+            Content = inner,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Background = GetBrush("SurfaceAppBrush"),
+        };
+
+        var dock = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(titleBarBorder, Dock.Top);
+        dock.Children.Add(titleBarBorder);
+        dock.Children.Add(scroller);
+
+        return new Border
+        {
+            Background = GetBrush("SurfaceAppBrush"),
+            IsVisible = false,
+            Child = dock,
+        };
+    }
+
+    /// <summary>
+    /// Routing sub-section: split/full radio cards + Russian-traffic bypass.
+    /// Mirrors desktop NetworkPage.axaml lines 237-309 (Routing block).
+    /// </summary>
+    private Control BuildSettingsRoutingSection()
+    {
+        var sectionTitle = MakeSectionTitle(Localization.SettingsSectionRouting);
+        var description = new TextBlock
+        {
+            Text = Localization.RoutingDescription,
+            FontSize = 11,
+            Foreground = GetBrush("TextSecondaryBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        var routingMode = AndroidStorage.GetRoutingMode();
+
+        _settingsSplitRadio = new Avalonia.Controls.RadioButton
+        {
+            GroupName = "SettingsRouting",
+            IsChecked = routingMode == "split",
+            MinHeight = 0,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(0),
+        };
+        _settingsSplitRadio.IsCheckedChanged += OnSettingsRoutingChanged;
+        var splitCard = MakeRadioCard(_settingsSplitRadio,
+            Localization.SplitTunnelTitle, Localization.SplitTunnelSubtitle);
+
+        _settingsFullRadio = new Avalonia.Controls.RadioButton
+        {
+            GroupName = "SettingsRouting",
+            IsChecked = routingMode == "full",
+            MinHeight = 0,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(0),
+        };
+        _settingsFullRadio.IsCheckedChanged += OnSettingsRoutingChanged;
+        var fullCard = MakeRadioCard(_settingsFullRadio,
+            Localization.FullTunnelTitle, Localization.FullTunnelSubtitle);
+
+        _settingsBypassRu = new Avalonia.Controls.CheckBox
+        {
+            IsChecked = AndroidStorage.GetBypassRussianTraffic(),
+            MinHeight = 0,
+            Padding = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 1, 0, 0),
+        };
+        _settingsBypassRu.IsCheckedChanged += OnSettingsBypassRuChanged;
+        var bypassCard = MakeCheckboxCard(_settingsBypassRu,
+            Localization.BypassRussianTrafficLabel, Localization.BypassRussianTrafficHint);
+
+        var stack = new StackPanel
+        {
+            Spacing = 10,
+            Children = { sectionTitle, description, splitCard, fullCard, bypassCard }
+        };
+        return WrapSection(stack);
+    }
+
+    /// <summary>
+    /// Leak protection sub-section: block_on_vpn_fail toggle + DNS strategy
+    /// ComboBox. Desktop has 4 checkboxes (StrictMode / ForceIpv4 /
+    /// FlushDns / StrictDns); on Android most map to either no-op or to
+    /// the VpnService.Builder layer. We surface the ones that map cleanly
+    /// to the Android stack and label them honestly.
+    /// </summary>
+    private Control BuildSettingsLeakSection()
+    {
+        var sectionTitle = MakeSectionTitle(Localization.SettingsSectionLeak);
+
+        _settingsBlockOnVpnFail = new Avalonia.Controls.CheckBox
+        {
+            IsChecked = AndroidStorage.GetBlockOnVpnFail(),
+            MinHeight = 0,
+            Padding = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _settingsBlockOnVpnFail.IsCheckedChanged += OnSettingsBlockOnVpnFailChanged;
+        var blockGrid = MakeLabeledCheckboxRow(_settingsBlockOnVpnFail,
+            Localization.BlockOnVpnFailLabel, Localization.BlockOnVpnFailHint);
+
+        // DNS strategy ComboBox — three values, mirrors desktop's choices.
+        _settingsDnsStrategy = new Avalonia.Controls.ComboBox
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            FontSize = 12,
+            ItemsSource = new[]
+            {
+                Localization.DnsStrategyIpv4Only,
+                Localization.DnsStrategyPreferIpv4,
+                Localization.DnsStrategyPreferIpv6,
+            },
+            SelectedIndex = AndroidStorage.GetDnsStrategy() switch
+            {
+                "prefer_ipv4" => 1,
+                "prefer_ipv6" => 2,
+                _ => 0,
+            },
+        };
+        _settingsDnsStrategy.SelectionChanged += OnSettingsDnsStrategyChanged;
+
+        var dnsHeader = new TextBlock
+        {
+            Text = Localization.DnsStrategyHeader,
+            FontWeight = FontWeight.SemiBold,
+            FontSize = 11,
+            Opacity = 0.8,
+            Margin = new Thickness(0, 6, 0, 0),
+        };
+        var dnsHint = new TextBlock
+        {
+            Text = Localization.DnsStrategyHint,
+            FontSize = 10,
+            Foreground = GetBrush("TextMutedBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 2, 0, 0),
+        };
+
+        var stack = new StackPanel
+        {
+            Spacing = 8,
+            Children = { sectionTitle, blockGrid, dnsHeader, _settingsDnsStrategy, dnsHint }
+        };
+        return WrapSection(stack);
+    }
+
+    /// <summary>
+    /// Updates sub-section: prerelease channel toggle + current version
+    /// label + manual check button. Mirrors desktop NetworkPage 1881-1928.
+    /// On Android the Check button reuses the same placeholder behaviour
+    /// as the kebab > Diagnostics > "Check for updates" entry — Android
+    /// auto-update is out of v3.0 alpha scope (handbook §6).
+    /// </summary>
+    private Control BuildSettingsUpdatesSection()
+    {
+        var sectionTitle = MakeSectionTitle(Localization.SettingsSectionUpdates);
+
+        var channelHeader = new TextBlock
+        {
+            Text = Localization.UpdateChannelHeader,
+            FontWeight = FontWeight.SemiBold,
+            FontSize = 11,
+            Opacity = 0.8,
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        _settingsReceivePrereleases = new Avalonia.Controls.CheckBox
+        {
+            IsChecked = AndroidStorage.GetUpdateChannel() == "experimental",
+            MinHeight = 0,
+            Padding = new Thickness(4, 0),
+            Content = new TextBlock
+            {
+                Text = Localization.ReceivePrereleasesLabel,
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 11,
+            }
+        };
+        _settingsReceivePrereleases.IsCheckedChanged += OnSettingsChannelChanged;
+
+        // Current version + Check button row.
+        _settingsCurrentVersion = new TextBlock
+        {
+            Text = VPNRouter.Core.AppVersion.Version,
+            FontSize = 12,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = GetBrush("TextPrimaryBrush"),
+        };
+        var versionLabel = new TextBlock
+        {
+            Text = Localization.CurrentVersionLabel,
+            FontSize = 10,
+            Opacity = 0.7,
+        };
+        var versionStack = new StackPanel
+        {
+            Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { versionLabel, _settingsCurrentVersion }
+        };
+
+        var checkBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.CheckForUpdatesButton,
+            FontSize = 10,
+            Padding = new Thickness(10, 5),
+            MinHeight = 0,
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        checkBtn.Click += OnSettingsCheckUpdatesClicked;
+
+        var versionRow = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 8,
+            Margin = new Thickness(0, 6, 0, 0),
+        };
+        Grid.SetColumn(versionStack, 0);
+        Grid.SetColumn(checkBtn, 1);
+        versionRow.Children.Add(versionStack);
+        versionRow.Children.Add(checkBtn);
+
+        var stack = new StackPanel
+        {
+            Spacing = 6,
+            Children = { sectionTitle, channelHeader, _settingsReceivePrereleases, versionRow }
+        };
+        return WrapSection(stack);
+    }
+
+    /// <summary>
+    /// Autostart sub-section: 3 toggles (VPN / Zapret / TgProxy) + DBG-3
+    /// status badge per the same predicate as desktop's
+    /// <c>ComputeAutostartStatus</c>. On Android there's no
+    /// BOOT_COMPLETED receiver wired and no Service-mode equivalent of
+    /// the Windows VPNRouterService, so the VPN toggle is permanently
+    /// in the ⛔ tier ("Will not fire: needs BOOT_COMPLETED + Service").
+    /// Zapret + TgProxy stay in the "not ported" tier — those features
+    /// are Windows-only on the desktop port today.
+    /// Persistence is real so a future BootCompletedReceiver can read
+    /// the flags without a migration.
+    /// </summary>
+    private Control BuildSettingsAutostartSection()
+    {
+        var sectionTitle = MakeSectionTitle(Localization.SettingsSectionAutostart);
+        var bootHeader = new TextBlock
+        {
+            Text = Localization.AutostartBootSectionTitle,
+            FontWeight = FontWeight.SemiBold,
+            FontSize = 11,
+            Foreground = GetBrush("TextMutedBrush"),
+        };
+        var bootSub = new TextBlock
+        {
+            Text = Localization.AutostartBootSectionSub,
+            FontSize = 10,
+            Foreground = GetBrush("TextMutedBrush"),
+            Opacity = 0.85,
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        // Per-component checkbox + status badge stacks. Status text
+        // mirrors the desktop ComputeAutostartStatus three-tier badge.
+        _settingsAutostartVpn = new Avalonia.Controls.CheckBox
+        {
+            IsChecked = AndroidStorage.GetAutostartVpn(),
+            MinHeight = 0,
+            Padding = new Thickness(4, 0),
+            Content = new TextBlock
+            {
+                Text = Localization.AutostartLabelVpn,
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 11,
+            }
+        };
+        _settingsAutostartVpn.IsCheckedChanged += OnSettingsAutostartVpnChanged;
+        var vpnStack = MakeAutostartRow(_settingsAutostartVpn,
+            Localization.AutostartStatusNoBoot, "DangerFgBrush");
+
+        _settingsAutostartZapret = new Avalonia.Controls.CheckBox
+        {
+            IsChecked = AndroidStorage.GetAutostartZapret(),
+            MinHeight = 0,
+            Padding = new Thickness(4, 0),
+            Content = new TextBlock
+            {
+                Text = Localization.AutostartLabelZapret,
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 11,
+            }
+        };
+        _settingsAutostartZapret.IsCheckedChanged += OnSettingsAutostartZapretChanged;
+        var zapretStack = MakeAutostartRow(_settingsAutostartZapret,
+            Localization.AutostartZapretNotPorted, "DangerFgBrush");
+
+        _settingsAutostartTgProxy = new Avalonia.Controls.CheckBox
+        {
+            IsChecked = AndroidStorage.GetAutostartTgProxy(),
+            MinHeight = 0,
+            Padding = new Thickness(4, 0),
+            Content = new TextBlock
+            {
+                Text = Localization.AutostartLabelTgProxy,
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 11,
+            }
+        };
+        _settingsAutostartTgProxy.IsCheckedChanged += OnSettingsAutostartTgProxyChanged;
+        var tgStack = MakeAutostartRow(_settingsAutostartTgProxy,
+            Localization.AutostartTgProxyNotPorted, "DangerFgBrush");
+
+        var stack = new StackPanel
+        {
+            Spacing = 8,
+            Children = { sectionTitle, bootHeader, bootSub, vpnStack, zapretStack, tgStack }
+        };
+        return WrapSection(stack);
+    }
+
+    // ── Settings overlay layout helpers ─────────────────────────────────
+
+    private TextBlock MakeSectionTitle(string text) => new TextBlock
+    {
+        Text = text,
+        FontWeight = FontWeight.Bold,
+        FontSize = 13,
+        Foreground = GetBrush("TextPrimaryBrush"),
+    };
+
+    private Border WrapSection(Control content) => new Border
+    {
+        Padding = new Thickness(12),
+        CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+        Background = GetBrush("SurfaceBaseBrush"),
+        BorderBrush = GetBrush("BorderSubtleBrush"),
+        BorderThickness = new Thickness(1),
+        Child = content,
+    };
+
+    /// <summary>
+    /// "Radio-card" pattern from desktop NetworkPage — Border with a 24,*
+    /// Grid (radio left, title+subtitle stack right). Whole card click
+    /// flips the radio.
+    /// </summary>
+    private Border MakeRadioCard(Avalonia.Controls.RadioButton radio, string title, string subtitle)
+    {
+        var titleText = new TextBlock
+        {
+            Text = title,
+            FontWeight = FontWeight.SemiBold,
+            FontSize = 11,
+            Foreground = GetBrush("TextPrimaryBrush"),
+        };
+        var subText = new TextBlock
+        {
+            Text = subtitle,
+            FontSize = 10,
+            Foreground = GetBrush("TextSecondaryBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("24,*"),
+            ColumnSpacing = 8,
+        };
+        Grid.SetColumn(radio, 0);
+        var rightStack = new StackPanel { Spacing = 2, Children = { titleText, subText } };
+        Grid.SetColumn(rightStack, 1);
+        grid.Children.Add(radio);
+        grid.Children.Add(rightStack);
+
+        var card = new Border
+        {
+            Padding = new Thickness(10, 8),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            BorderBrush = GetBrush("BorderSubtleBrush"),
+            BorderThickness = new Thickness(1),
+            Child = grid,
+        };
+        card.PointerPressed += (_, __) =>
+        {
+            // Tap anywhere on the card flips the radio (desktop card click
+            // semantics). Idempotent: clicking an already-active card
+            // is a no-op since IsChecked → true is no change.
+            radio.IsChecked = true;
+        };
+        return card;
+    }
+
+    /// <summary>"Checkbox-card" — same shape as MakeRadioCard but for a CheckBox.</summary>
+    private Border MakeCheckboxCard(Avalonia.Controls.CheckBox cb, string title, string subtitle)
+    {
+        var titleText = new TextBlock
+        {
+            Text = title,
+            FontWeight = FontWeight.SemiBold,
+            FontSize = 11,
+            Foreground = GetBrush("TextPrimaryBrush"),
+        };
+        var subText = new TextBlock
+        {
+            Text = subtitle,
+            FontSize = 10,
+            Foreground = GetBrush("TextSecondaryBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("24,*"),
+            ColumnSpacing = 8,
+        };
+        Grid.SetColumn(cb, 0);
+        var rightStack = new StackPanel { Spacing = 2, Children = { titleText, subText } };
+        Grid.SetColumn(rightStack, 1);
+        grid.Children.Add(cb);
+        grid.Children.Add(rightStack);
+
+        var card = new Border
+        {
+            Padding = new Thickness(10, 8),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            BorderBrush = GetBrush("BorderSubtleBrush"),
+            BorderThickness = new Thickness(1),
+            Child = grid,
+        };
+        card.PointerPressed += (_, __) =>
+        {
+            cb.IsChecked = !(cb.IsChecked == true);
+        };
+        return card;
+    }
+
+    /// <summary>
+    /// 24,* grid with checkbox + bold label + wrap-text hint underneath.
+    /// Used in Leak section where labels are short and don't deserve a
+    /// full radio-card look.
+    /// </summary>
+    private StackPanel MakeLabeledCheckboxRow(Avalonia.Controls.CheckBox cb, string label, string hint)
+    {
+        var labelText = new TextBlock
+        {
+            Text = label,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var hintText = new TextBlock
+        {
+            Text = hint,
+            FontSize = 10,
+            Foreground = GetBrush("TextMutedBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(28, 0, 0, 0),
+        };
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("24,*"),
+            ColumnSpacing = 6,
+        };
+        Grid.SetColumn(cb, 0);
+        Grid.SetColumn(labelText, 1);
+        grid.Children.Add(cb);
+        grid.Children.Add(labelText);
+
+        return new StackPanel
+        {
+            Spacing = 2,
+            Children = { grid, hintText }
+        };
+    }
+
+    /// <summary>
+    /// Autostart row: checkbox on top, status badge below indented to align
+    /// under the label text. Mirrors desktop NetworkPage 2071-2150 — the
+    /// status TextBlock is colored per its tier (Success / Warning / Danger).
+    /// </summary>
+    private StackPanel MakeAutostartRow(Avalonia.Controls.CheckBox cb, string statusText, string statusBrushKey)
+    {
+        var status = new TextBlock
+        {
+            Text = statusText,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 9,
+            Margin = new Thickness(22, 0, 0, 0),
+            Foreground = GetBrush(statusBrushKey),
+        };
+        return new StackPanel
+        {
+            Spacing = 2,
+            Children = { cb, status }
+        };
+    }
+
+    // ── Settings overlay event handlers ─────────────────────────────────
+
+    private void OnMenuSettingsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        ShowSettings();
+    }
+
+    private void ShowSettings()
+    {
+        if (_settingsOverlay is null) return;
+        // Re-seed control state so the overlay reflects the current
+        // persisted values (in case another path updated them — e.g. the
+        // form's Selected-apps radio writes per_app_mode independently).
+        _settingsLoading = true;
+        try
+        {
+            var routing = AndroidStorage.GetRoutingMode();
+            if (_settingsSplitRadio is not null) _settingsSplitRadio.IsChecked = routing == "split";
+            if (_settingsFullRadio is not null) _settingsFullRadio.IsChecked = routing == "full";
+            if (_settingsBypassRu is not null) _settingsBypassRu.IsChecked = AndroidStorage.GetBypassRussianTraffic();
+            if (_settingsBlockOnVpnFail is not null) _settingsBlockOnVpnFail.IsChecked = AndroidStorage.GetBlockOnVpnFail();
+            if (_settingsDnsStrategy is not null)
+            {
+                _settingsDnsStrategy.SelectedIndex = AndroidStorage.GetDnsStrategy() switch
+                {
+                    "prefer_ipv4" => 1,
+                    "prefer_ipv6" => 2,
+                    _ => 0,
+                };
+            }
+            if (_settingsReceivePrereleases is not null)
+                _settingsReceivePrereleases.IsChecked = AndroidStorage.GetUpdateChannel() == "experimental";
+            if (_settingsCurrentVersion is not null) _settingsCurrentVersion.Text = VPNRouter.Core.AppVersion.Version;
+            if (_settingsAutostartVpn is not null) _settingsAutostartVpn.IsChecked = AndroidStorage.GetAutostartVpn();
+            if (_settingsAutostartZapret is not null) _settingsAutostartZapret.IsChecked = AndroidStorage.GetAutostartZapret();
+            if (_settingsAutostartTgProxy is not null) _settingsAutostartTgProxy.IsChecked = AndroidStorage.GetAutostartTgProxy();
+        }
+        finally
+        {
+            _settingsLoading = false;
+        }
+        _settingsOverlay.IsVisible = true;
+    }
+
+    private void OnSettingsCloseClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_settingsOverlay is not null) _settingsOverlay.IsVisible = false;
+    }
+
+    private void OnSettingsRoutingChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_settingsLoading) return;
+        // RadioButton group fires IsCheckedChanged on both the now-off and
+        // now-on members; we react only to the new "on" state to avoid
+        // double-write. Falls back to "split" if neither radio is checked
+        // (initial transient state during construction).
+        var splitOn = _settingsSplitRadio?.IsChecked == true;
+        var fullOn = _settingsFullRadio?.IsChecked == true;
+        if (!splitOn && !fullOn) return;
+        var newMode = splitOn ? "split" : "full";
+        if (AndroidStorage.GetRoutingMode() != newMode)
+            AndroidStorage.SetRoutingMode(newMode);
+    }
+
+    private void OnSettingsBypassRuChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_settingsLoading || _settingsBypassRu is null) return;
+        AndroidStorage.SetBypassRussianTraffic(_settingsBypassRu.IsChecked == true);
+    }
+
+    private void OnSettingsBlockOnVpnFailChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_settingsLoading || _settingsBlockOnVpnFail is null) return;
+        AndroidStorage.SetBlockOnVpnFail(_settingsBlockOnVpnFail.IsChecked == true);
+    }
+
+    private void OnSettingsDnsStrategyChanged(object? sender, Avalonia.Controls.SelectionChangedEventArgs e)
+    {
+        if (_settingsLoading || _settingsDnsStrategy is null) return;
+        var value = _settingsDnsStrategy.SelectedIndex switch
+        {
+            1 => "prefer_ipv4",
+            2 => "prefer_ipv6",
+            _ => "ipv4_only",
+        };
+        AndroidStorage.SetDnsStrategy(value);
+    }
+
+    private void OnSettingsChannelChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_settingsLoading || _settingsReceivePrereleases is null) return;
+        AndroidStorage.SetUpdateChannel(_settingsReceivePrereleases.IsChecked == true ? "experimental" : "stable");
+    }
+
+    private void OnSettingsCheckUpdatesClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        // Same placeholder as the kebab > Diagnostics > "Check for updates"
+        // entry. Auto-update on Android needs PackageInstaller +
+        // REQUEST_INSTALL_PACKAGES — out of v3.0 alpha scope.
+        ShowMenuFeedback(Localization.MenuItemUpdateComingSoon);
+    }
+
+    private void OnSettingsAutostartVpnChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_settingsLoading || _settingsAutostartVpn is null) return;
+        AndroidStorage.SetAutostartVpn(_settingsAutostartVpn.IsChecked == true);
+    }
+
+    private void OnSettingsAutostartZapretChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_settingsLoading || _settingsAutostartZapret is null) return;
+        AndroidStorage.SetAutostartZapret(_settingsAutostartZapret.IsChecked == true);
+    }
+
+    private void OnSettingsAutostartTgProxyChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_settingsLoading || _settingsAutostartTgProxy is null) return;
+        AndroidStorage.SetAutostartTgProxy(_settingsAutostartTgProxy.IsChecked == true);
     }
 
     // ── Mascot loading + theme-aware inversion ──────────────────────────
@@ -2574,6 +3296,7 @@ public partial class AndroidApp : Avalonia.Application
         if (_menuThemeDark is not null) _menuThemeDark.Content = Localization.MenuSegDark;
         // RU/EN segment labels are locale-independent; nothing to update.
         // Phase 7.2 menu items
+        if (_menuSettingsItem is not null) _menuSettingsItem.Content = Localization.MenuItemSettings;
         if (_menuOpenLogItem is not null) _menuOpenLogItem.Content = Localization.MenuItemOpenLogs;
         if (_menuCopyLogPathItem is not null) _menuCopyLogPathItem.Content = Localization.MenuItemCopyLogPath;
         if (_menuUpdateCheckItem is not null) _menuUpdateCheckItem.Content = Localization.MenuItemUpdateCheck;

@@ -373,4 +373,99 @@ internal static class Localization
     public static string FcUsedToast => Ru
         ? "Сервер сохранён. Подключаюсь…"
         : "Server saved. Connecting…";
+
+    // ── v2.32.0 Settings overlay (mirrors desktop NetworkPage 1:1) (AND-2) ──────
+    //
+    // Strings copied verbatim from VPNRouter.App/Localization/Strings.cs
+    // so every label the desktop NetworkPage shows is reproduced on
+    // Android — no paraphrasing, no Android-only renaming. When the
+    // desktop string changes, the Android one must follow (handbook §1.1).
+
+    public static string MenuItemSettings => Ru ? "Настройки" : "Settings";
+    public static string SettingsTitle => Ru ? "Настройки" : "Settings";
+
+    // Sub-section headers (Strings.SectionRouting / SectionLeakProtection /
+    // SectionUpdates / AutostartSection in desktop)
+    public static string SettingsSectionRouting => Ru ? "Маршрутизация" : "Routing";
+    public static string SettingsSectionLeak => Ru ? "Защита от утечек" : "Leak Protection";
+    public static string SettingsSectionUpdates => Ru ? "Обновления" : "Updates";
+    public static string SettingsSectionAutostart => Ru ? "Автозапуск" : "Autostart";
+
+    // Routing — RoutingDescription / SplitTunnelTitle+Subtitle /
+    // FullTunnelTitle+Subtitle / BypassRussianTrafficLabel+Hint
+    public static string RoutingDescription => Ru
+        ? "Определяет, какой трафик пойдёт через VPN."
+        : "Determines which traffic goes through the VPN.";
+    public static string SplitTunnelTitle => Ru ? "Раздельный туннель" : "Split Tunnel";
+    public static string SplitTunnelSubtitle => Ru
+        ? "Только выбранные приложения. Остальное идёт напрямую."
+        : "Only selected apps. Everything else goes direct.";
+    public static string FullTunnelTitle => Ru ? "Полный туннель" : "Full Tunnel";
+    public static string FullTunnelSubtitle => Ru
+        ? "Весь трафик ОС через VPN, включая игры и банки."
+        : "All OS traffic through VPN — games and banks included.";
+    public static string BypassRussianTrafficLabel => Ru
+        ? "Российский трафик через реальный IP"
+        : "Russian traffic via real IP";
+    public static string BypassRussianTrafficHint => Ru
+        ? "Сайты и приложения с российскими доменами/IP идут напрямую, минуя VPN. Защищает VPN-сервер от блокировок российскими сервисами."
+        : "Russian domains and IPs go directly, bypassing VPN. Protects the VPN server from being blocked by Russian services.";
+
+    // Leak protection — block_on_vpn_fail toggle + DNS strategy ComboBox
+    public static string BlockOnVpnFailLabel => Ru
+        ? "Блокировать трафик при падении VPN"
+        : "Block traffic if VPN drops";
+    public static string BlockOnVpnFailHint => Ru
+        ? "На Android делается через VpnService.Builder.setBlocking(true) — пакеты не уходят с устройства, пока туннель не поднимется заново."
+        : "On Android this maps to VpnService.Builder.setBlocking(true) — packets stay on device until the tunnel is back up.";
+    public static string DnsStrategyHeader => Ru ? "DNS-стратегия" : "DNS strategy";
+    public static string DnsStrategyIpv4Only => Ru ? "Только IPv4" : "IPv4 only";
+    public static string DnsStrategyPreferIpv4 => Ru ? "Предпочитать IPv4" : "Prefer IPv4";
+    public static string DnsStrategyPreferIpv6 => Ru ? "Предпочитать IPv6" : "Prefer IPv6";
+    public static string DnsStrategyHint => Ru
+        ? "IPv4-only защищает от IPv6-утечек, если у провайдера или Wi-Fi включён IPv6, а у VPN-сервера — нет."
+        : "IPv4-only protects against IPv6 leaks when the carrier/Wi-Fi advertises IPv6 but the VPN server doesn't.";
+
+    // Updates — UpdateChannelHeader / ReceivePrereleasesLabel /
+    // CurrentVersion / CheckForUpdates
+    public static string UpdateChannelHeader => Ru ? "Канал обновлений" : "Update channel";
+    public static string ReceivePrereleasesLabel => Ru
+        ? "Получать prerelease обновления (experimental канал)"
+        : "Receive prereleases (experimental channel)";
+    public static string CurrentVersionLabel => Ru ? "Текущая версия" : "Current version";
+    public static string CheckForUpdatesButton => Ru ? "Проверить обновления" : "Check for updates";
+
+    // Autostart — Section A "boot" + Section B "login" mirroring desktop
+    public static string AutostartBootSectionTitle => Ru
+        ? "На старте Android (до разблокировки)"
+        : "At Android startup (before unlock)";
+    public static string AutostartBootSectionSub => Ru
+        ? "На Android требуется приёмник BOOT_COMPLETED + фоновый Service. Пока не реализовано — флаги сохраняются, но не запускают туннель сами."
+        : "On Android this needs a BOOT_COMPLETED receiver + a background Service. Not implemented yet — flags persist but won't start the tunnel by themselves.";
+    public static string AutostartLabelVpn => Ru
+        ? "Запускать VPN при старте системы"
+        : "Start VPN on system boot";
+    public static string AutostartLabelZapret => Ru
+        ? "Запускать Zapret при старте системы"
+        : "Start Zapret on system boot";
+    public static string AutostartLabelTgProxy => Ru
+        ? "Запускать TgProxy при старте системы"
+        : "Start TgProxy on system boot";
+
+    // DBG-3 status badges (mirror desktop's ComputeAutostartStatus output)
+    public static string AutostartStatusBoot => Ru
+        ? "✓ Через службу Android (на старте ОС)"
+        : "✓ Via Android Service (at boot)";
+    public static string AutostartStatusLoginFallback => Ru
+        ? "⚠ Без службы — сработает после открытия приложения"
+        : "⚠ No Service — will fire after the App opens";
+    public static string AutostartStatusNoBoot => Ru
+        ? "⛔ Не сработает: нужен BOOT_COMPLETED + Service"
+        : "⛔ Will not fire: needs BOOT_COMPLETED + Service";
+    public static string AutostartZapretNotPorted => Ru
+        ? "⛔ Zapret пока не портирован на Android"
+        : "⛔ Zapret is not ported to Android yet";
+    public static string AutostartTgProxyNotPorted => Ru
+        ? "⛔ TgProxy пока не портирован на Android"
+        : "⛔ TgProxy is not ported to Android yet";
 }
