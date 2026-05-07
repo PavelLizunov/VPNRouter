@@ -9,7 +9,45 @@ public static class SettingsLoader
 {
     private static readonly string DefaultConfigPath = AppPaths.ConfigYamlPath;
 
+    /// <summary>
+    /// Load and parse <c>config.yaml</c>. Guaranteed to never throw —
+    /// any failure (file not found, IO error, YAML parse error,
+    /// type-coercion failure, anything unexpected) falls through to a
+    /// fully-defaulted, sanity-checked <see cref="AppSettings"/>
+    /// instance. Unloadable files are backed up as
+    /// <c>config.yaml.unloadable-{timestamp}</c> for forensic recovery.
+    ///
+    /// <para>SR-4 (v2.32.0): the outer try/catch wrapper plus
+    /// <see cref="AppSettingsSane.EnsureSane"/> together close the
+    /// "Load throws → app dies at launch" gap that bit users on
+    /// v2.31.8-r9 (truncated config.yaml). Sister task SR-1 layers
+    /// semantic validation on top of the structurally-safe object this
+    /// method returns.</para>
+    /// </summary>
     public static AppSettings Load(string? path = null)
+    {
+        try
+        {
+            return LoadCore(path);
+        }
+        catch (Exception ex)
+        {
+            // Last-resort safety net: LoadCore already catches every
+            // expected failure mode (read error, parse error, migration
+            // error). If something still propagates here, log and return
+            // pure defaults rather than crashing the host process.
+            try
+            {
+                Console.Error.WriteLine(
+                    $"[SettingsLoader] FATAL: Load(\"{path ?? DefaultConfigPath}\") threw " +
+                    $"{ex.GetType().Name}: {ex.Message}. Returning defaults.");
+            }
+            catch { /* even logging failed — swallow */ }
+            return CreateDefaults().EnsureSane();
+        }
+    }
+
+    private static AppSettings LoadCore(string? path)
     {
         var configPath = path ?? DefaultConfigPath;
 
@@ -18,40 +56,82 @@ public static class SettingsLoader
         // (so next normal launch picks them up), but the current
         // process sees a clean slate.
         if (SafeMode.Enabled)
-            return CreateDefaults();
+            return CreateDefaults().EnsureSane();
 
         if (!File.Exists(configPath))
         {
-            // Write example config and return defaults
-            var defaults = CreateDefaults();
-            WriteExample(configPath, defaults);
+            // Write example config and return defaults. WriteExample
+            // failure is non-fatal — defaults are still valid for this
+            // session and the next save will persist them.
+            var defaults = CreateDefaults().EnsureSane();
+            try { WriteExample(configPath, defaults); }
+            catch (Exception writeEx)
+            {
+                try
+                {
+                    Console.Error.WriteLine(
+                        $"[SettingsLoader] could not write example config to {configPath} " +
+                        $"({writeEx.GetType().Name}: {writeEx.Message}); using in-memory defaults.");
+                }
+                catch { }
+            }
             return defaults;
         }
 
-        var yaml = File.ReadAllText(configPath);
-        // v2.31.8-r9 — graceful fallback on corrupt YAML. Pre-r9 a
-        // malformed config.yaml (truncated mid-write, manual edit
+        // SR-4: separate the read step from the parse step so we can
+        // distinguish "file is unreadable" (don't backup — we can't read
+        // it) from "file parsed badly" (backup and defaults).
+        string yaml;
+        try
+        {
+            yaml = File.ReadAllText(configPath);
+        }
+        catch (Exception readEx)
+        {
+            // File locked by another process / permission denied /
+            // encoding read failure / OOM on huge file. Log and return
+            // defaults; do NOT touch the file on disk so the next
+            // launch can retry.
+            try
+            {
+                Console.Error.WriteLine(
+                    $"[SettingsLoader] could not read {configPath} " +
+                    $"({readEx.GetType().Name}: {readEx.Message}); " +
+                    "using defaults for this session, original file untouched.");
+            }
+            catch { }
+            return CreateDefaults().EnsureSane();
+        }
+
+        // v2.31.8-r9 / SR-4 — graceful fallback on corrupt YAML. Pre-r9
+        // a malformed config.yaml (truncated mid-write, manual edit
         // mistake, accidental BOM, etc.) propagated InvalidDataException
         // up through MainWindowViewModel..ctor and crashed App.exe at
         // launch. User-facing symptom: «приложение не запускается»,
-        // no UI, no banner, no clue. Now we catch the parse error,
-        // rename the broken file to a timestamped backup, and proceed
-        // with defaults. Next normal save persists the new clean
-        // settings; user keeps a forensic copy at config.yaml.broken-*
-        // if they want to recover specific values.
+        // no UI, no banner, no clue. SR-4 widens the catch from
+        // "InvalidDataException-like things" to "any exception" — now
+        // YamlException, FormatException (type-coercion), duplicate-key
+        // errors, and anything else are all backed up + defaulted.
+        // Forensic copy lands at config.yaml.unloadable-{ts} so the
+        // user can recover specific values if they want.
         try
         {
-            return Parse(yaml);
+            var parsed = Parse(yaml);
+            // Belt-and-braces: Parse() already calls EnsureSane(), but
+            // call again so anyone manually invoking Load() directly
+            // gets a guaranteed-sane instance even if the contract of
+            // Parse() drifts in the future.
+            return parsed.EnsureSane();
         }
         catch (Exception parseEx)
         {
             try
             {
                 var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-                var backup = $"{configPath}.broken-{stamp}";
+                var backup = $"{configPath}.unloadable-{stamp}";
                 File.Move(configPath, backup, overwrite: false);
                 Console.Error.WriteLine(
-                    $"[SettingsLoader] config.yaml parse failed ({parseEx.GetType().Name}: {parseEx.Message}). " +
+                    $"[SettingsLoader] config.yaml unloadable ({parseEx.GetType().Name}: {parseEx.Message}). " +
                     $"Renamed to {backup}; using defaults for this session.");
             }
             catch
@@ -59,7 +139,7 @@ public static class SettingsLoader
                 // If we can't rename (locked / permission), fall through
                 // anyway — better defaults-with-no-backup than crash.
             }
-            return CreateDefaults();
+            return CreateDefaults().EnsureSane();
         }
     }
 
@@ -131,24 +211,15 @@ public static class SettingsLoader
         // defaults on first launch). Real content reaching this path with
         // null would be unusual now that the mapping check above has run,
         // but belt-and-braces: keep the fallback so we never crash here.
-        if (settings == null)
-            return new AppSettings();
-
-        // YamlDotNet may set subsections to null if YAML has empty keys (e.g. "vless:" with no children)
-        settings.App ??= new AppConfig();
-        settings.Vless ??= new VlessConfig();
-        settings.Tun ??= new TunSettings();
-        settings.Dns ??= new DnsSettings();
-        settings.SingBox ??= new SingBoxSettings();
-        settings.Monitoring ??= new MonitoringSettings();
-        settings.ProfileSources ??= new List<ProfileSource>();
-        settings.CustomApps ??= new List<string>();
-
-        // Nested objects inside Vless can also be null
-        settings.Vless.Reality ??= new VlessRealityConfig();
-        settings.Vless.Tls ??= new VlessTlsConfig();
-        settings.Vless.Transport ??= new VlessTransportConfig();
-        settings.Vless.Servers ??= new List<VlessServerEntry>();
+        // EnsureSane tolerates a null receiver and returns a fresh
+        // default-initialised instance.
+        //
+        // SR-4 (v2.32.0): EnsureSane replaced ~12 inline ??= assignments
+        // and extends coverage to every reference-typed property on the
+        // AppSettings tree (Subscriptions, CustomConfigs, CustomRules,
+        // CustomGroupApps, per-entry VlessServerEntry sub-objects, etc.).
+        // Idempotent — safe to call again later.
+        settings = settings.EnsureSane();
 
         // v2.25.1-r2: strip legacy "your.server.com" / "your-uuid-here"
         // placeholder values that older versions (pre-v2.24.3) wrote into
@@ -179,11 +250,7 @@ public static class SettingsLoader
             string.Equals(s.Uuid,   "your-uuid-here",  StringComparison.OrdinalIgnoreCase) ||
             (string.IsNullOrWhiteSpace(s.Server) && string.IsNullOrWhiteSpace(s.Uuid)));
 
-        // Nested objects inside Tun
-        settings.Tun.RouteExcludeAddress ??= new List<string>();
-
-        // Update settings
-        settings.Update ??= new UpdateSettings();
+        // (Tun.RouteExcludeAddress, Update — handled by EnsureSane above.)
 
         // Ensure routing mode has a valid value
         if (string.IsNullOrWhiteSpace(settings.App.RoutingMode))
