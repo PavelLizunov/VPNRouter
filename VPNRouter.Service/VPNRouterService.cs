@@ -58,6 +58,18 @@ public class VPNRouterService : BackgroundService
             var settings = _currentSettings;
             _logger.LogInformation("[Service] Config loaded, mode: {Mode}", settings.App.ConfigMode);
 
+            // v2.32.0 — surface a SettingsValidator recovery, if any, to
+            // the Windows Event Log. Service has no UI surface so this
+            // is the only operator-visible signal that a bad config was
+            // rewritten with defaults at boot. Consumed (cleared) so a
+            // subsequent in-process reload doesn't re-emit the same line.
+            var recovery = SettingsLoader.ConsumeRecoveryNotice();
+            if (!string.IsNullOrWhiteSpace(recovery))
+            {
+                _logger.LogWarning("[Service] {Notice}", recovery);
+                WriteEventLog(recovery, EventLogEntryType.Warning);
+            }
+
             // v2.26.0 — watch config.yaml for changes made by the desktop
             // UI (or anyone else) and reconcile into in-memory state + a
             // running sing-box if we own one. Closes the gap where a user

@@ -1411,4 +1411,18 @@ public static class Strings
     public static string CustomConfigsEmptyHint => Ru
         ? "Свой конфиг — это готовый JSON-файл sing-box для нестандартных протоколов (TUIC, Hysteria2, Reality+gRPC и др.). Нажми «Добавить конфиг…» внизу чтобы импортировать."
         : "A custom config is a ready sing-box JSON file for non-standard protocols (TUIC, Hysteria2, Reality+gRPC, etc.). Click «Add config…» below to import.";
+
+    // v2.32.0 — recovery banner shown after SettingsValidator rejected a
+    // structurally-valid but semantically-broken config.yaml (typoed
+    // config_mode, port out of range, malformed subscription URL, etc.)
+    // and the loader rewrote defaults. The backup path comes from
+    // SettingsLoader.LastRecoveryNotice and is appended verbatim by the
+    // VM, so the localized string is the prefix only.
+    public static string SettingsRecoveredFromBadConfig(string backupPath) => Ru
+        ? string.IsNullOrEmpty(backupPath)
+            ? "Config был повреждён, восстановлен default."
+            : $"Config был повреждён, восстановлен default. Backup: {backupPath}"
+        : string.IsNullOrEmpty(backupPath)
+            ? "Config was invalid; defaults restored."
+            : $"Config was invalid; defaults restored. Backup: {backupPath}";
 }

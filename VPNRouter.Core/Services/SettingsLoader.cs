@@ -9,6 +9,35 @@ public static class SettingsLoader
 {
     private static readonly string DefaultConfigPath = AppPaths.ConfigYamlPath;
 
+    /// <summary>
+    /// v2.32.0 — populated by <see cref="Load"/> when
+    /// <see cref="SettingsValidator.Validate"/> rejected a parsed
+    /// settings tree and we wrote fresh defaults instead. Holds a
+    /// short human-readable summary (validation reasons + backup path)
+    /// so the UI / Service layer can surface it once after startup
+    /// — desktop App as a dismissible banner, Windows Service as an
+    /// EventLog entry. Cleared after a single read; null otherwise.
+    ///
+    /// <para>Static-singleton lifetime is fine because <see cref="Load"/>
+    /// is called early at process start, well before any concurrent
+    /// readers; subsequent in-process loads (config-file watcher
+    /// reload, ResetToDefaults) intentionally don't repopulate this so
+    /// we don't spam the user with stale toast banners.</para>
+    /// </summary>
+    public static string? LastRecoveryNotice { get; private set; }
+
+    /// <summary>
+    /// One-shot read accessor — atomically returns the current notice
+    /// and clears it so subsequent callers don't re-surface the same
+    /// banner. Used by App + Service after their first <see cref="Load"/>.
+    /// </summary>
+    public static string? ConsumeRecoveryNotice()
+    {
+        var notice = LastRecoveryNotice;
+        LastRecoveryNotice = null;
+        return notice;
+    }
+
     public static AppSettings Load(string? path = null)
     {
         var configPath = path ?? DefaultConfigPath;
@@ -39,9 +68,10 @@ public static class SettingsLoader
         // with defaults. Next normal save persists the new clean
         // settings; user keeps a forensic copy at config.yaml.broken-*
         // if they want to recover specific values.
+        AppSettings parsed;
         try
         {
-            return Parse(yaml);
+            parsed = Parse(yaml);
         }
         catch (Exception parseEx)
         {
@@ -53,14 +83,63 @@ public static class SettingsLoader
                 Console.Error.WriteLine(
                     $"[SettingsLoader] config.yaml parse failed ({parseEx.GetType().Name}: {parseEx.Message}). " +
                     $"Renamed to {backup}; using defaults for this session.");
+                LastRecoveryNotice =
+                    $"config.yaml parse failed ({parseEx.GetType().Name}); restored defaults. Backup: {backup}";
             }
             catch
             {
                 // If we can't rename (locked / permission), fall through
                 // anyway — better defaults-with-no-backup than crash.
+                LastRecoveryNotice =
+                    $"config.yaml parse failed ({parseEx.GetType().Name}); restored defaults.";
             }
             return CreateDefaults();
         }
+
+        // v2.32.0 — semantic validation pass. Catches structurally-valid
+        // but semantically-broken configs that YamlDotNet happily maps
+        // (typoed config_mode, port out of range, malformed subscription
+        // URL, etc.). Validator runs AFTER migration so v1→v2 schema
+        // changes can't false-positive. Soft warnings are logged to
+        // Console.Error for ops visibility; only fatal reasons trigger
+        // backup+reset.
+        var validation = SettingsValidator.Validate(parsed);
+        foreach (var w in validation.Warnings)
+        {
+            Console.Error.WriteLine($"[SettingsValidator] warning: {w}");
+        }
+        if (!validation.IsValid)
+        {
+            var reasonsJoined = string.Join("; ", validation.Reasons);
+            string? backup = null;
+            try
+            {
+                var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                backup = $"{configPath}.invalid-{stamp}";
+                File.Move(configPath, backup, overwrite: false);
+            }
+            catch
+            {
+                // Backup failed (locked / permission). We still reset so
+                // the user gets a working app, just without a forensic copy.
+                backup = null;
+            }
+
+            var defaults = CreateDefaults();
+            try { Save(defaults, configPath); }
+            catch { /* save failure is non-fatal — caller still gets the in-memory defaults */ }
+
+            var noticeLine = backup != null
+                ? $"[SettingsValidation] config.yaml rejected: {reasonsJoined}; backup at {backup}; reset to defaults"
+                : $"[SettingsValidation] config.yaml rejected: {reasonsJoined}; reset to defaults (backup failed)";
+            Console.Error.WriteLine(noticeLine);
+            LastRecoveryNotice = backup != null
+                ? $"config.yaml was invalid ({reasonsJoined}); restored defaults. Backup: {backup}"
+                : $"config.yaml was invalid ({reasonsJoined}); restored defaults.";
+            return defaults;
+        }
+
+        return parsed;
     }
 
     public static AppSettings Parse(string yaml)

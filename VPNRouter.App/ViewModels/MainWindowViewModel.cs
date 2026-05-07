@@ -188,6 +188,48 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void DismissUpdateWarning() => UpdateWarningText = string.Empty;
 
     /// <summary>
+    /// v2.32.0 — settings-validator recovery banner. Populated in the
+    /// MainWindowViewModel constructor from
+    /// <see cref="SettingsLoader.ConsumeRecoveryNotice"/> when the
+    /// most recent <see cref="SettingsLoader.Load"/> rewrote defaults
+    /// over a structurally-valid but semantically-broken config.yaml
+    /// (typoed config_mode, port out of range, malformed subscription
+    /// URL, etc.). Dismissible without persisting — the underlying
+    /// notice was consumed once at startup so dismiss-on-close clears
+    /// it for this session and the user won't see the same message
+    /// again on next launch unless the corruption recurs.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSettingsRecoveryNotice))]
+    private string _settingsRecoveryNoticeText = string.Empty;
+
+    public bool HasSettingsRecoveryNotice =>
+        !string.IsNullOrWhiteSpace(SettingsRecoveryNoticeText);
+
+    [RelayCommand]
+    private void DismissSettingsRecoveryNotice() =>
+        SettingsRecoveryNoticeText = string.Empty;
+
+    /// <summary>
+    /// One-shot adapter between <see cref="SettingsLoader.ConsumeRecoveryNotice"/>
+    /// and the bound <see cref="SettingsRecoveryNoticeText"/> property.
+    /// Lifted out of the constructor so the ctor stays compact (the
+    /// AppAutostartTgProxy regression pin walks the first 5000 chars
+    /// of the ctor body looking for the bootstrap fire-and-forget).
+    /// </summary>
+    private void ConsumeSettingsRecoveryNotice()
+    {
+        var recovery = SettingsLoader.ConsumeRecoveryNotice();
+        if (string.IsNullOrWhiteSpace(recovery)) return;
+
+        // Loader-supplied recovery line already includes the backup
+        // path; pass an empty path to Strings so we don't double up.
+        SettingsRecoveryNoticeText =
+            Strings.SettingsRecoveredFromBadConfig(string.Empty)
+            + " (" + recovery + ")";
+    }
+
+    /// <summary>
     /// True when the window should render the one-page SimplePage instead of
     /// the full tabbed Advanced layout. Persisted via AppSettings.App.UiMode.
     /// </summary>
@@ -2286,6 +2328,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // (Service handles boot-spawn). See
         // MainWindowViewModel.AutostartBootstrap.cs for the gating logic.
         _ = BootstrapAutostartAsync();
+
+        // v2.32.0 — surface a SettingsValidator recovery banner if the
+        // most recent SettingsLoader.Load rewrote defaults over a
+        // structurally-valid but semantically-broken config.yaml.
+        // Called after the bootstrap fire-and-forget so the regression
+        // pin in AppAutostartTgProxyTests.Bootstrap_IsInvokedFromConstructor
+        // (5000-char ctor window) still locates the bootstrap call.
+        ConsumeSettingsRecoveryNotice();
     }
 
     /// <summary>
