@@ -455,6 +455,35 @@ public static class AndroidStorage
     public static bool GetAutostartTgProxy() => GetBool(KeyAutostartTgProxy, defaultValue: false);
     public static bool SetAutostartTgProxy(bool value) => SetBool(KeyAutostartTgProxy, value);
 
+    // ── v2.32.0 (AND-ZAPRET, 2026-05-07) — DPI bypass mode (handbook §7 Phase 8.4) ──
+    //
+    // Android equivalent of desktop's Zapret feature. Desktop runs winws.exe
+    // (a userspace WinDivert-based DPI-bypass tool) — that approach can't
+    // run on non-rooted Android. Instead we lean on sing-box's native
+    // outbound dialer options (tls_fragment + udp_fragment) which do
+    // packet-level fragmentation inside the tunnel without any extra
+    // userspace process. AndroidConfigBuilder.InjectDpiBypass picks up
+    // this value and mutates the proxy outbounds in the generated /
+    // user-supplied JSON before it reaches libbox.
+    //
+    // Three values mirror the desktop "Strategy" picker:
+    //   • "off"        — no fragmentation (pre-AND-ZAPRET behaviour)
+    //   • "standard"   — moderate fragments (10–100 B, 10–50 ms sleep)
+    //                    works against most Russian ISP DPI layers
+    //   • "aggressive" — small fragments (5–20 B, 50–150 ms sleep)
+    //                    + udp_fragment for QUIC; trades latency for
+    //                    bypass success on the most aggressive blocks
+    //
+    // SR-1 normaliser: an unknown stored value is quarantined and reset
+    // to "off" with a recovery notice, same pattern as RoutingMode etc.
+    private const string KeyDpiBypassMode = "dpi_bypass_mode";
+    private static readonly HashSet<string> AllowedDpiBypassModes =
+        new(StringComparer.OrdinalIgnoreCase) { "off", "standard", "aggressive" };
+
+    public static string GetDpiBypassMode() =>
+        ValidateOrDefault(KeyDpiBypassMode, GetString(KeyDpiBypassMode), AllowedDpiBypassModes, "off");
+    public static bool SetDpiBypassMode(string value) => SetString(KeyDpiBypassMode, value);
+
     // ── v2.32.0 (AND-4): per-server TCP+TLS test history ──────────────────
     //
     // Side-table keyed by VlessServersResolver dedup shape ("Server:Port:Uuid:Flow").
@@ -794,6 +823,7 @@ public static class AndroidStorage
                 KeyPerAppLastMode, KeyRoutingMode, KeyBypassRussianTraffic,
                 KeyBlockOnVpnFail, KeyDnsStrategy, KeyUpdateChannel,
                 KeyAutostartVpn, KeyAutostartZapret, KeyAutostartTgProxy,
+                KeyDpiBypassMode,
             };
             foreach (var k in liveKeys) editor.Remove(k);
             return editor.Commit();

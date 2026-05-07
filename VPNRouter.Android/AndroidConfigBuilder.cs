@@ -134,7 +134,16 @@ public static class AndroidConfigBuilder
         // to stderr → logcat. Long-term Phase 2: make AppPaths Android-
         // aware (Application.Context.FilesDir-based) so the desktop log
         // file pattern carries over with all the rotation logic.
-        return PatchLogPathForAndroid(json, logOutputPath);
+        var patched = PatchLogPathForAndroid(json, logOutputPath);
+
+        // v2.32.0 (AND-ZAPRET, 2026-05-07) — Android equivalent of desktop's
+        // Zapret feature. Mutates the generated config to add tls_fragment
+        // / udp_fragment to all real proxy outbounds when the user has
+        // picked a non-"off" DPI bypass mode in AndroidStorage. No-op
+        // when the mode is "off" (the default), so unrelated build paths
+        // — tests, fresh installs, users who never enabled DPI bypass —
+        // get exactly the pre-AND-ZAPRET JSON.
+        return InjectDpiBypass(patched, AndroidStorage.GetDpiBypassMode());
     }
 
     /// <summary>
@@ -192,7 +201,14 @@ public static class AndroidConfigBuilder
         // stack=gvisor, MTU=1500, log.output rewrite). It's tolerant of
         // arbitrary user JSON because it parses, walks, and re-emits;
         // anything it doesn't recognise stays untouched.
-        return PatchLogPathForAndroid(injectedJson, logOutputPath);
+        var patched = PatchLogPathForAndroid(injectedJson, logOutputPath);
+
+        // v2.32.0 (AND-ZAPRET, 2026-05-07) — apply DPI-bypass on the
+        // user-pasted custom JSON too. The user might paste a clean
+        // Hysteria2 config and toggle DPI bypass on — we still inject
+        // tls_fragment so the bypass applies regardless of which
+        // ConfigMode they chose. Mode="off" makes this a no-op.
+        return InjectDpiBypass(patched, AndroidStorage.GetDpiBypassMode());
     }
 
     /// <summary>
@@ -212,6 +228,26 @@ public static class AndroidConfigBuilder
     /// VpnService.Builder routes are what actually direct kernel
     /// packets into the TUN.</para>
     /// </summary>
+    /// <summary>
+    /// v2.32.0 (AND-ZAPRET, 2026-05-07) — Android-native DPI bypass via
+    /// sing-box's <c>tls_fragment</c> / <c>udp_fragment</c> outbound dialer
+    /// options. Mirrors desktop's Zapret UX intent (winws.exe + WinDivert)
+    /// with a config-only mechanism that works on non-rooted Android —
+    /// no external userspace process, no kernel module, no /proc reads.
+    ///
+    /// <para>Implementation lives in
+    /// <see cref="VPNRouter.Core.Services.AndroidDpiBypassInjector"/> so
+    /// it can be unit-tested by <c>VPNRouter.Tests</c> without
+    /// ProjectReference'ing the Android-targeted assembly. This wrapper
+    /// stays as the public Android-side entry-point so callers don't
+    /// need to know about the Core helper.</para>
+    /// </summary>
+    /// <param name="json">A pretty-printed sing-box JSON config.</param>
+    /// <param name="mode">"off" | "standard" | "aggressive".</param>
+    /// <returns>JSON with the strategy applied to all proxy outbounds.</returns>
+    public static string InjectDpiBypass(string json, string mode)
+        => AndroidDpiBypassInjector.Inject(json, mode);
+
     private static string PatchLogPathForAndroid(string json, string? logOutputPath)
     {
         try

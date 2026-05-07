@@ -259,6 +259,10 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.RadioButton? _settingsFullRadio;
     private Avalonia.Controls.CheckBox? _settingsBypassRu;
     private Avalonia.Controls.CheckBox? _settingsBlockOnVpnFail;
+    // v2.32.0 (AND-ZAPRET) — DPI bypass picker. ComboBox with three values
+    // (Off / Standard / Aggressive) wired to AndroidStorage.GetDpiBypassMode.
+    // Lives inside Settings > Routing alongside split/full + bypass-RU.
+    private Avalonia.Controls.ComboBox? _settingsDpiBypassMode;
     private Avalonia.Controls.ComboBox? _settingsDnsStrategy;
     private Avalonia.Controls.CheckBox? _settingsReceivePrereleases;
     private TextBlock? _settingsCurrentVersion;
@@ -316,6 +320,11 @@ public partial class AndroidApp : Avalonia.Application
     /// </summary>
     private enum ChipState { Off, Connecting, On }
     private ChipState _vpnChipState = ChipState.Off;
+    // v2.32.0 (AND-ZAPRET) — Zapret chip state. Mirrors VPN chip pattern.
+    // Driven by UpdateZapretChipFromState() which composes the current
+    // DPI bypass setting + VPN connection state into a single chip color.
+    private ChipState _zapretChipState = ChipState.Off;
+    private System.Threading.CancellationTokenSource? _zapretPulseCts;
     private System.Threading.CancellationTokenSource? _vpnPulseCts;
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -1657,12 +1666,85 @@ public partial class AndroidApp : Avalonia.Application
         var bypassCard = MakeCheckboxCard(_settingsBypassRu,
             Localization.BypassRussianTrafficLabel, Localization.BypassRussianTrafficHint);
 
+        // v2.32.0 (AND-ZAPRET) — DPI bypass card. Mirrors the desktop
+        // DpiBypassPage Strategy ComboBox + warning banner, collapsed
+        // into a single radio-card-styled picker because the rest of
+        // desktop's controls (hosts files, IPSet filter, diagnostics
+        // button) don't have an Android counterpart yet.
+        var dpiCard = BuildDpiBypassCard();
+
         var stack = new StackPanel
         {
             Spacing = 10,
-            Children = { sectionTitle, description, splitCard, fullCard, bypassCard }
+            Children = { sectionTitle, description, splitCard, fullCard, bypassCard, dpiCard }
         };
         return WrapSection(stack);
+    }
+
+    /// <summary>
+    /// v2.32.0 (AND-ZAPRET, 2026-05-07) — Routing-section card for the DPI
+    /// bypass strategy picker. Three-value ComboBox (Off / Standard /
+    /// Aggressive) + descriptive hint + warning blurb. Uses the same
+    /// SurfaceSunkenBrush card chrome as the bypass-RU checkbox card so
+    /// the section reads as one consistent block.
+    /// </summary>
+    private Border BuildDpiBypassCard()
+    {
+        var titleText = new TextBlock
+        {
+            Text = Localization.SettingsDpiBypassLabel,
+            FontWeight = FontWeight.SemiBold,
+            FontSize = 11,
+            Foreground = GetBrush("TextPrimaryBrush"),
+        };
+        var hintText = new TextBlock
+        {
+            Text = Localization.SettingsDpiBypassHint,
+            FontSize = 10,
+            Foreground = GetBrush("TextSecondaryBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        _settingsDpiBypassMode = new Avalonia.Controls.ComboBox
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            FontSize = 11,
+            ItemsSource = new[]
+            {
+                Localization.SettingsDpiBypassOff,
+                Localization.SettingsDpiBypassStandard,
+                Localization.SettingsDpiBypassAggressive,
+            },
+            SelectedIndex = AndroidStorage.GetDpiBypassMode() switch
+            {
+                "standard" => 1,
+                "aggressive" => 2,
+                _ => 0,
+            },
+        };
+        _settingsDpiBypassMode.SelectionChanged += OnSettingsDpiBypassModeChanged;
+
+        var warning = new TextBlock
+        {
+            Text = Localization.SettingsDpiBypassWarning,
+            FontSize = 9,
+            Foreground = GetBrush("WarningFgBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        return new Border
+        {
+            Padding = new Thickness(10, 8),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            BorderBrush = GetBrush("BorderSubtleBrush"),
+            BorderThickness = new Thickness(1),
+            Child = new StackPanel
+            {
+                Spacing = 6,
+                Children = { titleText, hintText, _settingsDpiBypassMode, warning }
+            }
+        };
     }
 
     /// <summary>
@@ -2120,6 +2202,15 @@ public partial class AndroidApp : Avalonia.Application
             if (_settingsAutostartVpn is not null) _settingsAutostartVpn.IsChecked = AndroidStorage.GetAutostartVpn();
             if (_settingsAutostartZapret is not null) _settingsAutostartZapret.IsChecked = AndroidStorage.GetAutostartZapret();
             if (_settingsAutostartTgProxy is not null) _settingsAutostartTgProxy.IsChecked = AndroidStorage.GetAutostartTgProxy();
+            if (_settingsDpiBypassMode is not null)
+            {
+                _settingsDpiBypassMode.SelectedIndex = AndroidStorage.GetDpiBypassMode() switch
+                {
+                    "standard" => 1,
+                    "aggressive" => 2,
+                    _ => 0,
+                };
+            }
         }
         finally
         {
@@ -2203,6 +2294,25 @@ public partial class AndroidApp : Avalonia.Application
     {
         if (_settingsLoading || _settingsAutostartTgProxy is null) return;
         AndroidStorage.SetAutostartTgProxy(_settingsAutostartTgProxy.IsChecked == true);
+    }
+
+    /// <summary>
+    /// v2.32.0 (AND-ZAPRET) — DPI bypass mode picker. Persists the new
+    /// value + refreshes the Zapret chip in the sub-header so the
+    /// state visualisation stays in sync without waiting for the next
+    /// VPN connect cycle.
+    /// </summary>
+    private void OnSettingsDpiBypassModeChanged(object? sender, Avalonia.Controls.SelectionChangedEventArgs e)
+    {
+        if (_settingsLoading || _settingsDpiBypassMode is null) return;
+        var value = _settingsDpiBypassMode.SelectedIndex switch
+        {
+            1 => "standard",
+            2 => "aggressive",
+            _ => "off",
+        };
+        AndroidStorage.SetDpiBypassMode(value);
+        UpdateZapretChipFromState();
     }
 
     // ── Mascot loading + theme-aware inversion ──────────────────────────
@@ -2341,6 +2451,7 @@ public partial class AndroidApp : Avalonia.Application
             // skipped → On in the normal happy path; on consent decline
             // or TUNNEL_ERROR it bounces back to Off.
             SetVpnChipState(ChipState.Connecting);
+            UpdateZapretChipFromState();
             activity.RequestConnect();
         }
     }
@@ -2413,6 +2524,11 @@ public partial class AndroidApp : Avalonia.Application
                 StartDiagnosticsTimer();
             }
         }
+        // v2.32.0 (AND-ZAPRET) — Zapret chip mirrors VPN phase when DPI
+        // bypass is enabled, since the bypass is implemented inside the
+        // sing-box outbound (no separate process). Recompute on every
+        // VPN state transition.
+        UpdateZapretChipFromState();
         UpdateConfigSummary();
     }
 
@@ -2453,7 +2569,7 @@ public partial class AndroidApp : Avalonia.Application
             case ChipState.Connecting:
                 bgKey = "WarningBgBrush";
                 fgKey = "WarningFgBrush";
-                StartChipPulse(_vpnChip);
+                _vpnPulseCts = StartChipPulse(_vpnChip);
                 break;
             default: // Off
                 bgKey = "SurfaceSunkenBrush";
@@ -2465,15 +2581,101 @@ public partial class AndroidApp : Avalonia.Application
     }
 
     /// <summary>
-    /// v3.0 Phase 7.1 — drive a soft "breathing" Opacity animation
-    /// (1.0 ↔ 0.55 over 1.2 s, cycling indefinitely). Cancelled via
-    /// <c>_vpnPulseCts</c>. Avalonia's Animation API handles the easing
-    /// curve — we just kick off the loop.
+    /// v2.32.0 (AND-ZAPRET, 2026-05-07) — same shape as
+    /// <see cref="SetVpnChipState"/> but for the Zapret chip. Driven by
+    /// <see cref="UpdateZapretChipFromState"/>, which composes the
+    /// stored <c>dpi_bypass_mode</c> with the live VPN connection state
+    /// into a chip color:
+    /// <list type="bullet">
+    ///   <item>Off: DPI bypass disabled OR VPN not connected (the
+    ///   bypass mechanism is in-tunnel, so it can't be active when
+    ///   the tunnel is down even if the user enabled it).</item>
+    ///   <item>Connecting: DPI bypass enabled AND VPN currently in
+    ///   the Connecting phase (pulse warning).</item>
+    ///   <item>On: DPI bypass enabled AND VPN connected (success
+    ///   green) — the tls_fragment block is now in libbox's outbound
+    ///   dialer settings and packets are being fragmented.</item>
+    /// </list>
     /// </summary>
-    private void StartChipPulse(Visual target)
+    private void SetZapretChipState(ChipState state, bool force = false)
+    {
+        if (_zapretChip is null) return;
+        if (_zapretChipState == state && !force) return;
+        _zapretChipState = state;
+
+        _zapretPulseCts?.Cancel();
+        _zapretPulseCts = null;
+        _zapretChip.Opacity = 1.0;
+
+        string bgKey, fgKey;
+        switch (state)
+        {
+            case ChipState.On:
+                bgKey = "SuccessBgBrush";
+                fgKey = "SuccessFgBrush";
+                break;
+            case ChipState.Connecting:
+                bgKey = "WarningBgBrush";
+                fgKey = "WarningFgBrush";
+                _zapretPulseCts = StartChipPulse(_zapretChip);
+                break;
+            default: // Off
+                bgKey = "SurfaceSunkenBrush";
+                fgKey = "TextMutedBrush";
+                break;
+        }
+        _zapretChip.BindToken(TextBlock.BackgroundProperty, bgKey);
+        _zapretChip.BindToken(TextBlock.ForegroundProperty, fgKey);
+    }
+
+    /// <summary>
+    /// v2.32.0 (AND-ZAPRET) — recompute the Zapret chip color from
+    /// (DPI bypass mode, VPN intent state, VPN chip phase). Called
+    /// whenever any of the three inputs changes.
+    /// </summary>
+    private void UpdateZapretChipFromState()
+    {
+        // DPI bypass off → chip always off, regardless of VPN state.
+        var mode = AndroidStorage.GetDpiBypassMode();
+        if (string.IsNullOrEmpty(mode) || string.Equals(mode, "off",
+            System.StringComparison.OrdinalIgnoreCase))
+        {
+            SetZapretChipState(ChipState.Off);
+            return;
+        }
+
+        // DPI bypass enabled — chip mirrors the VPN chip's phase.
+        // _vpnChipState is the most accurate signal because it goes
+        // through Connecting on click before IntendedConnected flips.
+        switch (_vpnChipState)
+        {
+            case ChipState.Connecting:
+                SetZapretChipState(ChipState.Connecting);
+                break;
+            case ChipState.On:
+                SetZapretChipState(ChipState.On);
+                break;
+            default:
+                SetZapretChipState(ChipState.Off);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// v3.0 Phase 7.1 — drive a soft "breathing" Opacity animation
+    /// (1.0 ↔ 0.55 over 1.2 s, cycling indefinitely). Returns the CTS so
+    /// callers can store + cancel it (one CTS per chip — VPN and Zapret
+    /// chips each have their own field).
+    ///
+    /// <para>v2.32.0 (AND-ZAPRET) — refactored from a hard-coded
+    /// <c>_vpnPulseCts</c> assignment so both chips can reuse the same
+    /// animation. Old call site assigned the cts inside the method;
+    /// new contract is "call site owns the CTS field, helper returns
+    /// what to store".</para>
+    /// </summary>
+    private System.Threading.CancellationTokenSource StartChipPulse(Visual target)
     {
         var cts = new System.Threading.CancellationTokenSource();
-        _vpnPulseCts = cts;
         var anim = new Avalonia.Animation.Animation
         {
             Duration = System.TimeSpan.FromMilliseconds(1200),
@@ -2495,8 +2697,10 @@ public partial class AndroidApp : Avalonia.Application
             },
         };
         // Fire-and-forget — the animation drives the visual and gets
-        // cancelled when cts.Cancel() is called from SetVpnChipState.
+        // cancelled when cts.Cancel() is called from SetVpnChipState
+        // / SetZapretChipState. The cts itself is owned by the caller.
         _ = anim.RunAsync(target, cts.Token);
+        return cts;
     }
 
     // ── v2.32.0 (AND-DIAG, 2026-05-07) — runtime diagnostics pump ──────
@@ -3303,6 +3507,11 @@ public partial class AndroidApp : Avalonia.Application
         RepaintThemeSegment();
         RepaintLanguageSegment();
         SetVpnChipState(_vpnChipState, force: true);
+        // v2.32.0 (AND-ZAPRET) — re-bind Zapret chip on theme flip too.
+        // UpdateConnectionState below recomputes from current state, but
+        // we force it explicitly so the BindToken call happens even when
+        // state hasn't changed (mirrors the SetVpnChipState force path).
+        SetZapretChipState(_zapretChipState, force: true);
         UpdateConnectionState(MainActivity.IntendedConnected);
     }
 
