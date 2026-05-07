@@ -2184,6 +2184,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         // Status dashboard (v2.15.0): poll VPN/Zapret/TgProxy every 2s
         StartRuntimeStatusPolling();
+
+        // v2.31.10 — App-side autostart bootstrap. Closes the gap where
+        // autostart_tgproxy / autostart_zapret in config.yaml were read
+        // into UI state but never spawned the daemons unless the Windows
+        // Service was installed. Defers to the Service when it's running
+        // (Service handles boot-spawn). See
+        // MainWindowViewModel.AutostartBootstrap.cs for the gating logic.
+        _ = BootstrapAutostartAsync();
     }
 
     /// <summary>
