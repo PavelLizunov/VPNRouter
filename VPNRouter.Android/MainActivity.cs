@@ -134,8 +134,51 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
             .WithInterFont();
     }
 
+    /// <summary>
+    /// v2.32.0 SR-2 (Android port) — path of the launch-failure counter
+    /// JSON, resolved against the app's private internal data dir
+    /// (<c>/data/user/0/&lt;package&gt;/files</c>). Set in
+    /// <see cref="OnCreate"/> as the very first thing so both the
+    /// strikes-bumping and MarkStable paths see a deterministic file
+    /// location regardless of <see cref="VPNRouter.Core.AppPaths"/>'s
+    /// Linux-branch resolution. Exposed as a property so
+    /// <see cref="AndroidApp"/> can pass the same path to
+    /// <c>LaunchFailureCounter.MarkStable</c> after first frame.
+    /// </summary>
+    public static string? LaunchCounterPath { get; private set; }
+
     protected override void OnCreate(Bundle? savedInstanceState)
     {
+        // v2.32.0 SR-2 — bump launch-failure counter BEFORE
+        // base.OnCreate (which spins up Avalonia). This way, any crash
+        // inside Avalonia init / view-model construction / first-frame
+        // render still leaves the counter incremented; only when
+        // AndroidApp.OnFrameworkInitializationCompleted reaches the
+        // post-render handler does MarkStable zero it. Mirrors desktop
+        // Program.Main → MainWindow.Opened wiring.
+        try
+        {
+            var filesDir = FilesDir?.AbsolutePath;
+            if (!string.IsNullOrEmpty(filesDir))
+            {
+                LaunchCounterPath = System.IO.Path.Combine(filesDir, "launch-counter.json");
+                var action = VPNRouter.Core.Services.LaunchFailureCounter.RecommendAction(LaunchCounterPath);
+                if (action != "none")
+                    DispatchAndroidLaunchRecovery(action);
+                VPNRouter.Core.Services.LaunchFailureCounter.IncrementOnStartup(path: LaunchCounterPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Counter is advisory — never block app startup.
+            try
+            {
+                global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
+                    $"launch-counter early init failed: {ex.GetType().Name}: {ex.Message}");
+            }
+            catch { }
+        }
+
         base.OnCreate(savedInstanceState);
         Instance = this;
 
@@ -428,5 +471,121 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
             global::Android.Util.Log.Warn("VpnRouter",
                 $"Phase 1.D: IntentChanged handler raised: {ex}");
         }
+    }
+
+    // ── v2.32.0 SR-2 — Android-specific launch-recovery dispatch ──────────
+    //
+    // Mirrors VPNRouter.App/Program.cs::DispatchLaunchRecovery but with
+    // tiers that make sense without a Windows/Mac/Linux installer surface:
+    //
+    //   "self-repair"      → wipe transient cache files (FreeConfigCache
+    //                         JSON + sing-box log dump). Most chronic
+    //                         crash sources are cache-driven on Android
+    //                         (corrupt subscription pool, malformed
+    //                         test-uri.txt, etc.) so this is the first-line
+    //                         remedy. Equivalent to desktop's web reinstall
+    //                         in spirit: "throw out the gunk, keep settings".
+    //   "config-reset"     → ALSO clear all SharedPreferences user-data
+    //                         keys (subscriptions, server cache, per-app
+    //                         filter, theme, etc.). Quarantine companions
+    //                         (key__corrupt_*) are preserved so a future
+    //                         bug report can still inspect what was there.
+    //                         Equivalent to desktop's config.yaml backup
+    //                         + reset.
+    //   "safe-mode-prompt" → record a persistent flag in SharedPreferences
+    //                         that AndroidApp surfaces as a top-of-screen
+    //                         banner: "If problems persist, go to Settings
+    //                         > Apps > VPNRouter > Storage > Clear data".
+    //                         Equivalent to desktop's --safe / repair.cmd
+    //                         pointer — manual user action of last resort.
+    //
+    // Each tier is best-effort: a failure here cannot block startup.
+    private void DispatchAndroidLaunchRecovery(string action)
+    {
+        try
+        {
+            switch (action)
+            {
+                case "self-repair":
+                    global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
+                        "3 launch failures in a row — clearing transient caches");
+                    TryClearAndroidCaches();
+                    break;
+
+                case "config-reset":
+                    global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
+                        "5 launch failures — clearing caches AND resetting user settings");
+                    TryClearAndroidCaches();
+                    try { AndroidStorage.ResetUserSettings(); }
+                    catch (Exception ex)
+                    {
+                        global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
+                            $"ResetUserSettings failed: {ex.GetType().Name}: {ex.Message}");
+                    }
+                    break;
+
+                case "safe-mode-prompt":
+                    global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
+                        "7 launch failures — surfacing safe-mode prompt");
+                    // Re-stamp the recovery notice so AndroidApp's banner
+                    // surfaces it on the next successful render.
+                    AndroidStorage.QueueSafeModeBannerForUi();
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("VpnRouter.SelfRepair",
+                $"DispatchAndroidLaunchRecovery({action}) failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Best-effort cache wipe. FreeConfigs cache lives at
+    /// <c>~/.config/vpnrouter/cache/free_configs.json</c> via Core's
+    /// AppPaths Linux branch; we also clear the sing-box log dump and
+    /// config-dump.json files we wrote under getExternalFilesDir() since
+    /// those can grow unbounded across launches.
+    /// </summary>
+    private void TryClearAndroidCaches()
+    {
+        try
+        {
+            var cacheDir = VPNRouter.Core.AppPaths.CacheDir;
+            if (System.IO.Directory.Exists(cacheDir))
+            {
+                foreach (var f in System.IO.Directory.EnumerateFiles(cacheDir, "*.json"))
+                {
+                    try { System.IO.File.Delete(f); }
+                    catch (Exception ex)
+                    {
+                        global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
+                            $"could not delete {f}: {ex.Message}");
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
+                $"cache wipe failed: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        // External files (log + config dump) — purely diagnostic, safe to
+        // erase. The next StartTunnelService rewrites them.
+        try
+        {
+            var ext = GetExternalFilesDir(null);
+            if (ext != null)
+            {
+                foreach (var name in new[] { "singbox.log", "config-dump.json" })
+                {
+                    var path = System.IO.Path.Combine(ext.AbsolutePath, name);
+                    try { if (System.IO.File.Exists(path)) System.IO.File.Delete(path); }
+                    catch { /* per-file best effort */ }
+                }
+            }
+        }
+        catch { /* GetExternalFilesDir may fail on some OEMs */ }
     }
 }

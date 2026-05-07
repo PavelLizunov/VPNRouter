@@ -257,13 +257,82 @@ public partial class AndroidApp : Avalonia.Application
             var hasSubscription = !string.IsNullOrEmpty(AndroidStorage.GetSubscriptionUrl());
             _formExpanded = !hasManual && !hasSubscription;
 
-            singleView.MainView = BuildSimplePageView();
+            var view = BuildSimplePageView();
+            singleView.MainView = view;
             MainActivity.IntentChanged += OnIntentChanged;
             UpdateConnectionState(MainActivity.IntendedConnected);
             ReloadServerList();
+
+            // v2.32.0 SR-2 — MarkStable on first attach to the visual
+            // tree. Mirrors desktop MainWindow.Opened semantics: by the
+            // time AttachedToVisualTree fires, the dispatcher is pumping
+            // and Avalonia rendering committed at least one frame, so a
+            // crash in earlier init has been ruled out. We use a one-
+            // shot subscription so subsequent re-attaches (config change
+            // recreates the activity) don't re-stamp.
+            //
+            // Also runs the recovery-notice consumption pass — pulls any
+            // pending notices from AndroidStorage (SR-1/3/4 stamps from
+            // this launch's bad SharedPrefs reads) AND from
+            // SettingsLoader (no-op on Android until we adopt the YAML
+            // backend, but kept for forward compat) AND the persistent
+            // safe-mode banner flag (SR-2 tier-3).
+            EventHandler<Avalonia.VisualTreeAttachmentEventArgs>? attachHandler = null;
+            attachHandler = (sender, _) =>
+            {
+                if (attachHandler != null && sender is Control c)
+                    c.AttachedToVisualTree -= attachHandler;
+                try
+                {
+                    if (!string.IsNullOrEmpty(MainActivity.LaunchCounterPath))
+                        VPNRouter.Core.Services.LaunchFailureCounter.MarkStable(MainActivity.LaunchCounterPath);
+                }
+                catch { /* counter is advisory */ }
+
+                try { ConsumeAndSurfaceRecoveryNotice(); }
+                catch (Exception ex)
+                {
+                    global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
+                        $"recovery notice surfacing failed: {ex.GetType().Name}: {ex.Message}");
+                }
+            };
+            view.AttachedToVisualTree += attachHandler;
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// v2.32.0 SR-1/2/3/4 — pull whatever recovery notices accumulated
+    /// during this launch (bad SharedPrefs JSON deserialise, unknown
+    /// enum reset, persistent safe-mode flag from a previous chronic
+    /// crash run) and surface them via the existing menu-feedback
+    /// banner. Kept tiny + try/catch'd: the banner is informational,
+    /// not load-bearing.
+    /// </summary>
+    private void ConsumeAndSurfaceRecoveryNotice()
+    {
+        // Order: SettingsLoader notice (desktop-style YAML, currently
+        // always null on Android — kept for forward compat), then
+        // AndroidStorage notice (our actual per-key SR-1/3/4 stamps),
+        // then safe-mode banner (SR-2 tier-3, persisted across crashes).
+        var coreNotice = VPNRouter.Core.Services.SettingsLoader.ConsumeRecoveryNotice();
+        var androidNotice = AndroidStorage.ConsumeRecoveryNotice();
+        var safeMode = AndroidStorage.ConsumeSafeModeBanner();
+
+        var parts = new System.Collections.Generic.List<string>(3);
+        if (!string.IsNullOrWhiteSpace(coreNotice)) parts.Add(coreNotice);
+        if (!string.IsNullOrWhiteSpace(androidNotice)) parts.Add(androidNotice);
+        if (safeMode)
+        {
+            parts.Add(Localization.Ru
+                ? "Если проблемы продолжаются: Настройки > Приложения > VPNRouter > Хранилище > Очистить данные."
+                : "If problems persist: Settings > Apps > VPNRouter > Storage > Clear data.");
+        }
+
+        if (parts.Count == 0) return;
+        var combined = string.Join(" — ", parts);
+        ShowMenuFeedback(combined);
     }
 
     private void ApplyTheme()
