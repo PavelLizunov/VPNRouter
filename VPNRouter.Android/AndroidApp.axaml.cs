@@ -953,10 +953,15 @@ public partial class AndroidApp : Avalonia.Application
         // v3.0 Phase 7.5 (2026-05-04) — fullscreen per-app picker
         // overlay. Triggered from the "Choose apps…" button in the form.
         _appPickerOverlay = BuildAppPickerOverlay();
+        // v2.32.0 (2026-05-07) — fullscreen Subscribe overlay (multi-
+        // subscription parity with desktop SubscribePage). Triggered from
+        // the "Расширенные настройки" advanced card. Defined in
+        // AndroidApp.SubscribePage.cs partial.
+        _subsOverlay = BuildSubsOverlay();
 
         return new Grid
         {
-            Children = { mainScroller, _logOverlay, _appPickerOverlay }
+            Children = { mainScroller, _logOverlay, _appPickerOverlay, _subsOverlay }
         };
     }
 
@@ -1503,9 +1508,13 @@ public partial class AndroidApp : Avalonia.Application
 
     private void OnAdvCardClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        // Phase 3 placeholder: would open an Advanced settings page on Android.
-        // For now expand the inline form (already exists).
-        if (!_formExpanded) OnConfigRowClicked(sender, e);
+        // v2.32.0 (2026-05-07) — Phase 3 placeholder replaced with
+        // Subscribe overlay open. The advanced card subtitle promises
+        // "Серверы · Подписки · Маршрутизация · Логи"; subscriptions are
+        // now real. (Servers + Routing + Logs остаются placeholder'ом
+        // под inline form / kebab menu / log overlay соответственно;
+        // subscription management was the only orphan here.)
+        OpenSubsOverlay();
     }
 
     private void OnScanQrClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -2387,6 +2396,9 @@ public partial class AndroidApp : Avalonia.Application
         if (_ctaConnect is not null) _ctaConnect.Content = Localization.ButtonConnect;
         if (_ctaConnecting is not null) _ctaConnecting.Content = Localization.ButtonConnecting;
         if (_ctaDisconnect is not null) _ctaDisconnect.Content = Localization.ButtonDisconnect;
+        // v2.32.0 — refresh Subscribe overlay strings (title, add form,
+        // refresh-all button, empty-state hint, per-card text).
+        RefreshSubsLocalizedStrings();
         UpdateConfigSummary();
     }
 

@@ -40,6 +40,14 @@ public static class AndroidStorage
     private const string KeySelectedServerName = "selected_server_name";
     private const string KeyLanguage = "language";   // "ru" | "en"
     private const string KeyTheme = "theme";         // "dark" | "light" | "system"
+    // v2.32.0 (2026-05-07) — multi-subscription parity with desktop
+    // SubscribePage. Persists List<SubscriptionEntry> from Core verbatim
+    // so the model is shared with the desktop YAML schema (fields:
+    // id/name/url/enabled/last_refreshed_at/last_server_count/servers).
+    // Pre-2.32.0 only KeySubscriptionUrl existed (single URL); on first
+    // read of KeySubscriptions we migrate the legacy single URL into a
+    // one-entry list.
+    private const string KeySubscriptions = "subscriptions_json";
 
     // ── Phase 1.F: single-URI manual mode ───────────────────────────────────
 
@@ -50,6 +58,89 @@ public static class AndroidStorage
 
     public static string? GetSubscriptionUrl() => GetString(KeySubscriptionUrl);
     public static bool SetSubscriptionUrl(string? value) => SetString(KeySubscriptionUrl, value);
+
+    // ── v2.32.0: multi-subscription list (desktop SubscribePage parity) ─
+
+    /// <summary>
+    /// Persisted list of <see cref="SubscriptionEntry"/> objects (one per
+    /// subscription source). Mirrors desktop's <c>app.subscriptions[]</c>
+    /// YAML array, using the same Core model so refresh/parse logic is
+    /// shared.
+    /// <para>If <c>subscriptions_json</c> is missing, falls back to the
+    /// legacy single <c>KeySubscriptionUrl</c> from Phase 1.H — wraps it
+    /// in a one-entry list called "Default" so old installs auto-migrate
+    /// on first open of the new SubscribePage. Migration is read-only;
+    /// the next <see cref="SetSubscriptions"/> persists the new schema.</para>
+    /// </summary>
+    public static List<SubscriptionEntry> GetSubscriptions()
+    {
+        try
+        {
+            var json = GetString(KeySubscriptions);
+            if (!string.IsNullOrWhiteSpace(json))
+            {
+                var list = JsonConvert.DeserializeObject<List<SubscriptionEntry>>(json);
+                if (list != null) return list;
+            }
+
+            var legacy = GetString(KeySubscriptionUrl);
+            if (!string.IsNullOrWhiteSpace(legacy))
+            {
+                return new List<SubscriptionEntry>
+                {
+                    new SubscriptionEntry
+                    {
+                        Name = "Default",
+                        Url = legacy,
+                        Enabled = true,
+                        Servers = GetServers(),
+                    }
+                };
+            }
+        }
+        catch
+        {
+            // fall through to empty
+        }
+        return new List<SubscriptionEntry>();
+    }
+
+    /// <summary>
+    /// Replace the list of subscriptions atomically. Pass null/empty to
+    /// clear. Also flushes the aggregated <see cref="GetServers"/> pool
+    /// (union of all entries' Servers, dedup by Server:Port:Uuid:Flow)
+    /// so the connect path keeps working without a separate rebuild
+    /// step.
+    /// </summary>
+    public static bool SetSubscriptions(IEnumerable<SubscriptionEntry>? subs)
+    {
+        try
+        {
+            var list = subs is null ? new List<SubscriptionEntry>() : new List<SubscriptionEntry>(subs);
+            var json = JsonConvert.SerializeObject(list);
+            var ok = SetString(KeySubscriptions, json);
+
+            // Rebuild aggregated server pool — dedup matches desktop
+            // VlessServersResolver.Resolve key shape (Server:Port:Uuid:Flow).
+            var pool = new List<VlessServerEntry>();
+            var seen = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            foreach (var s in list)
+            {
+                if (!s.Enabled || s.Servers == null) continue;
+                foreach (var srv in s.Servers)
+                {
+                    var key = $"{srv.Server}:{srv.Port}:{srv.Uuid}:{srv.Flow}";
+                    if (seen.Add(key)) pool.Add(srv);
+                }
+            }
+            SetServers(pool);
+            return ok;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// Persisted list of servers from the last successful subscription fetch.
