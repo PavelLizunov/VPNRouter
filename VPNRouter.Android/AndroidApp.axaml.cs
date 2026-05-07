@@ -1104,9 +1104,14 @@ public partial class AndroidApp : Avalonia.Application
         // desktop NetworkPage). Triggered from kebab > Diagnostics > "Настройки".
         _settingsOverlay = BuildSettingsOverlay();
 
+        // v2.32.0 (AND-4) — fullscreen Server-list overlay (per-server
+        // testing UI). Defined in AndroidApp.ServerList.cs partial.
+        // Triggered from a tap on the SubscribePage card's name area.
+        _srvOverlay = BuildServerListOverlay();
+
         return new Grid
         {
-            Children = { mainScroller, _logOverlay, _appPickerOverlay, _subsOverlay, _fcOverlay, _settingsOverlay }
+            Children = { mainScroller, _logOverlay, _appPickerOverlay, _subsOverlay, _fcOverlay, _settingsOverlay, _srvOverlay }
         };
     }
 
@@ -3460,13 +3465,12 @@ public partial class AndroidApp : Avalonia.Application
         // v2.32.0 — refresh Subscribe overlay strings (title, add form,
         // refresh-all button, empty-state hint, per-card text).
         RefreshSubsLocalizedStrings();
-        // v2.32.0 (2026-05-07) — auto-update banner copy when visible.
-        // The dynamic strings (size, percent, error message) are
-        // re-built next time the banner state changes; what we refresh
-        // here are the static labels (Download / Later / subtitle).
+        // v2.32.0 (AUTOUPDATE) — auto-update banner copy when visible.
         if (_updateBannerDismiss is not null) _updateBannerDismiss.Content = Localization.UpdateButtonDismiss;
         if (_updateBannerSubtitle is not null && _updateBannerSubtitle.IsVisible)
             _updateBannerSubtitle.Text = Localization.UpdateBannerSubtitle;
+        // v2.32.0 (SERVER-TESTING) — refresh Server-list overlay strings.
+        RefreshServerListLocalizedStrings();
         UpdateConfigSummary();
     }
 
