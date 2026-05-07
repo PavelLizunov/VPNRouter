@@ -134,7 +134,33 @@ sealed class Program
             }
             return;
         }
+#endif
 
+        // v2.32.0 — launch-failure counter. Cross-platform: persists
+        // a strike count in launch-counter.json next to config.yaml,
+        // resets on MainWindow.Opened (see MainWindow.axaml.cs), and
+        // graduates recovery (SelfRepair → config reset → Safe Mode
+        // prompt) when chronic startup loops are detected. Wired here
+        // — after Windows admin elevation, before any heavy work
+        // (binPath self-heal, InstallHealthCheck, DLL-loading paths)
+        // — so a crash from any of those still gets counted as a
+        // strike. Wrapped in try/catch — a JSON I/O hiccup on the
+        // counter must never block app startup.
+        try
+        {
+            var recoveryAction = VPNRouter.Core.Services.LaunchFailureCounter.RecommendAction();
+            if (recoveryAction != "none")
+            {
+                DispatchLaunchRecovery(recoveryAction);
+            }
+            VPNRouter.Core.Services.LaunchFailureCounter.IncrementOnStartup();
+        }
+        catch (Exception ex)
+        {
+            try { Console.Error.WriteLine($"[launch-counter] {ex.Message}"); } catch { }
+        }
+
+#if PLATFORM_WINDOWS
         // v2.26.0 — service binPath self-heal (Windows only). Analog of the
         // Run-key fix above but for `sc config VPNRouter binPath=`. Non-
         // disruptive: just reconfigures the service, change takes effect on
@@ -340,6 +366,85 @@ sealed class Program
         return principal.IsInRole(WindowsBuiltInRole.Administrator);
     }
 #endif
+
+    /// <summary>
+    /// v2.32.0 — graduated startup-loop recovery. Called by
+    /// <see cref="Main"/> when <see cref="VPNRouter.Core.Services.LaunchFailureCounter.RecommendAction"/>
+    /// surfaces a non-"none" action. Each branch is best-effort and
+    /// must NEVER throw out — the counter has already stamped its
+    /// cooldown so a relaunch within the next 10 min won't re-trigger
+    /// the same tier; this method's job is only to attempt the
+    /// recovery once.
+    /// </summary>
+    private static void DispatchLaunchRecovery(string action)
+    {
+        switch (action)
+        {
+            case "self-repair":
+#if PLATFORM_WINDOWS
+                try
+                {
+                    var plan = VPNRouter.App.Services.SelfRepair.Plan();
+                    if (plan.ShouldRun)
+                    {
+                        try { Console.Error.WriteLine("[launch-counter] 3 strikes — triggering SelfRepair (web reinstall)"); } catch { }
+                        VPNRouter.App.Services.SelfRepair.Run();
+                        Environment.Exit(0);
+                    }
+                    try { Console.Error.WriteLine($"[launch-counter] self-repair declined: {plan.Reason}"); } catch { }
+                }
+                catch (Exception ex)
+                {
+                    try { Console.Error.WriteLine($"[launch-counter] self-repair dispatch failed: {ex.Message}"); } catch { }
+                }
+#else
+                try { Console.Error.WriteLine("[launch-counter] self-repair tier reached but only implemented on Windows"); } catch { }
+#endif
+                break;
+
+            case "config-reset":
+                try
+                {
+                    var cfg = VPNRouter.Core.AppPaths.ConfigYamlPath;
+                    if (System.IO.File.Exists(cfg))
+                    {
+                        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                        var aside = $"{cfg}.crash-recovery-{stamp}";
+                        System.IO.File.Move(cfg, aside);
+                        try { Console.Error.WriteLine($"[launch-counter] 5 strikes — config moved aside to {aside}, fresh defaults will be created"); } catch { }
+                    }
+                    // SettingsLoader.Load() will see no config.yaml on
+                    // disk and write fresh defaults — the same path the
+                    // app takes on a clean install.
+                }
+                catch (Exception ex)
+                {
+                    try { Console.Error.WriteLine($"[launch-counter] config-reset failed: {ex.Message}"); } catch { }
+                }
+                break;
+
+            case "safe-mode-prompt":
+                try
+                {
+                    var msg =
+                        "VPNRouter has failed to start 7 times in a row.\r\n" +
+                        "Try the manual recovery script:\r\n" +
+                        "  iwr -useb https://vpn.ninitux.com/repair.cmd | iex\r\n" +
+                        "Or relaunch with --safe to bypass user config.";
+                    try { Console.Error.WriteLine($"[launch-counter] {msg}"); } catch { }
+                    var logDir = VPNRouter.Core.AppPaths.LogsDir;
+                    System.IO.Directory.CreateDirectory(logDir);
+                    var logPath = System.IO.Path.Combine(logDir, "vpnrouter-launch-error.log");
+                    System.IO.File.AppendAllText(logPath,
+                        $"[{DateTime.Now:O}] [safe-mode-prompt] {msg}\r\n");
+                }
+                catch (Exception ex)
+                {
+                    try { Console.Error.WriteLine($"[launch-counter] safe-mode-prompt failed: {ex.Message}"); } catch { }
+                }
+                break;
+        }
+    }
 
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()
