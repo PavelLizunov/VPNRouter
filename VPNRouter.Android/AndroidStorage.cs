@@ -164,9 +164,30 @@ public static class AndroidStorage
     // round-trip through SharedPreferences without inventing a delimiter.
     private const string KeyPerAppMode = "per_app_mode";
     private const string KeyPerAppPackages = "per_app_packages";
+    // v3.0 v2.32.0 (2026-05-07): when the user toggles the form's split
+    // radio off (mode="off"), we still want to remember whether their
+    // last active mode was "include" or "exclude" so toggling split back
+    // on restores it instead of defaulting to "include". Without this,
+    // an exclude-mode user who briefly switches to "All traffic" would
+    // silently lose their exclude intent.
+    private const string KeyPerAppLastMode = "per_app_last_mode";
 
-    public static string GetPerAppMode() => GetString(KeyPerAppMode) ?? "off";
+    public static string GetPerAppMode() =>
+        VPNRouter.Core.Models.PerAppFilterMode.Normalize(GetString(KeyPerAppMode));
     public static bool SetPerAppMode(string? value) => SetString(KeyPerAppMode, value);
+
+    /// <summary>
+    /// Last non-"off" mode the user actively chose ("include" or "exclude").
+    /// Used to restore the picker mode when the user toggles full-tunnel off
+    /// (mode="off") and then back on. Defaults to "include" — first-time
+    /// users who hit the split radio start in selected-only mode, matching
+    /// the most common per-app filter intent. Resolution lives in
+    /// <see cref="VPNRouter.Core.Models.PerAppFilterMode.ResolveLastMode"/>
+    /// so VPNRouter.Tests can pin the rule on net8.0.
+    /// </summary>
+    public static string GetPerAppLastMode() =>
+        VPNRouter.Core.Models.PerAppFilterMode.ResolveLastMode(GetString(KeyPerAppLastMode));
+    public static bool SetPerAppLastMode(string? value) => SetString(KeyPerAppLastMode, value);
 
     public static List<string> GetPerAppPackages()
     {

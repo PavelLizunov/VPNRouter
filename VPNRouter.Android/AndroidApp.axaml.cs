@@ -148,6 +148,17 @@ public partial class AndroidApp : Avalonia.Application
     private List<AppListLoader.AppEntry> _appPickerCache = new();
     private HashSet<string> _appPickerSelected = new(System.StringComparer.OrdinalIgnoreCase);
     private bool _appPickerSystemAppsVisible = false;
+    // v3.0 v2.32.0 (2026-05-07) — exclude-mode UI inside the picker
+    // overlay. Storage already round-trips "include" / "exclude" through
+    // VpnRouterService.java's addAllowedApplication / addDisallowedApplication
+    // branches; this is the missing UI surface that lets a user pick.
+    // The two segment buttons sit above the search box; selection drives
+    // the hint TextBlock below them and the count label on the form.
+    private Avalonia.Controls.Button? _appPickerModeIncludeBtn;
+    private Avalonia.Controls.Button? _appPickerModeExcludeBtn;
+    private TextBlock? _appPickerModeLabel;
+    private TextBlock? _appPickerModeHint;
+    private string _appPickerMode = "include";
 
     // State
     private bool _formExpanded = false;
@@ -640,9 +651,10 @@ public partial class AndroidApp : Avalonia.Application
         {
             GroupName = "TunnelMode",
             // v3.0 Phase 7.5 — radio state seeded from stored per-app
-            // mode. "include" → split; everything else → full. Lets the
-            // user reopen the form and see their saved choice.
-            IsChecked = AndroidStorage.GetPerAppMode() == "include",
+            // mode. v2.32.0 expanded: any non-"off" mode (include OR
+            // exclude) keeps split selected; the picker overlay refines
+            // include vs exclude inside the split branch.
+            IsChecked = AndroidStorage.GetPerAppMode() != "off",
             Content = _splitLabel,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
@@ -669,8 +681,10 @@ public partial class AndroidApp : Avalonia.Application
         _fullRadio = new Avalonia.Controls.RadioButton
         {
             GroupName = "TunnelMode",
-            // v3.0 Phase 7.5 — full mode = mode != "include".
-            IsChecked = AndroidStorage.GetPerAppMode() != "include",
+            // v3.0 Phase 7.5 — full mode = mode == "off".
+            // v2.32.0: was `!= "include"` which silently selected full when
+            // mode was "exclude" — wrong, exclude is still split.
+            IsChecked = AndroidStorage.GetPerAppMode() == "off",
             Content = _fullLabel,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
@@ -696,9 +710,13 @@ public partial class AndroidApp : Avalonia.Application
         _perAppPickButton.Margin = new Thickness(24, 4, 0, 0);
 
         var initialPerAppCount = AndroidStorage.GetPerAppPackages().Count;
+        var initialMode = AndroidStorage.GetPerAppMode();
+        var initialCountFmt = initialMode == "exclude"
+            ? Localization.PerAppCountExclude
+            : Localization.PerAppCountInclude;
         _perAppCountLabel = new TextBlock
         {
-            Text = string.Format(Localization.PerAppCount, initialPerAppCount),
+            Text = string.Format(initialCountFmt, initialPerAppCount),
             FontSize = 9,
             Foreground = textMuted,
             Margin = new Thickness(24, 2, 0, 0),
@@ -707,7 +725,9 @@ public partial class AndroidApp : Avalonia.Application
         var perAppStack = new StackPanel
         {
             Spacing = 0,
-            IsVisible = AndroidStorage.GetPerAppMode() == "include",
+            // v2.32.0: visible whenever split is on (mode != off), not just
+            // include. Exclude mode also needs the "Choose apps…" button.
+            IsVisible = AndroidStorage.GetPerAppMode() != "off",
             Children = { _perAppPickButton, _perAppCountLabel },
         };
         // Tag the stack so OnTunnelModeRadioChanged can flip its
@@ -1886,13 +1906,26 @@ public partial class AndroidApp : Avalonia.Application
         // the actual state.
         var splitOn = _splitRadio?.IsChecked == true;
 
-        // Persist the corresponding per-app mode. "Selected apps" radio
-        // → "include" (only listed packages route through tunnel);
-        // "All traffic" → "off" (full routing, no filter).
-        var newMode = splitOn ? "include" : "off";
-        if (AndroidStorage.GetPerAppMode() != newMode)
+        // v3.0 v2.32.0 — when the user toggles split ON, restore the last
+        // active per-app mode ("include" or "exclude"); first-time users
+        // get "include" via the GetPerAppLastMode default. Toggling split
+        // OFF writes "off" to the active mode but preserves last-mode so
+        // the next ON toggle is sticky.
+        if (splitOn)
         {
-            AndroidStorage.SetPerAppMode(newMode);
+            var current = AndroidStorage.GetPerAppMode();
+            if (current == "off")
+            {
+                var restored = AndroidStorage.GetPerAppLastMode();
+                AndroidStorage.SetPerAppMode(restored);
+            }
+        }
+        else
+        {
+            if (AndroidStorage.GetPerAppMode() != "off")
+            {
+                AndroidStorage.SetPerAppMode("off");
+            }
         }
 
         // Show/hide the "Choose apps…" sub-stack we tagged on the split
@@ -1901,6 +1934,27 @@ public partial class AndroidApp : Avalonia.Application
         {
             perAppStack.IsVisible = splitOn;
         }
+
+        UpdatePerAppFormCountLabel();
+    }
+
+    /// <summary>
+    /// v3.0 v2.32.0 (2026-05-07) — keeps the form-side "Selected: N" label
+    /// in sync with the saved package count + the active mode. The label
+    /// suffix differs by mode so a user glancing at the form can tell
+    /// whether "Selected: 3" means "3 apps go via VPN" (include) or
+    /// "3 apps bypass VPN" (exclude). Called from
+    /// <see cref="OnTunnelModeRadioChanged"/> + <see cref="OnAppPickerSaveClicked"/>.
+    /// </summary>
+    private void UpdatePerAppFormCountLabel()
+    {
+        if (_perAppCountLabel is null) return;
+        var count = AndroidStorage.GetPerAppPackages().Count;
+        var mode = AndroidStorage.GetPerAppMode();
+        var fmt = mode == "exclude"
+            ? Localization.PerAppCountExclude
+            : Localization.PerAppCountInclude;
+        _perAppCountLabel.Text = string.Format(fmt, count);
     }
 
     private void OnPerAppPickButtonClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1916,6 +1970,19 @@ public partial class AndroidApp : Avalonia.Application
         // the user previously saved.
         _appPickerSelected = new HashSet<string>(AndroidStorage.GetPerAppPackages(),
                                                  System.StringComparer.OrdinalIgnoreCase);
+
+        // v3.0 v2.32.0 — seed the picker mode. If storage is currently
+        // "off" (user opened the picker after toggling split on but before
+        // mode persisted), restore the last active mode; default to
+        // "include" via GetPerAppLastMode for first-run.
+        var storedMode = AndroidStorage.GetPerAppMode();
+        _appPickerMode = storedMode switch
+        {
+            "include" => "include",
+            "exclude" => "exclude",
+            _ => AndroidStorage.GetPerAppLastMode(),
+        };
+        ApplyPickerModeVisuals();
 
         if (_appPickerSearch is not null) _appPickerSearch.Text = string.Empty;
         if (_appPickerSystemToggle is not null)
@@ -1953,9 +2020,55 @@ public partial class AndroidApp : Avalonia.Application
     private void OnAppPickerSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         AndroidStorage.SetPerAppPackages(_appPickerSelected);
-        if (_perAppCountLabel is not null)
-            _perAppCountLabel.Text = string.Format(Localization.PerAppCount, _appPickerSelected.Count);
+        // v3.0 v2.32.0 — persist mode + sticky-restore key in one step so
+        // the next split-radio toggle restores the same mode.
+        AndroidStorage.SetPerAppMode(_appPickerMode);
+        AndroidStorage.SetPerAppLastMode(_appPickerMode);
+        UpdatePerAppFormCountLabel();
         if (_appPickerOverlay is not null) _appPickerOverlay.IsVisible = false;
+    }
+
+    private void OnAppPickerModeIncludeClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_appPickerMode == "include") return;
+        _appPickerMode = "include";
+        ApplyPickerModeVisuals();
+    }
+
+    private void OnAppPickerModeExcludeClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_appPickerMode == "exclude") return;
+        _appPickerMode = "exclude";
+        ApplyPickerModeVisuals();
+    }
+
+    /// <summary>
+    /// v3.0 v2.32.0 (2026-05-07) — repaints the include/exclude segment
+    /// buttons + the hint TextBlock based on <see cref="_appPickerMode"/>.
+    /// Mirrors how the kebab menu's theme/language segment row paints
+    /// active/inactive (see <see cref="MakeSegmentButton"/>).
+    /// </summary>
+    private void ApplyPickerModeVisuals()
+    {
+        var includeActive = _appPickerMode == "include";
+        var excludeActive = _appPickerMode == "exclude";
+        StyleSegment(_appPickerModeIncludeBtn, includeActive);
+        StyleSegment(_appPickerModeExcludeBtn, excludeActive);
+        if (_appPickerModeHint is not null)
+        {
+            _appPickerModeHint.Text = excludeActive
+                ? Localization.PerAppHintExclude
+                : Localization.PerAppHintInclude;
+        }
+    }
+
+    private void StyleSegment(Avalonia.Controls.Button? btn, bool active)
+    {
+        if (btn is null) return;
+        btn.Background = active ? GetBrush("AccentBgSubtleBrush") : GetBrush("SurfaceSunkenBrush");
+        btn.Foreground = active ? GetBrush("AccentFgBrush") : GetBrush("TextSecondaryBrush");
+        btn.BorderBrush = active ? GetBrush("BorderAccentBrush") : GetBrush("BorderSubtleBrush");
+        btn.FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal;
     }
 
     private void OnAppPickerSystemToggleChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -2052,15 +2165,33 @@ public partial class AndroidApp : Avalonia.Application
             UpdateAppPickerCount();
         };
 
+        // v3.0 v2.32.0 — real app icon to the left of the checkbox. The
+        // bitmap was converted by AppListLoader on the background thread
+        // (see AppIconCache), so a sync read here is safe even on cold
+        // cache. When IconBitmap is null (icon load threw, or package
+        // had no icon), the slot stays blank — better than a placeholder
+        // glyph that'd draw user attention to a non-issue.
+        var iconImage = new Image
+        {
+            Width = 24,
+            Height = 24,
+            VerticalAlignment = VerticalAlignment.Center,
+            Stretch = Stretch.Uniform,
+            Source = app.IconBitmap,
+        };
+        RenderOptions.SetBitmapInterpolationMode(iconImage, BitmapInterpolationMode.HighQuality);
+
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"),
             ColumnSpacing = 8,
             Margin = new Thickness(8, 4),
         };
         Grid.SetColumn(checkbox, 0);
-        Grid.SetColumn(rowText, 1);
+        Grid.SetColumn(iconImage, 1);
+        Grid.SetColumn(rowText, 2);
         grid.Children.Add(checkbox);
+        grid.Children.Add(iconImage);
         grid.Children.Add(rowText);
 
         // Tap anywhere on the row toggles the check.
@@ -2125,6 +2256,48 @@ public partial class AndroidApp : Avalonia.Application
             BorderThickness = new Thickness(0, 0, 0, 1),
             Padding = new Thickness(8, 4),
             Child = titleBar,
+        };
+
+        // v3.0 v2.32.0 — include/exclude segmented control + hint, sitting
+        // between the title bar and the search box. Tap include → only the
+        // checked apps route via VPN; tap exclude → checked apps bypass VPN
+        // (matches VpnRouterService.java's addAllowedApplication /
+        // addDisallowedApplication branches).
+        _appPickerModeLabel = new TextBlock
+        {
+            Text = Localization.PerAppPickerModeLabel,
+            FontSize = 10,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = GetBrush("TextMutedBrush"),
+            Margin = new Thickness(8, 6, 8, 2),
+        };
+        _appPickerModeIncludeBtn = MakeSegmentButton(
+            Localization.PerAppModeInclude,
+            _appPickerMode == "include",
+            OnAppPickerModeIncludeClicked);
+        _appPickerModeExcludeBtn = MakeSegmentButton(
+            Localization.PerAppModeExclude,
+            _appPickerMode == "exclude",
+            OnAppPickerModeExcludeClicked);
+        var modeRow = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,*"),
+            ColumnSpacing = 4,
+            Margin = new Thickness(8, 0, 8, 4),
+        };
+        Grid.SetColumn(_appPickerModeIncludeBtn, 0);
+        Grid.SetColumn(_appPickerModeExcludeBtn, 1);
+        modeRow.Children.Add(_appPickerModeIncludeBtn);
+        modeRow.Children.Add(_appPickerModeExcludeBtn);
+        _appPickerModeHint = new TextBlock
+        {
+            Text = _appPickerMode == "exclude"
+                ? Localization.PerAppHintExclude
+                : Localization.PerAppHintInclude,
+            FontSize = 9,
+            Foreground = GetBrush("TextMutedBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(8, 0, 8, 6),
         };
 
         _appPickerSearch = new TextBox
@@ -2204,10 +2377,16 @@ public partial class AndroidApp : Avalonia.Application
 
         var dock = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(titleBarBorder, Dock.Top);
+        DockPanel.SetDock(_appPickerModeLabel, Dock.Top);
+        DockPanel.SetDock(modeRow, Dock.Top);
+        DockPanel.SetDock(_appPickerModeHint, Dock.Top);
         DockPanel.SetDock(filterRow, Dock.Top);
         DockPanel.SetDock(togglesRow, Dock.Top);
         DockPanel.SetDock(_appPickerSaveBtn, Dock.Bottom);
         dock.Children.Add(titleBarBorder);
+        dock.Children.Add(_appPickerModeLabel);
+        dock.Children.Add(modeRow);
+        dock.Children.Add(_appPickerModeHint);
         dock.Children.Add(filterRow);
         dock.Children.Add(togglesRow);
         dock.Children.Add(_appPickerSaveBtn);

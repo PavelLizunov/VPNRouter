@@ -3,6 +3,7 @@ using System.Linq;
 using Android.App;
 using Android.Content.PM;
 using Android.Graphics.Drawables;
+using Avalonia.Media.Imaging;
 
 namespace VPNRouter.Android;
 
@@ -34,6 +35,12 @@ internal static class AppListLoader
         public string PackageName { get; set; } = string.Empty;
         public string Label       { get; set; } = string.Empty;
         public Drawable? Icon     { get; set; }
+        // v3.0 v2.32.0 (2026-05-07) — converted via AppIconCache so the
+        // per-app picker can render real app icons (handbook §5.5
+        // follow-up). Null when the package returned no icon or the
+        // Drawable→Bitmap conversion threw (rare; some short-lived
+        // stub packages misbehave).
+        public Bitmap? IconBitmap { get; set; }
         public bool IsSystem      { get; set; }
     }
 
@@ -102,11 +109,33 @@ internal static class AppListLoader
                 // icon slot.
             }
 
+            // v3.0 v2.32.0 — eager Drawable→Bitmap conversion inside the
+            // existing background Task.Run that wraps Load(). Cache hit
+            // is O(1); cold conversion is the bulk of the load latency
+            // (~10 ms × 100 apps ≈ 1 s on KYOCERA A101BM). Doing it
+            // here keeps the row builder synchronous, avoiding the
+            // need to dispatch back to the UI thread per-row to update
+            // an Image.Source after the fact.
+            var pkgName = info.PackageName ?? string.Empty;
+            Bitmap? iconBitmap = null;
+            if (!string.IsNullOrEmpty(pkgName))
+            {
+                try
+                {
+                    iconBitmap = AppIconCache.GetOrConvert(pkgName, icon);
+                }
+                catch
+                {
+                    iconBitmap = null;
+                }
+            }
+
             result.Add(new AppEntry
             {
-                PackageName = info.PackageName ?? string.Empty,
+                PackageName = pkgName,
                 Label = label,
                 Icon = icon,
+                IconBitmap = iconBitmap,
                 IsSystem = isSystem,
             });
         }
