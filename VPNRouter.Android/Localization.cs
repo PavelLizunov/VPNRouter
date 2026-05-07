@@ -603,4 +603,26 @@ internal static class Localization
     public static string AutostartTgProxyNotPorted => Ru
         ? "⛔ TgProxy пока не портирован на Android"
         : "⛔ TgProxy is not ported to Android yet";
+
+    // ── v2.32.0 (AND-ZAPRET, 2026-05-07) — DPI bypass picker (handbook §7 Phase 8.4) ──
+    //
+    // Android Zapret port via sing-box's native tls_fragment / udp_fragment
+    // instead of winws.exe. Strings parallel desktop's DpiBypassPage layout
+    // (LblDpiDescription, LblDpiWarning, ZapretStrategies items) but trimmed
+    // for mobile — single-line picker + one hint line + warning blurb,
+    // no full master-detail page (the controls are simpler on Android
+    // because we don't have hosts-file installers / external binary
+    // updaters to manage).
+    public static string SettingsDpiBypassLabel => Ru
+        ? "DPI bypass (Zapret)"
+        : "DPI bypass (Zapret)";
+    public static string SettingsDpiBypassHint => Ru
+        ? "Дробит TLS-handshake внутри туннеля, чтобы обойти DPI российских провайдеров. Использует встроенный механизм sing-box (tls_fragment), без отдельной службы — в отличие от Windows-версии Zapret."
+        : "Splits TLS handshake inside the tunnel to bypass Russian ISP DPI. Uses sing-box's native tls_fragment — no separate service, unlike the Windows Zapret port.";
+    public static string SettingsDpiBypassWarning => Ru
+        ? "⚠ Включай только если без него сайты не открываются. Может слегка увеличить задержку соединения."
+        : "⚠ Turn on only if sites don't open without it. May add a small connection-setup delay.";
+    public static string SettingsDpiBypassOff => Ru ? "Выключен" : "Off";
+    public static string SettingsDpiBypassStandard => Ru ? "Стандарт" : "Standard";
+    public static string SettingsDpiBypassAggressive => Ru ? "Агрессивно" : "Aggressive";
 }
