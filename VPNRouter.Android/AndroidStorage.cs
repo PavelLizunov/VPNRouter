@@ -1,8 +1,11 @@
 using Android.App;
 using Android.Content;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.Android;
 
@@ -71,36 +74,44 @@ public static class AndroidStorage
     /// in a one-entry list called "Default" so old installs auto-migrate
     /// on first open of the new SubscribePage. Migration is read-only;
     /// the next <see cref="SetSubscriptions"/> persists the new schema.</para>
+    /// <para>v2.32.0 (Android self-repair) — JSON parse failure no longer
+    /// silently returns empty; <see cref="StorageBlobRecovery.LoadOrRecover{T}"/>
+    /// classifies it, the bad payload is quarantined to a sibling
+    /// SharedPreferences key (forensic trail), and a recovery notice is
+    /// stamped so the UI banner can surface "we reset your subscriptions
+    /// because the saved data was unreadable".</para>
     /// </summary>
     public static List<SubscriptionEntry> GetSubscriptions()
     {
-        try
-        {
-            var json = GetString(KeySubscriptions);
-            if (!string.IsNullOrWhiteSpace(json))
-            {
-                var list = JsonConvert.DeserializeObject<List<SubscriptionEntry>>(json);
-                if (list != null) return list;
-            }
+        var json = GetString(KeySubscriptions);
+        var result = StorageBlobRecovery.LoadOrRecover<List<SubscriptionEntry>>(
+            json,
+            j => JsonConvert.DeserializeObject<List<SubscriptionEntry>>(j));
 
-            var legacy = GetString(KeySubscriptionUrl);
-            if (!string.IsNullOrWhiteSpace(legacy))
-            {
-                return new List<SubscriptionEntry>
-                {
-                    new SubscriptionEntry
-                    {
-                        Name = "Default",
-                        Url = legacy,
-                        Enabled = true,
-                        Servers = GetServers(),
-                    }
-                };
-            }
-        }
-        catch
+        if (result.Loaded)
+            return result.Value!;
+
+        if (result.ShouldRecover)
         {
-            // fall through to empty
+            QuarantineBadValue(KeySubscriptions, json);
+            StampRecoveryNotice(
+                $"subscriptions cache unreadable ({result.Reason}: {result.Detail}); reset to defaults");
+        }
+
+        // NotFound (no value yet) — try the legacy single-URL migration.
+        var legacy = GetString(KeySubscriptionUrl);
+        if (!string.IsNullOrWhiteSpace(legacy))
+        {
+            return new List<SubscriptionEntry>
+            {
+                new SubscriptionEntry
+                {
+                    Name = "Default",
+                    Url = legacy,
+                    Enabled = true,
+                    Servers = GetServers(),
+                }
+            };
         }
         return new List<SubscriptionEntry>();
     }
@@ -145,21 +156,28 @@ public static class AndroidStorage
     /// <summary>
     /// Persisted list of servers from the last successful subscription fetch.
     /// Returns empty list if no fetch has happened yet or the cache is
-    /// unparseable.
+    /// unparseable. v2.32.0: routes through
+    /// <see cref="StorageBlobRecovery.LoadOrRecover{T}"/> so a corrupt
+    /// payload is quarantined + the user gets a recovery notice instead
+    /// of a silent empty list.
     /// </summary>
     public static List<VlessServerEntry> GetServers()
     {
-        try
+        var json = GetString(KeyServersJson);
+        var result = StorageBlobRecovery.LoadOrRecover<List<VlessServerEntry>>(
+            json,
+            j => JsonConvert.DeserializeObject<List<VlessServerEntry>>(j));
+
+        if (result.Loaded)
+            return result.Value!;
+
+        if (result.ShouldRecover)
         {
-            var json = GetString(KeyServersJson);
-            if (string.IsNullOrWhiteSpace(json)) return new List<VlessServerEntry>();
-            var list = JsonConvert.DeserializeObject<List<VlessServerEntry>>(json);
-            return list ?? new List<VlessServerEntry>();
+            QuarantineBadValue(KeyServersJson, json);
+            StampRecoveryNotice(
+                $"server cache unreadable ({result.Reason}: {result.Detail}); reset to empty");
         }
-        catch
-        {
-            return new List<VlessServerEntry>();
-        }
+        return new List<VlessServerEntry>();
     }
 
     /// <summary>
@@ -236,9 +254,11 @@ public static class AndroidStorage
     /// "dark" / "light" / "system" — explicit preference. Defaults to
     /// "light" because that's what desktop ships (Phase 3 visual parity
     /// rewrite — pre-3 default was dark, which made the Android UI look
-    /// nothing like desktop on first launch).
+    /// nothing like desktop on first launch). v2.32.0 SR-1: unknown
+    /// values quarantined and replaced with default.
     /// </summary>
-    public static string GetTheme() => GetString(KeyTheme) ?? "light";
+    public static string GetTheme() =>
+        ValidateOrDefault(KeyTheme, GetString(KeyTheme), AllowedThemes, "light");
     public static bool SetTheme(string? value) => SetString(KeyTheme, value);
 
     // ── Phase 7.5 (2026-05-04): per-app filter (handbook §5.5) ──────────
@@ -263,8 +283,25 @@ public static class AndroidStorage
     // silently lose their exclude intent.
     private const string KeyPerAppLastMode = "per_app_last_mode";
 
-    public static string GetPerAppMode() =>
-        VPNRouter.Core.Models.PerAppFilterMode.Normalize(GetString(KeyPerAppMode));
+    public static string GetPerAppMode()
+    {
+        // v2.32.0 SR-1 — surface (but tolerate) unknown values. Core's
+        // PerAppFilterMode.Normalize maps anything unrecognised to "off"
+        // silently; we additionally stamp a recovery notice so the user
+        // knows their setting was reset rather than mysteriously reverting
+        // to full-tunnel. Empty / null is the first-run path — no notice.
+        var raw = GetString(KeyPerAppMode);
+        var normalized = VPNRouter.Core.Models.PerAppFilterMode.Normalize(raw);
+        if (!string.IsNullOrWhiteSpace(raw) &&
+            !string.Equals(raw, normalized, StringComparison.OrdinalIgnoreCase))
+        {
+            QuarantineBadValue(KeyPerAppMode, raw);
+            StampRecoveryNotice(
+                $"per-app filter mode '{raw}' unknown; reset to '{normalized}'");
+            SetString(KeyPerAppMode, normalized);
+        }
+        return normalized;
+    }
     public static bool SetPerAppMode(string? value) => SetString(KeyPerAppMode, value);
 
     /// <summary>
@@ -282,17 +319,21 @@ public static class AndroidStorage
 
     public static List<string> GetPerAppPackages()
     {
-        try
+        var json = GetString(KeyPerAppPackages);
+        var result = StorageBlobRecovery.LoadOrRecover<List<string>>(
+            json,
+            j => JsonConvert.DeserializeObject<List<string>>(j));
+
+        if (result.Loaded)
+            return result.Value!;
+
+        if (result.ShouldRecover)
         {
-            var json = GetString(KeyPerAppPackages);
-            if (string.IsNullOrWhiteSpace(json)) return new List<string>();
-            var list = JsonConvert.DeserializeObject<List<string>>(json);
-            return list ?? new List<string>();
+            QuarantineBadValue(KeyPerAppPackages, json);
+            StampRecoveryNotice(
+                $"per-app package list unreadable ({result.Reason}: {result.Detail}); reset to empty");
         }
-        catch
-        {
-            return new List<string>();
-        }
+        return new List<string>();
     }
 
     public static bool SetPerAppPackages(IEnumerable<string>? packages)
@@ -334,7 +375,22 @@ public static class AndroidStorage
     private const string KeyAutostartZapret = "autostart_zapret";      // bool
     private const string KeyAutostartTgProxy = "autostart_tgproxy";    // bool
 
-    public static string GetRoutingMode() => GetString(KeyRoutingMode) ?? "split";
+    // v2.32.0 SR-1 — semantic validation. Each enum getter normalises the
+    // raw stored value through ValidateOrDefault, so a typoed / older /
+    // hand-edited preference can't surface as an unsupported string deep
+    // inside the routing engine. Bad values are quarantined and replaced
+    // with the documented default; the user sees a recovery notice.
+    private static readonly HashSet<string> AllowedRoutingModes =
+        new(StringComparer.OrdinalIgnoreCase) { "split", "full" };
+    private static readonly HashSet<string> AllowedDnsStrategies =
+        new(StringComparer.OrdinalIgnoreCase) { "ipv4_only", "ipv6_only", "prefer_ipv4", "prefer_ipv6", "default" };
+    private static readonly HashSet<string> AllowedUpdateChannels =
+        new(StringComparer.OrdinalIgnoreCase) { "stable", "experimental" };
+    private static readonly HashSet<string> AllowedThemes =
+        new(StringComparer.OrdinalIgnoreCase) { "light", "dark", "system" };
+
+    public static string GetRoutingMode() =>
+        ValidateOrDefault(KeyRoutingMode, GetString(KeyRoutingMode), AllowedRoutingModes, "split");
     public static bool SetRoutingMode(string value) => SetString(KeyRoutingMode, value);
 
     public static bool GetBypassRussianTraffic() => GetBool(KeyBypassRussianTraffic, defaultValue: true);
@@ -343,10 +399,12 @@ public static class AndroidStorage
     public static bool GetBlockOnVpnFail() => GetBool(KeyBlockOnVpnFail, defaultValue: false);
     public static bool SetBlockOnVpnFail(bool value) => SetBool(KeyBlockOnVpnFail, value);
 
-    public static string GetDnsStrategy() => GetString(KeyDnsStrategy) ?? "ipv4_only";
+    public static string GetDnsStrategy() =>
+        ValidateOrDefault(KeyDnsStrategy, GetString(KeyDnsStrategy), AllowedDnsStrategies, "ipv4_only");
     public static bool SetDnsStrategy(string value) => SetString(KeyDnsStrategy, value);
 
-    public static string GetUpdateChannel() => GetString(KeyUpdateChannel) ?? "stable";
+    public static string GetUpdateChannel() =>
+        ValidateOrDefault(KeyUpdateChannel, GetString(KeyUpdateChannel), AllowedUpdateChannels, "stable");
     public static bool SetUpdateChannel(string value) => SetString(KeyUpdateChannel, value);
 
     public static bool GetAutostartVpn() => GetBool(KeyAutostartVpn, defaultValue: false);
@@ -507,6 +565,198 @@ public static class AndroidStorage
             using var editor = prefs.Edit();
             if (editor == null) return false;
             editor.PutBoolean(key, value);
+            return editor.Commit();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    // ── v2.32.0 Self-repair plumbing (handbook §1.3 mirror of desktop SR-1/3/4) ─
+
+    private static readonly object _recoveryLock = new();
+    private static string? _lastRecoveryNotice;
+
+    /// <summary>
+    /// Most recent recovery action since the last <see cref="ConsumeRecoveryNotice"/>
+    /// call. Mirrors <see cref="VPNRouter.Core.Services.SettingsLoader.LastRecoveryNotice"/>:
+    /// stamped each time a corrupt SharedPreferences value was quarantined +
+    /// replaced with defaults, or an unknown enum was normalised to its
+    /// default. Cleared after a single read so the UI banner doesn't keep
+    /// re-surfacing the same message.
+    /// </summary>
+    public static string? LastRecoveryNotice
+    {
+        get { lock (_recoveryLock) return _lastRecoveryNotice; }
+    }
+
+    /// <summary>
+    /// One-shot accessor — atomically returns the current notice and clears
+    /// it so the next caller doesn't re-surface the same banner. Called
+    /// from <c>AndroidApp.OnFrameworkInitializationCompleted</c> after the
+    /// first view is built, then merged with
+    /// <see cref="VPNRouter.Core.Services.SettingsLoader.ConsumeRecoveryNotice"/>.
+    /// </summary>
+    public static string? ConsumeRecoveryNotice()
+    {
+        lock (_recoveryLock)
+        {
+            var n = _lastRecoveryNotice;
+            _lastRecoveryNotice = null;
+            return n;
+        }
+    }
+
+    /// <summary>
+    /// Tests + recovery dispatch reset hook — wipes the in-memory notice
+    /// without consuming it (e.g. between scenarios). Production code uses
+    /// <see cref="ConsumeRecoveryNotice"/>.
+    /// </summary>
+    internal static void ResetRecoveryNoticeForTests()
+    {
+        lock (_recoveryLock) _lastRecoveryNotice = null;
+    }
+
+    /// <summary>
+    /// Stamp a recovery message; if multiple stamps land before the UI
+    /// reads, they're concatenated with "; " so nothing gets lost. Best-
+    /// effort: any failure (Application.Context null during early Main,
+    /// etc.) is swallowed.
+    /// </summary>
+    private static void StampRecoveryNotice(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return;
+        try
+        {
+            global::Android.Util.Log.Warn("VpnRouter.SelfRepair", message);
+        }
+        catch { /* logging itself failed — ignore */ }
+
+        lock (_recoveryLock)
+        {
+            _lastRecoveryNotice = string.IsNullOrEmpty(_lastRecoveryNotice)
+                ? message
+                : $"{_lastRecoveryNotice}; {message}";
+        }
+    }
+
+    /// <summary>
+    /// SR-1 normaliser: if <paramref name="raw"/> is null/empty/unknown,
+    /// quarantine + return <paramref name="defaultValue"/>; if known,
+    /// return the canonical-cased value from <paramref name="allowed"/>.
+    /// Idempotent — repeated calls with the same valid value are a no-op
+    /// and never stamp a notice.
+    /// </summary>
+    private static string ValidateOrDefault(
+        string key, string? raw, HashSet<string> allowed, string defaultValue)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return defaultValue;
+        // Normalise to the canonical casing from the allowed set so
+        // downstream comparisons can use ordinal equality without case
+        // surprises.
+        var match = allowed.FirstOrDefault(v =>
+            string.Equals(v, raw, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrEmpty(match)) return match!;
+
+        QuarantineBadValue(key, raw);
+        StampRecoveryNotice(
+            $"setting '{key}' had unknown value '{raw}'; reset to '{defaultValue}'");
+        SetString(key, defaultValue);
+        return defaultValue;
+    }
+
+    /// <summary>
+    /// Move a corrupt SharedPreferences value to a sibling key
+    /// <c>{key}__corrupt_{yyyyMMdd_HHmmss}</c> so a future bug report can
+    /// inspect it via <c>adb shell run-as com.ninitux.vpnrouter cat
+    /// shared_prefs/vpnrouter_settings.xml</c>. Best-effort: a failure here
+    /// is logged but never propagates — we still clear the bad key so the
+    /// app can keep running.
+    /// </summary>
+    private static void QuarantineBadValue(string key, string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        try
+        {
+            var ts = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+            var quarantineKey = $"{key}__corrupt_{ts}";
+            SetString(quarantineKey, value);
+            // Don't delete the original key here — the caller may want to
+            // overwrite it with a fresh default. The companion preserves
+            // the original payload for forensics.
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
+                    $"quarantine of '{key}' failed: {ex.GetType().Name}: {ex.Message}");
+            }
+            catch { /* nothing more we can do */ }
+        }
+    }
+
+    // ── SR-2 tier-3 safe-mode banner flag ─────────────────────────────────
+    //
+    // Persisted because the launch that crashed didn't get to OnFrameworkInitialization
+    // — by the time OnCreate next runs, the in-memory _lastRecoveryNotice
+    // is empty. Storing a one-shot flag in SharedPreferences lets the next
+    // successful render pick up the banner. Cleared by ConsumeSafeModeBanner
+    // after the UI displays it.
+    private const string KeySafeModeBannerPending = "safe_mode_banner_pending";
+
+    /// <summary>
+    /// SR-2 tier-3: queue a persistent banner suggesting "Settings > Apps >
+    /// VPNRouter > Storage > Clear data" for the next successful UI render.
+    /// Survives process restart so a 7th-strike user still sees the prompt
+    /// after the launch that crashed.
+    /// </summary>
+    public static void QueueSafeModeBannerForUi() => SetBool(KeySafeModeBannerPending, true);
+
+    /// <summary>
+    /// One-shot read+clear for the pending safe-mode banner. Returns true
+    /// exactly once after <see cref="QueueSafeModeBannerForUi"/> was called;
+    /// subsequent reads return false until queued again.
+    /// </summary>
+    public static bool ConsumeSafeModeBanner()
+    {
+        if (!GetBool(KeySafeModeBannerPending, defaultValue: false)) return false;
+        try { SetBool(KeySafeModeBannerPending, false); }
+        catch { /* read still succeeded; clear is best-effort */ }
+        return true;
+    }
+
+    /// <summary>
+    /// SR-2 tier-2 (config-reset) target: erase every user-data key in
+    /// <c>vpnrouter_settings</c>. Quarantine companions ({key}__corrupt_*)
+    /// are kept on purpose so a future bug report can still see what was
+    /// there. After this call the next <see cref="GetSubscriptions"/> /
+    /// <see cref="GetServers"/> / etc. return defaults.
+    /// </summary>
+    public static bool ResetUserSettings()
+    {
+        try
+        {
+            var ctx = Application.Context;
+            if (ctx == null) return false;
+            var prefs = ctx.GetSharedPreferences(PrefsName, FileCreationMode.Private);
+            if (prefs == null) return false;
+            using var editor = prefs.Edit();
+            if (editor == null) return false;
+
+            // Remove the documented user-data keys explicitly. Don't use
+            // editor.Clear() because that nukes quarantine companions too.
+            var liveKeys = new[]
+            {
+                KeyVlessUri, KeySubscriptionUrl, KeyServersJson,
+                KeySelectedServerName, KeyLanguage, KeyTheme,
+                KeySubscriptions, KeyPerAppMode, KeyPerAppPackages,
+                KeyPerAppLastMode, KeyRoutingMode, KeyBypassRussianTraffic,
+                KeyBlockOnVpnFail, KeyDnsStrategy, KeyUpdateChannel,
+                KeyAutostartVpn, KeyAutostartZapret, KeyAutostartTgProxy,
+            };
+            foreach (var k in liveKeys) editor.Remove(k);
             return editor.Commit();
         }
         catch
