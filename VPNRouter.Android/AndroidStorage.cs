@@ -198,6 +198,54 @@ public static class AndroidStorage
         }
     }
 
+    // ── v2.32.0 Settings parity (handbook §3.1, mirrors desktop NetworkPage) ──
+    //
+    // Four sub-sections persisted as discrete SharedPreferences keys so the
+    // Android Settings overlay can read/write each control independently:
+    //   • Routing: routing mode + Russian-traffic bypass
+    //   • Leak protection: block_on_vpn_fail master + DNS strategy
+    //   • Updates: channel selector (stable / experimental / placeholder)
+    //   • Autostart: 3 component flags (vpn / zapret / tgproxy) — currently
+    //     no-op on Android (no BOOT_COMPLETED receiver + no Service-mode),
+    //     but persisted so a future BootCompletedReceiver can act on them.
+    //
+    // Defaults match the desktop AppSettings.App defaults (RoutingMode="split",
+    // BypassRussianTraffic=true, BlockOnVpnFail=false, ForceIpv4Only=true,
+    // Channel="stable", Autostart*=false).
+
+    private const string KeyRoutingMode = "routing_mode";              // "split" | "full"
+    private const string KeyBypassRussianTraffic = "bypass_ru";        // bool
+    private const string KeyBlockOnVpnFail = "block_on_vpn_fail";      // bool — Leak ➜ setBlocking
+    private const string KeyDnsStrategy = "dns_strategy";              // "ipv4_only" | "prefer_ipv4" | "prefer_ipv6"
+    private const string KeyUpdateChannel = "update_channel";          // "stable" | "experimental"
+    private const string KeyAutostartVpn = "autostart_vpn";            // bool
+    private const string KeyAutostartZapret = "autostart_zapret";      // bool
+    private const string KeyAutostartTgProxy = "autostart_tgproxy";    // bool
+
+    public static string GetRoutingMode() => GetString(KeyRoutingMode) ?? "split";
+    public static bool SetRoutingMode(string value) => SetString(KeyRoutingMode, value);
+
+    public static bool GetBypassRussianTraffic() => GetBool(KeyBypassRussianTraffic, defaultValue: true);
+    public static bool SetBypassRussianTraffic(bool value) => SetBool(KeyBypassRussianTraffic, value);
+
+    public static bool GetBlockOnVpnFail() => GetBool(KeyBlockOnVpnFail, defaultValue: false);
+    public static bool SetBlockOnVpnFail(bool value) => SetBool(KeyBlockOnVpnFail, value);
+
+    public static string GetDnsStrategy() => GetString(KeyDnsStrategy) ?? "ipv4_only";
+    public static bool SetDnsStrategy(string value) => SetString(KeyDnsStrategy, value);
+
+    public static string GetUpdateChannel() => GetString(KeyUpdateChannel) ?? "stable";
+    public static bool SetUpdateChannel(string value) => SetString(KeyUpdateChannel, value);
+
+    public static bool GetAutostartVpn() => GetBool(KeyAutostartVpn, defaultValue: false);
+    public static bool SetAutostartVpn(bool value) => SetBool(KeyAutostartVpn, value);
+
+    public static bool GetAutostartZapret() => GetBool(KeyAutostartZapret, defaultValue: false);
+    public static bool SetAutostartZapret(bool value) => SetBool(KeyAutostartZapret, value);
+
+    public static bool GetAutostartTgProxy() => GetBool(KeyAutostartTgProxy, defaultValue: false);
+    public static bool SetAutostartTgProxy(bool value) => SetBool(KeyAutostartTgProxy, value);
+
     // ── Internals ───────────────────────────────────────────────────────────
 
     private static string? GetString(string key)
@@ -230,6 +278,40 @@ public static class AndroidStorage
                 editor.Remove(key);
             else
                 editor.PutString(key, value);
+            return editor.Commit();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool GetBool(string key, bool defaultValue)
+    {
+        try
+        {
+            var ctx = Application.Context;
+            if (ctx == null) return defaultValue;
+            var prefs = ctx.GetSharedPreferences(PrefsName, FileCreationMode.Private);
+            return prefs?.GetBoolean(key, defaultValue) ?? defaultValue;
+        }
+        catch
+        {
+            return defaultValue;
+        }
+    }
+
+    private static bool SetBool(string key, bool value)
+    {
+        try
+        {
+            var ctx = Application.Context;
+            if (ctx == null) return false;
+            var prefs = ctx.GetSharedPreferences(PrefsName, FileCreationMode.Private);
+            if (prefs == null) return false;
+            using var editor = prefs.Edit();
+            if (editor == null) return false;
+            editor.PutBoolean(key, value);
             return editor.Commit();
         }
         catch

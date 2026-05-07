@@ -86,6 +86,21 @@ public static class AndroidConfigBuilder
         settings.App.RoutingMode = "full";
         settings.App.LogLevel = "info";
         settings.App.ConfigMode = "generated";
+        // v2.32.0 — surface persisted settings into the generated config
+        // so the Android Settings overlay actually affects the sing-box
+        // pipeline (handbook §1.5 — "settings must do something").
+        // BypassRussianTraffic + ForceIpv4Only are read by ConfigGenerator
+        // when building DNS / route rules. The other Settings flags
+        // (BlockOnVpnFail / Autostart*) live at the VpnService.Builder
+        // layer or in the AndroidStorage cache without affecting the
+        // sing-box JSON.
+        settings.App.BypassRussianTraffic = AndroidStorage.GetBypassRussianTraffic();
+        settings.App.ForceIpv4Only = AndroidStorage.GetDnsStrategy() switch
+        {
+            "prefer_ipv6" => false,
+            "prefer_ipv4" => false,
+            _ => true,                          // ipv4_only (default)
+        };
         settings.Vless.Servers.Add(entry);
 
         // Empty profile — Android's per-app filtering happens at the
@@ -97,7 +112,7 @@ public static class AndroidConfigBuilder
         {
             Name = "AndroidDefault",
             DnsMode = "vpn_only",
-            BlockOnVpnFail = false,            // VpnService handles leak prevention via setBlocking
+            BlockOnVpnFail = AndroidStorage.GetBlockOnVpnFail(),
         };
 
         var processNames = System.Array.Empty<string>();
