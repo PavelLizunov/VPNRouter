@@ -84,6 +84,45 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _statusTitle;
     private TextBlock? _statusDesc;
 
+    // v2.32.0 (AND-DIAG, 2026-05-07) — runtime diagnostics on status card.
+    // Mirrors desktop's MainWindowViewModel.RuntimeStatus surface: a
+    // periodic 1-second timer drives uptime in the status title and a
+    // 30-second log-delta probe that surfaces under the description. The
+    // error one-liner appears under the probe row when a TUNNEL_ERROR
+    // arrives and persists for 30 s.
+    //
+    // State machine:
+    //   • idle       — _connectionStartedAt == null, timer stopped
+    //   • connected  — _connectionStartedAt set, timer ticking, _statusTitle
+    //                  shows "Connected · M:SS" / "Connected · H:MM:SS"
+    //   • error      — _lastError set, _lastErrorAt sealed; timer keeps
+    //                  ticking (or starts briefly even if disconnected) so
+    //                  the 30 s auto-clear runs
+    private TextBlock? _statusHealthCheck;
+    private TextBlock? _statusErrorOneLiner;
+    private DispatcherTimer? _diagnosticsTimer;
+    private DateTime? _connectionStartedAt;
+    private string? _lastError;
+    private DateTime _lastErrorAt;
+    /// <summary>30 s — how long the error one-liner stays visible
+    /// before auto-clearing (matches the prompt acceptance criteria).</summary>
+    private static readonly TimeSpan ErrorDisplayWindow = TimeSpan.FromSeconds(30);
+    /// <summary>30 s — health probe cadence. Keeps cost minimal (one
+    /// stat call per probe) while staying responsive to a stalled tunnel.</summary>
+    private static readonly TimeSpan HealthProbeInterval = TimeSpan.FromSeconds(30);
+    /// <summary>60 s — tolerance window for log delta. If the file hasn't
+    /// changed in this window AND we've been connected longer than this,
+    /// the probe reports "stale". Idle Android phones with screen off can
+    /// see legitimate quiet periods of 30+ s, so 60 s is the lower bound
+    /// that still catches a wedged sing-box without false-positives during
+    /// normal idle.</summary>
+    private static readonly TimeSpan HealthStaleThreshold = TimeSpan.FromSeconds(60);
+    private DateTime _lastHealthProbeAt;
+    private long _lastHealthLogSize = -1;
+    private DateTime _lastHealthLogMTime;
+    private bool _lastHealthOk;
+    private bool _firstProbePending;
+
     // Config row button
     private TextBlock? _configRowLabel;
     private TextBlock? _configRowValue;
@@ -301,6 +340,10 @@ public partial class AndroidApp : Avalonia.Application
             var view = BuildSimplePageView();
             singleView.MainView = view;
             MainActivity.IntentChanged += OnIntentChanged;
+            // v2.32.0 (AND-DIAG) — surface tunnel errors in the status
+            // card. Receiver fires from a binder dispatch thread so the
+            // handler posts to UI thread before mutating Avalonia state.
+            MainActivity.TunnelErrorReported += OnTunnelErrorReported;
             UpdateConnectionState(MainActivity.IntendedConnected);
             ReloadServerList();
 
@@ -651,6 +694,37 @@ public partial class AndroidApp : Avalonia.Application
         };
         _statusDesc.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
 
+        // v2.32.0 (AND-DIAG) — health-check chip beneath the description.
+        // Hidden until first probe runs (which is ~30 s post-connect; the
+        // pending text fills the gap). Indented to match _statusDesc so
+        // the column lines up with the title text rather than the dot.
+        _statusHealthCheck = new TextBlock
+        {
+            Text = string.Empty,
+            FontSize = 10,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(20, 0, 0, 0),
+            LineHeight = 14,
+            IsVisible = false,
+        };
+        _statusHealthCheck.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+
+        // v2.32.0 (AND-DIAG) — error one-liner. Surfaced when an
+        // ACTION_TUNNEL_ERROR arrives, persists 30 s. Red-ish foreground
+        // via DangerFgBrush so the user sees it on a glance even before
+        // reading the message.
+        _statusErrorOneLiner = new TextBlock
+        {
+            Text = string.Empty,
+            FontSize = 10,
+            FontWeight = FontWeight.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(20, 0, 0, 0),
+            LineHeight = 14,
+            IsVisible = false,
+        };
+        _statusErrorOneLiner.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
+
         var statusHeaderRow = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
@@ -666,8 +740,8 @@ public partial class AndroidApp : Avalonia.Application
             Padding = new Thickness(14),
             Child = new StackPanel
             {
-                Spacing = 8,
-                Children = { statusHeaderRow, _statusDesc },
+                Spacing = 6,
+                Children = { statusHeaderRow, _statusDesc, _statusHealthCheck, _statusErrorOneLiner },
             }
         };
         statusCard.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
@@ -2274,6 +2348,24 @@ public partial class AndroidApp : Avalonia.Application
             if (_ctaConnecting is not null) _ctaConnecting.IsVisible = false;
             if (_ctaDisconnect is not null) _ctaDisconnect.IsVisible = true;
             SetVpnChipState(ChipState.On);
+
+            // v2.32.0 (AND-DIAG) — start uptime tracking + diagnostics
+            // pump. Set _connectionStartedAt FIRST so the immediate first
+            // tick (which renders uptime) sees a non-null value.
+            _connectionStartedAt = DateTime.UtcNow;
+            _lastHealthLogSize = -1;
+            _lastHealthLogMTime = DateTime.MinValue;
+            _firstProbePending = true;
+            _lastHealthOk = false;
+            // Clear any stale error from a previous attempt — a successful
+            // reconnect supersedes whatever went wrong before.
+            _lastError = null;
+            if (_statusErrorOneLiner is not null) _statusErrorOneLiner.IsVisible = false;
+            StartDiagnosticsTimer();
+            // Surface the pending message immediately so the user sees the
+            // status card respond to their tap, instead of waiting up to
+            // 30 s for the first probe.
+            ApplyHealthCheckDisplay();
         }
         else
         {
@@ -2284,6 +2376,24 @@ public partial class AndroidApp : Avalonia.Application
             if (_ctaConnecting is not null) _ctaConnecting.IsVisible = false;
             if (_ctaDisconnect is not null) _ctaDisconnect.IsVisible = false;
             SetVpnChipState(ChipState.Off);
+
+            // v2.32.0 (AND-DIAG) — reset uptime + hide health check.
+            // Keep _lastError around if it was set in the same frame as
+            // this disconnect (TUNNEL_ERROR fires before SetIntent(false))
+            // so the error one-liner stays visible during the 30 s
+            // window. The diagnostics timer keeps ticking briefly so the
+            // 30 s auto-clear still runs even after disconnect.
+            _connectionStartedAt = null;
+            if (_statusHealthCheck is not null) _statusHealthCheck.IsVisible = false;
+            if (_lastError is null)
+            {
+                StopDiagnosticsTimer();
+            }
+            else
+            {
+                // Make sure it stays running until the error window expires.
+                StartDiagnosticsTimer();
+            }
         }
         UpdateConfigSummary();
     }
@@ -2369,6 +2479,214 @@ public partial class AndroidApp : Avalonia.Application
         // Fire-and-forget — the animation drives the visual and gets
         // cancelled when cts.Cancel() is called from SetVpnChipState.
         _ = anim.RunAsync(target, cts.Token);
+    }
+
+    // ── v2.32.0 (AND-DIAG, 2026-05-07) — runtime diagnostics pump ──────
+
+    /// <summary>
+    /// Receives ACTION_TUNNEL_ERROR broadcasts via the static
+    /// <see cref="MainActivity.TunnelErrorReported"/> event. The receiver
+    /// fires from a binder dispatch thread, so we marshal to the UI
+    /// thread before mutating Avalonia state. The actual rendering lives
+    /// in <see cref="ApplyErrorOneLinerDisplay"/> + the diagnostics timer
+    /// loop, which clears the message after
+    /// <see cref="ErrorDisplayWindow"/> elapses.
+    /// </summary>
+    private void OnTunnelErrorReported(string message)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (string.IsNullOrWhiteSpace(message)) return;
+            _lastError = message.Trim();
+            _lastErrorAt = DateTime.UtcNow;
+            ApplyErrorOneLinerDisplay();
+            // Keep the timer alive so the 30 s auto-clear runs even when
+            // we're disconnected (UpdateConnectionState(false) preserves
+            // the timer when _lastError is set).
+            StartDiagnosticsTimer();
+        });
+    }
+
+    private void StartDiagnosticsTimer()
+    {
+        if (_diagnosticsTimer is not null && _diagnosticsTimer.IsEnabled) return;
+        _diagnosticsTimer ??= new DispatcherTimer(
+            TimeSpan.FromSeconds(1),
+            DispatcherPriority.Background,
+            (_, _) => OnDiagnosticsTick());
+        _diagnosticsTimer.Start();
+        // Render an immediate first frame so the title shows "0:00" /
+        // "0:01" the second the user taps Connect, instead of waiting a
+        // full second for the first DispatcherTimer tick.
+        OnDiagnosticsTick();
+    }
+
+    private void StopDiagnosticsTimer()
+    {
+        if (_diagnosticsTimer is null) return;
+        _diagnosticsTimer.Stop();
+        if (_statusHealthCheck is not null) _statusHealthCheck.IsVisible = false;
+        // Title resets to plain "Not connected" inside UpdateConnectionState,
+        // so we don't touch _statusTitle here.
+    }
+
+    private void OnDiagnosticsTick()
+    {
+        try
+        {
+            // 1. Uptime — refresh title every tick while connected.
+            if (_connectionStartedAt is DateTime startUtc && _statusTitle is not null)
+            {
+                var elapsed = DateTime.UtcNow - startUtc;
+                _statusTitle.Text = string.Format(
+                    Localization.SimpleStatusTitleOnWithUptime,
+                    FormatUptime(elapsed));
+            }
+
+            // 2. Health probe — every 30 s, only while connected. The first
+            // probe fires HealthProbeInterval after Connect; before that
+            // we show "awaiting first check" so the surface is not blank.
+            if (_connectionStartedAt is not null)
+            {
+                var sinceLastProbe = DateTime.UtcNow - _lastHealthProbeAt;
+                var connectedFor = DateTime.UtcNow - _connectionStartedAt.Value;
+                var dueForProbe = _lastHealthProbeAt == DateTime.MinValue
+                    ? connectedFor >= HealthProbeInterval
+                    : sinceLastProbe >= HealthProbeInterval;
+                if (dueForProbe) RunHealthProbe();
+                ApplyHealthCheckDisplay();
+            }
+
+            // 3. Error one-liner — auto-clear after 30 s.
+            if (_lastError is not null)
+            {
+                if (DateTime.UtcNow - _lastErrorAt >= ErrorDisplayWindow)
+                {
+                    _lastError = null;
+                    if (_statusErrorOneLiner is not null) _statusErrorOneLiner.IsVisible = false;
+                    // If we're disconnected and the error has cleared,
+                    // there's nothing left to drive — stop the timer.
+                    if (_connectionStartedAt is null) StopDiagnosticsTimer();
+                }
+            }
+        }
+        catch
+        {
+            // Diagnostics rendering must never crash the app — swallow
+            // and let the next tick try again.
+        }
+    }
+
+    /// <summary>
+    /// Read sing-box log file's size + last-write time and decide whether
+    /// the tunnel is still actively writing. We pick log delta (rather
+    /// than a TCP probe to the proxy) because:
+    /// <list type="bullet">
+    ///   <item>It's purely local file I/O — no network round-trip needed,
+    ///   so the probe itself can't time out under poor connectivity.</item>
+    ///   <item>sing-box writes regular DNS-resolution + TCP-connect lines
+    ///   while routing real traffic, so a healthy tunnel = a growing log.</item>
+    ///   <item>It works for every protocol (VLESS / Hysteria2 / TUIC / SS)
+    ///   without needing per-protocol probe machinery.</item>
+    /// </list>
+    /// </summary>
+    private void RunHealthProbe()
+    {
+        _lastHealthProbeAt = DateTime.UtcNow;
+        try
+        {
+            var ctx = global::Android.App.Application.Context;
+            var extDir = ctx.GetExternalFilesDir(null);
+            if (extDir is null)
+            {
+                _lastHealthOk = false;
+                return;
+            }
+            var logPath = System.IO.Path.Combine(extDir.AbsolutePath, "singbox.log");
+            if (!System.IO.File.Exists(logPath))
+            {
+                _lastHealthOk = false;
+                return;
+            }
+
+            var info = new System.IO.FileInfo(logPath);
+            var size = info.Length;
+            var mtime = info.LastWriteTimeUtc;
+            var grew = _lastHealthLogSize >= 0 && size > _lastHealthLogSize;
+            // mtime is also a healthy signal — covers the case where a
+            // log rotation truncates the file (size shrinks) but writing
+            // has resumed normally.
+            var recent = (DateTime.UtcNow - mtime) < HealthStaleThreshold;
+
+            _lastHealthOk = grew || recent;
+            _lastHealthLogSize = size;
+            _lastHealthLogMTime = mtime;
+            _firstProbePending = false;
+        }
+        catch
+        {
+            _lastHealthOk = false;
+            _firstProbePending = false;
+        }
+    }
+
+    private void ApplyHealthCheckDisplay()
+    {
+        if (_statusHealthCheck is null) return;
+        if (_connectionStartedAt is null)
+        {
+            _statusHealthCheck.IsVisible = false;
+            return;
+        }
+        _statusHealthCheck.IsVisible = true;
+
+        if (_firstProbePending && _lastHealthProbeAt == DateTime.MinValue)
+        {
+            _statusHealthCheck.Text = Localization.DiagHealthCheckPending;
+            _statusHealthCheck.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+            return;
+        }
+
+        if (_lastHealthOk)
+        {
+            var ago = (int)Math.Max(0, (DateTime.UtcNow - _lastHealthProbeAt).TotalSeconds);
+            _statusHealthCheck.Text = string.Format(Localization.DiagHealthCheckOk, ago);
+            _statusHealthCheck.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+        }
+        else
+        {
+            _statusHealthCheck.Text = Localization.DiagHealthCheckStale;
+            _statusHealthCheck.BindToken(TextBlock.ForegroundProperty, "WarningFgBrush");
+        }
+    }
+
+    private void ApplyErrorOneLinerDisplay()
+    {
+        if (_statusErrorOneLiner is null) return;
+        if (string.IsNullOrEmpty(_lastError))
+        {
+            _statusErrorOneLiner.IsVisible = false;
+            return;
+        }
+        _statusErrorOneLiner.Text = string.Format(Localization.DiagErrorOneLiner, _lastError);
+        _statusErrorOneLiner.IsVisible = true;
+    }
+
+    /// <summary>
+    /// Auto-switch uptime format. Under 1 hour: "M:SS" (e.g. "0:42",
+    /// "12:05"). At/over 1 hour: "H:MM:SS" (e.g. "1:23:45"). Mirrors the
+    /// pattern users see on stock Android in the lock-screen / system
+    /// VPN-key tile (and Slack / WhatsApp call timers).
+    /// </summary>
+    private static string FormatUptime(TimeSpan elapsed)
+    {
+        if (elapsed < TimeSpan.Zero) elapsed = TimeSpan.Zero;
+        if (elapsed.TotalHours >= 1)
+        {
+            return string.Format("{0}:{1:D2}:{2:D2}",
+                (int)elapsed.TotalHours, elapsed.Minutes, elapsed.Seconds);
+        }
+        return string.Format("{0}:{1:D2}", elapsed.Minutes, elapsed.Seconds);
     }
 
     private void UpdateConfigSummary()
@@ -3771,6 +4089,12 @@ public partial class AndroidApp : Avalonia.Application
             _statusTitle.Text = MainActivity.IntendedConnected ? Localization.SimpleStatusTitleOn : Localization.SimpleStatusTitleOff;
         if (_statusDesc is not null)
             _statusDesc.Text = MainActivity.IntendedConnected ? Localization.SimpleStatusDescOn : Localization.SimpleStatusDescOff;
+        // v2.32.0 (AND-DIAG) — re-render diagnostics surface so the
+        // localized "X s ago" / "Awaiting first check" labels swap to
+        // the new language. Title's uptime suffix is re-applied on the
+        // very next 1-second tick, so don't manually rewrite here.
+        ApplyHealthCheckDisplay();
+        ApplyErrorOneLinerDisplay();
         if (_configRowLabel is not null) _configRowLabel.Text = Localization.SmpConfigRowLabel;
         if (_serverInputLabel is not null) _serverInputLabel.Text = Localization.SmpInputLabel;
         if (_serverInput is not null) _serverInput.Watermark = Localization.SmpInputWatermark;
