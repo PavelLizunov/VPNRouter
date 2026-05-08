@@ -779,6 +779,74 @@ public static class AndroidStorage
         }
     }
 
+    // ── v2.32.0 (AND-SR-1) central repair pass ────────────────────────────
+    //
+    // Mirror of desktop's SettingsLoader.LoadCore pipeline (deserialise →
+    // EnsureSane → SettingsValidator) scoped to the SharedPreferences keys
+    // this layer treats as enums. Pre-AND-SR-1 each enum getter ran its own
+    // ValidateOrDefault on first read, which is correct but means the
+    // contract drifts per-key whenever Core grows a new invariant. Wiring
+    // the central Core helper in once at startup gives us:
+    //
+    //   • a single call site to extend when desktop adds an invariant to
+    //     AppSettingsSane.EnsureSane (covered by the transient AppSettings
+    //     pass inside the Core helper — today a no-op, future-proofed),
+    //   • eager repair so corrupt values surface in the recovery notice
+    //     before the first read instead of being lazily fixed,
+    //   • a testable seam — the Core helper is net8.0 and exercised in
+    //     VPNRouter.Tests/AndroidStorageSaneTests without an Android device.
+    //
+    // The existing per-getter ValidateOrDefault calls stay as defense-in-
+    // depth (idempotent on a clean store) so a key that bypasses startup
+    // for any reason still gets repaired on first read.
+
+    /// <summary>
+    /// AND-SR-1 — run the central self-repair pass over every enum-shaped
+    /// SharedPreferences key. Returns the count of repairs (0 on a clean
+    /// store). Call once from
+    /// <c>AndroidApp.OnFrameworkInitializationCompleted</c> before any
+    /// consumer reads. Recovery notices accumulated during the pass are
+    /// surfaced via <see cref="ConsumeRecoveryNotice"/>.
+    /// </summary>
+    public static int RepairAllOnLoad()
+    {
+        try
+        {
+            var enumKeys = new List<AndroidStorageSane.EnumKeySpec>
+            {
+                new(KeyRoutingMode, AllowedRoutingModes, "split"),
+                new(KeyDnsStrategy, AllowedDnsStrategies, "ipv4_only"),
+                new(KeyUpdateChannel, AllowedUpdateChannels, "stable"),
+                new(KeyTheme, AllowedThemes, "light"),
+                new(KeyDpiBypassMode, AllowedDpiBypassModes, "off"),
+            };
+
+            var outcome = AndroidStorageSane.RepairAllOnLoad(
+                get: GetString,
+                // SetString returns bool (success); the Core helper takes
+                // an Action<string,string?>. Wrap so the discard happens
+                // here rather than leaking the bool signature into Core.
+                set: (k, v) => { SetString(k, v); },
+                enumKeys: enumKeys,
+                quarantine: QuarantineBadValue);
+
+            foreach (var change in outcome.Changes)
+                StampRecoveryNotice(change);
+
+            return outcome.Changes.Count;
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
+                    $"RepairAllOnLoad failed: {ex.GetType().Name}: {ex.Message}");
+            }
+            catch { /* nothing more we can do */ }
+            return 0;
+        }
+    }
+
     // ── SR-2 tier-3 safe-mode banner flag ─────────────────────────────────
     //
     // Persisted because the launch that crashed didn't get to OnFrameworkInitialization
