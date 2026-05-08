@@ -248,7 +248,7 @@ n/a платформенно бессмысленно.
 | Custom rules import/export | ✅ | ✅ | ✅ | ✅ (CONFIG-EXPORT pool 7 — QR + JSON) |
 | Server testing (TCP/TLS probe) | ✅ | ✅ | ✅ | ✅ (SERVER-TESTING pool 6) |
 | QR code share configs | ⚠ (через CONFIG-EXPORT, есть) | ⚠ | ⚠ | ✅ |
-| Crash reporter | ✅ | ✅ | ✅ | ⚠ (CrashReporter Core code есть, не уверен что hook'нут на Android Application.UnhandledException) |
+| Crash reporter | ✅ | ✅ | ✅ | ✅ (AND-CRASH-HOOK 2026-05-08 — `CrashReporter.Install()` в `MainActivity.OnCreate` + Java `Thread.setDefaultUncaughtExceptionHandler` в `VpnRouterService.onCreate`; кебаб → Diagnostics → "View crash log") |
 
 ### Service / autostart
 | Feature | Win | Mac | Linux | Android |
@@ -390,9 +390,11 @@ A+B+D в roadmap'е.
 - **AND-PROFILES** — последняя фича чтобы достичь 100% page parity
   (профили рутинга — preset'ы аппов). Уже spawned, не запущен. См. roadmap
   Pool A item #4.
-- **AND-CRASH-HOOK** — убедиться что `CrashReporter` подцеплен на Android
-  через `AppDomain.CurrentDomain.UnhandledException` или Android-specific
-  `Thread.setDefaultUncaughtExceptionHandler`. Status: TBD.
+- **AND-CRASH-HOOK** — DONE 2026-05-08. C# через `MainActivity.OnCreate` +
+  `CrashReporter.Install()`, Java через `VpnRouterService.onCreate` +
+  `Thread.setDefaultUncaughtExceptionHandler`. Оба пишут в
+  `<filesDir>/crashes/`, surfaced через кебаб → Diagnostics → "View crash log".
+  Подробности — §16.6.
 - **AND-SELF-REPAIR-ADAPT** — SR-1/SR-2/SR-3/SR-4 layer на Android. Большинство
   применимы (settings validator, cache recovery, settings load never-throws),
   кроме launch-failure counter (Android lifecycle отличается от Chrome-style
@@ -692,14 +694,32 @@ SR-1 SettingsValidator + SR-3 CacheRecovery + SR-4 never-throws — applicable
 концептуально. Wiring tasks отдельные. (SR-2 LaunchFailureCounter Android n/a —
 lifecycle не применим.)
 
-### 16.6 CrashReporter unhooked на Android
+### 16.6 CrashReporter unhooked на Android — DONE 2026-05-08
 
-`CrashReporter.cs` в Core, но не подцеплен через
-`Android.App.Application.OnUnhandledException` или
-`Thread.setDefaultUncaughtExceptionHandler`.
+`CrashReporter.cs` в Core теперь подцеплен на Android в обоих доменах:
 
-Решение: hook в `MainActivity.OnCreate` или `AndroidApp` startup. Effort
-**1-2 hours**.
+- **C# unhandled exceptions** — `MainActivity.OnCreate` (до `base.OnCreate`) делает
+  `AppPaths.OverrideDataDir(FilesDir.AbsolutePath)` (override Linux fallback,
+  который не маппится на Android sandbox), затем `EnsureDirectories()` +
+  `CrashReporter.Install()`. `AppDomain.UnhandledException` +
+  `TaskScheduler.UnobservedTaskException` теперь пишут `crash-<stamp>.txt` в
+  `<filesDir>/crashes/`.
+- **Java unhandled exceptions** — `VpnRouterService.onCreate()` устанавливает
+  `Thread.setDefaultUncaughtExceptionHandler` который пишет
+  `java-crash-<stamp>.txt` в тот же `<filesDir>/crashes/` каталог, потом
+  делегирует к previous handler чтобы система всё ещё корректно
+  killed процесс. (Anonymous inner class — не lambda, потому что javac
+  пайплайн `AndroidJavaSource` без LambdaMetafactory.)
+- **PII scrubbing** — оба пути зовут `CrashReporter.ScrubSecrets()` (или
+  Java эквивалент через `replaceAll`) — vless/vmess/trojan/ss/hysteria/tuic
+  URI, http(s) пути, UUID, Reality public keys (≥40-char base64) replaced
+  до записи на диск.
+- **UI surface** — кебаб → Diagnostics → "View crash log" (`MenuItemViewCrashLog`
+  RU "Журнал сбоев" / EN "View crash log"). Открывает существующий log
+  overlay но грузит самый свежий файл из `crashes/` (covers оба источника
+  через одну entry-point). Empty-state — "Сбоев нет — это хорошо."
+- **Регрессии** — `VPNRouter.Tests/CrashReporterScrubberTests.cs` (12 тестов)
+  пинит каждый scrub паттерн + `OverrideDataDir` round-trip.
 
 ### 16.7 Build pipeline + APK в release (Phase A в roadmap)
 

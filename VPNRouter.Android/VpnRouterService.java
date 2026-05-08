@@ -164,6 +164,122 @@ public final class VpnRouterService extends VpnService {
     private PowerManager.WakeLock connectWakeLock;
 
     @Override
+    public void onCreate() {
+        super.onCreate();
+        // v2.32.0 (AND-CRASH-HOOK, 2026-05-08) — Java unhandled exceptions
+        // in this service (libbox crashes, network-callback bugs, NPEs in
+        // builder.establish()) currently get swallowed into logcat, which
+        // a non-rooted user cannot read. Install a default uncaught
+        // handler that writes a minimal text report to <filesDir>/crashes/
+        // before chaining to the previous default — chaining is critical:
+        // without it the JVM keeps the dead thread alive and the process
+        // ends up in an undefined state. The C# CrashReporter on the
+        // Activity side reads the same dir on next launch and the kebab
+        // "View crash log" surface picks up either origin transparently.
+        installJavaUncaughtHandler();
+    }
+
+    private void installJavaUncaughtHandler() {
+        try {
+            final Thread.UncaughtExceptionHandler previous =
+                    Thread.getDefaultUncaughtExceptionHandler();
+            // Anonymous inner class (not a lambda) because the javac
+            // pipeline driving this project's AndroidJavaSource items
+            // targets a pre-8 source level — LambdaMetafactory is not
+            // resolvable on the classpath. Existing service code uses
+            // the same pattern (see InterfaceUpdateListener wiring), so
+            // we follow it here for consistency.
+            Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+                @Override
+                public void uncaughtException(Thread thread, Throwable throwable) {
+                    try {
+                        writeJavaCrashReport(thread, throwable);
+                    } catch (Throwable t) {
+                        // The reporter must never throw — if writing the
+                        // file failed for any reason, fall through to the
+                        // original handler so the process still terminates
+                        // correctly.
+                        Log.w(LOG_TAG, "AND-CRASH-HOOK: writeJavaCrashReport threw: " + t.getMessage());
+                    }
+                    if (previous != null) {
+                        previous.uncaughtException(thread, throwable);
+                    }
+                }
+            });
+            Log.i(LOG_TAG, "AND-CRASH-HOOK: Java uncaught-handler installed");
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "AND-CRASH-HOOK: install failed: " + e.getMessage());
+        }
+    }
+
+    private void writeJavaCrashReport(Thread thread, Throwable throwable) {
+        try {
+            File filesDir = getFilesDir();
+            if (filesDir == null) return;
+            File crashesDir = new File(filesDir, "crashes");
+            if (!crashesDir.exists() && !crashesDir.mkdirs()) {
+                // mkdirs() can return false if the dir already exists due
+                // to a race; check existsAfter and bail only if truly absent.
+                if (!crashesDir.exists()) return;
+            }
+
+            String stamp = new java.text.SimpleDateFormat(
+                    "yyyyMMdd-HHmmss-SSS", java.util.Locale.US)
+                    .format(new java.util.Date());
+            File crashFile = new File(crashesDir, "java-crash-" + stamp + ".txt");
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("VPNRouter Java crash report\n");
+            sb.append("Source:    VpnRouterService (Java)\n");
+            sb.append("Thread:    ").append(thread != null ? thread.getName() : "<null>").append('\n');
+            sb.append("Time:      ").append(new java.util.Date()).append('\n');
+            sb.append("Android:   ").append(Build.VERSION.RELEASE)
+                    .append(" (SDK ").append(Build.VERSION.SDK_INT).append(")\n");
+            sb.append("Device:    ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append('\n');
+            sb.append('\n');
+            sb.append("──── Exception ────\n");
+            if (throwable != null) {
+                java.io.StringWriter sw = new java.io.StringWriter();
+                throwable.printStackTrace(new java.io.PrintWriter(sw));
+                // Same scrub patterns the C# CrashReporter applies — kept
+                // minimal here to avoid depending on a Java regex library
+                // beyond what's in android.jar. Covers vless://… in
+                // exception messages (the most common leak vector).
+                sb.append(scrubSecrets(sw.toString()));
+            } else {
+                sb.append("(no throwable)\n");
+            }
+            sb.append('\n');
+
+            java.io.FileWriter fw = new java.io.FileWriter(crashFile, false);
+            try {
+                fw.write(sb.toString());
+            } finally {
+                try { fw.close(); } catch (Exception ignored) { }
+            }
+        } catch (Throwable t) {
+            // Best-effort — swallow.
+        }
+    }
+
+    private static String scrubSecrets(String s) {
+        if (s == null || s.isEmpty()) return s;
+        String out = s.replaceAll(
+                "(?i)\\b(vless|vmess|trojan|ss|hysteria2?|tuic|naive)://\\S+",
+                "$1://[redacted]");
+        out = out.replaceAll(
+                "(?i)(https?://[^\\s/?#]+)/\\S*",
+                "$1/[redacted]");
+        out = out.replaceAll(
+                "\\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\b",
+                "<uuid>");
+        out = out.replaceAll(
+                "\\b[A-Za-z0-9+/_\\-]{40,}={0,2}\\b",
+                "<key>");
+        return out;
+    }
+
+    @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent != null ? intent.getAction() : null;
         if (ACTION_START.equals(action)) {

@@ -168,6 +168,34 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
+        // v2.32.0 (AND-CRASH-HOOK, 2026-05-08) — pin AppPaths.DataDir to
+        // the per-app sandbox files dir BEFORE any Core code resolves it,
+        // and install the unhandled-exception hook. The Linux fallback in
+        // AppPaths (~/.config/vpnrouter) does not map onto Android's
+        // sandbox — without this override the crash reporter would either
+        // fail to create its directory or write to whatever HOME happened
+        // to be set, which is not user-recoverable. Both calls are
+        // best-effort: a failure here must not block startup.
+        try
+        {
+            var filesDir = FilesDir?.AbsolutePath;
+            if (!string.IsNullOrEmpty(filesDir))
+            {
+                VPNRouter.Core.AppPaths.OverrideDataDir(filesDir);
+                VPNRouter.Core.AppPaths.EnsureDirectories();
+                VPNRouter.Core.Services.CrashReporter.Install();
+            }
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                global::Android.Util.Log.Warn("VpnRouter.CrashHook",
+                    $"CrashReporter install failed: {ex.GetType().Name}: {ex.Message}");
+            }
+            catch { }
+        }
+
         // v2.32.0 SR-2 — bump launch-failure counter BEFORE
         // base.OnCreate (which spins up Avalonia). This way, any crash
         // inside Avalonia init / view-model construction / first-frame

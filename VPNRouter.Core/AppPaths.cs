@@ -13,6 +13,22 @@ public static class AppPaths
     /// <summary>Root data directory (config, logs, cache, state).</summary>
     public static string DataDir => _dataDir ??= ResolveDataDir();
 
+    /// <summary>
+    /// Override the resolved data directory. Required on Android, where the
+    /// Linux fallback (<c>$HOME/.config/vpnrouter</c>) does not map onto the
+    /// per-app sandbox. Call as early as possible — before any code reads
+    /// <see cref="DataDir"/> or its derivatives — passing the result of
+    /// <c>Context.getFilesDir()</c>. Subsequent calls update the value
+    /// (this is a static field, so a stale reader could see the previous
+    /// path; callers must order initialisation accordingly).
+    /// </summary>
+    public static void OverrideDataDir(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("path must be non-empty", nameof(path));
+        _dataDir = path;
+    }
+
     public static string ConfigDir => Path.Combine(DataDir, "config");
     public static string LogsDir => Path.Combine(DataDir, "logs");
     public static string CacheDir => Path.Combine(DataDir, "cache");
