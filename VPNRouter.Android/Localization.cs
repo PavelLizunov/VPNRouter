@@ -810,4 +810,52 @@ internal static class Localization
     public static string SettingsDpiBypassOff => Ru ? "Выключен" : "Off";
     public static string SettingsDpiBypassStandard => Ru ? "Стандарт" : "Standard";
     public static string SettingsDpiBypassAggressive => Ru ? "Агрессивно" : "Aggressive";
+
+    // ── v2.32.0 (AND-PROFILES, 2026-05-08) — Profiles overlay ───────────
+    //
+    // Routing profile catalog browser: list of named app bundles
+    // (Discord_Privacy / Browsers / AI_Tools / etc.) that the user can
+    // tap to bulk-apply per-app routing + leak protection. Mirrors desktop
+    // ApplicationsPage's "select-a-group-of-apps-at-once" intent but
+    // shipped as a single-tap chooser sized for mobile.
+    //
+    // Strings are Android-specific until AND-LOCALIZATION-MERGE collapses
+    // the duplicate Strings.cs files; the desktop side has no exact
+    // analogue (it builds AppGroupViewModel with per-app checkboxes
+    // inline, not a profile selector).
+
+    public static string MenuSectionProfiles => Ru ? "Профили" : "Profiles";
+    public static string MenuItemOpenProfiles => Ru ? "Профили маршрутизации" : "Routing profiles";
+
+    public static string ProfilesOverlayTitle => Ru ? "Профили маршрутизации" : "Routing profiles";
+    public static string ProfilesIntro => Ru
+        ? "Готовые наборы приложений, которые пойдут через VPN. Тап по карточке применяет профиль и переключает в режим Split tunnel."
+        : "Pre-made app bundles that go through VPN. Tap a card to apply the profile and switch to Split tunnel.";
+
+    /// <summary>"No profile" pseudo-card at the top of the list — full traffic mode.</summary>
+    public static string ProfilesNoneTitle => Ru ? "Без профиля" : "No profile";
+    public static string ProfilesNoneDescription => Ru
+        ? "Весь трафик через VPN. Список приложений сохранится для последующих профилей."
+        : "All traffic through VPN. App list is preserved for future profiles.";
+
+    /// <summary>Active-profile checkmark prefix glyph + label.</summary>
+    public static string ProfilesActiveBadge => Ru ? "✓ Активный" : "✓ Active";
+
+    /// <summary>Apps-count chip — args: {0}=count.</summary>
+    public static string ProfilesAppsCount => Ru ? "{0} прил." : "{0} apps";
+    public static string ProfilesAppsCountOne => Ru ? "1 прил." : "1 app";
+
+    /// <summary>DNS mode chip — args: {0}=mode (vpn_only / smart / direct).</summary>
+    public static string ProfilesDnsModeChip => Ru ? "DNS: {0}" : "DNS: {0}";
+
+    /// <summary>Block-on-VPN-fail chip when profile sets it to true.</summary>
+    public static string ProfilesBlockOnFailChip => Ru ? "блокировать при сбое" : "block on fail";
+
+    /// <summary>Toast shown after applying a profile — args: {0}=profile name.</summary>
+    public static string ProfilesAppliedToast => Ru
+        ? "Профиль применён: {0}"
+        : "Profile applied: {0}";
+    public static string ProfilesClearedToast => Ru
+        ? "Профиль снят. Весь трафик через VPN."
+        : "Profile cleared. All traffic through VPN.";
 }

@@ -493,6 +493,23 @@ public static class AndroidStorage
         ValidateOrDefault(KeyDpiBypassMode, GetString(KeyDpiBypassMode), AllowedDpiBypassModes, "off");
     public static bool SetDpiBypassMode(string value) => SetString(KeyDpiBypassMode, value);
 
+    // ── v2.32.0 (AND-PROFILES, 2026-05-08) — active routing profile ─────
+    //
+    // Stores the *name* of the profile the user last applied (or null when
+    // no profile is active). The package list itself is stored in
+    // KeyPerAppPackages — applying a profile rewrites that list. We persist
+    // the name separately so the Profiles overlay can highlight which card
+    // is active even after subscription refreshes / app restart.
+    //
+    // Multi-select (desktop-style "Discord_Privacy,Work_Suite" merge) is
+    // intentionally out of scope for the first port — Android UX is tap-
+    // one. Future expansion can swap to a comma-separated list and reuse
+    // ProfileManager.MergeProfilesTolerant.
+    private const string KeyActiveProfile = "active_profile";
+
+    public static string? GetActiveProfile() => GetString(KeyActiveProfile);
+    public static bool SetActiveProfile(string? value) => SetString(KeyActiveProfile, value);
+
     public static bool GetAutoReconnectOnNetworkChange() =>
         GetBool(KeyAutoReconnectOnNetworkChange, defaultValue: true);
     public static bool SetAutoReconnectOnNetworkChange(bool value) =>
@@ -838,6 +855,7 @@ public static class AndroidStorage
                 KeyBlockOnVpnFail, KeyDnsStrategy, KeyUpdateChannel,
                 KeyAutostartVpn, KeyAutostartZapret, KeyAutostartTgProxy,
                 KeyDpiBypassMode,
+                KeyActiveProfile,
             };
             foreach (var k in liveKeys) editor.Remove(k);
             return editor.Commit();
