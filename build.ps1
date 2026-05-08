@@ -9,6 +9,12 @@
 
     NOTE: Legacy flat ZIP (VPNRouter-v*.zip) was removed in v1.18.0.
     Old clients (v1.17.1 and earlier) will not auto-detect this release.
+
+    When -AndroidAlso is supplied the script also attempts a local APK build
+    after the Windows artifacts. APK builds normally happen on CI
+    (build-android.yml, see plans/vpnrouter-android-platform-parity-roadmap.md
+    Phase A); -AndroidAlso is a contributor convenience for sanity-checking
+    Android-side changes before pushing a tag.
 .PARAMETER Version
     Version string for the ZIP filename (default: "1.0")
 .PARAMETER SingBoxPath
@@ -17,9 +23,22 @@
     Upload the ZIPs to GitHub Releases using gh CLI
 .PARAMETER GitHubRepo
     GitHub repo in "owner/repo" format (default: PavelLizunov/VPNRouter)
+.PARAMETER AndroidAlso
+    Also build a signed Android APK (arm64) after the Windows artifacts.
+    Requires JAVA_HOME (JDK 17), ANDROID_HOME (Android SDK), the dotnet
+    'android' workload, and a signing keystore. The keystore is resolved
+    from env vars ANDROID_KEYSTORE_PATH + ANDROID_KEYSTORE_PASSWORD
+    (optionally ANDROID_KEYSTORE_KEY_ALIAS / ANDROID_KEYSTORE_KEY_PASSWORD),
+    or from a `.env.local` file at the repo root with the same keys, or
+    from a `vpnrouter.keystore` file inside VPNRouter.Android\. If any
+    prerequisite is missing the Android build is skipped with a warning;
+    the Windows artifacts above remain valid. When combined with -Upload
+    the APK + .sha256 are added to the release assets.
 .EXAMPLE
     .\build.ps1 -Version "1.18.0"
     .\build.ps1 -Version "1.18.0" -Upload
+    .\build.ps1 -Version "2.32.0-r1" -AndroidAlso
+    .\build.ps1 -Version "2.32.0" -Upload -AndroidAlso
 #>
 param(
     [string]$Version = "1.0",
@@ -32,7 +51,11 @@ param(
     # Empty string means "auto-download upstream $SingBoxVersion".
     [string]$SingBoxPath = "",
     [switch]$Upload,
-    [string]$GitHubRepo = "PavelLizunov/VPNRouter"
+    [string]$GitHubRepo = "PavelLizunov/VPNRouter",
+    # Build a local Android APK alongside the Windows artifacts. See
+    # PARAMETER AndroidAlso for prereqs. Falls back to a clear warning
+    # (not a hard failure) when prereqs are missing.
+    [switch]$AndroidAlso
 )
 
 $ErrorActionPreference = "Stop"
@@ -470,6 +493,160 @@ Get-ChildItem $DistDir -Recurse | ForEach-Object {
     if ($_.PSIsContainer) { "  $rel\" } else { "  $rel  ($([math]::Round($_.Length/1KB)) KB)" }
 }
 
+# ── Optional: local Android APK build (-AndroidAlso) ──
+# Contributor convenience. CI is authoritative — this just lets a dev
+# validate Android changes before pushing the tag. Failures here never
+# fail the script; Windows artifacts above already exist on disk.
+$AndroidBuilt = $false
+$ApkPath = $null
+$ApkShaPath = $null
+
+if ($AndroidAlso) {
+    Write-Host ""
+    Write-Host "=== Android APK build (-AndroidAlso) ===" -ForegroundColor Cyan
+
+    # Load .env.local (KEY=VALUE per line). Existing env vars win.
+    $envLocal = Join-Path $Root ".env.local"
+    if (Test-Path $envLocal) {
+        Get-Content $envLocal | ForEach-Object {
+            if ($_ -match '^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$') {
+                $k = $Matches[1]
+                $v = $Matches[2].Trim('"').Trim("'")
+                if (-not (Get-Item "Env:$k" -ErrorAction SilentlyContinue)) {
+                    Set-Item "Env:$k" -Value $v
+                }
+            }
+        }
+        Write-Host "       Loaded $envLocal (existing env vars take precedence)" -ForegroundColor Gray
+    }
+
+    # Prereq check — JAVA_HOME, ANDROID_HOME, dotnet workload 'android'.
+    $issues = @()
+    if (-not $env:JAVA_HOME) {
+        $issues += "JAVA_HOME not set (point at JDK 17 - e.g. Temurin)"
+    } elseif (-not (Test-Path $env:JAVA_HOME)) {
+        $issues += "JAVA_HOME points at non-existent path: $env:JAVA_HOME"
+    }
+    if (-not $env:ANDROID_HOME) {
+        $issues += "ANDROID_HOME not set (point at Android SDK root)"
+    } elseif (-not (Test-Path $env:ANDROID_HOME)) {
+        $issues += "ANDROID_HOME points at non-existent path: $env:ANDROID_HOME"
+    }
+    try {
+        $workloadOutput = & dotnet workload list 2>&1 | Out-String
+        if ($workloadOutput -notmatch '(?im)^\s*android\b') {
+            $issues += "dotnet workload 'android' not installed (run: dotnet workload install android)"
+        }
+    } catch {
+        $issues += "could not run 'dotnet workload list' to verify Android workload: $_"
+    }
+
+    if ($issues.Count -gt 0) {
+        Write-Host "Android build SKIPPED - prerequisites missing:" -ForegroundColor Yellow
+        foreach ($i in $issues) { Write-Host "  - $i" -ForegroundColor Yellow }
+        Write-Host "Windows artifacts above are still valid; only the APK was skipped." -ForegroundColor Yellow
+    } else {
+        # Resolve signing keystore. Order: env vars → .env.local (already
+        # merged above) → vpnrouter.keystore next to the .csproj.
+        $signingArgs = @()
+        $hasKeystore = $false
+        $keystoreSource = ""
+
+        if ($env:ANDROID_KEYSTORE_PATH -and $env:ANDROID_KEYSTORE_PASSWORD -and (Test-Path $env:ANDROID_KEYSTORE_PATH)) {
+            $keyAlias = if ($env:ANDROID_KEYSTORE_KEY_ALIAS) { $env:ANDROID_KEYSTORE_KEY_ALIAS } else { "vpnrouter" }
+            $keyPass  = if ($env:ANDROID_KEYSTORE_KEY_PASSWORD) { $env:ANDROID_KEYSTORE_KEY_PASSWORD } else { $env:ANDROID_KEYSTORE_PASSWORD }
+            $signingArgs = @(
+                "-p:AndroidSigningKeyStore=$($env:ANDROID_KEYSTORE_PATH)",
+                "-p:AndroidSigningStorePass=$($env:ANDROID_KEYSTORE_PASSWORD)",
+                "-p:AndroidSigningKeyAlias=$keyAlias",
+                "-p:AndroidSigningKeyPass=$keyPass"
+            )
+            $hasKeystore = $true
+            $keystoreSource = "ANDROID_KEYSTORE_PATH"
+        } else {
+            $csprojKeystore = Join-Path $Root "VPNRouter.Android\vpnrouter.keystore"
+            if (Test-Path $csprojKeystore) {
+                # csproj defaults pick this up via <AndroidSigningKeyStore>
+                # vpnrouter.keystore</AndroidSigningKeyStore>. The csproj
+                # does NOT specify a password — without env vars dotnet
+                # prompts interactively, which fails under -NonInteractive.
+                # So still require ANDROID_KEYSTORE_PASSWORD to be set.
+                if ($env:ANDROID_KEYSTORE_PASSWORD) {
+                    $keyAlias = if ($env:ANDROID_KEYSTORE_KEY_ALIAS) { $env:ANDROID_KEYSTORE_KEY_ALIAS } else { "vpnrouter" }
+                    $keyPass  = if ($env:ANDROID_KEYSTORE_KEY_PASSWORD) { $env:ANDROID_KEYSTORE_KEY_PASSWORD } else { $env:ANDROID_KEYSTORE_PASSWORD }
+                    $signingArgs = @(
+                        "-p:AndroidSigningStorePass=$($env:ANDROID_KEYSTORE_PASSWORD)",
+                        "-p:AndroidSigningKeyAlias=$keyAlias",
+                        "-p:AndroidSigningKeyPass=$keyPass"
+                    )
+                    $hasKeystore = $true
+                    $keystoreSource = "VPNRouter.Android\vpnrouter.keystore"
+                }
+            }
+        }
+
+        if (-not $hasKeystore) {
+            Write-Host "Android build SKIPPED - no signing keystore available." -ForegroundColor Yellow
+            Write-Host "  Provide via env vars:" -ForegroundColor Yellow
+            Write-Host "    ANDROID_KEYSTORE_PATH         = path to .keystore / .jks" -ForegroundColor Yellow
+            Write-Host "    ANDROID_KEYSTORE_PASSWORD     = store password" -ForegroundColor Yellow
+            Write-Host "    ANDROID_KEYSTORE_KEY_ALIAS    = alias (default: vpnrouter)" -ForegroundColor Yellow
+            Write-Host "    ANDROID_KEYSTORE_KEY_PASSWORD = key password (default: store password)" -ForegroundColor Yellow
+            Write-Host "  Or place the same keys in .env.local at the repo root." -ForegroundColor Yellow
+            Write-Host "  Production keystore must match the one used by CI for auto-update to work." -ForegroundColor Yellow
+        } else {
+            Write-Host "Signing source: $keystoreSource" -ForegroundColor Gray
+            Write-Host "Building APK (Release, android-arm64)..." -ForegroundColor Yellow
+
+            $publishArgs = @(
+                "publish", "$Root\VPNRouter.Android\VPNRouter.Android.csproj",
+                "-c", "Release",
+                "-p:RuntimeIdentifiers=android-arm64",
+                "-p:AndroidEnableProfiledAot=false"
+            ) + $signingArgs
+
+            & dotnet @publishArgs
+            $apkExit = $LASTEXITCODE
+
+            if ($apkExit -ne 0) {
+                Write-Host "Android build FAILED (dotnet publish exit $apkExit). Windows artifacts still valid." -ForegroundColor Red
+            } else {
+                $signedApk = Get-ChildItem -Path "$Root\VPNRouter.Android\bin\Release" -Recurse -Filter "*-Signed.apk" -ErrorAction SilentlyContinue |
+                             Sort-Object LastWriteTime -Descending |
+                             Select-Object -First 1
+                if (-not $signedApk) {
+                    Write-Host "Android build succeeded but no *-Signed.apk found under VPNRouter.Android\bin\Release\." -ForegroundColor Red
+                } else {
+                    $ApkName = "VPNRouter-v$Version-android-arm64.apk"
+                    $ApkPath = Join-Path $Root $ApkName
+                    Copy-Item $signedApk.FullName $ApkPath -Force
+
+                    $ApkShaPath = "$ApkPath.sha256"
+                    (Get-FileHash -Algorithm SHA256 $ApkPath).Hash.ToLower() | Set-Content $ApkShaPath -NoNewline
+
+                    $apkSize = [math]::Round((Get-Item $ApkPath).Length / 1MB, 1)
+                    Write-Host "APK: $ApkPath ($apkSize MB)" -ForegroundColor Green
+                    Write-Host "SHA256 (apk): $(Get-Content $ApkShaPath)" -ForegroundColor Gray
+                    $AndroidBuilt = $true
+                }
+            }
+        }
+    }
+}
+
+# ── Final artifact summary ──
+Write-Host ""
+Write-Host "=== Artifacts ===" -ForegroundColor Cyan
+Write-Host "  Windows install ZIP : $InstallZipName" -ForegroundColor White
+Write-Host "  Windows update ZIP  : $UpdateZipName" -ForegroundColor White
+if ($AndroidAlso) {
+    if ($AndroidBuilt) {
+        Write-Host "  Android APK         : $(Split-Path $ApkPath -Leaf)" -ForegroundColor White
+    } else {
+        Write-Host "  Android APK         : SKIPPED (see warnings above)" -ForegroundColor Yellow
+    }
+}
+
 # ── Upload to GitHub Releases (optional) ──
 if ($Upload) {
     Write-Host ""
@@ -480,7 +657,17 @@ if ($Upload) {
     } else {
         $tag = "v$Version"
 
-        gh release create $tag $InstallZipPath $UpdateZipPath $InstallShaPath $UpdateShaPath `
+        # Build the asset list. APK + sha join only if the local Android
+        # build above produced them; missing keystore / missing prereqs
+        # silently fall through to a Windows-only upload (CI will publish
+        # the APK on tag push regardless).
+        $releaseAssets = @($InstallZipPath, $UpdateZipPath, $InstallShaPath, $UpdateShaPath)
+        if ($AndroidBuilt) {
+            $releaseAssets += @($ApkPath, $ApkShaPath)
+            Write-Host "       Including local Android APK in release assets" -ForegroundColor Gray
+        }
+
+        gh release create $tag $releaseAssets `
             --repo $GitHubRepo `
             --title "VPNRouter v$Version" `
             --notes "VPNRouter v$Version" `
