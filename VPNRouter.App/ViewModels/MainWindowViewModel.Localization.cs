@@ -374,6 +374,8 @@ public partial class MainWindowViewModel
     public string L_SmpCtaCancel => Strings.SmpCtaCancel;
     public string L_SmpCtaConnect => Strings.SmpCtaConnect;
     public string L_SmpCtaDisconnect => Strings.SmpCtaDisconnect;
+    public string L_SmpSaveButton => Strings.SmpSaveButton;
+    public string L_SmpRefreshButton => Strings.SmpRefreshButton;
     public string L_SmpDisconnectedTitle => Strings.SmpDisconnectedTitle;
     public string L_SmpFullHint => Strings.SmpFullHint;
     public string L_SmpFullOption => Strings.SmpFullOption;

@@ -330,9 +330,10 @@ public static class SettingsLoader
 
         // (Tun.RouteExcludeAddress, Update — handled by EnsureSane above.)
 
-        // Ensure routing mode has a valid value
+        // Ensure routing mode has a valid value. v2.32.0 parity audit F-02
+        // row 8: default aligned with Android (first-launch goes "full").
         if (string.IsNullOrWhiteSpace(settings.App.RoutingMode))
-            settings.App.RoutingMode = "split";
+            settings.App.RoutingMode = "full";
 
         // Ensure theme has a valid value
         if (string.IsNullOrWhiteSpace(settings.App.Theme))

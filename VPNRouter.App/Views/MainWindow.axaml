@@ -282,18 +282,27 @@
                 BorderBrush="{DynamicResource BorderDefaultBrush}"
                 Background="{DynamicResource SurfaceBaseBrush}">
             <Grid ColumnDefinitions="28,*,Auto,Auto" ColumnSpacing="10">
+                <!-- v2.32.0 parity audit F-02 row 1: SimplePage now owns its
+                     own mini-header (mascot + brand + chips) so that
+                     PageScreenshotTests captures show the brand identity
+                     even when the page is rendered standalone (no
+                     MainWindow chrome). At runtime in Simple mode we hide
+                     these two columns to avoid duplicating the brand row;
+                     the kebab/mode-toggle in columns 2-3 stays visible. -->
                 <Border Grid.Column="0" Width="28" Height="28"
                         CornerRadius="{StaticResource RadiusSm}"
                         Background="{DynamicResource AccentBgSubtleBrush}"
                         ClipToBounds="True"
-                        VerticalAlignment="Center">
+                        VerticalAlignment="Center"
+                        IsVisible="{Binding !IsSimpleMode}">
                     <Image Source="{Binding LogoSource}"
                            Width="26" Height="26" Stretch="Uniform"
                            RenderOptions.BitmapInterpolationMode="HighQuality"
                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
 
-                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center"
+                            IsVisible="{Binding !IsSimpleMode}">
                     <TextBlock Text="Virtual Penguin Network"
                                FontSize="12" FontWeight="Bold"
                                Foreground="{DynamicResource TextPrimaryBrush}"

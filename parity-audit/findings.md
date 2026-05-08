@@ -51,36 +51,50 @@ the single source-of-truth, both UIs consume it.
 
 Side-by-side rendered + visually compared (`composite/simple.png`):
 
-| # | Element | Desktop | Android |
-|---|---|---|---|
-| 1 | Header / brand title | absent | "Virtual Penguin Network" + mascot |
-| 2 | Quick-toggle chips (VPN/Zapret/TG) | absent | present at top |
-| 3 | Status card wording | "Traffic goes **straight**" | "Traffic goes **direct**" |
-| 4 | Config·Mode default | "manual · split" | "subscription · all traffic" |
-| 5 | Sub-tabs (Subscription/Server/Custom JSON) | absent | present |
-| 6 | Action buttons (Save/QR/Refresh) | absent | present |
-| 7 | Routing label | "Route through VPN" | "What goes via VPN" |
-| 8 | Selected default | Selected apps | All traffic |
-| 9 | Selected-apps subtext | "Based on your selected apps" | "By selected apps list (advanced settings)" |
-| 10 | All-traffic subtext | "Includes games and banking" | "Including games and banks" |
-| 11 | Autostart inline card | present | absent (in kebab→Settings) |
-| 12 | Advanced settings card | present (summary list) | absent (use kebab) |
-| 13 | Information density | sparse, big margins | dense, scrollable |
+| # | Element | Desktop | Android | Status |
+|---|---|---|---|---|
+| 1 | Header / brand title | absent | "Virtual Penguin Network" + mascot | ✅ closed v2.32.0 (SimplePage.axaml mini-header re-instated; MainWindow brand columns hide when IsSimpleMode) |
+| 2 | Quick-toggle chips (VPN/Zapret/TG) | absent | present at top | ✅ closed v2.32.0 (same brand row) |
+| 3 | Status card wording | "Traffic goes **straight**" | "Traffic goes **direct**" | ✅ closed v2.32.0 (Strings.cs SmpStatusDisconnectedHint) |
+| 4 | Config·Mode default | "manual · split" | "subscription · all traffic" | ✅ closed v2.32.0 (AppSettings.ConfigMode default → "subscribe", VM `_isVlessMode/_isSubscribeMode` flipped) |
+| 5 | Sub-tabs (Subscription/Server/Custom JSON) | absent | present | 🔵 deferred P3 — adding sub-tabs reframes desktop's auto-detect input flow; needs separate VM rework. Not closed. |
+| 6 | Action buttons (Save/QR/Refresh) | absent | present | ✅ closed v2.32.0 (`SmpSaveCommand` + `RefreshAllSubscriptionsCommand` buttons on form; QR omitted on desktop — no camera) |
+| 7 | Routing label | "Route through VPN" | "What goes via VPN" | ✅ closed v2.32.0 (Strings.cs SmpTunnelModeLabel) |
+| 8 | Selected default | Selected apps | All traffic | ✅ closed v2.32.0 (AppSettings.RoutingMode default → "full", VM `_isSplitTunnel` flipped) |
+| 9 | Selected-apps subtext | "Based on your selected apps" | "By selected apps list (advanced settings)" | ✅ closed v2.32.0 (Strings.cs SmpSplitHint) |
+| 10 | All-traffic subtext | "Includes games and banking" | "Including games and banks" | ✅ closed v2.32.0 (Strings.cs SmpFullHint) |
+| 11 | Autostart inline card | present | absent (in kebab→Settings) | ✅ closed v2.32.0 (Android `BuildAutostartInlineCard` between CTA + Advanced card → opens Settings overlay) |
+| 12 | Advanced settings card | present (summary list) | absent (use kebab) | ✅ already present on Android (`advCardButton` opens Subscribe overlay) — re-classified as not actually divergent |
+| 13 | Information density | sparse, big margins | dense, scrollable | 🔵 P3 platform-justified — desktop has more horizontal real estate, Android optimises for thumb scroll. No fix planned. |
 
-**Why critical**: this is the FIRST page user sees. Different wordings,
-different default routing modes, different navigation pattern (kebab vs
-inline cards) means the two platforms feel like **different products**.
+**Closure summary (2026-05-09)**: 11 of 13 rows closed. Remaining:
+- Row 5 (sub-tabs) — deferred. Needs VM rework to add an explicit
+  Subscription/Server/Custom 3-way segmented control without breaking
+  the existing auto-detect SmpInput flow. Spawn separate chip.
+- Row 13 (density) — accepted as platform-justified, no fix planned.
 
-**Fix strategy**:
-- **Wording parity** (rows 3, 7, 9, 10): unify via shared Strings.cs (Phase H)
-- **Default mode** (row 4): pick one. Suggest Android's default
-  (subscription → all traffic) since most users start without explicit
-  process selection
-- **Layout** (rows 1, 2, 5, 6, 11, 12): structural — pick which platform
-  is canonical and port the other
-- **Recommendation**: keep desktop layout (advanced-settings card,
-  inline autostart) but ADD Android's brand title + quick chips to
-  desktop top rail. Ship parity in v2.33 or v2.34.
+**Why this mattered**: this is the FIRST page user sees. Different
+wordings, different default routing modes, different navigation patterns
+made the two platforms feel like different products. After this round
+desktop and Android first-launch present identical brand + canonical
+defaults (subscription · all traffic) + identical wording; remaining
+gaps are P3 / platform-justified.
+
+**Fix strategy applied**:
+- **Wording parity** (rows 3, 7, 9, 10): canonicalised Android's wording
+  in `VPNRouter.App/Localization/Strings.cs`; deferred the shared-Core
+  string merge to F-01 (Phase H, separate chip — strings are owned by
+  per-platform files until then).
+- **Default mode** (rows 4, 8): flipped `AppSettings.ConfigMode`
+  "generated" → "subscribe" and `RoutingMode` "split" → "full" so a
+  first-launch desktop user matches Android. Existing installs keep
+  their stored values (config.yaml has explicit values from prior runs).
+- **Layout** (rows 1, 2, 6, 11): SimplePage brand row reinstated;
+  MainWindow brand columns hide in Simple mode to avoid duplication;
+  Save + Refresh action buttons added to the SimplePage form; Android
+  gets an inline Autostart card mirroring desktop.
+- **Tests updated**: `SettingsValidatorTests` and
+  `SettingsLoaderRobustnessTests` reflect the new defaults.
 
 ---
 

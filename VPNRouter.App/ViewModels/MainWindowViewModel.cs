@@ -251,15 +251,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsZapretAvailable => OperatingSystem.IsWindows();
     /// <summary>True when bundled Telegram proxy is available on the current OS (Windows only).</summary>
     public bool IsTgProxyAvailable => OperatingSystem.IsWindows();
+    // v2.32.0 parity audit F-02 row 4 (2026-05-09): first-launch mode
+    // defaults flipped from "manual" to "subscription" so a fresh
+    // MainWindowViewModel matches Android's first-launch state. Saved
+    // configs override these via LoadSettingsIntoUI; only new users see
+    // the new default.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServerListMode))]
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
-    private bool _isVlessMode = true;
+    private bool _isVlessMode = false;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServerListMode))]
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
-    private bool _isSubscribeMode = false;
+    private bool _isSubscribeMode = true;
 
     /// <summary>True when the server ListBox should be visible (Manual or Subscribe mode).</summary>
     public bool IsServerListMode => IsVlessMode || IsSubscribeMode;
@@ -326,10 +331,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public ObservableCollection<SubscriptionViewModel> Subscriptions { get; } = new();
     [ObservableProperty] private string _newSubName = string.Empty;
     [ObservableProperty] private string _newSubUrl = string.Empty;
+    // v2.32.0 parity audit F-02 row 8 (2026-05-09): first-launch tunnel
+    // mode default flipped from "split" to "full" so a fresh ViewModel
+    // matches Android's "all traffic" first-launch radio. Saved config
+    // overrides via LoadSettingsIntoUI.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
     [NotifyPropertyChangedFor(nameof(IsFullTunnel))]
-    private bool _isSplitTunnel = true;
+    private bool _isSplitTunnel = false;
 
     /// <summary>
     /// v2.25.10 fix: exposes the inverse of <see cref="IsSplitTunnel"/> as a
@@ -2540,8 +2549,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // Set initial tab: 0=Manual, 1=Subscribe, 2=Network, 3=Applications
         SelectedTabIndex = IsSubscribeMode ? 1 : 0;
 
-        // Routing mode
-        IsSplitTunnel = !(_settings.App.RoutingMode ?? "split")
+        // Routing mode. v2.32.0 parity audit F-02 row 8: fallback aligned
+        // with the new "full" default (was "split"); only kicks in if
+        // RoutingMode is null/empty in YAML, which itself only happens for
+        // first-launch + corruption recovery — both already handled by
+        // SettingsLoader.LoadCore's EnsureSane pass.
+        IsSplitTunnel = !(_settings.App.RoutingMode ?? "full")
             .Equals("full", StringComparison.OrdinalIgnoreCase);
 
         // Russian geo bypass

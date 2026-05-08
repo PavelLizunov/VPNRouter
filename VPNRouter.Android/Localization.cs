@@ -162,6 +162,19 @@ internal static class Localization
         ? "Серверы · Подписки · Маршрутизация · Логи"
         : "Servers · Subscriptions · Routing · Logs";
 
+    // v2.32.0 parity audit F-02 row 11 (2026-05-09) — Autostart card on
+    // the Android main scroller mirrors desktop's SimplePage inline
+    // Autostart card. Tap → opens the existing Settings overlay (which
+    // already has the Autostart section). Surfacing the entry inline
+    // saves a kebab tap for a non-obvious destination — the most common
+    // "I just installed VPN, now make it stay on" path.
+    public static string SmpAutostartCardTitle => Ru
+        ? "Запуск с системой"
+        : "Start with system";
+    public static string SmpAutostartCardSubtitle => Ru
+        ? "Открыть автозапуск в настройках"
+        : "Open autostart in settings";
+
     public static string SimpleConfigSummary => Ru ? "вручную · полный" : "manual · full";
 
     // ── Server input ────────────────────────────────────────────────────

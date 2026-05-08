@@ -159,8 +159,10 @@ public class SettingsLoaderRobustnessTests : IDisposable
         Assert.Equal("example.com", s.Vless.Server);
         Assert.Equal(443, s.Vless.Port);
         Assert.Equal("aaaa-bbbb-cccc-dddd", s.Vless.Uuid);
-        // App was absent but defaults must apply (RoutingMode "split", etc.).
-        Assert.Equal("split", s.App.RoutingMode);
+        // App was absent but defaults must apply. v2.32.0 parity audit F-02
+        // row 8: default RoutingMode flipped from "split" to "full" so a
+        // first-launch desktop user matches Android's first-launch state.
+        Assert.Equal("full", s.App.RoutingMode);
         Assert.Equal("light", s.App.Theme);
     }
 

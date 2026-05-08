@@ -1288,6 +1288,14 @@ public partial class AndroidApp : Avalonia.Application
         _ctaDisconnect.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
         _ctaDisconnect.Click += OnConnectClicked;
 
+        // ── Autostart inline card (parity audit F-02 row 11) ────────────
+        // Mirrors desktop SimplePage.axaml's autostart card. Tap → opens
+        // the existing Settings overlay (Autostart section is the last
+        // sub-section, user scrolls). Placed above the Advanced settings
+        // card so the most-asked-after "stay on across reboots" entry is
+        // surfaced inline rather than buried two taps deep in the kebab.
+        var autostartCard = BuildAutostartInlineCard(radiusSm);
+
         // ── Расширенные настройки card (placeholder navigation) ─────────
         _advCardTitle = new TextBlock
         {
@@ -1387,6 +1395,7 @@ public partial class AndroidApp : Avalonia.Application
                 _ctaConnect,
                 _ctaConnecting,
                 _ctaDisconnect,
+                autostartCard,
                 advCardButton,
             }
         };
@@ -3900,6 +3909,75 @@ public partial class AndroidApp : Avalonia.Application
         // под inline form / kebab menu / log overlay соответственно;
         // subscription management was the only orphan here.)
         OpenSubsOverlay();
+    }
+
+    /// <summary>
+    /// v2.32.0 parity audit F-02 row 11 (2026-05-09) — build an inline
+    /// "Start with system" link card for the main scroller. Style mirrors
+    /// the autostart card on desktop SimplePage.axaml: title + subtitle
+    /// + small chevron, full-width tappable button. Clicking opens the
+    /// existing Settings overlay (already has the Autostart sub-section);
+    /// pre-fix this surface was only reachable via kebab → Settings →
+    /// scroll, which the parity audit flagged as a discoverability gap
+    /// vs. the desktop inline card.
+    /// </summary>
+    private Control BuildAutostartInlineCard(double radiusSm)
+    {
+        var titleText = new TextBlock
+        {
+            Text = Localization.SmpAutostartCardTitle,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+        };
+        titleText.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
+
+        var subText = new TextBlock
+        {
+            Text = Localization.SmpAutostartCardSubtitle,
+            FontSize = 9,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        subText.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+
+        var chevron = new TextBlock
+        {
+            Text = "›",
+            FontSize = 14,
+            FontWeight = FontWeight.Bold,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        chevron.BindToken(TextBlock.ForegroundProperty, "AccentFgBrush");
+
+        var inner = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 10,
+            Margin = new Thickness(10, 8),
+        };
+        var stack = new StackPanel
+        {
+            Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { titleText, subText },
+        };
+        Grid.SetColumn(stack, 0);
+        Grid.SetColumn(chevron, 1);
+        inner.Children.Add(stack);
+        inner.Children.Add(chevron);
+
+        var btn = new Avalonia.Controls.Button
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Padding = new Thickness(0),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(radiusSm),
+            Content = inner,
+        };
+        btn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "SurfaceSunkenBrush");
+        btn.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "BorderDefaultBrush");
+        btn.Click += (_, _) => ShowSettings();
+        return btn;
     }
 
     private void OnScanQrClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

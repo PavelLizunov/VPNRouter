@@ -1179,22 +1179,27 @@ public static class Strings
         : "vless://... or https://...";
     public static string SmpInputHint => Ru
         ? "Приму vless://-ссылку или URL подписки (http/https)."
-        : "Accepts a vless:// link or a subscription URL (http/https).";
-    public static string SmpTunnelModeLabel => Ru ? "Что идёт через VPN" : "Route through VPN";
+        : "Accepts a vless:// share-link or subscription URL (http/https).";
+    // v2.32.0 parity audit F-02 row 7: wording aligned with Android
+    // (Localization.cs SmpTunnelModeLabel) so both platforms surface the
+    // identical label. Desktop pre-fix said "Route through VPN" which framed
+    // the choice as a verb on the user; Android's "What goes via VPN" is
+    // the canonical wording — clearer for first-time users.
+    public static string SmpTunnelModeLabel => Ru ? "Что идёт через VPN" : "What goes via VPN";
     public static string SmpSplitOption => Ru
         ? "Выбранные приложения"
         : "Selected apps";
-    // v2.30.6-r1 (UX-3 fix): old subtitle hardcoded specific apps ("Discord,
-    // браузеры, мессенджеры, рабочие") which doesn't always match actual
-    // selected profiles. Generic descriptor avoids the mismatch and lets
-    // the Apps tab list be the source of truth.
+    // v2.32.0 parity audit F-02 row 9: subtext aligned with Android
+    // ("By selected apps list (advanced settings)") — surfaces the path
+    // to the selection list so users know where the apps are configured.
     public static string SmpSplitHint => Ru
-        ? "По списку выбранных приложений"
-        : "Based on your selected apps";
+        ? "По списку выбранных приложений (расширенные настройки)"
+        : "By selected apps list (advanced settings)";
     public static string SmpFullOption => Ru ? "Весь трафик" : "All traffic";
+    // v2.32.0 parity audit F-02 row 10: subtext canonical on Android.
     public static string SmpFullHint => Ru
         ? "Включая игры и банки"
-        : "Includes games and banking";
+        : "Including games and banks";
     public static string SmpAdvancedLink => Ru ? "Расширенные настройки ▸" : "Advanced settings ▸";
     // v2.30.7-r4 — F-1 fix: was "Free Configs" in BOTH languages
     // (D1 violation in RU + inconsistent with the new "Публичные"
@@ -1238,9 +1243,12 @@ public static class Strings
     public static string SmpStatusConnectingHint    => Ru
         ? "Рукопожатие с сервером — пара секунд."
         : "Handshaking with the server — a moment.";
+    // v2.32.0 parity audit F-02 row 3: wording aligned with Android
+    // (Localization.cs SimpleStatusDescOff) — "direct" is the canonical
+    // term, "straight" was a literal carry-over of the RU "напрямую".
     public static string SmpStatusDisconnectedHint  => Ru
         ? "Трафик идёт напрямую — выбери конфиг и запусти туннель."
-        : "Traffic goes straight — pick a config and start the tunnel.";
+        : "Traffic goes direct — pick a config and start the tunnel.";
 
     // Config row — "Config · Mode" label + value parts ("subscribe · split")
     public static string SmpConfigRowLabel => Ru ? "Конфиг · Режим" : "Config · Mode";
@@ -1254,6 +1262,14 @@ public static class Strings
     public static string SmpCtaConnect    => Ru ? "Подключить"   : "Connect";
     public static string SmpCtaDisconnect => Ru ? "Отключить"    : "Disconnect";
     public static string SmpCtaCancel     => Ru ? "Отменить"     : "Cancel";
+
+    // v2.32.0 parity audit F-02 row 6 — Save + Refresh action buttons
+    // inside the inline SimplePage form. Mirrors Android Localization.cs
+    // ButtonSave + ButtonRefresh so the two platforms surface identical
+    // button copy. QR is Android-only (camera surface), so no SmpQr
+    // string here.
+    public static string SmpSaveButton    => Ru ? "Сохранить"    : "Save";
+    public static string SmpRefreshButton => Ru ? "Обновить"     : "Refresh";
 
     // Advanced card — new wording listing the feature surface
     public static string SmpAdvCardTitle    => Ru ? "Расширенные настройки" : "Advanced settings";

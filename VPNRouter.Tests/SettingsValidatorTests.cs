@@ -314,8 +314,9 @@ public class SettingsValidatorTests
 
             var loaded = SettingsLoader.Load(configPath);
 
-            // Loader returned defaults — mode flipped back to "generated".
-            Assert.Equal("generated", loaded.App.ConfigMode);
+            // Loader returned defaults — mode flipped back to "subscribe"
+            // (v2.32.0 parity audit F-02 row 4: default aligned with Android).
+            Assert.Equal("subscribe", loaded.App.ConfigMode);
 
             // A backup file with the .invalid- prefix exists alongside.
             var siblings = Directory.GetFiles(dir, "config.yaml.invalid-*");
@@ -338,7 +339,7 @@ public class SettingsValidatorTests
             // Drain the notice just in case so subsequent tests in the
             // class start clean.
             var reloaded = SettingsLoader.Load(configPath);
-            Assert.Equal("generated", reloaded.App.ConfigMode);
+            Assert.Equal("subscribe", reloaded.App.ConfigMode);
             SettingsLoader.ConsumeRecoveryNotice();
         }
         finally

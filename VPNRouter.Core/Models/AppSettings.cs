@@ -74,9 +74,14 @@ public class AppConfig
     /// <summary>
     /// Routing mode: "split" routes only selected apps through VPN,
     /// "full" routes ALL traffic through VPN (except private IPs).
+    /// <para>v2.32.0 parity audit F-02 row 8 (2026-05-09): default flipped
+    /// from "split" to "full" so a first-launch desktop user matches
+    /// Android's first-launch state ("subscription · all traffic"). Existing
+    /// installs are unaffected — config.yaml already pins the chosen value.
+    /// </para>
     /// </summary>
     [YamlMember(Alias = "routing_mode")]
-    public string RoutingMode { get; set; } = "split";
+    public string RoutingMode { get; set; } = "full";
 
     /// <summary>UI theme: "light" or "dark".</summary>
     [YamlMember(Alias = "theme")]
@@ -105,11 +110,18 @@ public class AppConfig
 
     /// <summary>
     /// Config generation mode:
-    /// "generated" — build sing-box config from VLESS settings + profiles (default).
-    /// "custom" — use a user-provided sing-box JSON config, inject process routing only.
+    /// "generated" — build sing-box config from VLESS settings + profiles.
+    /// "subscribe" — pull server list from a remote subscription URL (default
+    ///               since v2.32.0; matches Android first-launch state).
+    /// "custom"    — use a user-provided sing-box JSON config, inject process
+    ///               routing only.
+    /// <para>v2.32.0 parity audit F-02 row 4 (2026-05-09): default flipped
+    /// from "generated" → "subscribe" so a first-launch user gets the
+    /// subscription tab pre-selected (consistent with Android). Existing
+    /// installs keep their stored value via config.yaml.</para>
     /// </summary>
     [YamlMember(Alias = "config_mode")]
-    public string ConfigMode { get; set; } = "generated";
+    public string ConfigMode { get; set; } = "subscribe";
 
     /// <summary>
     /// Path to custom sing-box JSON config (used when config_mode = "custom").

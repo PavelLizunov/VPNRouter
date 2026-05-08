@@ -368,6 +368,49 @@ public partial class MainWindowViewModel
     }
 
     /// <summary>
+    /// v2.32.0 parity audit F-02 row 6 (2026-05-09): Save command for the
+    /// SimplePage action row. Mirrors the parse + persist portion of
+    /// <see cref="SmpToggleConnectAsync"/> but stops short of Connect, so
+    /// users can persist a freshly-pasted URI / URL without committing
+    /// to a tunnel start. Pre-fix the Save action lived only on the
+    /// Subscribe Advanced page; F-02 row 6 wanted parity with Android,
+    /// which has Save / Refresh / QR buttons inline on the main scroller.
+    /// QR is omitted on desktop (no camera surface).
+    /// </summary>
+    [RelayCommand]
+    private void SmpSave()
+    {
+        SmpErrorText = string.Empty;
+        var raw = (_smpInput ?? string.Empty).Trim();
+        if (raw.Length == 0)
+        {
+            SmpErrorText = IsRussian
+                ? "Поле пусто — вставь vless:// / hysteria2:// / tuic:// / ss:// или https://-URL подписки."
+                : "Empty — paste a vless:// / hysteria2:// / tuic:// / ss:// link or an https:// subscription URL.";
+            return;
+        }
+
+        var kind = SimpleInputDetector.Classify(raw);
+        if (kind == SmpInputKind.Invalid)
+        {
+            SmpErrorText = IsRussian
+                ? "Не похоже на валидную ссылку или подписочный URL."
+                : "Doesn't look like a valid share-link or subscription URL.";
+            return;
+        }
+
+        if (kind == SmpInputKind.ServerUri && !TryApplyVless(raw)) return;
+        if (kind == SmpInputKind.SubscriptionUrl && !TryApplySubscriptionUrl(raw)) return;
+
+        _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
+        if (IsSplitTunnel)
+            _settings.ActiveProfile = SimpleSplitProfile;
+
+        SaveSettings();
+        _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+    }
+
+    /// <summary>
     /// Parse a single <c>vless://</c> URI and write it as the only VLESS
     /// server in settings. Returns false and sets SmpErrorText on failure.
     /// </summary>
