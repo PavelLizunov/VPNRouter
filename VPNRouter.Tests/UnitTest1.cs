@@ -3673,16 +3673,39 @@ public class CustomRulesV2_30_GeneratorTests
     [Fact]
     public void Apply_GeositeRule_RegistersRuleSetEntry()
     {
-        var config = NewConfigWithEmptyRoutes();
-        var rules = new List<VPNRouter.Core.Models.CustomRule>
+        // v2.31.9-r5 migrated geosite/geoip rule-sets from type:remote
+        // (with Url) to type:local (with Path), routed through
+        // RuleSetCacheManager. The on-disk .srs is pre-fetched in C# with
+        // a bounded timeout instead of letting sing-box do a synchronous
+        // mandatory fetch at startup (which crashed sing-box on TLS
+        // timeout — brat-2026-05-05 P0). Pre-populate the cache file so
+        // EnsureLocal returns a path deterministically without hitting
+        // the network; clean up after to avoid polluting %ProgramData%.
+        var cacheDir = System.IO.Path.Combine(
+            VPNRouter.Core.AppPaths.CacheDir,
+            VPNRouter.Core.Services.RuleSetCacheManager.CacheSubdir);
+        System.IO.Directory.CreateDirectory(cacheDir);
+        var stubPath = System.IO.Path.Combine(cacheDir, "user-geosite-ads.srs");
+        System.IO.File.WriteAllBytes(stubPath, new byte[] { 0x53, 0x52, 0x53, 0x00 }); // "SRS\0" magic placeholder
+        try
         {
-            new() { Action = "block", Type = "geosite", Value = "ads", Enabled = true },
-        };
-        VPNRouter.Core.Services.ConfigGenerator.ApplyCustomRules(config, rules);
-        Assert.NotNull(config.Route.RuleSet);
-        Assert.Single(config.Route.RuleSet!);
-        Assert.Equal("user-geosite-ads", config.Route.RuleSet![0].Tag);
-        Assert.Contains("sing-geosite", config.Route.RuleSet![0].Url);
+            var config = NewConfigWithEmptyRoutes();
+            var rules = new List<VPNRouter.Core.Models.CustomRule>
+            {
+                new() { Action = "block", Type = "geosite", Value = "ads", Enabled = true },
+            };
+            VPNRouter.Core.Services.ConfigGenerator.ApplyCustomRules(config, rules);
+            Assert.NotNull(config.Route.RuleSet);
+            Assert.Single(config.Route.RuleSet!);
+            Assert.Equal("user-geosite-ads", config.Route.RuleSet![0].Tag);
+            Assert.Equal("local", config.Route.RuleSet![0].Type);
+            Assert.NotNull(config.Route.RuleSet![0].Path);
+            Assert.EndsWith("user-geosite-ads.srs", config.Route.RuleSet![0].Path!);
+        }
+        finally
+        {
+            try { System.IO.File.Delete(stubPath); } catch { }
+        }
     }
 
     [Fact]
