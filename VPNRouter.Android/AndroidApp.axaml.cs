@@ -340,6 +340,26 @@ public partial class AndroidApp : Avalonia.Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // v2.32.0 (AND-SR-1) — central self-repair pass before any
+        // consumer reads. Mirrors desktop's
+        // SettingsLoader.LoadCore → EnsureSane → SettingsValidator
+        // pipeline so a corrupt enum value (KeyRoutingMode="garbage",
+        // KeyTheme="neon", etc.) is normalised + announced via
+        // recovery notice instead of reaching the routing engine.
+        // Wrapped in try/catch on top of the Core helper's own
+        // best-effort guards: a SharedPreferences failure here must
+        // never block app launch (SR-4 contract).
+        try { AndroidStorage.RepairAllOnLoad(); }
+        catch (Exception ex)
+        {
+            try
+            {
+                global::Android.Util.Log.Warn("VpnRouter.SelfRepair",
+                    $"RepairAllOnLoad in OnFrameworkInitialization failed: {ex.GetType().Name}: {ex.Message}");
+            }
+            catch { /* nothing more we can do */ }
+        }
+
         Localization.LoadFromStorage();
         ApplyTheme();
 
