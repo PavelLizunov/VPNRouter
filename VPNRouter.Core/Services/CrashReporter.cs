@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace VPNRouter.Core.Services;
 
@@ -66,7 +67,7 @@ public static class CrashReporter
             if (ex != null)
             {
                 sb.AppendLine("──── Exception ────");
-                sb.AppendLine(ex.ToString());
+                sb.AppendLine(ScrubSecrets(ex.ToString()));
                 sb.AppendLine();
             }
             else
@@ -90,7 +91,7 @@ public static class CrashReporter
                         var lines = File.ReadAllLines(logs);
                         var startIndex = Math.Max(0, lines.Length - 200);
                         for (int i = startIndex; i < lines.Length; i++)
-                            sb.AppendLine(lines[i]);
+                            sb.AppendLine(ScrubSecrets(lines[i]));
                     }
                 }
             }
@@ -103,5 +104,59 @@ public static class CrashReporter
         {
             return null;
         }
+    }
+
+    // ── PII scrubbing ───────────────────────────────────────────────────
+    //
+    // Crash reports go on disk in user-readable form and may be shared
+    // with support; the user-pasted vless URI, subscription URL, UUIDs
+    // and Reality public keys must not appear verbatim. The scrubber is
+    // best-effort — it strips the cases we know we leak (URIs in the
+    // exception message, log lines containing them) but won't catch a
+    // payload encoded with a custom format. Callers should not rely on
+    // it for compliance-grade redaction.
+    //
+    // Patterns:
+    //   • vless://… / vmess://… / trojan://… / ss://… / hysteria…://… —
+    //     full URI replaced with "<scheme>://[redacted]".
+    //   • Plain http(s):// URLs longer than ~16 chars get path/query
+    //     replaced ("https://example.com/[redacted]"). Domain is kept
+    //     so log lines stay diagnostic ("could not reach foo.bar").
+    //   • UUIDs replaced with "<uuid>".
+    //   • Long base64-ish runs (≥40 chars of A-Za-z0-9+/=_-) replaced
+    //     with "<key>" — covers Reality pbk, sid, and similar.
+
+    private static readonly Regex _proxyUriPattern = new(
+        @"\b(vless|vmess|trojan|ss|hysteria2?|tuic|naive)://\S+",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex _httpUrlPattern = new(
+        @"(https?://[^\s/?#]+)(/\S*)?",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex _uuidPattern = new(
+        @"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
+        RegexOptions.Compiled);
+
+    private static readonly Regex _longBase64Pattern = new(
+        @"\b[A-Za-z0-9+/_\-]{40,}={0,2}\b",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// Best-effort secret scrubbing on a single line of text. Public so
+    /// callers serialising their own context (e.g. an Android Java
+    /// uncaught-handler bridging via a JSON file) can apply the same
+    /// rules before writing the report.
+    /// </summary>
+    public static string ScrubSecrets(string? input)
+    {
+        if (string.IsNullOrEmpty(input)) return input ?? string.Empty;
+
+        var s = _proxyUriPattern.Replace(input, m => $"{m.Groups[1].Value}://[redacted]");
+        s = _httpUrlPattern.Replace(s, m =>
+            m.Groups[2].Success ? $"{m.Groups[1].Value}/[redacted]" : m.Groups[1].Value);
+        s = _uuidPattern.Replace(s, "<uuid>");
+        s = _longBase64Pattern.Replace(s, "<key>");
+        return s;
     }
 }

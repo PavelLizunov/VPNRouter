@@ -237,6 +237,10 @@ internal static class Localization
     // Diagnostics items
     public static string MenuItemOpenLogs => Ru ? "Открыть лог" : "Open log";
     public static string MenuItemCopyLogPath => Ru ? "Скопировать путь к логу" : "Copy log path";
+    public static string MenuItemViewCrashLog => Ru ? "Журнал сбоев" : "View crash log";
+    public static string CrashLogEmpty => Ru
+        ? "Сбоев нет — это хорошо."
+        : "No crashes recorded — that's good.";
     public static string MenuItemUpdateCheck => Ru ? "Проверить обновления" : "Check for updates";
     public static string MenuItemUpdateComingSoon => Ru
         ? "Авто-обновление появится в следующем апдейте."

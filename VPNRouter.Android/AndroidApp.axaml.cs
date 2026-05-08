@@ -201,6 +201,12 @@ public partial class AndroidApp : Avalonia.Application
     // Phase 7.2 — additional menu items (Diagnostics + Troubleshooting + About)
     private Avalonia.Controls.Button? _menuOpenLogItem;
     private Avalonia.Controls.Button? _menuCopyLogPathItem;
+    // v2.32.0 (AND-CRASH-HOOK, 2026-05-08) — Diagnostics → "View crash log".
+    // Reuses the singbox-log overlay; the click handler swaps the title
+    // and replaces the content with the most-recent file from
+    // <filesDir>/crashes/ (either crash-*.txt from the C# CrashReporter
+    // or java-crash-*.txt from VpnRouterService's uncaught-handler).
+    private Avalonia.Controls.Button? _menuViewCrashLogItem;
     private Avalonia.Controls.Button? _menuUpdateCheckItem;
     private Avalonia.Controls.Button? _menuResetSettingsItem;
     private Avalonia.Controls.Button? _menuVersionItem;
@@ -643,6 +649,8 @@ public partial class AndroidApp : Avalonia.Application
                                          "TextPrimaryBrush", OnMenuOpenLogClicked);
         _menuCopyLogPathItem = MakeMenuItem(Localization.MenuItemCopyLogPath,
                                             "TextPrimaryBrush", OnMenuCopyLogPathClicked);
+        _menuViewCrashLogItem = MakeMenuItem(Localization.MenuItemViewCrashLog,
+                                             "TextPrimaryBrush", OnMenuViewCrashLogClicked);
         _menuUpdateCheckItem = MakeMenuItem(Localization.MenuItemUpdateCheck,
                                             "TextPrimaryBrush", OnMenuUpdateCheckClicked);
         // v2.32.0 (Android-led, 2026-05-07) — config share entries. Sit
@@ -689,6 +697,7 @@ public partial class AndroidApp : Avalonia.Application
                           new[] { _menuProfilesItem });
         AppendMenuSection(menuStack, Localization.MenuSectionDiagnostics,
                           new[] { _menuSettingsItem, _menuOpenLogItem, _menuCopyLogPathItem,
+                                  _menuViewCrashLogItem,
                                   _menuUpdateCheckItem, _menuExportConfigItem, _menuImportConfigItem });
         AppendMenuSection(menuStack, Localization.MenuSectionTroubleshooting,
                           new[] { _menuResetSettingsItem });
@@ -4214,8 +4223,98 @@ public partial class AndroidApp : Avalonia.Application
     private void ShowLogViewer()
     {
         if (_logOverlay is null) return;
+        if (_logViewerTitle is not null) _logViewerTitle.Text = "singbox.log";
         LoadLogContent();
         _logOverlay.IsVisible = true;
+    }
+
+    /// <summary>
+    /// v2.32.0 (AND-CRASH-HOOK, 2026-05-08) — Diagnostics → "View crash
+    /// log". Opens the same overlay as the singbox.log viewer but loads
+    /// the most recent file from <c>AppPaths.DataDir/crashes/</c>. Both
+    /// the C# CrashReporter (<c>crash-*.txt</c>) and the VpnRouterService
+    /// Java uncaught-handler (<c>java-crash-*.txt</c>) write here, so a
+    /// single entry-point covers both origin paths.
+    /// </summary>
+    private void OnMenuViewCrashLogClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        if (_logOverlay is null) return;
+        if (_logViewerTitle is not null)
+            _logViewerTitle.Text = Localization.MenuItemViewCrashLog;
+        LoadCrashLogContent();
+        _logOverlay.IsVisible = true;
+    }
+
+    private void LoadCrashLogContent()
+    {
+        if (_logViewerContent is null) return;
+        try
+        {
+            var crashesDir = System.IO.Path.Combine(
+                VPNRouter.Core.AppPaths.DataDir, "crashes");
+            if (!System.IO.Directory.Exists(crashesDir))
+            {
+                ShowLogEmptyState(Localization.CrashLogEmpty);
+                return;
+            }
+
+            var files = System.IO.Directory.GetFiles(crashesDir, "*.txt");
+            if (files.Length == 0)
+            {
+                ShowLogEmptyState(Localization.CrashLogEmpty);
+                return;
+            }
+
+            var newest = files
+                .Select(p => new System.IO.FileInfo(p))
+                .OrderByDescending(fi => fi.LastWriteTimeUtc)
+                .First();
+
+            // Cap at 50 KB to match singbox.log viewer — crash files are
+            // typically <10 KB, but a malformed multi-MB report would
+            // OOM the GC if we slurped it whole.
+            const int MaxBytes = 50_000;
+            string text;
+            using (var fs = newest.OpenRead())
+            {
+                if (fs.Length <= MaxBytes)
+                {
+                    using var sr = new System.IO.StreamReader(fs);
+                    text = sr.ReadToEnd();
+                }
+                else
+                {
+                    fs.Seek(-MaxBytes, System.IO.SeekOrigin.End);
+                    using var sr = new System.IO.StreamReader(fs);
+                    sr.ReadLine();
+                    text = "(truncated to last 50 KB)\n\n" + sr.ReadToEnd();
+                }
+            }
+
+            // Header line so the user/support sees which file they're
+            // looking at when several crashes accumulate.
+            text = $"# {newest.Name}\n# {newest.LastWriteTime:yyyy-MM-dd HH:mm:ss} " +
+                   $"(of {files.Length} total)\n\n" + text;
+
+            _logViewerContent.Text = text;
+            if (_logViewerEmptyState is not null) _logViewerEmptyState.IsVisible = false;
+            if (_logViewerScroller is not null)
+            {
+                _logViewerScroller.IsVisible = true;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_logViewerScroller is null) return;
+                    _logViewerScroller.Offset = new Vector(
+                        _logViewerScroller.Offset.X, 0);
+                }, DispatcherPriority.Background);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowLogEmptyState(string.Format(Localization.LogViewerError,
+                ex.GetType().Name, ex.Message));
+        }
     }
 
     private void OnLogViewerCloseClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -4964,6 +5063,7 @@ public partial class AndroidApp : Avalonia.Application
         if (_menuSettingsItem is not null) _menuSettingsItem.Content = Localization.MenuItemSettings;
         if (_menuOpenLogItem is not null) _menuOpenLogItem.Content = Localization.MenuItemOpenLogs;
         if (_menuCopyLogPathItem is not null) _menuCopyLogPathItem.Content = Localization.MenuItemCopyLogPath;
+        if (_menuViewCrashLogItem is not null) _menuViewCrashLogItem.Content = Localization.MenuItemViewCrashLog;
         if (_menuUpdateCheckItem is not null) _menuUpdateCheckItem.Content = Localization.MenuItemUpdateCheck;
         if (_menuResetSettingsItem is not null && !_resetConfirmPending)
             _menuResetSettingsItem.Content = Localization.MenuItemResetSettings;
