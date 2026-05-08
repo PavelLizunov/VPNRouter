@@ -1,0 +1,179 @@
+name: Build Android APK
+
+# Triggered by:
+#  - pushing a v* tag (automatic on release)
+#  - manual dispatch (re-run on existing releases for missing APK)
+#
+# Mirrors the build-mac.yml / build-linux.yml shape so a single tag push
+# kicks off all platform builds in parallel. After this workflow lands,
+# release assets become 14 (was 12 = 4 Win + 2 Mac + 6 Linux). See
+# plans/vpnrouter-android-platform-parity-roadmap.md Phase A for context.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (without 'v' prefix, e.g. 2.32.1)"
+        required: true
+        type: string
+      upload_to_release:
+        description: "Upload built APK + sha256 to the matching GitHub release"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write  # needed to upload release assets
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      # JDK 17 is the minimum for current AndroidX + .NET Android 8 build
+      # tools. Temurin matches the developer-VM toolchain documented in
+      # plans/vpnrouter-android-handbook.md §3.5.
+      - name: Setup JDK 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # android-actions/setup-android@v3 installs cmdline-tools, accepts
+      # SDK licenses, and exports ANDROID_HOME / ANDROID_SDK_ROOT.
+      # The .NET Android workload picks up these env vars automatically;
+      # no extra -p:AndroidSdkDirectory flag needed.
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # The Android workload is not bundled with setup-dotnet; it has to
+      # be installed explicitly. ~3-4 min on a cold runner.
+      - name: Install .NET Android workload
+        run: dotnet workload install android
+
+      - name: Resolve version from tag or input
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building version: $VERSION"
+
+      # ── Decode signing keystore from secret ────────────────────────────
+      # The keystore was generated locally one-time (see roadmap Phase A
+      # "One-time keystore setup") and uploaded as ANDROID_KEYSTORE_BASE64.
+      # Losing this keystore means we can't ship updates to existing
+      # installs — Android refuses APKs signed with a different key on the
+      # same package id. Backup encrypted to multiple locations.
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_B64:-}" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is not set. See plans/vpnrouter-android-platform-parity-roadmap.md Phase A for one-time keystore generation steps."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$GITHUB_WORKSPACE/vpnrouter.keystore"
+          # Sanity check — file exists and is non-empty.
+          test -s "$GITHUB_WORKSPACE/vpnrouter.keystore"
+          echo "Keystore decoded: $(stat -c '%s bytes' "$GITHUB_WORKSPACE/vpnrouter.keystore")"
+
+      # ── Build signed APK ───────────────────────────────────────────────
+      # arm64-only by default — covers all currently-shipping phones at
+      # ~47 MB instead of ~120 MB for the all-RID fat APK. arm/x64/x86
+      # variants can be added later as separate publish jobs if user
+      # demand surfaces.
+      #
+      # csproj has AndroidSigningKeyStore="vpnrouter.keystore" gated on
+      # Configuration=Release; we override with the absolute path so the
+      # MSBuild target finds the file regardless of working directory.
+      - name: dotnet publish (android-arm64, signed)
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KS_PASS:-}" ]; then
+            echo "::error::ANDROID_KEYSTORE_PASSWORD secret is not set."
+            exit 1
+          fi
+          dotnet publish VPNRouter.Android/VPNRouter.Android.csproj \
+            -c Release \
+            -p:RuntimeIdentifiers=android-arm64 \
+            -p:AndroidSigningKeyStore="$GITHUB_WORKSPACE/vpnrouter.keystore" \
+            -p:AndroidSigningStorePass="$KS_PASS" \
+            -p:AndroidSigningKeyAlias=vpnrouter \
+            -p:AndroidSigningKeyPass="$KS_PASS"
+
+      # ── Locate + rename APK ────────────────────────────────────────────
+      # The exact output path depends on .NET Android SDK version (with vs
+      # without RID subdir under bin/). `find` is more robust than hard-
+      # coding the path. The signed APK always carries the -Signed suffix.
+      - name: Locate + rename APK
+        id: apk
+        run: |
+          set -euo pipefail
+          VER="${{ steps.version.outputs.version }}"
+          APK_SRC=$(find VPNRouter.Android/bin/Release -name "com.ninitux.vpnrouter-Signed.apk" -type f | head -1)
+          if [ -z "$APK_SRC" ]; then
+            echo "::error::Signed APK not found. Build artifacts:"
+            find VPNRouter.Android/bin -type f -name "*.apk" || true
+            exit 1
+          fi
+          APK_OUT="VPNRouter-v${VER}-android-arm64.apk"
+          cp "$APK_SRC" "$APK_OUT"
+          ls -lh "$APK_OUT"
+          echo "apk=$APK_OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Compute SHA256
+        run: |
+          set -euo pipefail
+          APK="${{ steps.apk.outputs.apk }}"
+          sha256sum "$APK" | awk '{print $1"  "$2}' > "${APK}.sha256"
+          echo "→ $(cat "${APK}.sha256")"
+
+      - name: Upload as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-v${{ steps.version.outputs.version }}
+          path: |
+            VPNRouter-v*-android-arm64.apk
+            VPNRouter-v*-android-arm64.apk.sha256
+          retention-days: 30
+
+      - name: Upload to GitHub Release
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.upload_to_release)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          APK="${{ steps.apk.outputs.apk }}"
+
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::warning::Release $TAG does not exist yet — skipping upload. Create the release first, then re-run this workflow."
+            exit 0
+          fi
+
+          echo "Uploading APK + sha256 to release $TAG..."
+          gh release upload "$TAG" \
+            "$APK" \
+            "${APK}.sha256" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+          echo "✓ Uploaded APK + sha256 to $TAG"

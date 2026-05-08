@@ -126,17 +126,71 @@ Long-term:
 
 ### Phase A — CI infrastructure (1 task)
 
-**A.1 build-android.yml** — GHA workflow на ubuntu-latest:
+**A.1 build-android.yml** — GHA workflow на ubuntu-latest. Файл создан:
+`.github/workflows/build-android.yml` (mirror build-linux.yml shape).
+
+Steps (текущая реализация):
 1. Setup .NET 8 SDK + Android workload (`dotnet workload install android`)
-2. Setup JDK 17 (Temurin) + Android SDK cmdline-tools
-3. Restore secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`
-4. Build: `dotnet publish VPNRouter.Android -c Release -p:RuntimeIdentifiers=android-arm64 -p:AndroidSigningKeyStore=$keystore -p:AndroidSigningStorePass=$password -p:AndroidSigningKeyAlias=vpnrouter -p:AndroidSigningKeyPass=$password`
-5. Verify APK: `aapt dump badging` shows com.ninitux.vpnrouter + correct version
-6. Upload: `gh release upload <tag> path/to/com.ninitux.vpnrouter-Signed.apk` (renamed to `VPNRouter-v$VER-android-arm64.apk`) + `.sha256`
+2. Setup JDK 17 (Temurin) via `actions/setup-java@v4`
+3. Setup Android SDK via `android-actions/setup-android@v3` (cmdline-tools, license accept, ANDROID_HOME export)
+4. Decode `ANDROID_KEYSTORE_BASE64` secret → `vpnrouter.keystore`
+5. Build: `dotnet publish VPNRouter.Android/VPNRouter.Android.csproj -c Release -p:RuntimeIdentifiers=android-arm64 -p:AndroidSigningKeyStore=<keystore_path> -p:AndroidSigningStorePass=<password> -p:AndroidSigningKeyAlias=vpnrouter -p:AndroidSigningKeyPass=<password>`
+6. Locate signed APK via `find` (output path varies by SDK version), rename → `VPNRouter-v$VER-android-arm64.apk`
+7. SHA256 sidecar
+8. Upload as workflow artifact (always)
+9. Upload to GH Release if push-tag OR dispatch with upload flag (skips with warning if release не создан yet)
 
-**Trigger**: same as build-mac.yml — `push: tags: v*` + `workflow_dispatch`. Runs in parallel with Mac/Linux.
+**Trigger**: same as build-mac.yml — `push: tags: v*` + `workflow_dispatch` (with `version` + `upload_to_release` inputs). Runs in parallel with Mac/Linux.
 
-**Time**: 1-2 ship cycles to stabilize. Initial keystore generation = manual (one-time).
+**Time**: 1-2 ship cycles to stabilize. Initial keystore generation = manual (one-time, см. ниже).
+
+#### One-time keystore setup (manual, before first run)
+
+Workflow требует два repo secrets. Pavel генерирует keystore локально и
+uploadит как secrets через `gh`. Без этого workflow упадёт на decode step
+с явной error message.
+
+```bash
+# 1. Generate keystore (one-time, 50-year validity)
+# RSA 2048, alias = "vpnrouter" (must match -p:AndroidSigningKeyAlias в workflow).
+# Pick a strong password — same value used for store + key.
+keytool -genkeypair \
+  -keystore vpnrouter.keystore \
+  -alias vpnrouter \
+  -storepass <PASSWORD> \
+  -keypass <PASSWORD> \
+  -keyalg RSA \
+  -keysize 2048 \
+  -validity 18250 \
+  -dname "CN=VPNRouter, O=ninitux, C=RU"
+
+# 2. Encode for GHA secret transport
+# -w0 = no line wrapping (gh secret set chokes on multi-line base64)
+base64 -w0 vpnrouter.keystore > keystore.b64
+
+# 3. Upload as repo secrets (gh CLI must be authenticated)
+gh secret set ANDROID_KEYSTORE_BASE64 \
+  --repo PavelLizunov/VPNRouter \
+  -b "$(cat keystore.b64)"
+gh secret set ANDROID_KEYSTORE_PASSWORD \
+  --repo PavelLizunov/VPNRouter \
+  -b "<PASSWORD>"
+
+# 4. Cleanup transport file (keep keystore + password offline)
+rm keystore.b64
+```
+
+**КРИТИЧНО — backup keystore + password to multiple secure locations**
+(encrypted offline archive + 1Password / Bitwarden / equivalent).
+Потеря keystore = невозможность ship'ить updates существующим Android
+installs: Android refuses APK с другим signing key для того же
+package id (`com.ninitux.vpnrouter`). Users были бы вынуждены делать
+clean reinstall (uninstall → install fresh APK), теряя settings +
+subscription URLs + saved servers.
+
+После того как secrets проставлены — push любого `v*` tag триггерит
+workflow автоматически вместе с Mac + Linux. Первый APK в GH Release
+после первого ship cycle.
 
 ### Phase B — Release strategy update (1 task, docs)
 
