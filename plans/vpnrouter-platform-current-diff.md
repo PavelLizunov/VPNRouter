@@ -483,3 +483,372 @@ single-source через shared project.
 **Когда обновлять этот файл**: после каждого major Android pool merge (когда
 feature/distribution gap меняется) и после каждой stable cut (для baseline
 versioning). Last refresh — выше в шапке.
+
+---
+
+## 15. Неразрешимые противоречия (платформенные ограничения)
+
+Это различия которые **нельзя** убрать через refactoring или дополнительный код —
+они продиктованы фундаментальной архитектурой OS и принять их как `de facto`.
+
+### 15.1 Process-name routing физически невозможен на Android
+
+**Desktop**: sing-box matches packets по `process_name` (Discord.exe). Это
+требует kernel access к process table — на Win через ETW + WMI, на Mac через
+lsof, на Linux через /proc.
+
+**Android**: VpnService API даёт **только UID-based filtering**:
+`addAllowedApplication(packageName)` / `addDisallowedApplication(packageName)`.
+Никакого process_name. Это специально — Android security model запрещает
+user-app process enumeration. Даже у нас нет `Process.GetProcessesByName` —
+SELinux + Android sandboxing блокируют.
+
+**Следствие**:
+- На Android понятие «routing» = «route by app package» (что **app целиком**
+  идёт через VPN)
+- Wildcards типа `*.exe` или `chrome*` не работают — Android оперирует
+  package ID (`com.android.chrome`), один app = один UID
+- Child process tracking (Win has it via WMI parent PID) — n/a, у Android
+  app's child processes наследуют тот же UID
+
+**Что делать**: уже сделано — Android UI использует package picker
+(`AppListLoader` через PackageManager), показывает app icon + display name.
+Routing через `addDisallowedApplication` (split tunnel) или
+`addAllowedApplication` (allowlist).
+
+### 15.2 ETW (Event Tracing for Windows) — Win kernel-only
+
+**Desktop Win**: `EtwProcessMonitor` — <10ms latency на process start/stop.
+Critical для split-tunnel UX (Discord открыли — сразу же routing активирован).
+
+**Mac/Linux**: нет equivalent. Polling /proc или lsof = ~500ms+ latency.
+**Android**: даже polling недоступен (нет API).
+
+Не лечится — это NT kernel feature.
+
+### 15.3 Admin/root privilege model
+
+**Desktop**: User имеет admin → даём им TUN driver, ETW, Firewall control,
+DNS hardening. Trust gate один раз через UAC.
+
+**Android**: Root **запрещён в commercial flow** (отказ от Play Store, F-Droid
+warns, OEM unlock breaks app trust). VpnService API специально designed чтобы
+не требовать root — но ограничивает:
+- Нет Firewall control (только VPN routing)
+- Нет DNS hardening (только VPN-tunnel DNS rules)
+- Нет System file modification
+- Нет hosts manipulation (для Discord voice fix)
+
+Не лечится — это Android security model. Половина Win-only services (Firewall,
+DNS hardening, Hosts, Zapret через Cygwin) **никогда** не будут на Android.
+
+### 15.4 Single-instance + bring-to-foreground
+
+**Desktop**: `Mutex Global\VPNRouter.App.SingleInstance.v2` + `AttachThreadInput`
+для бросить window наверх (v2.31.7 fix). Pure user-mode trick.
+
+**Android**: lifecycle managed by OS. Single instance — `launchMode="singleTask"`
+в manifest. Bring-to-foreground — startActivity intent (но если app в `onStop`
+система может отказать). **Невозможно** сделать identical UX — Android
+специально ограничивает foreground promotion.
+
+Не лечится. Это разные lifecycle модели.
+
+### 15.5 File system + storage paths
+
+**Desktop**: `%ProgramData%\VPNRouter\config.yaml`, `%ProgramData%\VPNRouter\logs\`,
+shared between user accounts, accessible через any tool.
+
+**Android**: `/data/data/com.ninitux.vpnrouter/` — sandbox per-app, **не
+доступно** другим apps без `content://` provider. Logs не достать через adb на
+non-rooted phone.
+
+Не лечится. Android sandboxing — fundamental design.
+
+**Implication**: Diagnostic UX отличается. На desktop user может прислать
+`logs\vpnrouter.log`. На Android нужен in-app log viewer (`AndroidApp` log
+overlay) + share sheet с экспортом в Storage Access Framework.
+
+### 15.6 Update mechanism
+
+**Desktop**:
+- helper.cmd kills sing-box + xcopy + restart App
+- Все файлы накладываются in-place
+- Backup snapshot (UpdateBackup T5) для rollback
+
+**Android**:
+- PackageInstaller intent: OS sees signed APK, prompts user, replaces app
+- Signature **должна совпадать** со старой иначе reject
+- Backup невозможен на нашей стороне — OS atomically replaces APK
+
+Не лечится. Это разные OS-level mechanisms. Но цель одинаковая — обновить
+binary без потери настроек.
+
+**Implication**:
+- Keystore management critical на Android (потеряли — все юзеры залочены на
+  старой версии)
+- T5 UpdateBackup на Android n/a — OS handles
+- Helper.cmd lint (T1) на Android n/a
+
+### 15.7 TUN driver ownership
+
+**Desktop**:
+- Win: Wintun installed by us, TunOwnershipLock prevents conflicts
+- Mac: utun via syscall
+- Linux: /dev/net/tun
+- Все требуют admin/root
+
+**Android**: VpnService API — TUN-tunnel создаётся системой, нам передаётся
+file descriptor. **Не наш TUN, не наш driver.** Никаких diagnostics типа
+"is Wintun installed", "is device claimed by another VPN".
+
+Implication: `TunAdapterDiagnostics` + `TunOwnershipLock` n/a на Android —
+система гарантирует exclusive access (но только одному VPN app одновременно
+на Android — это и есть единственный механизм).
+
+### 15.8 Background lifecycle (Doze + foreground service)
+
+**Desktop**: процесс живёт пока user не закрыл (или service постоянно).
+
+**Android**: 
+- Без foreground service → **OS убъёт** в background через ~5-10 мин
+- В Doze mode (screen off + idle) → CPU throttle + network requests batched
+- Foreground service → notification mandatory (otherwise crash в Android 14+)
+- **Always-on VPN** — отдельная OS setting (Settings → Network → VPN → нашлёт
+  always-on). Не наша feature, но мы должны быть совместимы
+
+Не лечится. Это battery policy. **Implication**:
+- Wake-lock в `VpnRouterService.java` (NETRES added)
+- START_STICKY return для VpnService.onStartCommand
+- Notification persistent (как trade-off за foreground promotion)
+- Auto-reconnect на network change через `ConnectivityManager.NetworkCallback`
+
+### 15.9 Hot-reload через Clash API
+
+**Desktop**: `PUT /configs` на localhost:9090 — sing-box swaps config без TUN
+restart. Юзер не замечает.
+
+**Android**: libbox API (`Libbox.newService(json)`) возвращает BoxService.
+Reconfig = `boxService.close() + Libbox.newService(newJson)`. Это **kill+restart**
+по факту, плюс на 1 секунду VPN tunnel закрыт.
+
+**Полу-resolvable** — может быть через libbox HTTP endpoint exposed (требует
+upstream sing-box-for-android API extension). Сейчас не делаем — overhead
+превышает benefit.
+
+### 15.10 Случай: case-sensitivity в filesystem
+
+**Win**: NTFS case-insensitive (по умолчанию). Process matching case-sensitive
+(Go map в sing-box).
+
+**Mac/Linux**: filesystem case-sensitive по умолчанию.
+
+**Android**: ext4 case-sensitive.
+
+В Core ConfigGenerator уже handle'нуто — preserve case `OrdinalIgnoreCase` для
+dedup. Применимо к всем платформам одинаково. Но это противоречие источник
+багов — урок «не использовать `ToLowerInvariant()` на process_name» в
+CLAUDE.md (golden rule #7).
+
+---
+
+## 16. Разрешимые противоречия (backlog, требуют работы)
+
+### 16.1 VM duplication (Phase G в roadmap)
+
+Сейчас: `MainWindowViewModel.cs` (5920 строк) на desktop ↔ inline в
+`AndroidApp.axaml.cs` (4666 строк). Каждая фича = два захода.
+
+Решение: extract VM в shared `VPNRouter.Avalonia.UI` project. Effort
+**30-50 hours**.
+
+### 16.2 Localization duplication (Phase H в roadmap)
+
+`Strings.cs` (App) ↔ `Localization.cs` (Android) ручная синхронизация. ~3
+случая drift'а зафиксированы.
+
+Решение: single Strings.cs в shared project. Effort **2-3 hours**. Можно
+сделать **до** Phase G.
+
+### 16.3 SettingsValidator partial wiring на Android
+
+Core has SR-1 validator, Android делает inline guards в `AndroidStorage`
+getter'ах. Логика дублируется.
+
+Решение: вызывать `AppSettingsSane.EnsureSane()` после load из SharedPreferences.
+Effort **2-4 hours**.
+
+### 16.4 CacheRecovery не подключён на Android
+
+Core has SR-3 (FreeConfigCache, ProfileManager, StateFile recovery), Android
+не вызывает.
+
+Решение: один call site в `AndroidApp.OnFrameworkInitializationCompleted`.
+Effort **1-2 hours**.
+
+### 16.5 SR-1/SR-3/SR-4 на Android — wiring
+
+SR-1 SettingsValidator + SR-3 CacheRecovery + SR-4 never-throws — applicable
+концептуально. Wiring tasks отдельные. (SR-2 LaunchFailureCounter Android n/a —
+lifecycle не применим.)
+
+### 16.6 CrashReporter unhooked на Android
+
+`CrashReporter.cs` в Core, но не подцеплен через
+`Android.App.Application.OnUnhandledException` или
+`Thread.setDefaultUncaughtExceptionHandler`.
+
+Решение: hook в `MainActivity.OnCreate` или `AndroidApp` startup. Effort
+**1-2 hours**.
+
+### 16.7 Build pipeline + APK в release (Phase A в roadmap)
+
+`build-android.yml` + keystore + APK upload. Effort **4-6 hours** + 1 ship
+cycle для validate.
+
+### 16.8 AndroidUpdater download URL pattern (Phase C)
+
+Класс existsуется, но pattern `VPNRouter-vX.Y.Z-android-arm64.apk` — пока
+не верифицирован к реальным release assets (потому что APK нет в release).
+После Phase A — live test и patch URL template если не совпадёт.
+
+Effort **2-3 hours**.
+
+### 16.9 XAML / programmatic UI duplication
+
+Сейчас Avalonia Mobile плохо handle'ит heavy XAML с ResourceDictionary
+lookups, поэтому Android ушёл в C#-only widget building. Это структурное
+различие, не drift.
+
+**Полу-resolvable** — может быть через shared `UserControl`-классы в
+shared project. Но Avalonia Mobile ограничения могут вернуть нас к C#-only
+ставку — нужен POC.
+
+Effort: TBD после Phase G.
+
+### 16.10 Test coverage gap на Android
+
+Сейчас xUnit тесты в `VPNRouter.Tests` покрывают **только Core** (потому что
+Android-specific code в `VPNRouter.Android` не тестируется). Если код в
+Core — он покрывается. Если inline в AndroidApp — нет.
+
+**Полу-resolvable** — после Phase G (extract VM) большая часть logic'а
+переедет в shared, автоматом покроется. Android-shell тесты (libbox interop,
+SharedPreferences) можно добавить через инструментальные тесты (требует
+эмулятор в CI). Effort: **большой**, deferred.
+
+### 16.11 Hot-reload на Android
+
+Сейчас restart-only. Через libbox API extension можно сделать hot-reload.
+
+Effort: **TBD**, требует exploration upstream sing-box-for-android.
+
+---
+
+## 17. Полу-противоречия / философские различия
+
+Это различия где обе стороны **правильные** — просто разная природа OS.
+Не gap, не bug, не TODO. Записывать как «принимаем такими» чтоб не
+пытаться унифицировать.
+
+### 17.1 Trust model
+
+**Desktop**: один admin gate (UAC). После него — всё дозволено.
+
+**Android**: per-permission user dialogs:
+- VPN connection (mandatory + per-app или global toggle)
+- Notification permission (Android 13+)
+- Storage Access Framework для config export
+- Battery exception (для not-killed-by-Doze)
+- Network state read
+
+Это **не недостаток** — это explicit consent model. Нам уже привыкнуть.
+
+### 17.2 Multi-user / multi-profile
+
+**Desktop**: один user типично. Settings в `%ProgramData%` shared. Profiles
+не Windows feature, our абстракция.
+
+**Android**: multi-user system из коробки:
+- Primary user vs guest
+- Work profile (Android Enterprise)
+- VpnService instance per-user (work profile может иметь свой VPN, primary —
+  свой)
+- SharedPreferences per-user-per-app
+
+Implication: на Android **наши настройки не shared между work-profile и
+primary**. Это не bug, это by design. У нас даже нет UI surface для multi-user.
+
+### 17.3 Logging strategy
+
+**Desktop**: file-based logs в `%ProgramData%\VPNRouter\logs\` + Serilog
+sinks. User может прислать .log file для diagnostic.
+
+**Android**: Android Log (logcat) + наш log overlay UI + Storage Access
+Framework export. Logcat недоступен на non-rooted phone через adb (без USB
+debug). 
+
+Оба правильные. Workaround на Android: in-app "Поделиться логом" → SAF intent.
+Уже сделано через AndroidApp log overlay.
+
+### 17.4 UI scaling / layout
+
+**Desktop**: window resize, multi-monitor, DPI scale, аspect ratio любой.
+
+**Android**: orientation (portrait/landscape) + system bars (notch, gesture
+nav, status bar) + density buckets (mdpi/hdpi/xhdpi/etc).
+
+Layout philosophy differs. Avalonia handle'ит большую часть автоматически,
+но Android-specific issue — нотчи, system insets, soft keyboard push-up.
+
+Не противоречие, просто разная задача. Желательно portrait-first дизайн
+для Android (что мы делаем).
+
+### 17.5 Update channel concept
+
+**Desktop**: stable/prerelease — наша абстракция (тег с `-rN`).
+
+**Android**: native abstraction есть в Play Store (internal/closed/open
+testing channels), но мы sideload — поэтому используем тот же UpdateChecker
+pattern что и desktop. Convergent path.
+
+Если когда-нибудь придём на Play Store — Play channels overlap с нашими, но
+не conflict. Resolvable in long term.
+
+### 17.6 Configuration export/share
+
+**Desktop**: copy-paste sing-box JSON в файл.
+
+**Android**: QR code (CONFIG-EXPORT pool 7) + ConfigShareDocument schema.
+Отлично работает cross-device — desktop сгенерил → phone scan → подцепил
+config.
+
+Это **усиление** Android, а не недостаток. QR работает в обе стороны.
+
+---
+
+## 18. Bottom-line
+
+| Категория | Количество | Можно убрать? |
+|---|---|---|
+| Неразрешимые (платформенные) | 10 | Нет — это OS architecture |
+| Разрешимые (backlog) | 11 | Да — ~50-70 hours total |
+| Полу-противоречия | 6 | Не нужно — обе стороны правильные |
+
+**Главный takeaway**: **80% разрыва между desktop и Android — work, не
+противоречие.** Тех 10 неразрешимых — это специфика Android security model
++ lifecycle, и мы их обходим архитектурно (UID-based routing вместо
+process_name, foreground service вместо просто running, VpnService API
+вместо нашего TUN driver, и т.д.).
+
+**Implication для development**:
+- Цель «одна правка → две платформы» достижима через Phase G+H для UI/VM
+  layer (~80% повседневной работы)
+- Cross-platform Core layer уже работает (поправка в `SettingsLoader` —
+  обе платформы)
+- 20% остаётся ручной port — Android-specific UI surface (per-app picker,
+  notification, SAF, lifecycle hooks)
+
+**Для shipping**: Phase A+B+C+D закрывает distribution gap полностью. После
+этого — `gh release create vX.Y.Z` действительно triggers все 4 платформы.
+
