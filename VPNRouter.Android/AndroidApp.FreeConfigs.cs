@@ -879,7 +879,7 @@ public partial class AndroidApp
     {
         var n = _fcSavedResults.Count;
         if (n <= 0) return Localization.FcTabSaved;
-        return string.Format(Localization.FcTabSavedWithCount, n);
+        return Localization.FcTabSavedWithCount(n);
     }
 
     // ── Find / Stop ───────────────────────────────────────────────────────
@@ -1054,7 +1054,7 @@ public partial class AndroidApp
         Dispatcher.UIThread.Post(() =>
         {
             if (_fcStatusText is not null)
-                _fcStatusText.Text = string.Format(Localization.FcStatusFailed, error);
+                _fcStatusText.Text = Localization.FcStatusFailed(error);
         });
     }
 

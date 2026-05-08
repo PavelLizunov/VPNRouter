@@ -259,7 +259,7 @@ internal sealed class AndroidFreeConfigsOrchestrator
         catch (Exception ex)
         {
             _logger.Warning(ex, "[Android.FreeConfigs] FindAsync failed");
-            OnStatus?.Invoke(string.Format(Localization.FcStatusFailed, ex.Message));
+            OnStatus?.Invoke(Localization.FcStatusFailed(ex.Message));
             OnFailed?.Invoke(ex.Message);
         }
         finally
