@@ -166,6 +166,158 @@ differs significantly.
 
 ---
 
+## 🟠 P1 (M8 — UI element catalog) — added 2026-05-09
+
+Source: `parity-audit/catalog/element-diff.md`. Static parse of 9 desktop
+XAML pages (760 elements) vs 6 Android C# code-behind files (372 elements
++ 72 helper-bucket). Counts per page:
+
+| Page | Desktop | Android | Delta |
+|---|---:|---:|---:|
+| Simple | 52 | 76 | +24 |
+| Subscribe | 49 | 32 | -17 |
+| Servers | 68 | 24 | -44 |
+| FreeConfigs | 78 | 57 | -21 |
+| Applications | 37 | 23 | -14 |
+| Network | 342 | 65 | -277 |
+| DpiBypass | 87 | 6 | -81 |
+| Telegram | 41 | 0 | -41 (P3) |
+| Tools | 6 | 10 | +4 |
+| AutoUpdate | 0 | 7 | +7 (P3) |
+
+### F-10 — DpiBypass page: Android is a stub (87 → 6 elements)
+
+Desktop `DpiBypassPage.axaml` exposes the full Zapret integration:
+12 Buttons (Discord/YouTube/Hosts/Strategy/Open Folder/Apply/Run Tests/
+Open Service Menu/Remove Service/...), 3 ComboBoxes (strategy + 7
+ComboBoxItem options), 23 TextBlocks (status, version, hints), 1 TextBox
+(IpSet filter), 1 ProgressBar, 5 ListBoxItems (advanced strategy choices).
+
+Android's "DpiBypass" surface is 1 ComboBox + 3 TextBlocks inside the
+settings overlay — effectively a strategy-mode dropdown only. Missing:
+- Discord/YouTube hosts editors
+- Strategy advanced options
+- Run-tests / clear-cache / open-folder actions
+- DpiToggle (start/stop) explicit button
+- Version/status display
+- IpSet filter + secondary advanced expander
+
+**Why P1**: DPI bypass is a marquee feature on Win (multiple user-visible
+controls). On Android the user can only pick a strategy mode without any
+of the diagnostics or hosts management. Cross-platform feature parity claim
+is misleading.
+
+**Fix**: track as separate roadmap item (`AND-DPI-BYPASS-FULL`). Likely
+needs its own overlay (similar shape to settings overlay) and reuse of
+desktop ZapretManager logic — but Android binary doesn't ship Zapret
+binaries (Cygwin), so the surface should reflect Android-side equivalents
+(per-app split etc.) where available, or label the missing controls
+"Windows only".
+
+### F-11 — Network settings overlay: 19% element parity (342 → 65)
+
+Desktop `NetworkPage.axaml` is the kitchen-sink page (40 Buttons,
+15 CheckBoxes, 4 ComboBoxes, 133 TextBlocks, 7 TextBoxes, 2 RadioButtons,
+6 ListBoxItems, 2 MenuItems). Android settings overlay has 5 Buttons,
+7 CheckBoxes, 1 ComboBox, 26 TextBlocks, 2 RadioButtons.
+
+Top missing element groups on Android (sample of the 141 only-on-desktop
+labelled elements):
+- **Routing rules editor**: NewRuleValue/NewRuleType/NewRuleComment
+  TextBoxes + Apply/Cancel buttons + RulesEditorStatusText
+- **Force-IPv4** (`ForceIpv4Label` CheckBox + matching TextBlock)
+- **Apply-now reload**: `L_ApplyNowReloadVpn` Button
+- **Restart service**: `L_RestartService` Button
+- **Autostart UI/TgProxy** sub-controls (`LblAutostartUi`, `LblAutostartTgProxy`)
+- **RulesViewCards** toggle + `RulesEditorApplyText` action
+
+**Why P1**: lots of these controls are runtime essentials (apply-without-
+restart, force-IPv4, restart-service). Android user has no path to them.
+
+**Fix**: this is the broadest gap in the catalog. Defer fix to
+`AND-NETWORK-SETTINGS-EXPANSION` roadmap item. Suggest pruning to a
+"settings essentials" subset on Android and exposing the rest behind
+"Advanced..." disclosure (so we don't have to build 277 controls at
+once).
+
+### F-12 — Servers page: manual server edit UI absent on Android
+
+Desktop `ServersPage.axaml` has 7 TextBoxes wiring `Name/Server/Port/
+Uuid/ShortId/VlessUri` editors plus add/remove buttons (`LblAddServers`,
+`LblRemove`) and `LblClickToActivateConfig`/`LblTcpUdpHint`. Android
+`AndroidApp.ServerList.cs` has 0 TextBoxes — read-only list of subscribed
+servers, no manual entry.
+
+**Why P1**: a Win user can paste a single VLESS URI directly into the
+Servers tab. Android user must add it via the Subscribe overlay (subscription
+URL), which is a different mental model and doesn't accept raw `vless://`.
+
+**Fix**: track as `AND-SERVERS-MANUAL-ADD`. Add a "+ Add server" button
+inside the Servers overlay opening a small sheet with single
+`vless://` URI field. Reuse Core `VlessUriParser`.
+
+---
+
+## 🟡 P2 (M8 catalog) — added 2026-05-09
+
+### F-13 — Subscribe page: ping-test column headers / actions missing on Android
+
+Desktop has 4 column-header TextBlocks (`L_ColServer/L_ColIp/L_ColPort/
+L_ColPing`), `L_RefreshAll` Button, `SubscriptionDeepProgressText` /
+`SubscriptionTestProgressText` / `SubscriptionTestImplausibleWarning`
+texts and `ServerDeepButtonText` Button. Android Subscribe overlay has
+none of these — it shows the subscription card list but no per-server
+test grid.
+
+**Why P2**: parity feature, but Android's saved-server list (in Servers
+overlay) covers the basic test latency display. The "deep verify" button
+is the actual gap.
+
+### F-14 — Applications page: AddCategory + AppsFullTunnelBanner missing
+
+Desktop has `L_AddCategory` Button, `NewCategoryName` TextBox, plus an
+`L_AppsFullTunnelBanner` notice + `L_AppsFullTunnelBannerAction` button
+that show when full-tunnel mode is active. Android has neither.
+
+**Why P2**: category creation absent → user can only pick from default
+categories or add individually. Banner is an informational state cue;
+without it, an Android user in full-tunnel mode wouldn't know that the
+selected-app list is currently bypassed.
+
+### F-15 — FreeConfigs: empty-states + freshness label + advanced settings expander missing
+
+Desktop `FreeConfigsPage.axaml` has 1 Expander (`L_FcAdvancedSettings`),
+empty-state TextBlocks (`L_FcSavedEmpty/L_FcFilteredEmpty/L_FcSearchListEmptyHint`),
+plus per-row `BandwidthDisplay`, `FreshnessLabel`, `CountryDisplay`. Android
+FreeConfigs has the list + tabs, but lacks the advanced-settings disclosure
++ empty-state copy + freshness/bandwidth metadata in the per-row view.
+
+**Why P2**: cosmetic parity. Information density is lower on Android, but
+the core feature works.
+
+### F-16 — Tools page: different UX paradigm
+
+Desktop `ToolsPage.axaml` is a sidebar `ListBox` with 2 items (`LblToolTgProxy`,
+`LblToolZapret`) — a navigation surface. Android has no Tools page; instead
+`BuildLogOverlay()` (3 elements: TextBlock "singbox.log", close + reload
+buttons) is reachable from the kebab. Fundamentally different shape.
+
+**Why P2**: the "Tools" concept is defined differently on each side
+(desktop = sub-feature switcher, Android = log viewer). Not a bug per se,
+but shared mental model breaks.
+
+---
+
+## 🔵 P3 (M8 catalog) — confirmed expected divergences
+
+- **Telegram page is desktop-only** (TgProxy is Win Service / Cygwin only).
+  41 elements on desktop, 0 on Android. Already documented in §15 of
+  `vpnrouter-platform-current-diff.md`.
+- **AutoUpdate banner is Android-only** (Win uses Squirrel installer
+  notify path). 7 Android elements vs 0 desktop.
+
+---
+
 ## 🔵 P3 — Platform-justified (already documented, not goal of audit)
 
 Per `vpnrouter-platform-current-diff.md` §15:
@@ -185,14 +337,14 @@ These are already accepted divergences, not issues to fix.
 | Category | Count |
 |---|---|
 | P0 critical | 0 |
-| P1 visible UX | 5 (F-01..F-05) |
-| P2 polish | 4 (F-06..F-09) |
-| P3 platform-justified | 10 (already documented) |
+| P1 visible UX | 8 (F-01..F-05, F-10..F-12) |
+| P2 polish | 8 (F-06..F-09, F-13..F-16) |
+| P3 platform-justified | 12 (Telegram + AutoUpdate added) |
 
-**Total fix-required findings**: 9.
+**Total fix-required findings**: 16.
 
-**Estimated effort to close P1**: ~10-14 hours (most of it is Phase H
-locale merge + desktop layout updates).
+**Estimated effort to close P1**: ~20-30 hours (locale merge + desktop
+Simple-page layout updates + Android DPI/Network/Servers expansion).
 
 ---
 
@@ -201,7 +353,9 @@ locale merge + desktop layout updates).
 - ✅ M1 — Side-by-side composite (8 pages, ImageMagick `+append`)
 - ✅ M6 — Text content review (eyeballed visible labels)
 - ✅ M7 — Locale key static diff (50/540/303 stats)
-- ✅ M8 — UI element comparison (manual)
+- ✅ M8 — UI element comparison: manual + scripted (`catalog/parse-desktop.ps1`,
+  `catalog/parse-android.ps1`, `catalog/diff-elements.ps1` → 760+372 elements
+  catalogued + per-page diff → F-10..F-16)
 - ⏸️ M2 — Pixel diff (deferred: layouts diverge structurally so pixel-diff
   is meaningless without first aligning structure)
 - ⏸️ M3 — Perceptual diff (same reason)
