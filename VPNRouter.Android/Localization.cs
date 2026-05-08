@@ -4,40 +4,35 @@ using System.Globalization;
 namespace VPNRouter.Android;
 
 /// <summary>
-/// v3.0 Phase 1.H (2026-05-04) — bilingual UI strings (RU/EN), mirrors
-/// the desktop <c>VPNRouter.App.Localization.Strings</c> pattern. Static
-/// getters branch on the <see cref="Ru"/> flag.
-///
-/// <para>Initial language is resolved in this priority order:
-/// <list type="number">
-///   <item>Explicit user choice persisted via
-///   <see cref="AndroidStorage.GetLanguage"/> (last toggle).</item>
-///   <item>System Locale (CultureInfo.CurrentUICulture.TwoLetterISOLanguageName)
-///   — "ru" → Ru=true, anything else → English.</item>
-///   <item>Fallback: English.</item>
-/// </list></para>
-///
-/// <para><see cref="ToggleAndPersist"/> flips Ru and writes the choice
-/// back to SharedPreferences so the next app launch starts in the same
-/// language. Phase 2 will swap to a fully reactive scheme (INotifyPropertyChanged
-/// on a singleton VM); for Phase 1.H the AndroidApp manually re-reads
-/// each label after toggle.</para>
+/// Thin re-export wrapper around <see cref="VPNRouter.Core.Localization.Strings"/>.
+/// The single source of truth for all UI labels lives in Core; this wrapper
+/// preserves the legacy public surface (<c>VPNRouter.Android.Localization</c>)
+/// so existing AndroidApp* call sites continue to work without bulk-edit.
+/// 
+/// <para>The Android-specific bootstrap stays here: <see cref="Ru"/> exposes the
+/// boolean view of Core's <c>Lang</c>, <see cref="LoadFromStorage"/> seeds Core's
+/// <c>Lang</c> from <c>AndroidStorage</c>, and <see cref="ToggleAndPersist"/> writes
+/// the choice back. Everything else is a pass-through to Core.</para>
 /// </summary>
 internal static class Localization
 {
-    public static bool Ru { get; private set; }
+    public static bool Ru =>
+        string.Equals(
+            global::VPNRouter.Core.Localization.Strings.Lang,
+            "ru",
+            StringComparison.OrdinalIgnoreCase);
 
     public static void LoadFromStorage()
     {
         var stored = AndroidStorage.GetLanguage();
         if (string.Equals(stored, "ru", StringComparison.OrdinalIgnoreCase))
         {
-            Ru = true;
+            global::VPNRouter.Core.Localization.Strings.Lang = "ru";
             return;
         }
         if (string.Equals(stored, "en", StringComparison.OrdinalIgnoreCase))
         {
-            Ru = false;
+            global::VPNRouter.Core.Localization.Strings.Lang = "en";
             return;
         }
 
@@ -45,821 +40,812 @@ internal static class Localization
         try
         {
             var lang = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-            Ru = string.Equals(lang, "ru", StringComparison.OrdinalIgnoreCase);
+            global::VPNRouter.Core.Localization.Strings.Lang =
+                string.Equals(lang, "ru", StringComparison.OrdinalIgnoreCase) ? "ru" : "en";
         }
         catch
         {
-            Ru = false;
+            global::VPNRouter.Core.Localization.Strings.Lang = "en";
         }
     }
 
     public static void ToggleAndPersist()
     {
-        Ru = !Ru;
-        AndroidStorage.SetLanguage(Ru ? "ru" : "en");
+        var newLang = Ru ? "en" : "ru";
+        global::VPNRouter.Core.Localization.Strings.Lang = newLang;
+        AndroidStorage.SetLanguage(newLang);
     }
 
-    // ── Header ─────────────────────────────────────────────────────────
-
-    public static string Title => "VPNRouter v3.0";
-    public static string Subtitle => Ru
-        ? "Android · вставь VLESS-URI или подписочный URL и подключись"
-        : "Android · paste a VLESS URI or subscription URL and connect";
-
-    public static string LangToggleLabel => Ru ? "EN" : "RU";
-
-    // v3.0 Phase 7.3 (2026-05-04) — segmented control labels for the
-    // kebab menu's "Вид" / "Appearance" section, mirroring desktop's
-    // SmpSegLight / SmpSegDark / SmpSegRu / SmpSegEn (see
-    // VPNRouter.App/Localization/Strings.cs:1280-1283). RU/EN labels
-    // for the language segments stay locale-independent (the segment
-    // shows what the user is switching TO, not the current language).
-    public static string MenuSegLight => Ru ? "Светлая" : "Light";
-    public static string MenuSegDark  => Ru ? "Тёмная"  : "Dark";
-    public static string MenuSegRu    => "RU";
-    public static string MenuSegEn    => "EN";
-
-    // ── Phase 4: sub-header parity with desktop ────────────────────────
-
-    public static string BrandTitle => Ru ? "Virtual Penguin Network" : "Virtual Penguin Network";
-
-    public static string MenuLanguageLabel => Ru ? "Язык: Русский" : "Language: English";
-    public static string MenuThemeLabel => Ru ? "Тема: переключить" : "Theme: toggle";
-
-    // ── Status / Connect button ─────────────────────────────────────────
-
-    public static string StatusConnected => Ru ? "Подключено" : "Connected";
-    public static string StatusDisconnected => Ru ? "Отключено" : "Disconnected";
-    public static string ButtonConnect => Ru ? "Подключить" : "Connect";
-    public static string ButtonDisconnect => Ru ? "Отключить" : "Disconnect";
-    public static string ButtonConnecting => Ru ? "Подключение…" : "Connecting…";
-
-    // ── SimplePage parity (Phase 3) ────────────────────────────────────
-
-    public static string SimpleStatusTitleOn => Ru ? "Подключено" : "Connected";
-    public static string SimpleStatusTitleOff => Ru ? "Не подключено" : "Not connected";
-    public static string SimpleStatusDescOn => Ru
-        ? "Трафик идёт через VPN-туннель."
-        : "Traffic is routed through the VPN tunnel.";
-    public static string SimpleStatusDescOff => Ru
-        ? "Трафик идёт напрямую — выбери конфиг и запусти туннель."
-        : "Traffic goes direct — pick a config and start the tunnel.";
-
-    // ── v2.32.0 (AND-DIAG, 2026-05-07) — runtime diagnostics on status card ──
-    //
-    // Mirrors desktop's RuntimeStatus surface: connection uptime appended
-    // to the status title, a "last health check" one-liner under the
-    // description, and a transient error one-liner that persists 30 s
-    // after ACTION_TUNNEL_ERROR. Format strings are tuned for narrow
-    // mobile width — short labels, no trailing period.
-
-    /// <summary>Title format when connected — args: {0}=uptime ("0:23" or "1:23:45").</summary>
-    public static string SimpleStatusTitleOnWithUptime => Ru
-        ? "Подключено · {0}"
-        : "Connected · {0}";
-
-    /// <summary>Healthy log probe — args: {0}=seconds since last successful probe.</summary>
-    public static string DiagHealthCheckOk => Ru
-        ? "✓ Проверка {0} с назад"
-        : "✓ Last check {0}s ago";
-
-    /// <summary>Stale log probe — sing-box hasn't written for &gt;60 s.</summary>
-    public static string DiagHealthCheckStale => Ru
-        ? "⚠ Проверка не отвечает"
-        : "⚠ Stale check";
-
-    /// <summary>Pending first probe — shown for the first 30 s after connect.</summary>
-    public static string DiagHealthCheckPending => Ru
-        ? "· Ожидаю первую проверку…"
-        : "· Awaiting first check…";
-
-    /// <summary>Error one-liner — args: {0}=raw error message from EXTRA_ERROR_MESSAGE.</summary>
-    public static string DiagErrorOneLiner => Ru
-        ? "Ошибка: {0}"
-        : "Error: {0}";
-
-    public static string SmpConfigRowLabel => Ru ? "Конфиг · Режим" : "Config · Mode";
-    public static string SmpSourceManual => Ru ? "вручную" : "manual";
-    public static string SmpSourceSubscription => Ru ? "подписка" : "subscription";
-    public static string SmpInputLabel => Ru ? "Конфиг VPN" : "VPN Config";
-    public static string SmpInputWatermark => Ru
-        ? "vless://… или https://…/sub"
-        : "vless://… or https://…/sub";
-    public static string SmpInputHint => Ru
-        ? "Приму vless://-ссылку или URL подписки (http/https)."
-        : "Accepts a vless:// share-link or subscription URL (http/https).";
-    public static string SmpTunnelModeLabel => Ru ? "Что идёт через VPN" : "What goes via VPN";
-    public static string SmpSplitOption => Ru ? "Выбранные приложения" : "Selected apps";
-    public static string SmpSplitHint => Ru
-        ? "По списку выбранных приложений (расширенные настройки)"
-        : "By selected apps list (advanced settings)";
-    public static string SmpFullOption => Ru ? "Весь трафик" : "All traffic";
-    public static string SmpFullHint => Ru
-        ? "Включая игры и банки"
-        : "Including games and banks";
-    public static string SmpAdvCardTitle => Ru ? "Расширенные настройки" : "Advanced settings";
-    public static string SmpAdvCardSubtitle => Ru
-        ? "Серверы · Подписки · Маршрутизация · Логи"
-        : "Servers · Subscriptions · Routing · Logs";
-
-    public static string SimpleConfigSummary => Ru ? "вручную · полный" : "manual · full";
-
-    // ── Server input ────────────────────────────────────────────────────
-
-    public static string ServerHeader => Ru ? "Сервер" : "Server";
-    public static string ServerInputWatermark => Ru
-        ? "vless://… или https://…/sub"
-        : "vless://… or https://…/sub";
-    public static string ButtonSave => Ru ? "Сохранить" : "Save";
-    public static string ButtonRefresh => Ru ? "Обновить" : "Refresh";
-
-    public static string ServerInputHintInitial => Ru
-        ? "Введи vless://-ссылку или подписочный URL и нажми «Сохранить». Для подписки потом «Обновить»."
-        : "Paste a vless:// share-link or a subscription URL, then tap Save. For a subscription URL, tap Refresh after.";
-
-    public static string SaveStatusCleared => Ru
-        ? "Сервер очищен. Будет использован встроенный placeholder."
-        : "Server cleared. The built-in placeholder will be used.";
-    public static string SaveStatusUriBadHost => Ru
-        ? "URI распарсен, но не хватает host или порта. Проверь."
-        : "Parsed but missing host or port — please double-check.";
-    public static string SaveStatusUriOk => Ru
-        ? "Сохранено. Сервер: {0}:{1}. Жми «Подключить»."
-        : "Saved. Server: {0}:{1}. Tap Connect.";
-    public static string SaveStatusUriInvalid => Ru
-        ? "Невалидный VLESS URI: {0}"
-        : "Invalid VLESS URI: {0}";
-    public static string SaveStatusSubStored => Ru
-        ? "URL подписки сохранён. Жми «Обновить» чтобы скачать список серверов."
-        : "Subscription URL saved. Tap Refresh to fetch the server list.";
-    public static string SaveStatusUnknown => Ru
-        ? "Не похоже ни на vless://, ни на http(s):// — проверь ввод."
-        : "Doesn't look like vless:// or http(s):// — check the input.";
-
-    public static string RefreshNeedsUrl => Ru
-        ? "Сначала сохрани подписочный URL (https://…)."
-        : "Save a subscription URL first (https://…).";
-    public static string RefreshFetching => Ru ? "Скачиваю…" : "Fetching…";
-    public static string RefreshOk => Ru
-        ? "Получено серверов: {0}. Выбери из списка ниже."
-        : "Fetched {0} servers. Pick one below.";
-    public static string RefreshFailed => Ru
-        ? "Не удалось скачать: {0}"
-        : "Refresh failed: {0}";
-
-    // ── Server list ─────────────────────────────────────────────────────
-
-    public static string AvailableServers => Ru ? "Доступные серверы" : "Available servers";
-    public static string ServerSelected => Ru
-        ? "Выбран: {0} ({1}:{2})"
-        : "Selected: {0} ({1}:{2})";
-
-    // ── QR scan (Phase 2.4 placeholder) ────────────────────────────────
-
-    public static string QrComingSoon => Ru
-        ? "QR-сканер появится в следующем апдейте — пока вставляй URI вручную."
-        : "QR scanner is coming in the next update — paste the URI manually for now.";
-
-    // ── Bottom hint ─────────────────────────────────────────────────────
-
-    public static string HintTunnel => Ru
-        ? "Состояние туннеля повторяет иконку 🔑 в строке состояния."
-        : "Tunnel state mirrors the system VPN-key icon in the status bar.";
-
-    // ── Phase 7.2 kebab menu — full sections ────────────────────────────
-
-    // Section headers
-    public static string MenuSectionView => Ru ? "Вид" : "Appearance";
-    public static string MenuSectionDiagnostics => Ru ? "Диагностика" : "Diagnostics";
-    public static string MenuSectionTroubleshooting => Ru ? "Устранение неполадок" : "Troubleshooting";
-    public static string MenuSectionAbout => Ru ? "О приложении" : "About";
-
-    // Diagnostics items
-    public static string MenuItemOpenLogs => Ru ? "Открыть лог" : "Open log";
-    public static string MenuItemCopyLogPath => Ru ? "Скопировать путь к логу" : "Copy log path";
-    public static string MenuItemViewCrashLog => Ru ? "Журнал сбоев" : "View crash log";
-    public static string CrashLogEmpty => Ru
-        ? "Сбоев нет — это хорошо."
-        : "No crashes recorded — that's good.";
-    public static string MenuItemUpdateCheck => Ru ? "Проверить обновления" : "Check for updates";
-    public static string MenuItemUpdateComingSoon => Ru
-        ? "Авто-обновление появится в следующем апдейте."
-        : "Auto-update is coming in the next release.";
-
-    // ── v2.32.0 (2026-05-07) — auto-update flow (AndroidUpdater.cs) ────
-    // Mirrors VPNRouter.App/Localization/Strings.cs entries
-    // (Checking / UpToDate / UpdateAvailableMessage / UpdateDownloading /
-    // UpdateApplying / UpdateRestarting / UpdateFailed / CheckFailed)
-    // verbatim where the desktop string fits, with Android-only additions
-    // for the install-permission deep link.
-
-    public static string UpdateCheckChecking => Ru ? "Проверяю…" : "Checking…";
-    public static string UpdateCheckUpToDate => Ru
-        ? "У вас последняя версия."
-        : "You're on the latest version.";
-    public static string UpdateCheckFailed => Ru
-        ? "Не удалось проверить обновления: {0}"
-        : "Failed to check for updates: {0}";
-
-    /// <summary>Banner title — args: {0}=version, {1}=size in MB.</summary>
-    public static string UpdateBannerTitle => Ru
-        ? "Доступна v{0} · {1:F1} МБ"
-        : "v{0} available · {1:F1} MB";
-    public static string UpdateBannerSubtitle => Ru
-        ? "Нажми «Скачать» — установка запросит разрешение системы."
-        : "Tap Download — install will ask for system permission.";
-
-    public static string UpdateButtonDownload => Ru ? "Скачать" : "Download";
-    public static string UpdateButtonInstall => Ru ? "Установить" : "Install";
-    public static string UpdateButtonDismiss => Ru ? "Позже" : "Later";
-    public static string UpdateButtonRetry => Ru ? "Повторить" : "Retry";
-    public static string UpdateButtonGrantPermission => Ru ? "Разрешить" : "Allow";
-
-    /// <summary>Progress label — arg: {0}=percent 0-100.</summary>
-    public static string UpdateDownloading => Ru
-        ? "Скачивание… {0}%"
-        : "Downloading… {0}%";
-    public static string UpdateDownloadDone => Ru
-        ? "Скачано. Жми «Установить»."
-        : "Downloaded. Tap Install.";
-    public static string UpdateDownloadFailed => Ru
-        ? "Скачивание не удалось: {0}"
-        : "Download failed: {0}";
-
-    public static string UpdateInstallPermissionNeeded => Ru
-        ? "Чтобы установить APK из приложения, нужно разрешить «Установка из неизвестных источников» для VPNRouter."
-        : "To install the APK from inside the app, allow \"Install from unknown sources\" for VPNRouter.";
-    public static string UpdateInstallPermissionGranted => Ru
-        ? "Разрешение получено — жми «Установить» снова."
-        : "Permission granted — tap Install again.";
-    public static string UpdateInstallLaunchFailed => Ru
-        ? "Не удалось запустить установщик."
-        : "Failed to launch installer.";
-
-    // Troubleshooting items
-    public static string MenuItemResetSettings => Ru ? "Сбросить настройки" : "Reset settings";
-    public static string MenuItemResetConfirm => Ru
-        ? "Все настройки будут удалены. Продолжить?"
-        : "All settings will be cleared. Continue?";
-    public static string MenuItemResetDone => Ru
-        ? "Настройки сброшены. Перезапусти приложение."
-        : "Settings cleared. Restart the app.";
-
-    // ── v2.32.0 (Android-led, 2026-05-07) — config share (export / import / QR) ──
-    //
-    // Diagnostics-section menu items + the export/import/QR overlay
-    // strings. Mirrors plans/v2.32.0-android-config-share.md schema.
-
-    public static string MenuItemExportConfig => Ru ? "Экспорт конфига" : "Export config";
-    public static string MenuItemImportConfig => Ru ? "Импорт конфига" : "Import config";
-    public static string MenuItemShareQr => Ru ? "Поделиться по QR" : "Share via QR";
-
-    public static string ExportTitle => Ru ? "Экспорт конфига" : "Export config";
-    public static string ExportDescription => Ru
-        ? "Сохраним подписки, ручной URI или custom JSON в один файл .json. Файл можно перенести на другое устройство и импортировать."
-        : "Save subscriptions, manual URI or custom JSON into a single .json file. Move the file to another device and import there.";
-    public static string ExportIncludeSettings => Ru
-        ? "Включить настройки (тема, язык, маршрутизация)"
-        : "Include settings (theme, language, routing)";
-    public static string ExportIncludePerApp => Ru
-        ? "Включить per-app фильтр"
-        : "Include per-app filter";
-    public static string ExportSecretBanner => Ru
-        ? "VLESS URI / token внутри файла = пароль. Не делитесь экспортом в открытых каналах."
-        : "VLESS URI / token inside the file = password. Don't share the export over public channels.";
-    public static string ExportSaveButton => Ru ? "Сохранить файл…" : "Save file…";
-    public static string ExportCloseButton => Ru ? "Закрыть" : "Close";
-    public static string ExportSuccess => Ru
-        ? "Сохранено: {0}"
-        : "Saved: {0}";
-    public static string ExportFailed => Ru
-        ? "Не удалось сохранить: {0}"
-        : "Save failed: {0}";
-    public static string ExportPickerCancelled => Ru
-        ? "Сохранение отменено."
-        : "Save cancelled.";
-
-    public static string ImportTitle => Ru ? "Импорт конфига" : "Import config";
-    public static string ImportDescription => Ru
-        ? "Выбери файл, ранее сохранённый через «Экспорт конфига». Покажем что внутри и спросим подтверждение."
-        : "Pick a file previously saved via Export config. We'll show what's inside and ask for confirmation.";
-    public static string ImportPickButton => Ru ? "Выбрать файл…" : "Pick a file…";
-    public static string ImportPreviewLabel => Ru ? "В файле:" : "Inside the file:";
-    public static string ImportApplySettings => Ru
-        ? "Применить настройки (если есть в файле)"
-        : "Apply settings (if present in the file)";
-    public static string ImportApplyPerApp => Ru
-        ? "Применить per-app фильтр (если есть в файле)"
-        : "Apply per-app filter (if present)";
-    public static string ImportConfirmReplace => Ru
-        ? "Текущие подписки и активный конфиг будут заменены. Перед заменой сохранится резервная копия."
-        : "Current subscriptions and active config will be replaced. A backup is saved before applying.";
-    public static string ImportApplyButton => Ru ? "Импортировать" : "Import";
-    public static string ImportCancelButton => Ru ? "Отмена" : "Cancel";
-    public static string ImportCloseButton => Ru ? "Закрыть" : "Close";
-    public static string ImportPickerCancelled => Ru
-        ? "Импорт отменён."
-        : "Import cancelled.";
-    public static string ImportFailedRead => Ru
-        ? "Не удалось прочитать файл: {0}"
-        : "Failed to read the file: {0}";
-    public static string ImportFailedParse => Ru
-        ? "Файл повреждён или не от VPNRouter: {0}"
-        : "File is corrupt or not a VPNRouter export: {0}";
-    public static string ImportSuccess => Ru
-        ? "Импорт завершён. Бэкап сохранён в {0}."
-        : "Import done. Backup saved at {0}.";
-    public static string ImportPartial => Ru
-        ? "Импорт прошёл частично: {0}"
-        : "Import partially applied: {0}";
-    public static string ImportFailed => Ru
-        ? "Импорт не удался: {0}"
-        : "Import failed: {0}";
-
-    public static string QrShareTitle => Ru ? "Поделиться VLESS" : "Share VLESS";
-    public static string QrShareNoActiveServer => Ru
-        ? "Нет активного сервера — выбери в подписке или сохрани ручной URI, потом возвращайся."
-        : "No active server — pick one in a subscription or save a manual URI, then come back.";
-    public static string QrShareSecretBanner => Ru
-        ? "URI = пароль. Делись только лично и в защищённом канале."
-        : "URI = password. Share only privately and over a secure channel.";
-    public static string QrShareCopyUriButton => Ru ? "Скопировать URI" : "Copy URI";
-    public static string QrShareCopiedToast => Ru
-        ? "URI скопирован в буфер."
-        : "URI copied to clipboard.";
-    public static string QrShareScanFromClipboardLabel => Ru
-        ? "Или вставь URI с другого устройства:"
-        : "Or paste a URI from another device:";
-    public static string QrShareScanHint => Ru
-        ? "Подсказка: открой системную «Камеру» и наведи на QR — Android распознает URL и предложит скопировать."
-        : "Tip: open the system Camera app and point at a QR — Android recognises the URL and offers a copy action.";
-    public static string QrSharePasteButton => Ru ? "Применить URI" : "Apply URI";
-    public static string QrShareApplyFailed => Ru
-        ? "Не удалось распознать URI: {0}"
-        : "Could not parse URI: {0}";
-    public static string QrShareApplyOk => Ru
-        ? "URI сохранён. Подключайся."
-        : "URI saved. You can connect now.";
-    public static string QrShareCloseButton => Ru ? "Закрыть" : "Close";
-
-    public static string ConfigShareNotImplementedToast => Ru
-        ? "Эта функция требует Android 4.4+ Storage Access Framework."
-        : "This feature requires Android 4.4+ Storage Access Framework.";
-
-    // About items
-    public static string MenuItemVersion => Ru ? "Версия" : "Version";
-    public static string MenuItemRepoLink => Ru ? "GitHub репозиторий" : "GitHub repository";
-
-    // ── Phase 7.4 in-app log viewer (handbook §5.6) ─────────────────────
-
-    public static string LogViewerEmpty => Ru
-        ? "Лог пуст. Подключи туннель — sing-box начнёт писать сюда."
-        : "Log is empty. Connect the tunnel — sing-box will start writing here.";
-    public static string LogViewerError => Ru
-        ? "Не удалось прочитать лог: {0}: {1}"
-        : "Failed to read log: {0}: {1}";
-
-    // ── Phase 7.5 per-app filter (handbook §5.5) ────────────────────────
-
-    public static string PerAppTitle => Ru ? "Фильтр по приложениям" : "Per-app filter";
-    public static string PerAppModeOff => Ru ? "Выключен" : "Off";
-    public static string PerAppModeInclude => Ru ? "Только выбранные" : "Selected only";
-    public static string PerAppModeExclude => Ru ? "Кроме выбранных" : "Exclude selected";
-    public static string PerAppPickButton => Ru ? "Выбрать приложения…" : "Choose apps…";
-    public static string PerAppCount => Ru ? "Выбрано: {0}" : "Selected: {0}";
-    public static string PerAppLoading => Ru ? "Загружаю список приложений…" : "Loading app list…";
-    public static string PerAppSaveButton => Ru ? "Готово" : "Done";
-    public static string PerAppSearchHint => Ru ? "Поиск" : "Search";
-    public static string PerAppSystemAppsToggle => Ru ? "Системные приложения" : "System apps";
-    public static string PerAppEmptyHint => Ru
-        ? "Ничего не выбрано. Если режим — «Только выбранные», то весь трафик пойдёт мимо туннеля."
-        : "Nothing selected. If mode is \"Selected only\", all traffic bypasses the tunnel.";
-
-    // ── v2.32.0 (2026-05-07) — exclude-mode UI strings (AND-5) ─────────
-    // Mode toggle inside the picker overlay + form-side count label
-    // suffixes that distinguish "selected apps go via VPN" (include) from
-    // "selected apps bypass VPN" (exclude).
-
-    public static string PerAppPickerModeLabel => Ru ? "Режим" : "Mode";
-    public static string PerAppHintInclude => Ru
-        ? "Только выбранные приложения пойдут через VPN."
-        : "Only the selected apps go via VPN.";
-    public static string PerAppHintExclude => Ru
-        ? "Выбранные приложения пойдут мимо VPN, остальные — через."
-        : "The selected apps bypass VPN; everything else routes through it.";
-    public static string PerAppCountInclude => Ru
-        ? "Выбрано: {0} · через VPN"
-        : "Selected: {0} · via VPN";
-    public static string PerAppCountExclude => Ru
-        ? "Выбрано: {0} · мимо VPN"
-        : "Selected: {0} · bypass VPN";
-
-    // ── v2.32.0 (2026-05-07) — SubscribePage parity (AND-1) ────────────
-    // Mirror desktop's VPNRouter.App/Localization/Strings.cs entries
-    // (SubscriptionsSection, SubscriptionNameHint, AddSubscription,
-    // RefreshAll, SubscriptionUrlHint, TipRefreshSubscription,
-    // TipRemoveSubscription, LblNoServers, LblAddSubscriptionHint,
-    // TipSubscriptionMetadata). RU/EN copy is verbatim from desktop so
-    // bilingual users see identical wording on both platforms.
-    public static string SubscriptionsSection => Ru ? "Подписки" : "Subscriptions";
-    public static string SubscriptionNameHint => Ru ? "Имя" : "Name";
-    public static string SubscriptionUrlHint => Ru ? "URL подписки" : "Subscription URL";
-    public static string AddSubscription => Ru ? "+ Добавить" : "+ Add";
-    public static string RefreshAll => Ru ? "Обновить все" : "Refresh all";
-    public static string TipRefreshSubscription => Ru ? "Обновить подписку" : "Refresh subscription";
-    public static string TipRemoveSubscription => Ru ? "Удалить подписку" : "Remove subscription";
-    public static string TipEditSubscription => Ru ? "Изменить URL" : "Edit URL";
-    public static string LblNoSubscriptions => Ru ? "Подписок нет" : "No subscriptions";
-    public static string LblAddSubscriptionHint => Ru
-        ? "Добавьте подписку ниже"
-        : "Add a subscription below";
-    public static string TipSubscriptionMetadata => Ru
-        ? "URL · число серверов в последнем обновлении · когда был последний рефреш. «—» если ни разу не обновлялась."
-        : "URL · server count from last refresh · time since last refresh. \"—\" means it has never been refreshed.";
-    public static string SubsRemoveConfirm => Ru ? "Точно? Ещё раз — удалю" : "Sure? Tap again to delete";
-    public static string SubsNeverRefreshed => Ru ? "никогда" : "never";
-    public static string SubsServersFormat => Ru ? "{0} серверов" : "{0} servers";
-    public static string SubsRefreshing => Ru ? "Обновляю…" : "Refreshing…";
-    public static string SubsRefreshFailed => Ru ? "Ошибка: {0}" : "Failed: {0}";
-    public static string SubsRefreshAllDone => Ru
-        ? "Готово. Серверов: {0}"
-        : "Done. Servers: {0}";
-    public static string SubsCancelEdit => Ru ? "Отмена" : "Cancel";
-    public static string SubsSaveEdit => Ru ? "Сохранить" : "Save";
-
-    // ── v2.32.0 (AND-4) Per-server testing UI (drill-down from a subscription card) ──
-    //
-    // Mirrors desktop ServersPage labels (L_TipTestTcpTls, ServerTestButtonText,
-    // L_ColPing etc.) but adapted to mobile drill-down semantics — tap card
-    // → server list overlay opens, "Test all" runs concurrent TCP+TLS,
-    // sort toggle reorders by latency.
-
-    public static string ServerListTitleFmt => Ru
-        ? "Серверы · {0}"
-        : "Servers · {0}";
-    public static string SrvTestAll => Ru ? "Тест все" : "Test all";
-    public static string SrvTestOne => Ru ? "Тест" : "Test";
-    public static string SrvTesting => Ru ? "Тестирую…" : "Testing…";
-    public static string SrvSortByLatencyAsc => Ru ? "по пингу ↑" : "by ping ↑";
-    public static string SrvSortByOriginal => Ru ? "по списку" : "as listed";
-    public static string SrvSortToggleHint => Ru ? "Сортировка" : "Sort";
-    public static string SrvProgressFmt => Ru
-        ? "Протестировано {0}/{1}"
-        : "Tested {0}/{1}";
-    public static string SrvProgressDoneFmt => Ru
-        ? "{0} рабочих из {1}"
-        : "{0} reachable of {1}";
-    public static string SrvEmptyHint => Ru
-        ? "В этой подписке пока нет серверов. Обнови подписку (↻) чтобы получить список."
-        : "This subscription has no servers yet. Refresh (↻) to fetch the list.";
-    public static string SrvNeverTested => "—";
-    public static string SrvUnreachable => "×";
-    public static string SrvTlsFailed => Ru ? "TLS×" : "TLS×";
-    public static string SrvImplausible => Ru ? "<5ms?" : "<5ms?";
-    public static string SrvTipTestRow => Ru
-        ? "Проверить TCP+TLS до сервера"
-        : "Probe TCP+TLS to this server";
-    public static string SrvTipTestAll => Ru
-        ? "Параллельно проверить все серверы (4 потока)"
-        : "Probe all servers in parallel (4 threads)";
-    public static string SrvTipSelectServer => Ru
-        ? "Выбрать как активный сервер"
-        : "Set as active server";
-    public static string SrvActiveBadge => Ru ? "активный" : "active";
-
-    // ── v2.32.0 Free Configs (Android port — see plans/v2.32.0-android-free-configs.md) ──
-
-    /// <summary>Kebab menu item that opens the Free Configs overlay.</summary>
-    public static string MenuSectionFreeConfigs => Ru ? "Бесплатные конфиги" : "Free configs";
-    public static string MenuItemOpenFreeConfigs => Ru ? "Найти сервер" : "Find a server";
-
-    public static string FcOverlayTitle => Ru ? "Бесплатные конфиги" : "Free configs";
-    public static string FcTabSearch => Ru ? "Поиск" : "Search";
-    public static string FcTabSaved => Ru ? "★ Сохранённые" : "★ Saved";
-    public static string FcTabSavedWithCount => Ru ? "★ Сохранённые ({0})" : "★ Saved ({0})";
-
-    public static string FcSearchHint => Ru
-        ? "Соберём список ниже из публичных источников и проверим TCP+TLS до каждого. Жми «Найти» — выберем самые быстрые."
-        : "We'll pull the list below from public sources and run TCP+TLS to each. Tap Find — we'll pick the fastest.";
-    public static string FcFindButton => Ru ? "✓✓ Найти рабочие конфиги" : "✓✓ Find working configs";
-    public static string FcStopButton => Ru ? "✕ Остановить" : "✕ Stop";
-
-    public static string FcAdvancedSettings => Ru ? "Расширенные настройки" : "Advanced settings";
-    public static string FcTargetNLabel => Ru ? "Найти" : "Find";
-    public static string FcConfigsWord => Ru ? "конфигов" : "configs";
-    public static string FcWithPingUnder => Ru ? "с пингом до" : "with ping under";
-    public static string FcMsUnit => "ms";
-    public static string FcExcludeRu => Ru
-        ? "Исключить серверы в России"
-        : "Skip servers in Russia";
-
-    public static string FcColCountry => Ru ? "Страна" : "Country";
-    public static string FcColEndpoint => Ru ? "Endpoint" : "Endpoint";
-    public static string FcColLatency => Ru ? "Пинг" : "Latency";
-    public static string FcColTransport => Ru ? "Транспорт" : "Transport";
-    public static string FcColStatus => Ru ? "Статус" : "Status";
-
-    public static string FcSearchListEmptyHint => Ru
-        ? "Список пуст. Нажми «Найти рабочие конфиги» выше."
-        : "List is empty. Tap «Find working configs» above.";
-    public static string FcSavedEmptyHint => Ru
-        ? "Сохранённых конфигов пока нет. Запусти «Найти» — найденные сохранятся здесь."
-        : "No saved configs yet. Run «Find» — results will be saved here.";
-
-    public static string FcSavedClearAll => Ru ? "✕ Удалить всё" : "✕ Clear all";
-    public static string FcSavedRemoveOne => "✕";
-
-    public static string FcStatusEmpty => Ru ? "Готов к поиску." : "Ready to search.";
-    public static string FcStatusFetchingPool => Ru ? "Скачиваю pool.json…" : "Downloading pool.json…";
-    public static string FcStatusPoolLoaded => Ru
-        ? "В пуле {0} серверов. Тестирую первые {1}…"
-        : "Pool has {0} servers. Testing first {1}…";
-    public static string FcStatusPoolEmpty => Ru
-        ? "Pool пуст или недоступен. Проверь интернет."
-        : "Pool empty or unreachable. Check internet.";
-    public static string FcStatusTesting => Ru
-        ? "Найдено {0}/{1} · протестировано {2}/{3}"
-        : "Found {0}/{1} · tested {2}/{3}";
-    public static string FcStatusFound => Ru
-        ? "Найдено {0}/{1} рабочих."
-        : "Found {0}/{1} working.";
-    public static string FcStatusDoneOk => Ru
-        ? "Готово. Найдено {0} конфигов."
-        : "Done. Found {0} working configs.";
-    public static string FcStatusDoneExhausted => Ru
-        ? "Список источников исчерпан. Найдено {0} из {1}."
-        : "Sources exhausted. Found {0} of {1}.";
-    public static string FcStatusCancelled => Ru ? "Отменено пользователем." : "Cancelled by user.";
-    public static string FcStatusFailed => Ru
-        ? "Ошибка: {0}"
-        : "Error: {0}";
-
-    public static string FcConnectHint => Ru
-        ? "Выбери сервер в списке — кнопка «Подключить» активируется."
-        : "Pick a server above — the Connect button activates.";
-    public static string FcUseSelected => Ru ? "Подключить к выбранному" : "Connect to selected";
-    public static string FcUsedToast => Ru
-        ? "Сервер сохранён. Подключаюсь…"
-        : "Server saved. Connecting…";
-
-    // ── v2.32.0 Settings overlay (mirrors desktop NetworkPage 1:1) (AND-2) ──────
-    //
-    // Strings copied verbatim from VPNRouter.App/Localization/Strings.cs
-    // so every label the desktop NetworkPage shows is reproduced on
-    // Android — no paraphrasing, no Android-only renaming. When the
-    // desktop string changes, the Android one must follow (handbook §1.1).
-
-    public static string MenuItemSettings => Ru ? "Настройки" : "Settings";
-    public static string SettingsTitle => Ru ? "Настройки" : "Settings";
-
-    // Sub-section headers (Strings.SectionRouting / SectionLeakProtection /
-    // SectionUpdates / AutostartSection in desktop)
-    public static string SettingsSectionRouting => Ru ? "Маршрутизация" : "Routing";
-    public static string SettingsSectionLeak => Ru ? "Защита от утечек" : "Leak Protection";
-    public static string SettingsSectionUpdates => Ru ? "Обновления" : "Updates";
-    public static string SettingsSectionAutostart => Ru ? "Автозапуск" : "Autostart";
-
-    // ── v2.32.0 AND-NETRES (2026-05-07) Reliability section ────────────
-    //
-    // No desktop equivalent — Android-only features (Always-on VPN, Doze
-    // mode, battery optimization) live in this dedicated section. The
-    // section sits between Autostart and Updates so the kebab menu user
-    // who's looking for "stay connected at all times" plumbing finds it
-    // before they hit the Updates / Diagnostics tail.
-    public static string SettingsSectionReliability => Ru ? "Резервирование" : "Reliability";
-    public static string SettingsReliabilityIntro => Ru
-        ? "Чтобы VPN держался даже при перезагрузке телефона, в режиме энергосбережения и при смене Wi-Fi на мобильную сеть."
-        : "Keep VPN up across reboots, in battery-saver / Doze mode, and when switching Wi-Fi ↔ cellular.";
-
-    // Always-on VPN row
-    public static string ReliabilityAlwaysOnTitle => Ru
-        ? "Always-on VPN"
-        : "Always-on VPN";
-    public static string ReliabilityAlwaysOnHint => Ru
-        ? "В системных настройках Android: VPN → шестерёнка рядом с VPNRouter → «Always-on VPN». После включения туннель поднимется сам после перезагрузки и при подключении к новой сети."
-        : "In Android Settings: VPN → gear next to VPNRouter → «Always-on VPN». Once enabled, the tunnel comes up on its own after reboot and when joining a new network.";
-    public static string ReliabilityAlwaysOnButton => Ru
-        ? "Открыть настройки VPN"
-        : "Open VPN settings";
-
-    // Battery optimization row
-    public static string ReliabilityBatteryOptTitle => Ru
-        ? "Энергосбережение"
-        : "Battery optimization";
-    public static string ReliabilityBatteryOptStatusExempt => Ru
-        ? "✓ VPNRouter исключён из энергосбережения"
-        : "✓ VPNRouter is excluded from battery optimization";
-    public static string ReliabilityBatteryOptStatusOptimized => Ru
-        ? "⚠ VPNRouter в обычном энергосбережении — Android может прибить туннель в Doze"
-        : "⚠ VPNRouter is under standard battery optimization — Android may kill the tunnel in Doze";
-    public static string ReliabilityBatteryOptHint => Ru
-        ? "Android в Doze (экран выключен 30+ минут) урезает CPU фоновым процессам. Если VPNRouter не исключён, sing-box может застрять между ретрансляциями и потерять трафик."
-        : "Android Doze (screen-off for 30+ min) throttles background CPU. Without an exclusion, sing-box can stall between retransmissions and drop packets.";
-    public static string ReliabilityBatteryOptButtonGrant => Ru
-        ? "Запросить исключение"
-        : "Request exclusion";
-    public static string ReliabilityBatteryOptButtonOpen => Ru
-        ? "Открыть настройки энергосбережения"
-        : "Open battery settings";
-
-    // Auto-reconnect toggle row
-    public static string ReliabilityAutoReconnectTitle => Ru
-        ? "Авто-переподключение при смене сети"
-        : "Auto-reconnect on network change";
-    public static string ReliabilityAutoReconnectHint => Ru
-        ? "При переключении Wi-Fi ↔ мобильная sing-box сам пересвяжет upstream-сокеты с новым интерфейсом. Отключи только если подозреваешь конфликт с внутренним монитором интерфейсов libbox."
-        : "On Wi-Fi ↔ cellular handoff, sing-box re-binds upstream sockets to the new interface. Disable only if you suspect a conflict with libbox's own interface monitor.";
-
-    // Routing — RoutingDescription / SplitTunnelTitle+Subtitle /
-    // FullTunnelTitle+Subtitle / BypassRussianTrafficLabel+Hint
-    public static string RoutingDescription => Ru
-        ? "Определяет, какой трафик пойдёт через VPN."
-        : "Determines which traffic goes through the VPN.";
-    public static string SplitTunnelTitle => Ru ? "Раздельный туннель" : "Split Tunnel";
-    public static string SplitTunnelSubtitle => Ru
-        ? "Только выбранные приложения. Остальное идёт напрямую."
-        : "Only selected apps. Everything else goes direct.";
-    public static string FullTunnelTitle => Ru ? "Полный туннель" : "Full Tunnel";
-    public static string FullTunnelSubtitle => Ru
-        ? "Весь трафик ОС через VPN, включая игры и банки."
-        : "All OS traffic through VPN — games and banks included.";
-    public static string BypassRussianTrafficLabel => Ru
-        ? "Российский трафик через реальный IP"
-        : "Russian traffic via real IP";
-    public static string BypassRussianTrafficHint => Ru
-        ? "Сайты и приложения с российскими доменами/IP идут напрямую, минуя VPN. Защищает VPN-сервер от блокировок российскими сервисами."
-        : "Russian domains and IPs go directly, bypassing VPN. Protects the VPN server from being blocked by Russian services.";
-
-    // Leak protection — block_on_vpn_fail toggle + DNS strategy ComboBox
-    public static string BlockOnVpnFailLabel => Ru
-        ? "Блокировать трафик при падении VPN"
-        : "Block traffic if VPN drops";
-    public static string BlockOnVpnFailHint => Ru
-        ? "На Android делается через VpnService.Builder.setBlocking(true) — пакеты не уходят с устройства, пока туннель не поднимется заново."
-        : "On Android this maps to VpnService.Builder.setBlocking(true) — packets stay on device until the tunnel is back up.";
-    public static string DnsStrategyHeader => Ru ? "DNS-стратегия" : "DNS strategy";
-    public static string DnsStrategyIpv4Only => Ru ? "Только IPv4" : "IPv4 only";
-    public static string DnsStrategyPreferIpv4 => Ru ? "Предпочитать IPv4" : "Prefer IPv4";
-    public static string DnsStrategyPreferIpv6 => Ru ? "Предпочитать IPv6" : "Prefer IPv6";
-    public static string DnsStrategyHint => Ru
-        ? "IPv4-only защищает от IPv6-утечек, если у провайдера или Wi-Fi включён IPv6, а у VPN-сервера — нет."
-        : "IPv4-only protects against IPv6 leaks when the carrier/Wi-Fi advertises IPv6 but the VPN server doesn't.";
-
-    // Updates — UpdateChannelHeader / ReceivePrereleasesLabel /
-    // CurrentVersion / CheckForUpdates
-    public static string UpdateChannelHeader => Ru ? "Канал обновлений" : "Update channel";
-    public static string ReceivePrereleasesLabel => Ru
-        ? "Получать prerelease обновления (experimental канал)"
-        : "Receive prereleases (experimental channel)";
-    public static string CurrentVersionLabel => Ru ? "Текущая версия" : "Current version";
-    public static string CheckForUpdatesButton => Ru ? "Проверить обновления" : "Check for updates";
-
-    // Autostart — Section A "boot" + Section B "login" mirroring desktop
-    public static string AutostartBootSectionTitle => Ru
-        ? "На старте Android (до разблокировки)"
-        : "At Android startup (before unlock)";
-    public static string AutostartBootSectionSub => Ru
-        ? "На Android требуется приёмник BOOT_COMPLETED + фоновый Service. Пока не реализовано — флаги сохраняются, но не запускают туннель сами."
-        : "On Android this needs a BOOT_COMPLETED receiver + a background Service. Not implemented yet — flags persist but won't start the tunnel by themselves.";
-    public static string AutostartLabelVpn => Ru
-        ? "Запускать VPN при старте системы"
-        : "Start VPN on system boot";
-    public static string AutostartLabelZapret => Ru
-        ? "Запускать Zapret при старте системы"
-        : "Start Zapret on system boot";
-    public static string AutostartLabelTgProxy => Ru
-        ? "Запускать TgProxy при старте системы"
-        : "Start TgProxy on system boot";
-
-    // ── v2.32.0 (AND-CC, 2026-05-07) — Custom sing-box JSON mode ───────
-    //
-    // Mirrors desktop's ConfigMode="custom" flow (CustomConfigViewModel,
-    // ServersPage Custom sub-tab). Three labels for the segmented mode
-    // selector + watermark + hint + button captions + error messages
-    // surfaced from CustomConfigInjector.Validate.
-    public static string CcModeSubscription => Ru ? "Подписка" : "Subscription";
-    public static string CcModeManual => Ru ? "Сервер" : "Server";
-    public static string CcModeCustom => Ru ? "Свой JSON" : "Custom JSON";
-
-    public static string CcCustomLabel => Ru
-        ? "Свой sing-box JSON"
-        : "Custom sing-box JSON";
-    public static string CcCustomHint => Ru
-        ? "Вставь полный sing-box JSON-конфиг (например Hysteria2 + obfs, цепочки DNS, несколько outbounds). Перед сохранением жми «Проверить»."
-        : "Paste a full sing-box JSON config (e.g. Hysteria2 + obfs, DNS chains, multiple outbounds). Tap «Validate» before saving.";
-    public static string CcCustomWatermark => Ru
-        ? "{ \"log\": {…}, \"dns\": {…}, \"inbounds\": […], \"outbounds\": […], \"route\": {…} }"
-        : "{ \"log\": {…}, \"dns\": {…}, \"inbounds\": […], \"outbounds\": […], \"route\": {…} }";
-
-    public static string CcValidateButton => Ru ? "Проверить" : "Validate";
-    public static string CcSaveButton => Ru ? "Сохранить" : "Save";
-    public static string CcClearButton => Ru ? "Очистить" : "Clear";
-
-    public static string CcSourceCustom => Ru ? "свой JSON" : "custom JSON";
-
-    public static string CcValidationOk => Ru
-        ? "✓ JSON корректен. Найдено протоколов: {0}. Сервер: {1}."
-        : "✓ JSON is valid. Protocols: {0}. Server: {1}.";
-    public static string CcValidationFailed => Ru
-        ? "✗ Не валидно: {0}"
-        : "✗ Invalid: {0}";
-    public static string CcValidationParseError => Ru
-        ? "✗ Не удалось разобрать JSON: {0}"
-        : "✗ Could not parse JSON: {0}";
-    public static string CcSaveStatusEmpty => Ru
-        ? "Введи sing-box JSON или нажми «Очистить»."
-        : "Paste a sing-box JSON or tap «Clear».";
-    public static string CcSaveStatusOk => Ru
-        ? "Сохранено. Жми «Подключить»."
-        : "Saved. Tap Connect.";
-    public static string CcSaveStatusInvalid => Ru
-        ? "JSON не валиден — сохраняю как есть, но sing-box может его отвергнуть."
-        : "JSON is invalid — saving as-is, but sing-box may reject it.";
-
-    // DBG-3 status badges (mirror desktop's ComputeAutostartStatus output)
-    public static string AutostartStatusBoot => Ru
-        ? "✓ Через службу Android (на старте ОС)"
-        : "✓ Via Android Service (at boot)";
-    public static string AutostartStatusLoginFallback => Ru
-        ? "⚠ Без службы — сработает после открытия приложения"
-        : "⚠ No Service — will fire after the App opens";
-    public static string AutostartStatusNoBoot => Ru
-        ? "⛔ Не сработает: нужен BOOT_COMPLETED + Service"
-        : "⛔ Will not fire: needs BOOT_COMPLETED + Service";
-    public static string AutostartZapretNotPorted => Ru
-        ? "⛔ Zapret пока не портирован на Android"
-        : "⛔ Zapret is not ported to Android yet";
-    public static string AutostartTgProxyNotPorted => Ru
-        ? "⛔ TgProxy пока не портирован на Android"
-        : "⛔ TgProxy is not ported to Android yet";
-
-    // ── v2.32.0 (AND-ZAPRET, 2026-05-07) — DPI bypass picker (handbook §7 Phase 8.4) ──
-    //
-    // Android Zapret port via sing-box's native tls_fragment / udp_fragment
-    // instead of winws.exe. Strings parallel desktop's DpiBypassPage layout
-    // (LblDpiDescription, LblDpiWarning, ZapretStrategies items) but trimmed
-    // for mobile — single-line picker + one hint line + warning blurb,
-    // no full master-detail page (the controls are simpler on Android
-    // because we don't have hosts-file installers / external binary
-    // updaters to manage).
-    public static string SettingsDpiBypassLabel => Ru
-        ? "DPI bypass (Zapret)"
-        : "DPI bypass (Zapret)";
-    public static string SettingsDpiBypassHint => Ru
-        ? "Дробит TLS-handshake внутри туннеля, чтобы обойти DPI российских провайдеров. Использует встроенный механизм sing-box (tls_fragment), без отдельной службы — в отличие от Windows-версии Zapret."
-        : "Splits TLS handshake inside the tunnel to bypass Russian ISP DPI. Uses sing-box's native tls_fragment — no separate service, unlike the Windows Zapret port.";
-    public static string SettingsDpiBypassWarning => Ru
-        ? "⚠ Включай только если без него сайты не открываются. Может слегка увеличить задержку соединения."
-        : "⚠ Turn on only if sites don't open without it. May add a small connection-setup delay.";
-    public static string SettingsDpiBypassOff => Ru ? "Выключен" : "Off";
-    public static string SettingsDpiBypassStandard => Ru ? "Стандарт" : "Standard";
-    public static string SettingsDpiBypassAggressive => Ru ? "Агрессивно" : "Aggressive";
-
-    // ── v2.32.0 (AND-PROFILES, 2026-05-08) — Profiles overlay ───────────
-    //
-    // Routing profile catalog browser: list of named app bundles
-    // (Discord_Privacy / Browsers / AI_Tools / etc.) that the user can
-    // tap to bulk-apply per-app routing + leak protection. Mirrors desktop
-    // ApplicationsPage's "select-a-group-of-apps-at-once" intent but
-    // shipped as a single-tap chooser sized for mobile.
-    //
-    // Strings are Android-specific until AND-LOCALIZATION-MERGE collapses
-    // the duplicate Strings.cs files; the desktop side has no exact
-    // analogue (it builds AppGroupViewModel with per-app checkboxes
-    // inline, not a profile selector).
-
-    public static string MenuSectionProfiles => Ru ? "Профили" : "Profiles";
-    public static string MenuItemOpenProfiles => Ru ? "Профили маршрутизации" : "Routing profiles";
-
-    public static string ProfilesOverlayTitle => Ru ? "Профили маршрутизации" : "Routing profiles";
-    public static string ProfilesIntro => Ru
-        ? "Готовые наборы приложений, которые пойдут через VPN. Тап по карточке применяет профиль и переключает в режим Split tunnel."
-        : "Pre-made app bundles that go through VPN. Tap a card to apply the profile and switch to Split tunnel.";
-
-    /// <summary>"No profile" pseudo-card at the top of the list — full traffic mode.</summary>
-    public static string ProfilesNoneTitle => Ru ? "Без профиля" : "No profile";
-    public static string ProfilesNoneDescription => Ru
-        ? "Весь трафик через VPN. Список приложений сохранится для последующих профилей."
-        : "All traffic through VPN. App list is preserved for future profiles.";
-
-    /// <summary>Active-profile checkmark prefix glyph + label.</summary>
-    public static string ProfilesActiveBadge => Ru ? "✓ Активный" : "✓ Active";
-
-    /// <summary>Apps-count chip — args: {0}=count.</summary>
-    public static string ProfilesAppsCount => Ru ? "{0} прил." : "{0} apps";
-    public static string ProfilesAppsCountOne => Ru ? "1 прил." : "1 app";
-
-    /// <summary>DNS mode chip — args: {0}=mode (vpn_only / smart / direct).</summary>
-    public static string ProfilesDnsModeChip => Ru ? "DNS: {0}" : "DNS: {0}";
-
-    /// <summary>Block-on-VPN-fail chip when profile sets it to true.</summary>
-    public static string ProfilesBlockOnFailChip => Ru ? "блокировать при сбое" : "block on fail";
-
-    /// <summary>Toast shown after applying a profile — args: {0}=profile name.</summary>
-    public static string ProfilesAppliedToast => Ru
-        ? "Профиль применён: {0}"
-        : "Profile applied: {0}";
-    public static string ProfilesClearedToast => Ru
-        ? "Профиль снят. Весь трафик через VPN."
-        : "Profile cleared. All traffic through VPN.";
+    public static string OsDisplayName => global::VPNRouter.Core.Localization.Strings.OsDisplayName;
+    public static string TabServers => global::VPNRouter.Core.Localization.Strings.TabServers;
+    public static string TabApps => global::VPNRouter.Core.Localization.Strings.TabApps;
+    public static string TabNetwork => global::VPNRouter.Core.Localization.Strings.TabNetwork;
+    public static string TabSettings => global::VPNRouter.Core.Localization.Strings.TabSettings;
+    public static string TabZapret => global::VPNRouter.Core.Localization.Strings.TabZapret;
+    public static string TabTgWsProxy => global::VPNRouter.Core.Localization.Strings.TabTgWsProxy;
+    public static string VlessServers => global::VPNRouter.Core.Localization.Strings.VlessServers;
+    public static string CustomConfigJson => global::VPNRouter.Core.Localization.Strings.CustomConfigJson;
+    public static string ModeManual => global::VPNRouter.Core.Localization.Strings.ModeManual;
+    public static string ModeSubscribe => global::VPNRouter.Core.Localization.Strings.ModeSubscribe;
+    public static string ModeCustomConfig => global::VPNRouter.Core.Localization.Strings.ModeCustomConfig;
+    public static string SubscribeMode => global::VPNRouter.Core.Localization.Strings.SubscribeMode;
+    public static string SubscriptionUrlHint => global::VPNRouter.Core.Localization.Strings.SubscriptionUrlHint;
+    public static string SyncButton => global::VPNRouter.Core.Localization.Strings.SyncButton;
+    public static string Syncing => global::VPNRouter.Core.Localization.Strings.Syncing;
+    public static string SyncComplete(int count) => global::VPNRouter.Core.Localization.Strings.SyncComplete(count);
+    public static string SyncFailed(string err) => global::VPNRouter.Core.Localization.Strings.SyncFailed(err);
+    public static string SyncEmpty => global::VPNRouter.Core.Localization.Strings.SyncEmpty;
+    public static string PasteVlessUri => global::VPNRouter.Core.Localization.Strings.PasteVlessUri;
+    public static string StartVPN => global::VPNRouter.Core.Localization.Strings.StartVPN;
+    public static string StopVPN => global::VPNRouter.Core.Localization.Strings.StopVPN;
+    public static string AddServers => global::VPNRouter.Core.Localization.Strings.AddServers;
+    public static string Remove => global::VPNRouter.Core.Localization.Strings.Remove;
+    public static string AddConfig => global::VPNRouter.Core.Localization.Strings.AddConfig;
+    public static string Apply => global::VPNRouter.Core.Localization.Strings.Apply;
+    public static string BtnAdd => global::VPNRouter.Core.Localization.Strings.BtnAdd;
+    public static string RemoveChecked => global::VPNRouter.Core.Localization.Strings.RemoveChecked;
+    public static string SplitTunnel => global::VPNRouter.Core.Localization.Strings.SplitTunnel;
+    public static string FullTunnel => global::VPNRouter.Core.Localization.Strings.FullTunnel;
+    public static string AppsHint => global::VPNRouter.Core.Localization.Strings.AppsHint;
+    public static string CustomAppLabel => global::VPNRouter.Core.Localization.Strings.CustomAppLabel;
+    public static string AddCustomAppBtn => global::VPNRouter.Core.Localization.Strings.AddCustomAppBtn;
+    public static string ThemeDark => global::VPNRouter.Core.Localization.Strings.ThemeDark;
+    public static string ThemeLight => global::VPNRouter.Core.Localization.Strings.ThemeLight;
+    public static string NotConnected => global::VPNRouter.Core.Localization.Strings.NotConnected;
+    public static string Connected(string mode, string? serverName, string? serverIp) => global::VPNRouter.Core.Localization.Strings.Connected(mode, serverName, serverIp);
+    public static string Starting => global::VPNRouter.Core.Localization.Strings.Starting;
+    public static string Stopping => global::VPNRouter.Core.Localization.Strings.Stopping;
+    public static string ColName => global::VPNRouter.Core.Localization.Strings.ColName;
+    public static string ColServer => global::VPNRouter.Core.Localization.Strings.ColServer;
+    public static string ColPort => global::VPNRouter.Core.Localization.Strings.ColPort;
+    public static string ColSecurity => global::VPNRouter.Core.Localization.Strings.ColSecurity;
+    public static string ColIp => global::VPNRouter.Core.Localization.Strings.ColIp;
+    public static string ColPing => global::VPNRouter.Core.Localization.Strings.ColPing;
+    public static string ColPingTooltip => global::VPNRouter.Core.Localization.Strings.ColPingTooltip;
+    public static string RoutingDescription => global::VPNRouter.Core.Localization.Strings.RoutingDescription;
+    public static string SplitTunnelTitle => global::VPNRouter.Core.Localization.Strings.SplitTunnelTitle;
+    public static string SplitTunnelSubtitle => global::VPNRouter.Core.Localization.Strings.SplitTunnelSubtitle;
+    public static string FullTunnelTitle => global::VPNRouter.Core.Localization.Strings.FullTunnelTitle;
+    public static string FullTunnelSubtitle => global::VPNRouter.Core.Localization.Strings.FullTunnelSubtitle;
+    public static string ServiceStatusLabel => global::VPNRouter.Core.Localization.Strings.ServiceStatusLabel;
+    public static string ServiceRunningText => global::VPNRouter.Core.Localization.Strings.ServiceRunningText;
+    public static string ServiceStoppedText => global::VPNRouter.Core.Localization.Strings.ServiceStoppedText;
+    public static string ServiceInstalledText => global::VPNRouter.Core.Localization.Strings.ServiceInstalledText;
+    public static string ServiceNotInstalledText => global::VPNRouter.Core.Localization.Strings.ServiceNotInstalledText;
+    public static string ServiceMasterTitle => global::VPNRouter.Core.Localization.Strings.ServiceMasterTitle;
+    public static string ServiceMasterSubtitle => global::VPNRouter.Core.Localization.Strings.ServiceMasterSubtitle;
+    public static string ServiceEnableLabel => global::VPNRouter.Core.Localization.Strings.ServiceEnableLabel;
+    public static string ServiceInstalling => global::VPNRouter.Core.Localization.Strings.ServiceInstalling;
+    public static string ServiceRemoving => global::VPNRouter.Core.Localization.Strings.ServiceRemoving;
+    public static string ServiceComponentsHeader => global::VPNRouter.Core.Localization.Strings.ServiceComponentsHeader;
+    public static string ServiceComponentsDisabledHint => global::VPNRouter.Core.Localization.Strings.ServiceComponentsDisabledHint;
+    public static string AutostartUiSessionHeader => global::VPNRouter.Core.Localization.Strings.AutostartUiSessionHeader;
+    public static string AutostartBootSectionTitle => global::VPNRouter.Core.Localization.Strings.AutostartBootSectionTitle;
+    public static string AutostartBootSectionSub => global::VPNRouter.Core.Localization.Strings.AutostartBootSectionSub;
+    public static string AutostartComponentsInfoHint => global::VPNRouter.Core.Localization.Strings.AutostartComponentsInfoHint;
+    public static string AutostartStatusBoot => global::VPNRouter.Core.Localization.Strings.AutostartStatusBoot;
+    public static string AutostartStatusLoginFallback => global::VPNRouter.Core.Localization.Strings.AutostartStatusLoginFallback;
+    public static string AutostartStatusNoBoot => global::VPNRouter.Core.Localization.Strings.AutostartStatusNoBoot;
+    public static string BtnInstallServiceInlineCta => global::VPNRouter.Core.Localization.Strings.BtnInstallServiceInlineCta;
+    public static string TipInstallServiceInlineCta => global::VPNRouter.Core.Localization.Strings.TipInstallServiceInlineCta;
+    public static string TipSubscriptionMetadata => global::VPNRouter.Core.Localization.Strings.TipSubscriptionMetadata;
+    public static string AutostartLoginSectionTitle => global::VPNRouter.Core.Localization.Strings.AutostartLoginSectionTitle;
+    public static string AutostartLoginAppDescription => global::VPNRouter.Core.Localization.Strings.AutostartLoginAppDescription;
+    public static string ServiceRunningLine(int pid) => global::VPNRouter.Core.Localization.Strings.ServiceRunningLine(pid);
+    public static string ServiceStoppedLine => global::VPNRouter.Core.Localization.Strings.ServiceStoppedLine;
+    public static string SmpAutostartCardTitle => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardTitle;
+    public static string SmpAutostartCardOn => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardOn;
+    public static string SmpAutostartCardOff => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardOff;
+    public static string FailedStartVpn => global::VPNRouter.Core.Localization.Strings.FailedStartVpn;
+    public static string AddServerFirst => global::VPNRouter.Core.Localization.Strings.AddServerFirst;
+    public static string SelectSingBoxConfig => global::VPNRouter.Core.Localization.Strings.SelectSingBoxConfig;
+    public static string InvalidConfig => global::VPNRouter.Core.Localization.Strings.InvalidConfig;
+    public static string ConfigExists(string name) => global::VPNRouter.Core.Localization.Strings.ConfigExists(name);
+    public static string TrayStart => global::VPNRouter.Core.Localization.Strings.TrayStart;
+    public static string TrayStop => global::VPNRouter.Core.Localization.Strings.TrayStop;
+    public static string TraySettings => global::VPNRouter.Core.Localization.Strings.TraySettings;
+    public static string TrayExit => global::VPNRouter.Core.Localization.Strings.TrayExit;
+    public static string FieldName => global::VPNRouter.Core.Localization.Strings.FieldName;
+    public static string FieldServer => global::VPNRouter.Core.Localization.Strings.FieldServer;
+    public static string FieldPort => global::VPNRouter.Core.Localization.Strings.FieldPort;
+    public static string FieldUuid => global::VPNRouter.Core.Localization.Strings.FieldUuid;
+    public static string FieldPublicKey => global::VPNRouter.Core.Localization.Strings.FieldPublicKey;
+    public static string FieldShortId => global::VPNRouter.Core.Localization.Strings.FieldShortId;
+    public static string DoubleClickEditServer => global::VPNRouter.Core.Localization.Strings.DoubleClickEditServer;
+    public static string DoubleClickActiveConfig => global::VPNRouter.Core.Localization.Strings.DoubleClickActiveConfig;
+    public static string AddCustomAppHint => global::VPNRouter.Core.Localization.Strings.AddCustomAppHint;
+    public static string TcpUdpHint => global::VPNRouter.Core.Localization.Strings.TcpUdpHint;
+    public static string BypassRussianTrafficLabel => global::VPNRouter.Core.Localization.Strings.BypassRussianTrafficLabel;
+    public static string BypassRussianTrafficHint => global::VPNRouter.Core.Localization.Strings.BypassRussianTrafficHint;
+    public static string CheckLeaks => global::VPNRouter.Core.Localization.Strings.CheckLeaks;
+    public static string ShowLogs => global::VPNRouter.Core.Localization.Strings.ShowLogs;
+    public static string StrictModeLabel => global::VPNRouter.Core.Localization.Strings.StrictModeLabel;
+    public static string StrictModeHint => global::VPNRouter.Core.Localization.Strings.StrictModeHint;
+    public static string ForceIpv4Label => global::VPNRouter.Core.Localization.Strings.ForceIpv4Label;
+    public static string FlushDnsLabel => global::VPNRouter.Core.Localization.Strings.FlushDnsLabel;
+    public static string StrictDnsLabel => global::VPNRouter.Core.Localization.Strings.StrictDnsLabel;
+    public static string CheckForUpdates => global::VPNRouter.Core.Localization.Strings.CheckForUpdates;
+    public static string Checking => global::VPNRouter.Core.Localization.Strings.Checking;
+    public static string UpToDate => global::VPNRouter.Core.Localization.Strings.UpToDate;
+    public static string CheckFailed => global::VPNRouter.Core.Localization.Strings.CheckFailed;
+    public static string UpdateAvailableShort => global::VPNRouter.Core.Localization.Strings.UpdateAvailableShort;
+    public static string UpdateAvailableMessage => global::VPNRouter.Core.Localization.Strings.UpdateAvailableMessage;
+    public static string UpdateButton => global::VPNRouter.Core.Localization.Strings.UpdateButton;
+    public static string UpdateDownloading => global::VPNRouter.Core.Localization.Strings.UpdateDownloading;
+    public static string UpdateApplying => global::VPNRouter.Core.Localization.Strings.UpdateApplying;
+    public static string UpdateRestarting => global::VPNRouter.Core.Localization.Strings.UpdateRestarting;
+    public static string UpdateFailed => global::VPNRouter.Core.Localization.Strings.UpdateFailed;
+    public static string SettingsAutosaved => global::VPNRouter.Core.Localization.Strings.SettingsAutosaved;
+    public static string ApplyNowReloadVpn => global::VPNRouter.Core.Localization.Strings.ApplyNowReloadVpn;
+    public static string ApplyNowHint => global::VPNRouter.Core.Localization.Strings.ApplyNowHint;
+    public static string ChannelStable => global::VPNRouter.Core.Localization.Strings.ChannelStable;
+    public static string ChannelExperimental => global::VPNRouter.Core.Localization.Strings.ChannelExperimental;
+    public static string TabTelegram => global::VPNRouter.Core.Localization.Strings.TabTelegram;
+    public static string TgProxyDescription => global::VPNRouter.Core.Localization.Strings.TgProxyDescription;
+    public static string TgProxySetupHint => global::VPNRouter.Core.Localization.Strings.TgProxySetupHint;
+    public static string TgProxyPort => global::VPNRouter.Core.Localization.Strings.TgProxyPort;
+    public static string TgProxySecret => global::VPNRouter.Core.Localization.Strings.TgProxySecret;
+    public static string TgProxyLink => global::VPNRouter.Core.Localization.Strings.TgProxyLink;
+    public static string TgProxyCopy => global::VPNRouter.Core.Localization.Strings.TgProxyCopy;
+    public static string TgProxyCopied => global::VPNRouter.Core.Localization.Strings.TgProxyCopied;
+    public static string TgProxyRegenerate => global::VPNRouter.Core.Localization.Strings.TgProxyRegenerate;
+    public static string TgProxyStart => global::VPNRouter.Core.Localization.Strings.TgProxyStart;
+    public static string TgProxyStop => global::VPNRouter.Core.Localization.Strings.TgProxyStop;
+    public static string TgProxyOpenInTelegram => global::VPNRouter.Core.Localization.Strings.TgProxyOpenInTelegram;
+    public static string TgProxyStartAndOpen => global::VPNRouter.Core.Localization.Strings.TgProxyStartAndOpen;
+    public static string TgProxySetupOnce => global::VPNRouter.Core.Localization.Strings.TgProxySetupOnce;
+    public static string TgProxyReopenInTelegram => global::VPNRouter.Core.Localization.Strings.TgProxyReopenInTelegram;
+    public static string TgProxyCopySecretA11y => global::VPNRouter.Core.Localization.Strings.TgProxyCopySecretA11y;
+    public static string TgProxyRegenerateSecretA11y => global::VPNRouter.Core.Localization.Strings.TgProxyRegenerateSecretA11y;
+    public static string OpenFolder => global::VPNRouter.Core.Localization.Strings.OpenFolder;
+    public static string OpenGitHub => global::VPNRouter.Core.Localization.Strings.OpenGitHub;
+    public static string SubscriptionsSection => global::VPNRouter.Core.Localization.Strings.SubscriptionsSection;
+    public static string SubscriptionNameHint => global::VPNRouter.Core.Localization.Strings.SubscriptionNameHint;
+    public static string AddSubscription => global::VPNRouter.Core.Localization.Strings.AddSubscription;
+    public static string RefreshAll => global::VPNRouter.Core.Localization.Strings.RefreshAll;
+    public static string NeverRefreshed => global::VPNRouter.Core.Localization.Strings.NeverRefreshed;
+    public static string SubUpdatedAt => global::VPNRouter.Core.Localization.Strings.SubUpdatedAt;
+    public static string ToolsSection => global::VPNRouter.Core.Localization.Strings.ToolsSection;
+    public static string RunDiagnostics => global::VPNRouter.Core.Localization.Strings.RunDiagnostics;
+    public static string ClearDiscordCache => global::VPNRouter.Core.Localization.Strings.ClearDiscordCache;
+    public static string UpdateHostsFile => global::VPNRouter.Core.Localization.Strings.UpdateHostsFile;
+    public static string OpenServiceMenu => global::VPNRouter.Core.Localization.Strings.OpenServiceMenu;
+    public static string TipOpenServiceMenu => global::VPNRouter.Core.Localization.Strings.TipOpenServiceMenu;
+    public static string ZapretSecStatus => global::VPNRouter.Core.Localization.Strings.ZapretSecStatus;
+    public static string ZapretSecStrategy => global::VPNRouter.Core.Localization.Strings.ZapretSecStrategy;
+    public static string ZapretSecHosts => global::VPNRouter.Core.Localization.Strings.ZapretSecHosts;
+    public static string ZapretSecFilters => global::VPNRouter.Core.Localization.Strings.ZapretSecFilters;
+    public static string ZapretSecUpdates => global::VPNRouter.Core.Localization.Strings.ZapretSecUpdates;
+    public static string ZapretSecDiagnostics => global::VPNRouter.Core.Localization.Strings.ZapretSecDiagnostics;
+    public static string ZapretSecAdvanced => global::VPNRouter.Core.Localization.Strings.ZapretSecAdvanced;
+    public static string ZapretSecStrategyDesc => global::VPNRouter.Core.Localization.Strings.ZapretSecStrategyDesc;
+    public static string ZapretSecHostsDesc => global::VPNRouter.Core.Localization.Strings.ZapretSecHostsDesc;
+    public static string ZapretSecFiltersDesc => global::VPNRouter.Core.Localization.Strings.ZapretSecFiltersDesc;
+    public static string ZapretSecAdvancedDesc => global::VPNRouter.Core.Localization.Strings.ZapretSecAdvancedDesc;
+    public static string GameFilter => global::VPNRouter.Core.Localization.Strings.GameFilter;
+    public static string GameFilterOff => global::VPNRouter.Core.Localization.Strings.GameFilterOff;
+    public static string GameFilterAll => global::VPNRouter.Core.Localization.Strings.GameFilterAll;
+    public static string GameFilterTcp => global::VPNRouter.Core.Localization.Strings.GameFilterTcp;
+    public static string GameFilterUdp => global::VPNRouter.Core.Localization.Strings.GameFilterUdp;
+    public static string IpSetFilter => global::VPNRouter.Core.Localization.Strings.IpSetFilter;
+    public static string IpSetAny => global::VPNRouter.Core.Localization.Strings.IpSetAny;
+    public static string IpSetLoaded => global::VPNRouter.Core.Localization.Strings.IpSetLoaded;
+    public static string IpSetNone => global::VPNRouter.Core.Localization.Strings.IpSetNone;
+    public static string UpdateIpSet => global::VPNRouter.Core.Localization.Strings.UpdateIpSet;
+    public static string AutoUpdateCheckLabel => global::VPNRouter.Core.Localization.Strings.AutoUpdateCheckLabel;
+    public static string RunTestsLabel => global::VPNRouter.Core.Localization.Strings.RunTestsLabel;
+    public static string RemoveServiceLabel => global::VPNRouter.Core.Localization.Strings.RemoveServiceLabel;
+    public static string ApplyChanges => global::VPNRouter.Core.Localization.Strings.ApplyChanges;
+    public static string ChangesApplied => global::VPNRouter.Core.Localization.Strings.ChangesApplied;
+    public static string ApplyFailed => global::VPNRouter.Core.Localization.Strings.ApplyFailed;
+    public static string AddCategory => global::VPNRouter.Core.Localization.Strings.AddCategory;
+    public static string EnableWholeGroup => global::VPNRouter.Core.Localization.Strings.EnableWholeGroup;
+    public static string CategoryNamePrompt => global::VPNRouter.Core.Localization.Strings.CategoryNamePrompt;
+    public static string AddAppHint => global::VPNRouter.Core.Localization.Strings.AddAppHint;
+    public static string GroupDisplayName(string internalName) => global::VPNRouter.Core.Localization.Strings.GroupDisplayName(internalName);
+    public static string SectionRouting => global::VPNRouter.Core.Localization.Strings.SectionRouting;
+    public static string SectionRules => global::VPNRouter.Core.Localization.Strings.SectionRules;
+    public static string SectionLeakProtection => global::VPNRouter.Core.Localization.Strings.SectionLeakProtection;
+    public static string SectionContent => global::VPNRouter.Core.Localization.Strings.SectionContent;
+    public static string SectionUpdates => global::VPNRouter.Core.Localization.Strings.SectionUpdates;
+    public static string AutostartSection => global::VPNRouter.Core.Localization.Strings.AutostartSection;
+    public static string AutostartVpn => global::VPNRouter.Core.Localization.Strings.AutostartVpn;
+    public static string AutostartZapret => global::VPNRouter.Core.Localization.Strings.AutostartZapret;
+    public static string AutostartTgProxy => global::VPNRouter.Core.Localization.Strings.AutostartTgProxy;
+    public static string AutostartUi => global::VPNRouter.Core.Localization.Strings.AutostartUi;
+    public static string TabFreeConfigs => global::VPNRouter.Core.Localization.Strings.TabFreeConfigs;
+    public static string FcDashboardTotal => global::VPNRouter.Core.Localization.Strings.FcDashboardTotal;
+    public static string FcDashboardWorking => global::VPNRouter.Core.Localization.Strings.FcDashboardWorking;
+    public static string FcDashboardTimeout => global::VPNRouter.Core.Localization.Strings.FcDashboardTimeout;
+    public static string FcDashboardUnreach => global::VPNRouter.Core.Localization.Strings.FcDashboardUnreach;
+    public static string FcDashboardTlsFail => global::VPNRouter.Core.Localization.Strings.FcDashboardTlsFail;
+    public static string FcDashboardVerified => global::VPNRouter.Core.Localization.Strings.FcDashboardVerified;
+    public static string FcDashboardFake => global::VPNRouter.Core.Localization.Strings.FcDashboardFake;
+    public static string FcDeepVerify => global::VPNRouter.Core.Localization.Strings.FcDeepVerify;
+    public static string FcStatusNoDeepCandidates => global::VPNRouter.Core.Localization.Strings.FcStatusNoDeepCandidates;
+    public static string FcStatusDeepVerifyStart(int target) => global::VPNRouter.Core.Localization.Strings.FcStatusDeepVerifyStart(target);
+    public static string FcStatusDeepVerifyProbe(int found, int target, int tested, string host) => global::VPNRouter.Core.Localization.Strings.FcStatusDeepVerifyProbe(found, target, tested, host);
+    public static string FcStatusDeepVerifyProgress(int found, int target, int tested, int totalQueue) => global::VPNRouter.Core.Localization.Strings.FcStatusDeepVerifyProgress(found, target, tested, totalQueue);
+    public static string FcStatusDeepVerifyDone(int verified) => global::VPNRouter.Core.Localization.Strings.FcStatusDeepVerifyDone(verified);
+    public static string FcStatusDeepVerifyExhausted(int verified, int tested) => global::VPNRouter.Core.Localization.Strings.FcStatusDeepVerifyExhausted(verified, tested);
+    public static string FcStatusBatchedSearchStart(int target, int poolSize) => global::VPNRouter.Core.Localization.Strings.FcStatusBatchedSearchStart(target, poolSize);
+    public static string FcStatusBatchedTcpTls(int found, int target, int batchNum, int totalBatches) => global::VPNRouter.Core.Localization.Strings.FcStatusBatchedTcpTls(found, target, batchNum, totalBatches);
+    public static string FcStatusBatchedTcpTlsProgress(int found, int target, int batchNum, int totalBatches, int done, int total) => global::VPNRouter.Core.Localization.Strings.FcStatusBatchedTcpTlsProgress(found, target, batchNum, totalBatches, done, total);
+    public static string FcStatusBatchedDeepVerify(int found, int target, int batchNum, int totalBatches, int candidates) => global::VPNRouter.Core.Localization.Strings.FcStatusBatchedDeepVerify(found, target, batchNum, totalBatches, candidates);
+    public static string FcStatusBatchedFound(int found, int target) => global::VPNRouter.Core.Localization.Strings.FcStatusBatchedFound(found, target);
+    public static string FcStatusBatchedProbing(int found, int target, string host, int port, string cc) => global::VPNRouter.Core.Localization.Strings.FcStatusBatchedProbing(found, target, host, port, cc);
+    public static string FcDeepTargetLabel => global::VPNRouter.Core.Localization.Strings.FcDeepTargetLabel;
+    public static string FcDeepExcludeRu => global::VPNRouter.Core.Localization.Strings.FcDeepExcludeRu;
+    public static string FcDeepHint => global::VPNRouter.Core.Localization.Strings.FcDeepHint;
+    public static string FcStatusMainVpnActive => global::VPNRouter.Core.Localization.Strings.FcStatusMainVpnActive;
+    public static string FcOpenLogs => global::VPNRouter.Core.Localization.Strings.FcOpenLogs;
+    public static string FcClearFailed => global::VPNRouter.Core.Localization.Strings.FcClearFailed;
+    public static string FcKeepVerified => global::VPNRouter.Core.Localization.Strings.FcKeepVerified;
+    public static string FcKeepVerifiedOnly => global::VPNRouter.Core.Localization.Strings.FcKeepVerifiedOnly;
+    public static string FcClearAll => global::VPNRouter.Core.Localization.Strings.FcClearAll;
+    public static string FcCleanupHint => global::VPNRouter.Core.Localization.Strings.FcCleanupHint;
+    public static string FcStatusCleared(int removed, int kept) => global::VPNRouter.Core.Localization.Strings.FcStatusCleared(removed, kept);
+    public static string FcCountryFilter => global::VPNRouter.Core.Localization.Strings.FcCountryFilter;
+    public static string FcRefreshSources => global::VPNRouter.Core.Localization.Strings.FcRefreshSources;
+    public static string FcRetestAll => global::VPNRouter.Core.Localization.Strings.FcRetestAll;
+    public static string FcConnectHint => global::VPNRouter.Core.Localization.Strings.FcConnectHint;
+    public static string FcTipVpnActive => global::VPNRouter.Core.Localization.Strings.FcTipVpnActive;
+    public static string FcCancel => global::VPNRouter.Core.Localization.Strings.FcCancel;
+    public static string FcApplySelected => global::VPNRouter.Core.Localization.Strings.FcApplySelected;
+    public static string FcCountryAll => global::VPNRouter.Core.Localization.Strings.FcCountryAll;
+    public static string FcColCountry => global::VPNRouter.Core.Localization.Strings.FcColCountry;
+    public static string FcColEndpoint => global::VPNRouter.Core.Localization.Strings.FcColEndpoint;
+    public static string FcColLatency => global::VPNRouter.Core.Localization.Strings.FcColLatency;
+    public static string FcColBandwidth => global::VPNRouter.Core.Localization.Strings.FcColBandwidth;
+    public static string FcSpeedColumnTooltip => global::VPNRouter.Core.Localization.Strings.FcSpeedColumnTooltip;
+    public static string HealthCheckSavedToast => global::VPNRouter.Core.Localization.Strings.HealthCheckSavedToast;
+    public static string FcColSni => global::VPNRouter.Core.Localization.Strings.FcColSni;
+    public static string FcColTransport => global::VPNRouter.Core.Localization.Strings.FcColTransport;
+    public static string FcEmptyHint => global::VPNRouter.Core.Localization.Strings.FcEmptyHint;
+    public static string FcEmptyCtaTitle => global::VPNRouter.Core.Localization.Strings.FcEmptyCtaTitle;
+    public static string FcEmptyCtaSubtitle => global::VPNRouter.Core.Localization.Strings.FcEmptyCtaSubtitle;
+    public static string FcEmptyCtaButton => global::VPNRouter.Core.Localization.Strings.FcEmptyCtaButton;
+    public static string FcFilteredEmpty => global::VPNRouter.Core.Localization.Strings.FcFilteredEmpty;
+    public static string FcRefreshHint => global::VPNRouter.Core.Localization.Strings.FcRefreshHint;
+    public static string FcSmartRefreshLabel => global::VPNRouter.Core.Localization.Strings.FcSmartRefreshLabel;
+    public static string FcTargetNLabel => global::VPNRouter.Core.Localization.Strings.FcTargetNLabel;
+    public static string FcConfigsWord => global::VPNRouter.Core.Localization.Strings.FcConfigsWord;
+    public static string FcWithPingUnder => global::VPNRouter.Core.Localization.Strings.FcWithPingUnder;
+    public static string FcMsUnit => global::VPNRouter.Core.Localization.Strings.FcMsUnit;
+    public static string FcSmartRefreshHint => global::VPNRouter.Core.Localization.Strings.FcSmartRefreshHint;
+    public static string FcMoreOptions => global::VPNRouter.Core.Localization.Strings.FcMoreOptions;
+    public static string FcListHeader => global::VPNRouter.Core.Localization.Strings.FcListHeader;
+    public static string FcListShown => global::VPNRouter.Core.Localization.Strings.FcListShown;
+    public static string FcDeepStop => global::VPNRouter.Core.Localization.Strings.FcDeepStop;
+    public static string FcDeepStopTooltip => global::VPNRouter.Core.Localization.Strings.FcDeepStopTooltip;
+    public static string FcAdvancedSettings => global::VPNRouter.Core.Localization.Strings.FcAdvancedSettings;
+    public static string FcTabSearch => global::VPNRouter.Core.Localization.Strings.FcTabSearch;
+    public static string FcTabSaved => global::VPNRouter.Core.Localization.Strings.FcTabSaved;
+    public static string FcTabSavedWithCount(int n) => global::VPNRouter.Core.Localization.Strings.FcTabSavedWithCount(n);
+    public static string FcSavedTabHint => global::VPNRouter.Core.Localization.Strings.FcSavedTabHint;
+    public static string FcSavedRecheckStaleBtn(int n) => global::VPNRouter.Core.Localization.Strings.FcSavedRecheckStaleBtn(n);
+    public static string FcSavedRecheckAllBtn => global::VPNRouter.Core.Localization.Strings.FcSavedRecheckAllBtn;
+    public static string FcSavedClearAllBtn => global::VPNRouter.Core.Localization.Strings.FcSavedClearAllBtn;
+    public static string FcSavedColStatus => global::VPNRouter.Core.Localization.Strings.FcSavedColStatus;
+    public static string FcSavedEmpty => global::VPNRouter.Core.Localization.Strings.FcSavedEmpty;
+    public static string FcSavedRecheckOneTooltip => global::VPNRouter.Core.Localization.Strings.FcSavedRecheckOneTooltip;
+    public static string FcSavedRemoveOneTooltip => global::VPNRouter.Core.Localization.Strings.FcSavedRemoveOneTooltip;
+    public static string FcFreshnessFresh => global::VPNRouter.Core.Localization.Strings.FcFreshnessFresh;
+    public static string FcFreshnessAgeingDays(int d) => global::VPNRouter.Core.Localization.Strings.FcFreshnessAgeingDays(d);
+    public static string FcFreshnessStale => global::VPNRouter.Core.Localization.Strings.FcFreshnessStale;
+    public static string FcFreshnessFailed => global::VPNRouter.Core.Localization.Strings.FcFreshnessFailed;
+    public static string FcStatusRecheckOne(string host, int port, string cc) => global::VPNRouter.Core.Localization.Strings.FcStatusRecheckOne(host, port, cc);
+    public static string FcStatusRecheckAllStart(int total) => global::VPNRouter.Core.Localization.Strings.FcStatusRecheckAllStart(total);
+    public static string FcStatusRecheckAllProgress(int done, int total) => global::VPNRouter.Core.Localization.Strings.FcStatusRecheckAllProgress(done, total);
+    public static string FcStatusRecheckAllDone(int verified, int failed) => global::VPNRouter.Core.Localization.Strings.FcStatusRecheckAllDone(verified, failed);
+    public static string FcSearchListEmptyHint => global::VPNRouter.Core.Localization.Strings.FcSearchListEmptyHint;
+    public static string FcFastScanLabel => global::VPNRouter.Core.Localization.Strings.FcFastScanLabel;
+    public static string FcFastScanHint => global::VPNRouter.Core.Localization.Strings.FcFastScanHint;
+    public static string FcPresetLabel => global::VPNRouter.Core.Localization.Strings.FcPresetLabel;
+    public static string FcPresetGaming => global::VPNRouter.Core.Localization.Strings.FcPresetGaming;
+    public static string FcPresetStream => global::VPNRouter.Core.Localization.Strings.FcPresetStream;
+    public static string FcPresetChat => global::VPNRouter.Core.Localization.Strings.FcPresetChat;
+    public static string FcPresetBest => global::VPNRouter.Core.Localization.Strings.FcPresetBest;
+    public static string FcPresetCustom => global::VPNRouter.Core.Localization.Strings.FcPresetCustom;
+    public static string FcCustomPing => global::VPNRouter.Core.Localization.Strings.FcCustomPing;
+    public static string FcCustomBw => global::VPNRouter.Core.Localization.Strings.FcCustomBw;
+    public static string FcMbpsUnit => global::VPNRouter.Core.Localization.Strings.FcMbpsUnit;
+    public static string FcBandwidthHint => global::VPNRouter.Core.Localization.Strings.FcBandwidthHint;
+    public static string FcUserSrcSection => global::VPNRouter.Core.Localization.Strings.FcUserSrcSection;
+    public static string FcUserSrcNamePlaceholder => global::VPNRouter.Core.Localization.Strings.FcUserSrcNamePlaceholder;
+    public static string FcUserSrcUrlPlaceholder => global::VPNRouter.Core.Localization.Strings.FcUserSrcUrlPlaceholder;
+    public static string FcUserSrcAdd => global::VPNRouter.Core.Localization.Strings.FcUserSrcAdd;
+    public static string FcUserSrcHint => global::VPNRouter.Core.Localization.Strings.FcUserSrcHint;
+    public static string FcUserSrcEmpty => global::VPNRouter.Core.Localization.Strings.FcUserSrcEmpty;
+    public static string FcUserSrcAdded => global::VPNRouter.Core.Localization.Strings.FcUserSrcAdded;
+    public static string FcUserSrcRemoved => global::VPNRouter.Core.Localization.Strings.FcUserSrcRemoved;
+    public static string FcUserSrcDuplicate => global::VPNRouter.Core.Localization.Strings.FcUserSrcDuplicate;
+    public static string FcUserSrcInvalidUrl => global::VPNRouter.Core.Localization.Strings.FcUserSrcInvalidUrl;
+    public static string FcUserSrcEmptyUrl => global::VPNRouter.Core.Localization.Strings.FcUserSrcEmptyUrl;
+    public static string FcRefreshTooltip => global::VPNRouter.Core.Localization.Strings.FcRefreshTooltip;
+    public static string FcRetestTooltip => global::VPNRouter.Core.Localization.Strings.FcRetestTooltip;
+    public static string FcDeepVerifyTooltip => global::VPNRouter.Core.Localization.Strings.FcDeepVerifyTooltip;
+    public static string FcSecWarnTitle => global::VPNRouter.Core.Localization.Strings.FcSecWarnTitle;
+    public static string FcSecWarnHeader => global::VPNRouter.Core.Localization.Strings.FcSecWarnHeader;
+    public static string FcSecWarnBody => global::VPNRouter.Core.Localization.Strings.FcSecWarnBody;
+    public static string FcSecWarnDontUseList => global::VPNRouter.Core.Localization.Strings.FcSecWarnDontUseList;
+    public static string FcSecWarnGoodFor => global::VPNRouter.Core.Localization.Strings.FcSecWarnGoodFor;
+    public static string FcSecWarnProceed => global::VPNRouter.Core.Localization.Strings.FcSecWarnProceed;
+    public static string FcSecWarnCancel => global::VPNRouter.Core.Localization.Strings.FcSecWarnCancel;
+    public static string FcPageDescription => global::VPNRouter.Core.Localization.Strings.FcPageDescription;
+    public static string FcStatusEmpty => global::VPNRouter.Core.Localization.Strings.FcStatusEmpty;
+    public static string FcStatusCancelled => global::VPNRouter.Core.Localization.Strings.FcStatusCancelled;
+    public static string FcStatusApplyFailed => global::VPNRouter.Core.Localization.Strings.FcStatusApplyFailed;
+    public static string FcStatusCacheAge(string age) => global::VPNRouter.Core.Localization.Strings.FcStatusCacheAge(age);
+    public static string FcStatusRefreshed(int n) => global::VPNRouter.Core.Localization.Strings.FcStatusRefreshed(n);
+    public static string FcStatusTested(int n) => global::VPNRouter.Core.Localization.Strings.FcStatusTested(n);
+    public static string FcStatusFailed(string err) => global::VPNRouter.Core.Localization.Strings.FcStatusFailed(err);
+    public static string FcStatusApplying(string ep) => global::VPNRouter.Core.Localization.Strings.FcStatusApplying(ep);
+    public static string FcStatusApplied(string ep) => global::VPNRouter.Core.Localization.Strings.FcStatusApplied(ep);
+    public static string AutostartWithWindows => global::VPNRouter.Core.Localization.Strings.AutostartWithWindows;
+    public static string RestartService => global::VPNRouter.Core.Localization.Strings.RestartService;
+    public static string ReinstallService => global::VPNRouter.Core.Localization.Strings.ReinstallService;
+    public static string InstallingService => global::VPNRouter.Core.Localization.Strings.InstallingService;
+    public static string RemovingService => global::VPNRouter.Core.Localization.Strings.RemovingService;
+    public static string ServerListHint => global::VPNRouter.Core.Localization.Strings.ServerListHint;
+    public static string ZapretHostsHint => global::VPNRouter.Core.Localization.Strings.ZapretHostsHint;
+    public static string AppsGroupEmpty => global::VPNRouter.Core.Localization.Strings.AppsGroupEmpty;
+    public static string AppsFullTunnelBanner => global::VPNRouter.Core.Localization.Strings.AppsFullTunnelBanner;
+    public static string AppsFullTunnelBannerAction => global::VPNRouter.Core.Localization.Strings.AppsFullTunnelBannerAction;
+    public static string CustomRulesTitle => global::VPNRouter.Core.Localization.Strings.CustomRulesTitle;
+    public static string CustomRulesDescription => global::VPNRouter.Core.Localization.Strings.CustomRulesDescription;
+    public static string CustomRulesPlaceholder => global::VPNRouter.Core.Localization.Strings.CustomRulesPlaceholder;
+    public static string CustomRulesErrorHeader => global::VPNRouter.Core.Localization.Strings.CustomRulesErrorHeader;
+    public static string CustomRulesConflictHeader => global::VPNRouter.Core.Localization.Strings.CustomRulesConflictHeader;
+    public static string CustomRulesPageDescription => global::VPNRouter.Core.Localization.Strings.CustomRulesPageDescription;
+    public static string CustomRulesEmpty => global::VPNRouter.Core.Localization.Strings.CustomRulesEmpty;
+    public static string CustomRulesAddTitle => global::VPNRouter.Core.Localization.Strings.CustomRulesAddTitle;
+    public static string CustomRulesAddBtn => global::VPNRouter.Core.Localization.Strings.CustomRulesAddBtn;
+    public static string CustomRulesActionLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesActionLabel;
+    public static string CustomRulesTypeLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesTypeLabel;
+    public static string CustomRulesValueLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesValueLabel;
+    public static string CustomRulesCommentLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesCommentLabel;
+    public static string CustomRulesActionDirect => global::VPNRouter.Core.Localization.Strings.CustomRulesActionDirect;
+    public static string CustomRulesActionProxy => global::VPNRouter.Core.Localization.Strings.CustomRulesActionProxy;
+    public static string CustomRulesActionBlock => global::VPNRouter.Core.Localization.Strings.CustomRulesActionBlock;
+    public static string CustomRulesValuePlaceholder => global::VPNRouter.Core.Localization.Strings.CustomRulesValuePlaceholder;
+    public static string CustomRulesAdvancedMode => global::VPNRouter.Core.Localization.Strings.CustomRulesAdvancedMode;
+    public static string CustomRulesValidationFailed => global::VPNRouter.Core.Localization.Strings.CustomRulesValidationFailed;
+    public static string CustomRulesActionDirectLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesActionDirectLabel;
+    public static string CustomRulesActionProxyLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesActionProxyLabel;
+    public static string CustomRulesActionBlockLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesActionBlockLabel;
+    public static string CustomRulesDelete => global::VPNRouter.Core.Localization.Strings.CustomRulesDelete;
+    public static string CustomRulesEdit => global::VPNRouter.Core.Localization.Strings.CustomRulesEdit;
+    public static string CustomRulesMoveUp => global::VPNRouter.Core.Localization.Strings.CustomRulesMoveUp;
+    public static string CustomRulesMoveDown => global::VPNRouter.Core.Localization.Strings.CustomRulesMoveDown;
+    public static string CustomRulesImport => global::VPNRouter.Core.Localization.Strings.CustomRulesImport;
+    public static string CustomRulesExport => global::VPNRouter.Core.Localization.Strings.CustomRulesExport;
+    public static string CustomRulesImportTooltip => global::VPNRouter.Core.Localization.Strings.CustomRulesImportTooltip;
+    public static string CustomRulesExportTooltip => global::VPNRouter.Core.Localization.Strings.CustomRulesExportTooltip;
+    public static string CustomRulesSearchPlaceholder => global::VPNRouter.Core.Localization.Strings.CustomRulesSearchPlaceholder;
+    public static string CustomRulesClearAll => global::VPNRouter.Core.Localization.Strings.CustomRulesClearAll;
+    public static string CustomRulesEnableAll => global::VPNRouter.Core.Localization.Strings.CustomRulesEnableAll;
+    public static string CustomRulesDisableAll => global::VPNRouter.Core.Localization.Strings.CustomRulesDisableAll;
+    public static string CustomRulesClearAllTooltip => global::VPNRouter.Core.Localization.Strings.CustomRulesClearAllTooltip;
+    public static string CustomRulesEnableAllTooltip => global::VPNRouter.Core.Localization.Strings.CustomRulesEnableAllTooltip;
+    public static string CustomRulesDisableAllTooltip => global::VPNRouter.Core.Localization.Strings.CustomRulesDisableAllTooltip;
+    public static string CustomRulesNoMatchHint => global::VPNRouter.Core.Localization.Strings.CustomRulesNoMatchHint;
+    public static string CustomRulesExistingHeader => global::VPNRouter.Core.Localization.Strings.CustomRulesExistingHeader;
+    public static string RulesViewCards => global::VPNRouter.Core.Localization.Strings.RulesViewCards;
+    public static string RulesViewRead => global::VPNRouter.Core.Localization.Strings.RulesViewRead;
+    public static string RulesViewEdit => global::VPNRouter.Core.Localization.Strings.RulesViewEdit;
+    public static string RulesViewCardsTooltip => global::VPNRouter.Core.Localization.Strings.RulesViewCardsTooltip;
+    public static string RulesViewReadTooltip => global::VPNRouter.Core.Localization.Strings.RulesViewReadTooltip;
+    public static string RulesViewEditTooltip => global::VPNRouter.Core.Localization.Strings.RulesViewEditTooltip;
+    public static string RulesEditorApply => global::VPNRouter.Core.Localization.Strings.RulesEditorApply;
+    public static string RulesEditorRevert => global::VPNRouter.Core.Localization.Strings.RulesEditorRevert;
+    public static string RulesEditorDirty => global::VPNRouter.Core.Localization.Strings.RulesEditorDirty;
+    public static string RulesEditorFormatHint => global::VPNRouter.Core.Localization.Strings.RulesEditorFormatHint;
+    public static string RulesFilterAll => global::VPNRouter.Core.Localization.Strings.RulesFilterAll;
+    public static string RulesBulkActions => global::VPNRouter.Core.Localization.Strings.RulesBulkActions;
+    public static string RulesSortByType => global::VPNRouter.Core.Localization.Strings.RulesSortByType;
+    public static string RulesClearAllHint => global::VPNRouter.Core.Localization.Strings.RulesClearAllHint;
+    public static string RulesClearAllConfirm => global::VPNRouter.Core.Localization.Strings.RulesClearAllConfirm;
+    public static string CommonCancel => global::VPNRouter.Core.Localization.Strings.CommonCancel;
+    public static string RulesCustomAboveToggles => global::VPNRouter.Core.Localization.Strings.RulesCustomAboveToggles;
+    public static string RulesCustomAboveTogglesHint => global::VPNRouter.Core.Localization.Strings.RulesCustomAboveTogglesHint;
+    public static string RulesAddLabelAction => global::VPNRouter.Core.Localization.Strings.RulesAddLabelAction;
+    public static string RulesAddLabelType => global::VPNRouter.Core.Localization.Strings.RulesAddLabelType;
+    public static string RulesAddLabelValue => global::VPNRouter.Core.Localization.Strings.RulesAddLabelValue;
+    public static string RulesAddLabelComment => global::VPNRouter.Core.Localization.Strings.RulesAddLabelComment;
+    public static string RulesAddLabelOpt => global::VPNRouter.Core.Localization.Strings.RulesAddLabelOpt;
+    public static string RulesHelpHeader => global::VPNRouter.Core.Localization.Strings.RulesHelpHeader;
+    public static string RulesHelpB1Pre => global::VPNRouter.Core.Localization.Strings.RulesHelpB1Pre;
+    public static string RulesHelpB1T1 => global::VPNRouter.Core.Localization.Strings.RulesHelpB1T1;
+    public static string RulesHelpB1Mid => global::VPNRouter.Core.Localization.Strings.RulesHelpB1Mid;
+    public static string RulesHelpB1T2 => global::VPNRouter.Core.Localization.Strings.RulesHelpB1T2;
+    public static string RulesHelpB1Suf => global::VPNRouter.Core.Localization.Strings.RulesHelpB1Suf;
+    public static string RulesHelpB2Pre => global::VPNRouter.Core.Localization.Strings.RulesHelpB2Pre;
+    public static string RulesHelpB2Mid => global::VPNRouter.Core.Localization.Strings.RulesHelpB2Mid;
+    public static string RulesHelpB2Suf => global::VPNRouter.Core.Localization.Strings.RulesHelpB2Suf;
+    public static string RulesHelpB3Pre => global::VPNRouter.Core.Localization.Strings.RulesHelpB3Pre;
+    public static string RulesHelpB3Bold => global::VPNRouter.Core.Localization.Strings.RulesHelpB3Bold;
+    public static string RulesHelpB3Suf => global::VPNRouter.Core.Localization.Strings.RulesHelpB3Suf;
+    public static string RulesHelpBanner => global::VPNRouter.Core.Localization.Strings.RulesHelpBanner;
+    public static string CustomDirectRulesTitle => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesTitle;
+    public static string CustomDirectRulesDescription => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesDescription;
+    public static string CustomDirectRulesPlaceholder => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesPlaceholder;
+    public static string CustomDirectRulesErrorHeader => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesErrorHeader;
+    public static string SelectCategoryHint => global::VPNRouter.Core.Localization.Strings.SelectCategoryHint;
+    public static string TipBypassRu => global::VPNRouter.Core.Localization.Strings.TipBypassRu;
+    public static string TipLeakBlockOnFail => global::VPNRouter.Core.Localization.Strings.TipLeakBlockOnFail;
+    public static string TipLeakStrictMode => global::VPNRouter.Core.Localization.Strings.TipLeakStrictMode;
+    public static string TipLeakForceIpv4 => global::VPNRouter.Core.Localization.Strings.TipLeakForceIpv4;
+    public static string TipLeakStrictDns => global::VPNRouter.Core.Localization.Strings.TipLeakStrictDns;
+    public static string TipLeakFlushDns => global::VPNRouter.Core.Localization.Strings.TipLeakFlushDns;
+    public static string TipBlockAds => global::VPNRouter.Core.Localization.Strings.TipBlockAds;
+    public static string TipZapretAutoUpdate => global::VPNRouter.Core.Localization.Strings.TipZapretAutoUpdate;
+    public static string TipFcFastScan => global::VPNRouter.Core.Localization.Strings.TipFcFastScan;
+    public static string TipFcSmartRefresh => global::VPNRouter.Core.Localization.Strings.TipFcSmartRefresh;
+    public static string TipFcSkipRu => global::VPNRouter.Core.Localization.Strings.TipFcSkipRu;
+    public static string SmpToggleToAdvanced => global::VPNRouter.Core.Localization.Strings.SmpToggleToAdvanced;
+    public static string SmpToggleToSimple => global::VPNRouter.Core.Localization.Strings.SmpToggleToSimple;
+    public static string SmpToggleTooltip => global::VPNRouter.Core.Localization.Strings.SmpToggleTooltip;
+    public static string SmpPlaceholderTitle => global::VPNRouter.Core.Localization.Strings.SmpPlaceholderTitle;
+    public static string SmpPlaceholderBody => global::VPNRouter.Core.Localization.Strings.SmpPlaceholderBody;
+    public static string SmpPlaceholderSwitchToAdvanced => global::VPNRouter.Core.Localization.Strings.SmpPlaceholderSwitchToAdvanced;
+    public static string SmpInputLabel => global::VPNRouter.Core.Localization.Strings.SmpInputLabel;
+    public static string SmpInputWatermark => global::VPNRouter.Core.Localization.Strings.SmpInputWatermark;
+    public static string SmpInputHint => global::VPNRouter.Core.Localization.Strings.SmpInputHint;
+    public static string SmpTunnelModeLabel => global::VPNRouter.Core.Localization.Strings.SmpTunnelModeLabel;
+    public static string SmpSplitOption => global::VPNRouter.Core.Localization.Strings.SmpSplitOption;
+    public static string SmpSplitHint => global::VPNRouter.Core.Localization.Strings.SmpSplitHint;
+    public static string SmpFullOption => global::VPNRouter.Core.Localization.Strings.SmpFullOption;
+    public static string SmpFullHint => global::VPNRouter.Core.Localization.Strings.SmpFullHint;
+    public static string SmpAdvancedLink => global::VPNRouter.Core.Localization.Strings.SmpAdvancedLink;
+    public static string SmpAdvancedHint => global::VPNRouter.Core.Localization.Strings.SmpAdvancedHint;
+    public static string SmpChangeConfig => global::VPNRouter.Core.Localization.Strings.SmpChangeConfig;
+    public static string SmpConnectedTitle => global::VPNRouter.Core.Localization.Strings.SmpConnectedTitle;
+    public static string SmpDisconnectedTitle => global::VPNRouter.Core.Localization.Strings.SmpDisconnectedTitle;
+    public static string SmpTipSplit => global::VPNRouter.Core.Localization.Strings.SmpTipSplit;
+    public static string SmpTipFull => global::VPNRouter.Core.Localization.Strings.SmpTipFull;
+    public static string SmpAutostartLabel => global::VPNRouter.Core.Localization.Strings.SmpAutostartLabel;
+    public static string SmpTipAutostart => global::VPNRouter.Core.Localization.Strings.SmpTipAutostart;
+    public static string SmpStartVpn => global::VPNRouter.Core.Localization.Strings.SmpStartVpn;
+    public static string SmpStopVpn => global::VPNRouter.Core.Localization.Strings.SmpStopVpn;
+    public static string SmpActiveThrough => global::VPNRouter.Core.Localization.Strings.SmpActiveThrough;
+    public static string SmpStatusProtected => global::VPNRouter.Core.Localization.Strings.SmpStatusProtected;
+    public static string SmpStatusConnecting => global::VPNRouter.Core.Localization.Strings.SmpStatusConnecting;
+    public static string SmpStatusNotConnected => global::VPNRouter.Core.Localization.Strings.SmpStatusNotConnected;
+    public static string SmpStatusConnectedVia => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectedVia;
+    public static string SmpStatusConnectedNoDetails => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectedNoDetails;
+    public static string SmpStatusConnectingHint => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectingHint;
+    public static string SmpStatusDisconnectedHint => global::VPNRouter.Core.Localization.Strings.SmpStatusDisconnectedHint;
+    public static string SmpConfigRowLabel => global::VPNRouter.Core.Localization.Strings.SmpConfigRowLabel;
+    public static string SmpCfgSubscribe => global::VPNRouter.Core.Localization.Strings.SmpCfgSubscribe;
+    public static string SmpCfgManual => global::VPNRouter.Core.Localization.Strings.SmpCfgManual;
+    public static string SmpCfgCustom => global::VPNRouter.Core.Localization.Strings.SmpCfgCustom;
+    public static string SmpCfgSplit => global::VPNRouter.Core.Localization.Strings.SmpCfgSplit;
+    public static string SmpCfgFull => global::VPNRouter.Core.Localization.Strings.SmpCfgFull;
+    public static string SmpCtaConnect => global::VPNRouter.Core.Localization.Strings.SmpCtaConnect;
+    public static string SmpCtaDisconnect => global::VPNRouter.Core.Localization.Strings.SmpCtaDisconnect;
+    public static string SmpCtaCancel => global::VPNRouter.Core.Localization.Strings.SmpCtaCancel;
+    public static string SmpAdvCardTitle => global::VPNRouter.Core.Localization.Strings.SmpAdvCardTitle;
+    public static string SmpAdvCardSubtitle => global::VPNRouter.Core.Localization.Strings.SmpAdvCardSubtitle;
+    public static string SmpMenuTheme => global::VPNRouter.Core.Localization.Strings.SmpMenuTheme;
+    public static string SmpMenuLanguage => global::VPNRouter.Core.Localization.Strings.SmpMenuLanguage;
+    public static string SmpMenuOpenLogs => global::VPNRouter.Core.Localization.Strings.SmpMenuOpenLogs;
+    public static string SmpMenuCheckLeaks => global::VPNRouter.Core.Localization.Strings.SmpMenuCheckLeaks;
+    public static string SmpMenuCheckUpdates => global::VPNRouter.Core.Localization.Strings.SmpMenuCheckUpdates;
+    public static string SmpMenuSwitchToAdv => global::VPNRouter.Core.Localization.Strings.SmpMenuSwitchToAdv;
+    public static string SmpMenuHealthCheck => global::VPNRouter.Core.Localization.Strings.SmpMenuHealthCheck;
+    public static string SmpMenuSafeMode => global::VPNRouter.Core.Localization.Strings.SmpMenuSafeMode;
+    public static string SmpMenuResetConfig => global::VPNRouter.Core.Localization.Strings.SmpMenuResetConfig;
+    public static string SmpMenuResetConfirm => global::VPNRouter.Core.Localization.Strings.SmpMenuResetConfirm;
+    public static string TipSmpMenuHealthCheck => global::VPNRouter.Core.Localization.Strings.TipSmpMenuHealthCheck;
+    public static string TipSmpMenuSafeMode => global::VPNRouter.Core.Localization.Strings.TipSmpMenuSafeMode;
+    public static string TipSmpMenuResetConfig => global::VPNRouter.Core.Localization.Strings.TipSmpMenuResetConfig;
+    public static string AutostartPlatformNotice => global::VPNRouter.Core.Localization.Strings.AutostartPlatformNotice;
+    public static string SmpMenuViewSection => global::VPNRouter.Core.Localization.Strings.SmpMenuViewSection;
+    public static string SmpMenuDiagnosticsSection => global::VPNRouter.Core.Localization.Strings.SmpMenuDiagnosticsSection;
+    public static string SmpMenuTroubleshootingSection => global::VPNRouter.Core.Localization.Strings.SmpMenuTroubleshootingSection;
+    public static string SmpSegLight => global::VPNRouter.Core.Localization.Strings.SmpSegLight;
+    public static string SmpSegDark => global::VPNRouter.Core.Localization.Strings.SmpSegDark;
+    public static string SmpSegRu => global::VPNRouter.Core.Localization.Strings.SmpSegRu;
+    public static string SmpSegEn => global::VPNRouter.Core.Localization.Strings.SmpSegEn;
+    public static string LanguageSwitching => global::VPNRouter.Core.Localization.Strings.LanguageSwitching;
+    public static string SmpMenuAbout => global::VPNRouter.Core.Localization.Strings.SmpMenuAbout;
+    public static string TipSmpMenuAbout => global::VPNRouter.Core.Localization.Strings.TipSmpMenuAbout;
+    public static string AboutTitle => global::VPNRouter.Core.Localization.Strings.AboutTitle;
+    public static string AboutBrandName => global::VPNRouter.Core.Localization.Strings.AboutBrandName;
+    public static string AboutTagline => global::VPNRouter.Core.Localization.Strings.AboutTagline;
+    public static string AboutVersionLabel => global::VPNRouter.Core.Localization.Strings.AboutVersionLabel;
+    public static string AboutSingBoxLabel => global::VPNRouter.Core.Localization.Strings.AboutSingBoxLabel;
+    public static string AboutCreatorLabel => global::VPNRouter.Core.Localization.Strings.AboutCreatorLabel;
+    public static string AboutRepoLabel => global::VPNRouter.Core.Localization.Strings.AboutRepoLabel;
+    public static string AboutCloseBtn => global::VPNRouter.Core.Localization.Strings.AboutCloseBtn;
+    public static string TipOpenLogs => global::VPNRouter.Core.Localization.Strings.TipOpenLogs;
+    public static string TipIpLeak => global::VPNRouter.Core.Localization.Strings.TipIpLeak;
+    public static string TipRemoveCategory => global::VPNRouter.Core.Localization.Strings.TipRemoveCategory;
+    public static string TipRemoveApp => global::VPNRouter.Core.Localization.Strings.TipRemoveApp;
+    public static string TipOpenFreeConfigLogs => global::VPNRouter.Core.Localization.Strings.TipOpenFreeConfigLogs;
+    public static string TipClearFailed => global::VPNRouter.Core.Localization.Strings.TipClearFailed;
+    public static string TipKeepVerifiedOnly => global::VPNRouter.Core.Localization.Strings.TipKeepVerifiedOnly;
+    public static string TipClearAllCache => global::VPNRouter.Core.Localization.Strings.TipClearAllCache;
+    public static string TipTcpTlsPing => global::VPNRouter.Core.Localization.Strings.TipTcpTlsPing;
+    public static string TipTestTcpTls => global::VPNRouter.Core.Localization.Strings.TipTestTcpTls;
+    public static string TipCloseServerDetail => global::VPNRouter.Core.Localization.Strings.TipCloseServerDetail;
+    public static string TipDeleteServer => global::VPNRouter.Core.Localization.Strings.TipDeleteServer;
+    public static string TipTestAllServers => global::VPNRouter.Core.Localization.Strings.TipTestAllServers;
+    public static string TipDeepVerifyServers => global::VPNRouter.Core.Localization.Strings.TipDeepVerifyServers;
+    public static string TipRefreshSubscription => global::VPNRouter.Core.Localization.Strings.TipRefreshSubscription;
+    public static string TipRemoveSubscription => global::VPNRouter.Core.Localization.Strings.TipRemoveSubscription;
+    public static string LblName => global::VPNRouter.Core.Localization.Strings.LblName;
+    public static string LblServer => global::VPNRouter.Core.Localization.Strings.LblServer;
+    public static string LblPort => global::VPNRouter.Core.Localization.Strings.LblPort;
+    public static string LblUuid => global::VPNRouter.Core.Localization.Strings.LblUuid;
+    public static string LblPublicKey => global::VPNRouter.Core.Localization.Strings.LblPublicKey;
+    public static string LblShortId => global::VPNRouter.Core.Localization.Strings.LblShortId;
+    public static string LblRoutingMode => global::VPNRouter.Core.Localization.Strings.LblRoutingMode;
+    public static string LblNoServers => global::VPNRouter.Core.Localization.Strings.LblNoServers;
+    public static string LblAddSubscriptionHint => global::VPNRouter.Core.Localization.Strings.LblAddSubscriptionHint;
+    public static string LblCustomBadge => global::VPNRouter.Core.Localization.Strings.LblCustomBadge;
+    public static string WmZapretCustomArgs => global::VPNRouter.Core.Localization.Strings.WmZapretCustomArgs;
+    public static string WmVlessUri => global::VPNRouter.Core.Localization.Strings.WmVlessUri;
+    public static string WmTgProxyPort => global::VPNRouter.Core.Localization.Strings.WmTgProxyPort;
+    public static string WmTgProxySecret => global::VPNRouter.Core.Localization.Strings.WmTgProxySecret;
+    public static string StatusStopped => global::VPNRouter.Core.Localization.Strings.StatusStopped;
+    public static string StatusRunning => global::VPNRouter.Core.Localization.Strings.StatusRunning;
+    public static string CurrentVersion => global::VPNRouter.Core.Localization.Strings.CurrentVersion;
+    public static string CustomConfigsEmptyTitle => global::VPNRouter.Core.Localization.Strings.CustomConfigsEmptyTitle;
+    public static string CustomConfigsEmptyHint => global::VPNRouter.Core.Localization.Strings.CustomConfigsEmptyHint;
+    public static string SettingsRecoveredFromBadConfig(string backupPath) => global::VPNRouter.Core.Localization.Strings.SettingsRecoveredFromBadConfig(backupPath);
+    public static string Title => global::VPNRouter.Core.Localization.Strings.Title;
+    public static string Subtitle => global::VPNRouter.Core.Localization.Strings.Subtitle;
+    public static string LangToggleLabel => global::VPNRouter.Core.Localization.Strings.LangToggleLabel;
+    public static string MenuSegLight => global::VPNRouter.Core.Localization.Strings.MenuSegLight;
+    public static string MenuSegDark => global::VPNRouter.Core.Localization.Strings.MenuSegDark;
+    public static string MenuSegRu => global::VPNRouter.Core.Localization.Strings.MenuSegRu;
+    public static string MenuSegEn => global::VPNRouter.Core.Localization.Strings.MenuSegEn;
+    public static string BrandTitle => global::VPNRouter.Core.Localization.Strings.BrandTitle;
+    public static string MenuLanguageLabel => global::VPNRouter.Core.Localization.Strings.MenuLanguageLabel;
+    public static string MenuThemeLabel => global::VPNRouter.Core.Localization.Strings.MenuThemeLabel;
+    public static string StatusConnected => global::VPNRouter.Core.Localization.Strings.StatusConnected;
+    public static string StatusDisconnected => global::VPNRouter.Core.Localization.Strings.StatusDisconnected;
+    public static string ButtonConnect => global::VPNRouter.Core.Localization.Strings.ButtonConnect;
+    public static string ButtonDisconnect => global::VPNRouter.Core.Localization.Strings.ButtonDisconnect;
+    public static string ButtonConnecting => global::VPNRouter.Core.Localization.Strings.ButtonConnecting;
+    public static string SimpleStatusTitleOn => global::VPNRouter.Core.Localization.Strings.SimpleStatusTitleOn;
+    public static string SimpleStatusTitleOff => global::VPNRouter.Core.Localization.Strings.SimpleStatusTitleOff;
+    public static string SimpleStatusDescOn => global::VPNRouter.Core.Localization.Strings.SimpleStatusDescOn;
+    public static string SimpleStatusDescOff => global::VPNRouter.Core.Localization.Strings.SimpleStatusDescOff;
+    public static string SimpleStatusTitleOnWithUptime => global::VPNRouter.Core.Localization.Strings.SimpleStatusTitleOnWithUptime;
+    public static string DiagHealthCheckOk => global::VPNRouter.Core.Localization.Strings.DiagHealthCheckOk;
+    public static string DiagHealthCheckStale => global::VPNRouter.Core.Localization.Strings.DiagHealthCheckStale;
+    public static string DiagHealthCheckPending => global::VPNRouter.Core.Localization.Strings.DiagHealthCheckPending;
+    public static string DiagErrorOneLiner => global::VPNRouter.Core.Localization.Strings.DiagErrorOneLiner;
+    public static string SmpSourceManual => global::VPNRouter.Core.Localization.Strings.SmpSourceManual;
+    public static string SmpSourceSubscription => global::VPNRouter.Core.Localization.Strings.SmpSourceSubscription;
+    public static string SimpleConfigSummary => global::VPNRouter.Core.Localization.Strings.SimpleConfigSummary;
+    public static string ServerHeader => global::VPNRouter.Core.Localization.Strings.ServerHeader;
+    public static string ServerInputWatermark => global::VPNRouter.Core.Localization.Strings.ServerInputWatermark;
+    public static string ButtonSave => global::VPNRouter.Core.Localization.Strings.ButtonSave;
+    public static string ButtonRefresh => global::VPNRouter.Core.Localization.Strings.ButtonRefresh;
+    public static string ServerInputHintInitial => global::VPNRouter.Core.Localization.Strings.ServerInputHintInitial;
+    public static string SaveStatusCleared => global::VPNRouter.Core.Localization.Strings.SaveStatusCleared;
+    public static string SaveStatusUriBadHost => global::VPNRouter.Core.Localization.Strings.SaveStatusUriBadHost;
+    public static string SaveStatusUriOk => global::VPNRouter.Core.Localization.Strings.SaveStatusUriOk;
+    public static string SaveStatusUriInvalid => global::VPNRouter.Core.Localization.Strings.SaveStatusUriInvalid;
+    public static string SaveStatusSubStored => global::VPNRouter.Core.Localization.Strings.SaveStatusSubStored;
+    public static string SaveStatusUnknown => global::VPNRouter.Core.Localization.Strings.SaveStatusUnknown;
+    public static string RefreshNeedsUrl => global::VPNRouter.Core.Localization.Strings.RefreshNeedsUrl;
+    public static string RefreshFetching => global::VPNRouter.Core.Localization.Strings.RefreshFetching;
+    public static string RefreshOk => global::VPNRouter.Core.Localization.Strings.RefreshOk;
+    public static string RefreshFailed => global::VPNRouter.Core.Localization.Strings.RefreshFailed;
+    public static string AvailableServers => global::VPNRouter.Core.Localization.Strings.AvailableServers;
+    public static string ServerSelected => global::VPNRouter.Core.Localization.Strings.ServerSelected;
+    public static string QrComingSoon => global::VPNRouter.Core.Localization.Strings.QrComingSoon;
+    public static string HintTunnel => global::VPNRouter.Core.Localization.Strings.HintTunnel;
+    public static string MenuSectionView => global::VPNRouter.Core.Localization.Strings.MenuSectionView;
+    public static string MenuSectionDiagnostics => global::VPNRouter.Core.Localization.Strings.MenuSectionDiagnostics;
+    public static string MenuSectionTroubleshooting => global::VPNRouter.Core.Localization.Strings.MenuSectionTroubleshooting;
+    public static string MenuSectionAbout => global::VPNRouter.Core.Localization.Strings.MenuSectionAbout;
+    public static string MenuItemOpenLogs => global::VPNRouter.Core.Localization.Strings.MenuItemOpenLogs;
+    public static string MenuItemCopyLogPath => global::VPNRouter.Core.Localization.Strings.MenuItemCopyLogPath;
+    public static string MenuItemViewCrashLog => global::VPNRouter.Core.Localization.Strings.MenuItemViewCrashLog;
+    public static string CrashLogEmpty => global::VPNRouter.Core.Localization.Strings.CrashLogEmpty;
+    public static string MenuItemUpdateCheck => global::VPNRouter.Core.Localization.Strings.MenuItemUpdateCheck;
+    public static string MenuItemUpdateComingSoon => global::VPNRouter.Core.Localization.Strings.MenuItemUpdateComingSoon;
+    public static string UpdateCheckChecking => global::VPNRouter.Core.Localization.Strings.UpdateCheckChecking;
+    public static string UpdateCheckUpToDate => global::VPNRouter.Core.Localization.Strings.UpdateCheckUpToDate;
+    public static string UpdateCheckFailed => global::VPNRouter.Core.Localization.Strings.UpdateCheckFailed;
+    public static string UpdateBannerTitle => global::VPNRouter.Core.Localization.Strings.UpdateBannerTitle;
+    public static string UpdateBannerSubtitle => global::VPNRouter.Core.Localization.Strings.UpdateBannerSubtitle;
+    public static string UpdateButtonDownload => global::VPNRouter.Core.Localization.Strings.UpdateButtonDownload;
+    public static string UpdateButtonInstall => global::VPNRouter.Core.Localization.Strings.UpdateButtonInstall;
+    public static string UpdateButtonDismiss => global::VPNRouter.Core.Localization.Strings.UpdateButtonDismiss;
+    public static string UpdateButtonRetry => global::VPNRouter.Core.Localization.Strings.UpdateButtonRetry;
+    public static string UpdateButtonGrantPermission => global::VPNRouter.Core.Localization.Strings.UpdateButtonGrantPermission;
+    public static string UpdateDownloadDone => global::VPNRouter.Core.Localization.Strings.UpdateDownloadDone;
+    public static string UpdateDownloadFailed => global::VPNRouter.Core.Localization.Strings.UpdateDownloadFailed;
+    public static string UpdateInstallPermissionNeeded => global::VPNRouter.Core.Localization.Strings.UpdateInstallPermissionNeeded;
+    public static string UpdateInstallPermissionGranted => global::VPNRouter.Core.Localization.Strings.UpdateInstallPermissionGranted;
+    public static string UpdateInstallLaunchFailed => global::VPNRouter.Core.Localization.Strings.UpdateInstallLaunchFailed;
+    public static string MenuItemResetSettings => global::VPNRouter.Core.Localization.Strings.MenuItemResetSettings;
+    public static string MenuItemResetConfirm => global::VPNRouter.Core.Localization.Strings.MenuItemResetConfirm;
+    public static string MenuItemResetDone => global::VPNRouter.Core.Localization.Strings.MenuItemResetDone;
+    public static string MenuItemExportConfig => global::VPNRouter.Core.Localization.Strings.MenuItemExportConfig;
+    public static string MenuItemImportConfig => global::VPNRouter.Core.Localization.Strings.MenuItemImportConfig;
+    public static string MenuItemShareQr => global::VPNRouter.Core.Localization.Strings.MenuItemShareQr;
+    public static string ExportTitle => global::VPNRouter.Core.Localization.Strings.ExportTitle;
+    public static string ExportDescription => global::VPNRouter.Core.Localization.Strings.ExportDescription;
+    public static string ExportIncludeSettings => global::VPNRouter.Core.Localization.Strings.ExportIncludeSettings;
+    public static string ExportIncludePerApp => global::VPNRouter.Core.Localization.Strings.ExportIncludePerApp;
+    public static string ExportSecretBanner => global::VPNRouter.Core.Localization.Strings.ExportSecretBanner;
+    public static string ExportSaveButton => global::VPNRouter.Core.Localization.Strings.ExportSaveButton;
+    public static string ExportCloseButton => global::VPNRouter.Core.Localization.Strings.ExportCloseButton;
+    public static string ExportSuccess => global::VPNRouter.Core.Localization.Strings.ExportSuccess;
+    public static string ExportFailed => global::VPNRouter.Core.Localization.Strings.ExportFailed;
+    public static string ExportPickerCancelled => global::VPNRouter.Core.Localization.Strings.ExportPickerCancelled;
+    public static string ImportTitle => global::VPNRouter.Core.Localization.Strings.ImportTitle;
+    public static string ImportDescription => global::VPNRouter.Core.Localization.Strings.ImportDescription;
+    public static string ImportPickButton => global::VPNRouter.Core.Localization.Strings.ImportPickButton;
+    public static string ImportPreviewLabel => global::VPNRouter.Core.Localization.Strings.ImportPreviewLabel;
+    public static string ImportApplySettings => global::VPNRouter.Core.Localization.Strings.ImportApplySettings;
+    public static string ImportApplyPerApp => global::VPNRouter.Core.Localization.Strings.ImportApplyPerApp;
+    public static string ImportConfirmReplace => global::VPNRouter.Core.Localization.Strings.ImportConfirmReplace;
+    public static string ImportApplyButton => global::VPNRouter.Core.Localization.Strings.ImportApplyButton;
+    public static string ImportCancelButton => global::VPNRouter.Core.Localization.Strings.ImportCancelButton;
+    public static string ImportCloseButton => global::VPNRouter.Core.Localization.Strings.ImportCloseButton;
+    public static string ImportPickerCancelled => global::VPNRouter.Core.Localization.Strings.ImportPickerCancelled;
+    public static string ImportFailedRead => global::VPNRouter.Core.Localization.Strings.ImportFailedRead;
+    public static string ImportFailedParse => global::VPNRouter.Core.Localization.Strings.ImportFailedParse;
+    public static string ImportSuccess => global::VPNRouter.Core.Localization.Strings.ImportSuccess;
+    public static string ImportPartial => global::VPNRouter.Core.Localization.Strings.ImportPartial;
+    public static string ImportFailed => global::VPNRouter.Core.Localization.Strings.ImportFailed;
+    public static string QrShareTitle => global::VPNRouter.Core.Localization.Strings.QrShareTitle;
+    public static string QrShareNoActiveServer => global::VPNRouter.Core.Localization.Strings.QrShareNoActiveServer;
+    public static string QrShareSecretBanner => global::VPNRouter.Core.Localization.Strings.QrShareSecretBanner;
+    public static string QrShareCopyUriButton => global::VPNRouter.Core.Localization.Strings.QrShareCopyUriButton;
+    public static string QrShareCopiedToast => global::VPNRouter.Core.Localization.Strings.QrShareCopiedToast;
+    public static string QrShareScanFromClipboardLabel => global::VPNRouter.Core.Localization.Strings.QrShareScanFromClipboardLabel;
+    public static string QrShareScanHint => global::VPNRouter.Core.Localization.Strings.QrShareScanHint;
+    public static string QrSharePasteButton => global::VPNRouter.Core.Localization.Strings.QrSharePasteButton;
+    public static string QrShareApplyFailed => global::VPNRouter.Core.Localization.Strings.QrShareApplyFailed;
+    public static string QrShareApplyOk => global::VPNRouter.Core.Localization.Strings.QrShareApplyOk;
+    public static string QrShareCloseButton => global::VPNRouter.Core.Localization.Strings.QrShareCloseButton;
+    public static string ConfigShareNotImplementedToast => global::VPNRouter.Core.Localization.Strings.ConfigShareNotImplementedToast;
+    public static string MenuItemVersion => global::VPNRouter.Core.Localization.Strings.MenuItemVersion;
+    public static string MenuItemRepoLink => global::VPNRouter.Core.Localization.Strings.MenuItemRepoLink;
+    public static string LogViewerEmpty => global::VPNRouter.Core.Localization.Strings.LogViewerEmpty;
+    public static string LogViewerError => global::VPNRouter.Core.Localization.Strings.LogViewerError;
+    public static string PerAppTitle => global::VPNRouter.Core.Localization.Strings.PerAppTitle;
+    public static string PerAppModeOff => global::VPNRouter.Core.Localization.Strings.PerAppModeOff;
+    public static string PerAppModeInclude => global::VPNRouter.Core.Localization.Strings.PerAppModeInclude;
+    public static string PerAppModeExclude => global::VPNRouter.Core.Localization.Strings.PerAppModeExclude;
+    public static string PerAppPickButton => global::VPNRouter.Core.Localization.Strings.PerAppPickButton;
+    public static string PerAppCount => global::VPNRouter.Core.Localization.Strings.PerAppCount;
+    public static string PerAppLoading => global::VPNRouter.Core.Localization.Strings.PerAppLoading;
+    public static string PerAppSaveButton => global::VPNRouter.Core.Localization.Strings.PerAppSaveButton;
+    public static string PerAppSearchHint => global::VPNRouter.Core.Localization.Strings.PerAppSearchHint;
+    public static string PerAppSystemAppsToggle => global::VPNRouter.Core.Localization.Strings.PerAppSystemAppsToggle;
+    public static string PerAppEmptyHint => global::VPNRouter.Core.Localization.Strings.PerAppEmptyHint;
+    public static string PerAppPickerModeLabel => global::VPNRouter.Core.Localization.Strings.PerAppPickerModeLabel;
+    public static string PerAppHintInclude => global::VPNRouter.Core.Localization.Strings.PerAppHintInclude;
+    public static string PerAppHintExclude => global::VPNRouter.Core.Localization.Strings.PerAppHintExclude;
+    public static string PerAppCountInclude => global::VPNRouter.Core.Localization.Strings.PerAppCountInclude;
+    public static string PerAppCountExclude => global::VPNRouter.Core.Localization.Strings.PerAppCountExclude;
+    public static string TipEditSubscription => global::VPNRouter.Core.Localization.Strings.TipEditSubscription;
+    public static string LblNoSubscriptions => global::VPNRouter.Core.Localization.Strings.LblNoSubscriptions;
+    public static string SubsRemoveConfirm => global::VPNRouter.Core.Localization.Strings.SubsRemoveConfirm;
+    public static string SubsNeverRefreshed => global::VPNRouter.Core.Localization.Strings.SubsNeverRefreshed;
+    public static string SubsServersFormat => global::VPNRouter.Core.Localization.Strings.SubsServersFormat;
+    public static string SubsRefreshing => global::VPNRouter.Core.Localization.Strings.SubsRefreshing;
+    public static string SubsRefreshFailed => global::VPNRouter.Core.Localization.Strings.SubsRefreshFailed;
+    public static string SubsRefreshAllDone => global::VPNRouter.Core.Localization.Strings.SubsRefreshAllDone;
+    public static string SubsCancelEdit => global::VPNRouter.Core.Localization.Strings.SubsCancelEdit;
+    public static string SubsSaveEdit => global::VPNRouter.Core.Localization.Strings.SubsSaveEdit;
+    public static string ServerListTitleFmt => global::VPNRouter.Core.Localization.Strings.ServerListTitleFmt;
+    public static string SrvTestAll => global::VPNRouter.Core.Localization.Strings.SrvTestAll;
+    public static string SrvTestOne => global::VPNRouter.Core.Localization.Strings.SrvTestOne;
+    public static string SrvTesting => global::VPNRouter.Core.Localization.Strings.SrvTesting;
+    public static string SrvSortByLatencyAsc => global::VPNRouter.Core.Localization.Strings.SrvSortByLatencyAsc;
+    public static string SrvSortByOriginal => global::VPNRouter.Core.Localization.Strings.SrvSortByOriginal;
+    public static string SrvSortToggleHint => global::VPNRouter.Core.Localization.Strings.SrvSortToggleHint;
+    public static string SrvProgressFmt => global::VPNRouter.Core.Localization.Strings.SrvProgressFmt;
+    public static string SrvProgressDoneFmt => global::VPNRouter.Core.Localization.Strings.SrvProgressDoneFmt;
+    public static string SrvEmptyHint => global::VPNRouter.Core.Localization.Strings.SrvEmptyHint;
+    public static string SrvNeverTested => global::VPNRouter.Core.Localization.Strings.SrvNeverTested;
+    public static string SrvUnreachable => global::VPNRouter.Core.Localization.Strings.SrvUnreachable;
+    public static string SrvTlsFailed => global::VPNRouter.Core.Localization.Strings.SrvTlsFailed;
+    public static string SrvImplausible => global::VPNRouter.Core.Localization.Strings.SrvImplausible;
+    public static string SrvTipTestRow => global::VPNRouter.Core.Localization.Strings.SrvTipTestRow;
+    public static string SrvTipTestAll => global::VPNRouter.Core.Localization.Strings.SrvTipTestAll;
+    public static string SrvTipSelectServer => global::VPNRouter.Core.Localization.Strings.SrvTipSelectServer;
+    public static string SrvActiveBadge => global::VPNRouter.Core.Localization.Strings.SrvActiveBadge;
+    public static string MenuSectionFreeConfigs => global::VPNRouter.Core.Localization.Strings.MenuSectionFreeConfigs;
+    public static string MenuItemOpenFreeConfigs => global::VPNRouter.Core.Localization.Strings.MenuItemOpenFreeConfigs;
+    public static string FcOverlayTitle => global::VPNRouter.Core.Localization.Strings.FcOverlayTitle;
+    public static string FcSearchHint => global::VPNRouter.Core.Localization.Strings.FcSearchHint;
+    public static string FcFindButton => global::VPNRouter.Core.Localization.Strings.FcFindButton;
+    public static string FcStopButton => global::VPNRouter.Core.Localization.Strings.FcStopButton;
+    public static string FcExcludeRu => global::VPNRouter.Core.Localization.Strings.FcExcludeRu;
+    public static string FcColStatus => global::VPNRouter.Core.Localization.Strings.FcColStatus;
+    public static string FcSavedEmptyHint => global::VPNRouter.Core.Localization.Strings.FcSavedEmptyHint;
+    public static string FcSavedClearAll => global::VPNRouter.Core.Localization.Strings.FcSavedClearAll;
+    public static string FcSavedRemoveOne => global::VPNRouter.Core.Localization.Strings.FcSavedRemoveOne;
+    public static string FcStatusFetchingPool => global::VPNRouter.Core.Localization.Strings.FcStatusFetchingPool;
+    public static string FcStatusPoolLoaded => global::VPNRouter.Core.Localization.Strings.FcStatusPoolLoaded;
+    public static string FcStatusPoolEmpty => global::VPNRouter.Core.Localization.Strings.FcStatusPoolEmpty;
+    public static string FcStatusTesting => global::VPNRouter.Core.Localization.Strings.FcStatusTesting;
+    public static string FcStatusFound => global::VPNRouter.Core.Localization.Strings.FcStatusFound;
+    public static string FcStatusDoneOk => global::VPNRouter.Core.Localization.Strings.FcStatusDoneOk;
+    public static string FcStatusDoneExhausted => global::VPNRouter.Core.Localization.Strings.FcStatusDoneExhausted;
+    public static string FcUseSelected => global::VPNRouter.Core.Localization.Strings.FcUseSelected;
+    public static string FcUsedToast => global::VPNRouter.Core.Localization.Strings.FcUsedToast;
+    public static string MenuItemSettings => global::VPNRouter.Core.Localization.Strings.MenuItemSettings;
+    public static string SettingsTitle => global::VPNRouter.Core.Localization.Strings.SettingsTitle;
+    public static string SettingsSectionRouting => global::VPNRouter.Core.Localization.Strings.SettingsSectionRouting;
+    public static string SettingsSectionLeak => global::VPNRouter.Core.Localization.Strings.SettingsSectionLeak;
+    public static string SettingsSectionUpdates => global::VPNRouter.Core.Localization.Strings.SettingsSectionUpdates;
+    public static string SettingsSectionAutostart => global::VPNRouter.Core.Localization.Strings.SettingsSectionAutostart;
+    public static string SettingsSectionReliability => global::VPNRouter.Core.Localization.Strings.SettingsSectionReliability;
+    public static string SettingsReliabilityIntro => global::VPNRouter.Core.Localization.Strings.SettingsReliabilityIntro;
+    public static string ReliabilityAlwaysOnTitle => global::VPNRouter.Core.Localization.Strings.ReliabilityAlwaysOnTitle;
+    public static string ReliabilityAlwaysOnHint => global::VPNRouter.Core.Localization.Strings.ReliabilityAlwaysOnHint;
+    public static string ReliabilityAlwaysOnButton => global::VPNRouter.Core.Localization.Strings.ReliabilityAlwaysOnButton;
+    public static string ReliabilityBatteryOptTitle => global::VPNRouter.Core.Localization.Strings.ReliabilityBatteryOptTitle;
+    public static string ReliabilityBatteryOptStatusExempt => global::VPNRouter.Core.Localization.Strings.ReliabilityBatteryOptStatusExempt;
+    public static string ReliabilityBatteryOptStatusOptimized => global::VPNRouter.Core.Localization.Strings.ReliabilityBatteryOptStatusOptimized;
+    public static string ReliabilityBatteryOptHint => global::VPNRouter.Core.Localization.Strings.ReliabilityBatteryOptHint;
+    public static string ReliabilityBatteryOptButtonGrant => global::VPNRouter.Core.Localization.Strings.ReliabilityBatteryOptButtonGrant;
+    public static string ReliabilityBatteryOptButtonOpen => global::VPNRouter.Core.Localization.Strings.ReliabilityBatteryOptButtonOpen;
+    public static string ReliabilityAutoReconnectTitle => global::VPNRouter.Core.Localization.Strings.ReliabilityAutoReconnectTitle;
+    public static string ReliabilityAutoReconnectHint => global::VPNRouter.Core.Localization.Strings.ReliabilityAutoReconnectHint;
+    public static string BlockOnVpnFailLabel => global::VPNRouter.Core.Localization.Strings.BlockOnVpnFailLabel;
+    public static string BlockOnVpnFailHint => global::VPNRouter.Core.Localization.Strings.BlockOnVpnFailHint;
+    public static string DnsStrategyHeader => global::VPNRouter.Core.Localization.Strings.DnsStrategyHeader;
+    public static string DnsStrategyIpv4Only => global::VPNRouter.Core.Localization.Strings.DnsStrategyIpv4Only;
+    public static string DnsStrategyPreferIpv4 => global::VPNRouter.Core.Localization.Strings.DnsStrategyPreferIpv4;
+    public static string DnsStrategyPreferIpv6 => global::VPNRouter.Core.Localization.Strings.DnsStrategyPreferIpv6;
+    public static string DnsStrategyHint => global::VPNRouter.Core.Localization.Strings.DnsStrategyHint;
+    public static string UpdateChannelHeader => global::VPNRouter.Core.Localization.Strings.UpdateChannelHeader;
+    public static string ReceivePrereleasesLabel => global::VPNRouter.Core.Localization.Strings.ReceivePrereleasesLabel;
+    public static string CurrentVersionLabel => global::VPNRouter.Core.Localization.Strings.CurrentVersionLabel;
+    public static string CheckForUpdatesButton => global::VPNRouter.Core.Localization.Strings.CheckForUpdatesButton;
+    public static string AutostartLabelVpn => global::VPNRouter.Core.Localization.Strings.AutostartLabelVpn;
+    public static string AutostartLabelZapret => global::VPNRouter.Core.Localization.Strings.AutostartLabelZapret;
+    public static string AutostartLabelTgProxy => global::VPNRouter.Core.Localization.Strings.AutostartLabelTgProxy;
+    public static string CcModeSubscription => global::VPNRouter.Core.Localization.Strings.CcModeSubscription;
+    public static string CcModeManual => global::VPNRouter.Core.Localization.Strings.CcModeManual;
+    public static string CcModeCustom => global::VPNRouter.Core.Localization.Strings.CcModeCustom;
+    public static string CcCustomLabel => global::VPNRouter.Core.Localization.Strings.CcCustomLabel;
+    public static string CcCustomHint => global::VPNRouter.Core.Localization.Strings.CcCustomHint;
+    public static string CcCustomWatermark => global::VPNRouter.Core.Localization.Strings.CcCustomWatermark;
+    public static string CcValidateButton => global::VPNRouter.Core.Localization.Strings.CcValidateButton;
+    public static string CcSaveButton => global::VPNRouter.Core.Localization.Strings.CcSaveButton;
+    public static string CcClearButton => global::VPNRouter.Core.Localization.Strings.CcClearButton;
+    public static string CcSourceCustom => global::VPNRouter.Core.Localization.Strings.CcSourceCustom;
+    public static string CcValidationOk => global::VPNRouter.Core.Localization.Strings.CcValidationOk;
+    public static string CcValidationFailed => global::VPNRouter.Core.Localization.Strings.CcValidationFailed;
+    public static string CcValidationParseError => global::VPNRouter.Core.Localization.Strings.CcValidationParseError;
+    public static string CcSaveStatusEmpty => global::VPNRouter.Core.Localization.Strings.CcSaveStatusEmpty;
+    public static string CcSaveStatusOk => global::VPNRouter.Core.Localization.Strings.CcSaveStatusOk;
+    public static string CcSaveStatusInvalid => global::VPNRouter.Core.Localization.Strings.CcSaveStatusInvalid;
+    public static string AutostartZapretNotPorted => global::VPNRouter.Core.Localization.Strings.AutostartZapretNotPorted;
+    public static string AutostartTgProxyNotPorted => global::VPNRouter.Core.Localization.Strings.AutostartTgProxyNotPorted;
+    public static string SettingsDpiBypassLabel => global::VPNRouter.Core.Localization.Strings.SettingsDpiBypassLabel;
+    public static string SettingsDpiBypassHint => global::VPNRouter.Core.Localization.Strings.SettingsDpiBypassHint;
+    public static string SettingsDpiBypassWarning => global::VPNRouter.Core.Localization.Strings.SettingsDpiBypassWarning;
+    public static string SettingsDpiBypassOff => global::VPNRouter.Core.Localization.Strings.SettingsDpiBypassOff;
+    public static string SettingsDpiBypassStandard => global::VPNRouter.Core.Localization.Strings.SettingsDpiBypassStandard;
+    public static string SettingsDpiBypassAggressive => global::VPNRouter.Core.Localization.Strings.SettingsDpiBypassAggressive;
+    public static string MenuSectionProfiles => global::VPNRouter.Core.Localization.Strings.MenuSectionProfiles;
+    public static string MenuItemOpenProfiles => global::VPNRouter.Core.Localization.Strings.MenuItemOpenProfiles;
+    public static string ProfilesOverlayTitle => global::VPNRouter.Core.Localization.Strings.ProfilesOverlayTitle;
+    public static string ProfilesIntro => global::VPNRouter.Core.Localization.Strings.ProfilesIntro;
+    public static string ProfilesNoneTitle => global::VPNRouter.Core.Localization.Strings.ProfilesNoneTitle;
+    public static string ProfilesNoneDescription => global::VPNRouter.Core.Localization.Strings.ProfilesNoneDescription;
+    public static string ProfilesActiveBadge => global::VPNRouter.Core.Localization.Strings.ProfilesActiveBadge;
+    public static string ProfilesAppsCount => global::VPNRouter.Core.Localization.Strings.ProfilesAppsCount;
+    public static string ProfilesAppsCountOne => global::VPNRouter.Core.Localization.Strings.ProfilesAppsCountOne;
+    public static string ProfilesDnsModeChip => global::VPNRouter.Core.Localization.Strings.ProfilesDnsModeChip;
+    public static string ProfilesBlockOnFailChip => global::VPNRouter.Core.Localization.Strings.ProfilesBlockOnFailChip;
+    public static string ProfilesAppliedToast => global::VPNRouter.Core.Localization.Strings.ProfilesAppliedToast;
+    public static string ProfilesClearedToast => global::VPNRouter.Core.Localization.Strings.ProfilesClearedToast;
 }
