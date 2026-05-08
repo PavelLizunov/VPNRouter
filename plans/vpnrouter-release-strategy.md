@@ -125,8 +125,11 @@ v2.31.2).
 
 1. `dotnet build VPNRouter.sln -c Release` — 0 errors.
 2. Regression test suite green (xUnit + headless Avalonia).
-3. Mac + Linux CI workflows green on the `-rN` tag.
-4. `gh release view vX.Y.Z-rN` shows 12 assets (Win + Mac + Linux + sha256 sidecars).
+3. Mac + Linux + Android CI workflows green on the `-rN` tag
+   (`build-mac.yml`, `build-linux.yml`, `build-android.yml`).
+4. `gh release view vX.Y.Z-rN` shows 14 assets (Win + Mac + Linux +
+   Android + sha256 sidecars). See "What's in a release" matrix below
+   for the per-platform breakdown.
 5. **`test-windows-update.yml` green on the `-rN` tag** (runs
    automatically via `release: published` + `push: tags: v*-r*`
    triggers; see `plans/v2.31.10-update-integration-test.md`). Catches
@@ -137,6 +140,45 @@ v2.31.2).
 
 If (5) is RED, **don't** promote to stable. Fix the helper.cmd
 generation or whatever surfaced, ship `-r(N+1)`, re-run.
+
+---
+
+## What's in a release (14 assets)
+
+A complete `vX.Y.Z` (or `-rN`) release carries exactly these files.
+`verify-release-integrity.yml` (post-publish CI) treats this as the
+authoritative inventory: missing files are soft warnings, name/version
+mismatches inside binaries are version-check failures.
+
+| Platform | Asset | sha256 sidecar | Source workflow |
+|---|---|---|---|
+| Windows | `VPNRouter-vX.Y.Z-win.zip` | yes | `build.ps1` (local) |
+| Windows | `VPNRouter-update-vX.Y.Z-win.zip` | yes | `build.ps1` (local) |
+| macOS | `VPNRouter-vX.Y.Z-mac.dmg` | no | `build-mac.yml` (cloud Mac runner) |
+| macOS | `VPNRouter-vX.Y.Z-mac.zip` | no | `build-mac.yml` |
+| Linux | `VPNRouter-vX.Y.Z-linux-amd64.deb` | yes | `build-linux.yml` |
+| Linux | `VPNRouter-vX.Y.Z-linux-x86_64.AppImage` | yes | `build-linux.yml` |
+| Linux | `VPNRouter-vX.Y.Z-linux.tar.gz` | yes | `build-linux.yml` |
+| Android | `VPNRouter-vX.Y.Z-android-arm64.apk` | yes | `build-android.yml` |
+
+Counted: 4 (Win) + 2 (Mac) + 6 (Linux: 3 binaries × 2 with sidecars)
++ 2 (Android: apk + sidecar) = **14**.
+
+### Android keystore (one-time setup, cross-link)
+
+`build-android.yml` signs each APK with a long-lived keystore stored as
+two GHA secrets: `ANDROID_KEYSTORE_BASE64` (base64-encoded `.keystore`
+file) and `ANDROID_KEYSTORE_PASSWORD`. The same keystore must be used
+for every release going forward — Android refuses to upgrade an installed
+APK if the new APK is signed with a different key, even when the
+`com.ninitux.vpnrouter` package id matches.
+
+One-time generation steps + GHA secret upload commands live in
+`plans/vpnrouter-android-platform-parity-roadmap.md` Phase A
+("One-time keystore setup"). Losing the keystore means existing Android
+users can't auto-update — they'd need to uninstall + reinstall, losing
+their settings. Backup encrypted to multiple secure locations (offline
+archive + password manager).
 
 ---
 
@@ -170,21 +212,29 @@ publish, including manual operator uploads). Runs on `ubuntu-latest`
 What it checks:
 
 1. **Embedded AppVersion** — for each non-sha256 binary asset (Win zip×2,
-   Mac dmg+zip, Linux deb+AppImage+tar.gz), extracts `VPNRouter.Core.dll`
-   and scans its UTF-16 LE byte stream for the AppVersion.Version
-   literal. Asserts the release tag's version (with leading `v` stripped)
-   appears among the embedded matches.
+   Mac dmg+zip, Linux deb+AppImage+tar.gz, Android APK), extracts
+   `VPNRouter.Core.dll` (or, on Android, the assembly-store blob that
+   contains it) and scans its UTF-16 LE byte stream for the
+   AppVersion.Version literal. Asserts the release tag's version (with
+   leading `v` stripped) appears among the embedded matches.
+
+   Severity is split: **hard fail on Win** (JIT-compiled DLLs preserve
+   string constants intact), **soft warn on Mac/Linux/Android** (AOT/Mono
+   trim string literals, so absence isn't proof of mismatch). The Win
+   hard-check still catches the v2.29.0 fake-tag class for the platform
+   where helper.cmd auto-update lives.
 
 2. **SHA256 sidecars** — recomputes sha256 of every binary, compares
    to the bundled `.sha256` sidecar. Two formats supported:
-   `<hex>  <filename>\n` (Linux CI sha256sum) and bare `<hex>` (Windows
-   build.ps1 PowerShell-native).
+   `<hex>  <filename>\n` (Linux CI + Android `sha256sum`) and bare `<hex>`
+   (Windows build.ps1 PowerShell-native).
 
-3. **Asset count** — current release-strategy convention is 12 assets
-   per release (4 Win + 2 Mac + 6 Linux). Missing assets are a SOFT
-   warning, not a failure: parallel CI may still be uploading at the
+3. **Asset count** — current release-strategy convention is 14 assets
+   per release (4 Win + 2 Mac + 6 Linux + 2 Android). Missing assets are
+   a SOFT warning, not a failure: parallel CI (build-mac.yml,
+   build-linux.yml, build-android.yml) may still be uploading at the
    time of the `release: published` event. Each subsequent
-   `release: edited` re-runs the workflow until all 12 are present.
+   `release: edited` re-runs the workflow until all 14 are present.
 
 On failure (version mismatch or sha256 mismatch — these are catastrophic):
 - Marks the release as a **draft** (hides from users — they can't
