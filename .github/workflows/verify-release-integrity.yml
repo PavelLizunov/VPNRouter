@@ -16,15 +16,19 @@ name: Verify Release Integrity
 # What it does:
 #   1) Downloads every "VPNRouter-*" asset on the release.
 #   2) For each non-sha256 binary asset (Win zip, Mac dmg/zip, Linux deb/
-#      AppImage/tar.gz), extracts VPNRouter.Core.dll and scans its UTF-16
+#      AppImage/tar.gz, Android APK), extracts VPNRouter.Core.dll (or the
+#      Android assembly-store blob containing it) and scans its UTF-16
 #      string table for the embedded AppVersion.Version constant.
 #   3) Asserts the embedded version matches the release tag (after stripping
-#      the leading 'v'). Mismatch in ANY asset is a hard failure.
+#      the leading 'v'). Mismatch on Win assets is a hard failure
+#      (JIT-compiled DLLs preserve string constants intact). Mismatch on
+#      Mac/Linux/Android is a soft warning (AOT/Mono trim string literals).
 #   4) Recomputes sha256 of each binary and compares to its bundled .sha256
 #      sidecar (Linux: "<hex>  <filename>"; Windows: bare hex; both formats
 #      handled).
-#   5) Counts assets — current convention is 12 (4 Win + 2 Mac + 6 Linux).
-#      Soft warning if missing (mac/linux CI may still be uploading).
+#   5) Counts assets — current convention is 14 (4 Win + 2 Mac + 6 Linux +
+#      2 Android). Soft warning if missing (mac/linux/android CI may still
+#      be uploading).
 #   6) On hard failure: drafts the release (hides from users), then prepends
 #      a "VERIFY-RELEASE-INTEGRITY: FAILED" banner with the specific
 #      mismatch to the release notes.
@@ -167,9 +171,9 @@ jobs:
           WARNINGS=()
 
           # ── 1. Asset count check ──────────────────────────────────────
-          # 12 expected: 4 Win (zip+sha256 ×2) + 2 Mac (dmg, zip — no sha256
+          # 14 expected: 4 Win (zip+sha256 ×2) + 2 Mac (dmg, zip — no sha256
           # sidecars; build-mac.sh doesn't emit them) + 6 Linux (deb/AppImage/
-          # tar.gz × bin+sha256).
+          # tar.gz × bin+sha256) + 2 Android (apk + sha256, from build-android.yml).
           EXPECTED_FILES=(
             "VPNRouter-v${EXPECTED_VERSION}-win.zip"
             "VPNRouter-v${EXPECTED_VERSION}-win.zip.sha256"
@@ -183,6 +187,8 @@ jobs:
             "VPNRouter-v${EXPECTED_VERSION}-linux-x86_64.AppImage.sha256"
             "VPNRouter-v${EXPECTED_VERSION}-linux.tar.gz"
             "VPNRouter-v${EXPECTED_VERSION}-linux.tar.gz.sha256"
+            "VPNRouter-v${EXPECTED_VERSION}-android-arm64.apk"
+            "VPNRouter-v${EXPECTED_VERSION}-android-arm64.apk.sha256"
           )
           MISSING=()
           for f in "${EXPECTED_FILES[@]}"; do
@@ -191,14 +197,15 @@ jobs:
             fi
           done
           if [ "${#MISSING[@]}" -gt 0 ]; then
-            # Soft warning: parallel CI (build-mac.yml, build-linux.yml)
-            # may still be uploading at the time of `release: published`.
-            # Each `gh release upload --clobber` fires a fresh `release:
-            # edited` that re-runs this workflow until all 12 are present.
+            # Soft warning: parallel CI (build-mac.yml, build-linux.yml,
+            # build-android.yml) may still be uploading at the time of
+            # `release: published`. Each `gh release upload --clobber`
+            # fires a fresh `release: edited` that re-runs this workflow
+            # until all 14 are present.
             WARNINGS+=("Missing ${#MISSING[@]}/${#EXPECTED_FILES[@]} expected assets — parallel CI may still be uploading:")
             for m in "${MISSING[@]}"; do WARNINGS+=("  - $m"); done
           else
-            echo "✓ All 12 expected assets present"
+            echo "✓ All 14 expected assets present"
           fi
 
           # ── 2. AppVersion check on each binary asset ──────────────────
@@ -316,6 +323,38 @@ jobs:
             tar -xzf "$TGZ" -C /tmp/tgz-ext
             DLL=$(find /tmp/tgz-ext -name "VPNRouter.Core.dll" -type f | head -1)
             verify_dll "$DLL" "$(basename $TGZ)" "soft"
+          fi
+
+          # ── 2g. Android APK: zip-format archive ──
+          # APKs are zip files; plain unzip works. Soft-warn severity
+          # mirrors Mac/Linux: .NET Android Release builds default to
+          # `AndroidUseAssemblyStore=true`, which packs all .NET assemblies
+          # into a single `assemblies/assemblies.blob` (or per-RID
+          # `assemblies/assemblies.{rid}.blob`). The blob is uncompressed
+          # by default in .NET 8 (`AndroidEnableAssemblyCompression=false`),
+          # so UTF-16 LE strings from each contained DLL are still scannable
+          # in the raw byte stream — same trick as the DLL scan, just
+          # against a larger file. If a future build flips on assembly
+          # compression, the scan will silently fall through to "no
+          # version-shaped strings found" — that's fine as a soft warning.
+          # Hard-failing here would block legitimate releases; the Win
+          # hard-check still catches the v2.29.0 fake-tag class.
+          APK="assets/VPNRouter-v${EXPECTED_VERSION}-android-arm64.apk"
+          if [ -f "$APK" ]; then
+            echo "── Inspecting $(basename $APK) ──"
+            rm -rf /tmp/apk-ext && mkdir -p /tmp/apk-ext
+            unzip -q "$APK" -d /tmp/apk-ext 2>&1 | head -3 || true
+            # Try to find Core.dll directly first (uncommon — only when
+            # AndroidUseAssemblyStore=false). Fall back to the assembly
+            # store blob (the default for Release builds).
+            DLL=$(find /tmp/apk-ext -name "VPNRouter.Core.dll" -type f | head -1)
+            if [ -z "$DLL" ] && [ -d "/tmp/apk-ext/assemblies" ]; then
+              # Pick the largest .blob/.dll file in assemblies/ — that's
+              # the assembly store containing all .NET assemblies.
+              DLL=$(find /tmp/apk-ext/assemblies -type f \( -name "*.blob" -o -name "*.dll" \) -printf '%s %p\n' \
+                    | sort -rn | head -1 | awk '{print $2}')
+            fi
+            verify_dll "$DLL" "$(basename $APK)" "soft"
           fi
 
           # ── 3. SHA256 sidecar verification ────────────────────────────
