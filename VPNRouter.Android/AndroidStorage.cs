@@ -554,23 +554,33 @@ public static class AndroidStorage
     public static string BuildServerKey(VlessServerEntry srv)
         => $"{srv.Server}:{srv.Port}:{srv.Uuid}:{srv.Flow}";
 
+    /// <summary>
+    /// v2.32.0 (SR-3 parity): routes through
+    /// <see cref="StorageBlobRecovery.LoadOrRecover{T}"/> so a corrupt
+    /// payload is quarantined to <c>server_test_results__corrupt_{ts}</c>
+    /// and surfaces a recovery notice — same shape as
+    /// <see cref="GetSubscriptions"/> / <see cref="GetServers"/> /
+    /// <see cref="GetPerAppPackages"/>. Returned dictionary is always
+    /// wrapped with an OrdinalIgnoreCase comparer so casing drift on host
+    /// names doesn't fragment the cache.
+    /// </summary>
     public static Dictionary<string, ServerTestResultDto> GetServerTestResults()
     {
-        try
+        var json = GetString(KeyServerTestResults);
+        var result = StorageBlobRecovery.LoadOrRecover<Dictionary<string, ServerTestResultDto>>(
+            json,
+            j => JsonConvert.DeserializeObject<Dictionary<string, ServerTestResultDto>>(j));
+
+        if (result.Loaded)
+            return new Dictionary<string, ServerTestResultDto>(result.Value!, System.StringComparer.OrdinalIgnoreCase);
+
+        if (result.ShouldRecover)
         {
-            var json = GetString(KeyServerTestResults);
-            if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, ServerTestResultDto>(System.StringComparer.OrdinalIgnoreCase);
-            var dict = JsonConvert.DeserializeObject<Dictionary<string, ServerTestResultDto>>(json);
-            if (dict is null) return new Dictionary<string, ServerTestResultDto>(System.StringComparer.OrdinalIgnoreCase);
-            // Ensure case-insensitive comparer on read (JSON deserializer
-            // defaults to ordinal — would miss casing changes in host
-            // names which DNS treats as case-insensitive).
-            return new Dictionary<string, ServerTestResultDto>(dict, System.StringComparer.OrdinalIgnoreCase);
+            QuarantineBadValue(KeyServerTestResults, json);
+            StampRecoveryNotice(
+                $"server test history unreadable ({result.Reason}: {result.Detail}); reset to empty");
         }
-        catch
-        {
-            return new Dictionary<string, ServerTestResultDto>(System.StringComparer.OrdinalIgnoreCase);
-        }
+        return new Dictionary<string, ServerTestResultDto>(System.StringComparer.OrdinalIgnoreCase);
     }
 
     public static bool SetServerTestResults(Dictionary<string, ServerTestResultDto>? results)

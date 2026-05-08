@@ -230,7 +230,7 @@ n/a платформенно бессмысленно.
 | SelfRepair (re-download bad files) | ✅ | n/a | n/a | ❌ |
 | SettingsValidator (SR-1) | ✅ Core, applies to all | ✅ | ✅ | ⚠ (partial — inline guards в AndroidStorage) |
 | LaunchFailureCounter (SR-2) | ✅ Core | ✅ | ✅ | ❌ (Android lifecycle differs — no "launch loop" pattern) |
-| CacheRecovery (SR-3) | ✅ Core | ✅ | ✅ | ⚠ (применимо к FreeConfigCache, не подключено) |
+| CacheRecovery (SR-3) | ✅ Core | ✅ | ✅ | ✅ FreeConfigCache (file) через Core; StorageBlobRecovery (SharedPrefs blob) на subscriptions/servers/per_app_packages/server_test_results |
 | Settings load never-throws (SR-4) | ✅ Core | ✅ | ✅ | ⚠ (per-getter, не single wrapper) |
 | ShortcutSelfHeal | ✅ (re-creates Start Menu/Desktop shortcuts) | n/a | n/a | n/a |
 
@@ -680,13 +680,26 @@ getter'ах. Логика дублируется.
 Решение: вызывать `AppSettingsSane.EnsureSane()` после load из SharedPreferences.
 Effort **2-4 hours**.
 
-### 16.4 CacheRecovery не подключён на Android
+### 16.4 ~~CacheRecovery не подключён на Android~~ — закрыто
 
-Core has SR-3 (FreeConfigCache, ProfileManager, StateFile recovery), Android
-не вызывает.
+Закрыто 2026-05-08. SR-3 на Android покрыт двумя путями:
 
-Решение: один call site в `AndroidApp.OnFrameworkInitializationCompleted`.
-Effort **1-2 hours**.
+- **File-based** (`free_configs.json` под `AppPaths.CacheDir`) — Android
+  пользуется Core'овским `FreeConfigCache.Load()`, который уже
+  делает `CacheRecovery.LoadOrRecover<CacheFile>` (см.
+  `VPNRouter.Core/Services/FreeConfigs/FreeConfigCache.cs:67`). Никакого
+  отдельного call site на Android не требуется — это lazy-on-first-read
+  pattern через `AndroidFreeConfigsOrchestrator`.
+- **SharedPreferences blobs** — `subscriptions_json`, `servers_json`,
+  `per_app_packages`, `server_test_results` все идут через
+  `StorageBlobRecovery.LoadOrRecover<T>` (SR-3 sibling для in-memory
+  blobs — см. `VPNRouter.Core/Services/StorageBlobRecovery.cs`).
+  Bad payload quarantine'ится в `{key}__corrupt_{ts}` companion key,
+  recovery notice surface'ится через
+  `AndroidApp.ConsumeAndSurfaceRecoveryNotice`.
+
+`ProfileManager` / `StateFile` recovery — desktop-only (Android не
+читает profiles/, не пишет state.json), не требуют Android-side wiring.
 
 ### 16.5 SR-1/SR-3/SR-4 на Android — wiring
 
