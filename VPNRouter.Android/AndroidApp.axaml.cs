@@ -374,7 +374,14 @@ public partial class AndroidApp : Avalonia.Application
     private string _appPickerMode = "include";
 
     // State
-    private bool _formExpanded = false;
+    // AND-RESTORE-SIMPLE (2026-05-09) — default true to mirror desktop
+    // SimpleMode VM `_smpFormExpanded = true`. Pre-fix this defaulted to
+    // false and was only flipped true on first-launch (no saved config).
+    // Existing users with a saved subscription saw a collapsed form on
+    // every launch — input + radios + autostart effectively "lost" until
+    // they discovered the Config·Mode chevron tap. Desktop has always
+    // shown them by default; Android now matches.
+    private bool _formExpanded = true;
     private List<VlessServerEntry> _cachedServers = new();
 
     /// <summary>
@@ -428,15 +435,12 @@ public partial class AndroidApp : Avalonia.Application
 
         if (ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.ISingleViewApplicationLifetime singleView)
         {
-            // v3.0 Phase 7.3 (handbook §5.4) — auto-expand the config form
-            // on first launch when nothing has been configured yet, so
-            // user can paste their VPN URI without an extra tap on the
-            // chevron. Mirrors desktop's first-launch behaviour. If the
-            // user has either a manual URI or a subscription saved, keep
-            // the form collapsed (default).
-            var hasManual = !string.IsNullOrEmpty(AndroidStorage.GetVlessUri());
-            var hasSubscription = !string.IsNullOrEmpty(AndroidStorage.GetSubscriptionUrl());
-            _formExpanded = !hasManual && !hasSubscription;
+            // AND-RESTORE-SIMPLE (2026-05-09) — pre-fix this branch read
+            // hasManual + hasSubscription and collapsed the form for
+            // returning users. Desktop's `_smpFormExpanded = true` is
+            // unconditional, so Android matches now. The form-default
+            // value at the field declaration above (true) is sufficient;
+            // no per-launch override needed.
 
             var view = BuildSimplePageView();
             singleView.MainView = view;

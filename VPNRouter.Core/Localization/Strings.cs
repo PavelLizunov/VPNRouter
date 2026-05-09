@@ -20,9 +20,16 @@ public static class Strings
     // detect runtime platform and substitute "macOS" / "Linux" / "Windows"
     // into RU+EN templates. Does NOT change Windows-Service-tech labels
     // (those reference an actual Windows-only API surface).
+    // AND-RESTORE-SIMPLE (2026-05-09): Android branch added so the
+    // Simple-page autostart card on Android renders "Enable VPN at
+    // Android boot" rather than "Linux boot". OperatingSystem.IsAndroid()
+    // is checked first because IsLinux() also returns true on Android
+    // (Android is built on the Linux kernel).
     public static string OsDisplayName =>
+        OperatingSystem.IsAndroid() ? "Android" :
         OperatingSystem.IsWindows() ? "Windows" :
-        OperatingSystem.IsMacOS() ? "macOS" : "Linux";
+        OperatingSystem.IsMacOS() ? "macOS" :
+        OperatingSystem.IsLinux() ? "Linux" : "OS";
 
     // ── Tabs ──
     public static string TabServers => Ru ? "Серверы" : "Servers";
