@@ -334,8 +334,9 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _menuSectionProfiles;
 
     // AND-MIGRATE-OVERLAYS (2026-05-09): per-app filter picker is now the
-    // Apps tab inside the Advanced shell. The "Choose apps…" button on
-    // the Simple form deeplinks via OpenAdvancedShell(AdvancedTab.Apps).
+    // Applications tab inside the Advanced shell. The "Choose apps…" button
+    // on the Simple form deeplinks via OpenAdvancedShell(AdvancedTab.Applications).
+    // AND-ADV-CHROME (2026-05-10): tab renamed Apps → Applications.
     private TextBox? _appPickerSearch;
     private Avalonia.Controls.CheckBox? _appPickerSystemToggle;
     private TextBlock? _appPickerCount;
@@ -1463,19 +1464,11 @@ public partial class AndroidApp : Avalonia.Application
         _profilesOverlay = BuildProfilesOverlay();
 
         // AND-MIGRATE-OVERLAYS (2026-05-09) — Advanced shell. Single
-        // overlay that hosts Servers / Subscriptions / Apps / Network /
-        // DPI bypass / Telegram / Public configs as a tab strip. Replaces
-        // the kebab → feature-page pattern that diverged from desktop.
-        // Tab content is built lazily on first activation; see
-        // AndroidApp.AdvancedShell.cs.
-        _advShellOverlay = BuildAdvancedShellOverlay();
-
-        // AND-ADV-SHELL (2026-05-09) — tab-based Advanced overlay shell.
-        // Replaces the kebab as the primary path to Advanced features so
-        // mobile mirrors desktop's tab strip. Triggered by the "Расширенные
-        // настройки" / "Advanced settings" card on Simple page. Empty stub
-        // panes for now; the next chip (AND-ADV-MIGRATE) drops the real
-        // per-tab content into each pane and trims the kebab. Defined in
+        // overlay that hosts Servers / Subscribe / Settings / Applications /
+        // Tools / Public as a tab strip (AND-ADV-CHROME 2026-05-10 renamed
+        // tabs + merged DPI bypass+Telegram into Tools). Replaces the
+        // kebab → feature-page pattern that diverged from desktop. Tab
+        // content is built lazily on first activation; see
         // AndroidApp.AdvancedShell.cs.
         _advShellOverlay = BuildAdvancedShellOverlay();
 
@@ -2464,13 +2457,15 @@ public partial class AndroidApp : Avalonia.Application
     }
 
     /// <summary>
-    /// Deeplink: open the Advanced shell on the Network tab. Re-seeds
+    /// Deeplink: open the Advanced shell on the Settings tab. Re-seeds
     /// control state if the tab body has already been built. Replaces the
     /// old fullscreen Settings overlay path (gone in AND-MIGRATE-OVERLAYS).
+    /// AND-ADV-CHROME (2026-05-10): tab renamed Network → Settings to
+    /// match desktop v2.32.0.
     /// </summary>
     private void ShowSettings()
     {
-        OpenAdvancedShell(AdvancedTab.Network);
+        OpenAdvancedShell(AdvancedTab.Settings);
     }
 
     /// <summary>
@@ -3307,6 +3302,13 @@ public partial class AndroidApp : Avalonia.Application
         // VPN state transition.
         UpdateZapretChipFromState();
         UpdateConfigSummary();
+
+        // AND-ADV-CHROME (2026-05-10) — flip the Advanced shell's
+        // persistent footer (status dot + text + Start/Stop VPN button)
+        // alongside the Simple page CTA, so the two surfaces stay in
+        // lock-step even while the user is inside Advanced. Helper is
+        // null-safe before BuildAdvancedShellOverlay has run.
+        ApplyAdvancedFooterConnectionState(connected);
     }
 
     /// <summary>
@@ -3534,12 +3536,20 @@ public partial class AndroidApp : Avalonia.Application
         try
         {
             // 1. Uptime — refresh title every tick while connected.
-            if (_connectionStartedAt is DateTime startUtc && _statusCard is not null)
+            if (_connectionStartedAt is DateTime startUtc)
             {
                 var elapsed = DateTime.UtcNow - startUtc;
-                _statusCard.Title = string.Format(
+                var uptimeTitle = string.Format(
                     Localization.SimpleStatusTitleOnWithUptime,
                     FormatUptime(elapsed));
+                if (_statusCard is not null)
+                    _statusCard.Title = uptimeTitle;
+                // AND-ADV-CHROME (2026-05-10) — mirror the uptime suffix
+                // into the Advanced shell's footer status text so the
+                // "Connected · M:SS" copy matches between Simple + Advanced
+                // surfaces.
+                if (_advFooterStatusText is not null)
+                    _advFooterStatusText.Text = uptimeTitle;
             }
 
             // 2. Health probe — every 30 s, only while connected. The first
@@ -4681,10 +4691,11 @@ public partial class AndroidApp : Avalonia.Application
     private void ShowAppPicker()
     {
         // AND-MIGRATE-OVERLAYS (2026-05-09): "Choose apps" button now
-        // deeplinks to the Advanced shell on the Apps tab. Re-seed
+        // deeplinks to the Advanced shell on the Applications tab. Re-seed
         // happens inside ReseedAppPickerTabState (called by the shell on
-        // tab activation).
-        OpenAdvancedShell(AdvancedTab.Apps);
+        // tab activation). AND-ADV-CHROME (2026-05-10): tab renamed
+        // Apps → Applications to match desktop v2.32.0.
+        OpenAdvancedShell(AdvancedTab.Applications);
     }
 
     /// <summary>

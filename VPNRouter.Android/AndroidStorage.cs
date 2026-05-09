@@ -529,25 +529,63 @@ public static class AndroidStorage
 
     // ── AND-ADV-SHELL (2026-05-09): Advanced overlay last-active tab ────
     //
-    // Stores the 0-based index of the tab the user last viewed in the
-    // tab-based Advanced overlay (Servers / Subscribe / Apps / Network /
-    // DPI bypass / Telegram / Public configs — see
-    // AndroidApp.AdvancedShell.cs::AdvancedTabCount). Reopen lands on the
-    // same tab.
+    // Stores the AdvancedTab enum NAME of the tab the user last viewed in
+    // the tab-based Advanced overlay. Reopen lands on the same tab.
+    //
+    // AND-ADV-CHROME (2026-05-10): switched from int-index storage to
+    // enum-name storage so the v2.32.0 desktop-parity rename
+    // (Subscriptions→Subscribe, Network→Settings, FreeConfigs→Public,
+    // Apps→Applications, DpiBypass+Telegram→Tools) doesn't silently shift
+    // existing users to a different tab. Legacy stored values (old enum
+    // names + old 0-based int indices) are translated to the new names on
+    // read so an existing install keeps its last-active tab.
     //
     // Persisted as a string for parity with other GetString-based keys;
-    // an unparseable value falls back to "0" (Servers tab).
+    // unrecognised values fall back to "Servers".
     private const string KeyAdvancedActiveTab = "advanced_active_tab";
 
-    public static int GetAdvancedActiveTab()
+    public static string GetAdvancedActiveTab()
     {
         var raw = GetString(KeyAdvancedActiveTab);
-        if (string.IsNullOrEmpty(raw)) return 0;
-        return int.TryParse(raw, out var idx) ? idx : 0;
+        if (string.IsNullOrEmpty(raw)) return "Servers";
+
+        // Legacy int-index migration (pre-AND-ADV-CHROME — was Subscriptions=1,
+        // Apps=2, Network=3, DpiBypass=4, Telegram=5, FreeConfigs=6).
+        if (int.TryParse(raw, out var idx))
+        {
+            return idx switch
+            {
+                0 => "Servers",
+                1 => "Subscribe",        // was "Subscriptions"
+                2 => "Applications",     // was "Apps"
+                3 => "Settings",         // was "Network"
+                4 => "Tools",            // was "DpiBypass" — merged into Tools
+                5 => "Tools",             // was "Telegram"   — merged into Tools
+                6 => "Public",           // was "FreeConfigs"
+                _ => "Servers",
+            };
+        }
+
+        // Legacy enum-name migration — translate old names to new names so
+        // the user's last-active tab survives the rename. Same mapping as
+        // the int-index translation above.
+        return raw switch
+        {
+            "Subscriptions" => "Subscribe",
+            "Apps"          => "Applications",
+            "Network"       => "Settings",
+            "DpiBypass"     => "Tools",
+            "Telegram"      => "Tools",
+            "FreeConfigs"   => "Public",
+            // Already a current name — pass through.
+            "Servers" or "Subscribe" or "Settings" or "Applications" or "Tools" or "Public" => raw,
+            // Unrecognised — fall back to Servers rather than crash on enum-parse.
+            _ => "Servers",
+        };
     }
 
-    public static bool SetAdvancedActiveTab(int index)
-        => SetString(KeyAdvancedActiveTab, index.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    public static bool SetAdvancedActiveTab(string tabName)
+        => SetString(KeyAdvancedActiveTab, tabName ?? "Servers");
 
     // ── v2.32.0 (AND-4): per-server TCP+TLS test history ──────────────────
     //
