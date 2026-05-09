@@ -4739,18 +4739,53 @@ public partial class AndroidApp : Avalonia.Application
                 a.Label.Contains(search, System.StringComparison.OrdinalIgnoreCase)
                 || a.PackageName.Contains(search, System.StringComparison.OrdinalIgnoreCase)).ToList();
 
-        var rows = filtered.Select(BuildAppRow).ToList();
+        // v3.0 — Selected / Available split mirrors desktop ApplicationsPage
+        // category structure. Sections are computed only at filter time
+        // (search/system-toggle change); per-row checkbox toggles update
+        // the selected count but leave rows in their current section so
+        // the user doesn't lose scroll position mid-tap.
+        var selectedRows = new List<AppListLoader.AppEntry>();
+        var availableRows = new List<AppListLoader.AppEntry>();
+        foreach (var app in filtered)
+        {
+            if (_appPickerSelected.Contains(app.PackageName))
+                selectedRows.Add(app);
+            else
+                availableRows.Add(app);
+        }
+
+        var rows = new List<Control>(filtered.Count + 2);
+        if (selectedRows.Count > 0)
+        {
+            rows.Add(BuildPickerSectionHeader(Localization.PerAppGroupSelected, selectedRows.Count));
+            foreach (var app in selectedRows) rows.Add(BuildAppRow(app));
+        }
+        if (availableRows.Count > 0)
+        {
+            rows.Add(BuildPickerSectionHeader(Localization.PerAppGroupAvailable, availableRows.Count));
+            foreach (var app in availableRows) rows.Add(BuildAppRow(app));
+        }
+
         _appPickerList.ItemsSource = rows;
         UpdateAppPickerCount();
     }
 
     private Control BuildAppRow(AppListLoader.AppEntry app)
     {
+        // v3.0 — visual parity with desktop ApplicationsPage Border.app-row:
+        // sunken-bg rounded block, padding 10/7, 4-pt margin between rows.
+        // Desktop has no per-app icon (Windows doesn't expose a uniform
+        // per-process icon API) so the icon slot is Android-only polish;
+        // typography (TextPrimary name + TextMuted secondary) and the
+        // rounded-block surround mirror desktop one-to-one. CheckBox sits
+        // trailing per Material list convention — desktop puts it leading,
+        // but the touch ergonomics differ (large finger tapping a leading
+        // checkbox occludes the icon/label readability mid-tap).
         var label = new TextBlock
         {
             Text = app.Label,
             FontSize = 12,
-            TextWrapping = TextWrapping.NoWrap,
+            TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
         };
         label.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
@@ -4758,7 +4793,7 @@ public partial class AndroidApp : Avalonia.Application
         {
             Text = app.PackageName,
             FontSize = 9,
-            TextWrapping = TextWrapping.NoWrap,
+            TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
         };
         pkgLine.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
@@ -4773,6 +4808,8 @@ public partial class AndroidApp : Avalonia.Application
         {
             IsChecked = _appPickerSelected.Contains(app.PackageName),
             VerticalAlignment = VerticalAlignment.Center,
+            MinHeight = 0,
+            Padding = new Thickness(0),
         };
         checkbox.IsCheckedChanged += (_, __) =>
         {
@@ -4783,16 +4820,13 @@ public partial class AndroidApp : Avalonia.Application
             UpdateAppPickerCount();
         };
 
-        // v3.0 v2.32.0 — real app icon to the left of the checkbox. The
-        // bitmap was converted by AppListLoader on the background thread
-        // (see AppIconCache), so a sync read here is safe even on cold
-        // cache. When IconBitmap is null (icon load threw, or package
-        // had no icon), the slot stays blank — better than a placeholder
-        // glyph that'd draw user attention to a non-issue.
+        // 32dp icon — Material medium list-icon size, matches the touch
+        // density of the rounded-block row. Cached Bitmap from
+        // AppIconCache; null slot stays blank rather than placeholder.
         var iconImage = new Image
         {
-            Width = 24,
-            Height = 24,
+            Width = 32,
+            Height = 32,
             VerticalAlignment = VerticalAlignment.Center,
             Stretch = Stretch.Uniform,
             Source = app.IconBitmap,
@@ -4801,28 +4835,76 @@ public partial class AndroidApp : Avalonia.Application
 
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"),
-            ColumnSpacing = 8,
-            Margin = new Thickness(8, 4),
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            ColumnSpacing = 10,
+            VerticalAlignment = VerticalAlignment.Center,
         };
-        Grid.SetColumn(checkbox, 0);
-        Grid.SetColumn(iconImage, 1);
-        Grid.SetColumn(rowText, 2);
-        grid.Children.Add(checkbox);
+        Grid.SetColumn(iconImage, 0);
+        Grid.SetColumn(rowText, 1);
+        Grid.SetColumn(checkbox, 2);
         grid.Children.Add(iconImage);
         grid.Children.Add(rowText);
+        grid.Children.Add(checkbox);
 
-        // Tap anywhere on the row toggles the check.
-        var clickable = new Border
+        var rowBorder = new Border
         {
-            Background = Brushes.Transparent,
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Padding = new Thickness(10, 7),
+            Margin = new Thickness(0, 0, 0, 4),
+            MinHeight = 44,
             Child = grid,
         };
-        clickable.PointerPressed += (_, __) =>
+        rowBorder.BindToken(Border.BackgroundProperty, "SurfaceSunkenBrush");
+        rowBorder.PointerPressed += (_, __) =>
         {
             checkbox.IsChecked = !(checkbox.IsChecked == true);
         };
-        return clickable;
+        return rowBorder;
+    }
+
+    /// <summary>
+    /// Section header for the per-app picker — mirrors desktop
+    /// ApplicationsPage cat-name + cat-count style: SemiBold secondary
+    /// label on the left, mono muted count on the right. Used to split
+    /// the picker into "Selected" / "Available" subsections so users
+    /// see at a glance what's currently routed via VPN vs the rest.
+    /// </summary>
+    private Control BuildPickerSectionHeader(string label, int count)
+    {
+        var nameTb = new TextBlock
+        {
+            Text = label,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        nameTb.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
+
+        var countTb = new TextBlock
+        {
+            Text = count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            FontSize = 9,
+            FontFamily = new FontFamily("Consolas, SF Mono, Cascadia Code, Ubuntu Mono, monospace"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(4, 0, 0, 0),
+        };
+        countTb.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+        };
+        Grid.SetColumn(nameTb, 0);
+        Grid.SetColumn(countTb, 1);
+        grid.Children.Add(nameTb);
+        grid.Children.Add(countTb);
+
+        return new Border
+        {
+            Padding = new Thickness(2, 8, 2, 4),
+            Child = grid,
+        };
     }
 
     private void UpdateAppPickerCount()
@@ -4951,6 +5033,7 @@ public partial class AndroidApp : Avalonia.Application
         {
             Text = string.Format(Localization.PerAppCount, 0),
             FontSize = 10,
+            FontFamily = new FontFamily("Consolas, SF Mono, Cascadia Code, Ubuntu Mono, monospace"),
             VerticalAlignment = VerticalAlignment.Center,
         };
         _appPickerCount.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");

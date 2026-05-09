@@ -731,6 +731,8 @@ internal static class Localization
     public static string PerAppHintExclude => global::VPNRouter.Core.Localization.Strings.PerAppHintExclude;
     public static string PerAppCountInclude => global::VPNRouter.Core.Localization.Strings.PerAppCountInclude;
     public static string PerAppCountExclude => global::VPNRouter.Core.Localization.Strings.PerAppCountExclude;
+    public static string PerAppGroupSelected => global::VPNRouter.Core.Localization.Strings.PerAppGroupSelected;
+    public static string PerAppGroupAvailable => global::VPNRouter.Core.Localization.Strings.PerAppGroupAvailable;
     public static string TipEditSubscription => global::VPNRouter.Core.Localization.Strings.TipEditSubscription;
     public static string LblNoSubscriptions => global::VPNRouter.Core.Localization.Strings.LblNoSubscriptions;
     public static string SubsRemoveConfirm => global::VPNRouter.Core.Localization.Strings.SubsRemoveConfirm;

@@ -1910,6 +1910,10 @@ public static class Strings
         ? "Выбрано: {0} · мимо VPN"
         : "Selected: {0} · bypass VPN";
 
+    public static string PerAppGroupSelected => Ru ? "Выбранные" : "Selected";
+
+    public static string PerAppGroupAvailable => Ru ? "Доступные" : "Available";
+
     public static string TipEditSubscription => Ru ? "Изменить URL" : "Edit URL";
 
     public static string LblNoSubscriptions => Ru ? "Подписок нет" : "No subscriptions";
