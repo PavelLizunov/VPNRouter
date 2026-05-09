@@ -1,6 +1,42 @@
 # VPNRouter — UI/UX parity audit findings
 
 **Date**: 2026-05-09 after v2.32.0 + AND-PROFILES merge.
+
+## 🔄 2026-05-10 FULL DESKTOP REVERT — corrected approach
+
+User feedback: "we shouldn't have touched desktop at all". All desktop changes
+made by today's chips (F-02/F-10/F-11/F-12/foundation) reverted to **v2.32.0
+stable visual** in commit `d9f7027`. Android slimmed in commit `bb82c4b` +
+`b1f9743` to match v2.32.0 desktop. Tests aligned in `e32e80c` (597 pass /
+0 fail / 3 skip). Final state:
+
+- **Desktop SimplePage** = pristine v2.32.0 (no Save/Refresh, no auto-detect,
+  Connect always-enabled, "Traffic goes straight", "Route through VPN",
+  manual·split default).
+- **Desktop kebab** = pristine v2.32.0 (View / Diagnostics(3) /
+  Troubleshooting(3) / About / Advanced ▶).
+- **Android Simple page** = matches v2.32.0 desktop (brand row + chips,
+  status, Config·Mode, VPN config form WITHOUT action row, routing radios,
+  autostart card "Configure VPN autostart at Windows boot", Connect,
+  Advanced settings).
+- **Android kebab** = matches v2.32.0 desktop slim 7-item structure +
+  Advanced button.
+- **Android Advanced shell** preserved as legitimate port (tab strip
+  Servers/Subscriptions/Apps/Network/DPI/Telegram/Public — Android
+  equivalent of desktop's MainWindow tab nav).
+- **Connected state** on Android: "Connected · MM:SS" + uptime + "Traffic
+  is routed through the VPN tunnel." + "Last check Ns ago" health monitor +
+  Disconnect button — verified live, matches v2.32.0 desktop Connected.
+
+Lesson encoded for future chips: any chip touching `VPNRouter.App/`,
+`VPNRouter.Core/Models/AppSettings.cs`, or `VPNRouter.Core/Services/
+SettingsLoader.cs` requires explicit user approval. Default reference for
+"desktop look" is **commit `7d9707b` (v2.32.0 stable)**, not main HEAD.
+
+---
+
+## Pre-revert findings (kept for context — most are now obsolete)
+
 **Re-test 1**: 2026-05-09 after F-01 + F-02 — static screenshot match only.
 **Re-test 2 (LIVE INTERACTIVE)**: 2026-05-09 after F-10 + F-11 + F-12 — verified press-by-press on real desktop fresh-build + Android phone:
 - F-10 ✅ canonical kebab — both kebabs now expose Find a server / Routing profiles / Copy log path / View crash log / Check IP leak / Run Health Check / Export+Import / Restart in Safe Mode / Reset (red). Desktop has residual "Advanced ▶" placeholder (cosmetic — items moved out, container still visible).
