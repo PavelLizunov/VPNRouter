@@ -501,6 +501,13 @@ internal static class Localization
     public static string SmpSavedAsServerToast => global::VPNRouter.Core.Localization.Strings.SmpSavedAsServerToast;
     public static string SmpSavedAsSubscriptionToast => global::VPNRouter.Core.Localization.Strings.SmpSavedAsSubscriptionToast;
     public static string SmpRefreshDoneToast => global::VPNRouter.Core.Localization.Strings.SmpRefreshDoneToast;
+    // Android-only QR scan flow (lucid-pike, 2026-05-09) — see Core
+    // Strings.cs SmpScanQr* group. Wired from AndroidApp.QrScan.cs +
+    // MainActivity camera-intent path.
+    public static string SmpScanQrButton => global::VPNRouter.Core.Localization.Strings.SmpScanQrButton;
+    public static string SmpQrPermissionDenied => global::VPNRouter.Core.Localization.Strings.SmpQrPermissionDenied;
+    public static string SmpQrNotRecognized => global::VPNRouter.Core.Localization.Strings.SmpQrNotRecognized;
+    public static string SmpQrScannedToast => global::VPNRouter.Core.Localization.Strings.SmpQrScannedToast;
     public static string SmpTunnelModeLabel => global::VPNRouter.Core.Localization.Strings.SmpTunnelModeLabel;
     public static string SmpSplitOption => global::VPNRouter.Core.Localization.Strings.SmpSplitOption;
     public static string SmpSplitHint => global::VPNRouter.Core.Localization.Strings.SmpSplitHint;

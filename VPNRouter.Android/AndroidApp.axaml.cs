@@ -1113,7 +1113,11 @@ public partial class AndroidApp : Avalonia.Application
         // rhythm. Spacing="6" left-to-right gap matches desktop.
         var saveBtn = MakeSimpleSecondaryButton(Localization.ButtonSave);
         saveBtn.Click += OnSaveClicked;
-        var qrBtn = MakeSimpleSecondaryButton("📷 QR");
+        // lucid-pike (2026-05-09) — camera-scan flow. Button label is the
+        // localized "Scan QR" / "Сканировать QR"; OnScanQrClicked bridges
+        // to MainActivity for the runtime-permission + camera-intent round
+        // trip and pastes the decoded text back into _serverInput.
+        var qrBtn = MakeSimpleSecondaryButton(Localization.SmpScanQrButton);
         qrBtn.Click += OnScanQrClicked;
         var refreshBtn = MakeSimpleSecondaryButton(Localization.ButtonRefresh);
         refreshBtn.Click += OnRefreshClicked;
@@ -4277,8 +4281,82 @@ public partial class AndroidApp : Avalonia.Application
 
     private void OnScanQrClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        // Camera-scan flow lives elsewhere; the previous QR-share overlay
-        // has been removed.
+        // lucid-pike (2026-05-09) — Simple-page camera QR scan.
+        //
+        // Flow: stash a one-shot callback on MainActivity so the camera-
+        // result round-trip (permission grant → MediaStore.ACTION_IMAGE_CAPTURE
+        // → ZXing decode in MainActivity.HandleQrCameraResult) can deliver
+        // the decoded text back here. The Activity-side methods are pure
+        // Android.* and live in MainActivity.cs to keep this Avalonia file
+        // free of Android.* references; this Click handler is the bridge.
+        var activity = MainActivity.Instance;
+        if (activity is null)
+        {
+            // Activity not attached yet — extremely unlikely from a button
+            // click but cheap to guard. Surface as a "not recognized" toast
+            // since we have no permission/UX nuance to communicate.
+            ShowSmpToast(Localization.SmpQrNotRecognized);
+            return;
+        }
+
+        MainActivity.PendingQrScanCallback = (ok, payload) =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => HandleQrScanResult(ok, payload));
+        };
+        activity.RequestQrCodeScan();
+    }
+
+    /// <summary>
+    /// lucid-pike (2026-05-09) — receives the camera-scan result on the UI
+    /// thread (marshalled in OnScanQrClicked's lambda). Three terminal
+    /// outcomes mirror the Activity-side callback contract:
+    ///
+    ///   • <c>ok=true</c> → decoded QR text. Drop into <c>_serverInput</c>;
+    ///     the existing <c>TextChanged</c> hook fires <c>UpdateDetectedHint</c>
+    ///     so the F-11 auto-detect line ("Detected: server link" / "Detected:
+    ///     subscription URL") updates without extra wiring.
+    ///   • <c>ok=false</c> + <c>"permission_denied"</c> → user denied CAMERA
+    ///     at runtime. Toast SmpQrPermissionDenied so they know to grant in
+    ///     Android Settings.
+    ///   • <c>ok=false</c> + anything else (cancelled / not_recognized /
+    ///     decode_error) → quiet failure. "cancelled" is silent (user
+    ///     intentionally backed out); the rest surface SmpQrNotRecognized
+    ///     with a Debug log line so it's visible in adb logcat.
+    /// </summary>
+    private void HandleQrScanResult(bool ok, string? payload)
+    {
+        if (ok && !string.IsNullOrEmpty(payload))
+        {
+            if (_serverInput is not null)
+            {
+                _serverInput.Text = payload;
+                // Caret to end so the user can keep typing if they want to
+                // tweak the decoded text. UpdateDetectedHint() fires
+                // automatically via _serverInput.PropertyChanged hook (line
+                // ~1075), so the F-11 inline auto-detect refreshes.
+                _serverInput.CaretIndex = payload.Length;
+            }
+            ShowSmpToast(Localization.SmpQrScannedToast);
+            return;
+        }
+
+        if (string.Equals(payload, "permission_denied", StringComparison.OrdinalIgnoreCase))
+        {
+            ShowSmpToast(Localization.SmpQrPermissionDenied);
+            return;
+        }
+
+        if (string.Equals(payload, "cancelled", StringComparison.OrdinalIgnoreCase))
+        {
+            // User backed out — no toast (matches Save's empty-input clear
+            // path: silent when intentional).
+            return;
+        }
+
+        // not_recognized / decode_error / no_image / camera_unavailable.
+        global::Android.Util.Log.Debug("VpnRouter.QrScan",
+            $"QR scan failed: payload={payload ?? "(null)"}");
+        ShowSmpToast(Localization.SmpQrNotRecognized);
     }
 
     private void OnMenuExportConfigClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

@@ -123,6 +123,13 @@
          transitive set, so we add it explicitly. ~50 KB on top of
          the existing AndroidX surface. -->
     <PackageReference Include="Xamarin.AndroidX.Core" Version="1.13.1.5" />
+    <!-- lucid-pike (2026-05-09) — Simple-page QR scan. Pure-C# ZXing port;
+         we pass a pixel int[] from Bitmap.GetPixels into RGBLuminanceSource
+         + HybridBinarizer + MultiFormatReader. No JNI, no native lib — same
+         decoder runs on .NET Standard 2.0 / .NET 8 / Mono Android. Encoder
+         half is unused here (desktop has its own pure-C# QrCode encoder
+         under VPNRouter.Core/Services/QrCode.cs). -->
+    <PackageReference Include="ZXing.Net" Version="0.16.10" />
   </ItemGroup>
 
   <!-- libbox.aar — sing-box gomobile binding. Built locally via:
