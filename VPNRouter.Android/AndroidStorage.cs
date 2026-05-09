@@ -81,7 +81,11 @@ public static class AndroidStorage
         // wins because that's the historical default flow.
         if (!string.IsNullOrEmpty(GetString(KeySubscriptionUrl))) return "subscribe";
         if (!string.IsNullOrEmpty(GetString(KeyVlessUri))) return "manual";
-        return "subscribe";
+        // 2026-05-10 revert per user: first-launch default must show
+        // "manual · split" matching desktop v2.32.0 (AppSettings.ConfigMode
+        // default = "generated" displays as "manual"). Pre-fix returned
+        // "subscribe" forcing fresh installs into subscription·all mode.
+        return "manual";
     }
     public static bool SetConfigMode(string value) => SetString(KeyConfigMode, value);
 

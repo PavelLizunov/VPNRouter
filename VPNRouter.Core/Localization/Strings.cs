@@ -1553,7 +1553,7 @@ public static class Strings
 
     public static string SimpleStatusDescOff => Ru
         ? "Трафик идёт напрямую — выбери конфиг и запусти туннель."
-        : "Traffic goes direct — pick a config and start the tunnel.";
+        : "Traffic goes straight — pick a config and start the tunnel.";
 
     /// <summary>Title format when connected — args: {0}=uptime ("0:23" or "1:23:45").</summary>
     public static string SimpleStatusTitleOnWithUptime => Ru
