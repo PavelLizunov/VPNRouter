@@ -1962,11 +1962,13 @@ public partial class AndroidApp : Avalonia.Application
     }
 
     /// <summary>
-    /// Leak protection sub-section: block_on_vpn_fail toggle + DNS strategy
-    /// ComboBox. Desktop has 4 checkboxes (StrictMode / ForceIpv4 /
-    /// FlushDns / StrictDns); on Android most map to either no-op or to
-    /// the VpnService.Builder layer. We surface the ones that map cleanly
-    /// to the Android stack and label them honestly.
+    /// Leak protection sub-section. Desktop NetworkPage:1779-1859 packs four
+    /// inline 24,* checkbox rows inside a single SurfaceSunken Border. We
+    /// mirror that chrome but surface only the controls that map cleanly to
+    /// the Android stack — block_on_vpn_fail (VpnService.setBlocking) and
+    /// the DNS strategy combo. StrictMode / ForceIpv4 / FlushDns / StrictDns
+    /// are desktop-only (Windows firewall + DNS cache flush) and intentionally
+    /// not exposed; they would be no-ops on Android.
     /// </summary>
     private Control BuildSettingsLeakSection()
     {
@@ -1980,10 +1982,54 @@ public partial class AndroidApp : Avalonia.Application
             VerticalAlignment = VerticalAlignment.Center,
         };
         _settingsBlockOnVpnFail.IsCheckedChanged += OnSettingsBlockOnVpnFailChanged;
-        var blockGrid = MakeLabeledCheckboxRow(_settingsBlockOnVpnFail,
-            Localization.BlockOnVpnFailLabel, Localization.BlockOnVpnFailHint);
 
-        // DNS strategy ComboBox — three values, mirrors desktop's choices.
+        // Inline 24,* checkbox row inside a SurfaceSunken Border, matching
+        // desktop NetworkPage:1804-1857. Label TextBlock sits in the * col
+        // with TextWrapping=Wrap so long localised labels reflow inside the
+        // card width instead of pushing the parent past the ScrollViewer.
+        var blockLabel = new TextBlock
+        {
+            Text = Localization.BlockOnVpnFailLabel,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+            FontSize = 11,
+        };
+        var blockGrid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("24,*"),
+            ColumnSpacing = 6,
+        };
+        Grid.SetColumn(_settingsBlockOnVpnFail, 0);
+        Grid.SetColumn(blockLabel, 1);
+        blockGrid.Children.Add(_settingsBlockOnVpnFail);
+        blockGrid.Children.Add(blockLabel);
+
+        var blockHint = new TextBlock
+        {
+            Text = Localization.BlockOnVpnFailHint,
+            FontSize = 10,
+            Foreground = GetBrush("TextMutedBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(30, 0, 0, 0),
+        };
+
+        var leakInner = new Border
+        {
+            Padding = new Thickness(8, 6),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(1),
+            Child = new StackPanel
+            {
+                Spacing = 4,
+                Children = { blockGrid, blockHint }
+            }
+        };
+
+        // DNS strategy combo lives in a sibling SurfaceSunken Border so the
+        // visual grouping reads "two leak-protection cards", same as the
+        // desktop pattern of stacking SurfaceSunken Borders inside a section.
         _settingsDnsStrategy = new Avalonia.Controls.ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -2009,7 +2055,7 @@ public partial class AndroidApp : Avalonia.Application
             FontWeight = FontWeight.SemiBold,
             FontSize = 11,
             Opacity = 0.8,
-            Margin = new Thickness(0, 6, 0, 0),
+            TextWrapping = TextWrapping.Wrap,
         };
         var dnsHint = new TextBlock
         {
@@ -2017,13 +2063,58 @@ public partial class AndroidApp : Avalonia.Application
             FontSize = 10,
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 2, 0, 0),
+        };
+
+        var dnsInner = new Border
+        {
+            Padding = new Thickness(8, 6),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(1),
+            Child = new StackPanel
+            {
+                Spacing = 4,
+                Children = { dnsHeader, _settingsDnsStrategy, dnsHint }
+            }
         };
 
         var stack = new StackPanel
         {
-            Spacing = 8,
-            Children = { sectionTitle, blockGrid, dnsHeader, _settingsDnsStrategy, dnsHint }
+            Spacing = 10,
+            Children = { sectionTitle, leakInner, dnsInner }
+        };
+        return WrapSection(stack);
+    }
+
+    /// <summary>
+    /// Content sub-section. Mirrors desktop NetworkPage:1861-1879 — a single
+    /// checkbox-card for AdGuard DNS / ad blocking. Persists the toggle today
+    /// so future overlays read consistent state; the AndroidConfigBuilder
+    /// integration (geosite-ads route → reject + AdGuard DoH override) is a
+    /// follow-up. Visually identical to desktop's "checkbox-card" pattern.
+    /// </summary>
+    private Control BuildSettingsContentSection()
+    {
+        var sectionTitle = MakeSectionTitle(Localization.SettingsSectionContent);
+
+        _settingsBlockAds = new Avalonia.Controls.CheckBox
+        {
+            IsChecked = AndroidStorage.GetBlockAds(),
+            MinHeight = 0,
+            Padding = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 1, 0, 0),
+        };
+        _settingsBlockAds.IsCheckedChanged += OnSettingsBlockAdsChanged;
+        var card = MakeCheckboxCard(_settingsBlockAds,
+            Localization.SettingsBlockAdsLabel,
+            Localization.SettingsBlockAdsHint);
+
+        var stack = new StackPanel
+        {
+            Spacing = 10,
+            Children = { sectionTitle, card }
         };
         return WrapSection(stack);
     }
@@ -2168,6 +2259,10 @@ public partial class AndroidApp : Avalonia.Application
     {
         var sectionTitle = MakeSectionTitle(Localization.SettingsSectionUpdates);
 
+        // Channel sub-card. Desktop NetworkPage:1885-1899 wraps the channel
+        // header + prerelease checkbox in a SurfaceSunken Border. Mirroring
+        // the chrome here keeps Android's stacked-section layout matching
+        // desktop's master-detail pane visually.
         var channelHeader = new TextBlock
         {
             Text = Localization.UpdateChannelHeader,
@@ -2191,7 +2286,22 @@ public partial class AndroidApp : Avalonia.Application
         };
         _settingsReceivePrereleases.IsCheckedChanged += OnSettingsChannelChanged;
 
-        // Current version + Check button row.
+        var channelInner = new Border
+        {
+            Padding = new Thickness(8, 6),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(1),
+            Child = new StackPanel
+            {
+                Spacing = 3,
+                Children = { channelHeader, _settingsReceivePrereleases }
+            }
+        };
+
+        // Current version + Check button row in its own SurfaceSunken Border,
+        // mirroring desktop NetworkPage:1904-1927 (the SUGGEST-22 panel).
         _settingsCurrentVersion = new TextBlock
         {
             Text = VPNRouter.Core.AppVersion.Version,
@@ -2227,17 +2337,26 @@ public partial class AndroidApp : Avalonia.Application
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
             ColumnSpacing = 8,
-            Margin = new Thickness(0, 6, 0, 0),
         };
         Grid.SetColumn(versionStack, 0);
         Grid.SetColumn(checkBtn, 1);
         versionRow.Children.Add(versionStack);
         versionRow.Children.Add(checkBtn);
 
+        var versionInner = new Border
+        {
+            Padding = new Thickness(8, 6),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(1),
+            Child = versionRow,
+        };
+
         var stack = new StackPanel
         {
-            Spacing = 6,
-            Children = { sectionTitle, channelHeader, _settingsReceivePrereleases, versionRow }
+            Spacing = 10,
+            Children = { sectionTitle, channelInner, versionInner }
         };
         return WrapSection(stack);
     }
@@ -2530,6 +2649,7 @@ public partial class AndroidApp : Avalonia.Application
             if (_settingsFullRadio is not null) _settingsFullRadio.IsChecked = routing == "full";
             if (_settingsBypassRu is not null) _settingsBypassRu.IsChecked = AndroidStorage.GetBypassRussianTraffic();
             if (_settingsBlockOnVpnFail is not null) _settingsBlockOnVpnFail.IsChecked = AndroidStorage.GetBlockOnVpnFail();
+            if (_settingsBlockAds is not null) _settingsBlockAds.IsChecked = AndroidStorage.GetBlockAds();
             if (_settingsDnsStrategy is not null)
             {
                 _settingsDnsStrategy.SelectedIndex = AndroidStorage.GetDnsStrategy() switch
@@ -2598,6 +2718,12 @@ public partial class AndroidApp : Avalonia.Application
     {
         if (_settingsLoading || _settingsBlockOnVpnFail is null) return;
         AndroidStorage.SetBlockOnVpnFail(_settingsBlockOnVpnFail.IsChecked == true);
+    }
+
+    private void OnSettingsBlockAdsChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_settingsLoading || _settingsBlockAds is null) return;
+        AndroidStorage.SetBlockAds(_settingsBlockAds.IsChecked == true);
     }
 
     private void OnSettingsDnsStrategyChanged(object? sender, Avalonia.Controls.SelectionChangedEventArgs e)
