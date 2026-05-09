@@ -902,4 +902,13 @@ internal static class Localization
     // (around line 215-225) from the v2.32.0 (AND-ZAPRET) batch. The
     // F-13 DPI Bypass overlay reuses those existing accessors directly —
     // re-adding here would cause CS0102 duplicate definitions.
+
+    // Phase C: Settings tab side-nav (2026-05-10) — Rules sub-section
+    // header + Android-equivalence explainer for the Rules sub-section
+    // (CustomRulesParser is desktop-only today) + Autostart sub-section
+    // intro that explains Always-on VPN as the Android equivalent of
+    // the Windows Service install path.
+    public static string SettingsSectionRules => global::VPNRouter.Core.Localization.Strings.SettingsSectionRules;
+    public static string AdvSettingsRulesAndroidNote => global::VPNRouter.Core.Localization.Strings.AdvSettingsRulesAndroidNote;
+    public static string AdvSettingsAutostartAndroidIntro => global::VPNRouter.Core.Localization.Strings.AdvSettingsAutostartAndroidIntro;
 }

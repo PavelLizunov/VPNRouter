@@ -311,5 +311,22 @@ public partial class AndroidApp
             _advShellTitle.Text = Localization.SmpAdvCardTitle;
         foreach (var kv in _advShellTabButtons)
             kv.Value.Content = AdvancedTabLabel(kv.Key);
+
+        // Phase C (2026-05-10) — Settings tab side-nav button labels and
+        // footer Apply/Auto-saved row also need to flip on language toggle.
+        // The actual section content (tab body inside each sub-section) is
+        // rebuilt fresh on the next ReseedNetworkTabState because each
+        // section helper reads from Localization at build time and we don't
+        // hold per-row TextBlock references; the Settings tab gets
+        // re-populated when the user navigates to it. Sub-section button
+        // text + footer captions DO have stable references, so we update
+        // them in place here.
+        for (int i = 0; i < _settingsSubSectionButtons.Length; i++)
+        {
+            var btn = _settingsSubSectionButtons[i];
+            if (btn is not null) btn.Content = SettingsSubSectionLabel(i);
+        }
+        if (_settingsApplyButton is not null)
+            _settingsApplyButton.Content = Localization.ApplyNowReloadVpn;
     }
 }

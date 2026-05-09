@@ -2411,4 +2411,30 @@ public static class Strings
 
     /// <summary>"Check IP leak" button label in Tools / Advanced.</summary>
     public static string AndroidToolsCheckLeak => Ru ? "Проверить IP-утечку" : "Check IP leak";
+
+    // ── Phase C: Android Settings tab side-nav (2026-05-10) ─────────────
+    //
+    // Six sub-sections mirroring desktop NetworkPage left-nav (Routing /
+    // Rules / Leak / Content / Updates / Autostart). Section labels reuse
+    // existing SettingsSection* / SectionRules keys; only the rules-Android-
+    // note + Autostart Android-equivalence intro are net-new.
+    //
+    // Rules sub-section: AndroidConfigBuilder doesn't yet pipe the
+    // CustomRules list into the generated sing-box JSON — desktop's
+    // CustomRulesParser consumer lives in ConfigGenerator, not the Android
+    // builder. We surface a placeholder explainer so the side-nav has
+    // visual parity with desktop without shipping a no-op text editor.
+    public static string SettingsSectionRules => Ru ? "Правила" : "Rules";
+
+    public static string AdvSettingsRulesAndroidNote => Ru
+        ? "Кастомные правила маршрутизации (домен → действие) пока не подключены на Android. Пока что используй вкладку «Приложения» — там можно выбрать, какие приложения идут через VPN."
+        : "Custom routing rules (domain → action) aren't wired into the Android tunnel yet. For now use the Apps tab to choose which apps go through VPN.";
+
+    // Autostart sub-section intro on Android — explains that Always-on VPN
+    // (under Reliability on the desktop, but folded into Autostart on
+    // Android per the parity plan's platform-impossible item table) is the
+    // recommended replacement for the Windows Service install path.
+    public static string AdvSettingsAutostartAndroidIntro => Ru
+        ? "На Android системного аналога Windows-службы нет. Чтобы VPN поднимался после перезагрузки и при смене сети — включи «Always-on VPN» в системных настройках Android (кнопка ниже)."
+        : "Android has no system-level equivalent of the Windows service. To bring the VPN up after reboot and network change, enable «Always-on VPN» in Android system settings (button below).";
 }

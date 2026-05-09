@@ -549,6 +549,23 @@ public static class AndroidStorage
     public static bool SetAdvancedActiveTab(int index)
         => SetString(KeyAdvancedActiveTab, index.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
+    // Phase C (2026-05-10): remembers which Settings-tab sub-section the
+    // user was last viewing so re-opening Advanced > Settings restores
+    // the same pane. Stored as the integer index 0..5 matching desktop's
+    // SelectedSettingsIndex (Routing / Rules / Leak / Content / Updates /
+    // Autostart). Default 0 = Routing.
+    private const string KeySettingsActiveSubSection = "settings_active_subsection";
+
+    public static int GetSettingsActiveSubSection()
+    {
+        var raw = GetString(KeySettingsActiveSubSection);
+        if (string.IsNullOrEmpty(raw)) return 0;
+        return int.TryParse(raw, out var idx) && idx >= 0 && idx <= 5 ? idx : 0;
+    }
+
+    public static bool SetSettingsActiveSubSection(int index)
+        => SetString(KeySettingsActiveSubSection, index.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
     // ── v2.32.0 (AND-4): per-server TCP+TLS test history ──────────────────
     //
     // Side-table keyed by VlessServersResolver dedup shape ("Server:Port:Uuid:Flow").
