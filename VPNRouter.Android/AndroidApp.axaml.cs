@@ -209,7 +209,18 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.Button? _menuViewCrashLogItem;
     private Avalonia.Controls.Button? _menuUpdateCheckItem;
     private Avalonia.Controls.Button? _menuResetSettingsItem;
+    // F-12 kebab visual parity (2026-05-09): About row is a Button whose
+    // content is a 2-column Grid — left text "О приложении / About"
+    // (TextPrimary), right text mono version pill (TextMuted). Click target
+    // opens the GitHub repo (Android has no AboutWindow). Pre-fix Android
+    // had two separate rows (version + repo link) under an "About" section
+    // header; desktop has just one inline row with the version pill.
     private Avalonia.Controls.Button? _menuVersionItem;
+    private TextBlock? _menuAboutLabel;
+    private TextBlock? _menuVersionPill;
+    // _menuRepoItem retained as field-level null-stub so existing
+    // ToggleLanguageAndRefresh / null-check sites don't need refactoring.
+    // Functionally retired — the About row above absorbs the repo-open click.
     private Avalonia.Controls.Button? _menuRepoItem;
     // v2.32.0 — Free Configs entry point lives in the kebab menu (no
     // dedicated tab on Android — single-screen layout).
@@ -682,16 +693,55 @@ public partial class AndroidApp : Avalonia.Application
                                             "TextPrimaryBrush", OnMenuHealthCheckClicked);
         _menuRestartSafeModeItem = MakeMenuItem(Localization.MenuItemSafeMode,
                                                 "TextPrimaryBrush", OnMenuRestartSafeModeClicked);
-        _menuVersionItem = MakeMenuItem(
-            $"{Localization.MenuItemVersion} {VPNRouter.Core.AppVersion.Version}",
-            "TextMutedBrush", null);
-        _menuRepoItem = MakeMenuItem(Localization.MenuItemRepoLink,
-                                     "TextPrimaryBrush", OnMenuRepoClicked);
+        // F-12 kebab visual parity (2026-05-09): About row mirrors desktop's
+        // single-row "О приложении · v2.X.Y" with the version rendered as a
+        // mono-font pill on the right (TextMutedBrush) — see MainWindow.axaml
+        // line 623-635 (Button Classes="menu-item" wrapping Grid */Auto). On
+        // desktop the row opens AboutWindow; on Android there is no AboutWindow,
+        // so the row's tap target opens the GitHub repo (the same destination
+        // the standalone "GitHub repository" row used to point at). _menuRepoItem
+        // is gone — its function folds into the new About row.
+        _menuAboutLabel = new TextBlock
+        {
+            Text = Localization.SmpMenuAbout,
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _menuAboutLabel.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
+        _menuVersionPill = new TextBlock
+        {
+            Text = VPNRouter.Core.AppVersion.Version,
+            FontSize = 9,
+            FontFamily = new FontFamily("Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _menuVersionPill.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+        var aboutGrid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 16,
+        };
+        Grid.SetColumn(_menuAboutLabel, 0);
+        Grid.SetColumn(_menuVersionPill, 1);
+        aboutGrid.Children.Add(_menuAboutLabel);
+        aboutGrid.Children.Add(_menuVersionPill);
+        _menuVersionItem = new Avalonia.Controls.Button
+        {
+            Content = aboutGrid,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Padding = new Thickness(10, 7),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+        };
+        _menuVersionItem.Click += OnMenuRepoClicked;
+        // _menuRepoItem retired: combined into the About row above.
+        _menuRepoItem = null;
 
         var menuStack = new StackPanel
         {
-            Spacing = 0,
-            MinWidth = 240,
+            Spacing = 1,
         };
 
         // v2.32.0 — Free Configs entry. Sits between Вид and Диагностика
@@ -727,25 +777,31 @@ public partial class AndroidApp : Avalonia.Application
         // desktop — Restart in Safe Mode + Reset settings (red).
         AppendMenuSection(menuStack, Localization.MenuSectionTroubleshooting,
                           new[] { _menuRestartSafeModeItem, _menuResetSettingsItem });
-        AppendMenuSection(menuStack, Localization.MenuSectionAbout,
-                          new[] { _menuVersionItem, _menuRepoItem });
+        // F-12 kebab visual parity (2026-05-09): About row sits inline at
+        // the very bottom — no section header (matches desktop, which has
+        // a divider then a single "О приложении · v2.X.Y" Button row, no
+        // section label). The trailing divider appended by the previous
+        // AppendMenuSection call serves as the visual separator above.
+        menuStack.Children.Add(_menuVersionItem);
 
+        // F-12 kebab visual parity (2026-05-09): container now matches desktop
+        // MainWindow.axaml line 465 verbatim — Width=232, BorderDefault 1px,
+        // CornerRadius=RadiusMd, Padding=6. BoxShadow drives off the ShadowMd
+        // theme token (BindToken so light/dark switches re-resolve). Pre-fix
+        // values (radiusSm=6, padding="0,4", hand-rolled shadow Color.FromArgb)
+        // produced a flatter, less-elevated card that read as a sunken inset
+        // rather than a popover.
         var menuPanel = new Border
         {
+            Width = 232,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(radiusSm),
-            BoxShadow = new BoxShadows(new BoxShadow
-            {
-                OffsetX = 0,
-                OffsetY = 4,
-                Blur = 12,
-                Color = Color.FromArgb(50, 0, 0, 0),
-            }),
-            Padding = new Thickness(0, 4),
+            CornerRadius = new CornerRadius(GetRadius("RadiusMd")),
+            Padding = new Thickness(6),
             Child = menuStack,
         };
         menuPanel.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
         menuPanel.BindToken(Border.BorderBrushProperty, "BorderDefaultBrush");
+        menuPanel.BindToken(Border.BoxShadowProperty, "ShadowMd");
 
         _kebabPopup = new Popup
         {
@@ -4040,15 +4096,20 @@ public partial class AndroidApp : Avalonia.Application
         string foregroundKey,
         EventHandler<Avalonia.Interactivity.RoutedEventArgs>? onClick)
     {
+        // F-12 kebab visual parity (2026-05-09): mirrors desktop
+        // Style Selector="Button.menu-item" — FontSize=11, Padding=10,7,
+        // CornerRadius=RadiusXs (3). Pre-fix Android used 12px / 14,8 /
+        // 0px which made rows visibly taller and wider than desktop.
         var btn = new Avalonia.Controls.Button
         {
             Content = label,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
-            Padding = new Thickness(14, 8),
-            FontSize = 12,
+            Padding = new Thickness(10, 7),
+            FontSize = 11,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
             IsHitTestVisible = onClick is not null,
         };
         btn.BindToken(Avalonia.Controls.Button.ForegroundProperty, foregroundKey);
@@ -4115,12 +4176,18 @@ public partial class AndroidApp : Avalonia.Application
         string headerText,
         Control[] items)
     {
+        // F-12 kebab visual parity (2026-05-09): section label spec mirrors
+        // desktop Style Selector="TextBlock.section-label" — FontSize=9,
+        // SemiBold, TextMutedBrush, Margin="8,6,8,4". Divider moved from
+        // immediately under the header (was acting as a header underline)
+        // to AFTER the section's items (acts as inter-section separator,
+        // matches desktop Border Classes="menu-divider"/ pattern).
         var header = new TextBlock
         {
             Text = headerText,
-            FontSize = 10,
+            FontSize = 9,
             FontWeight = FontWeight.SemiBold,
-            Margin = new Thickness(14, 8, 14, 4),
+            Margin = new Thickness(8, 6, 8, 4),
         };
         header.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
         if (headerText == Localization.MenuSectionView) _menuSectionView = header;
@@ -4132,18 +4199,12 @@ public partial class AndroidApp : Avalonia.Application
 
         stack.Children.Add(header);
 
-        var divider = new Border
-        {
-            Height = 1,
-            Margin = new Thickness(14, 0, 14, 4),
-        };
-        divider.BindToken(Border.BackgroundProperty, "BorderSubtleBrush");
-        stack.Children.Add(divider);
-
         foreach (var item in items)
         {
             stack.Children.Add(item);
         }
+
+        AppendMenuDivider(stack);
     }
 
     /// <summary>
@@ -4157,12 +4218,17 @@ public partial class AndroidApp : Avalonia.Application
         string headerText,
         Avalonia.Controls.Button[] items)
     {
+        // F-12 kebab visual parity (2026-05-09): mirrors desktop section-label
+        // (FontSize=9 SemiBold TextMutedBrush, Margin=8,6,8,4) and moves the
+        // divider to AFTER the section so it separates this section from the
+        // next, instead of underlining the header. See AppendMenuSectionWithControls
+        // above for the same structure for the View segments section.
         var header = new TextBlock
         {
             Text = headerText,
-            FontSize = 10,
+            FontSize = 9,
             FontWeight = FontWeight.SemiBold,
-            Margin = new Thickness(14, 8, 14, 4),
+            Margin = new Thickness(8, 6, 8, 4),
         };
         header.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
         // Cache by header text so ToggleLanguageAndRefresh can find it.
@@ -4175,18 +4241,29 @@ public partial class AndroidApp : Avalonia.Application
 
         stack.Children.Add(header);
 
-        var divider = new Border
-        {
-            Height = 1,
-            Margin = new Thickness(14, 0, 14, 4),
-        };
-        divider.BindToken(Border.BackgroundProperty, "BorderSubtleBrush");
-        stack.Children.Add(divider);
-
         foreach (var item in items)
         {
             stack.Children.Add(item);
         }
+
+        AppendMenuDivider(stack);
+    }
+
+    /// <summary>
+    /// F-12 kebab visual parity (2026-05-09) — 1px <see cref="BorderSubtleBrush"/>
+    /// separator between sections. Mirrors desktop's
+    /// <c>Style Selector="Border.menu-divider"</c> (Height=1,
+    /// Background=BorderSubtleBrush, Margin=4,4).
+    /// </summary>
+    private void AppendMenuDivider(StackPanel stack)
+    {
+        var divider = new Border
+        {
+            Height = 1,
+            Margin = new Thickness(4, 4, 4, 4),
+        };
+        divider.BindToken(Border.BackgroundProperty, "BorderSubtleBrush");
+        stack.Children.Add(divider);
     }
 
     private void OnKebabMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -5289,9 +5366,11 @@ public partial class AndroidApp : Avalonia.Application
         if (_menuUpdateCheckItem is not null) _menuUpdateCheckItem.Content = Localization.MenuItemUpdateCheck;
         if (_menuResetSettingsItem is not null && !_resetConfirmPending)
             _menuResetSettingsItem.Content = Localization.MenuItemResetSettings;
-        if (_menuVersionItem is not null)
-            _menuVersionItem.Content = $"{Localization.MenuItemVersion} {VPNRouter.Core.AppVersion.Version}";
-        if (_menuRepoItem is not null) _menuRepoItem.Content = Localization.MenuItemRepoLink;
+        // F-12 kebab visual parity (2026-05-09): About row's left text is
+        // now a stand-alone TextBlock inside a Grid (not the Button.Content
+        // string), so refresh that field directly. Version pill stays put —
+        // not localized. _menuRepoItem is a null stub (combined into About).
+        if (_menuAboutLabel is not null) _menuAboutLabel.Text = Localization.SmpMenuAbout;
         // Section headers
         if (_menuSectionView is not null) _menuSectionView.Text = Localization.MenuSectionView;
         if (_menuSectionDiagnostics is not null) _menuSectionDiagnostics.Text = Localization.MenuSectionDiagnostics;
