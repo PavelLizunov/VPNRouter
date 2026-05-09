@@ -16,6 +16,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.UI.Controls;
 
 namespace VPNRouter.Android;
 
@@ -79,10 +80,13 @@ internal static class StyledElementResourceExtensions
 /// </summary>
 public partial class AndroidApp : Avalonia.Application
 {
-    // Status card
-    private Ellipse? _statusDot;
-    private TextBlock? _statusTitle;
-    private TextBlock? _statusDesc;
+    // Status card.
+    // v3.0 Phase G step 1 (2026-05-09): replaced the Ellipse + 2× TextBlock
+    // trio with the shared VPNRouter.UI.Controls.StatusCard so desktop +
+    // Android render the same Border / dot / typography from one .axaml.
+    // Title / Subtitle / IsOn / IsWarn / IsOff are StyledProperty setters
+    // on the control; UpdateConnectionState mutates them directly.
+    private StatusCard? _statusCard;
 
     // v2.32.0 (AND-DIAG, 2026-05-07) — runtime diagnostics on status card.
     // Mirrors desktop's MainWindowViewModel.RuntimeStatus surface: a
@@ -93,8 +97,9 @@ public partial class AndroidApp : Avalonia.Application
     //
     // State machine:
     //   • idle       — _connectionStartedAt == null, timer stopped
-    //   • connected  — _connectionStartedAt set, timer ticking, _statusTitle
-    //                  shows "Connected · M:SS" / "Connected · H:MM:SS"
+    //   • connected  — _connectionStartedAt set, timer ticking,
+    //                  _statusCard.Title shows "Connected · M:SS" /
+    //                  "Connected · H:MM:SS"
     //   • error      — _lastError set, _lastErrorAt sealed; timer keeps
     //                  ticking (or starts briefly even if disconnected) so
     //                  the 30 s auto-clear runs
@@ -818,43 +823,32 @@ public partial class AndroidApp : Avalonia.Application
         headerRow.Children.Add(_kebabPopup);
 
         // ── Status card (dot + title + description) ─────────────────────
-        _statusDot = new Ellipse
+        // v3.0 Phase G step 1 (2026-05-09): visual treatment moved into
+        // VPNRouter.UI.Controls.StatusCard so desktop + Android render
+        // the same Border / dot / typography from one .axaml. The card
+        // itself only owns the dot + title + subtitle. Diagnostic chips
+        // (_statusHealthCheck, _statusErrorOneLiner) live alongside the
+        // card — wrapped in a small StackPanel so they appear visually
+        // adjacent in the parent scroller. Pre-G they were nested inside
+        // the bordered card; the new arrangement is slightly looser
+        // visually but only manifests when AND-DIAG probes / errors
+        // surface (chips default IsVisible=false).
+        _statusCard = new StatusCard
         {
-            Width = 10,
-            Height = 10,
-            VerticalAlignment = VerticalAlignment.Center,
+            IsOff = true,
+            IsOn = false,
+            IsWarn = false,
+            Title = Localization.SimpleStatusTitleOff,
+            Subtitle = Localization.SimpleStatusDescOff,
         };
-        // v3.0 Phase 8.2 — UpdateConnectionState re-binds Fill on every
-        // state flip; the initial value tracks the Off state.
-        _statusDot.BindToken(Avalonia.Controls.Shapes.Shape.FillProperty, "TextMutedBrush");
 
-        _statusTitle = new TextBlock
-        {
-            Text = Localization.SimpleStatusTitleOff,
-            FontSize = 15,
-            FontWeight = FontWeight.Bold,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        _statusTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
-
-        // v2.32.0 parity port (2026-05-09) — match desktop SimplePage.axaml
-        // line 167-172: FontSize 11 → 10, LineHeight 16 → 15. Smaller line
-        // height plus smaller font size keeps the description visually
-        // subordinate to the title and matches desktop's calmer rhythm.
-        _statusDesc = new TextBlock
-        {
-            Text = Localization.SimpleStatusDescOff,
-            FontSize = 10,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(20, 0, 0, 0),
-            LineHeight = 15,
-        };
-        _statusDesc.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
-
-        // v2.32.0 (AND-DIAG) — health-check chip beneath the description.
-        // Hidden until first probe runs (which is ~30 s post-connect; the
-        // pending text fills the gap). Indented to match _statusDesc so
-        // the column lines up with the title text rather than the dot.
+        // v2.32.0 (AND-DIAG) — health-check chip beneath the card. Hidden
+        // until first probe runs (which is ~30 s post-connect; the
+        // pending text fills the gap). 20 px indent so the column lines
+        // up with the StatusCard's title text rather than the dot.
+        // (StatusCard UserControl from VPNRouter.UI shared lib renders the
+        // title + subtitle internally — old inline _statusTitle / _statusDesc
+        // builders removed in foundation merge.)
         _statusHealthCheck = new TextBlock
         {
             Text = string.Empty,
@@ -882,35 +876,16 @@ public partial class AndroidApp : Avalonia.Application
         };
         _statusErrorOneLiner.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
 
-        var statusHeaderRow = new StackPanel
+        // Group the card + diagnostic chips so they ride innerStack as
+        // one unit. 6 px internal spacing matches the pre-G in-card stack.
+        var statusCard = new StackPanel
         {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 10,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children = { _statusDot, _statusTitle },
+            Spacing = 6,
+            Children = { _statusCard, _statusHealthCheck, _statusErrorOneLiner },
         };
 
-        // v2.32.0 parity port (2026-05-09) — inner StackPanel Spacing 6 → 8
-        // so the gap between the dot+title row and the description matches
-        // desktop SimplePage.axaml line 150 (StackPanel Spacing="8"). The
-        // diagnostics rows (_statusHealthCheck, _statusErrorOneLiner) are
-        // Android-only additions and stay in the same stack — they only
-        // become visible during real diagnostics events, so the desktop
-        // visual at rest is identical.
-        var statusCard = new Border
-        {
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(radiusMd),
-            Padding = new Thickness(14),
-            Child = new StackPanel
-            {
-                Spacing = 8,
-                Children = { statusHeaderRow, _statusDesc, _statusHealthCheck, _statusErrorOneLiner },
-            }
-        };
-        statusCard.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
-        statusCard.BindToken(Border.BorderBrushProperty, "BorderDefaultBrush");
-
+// (statusCard already declared above as wrapper StackPanel containing
+        // _statusCard UserControl + _statusHealthCheck + _statusErrorOneLiner.)
         // ── Config row button (tappable, expands form) ──────────────────
         var flagGlyph = new TextBlock
         {
@@ -3226,16 +3201,19 @@ public partial class AndroidApp : Avalonia.Application
 
     private void UpdateConnectionState(bool connected)
     {
-        if (_statusDot is null) return;
+        if (_statusCard is null) return;
 
         if (connected)
         {
-            // v3.0 Phase 8.2 — Fill goes through DynamicResource so a
-            // theme switch while connected re-resolves SuccessSolidBrush
-            // to the new variant's value automatically.
-            _statusDot.BindToken(Avalonia.Controls.Shapes.Shape.FillProperty, "SuccessSolidBrush");
-            if (_statusTitle is not null) _statusTitle.Text = Localization.SimpleStatusTitleOn;
-            if (_statusDesc is not null) _statusDesc.Text = Localization.SimpleStatusDescOn;
+            // v3.0 Phase G step 1 (2026-05-09) — flip the shared StatusCard
+            // into its On state. The internal Ellipse Fill resolves through
+            // DynamicResource on SuccessSolidBrush, so a theme switch while
+            // connected re-renders automatically (no manual rebind needed).
+            _statusCard.IsOn = true;
+            _statusCard.IsWarn = false;
+            _statusCard.IsOff = false;
+            _statusCard.Title = Localization.SimpleStatusTitleOn;
+            _statusCard.Subtitle = Localization.SimpleStatusDescOn;
             if (_ctaConnect is not null) _ctaConnect.IsVisible = false;
             if (_ctaConnecting is not null) _ctaConnecting.IsVisible = false;
             if (_ctaDisconnect is not null) _ctaDisconnect.IsVisible = true;
@@ -3261,9 +3239,11 @@ public partial class AndroidApp : Avalonia.Application
         }
         else
         {
-            _statusDot.BindToken(Avalonia.Controls.Shapes.Shape.FillProperty, "TextMutedBrush");
-            if (_statusTitle is not null) _statusTitle.Text = Localization.SimpleStatusTitleOff;
-            if (_statusDesc is not null) _statusDesc.Text = Localization.SimpleStatusDescOff;
+            _statusCard.IsOn = false;
+            _statusCard.IsWarn = false;
+            _statusCard.IsOff = true;
+            _statusCard.Title = Localization.SimpleStatusTitleOff;
+            _statusCard.Subtitle = Localization.SimpleStatusDescOff;
             if (_ctaConnect is not null) _ctaConnect.IsVisible = true;
             if (_ctaConnecting is not null) _ctaConnecting.IsVisible = false;
             if (_ctaDisconnect is not null) _ctaDisconnect.IsVisible = false;
@@ -3512,7 +3492,7 @@ public partial class AndroidApp : Avalonia.Application
         _diagnosticsTimer.Stop();
         if (_statusHealthCheck is not null) _statusHealthCheck.IsVisible = false;
         // Title resets to plain "Not connected" inside UpdateConnectionState,
-        // so we don't touch _statusTitle here.
+        // so we don't touch _statusCard.Title here.
     }
 
     private void OnDiagnosticsTick()
@@ -3520,10 +3500,10 @@ public partial class AndroidApp : Avalonia.Application
         try
         {
             // 1. Uptime — refresh title every tick while connected.
-            if (_connectionStartedAt is DateTime startUtc && _statusTitle is not null)
+            if (_connectionStartedAt is DateTime startUtc && _statusCard is not null)
             {
                 var elapsed = DateTime.UtcNow - startUtc;
-                _statusTitle.Text = string.Format(
+                _statusCard.Title = string.Format(
                     Localization.SimpleStatusTitleOnWithUptime,
                     FormatUptime(elapsed));
             }
@@ -5479,10 +5459,11 @@ public partial class AndroidApp : Avalonia.Application
         // v2.32.0 (Android-led) — refresh config share overlay strings
         // (export/import/QR) along with their kebab entries.
         RefreshConfigShareLocalization();
-        if (_statusTitle is not null)
-            _statusTitle.Text = MainActivity.IntendedConnected ? Localization.SimpleStatusTitleOn : Localization.SimpleStatusTitleOff;
-        if (_statusDesc is not null)
-            _statusDesc.Text = MainActivity.IntendedConnected ? Localization.SimpleStatusDescOn : Localization.SimpleStatusDescOff;
+        if (_statusCard is not null)
+        {
+            _statusCard.Title = MainActivity.IntendedConnected ? Localization.SimpleStatusTitleOn : Localization.SimpleStatusTitleOff;
+            _statusCard.Subtitle = MainActivity.IntendedConnected ? Localization.SimpleStatusDescOn : Localization.SimpleStatusDescOff;
+        }
         // v2.32.0 (AND-DIAG) — re-render diagnostics surface so the
         // localized "X s ago" / "Awaiting first check" labels swap to
         // the new language. Title's uptime suffix is re-applied on the

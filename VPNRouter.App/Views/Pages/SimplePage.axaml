@@ -3,6 +3,7 @@
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:conv="using:VPNRouter.App"
+             xmlns:vui="using:VPNRouter.UI.Controls"
              x:Class="VPNRouter.App.Views.Pages.SimplePage"
              x:DataType="vm:MainWindowViewModel">
 
@@ -141,37 +142,18 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- ═══ Status card — 3 variants via IsVisible on SimpleStatusIs* ═══ -->
-                <Border BorderThickness="1"
-                        BorderBrush="{DynamicResource BorderDefaultBrush}"
-                        Background="{DynamicResource SurfaceBaseBrush}"
-                        CornerRadius="{StaticResource RadiusMd}"
-                        Padding="14">
-                    <StackPanel Spacing="8">
-                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                            <!-- Status dot — only one visible at a time -->
-                            <Ellipse Width="10" Height="10" VerticalAlignment="Center"
-                                     Fill="{DynamicResource SuccessSolidBrush}"
-                                     IsVisible="{Binding SimpleStatusIsOn}"/>
-                            <Ellipse Width="10" Height="10" VerticalAlignment="Center"
-                                     Fill="{DynamicResource WarningSolidBrush}"
-                                     IsVisible="{Binding SimpleStatusIsWarn}"/>
-                            <Ellipse Width="10" Height="10" VerticalAlignment="Center"
-                                     Fill="{DynamicResource TextMutedBrush}"
-                                     IsVisible="{Binding SimpleStatusIsOff}"/>
-                            <TextBlock Text="{Binding SimpleStatusTitle}"
-                                       FontSize="15" FontWeight="Bold"
-                                       VerticalAlignment="Center"
-                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
-                        </StackPanel>
-                        <TextBlock Text="{Binding SimpleStatusDescription}"
-                                   FontSize="10"
-                                   Foreground="{DynamicResource TextSecondaryBrush}"
-                                   TextWrapping="Wrap"
-                                   Margin="20,0,0,0"
-                                   LineHeight="15"/>
-                    </StackPanel>
-                </Border>
+                <!-- ═══ Status card — 3 variants via IsVisible on SimpleStatusIs* ═══
+                     v3.0 Phase G step 1 (2026-05-09): visual treatment moved
+                     into the shared VPNRouter.Avalonia.UI.Controls.StatusCard
+                     UserControl so desktop + Android render the same Border /
+                     dot / typography from one .axaml. Three bool styled
+                     properties map 1:1 to the existing SimpleStatusIs* VM
+                     getters; Title/Subtitle bind verbatim. -->
+                <vui:StatusCard IsOn="{Binding SimpleStatusIsOn}"
+                                IsWarn="{Binding SimpleStatusIsWarn}"
+                                IsOff="{Binding SimpleStatusIsOff}"
+                                Title="{Binding SimpleStatusTitle}"
+                                Subtitle="{Binding SimpleStatusDescription}"/>
 
                 <!-- ═══ Config row — tappable, opens the inline form ═══
                      v2.31.6-r9 A11y: same card-as-button pattern as the
