@@ -159,10 +159,11 @@ public class SettingsLoaderRobustnessTests : IDisposable
         Assert.Equal("example.com", s.Vless.Server);
         Assert.Equal(443, s.Vless.Port);
         Assert.Equal("aaaa-bbbb-cccc-dddd", s.Vless.Uuid);
-        // App was absent but defaults must apply. v2.32.0 parity audit F-02
-        // row 8: default RoutingMode flipped from "split" to "full" so a
-        // first-launch desktop user matches Android's first-launch state.
-        Assert.Equal("full", s.App.RoutingMode);
+        // App was absent but defaults must apply. v2.32.0 default RoutingMode
+        // = "split" (revert 2026-05-10 d9f7027 — desktop was never supposed
+        // to flip to "full"; F-02 chip's default-flip was reverted with the
+        // rest of the desktop changes).
+        Assert.Equal("split", s.App.RoutingMode);
         Assert.Equal("light", s.App.Theme);
     }
 
