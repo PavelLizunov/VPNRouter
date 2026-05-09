@@ -265,8 +265,8 @@ public static class Strings
     // Generic subtitle used on Android inline card (no Service-installed/stopped
     // distinction yet — Android lifecycle differs from Windows Service).
     public static string SmpAutostartCardSubtitle => Ru
-        ? $"Включить запуск VPN при старте {OsDisplayName}"
-        : $"Enable VPN at {OsDisplayName} boot";
+        ? "Настроить автозапуск VPN при старте Windows"
+        : "Configure VPN autostart at Windows boot";
 
     // ── Dialogs ──
     public static string FailedStartVpn => Ru ? "Не удалось запустить VPN:" : "Failed to start VPN:";
