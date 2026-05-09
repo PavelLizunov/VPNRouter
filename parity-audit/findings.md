@@ -192,6 +192,72 @@ Live interactive comparison desktop v2.32.0 (currently installed) ↔ Android fr
 - (b) Mirror **all** items on both with consistent Advanced submenu (Desktop model)
 - Recommend (a) because it scales better on mobile where there's no big window for Advanced.
 
+**Closure 2026-05-09 — strategy (a) applied**:
+
+Both kebabs now expose the same item set in the same canonical order:
+
+```
+Appearance:   Light · Dark · RU · EN
+Free configs: Find a server
+Profiles:     Routing profiles
+Diagnostics:  Settings · Open log · Copy log path · View crash log
+              · Check IP leak · Run Health Check · Check for updates
+              · Export config · Import config
+Troubleshoot: Restart in Safe Mode · Reset config to defaults (red on both)
+About:        version + (desktop: About dialog · Android: GitHub repo link)
+```
+
+Per-item closure:
+
+| Item | Desktop | Android | Status |
+|---|---|---|---|
+| Find a server | added (kebab → switch Advanced + Free Configs tab) | already present | ✅ |
+| Routing profiles | added (new RoutingProfilesDialog catalog) | already present | ✅ |
+| Settings | added (kebab → Advanced + Network tab) | already present | ✅ |
+| Copy log path | added (clipboard + toast) | already present | ✅ |
+| View crash log | added (opens newest crash-*.txt in default editor) | already present | ✅ |
+| Export config | added (FilePickerSave + ConfigShareDocument.Serialize) | already present | ✅ |
+| Import config | added (FilePickerOpen + ConfigShareDocument.TryParse) | already present | ✅ |
+| Check IP leak | already present | added (Intent.ActionView → ipleak.net) | ✅ |
+| Run Health Check | already present (moved Diagnostics) | added (HealthCheck.RunAll → in-app log overlay) | ✅ |
+| Restart in Safe Mode | already present | added (AndroidStorage.SetSafeModeOnNextLaunch + relaunch) | ✅ |
+| Reset config | already red | now red (DangerSolidBrush foreground) | ✅ |
+| Advanced ▶ submenu | n/a — was the bottom UI-mode toggle button (kept) | n/a | ✅ |
+
+Behavior parity caveats (platform-justified):
+- **Settings**: desktop navigates to Network tab (Advanced); Android opens
+  modal overlay. Same outcome (user reaches settings UI), different
+  presentation. Documented in F-03.
+- **About**: desktop opens AboutWindow dialog; Android shows Version row
+  + GitHub repo link inline in kebab. Same section, different shape.
+- **Restart in Safe Mode**: desktop relaunches with `--safe` flag;
+  Android sets `safe_mode_on_next_launch` SharedPreferences flag and
+  re-launches the activity (Java VM lifecycle).
+- **Reset config**: desktop has 5 s auto-disarm; Android has 2-tap
+  confirm. Different gestures, both protect against accidental clicks.
+
+Code changes:
+- New canonical Core keys: `MenuItemCheckLeaks` / `MenuItemHealthCheck` /
+  `MenuItemSafeMode` (+ Tip variants) — alias the existing `SmpMenu*`
+  values so both platforms can name the same string identically.
+- Desktop: `MainWindow.axaml` kebab restructured (removed item-by-item
+  ordering, added 4 new sections in canonical order); `MainWindowViewModel.cs`
+  gained `OpenSettingsMenu/OpenFreeConfigsMenu/OpenRoutingProfiles/
+  CopyLogPath/ViewCrashLog/ExportConfig/ImportConfig` commands; new
+  `RoutingProfilesDialog.axaml{,.cs}` view; `ApplyProfileFromDialog`
+  public API on the VM so the dialog applies a profile through the
+  existing AppGroups path without reflecting into private fields.
+- Android: 3 new menu items wired in `AndroidApp.axaml.cs` (Diagnostics
+  block extended with Check IP leak + Run Health Check; Troubleshooting
+  gets Restart in Safe Mode); `AndroidStorage.SetSafeModeOnNextLaunch` /
+  `ConsumeSafeModeOnNextLaunch` one-shot flag mirrors desktop's `--safe`;
+  Reset menu item now uses `DangerSolidBrush` (matches desktop's
+  v2.30.3-r1 foreground tint).
+
+Tests + build: `dotnet build VPNRouter.sln -c Release` 0 errors;
+regression suite (VlessServersResolver / ConfigGeneratorEmptyServersGuard
+/ FreeConfigAggregatorPreserve) 20/20 green.
+
 ---
 
 ### F-11 — VPN config input is passive on desktop, active on Android

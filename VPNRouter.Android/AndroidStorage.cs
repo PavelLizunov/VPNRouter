@@ -904,6 +904,37 @@ public static class AndroidStorage
         return true;
     }
 
+    // ── F-10 kebab parity (2026-05-09) — Safe Mode flag ────────────────
+    //
+    // Mirrors desktop's `--safe` command-line flag without process args.
+    // The kebab "Restart in Safe Mode" handler sets this to true, exits
+    // the process, and the Application.OnCreate path on next launch reads
+    // it via ConsumeSafeModeOnNextLaunch (one-shot) to skip auto-connect /
+    // auto-update / heavy bootstrap so the user can recover from a crash
+    // loop. Stored in SharedPreferences so it survives `JavaSystem.Exit`.
+    private const string KeySafeModeOnNextLaunch = "safe_mode_on_next_launch";
+
+    /// <summary>
+    /// Queue safe-mode for the next process startup. Cleared on read by
+    /// <see cref="ConsumeSafeModeOnNextLaunch"/> so a single setting only
+    /// affects one launch.
+    /// </summary>
+    public static bool SetSafeModeOnNextLaunch(bool value)
+        => SetBool(KeySafeModeOnNextLaunch, value);
+
+    /// <summary>
+    /// One-shot read+clear for the pending safe-mode flag. Returns true
+    /// exactly once after <see cref="SetSafeModeOnNextLaunch"/> was called
+    /// with true; subsequent reads return false until queued again.
+    /// </summary>
+    public static bool ConsumeSafeModeOnNextLaunch()
+    {
+        if (!GetBool(KeySafeModeOnNextLaunch, defaultValue: false)) return false;
+        try { SetBool(KeySafeModeOnNextLaunch, false); }
+        catch { /* read still succeeded; clear is best-effort */ }
+        return true;
+    }
+
     /// <summary>
     /// SR-2 tier-2 (config-reset) target: erase every user-data key in
     /// <c>vpnrouter_settings</c>. Quarantine companions ({key}__corrupt_*)
