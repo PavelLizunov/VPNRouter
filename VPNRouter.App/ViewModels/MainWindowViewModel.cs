@@ -79,6 +79,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(SimpleCtaText))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnected))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsDisconnected))]
+    [NotifyPropertyChangedFor(nameof(SmpConnectEnabled))]
     private bool _isConnected;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SimpleStatusIsOn))]
@@ -90,6 +91,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnecting))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnected))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsDisconnected))]
+    [NotifyPropertyChangedFor(nameof(SmpConnectEnabled))]
     private bool _isConnecting;
     [ObservableProperty] private string _connectButtonText = Strings.StartVPN;
     [ObservableProperty]
@@ -264,6 +266,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServerListMode))]
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
+    [NotifyPropertyChangedFor(nameof(SmpRefreshEnabled))]
     private bool _isSubscribeMode = true;
 
     /// <summary>True when the server ListBox should be visible (Manual or Subscribe mode).</summary>
@@ -2943,6 +2946,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             .FirstOrDefault(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url));
         if (firstEnabledSub != null)
             SmpInput = firstEnabledSub.Url;
+
+        // v2.32.0 parity audit F-11 (2026-05-09): seed the SmpInput snapshot
+        // so the value loaded from settings is treated as "saved" — without
+        // this, SmpInputDirty would return true on first paint and disable
+        // the Connect CTA until the user re-typed the URL.
+        _smpInputSavedSnapshot = (SmpInput ?? string.Empty).Trim();
+        OnPropertyChanged(nameof(SmpInputDirty));
+        OnPropertyChanged(nameof(SmpSaveEnabled));
+        OnPropertyChanged(nameof(SmpRefreshEnabled));
+        OnPropertyChanged(nameof(SmpConnectEnabled));
 
         // Config mode (three-way: generated / custom / subscribe)
         // Mode is determined by which tab is active. On load, select the

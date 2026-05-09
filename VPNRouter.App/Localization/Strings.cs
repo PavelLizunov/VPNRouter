@@ -39,6 +39,12 @@ public static class Strings
     public static string StopVPN => global::VPNRouter.Core.Localization.Strings.StopVPN;
     public static string SmpSaveButton => global::VPNRouter.Core.Localization.Strings.SmpSaveButton;
     public static string SmpRefreshButton => global::VPNRouter.Core.Localization.Strings.SmpRefreshButton;
+    // v2.32.0 parity audit F-11 (2026-05-09)
+    public static string SmpInputDetectedServer => global::VPNRouter.Core.Localization.Strings.SmpInputDetectedServer;
+    public static string SmpInputDetectedSubscription => global::VPNRouter.Core.Localization.Strings.SmpInputDetectedSubscription;
+    public static string SmpSavedAsServerToast => global::VPNRouter.Core.Localization.Strings.SmpSavedAsServerToast;
+    public static string SmpSavedAsSubscriptionToast => global::VPNRouter.Core.Localization.Strings.SmpSavedAsSubscriptionToast;
+    public static string SmpRefreshDoneToast => global::VPNRouter.Core.Localization.Strings.SmpRefreshDoneToast;
     public static string AddServers => global::VPNRouter.Core.Localization.Strings.AddServers;
     public static string Remove => global::VPNRouter.Core.Localization.Strings.Remove;
     public static string AddConfig => global::VPNRouter.Core.Localization.Strings.AddConfig;

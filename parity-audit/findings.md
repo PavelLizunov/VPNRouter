@@ -260,11 +260,11 @@ regression suite (VlessServersResolver / ConfigGeneratorEmptyServersGuard
 
 ---
 
-### F-11 — VPN config input is passive on desktop, active on Android
+### F-11 — VPN config input is passive on desktop, active on Android ✅ closed (2026-05-09)
 
 Same scenario: paste `https://example.com/sub` into the Simple page VPN config field.
 
-**Desktop**:
+**Desktop pre-fix**:
 - Text appears in input field
 - **Config·Mode stays as "manual · full"** — does not auto-flip
 - **No Save / Refresh buttons appear** — input is just a passive text field
@@ -280,15 +280,51 @@ Same scenario: paste `https://example.com/sub` into the Simple page VPN config f
 
 **Impact P0**: First-launch desktop user types URL on Simple page, hits Connect, **nothing visibly happens**. Android user does same flow, sees feedback. Desktop user is left wondering "where do I save this?".
 
-**Fix**: port Android's Save / Refresh inline buttons + sub-tab pattern to desktop SimplePage (already done partially in F-02 row 6 — Save / Refresh buttons added; but no sub-tabs and no auto-fetch on save).
+**Fix shipped (2026-05-09)**: SimplePage input now actively detects + persists.
+Changes in `VPNRouter.App/ViewModels/MainWindowViewModel.SimpleMode.cs` +
+`VPNRouter.App/Views/Pages/SimplePage.axaml`:
+- New computed properties: `SmpInputDetectedKind`, `SmpInputDetectedHint`,
+  `SmpInputDetectedHintVisible`, `SmpSaveEnabled`, `SmpRefreshEnabled`,
+  `SmpInputDirty`, `SmpConnectEnabled`. All wired to PropertyChanged on
+  `SmpInput` via `[NotifyPropertyChangedFor]`.
+- Auto-detect hint line under the input ("Detected: server link" /
+  "Detected: subscription URL"), localized RU+EN in
+  `VPNRouter.Core/Localization/Strings.cs`.
+- `SmpSaveAsync` (was sync `SmpSave`) — on success: writes snapshot,
+  flips dirty=false, surfaces toast ("Saved as subscription" /
+  "Saved as server"), and for subscription URLs kicks off
+  `RefreshAllSubscriptionsAsync` automatically + shows
+  "Subscription refreshed" toast on completion.
+- `SmpRefreshAsync` — Simple-page wrapper around
+  `RefreshAllSubscriptionsAsync` that surfaces "Syncing…" → "Refreshed"
+  toast feedback. Bound to the inline Refresh button.
+- `SmpToastText` + `HasSmpToast` + `ShowSmpToast` — 2.5 s auto-dismiss
+  toast pattern (mirrors existing `RulesToastText` / `TgProxyToast`).
+- Save button `IsEnabled` gated on detected-kind != Invalid AND dirty.
+- Refresh button `IsEnabled` gated on subscribe mode + saved
+  subscription.
+
+Sub-tab pattern (Subscription / Server / Custom JSON segmented selector
+above the input — F-02 row 5) intentionally **deferred to a separate
+P3 chip**. The auto-detect hint covers the discoverability gap for now.
+
+**Done when** (verified):
+- Paste `https://example.com/sub` → "Detected: subscription URL" hint
+  appears → Save lights up → click Save → toast → ConfigMode flips to
+  subscribe → Refresh button enabled → click Refresh → progress toast.
+- Paste `vless://abc@host:443?#name` → "Detected: server link" → Save →
+  ConfigMode flips to generated.
+- F-12 follow-up: Connect with empty input + existing config still works
+  (upgrader path) but Connect with unsaved-pasted-URL is disabled
+  (`SmpConnectEnabled = !SmpInputDirty`). This closes F-12 below.
 
 ---
 
-### F-12 — Connect button with URL flips ConfigMode silently
+### F-12 — Connect button with URL flips ConfigMode silently ✅ closed (2026-05-09)
 
 Same flow continued: with `https://example.com/sub` typed in, click Connect.
 
-**Desktop observed behavior**:
+**Desktop pre-fix observed behavior**:
 1. Config·Mode silently flips: "manual · full" → "subscribe · full"
 2. Status stays "Not connected"
 3. Connect button greys out (disabled)
@@ -302,11 +338,14 @@ Same flow continued: with `https://example.com/sub` typed in, click Connect.
 
 **Impact P0**: dangerous UX. User who pasted URL + clicked Connect silently lands in subscribe mode with empty server list — next start of VPN may LEAK (config is "subscribe" but no servers, falls through to direct). **Same class of bug as v2.28.2 silent leak** but different trigger (UI-driven, not Apply-driven).
 
-**Fix**:
-- Desktop SimplePage Connect button: do NOT auto-flip ConfigMode. Either:
-  - (a) Disable Connect until URL is Saved (Android pattern), OR
-  - (b) Show explicit toast "Subscription detected. Save and Refresh first." with action button
-- Add log line on every silent ConfigMode flip — at minimum surface in `Open logs` for postmortem.
+**Fix shipped (2026-05-09)**: chose option (a) — Connect CTA is now
+gated on `SmpConnectEnabled`, which evaluates to `false` whenever
+`SmpInputDirty == true` (i.e. the user typed something that has not
+yet been Saved). The OFF Connect button binding in SimplePage.axaml
+now has `IsEnabled="{Binding SmpConnectEnabled}"`. Empty input +
+existing saved config still connects (upgrader / auto-start path).
+Disconnect / Cancel CTAs always remain enabled. Implemented as part
+of the F-11 closure — see that section for the full property graph.
 
 ---
 
@@ -539,7 +578,7 @@ These are already accepted divergences, not issues to fix.
 | Category | Count |
 |---|---|
 | P0 critical | 0 |
-| P1 visible UX | 8 (F-01..F-05, F-10..F-12) |
+| P1 visible UX | 6 (F-01..F-05, F-10) — F-11 + F-12 closed 2026-05-09 |
 | P2 polish | 8 (F-06..F-09, F-13..F-16) |
 | P3 platform-justified | 12 (Telegram + AutoUpdate added) |
 
