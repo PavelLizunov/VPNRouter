@@ -262,6 +262,11 @@ public static class Strings
     public static string SmpAutostartCardOff => Ru
         ? $"Настроить автозапуск VPN при старте {OsDisplayName}"
         : $"Configure VPN autostart at {OsDisplayName} boot";
+    // Generic subtitle used on Android inline card (no Service-installed/stopped
+    // distinction yet — Android lifecycle differs from Windows Service).
+    public static string SmpAutostartCardSubtitle => Ru
+        ? $"Включить запуск VPN при старте {OsDisplayName}"
+        : $"Enable VPN at {OsDisplayName} boot";
 
     // ── Dialogs ──
     public static string FailedStartVpn => Ru ? "Не удалось запустить VPN:" : "Failed to start VPN:";
@@ -1225,6 +1230,8 @@ public static class Strings
         : "Installs VPNRouter as a Windows Service so the VPN comes up at boot, before you log in.";
     public static string SmpStartVpn => Ru ? "▶  Запустить VPN" : "▶  Start VPN";
     public static string SmpStopVpn => Ru ? "⏹  Остановить VPN" : "⏹  Stop VPN";
+    public static string SmpSaveButton    => Ru ? "Сохранить"    : "Save";
+    public static string SmpRefreshButton => Ru ? "Обновить"     : "Refresh";
     public static string SmpActiveThrough => Ru ? "Через:" : "Through:";
 
     // ── v2.18.0 compact Simple-mode redesign (Variant A · Calm) ──

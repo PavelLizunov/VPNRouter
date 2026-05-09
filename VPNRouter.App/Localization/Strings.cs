@@ -37,6 +37,8 @@ public static class Strings
     public static string PasteVlessUri => global::VPNRouter.Core.Localization.Strings.PasteVlessUri;
     public static string StartVPN => global::VPNRouter.Core.Localization.Strings.StartVPN;
     public static string StopVPN => global::VPNRouter.Core.Localization.Strings.StopVPN;
+    public static string SmpSaveButton => global::VPNRouter.Core.Localization.Strings.SmpSaveButton;
+    public static string SmpRefreshButton => global::VPNRouter.Core.Localization.Strings.SmpRefreshButton;
     public static string AddServers => global::VPNRouter.Core.Localization.Strings.AddServers;
     public static string Remove => global::VPNRouter.Core.Localization.Strings.Remove;
     public static string AddConfig => global::VPNRouter.Core.Localization.Strings.AddConfig;

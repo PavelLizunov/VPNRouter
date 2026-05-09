@@ -1,6 +1,8 @@
 # VPNRouter — UI/UX parity audit findings
 
 **Date**: 2026-05-09 after v2.32.0 + AND-PROFILES merge.
+**Re-test**: 2026-05-09 after F-01 (Phase H locale → Core) + F-02 (Simple parity 11/13) merged.
+**Convergence**: verified visually via re-rendered composite/simple.png — desktop and Android now share brand row, status wording, default mode, app-list subtext, all-traffic subtext, autostart inline card, advanced settings card, action buttons (Save/Refresh).
 **Scope**: 9 desktop pages × Android equivalent overlays.
 **Methods used**: M1 (side-by-side), M6 (text content), M7 (locale keys),
 M8 (UI element catalog) — partial M2 (pixel diff), M9-M11 deferred.

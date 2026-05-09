@@ -136,6 +136,7 @@ internal static class Localization
     public static string SmpAutostartCardTitle => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardTitle;
     public static string SmpAutostartCardOn => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardOn;
     public static string SmpAutostartCardOff => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardOff;
+    public static string SmpAutostartCardSubtitle => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardSubtitle;
     public static string FailedStartVpn => global::VPNRouter.Core.Localization.Strings.FailedStartVpn;
     public static string AddServerFirst => global::VPNRouter.Core.Localization.Strings.AddServerFirst;
     public static string SelectSingBoxConfig => global::VPNRouter.Core.Localization.Strings.SelectSingBoxConfig;
