@@ -1577,7 +1577,7 @@ public partial class AndroidApp : Avalonia.Application
         // panes for now; the next chip (AND-ADV-MIGRATE) drops the real
         // per-tab content into each pane and trims the kebab. Defined in
         // AndroidApp.AdvancedShell.cs.
-        _advancedOverlay = BuildAdvancedOverlay();
+        _advShellOverlay = BuildAdvancedShellOverlay();
 
         return new Grid
         {
