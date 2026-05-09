@@ -2411,4 +2411,65 @@ public static class Strings
 
     /// <summary>"Check IP leak" button label in Tools / Advanced.</summary>
     public static string AndroidToolsCheckLeak => Ru ? "Проверить IP-утечку" : "Check IP leak";
+
+    // ── Android Advanced > Servers + Subscribe (Phase B parity, 2026-05-10) ──
+    // Phase B of plans/vpnrouter-android-advanced-parity-plan.md adds a
+    // sub-tab segmented control (Servers / Custom Config JSON) to the
+    // Servers tab and a Test all / Deep verify / Add row footer matching
+    // desktop ServersPage + SubscribePage chrome.
+
+    /// <summary>Sub-tab label inside Servers tab — VLESS server list view (active by default).</summary>
+    public static string AdvServersSubTabServers => Ru ? "Серверы" : "Servers";
+
+    /// <summary>Sub-tab label inside Servers tab — Custom sing-box JSON config view.</summary>
+    public static string AdvServersSubTabCustomJson => Ru ? "Custom Config (JSON)" : "Custom Config (JSON)";
+
+    /// <summary>Footer action button — runs TCP+TLS probe on every listed server.</summary>
+    public static string AdvServersTestAll => Ru ? "Тест все" : "Test all";
+
+    /// <summary>Footer action button — runs deep HTTP-through-tunnel verification on every listed server.</summary>
+    public static string AdvServersDeepVerify => Ru ? "Deep verify" : "Deep verify";
+
+    /// <summary>Footer action button — removes the highlighted/active server from the list.</summary>
+    public static string AdvServersRemove => Ru ? "Удалить" : "Remove";
+
+    /// <summary>Footer action button — adds a server parsed from the URI input field.</summary>
+    public static string AdvServersAddServers => Ru ? "+ Добавить" : "+ Add Server(s)";
+
+    /// <summary>Subscribe tab action — refreshes every enabled subscription via SubscriptionFetcher.</summary>
+    public static string AdvSubscribeRefreshAll => Ru ? "Обновить все" : "Refresh all";
+
+    /// <summary>Subscribe tab — header above the add-new-subscription form (mirrors desktop section layout).</summary>
+    public static string AdvSubscribeAddSubscription => Ru ? "Добавить подписку" : "Add subscription";
+
+    /// <summary>Subscribe tab — input watermark for the subscription's display name (compact left field).</summary>
+    public static string AdvSubscribeNameLabel => Ru ? "Имя" : "Name";
+
+    /// <summary>Subscribe tab — input watermark for the subscription's URL (long right field).</summary>
+    public static string AdvSubscribeUrlLabel => Ru ? "URL подписки" : "Subscription URL";
+
+    /// <summary>
+    /// Status text shown when the Custom Config (JSON) sub-tab is selected
+    /// but no JSON has been pasted yet. Explains what the textarea does.
+    /// </summary>
+    public static string AdvServersCustomJsonExplainer => Ru
+        ? "Свой sing-box JSON для нестандартных протоколов (Hysteria2, TUIC, Reality+gRPC и т.п.). Вставь конфиг ниже и сохрани — VPNRouter подменит routing рулы автоматически."
+        : "Custom sing-box JSON for non-standard protocols (Hysteria2, TUIC, Reality+gRPC, etc.). Paste a config below and save — VPNRouter injects the routing rules automatically.";
+
+    /// <summary>
+    /// Watermark for the deep-verify button when the Android binary can
+    /// only run TCP+TLS probes (sing-box can't be spawned as a subprocess
+    /// inside the app). Surfaced as a tooltip on the Deep verify button.
+    /// </summary>
+    public static string AdvServersDeepVerifyAndroidNote => Ru
+        ? "На Android Deep verify эквивалентен расширенному TCP+TLS пробу — отдельный sing-box процесс из приложения недоступен."
+        : "On Android, Deep verify equals an extended TCP+TLS probe — spawning a separate sing-box process from the app isn't available.";
+
+    /// <summary>
+    /// Empty state shown in the Subscribe tab's aggregated server list
+    /// when no enabled subscription has fetched any servers yet.
+    /// </summary>
+    public static string AdvSubscribeAggregatedEmpty => Ru
+        ? "В подписках пока нет серверов — добавь подписку ниже и нажми ↻."
+        : "No servers in any subscription yet — add one below and click ↻.";
 }

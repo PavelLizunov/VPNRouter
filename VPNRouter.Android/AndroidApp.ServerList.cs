@@ -55,6 +55,40 @@ public partial class AndroidApp
     private TextBlock? _srvColPing;
     private TextBlock? _srvColPort;
 
+    // ── AND-ADV-SERVERS-SUBSCRIBE (Phase B, 2026-05-10) ────────────────
+    // Sub-tab segmented control (Servers / Custom Config JSON), the two
+    // sub-panels, and the footer action row (Test all / Deep verify /
+    // vless URI input / Remove / Add Server(s)). All hosted inside the
+    // Advanced shell's Servers tab content. Phase A may later relocate
+    // _srvFooterActionsRow into a dedicated FooterActions slot above the
+    // persistent connect/disconnect footer; for now it docks at the bottom
+    // of the tab content itself so users see the action surface
+    // immediately.
+    private string _srvSubTab = "servers";
+    private Avalonia.Controls.Button? _srvSubTabServersBtn;
+    private Avalonia.Controls.Button? _srvSubTabCustomJsonBtn;
+    private StackPanel? _srvSubTabRow;
+    private DockPanel? _srvServersSubPanel;
+    private StackPanel? _srvCustomJsonSubPanel;
+    private Border? _srvFooterActionsRow;
+    private Avalonia.Controls.Button? _srvDeepVerifyBtn;
+    private TextBox? _srvVlessUriInput;
+    private Avalonia.Controls.Button? _srvAddBtn;
+    private Avalonia.Controls.Button? _srvRemoveBtn;
+
+    // Custom Config (JSON) sub-tab body. Owns its own TextBox + status —
+    // independent from the Simple page's _ccCustomInput so navigation
+    // between the two surfaces doesn't cause control-already-parented
+    // errors. Both surfaces read/write the same AndroidStorage key
+    // (CustomConfigJson), so the UI stays in sync via re-seed on tab
+    // activation.
+    private TextBox? _srvCustomJsonInput;
+    private TextBlock? _srvCustomJsonStatus;
+    private Avalonia.Controls.Button? _srvCustomJsonSaveBtn;
+    private Avalonia.Controls.Button? _srvCustomJsonClearBtn;
+    private Avalonia.Controls.Button? _srvCustomJsonValidateBtn;
+    private TextBlock? _srvCustomJsonExplainer;
+
     /// <summary>The subscription whose servers we're showing. Set on open.</summary>
     private SubscriptionEntry? _srvCurrentSub;
 
@@ -77,11 +111,113 @@ public partial class AndroidApp
 
     /// <summary>
     /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the Servers
-    /// tab inside the Advanced shell. Layout (top→bottom): subscription
-    /// label header → action row (Test all + sort toggle + status) →
-    /// scrollable list. No title bar / close — the shell provides those.
+    /// tab inside the Advanced shell. Updated AND-ADV-SERVERS-SUBSCRIBE
+    /// (Phase B, 2026-05-10) to mirror desktop ServersPage chrome:
+    /// segmented sub-tab control (Servers / Custom Config JSON), per
+    /// sub-tab body, and a persistent footer action row (Test all /
+    /// Deep verify / vless URI input / Remove / Add Server(s)) docked
+    /// at the bottom. Phase A may later move _srvFooterActionsRow into
+    /// a dedicated shell-owned FooterActions slot above the persistent
+    /// connect/disconnect footer; today the row docks inside the tab
+    /// content so the surface is visible immediately.
     /// </summary>
     private Control BuildServersTabContent()
+    {
+        // ── Sub-tab segmented control (top of tab body) ───────────────
+        _srvSubTabRow = BuildServersSubTabBar();
+
+        // ── Servers sub-panel: existing subscription header + action row
+        //    + column headers + scrollable list. Pulled into its own
+        //    builder so the sub-tab toggle just flips IsVisible on two
+        //    sibling Controls inside the content host.
+        _srvServersSubPanel = BuildServersListSubPanel();
+
+        // ── Custom Config (JSON) sub-panel: explainer + textarea +
+        //    Validate / Save / Clear (mirrors the Simple-page custom
+        //    section but is independent so both can be active in
+        //    different navigation paths without parenting collisions).
+        _srvCustomJsonSubPanel = BuildCustomJsonSubPanel();
+
+        // ── Footer action row: Test all / Deep verify / vless URI /
+        //    Remove / Add Server(s). Visible only on the Servers
+        //    sub-tab — the Custom Config sub-tab has its own action
+        //    buttons inside its sub-panel.
+        _srvFooterActionsRow = BuildServersFooterActions();
+
+        // Compose the sub-panels into a single content host so toggling
+        // the sub-tab flips one IsVisible bit per panel.
+        var contentHost = new Grid();
+        contentHost.Children.Add(_srvServersSubPanel);
+        contentHost.Children.Add(_srvCustomJsonSubPanel);
+
+        var dock = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(_srvSubTabRow, Dock.Top);
+        DockPanel.SetDock(_srvFooterActionsRow, Dock.Bottom);
+        dock.Children.Add(_srvSubTabRow);
+        dock.Children.Add(_srvFooterActionsRow);
+        dock.Children.Add(contentHost);
+
+        // Initialize sub-tab to "servers" — paints segments + flips
+        // panel + footer visibility.
+        ApplyServersSubTabVisuals();
+
+        return new Border
+        {
+            Background = GetBrush("SurfaceAppBrush"),
+            Child = dock,
+        };
+    }
+
+    /// <summary>
+    /// Segmented control at the top of the Servers tab — desktop
+    /// ServersPage.axaml lines 117-131 (ListBox sub-tab strip). Active
+    /// segment uses the AccentBgSubtle pill style; inactive segments stay
+    /// neutral. Click flips _srvSubTab + repaints + toggles panel
+    /// visibility.
+    /// </summary>
+    private StackPanel BuildServersSubTabBar()
+    {
+        _srvSubTabServersBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.AdvServersSubTabServers,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Padding = new Thickness(12, 6),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            BorderThickness = new Thickness(1),
+        };
+        _srvSubTabServersBtn.Click += (_, _) => SetServersSubTab("servers");
+
+        _srvSubTabCustomJsonBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.AdvServersSubTabCustomJson,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Padding = new Thickness(12, 6),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            BorderThickness = new Thickness(1),
+        };
+        _srvSubTabCustomJsonBtn.Click += (_, _) => SetServersSubTab("custom");
+
+        var row = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 6,
+            Margin = new Thickness(12, 8, 12, 6),
+            Children = { _srvSubTabServersBtn, _srvSubTabCustomJsonBtn },
+        };
+        return row;
+    }
+
+    /// <summary>
+    /// Build the Servers sub-panel — wraps the existing subscription
+    /// header + Test all / sort row + column headers + scrollable list
+    /// inside a DockPanel so the parent contentHost can toggle visibility
+    /// on a single Control. Field assignments (_srvTitle, _srvTestAllBtn,
+    /// etc.) match the pre-Phase-B contract so RebuildServerList /
+    /// OnSrvTestAllClicked / OnSrvSortToggleClicked stay unchanged.
+    /// </summary>
+    private DockPanel BuildServersListSubPanel()
     {
         // Subscription label sits inline at the top of the body so the
         // user can see which sub they're inspecting (the shell's outer
@@ -94,24 +230,12 @@ public partial class AndroidApp
             Foreground = GetBrush("TextPrimaryBrush"),
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            Margin = new Thickness(12, 8, 12, 0),
+            Margin = new Thickness(12, 4, 12, 0),
         };
 
-        // ── Action row: Test all + sort toggle + status text ──
-        _srvTestAllBtn = new Avalonia.Controls.Button
-        {
-            Content = Localization.SrvTestAll,
-            FontSize = 11,
-            FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(12, 6),
-            Background = GetBrush("AccentSolidBrush"),
-            Foreground = GetBrush("AccentOnSolidBrush"),
-            BorderThickness = new Thickness(0),
-            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
-        };
-        ToolTip.SetTip(_srvTestAllBtn, Localization.SrvTipTestAll);
-        _srvTestAllBtn.Click += async (s, e) => await OnSrvTestAllClicked();
-
+        // ── In-list Sort + status row (Test all / Deep verify moved to
+        //    the footer per Phase B; sort toggle stays here because it's
+        //    list-affordance, not action-row affordance).
         _srvSortToggle = new Avalonia.Controls.Button
         {
             Content = Localization.SrvSortByOriginal,
@@ -136,18 +260,16 @@ public partial class AndroidApp
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
 
-        var actionRow = new Grid
+        var sortRow = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
             ColumnSpacing = 8,
-            Margin = new Thickness(12, 8, 12, 4),
+            Margin = new Thickness(12, 6, 12, 4),
         };
-        Grid.SetColumn(_srvTestAllBtn, 0);
-        Grid.SetColumn(_srvSortToggle, 1);
-        Grid.SetColumn(_srvStatusText, 2);
-        actionRow.Children.Add(_srvTestAllBtn);
-        actionRow.Children.Add(_srvSortToggle);
-        actionRow.Children.Add(_srvStatusText);
+        Grid.SetColumn(_srvSortToggle, 0);
+        Grid.SetColumn(_srvStatusText, 1);
+        sortRow.Children.Add(_srvSortToggle);
+        sortRow.Children.Add(_srvStatusText);
 
         // ── Column header strip (desktop ServersPage rows 140-154 parity) ──
         // Same column widths as the row template below — header labels
@@ -245,24 +367,472 @@ public partial class AndroidApp
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             Background = GetBrush("SurfaceBaseBrush"),
-            Margin = new Thickness(12, 0, 12, 12),
+            Margin = new Thickness(12, 0, 12, 4),
             Child = listScroller,
         };
 
         var dock = new DockPanel { LastChildFill = true };
-        DockPanel.SetDock(_srvTitle!, Dock.Top);
-        DockPanel.SetDock(actionRow, Dock.Top);
+        DockPanel.SetDock(_srvTitle, Dock.Top);
+        DockPanel.SetDock(sortRow, Dock.Top);
         DockPanel.SetDock(headerHost, Dock.Top);
-        dock.Children.Add(_srvTitle!);
-        dock.Children.Add(actionRow);
+        dock.Children.Add(_srvTitle);
+        dock.Children.Add(sortRow);
         dock.Children.Add(headerHost);
         dock.Children.Add(listCard);
+        return dock;
+    }
 
+    /// <summary>
+    /// Build the Custom Config (JSON) sub-panel — explainer text + paste
+    /// textarea + Validate / Save / Clear buttons + status banner.
+    /// Independent from the Simple page's _ccCustomInput surface so the
+    /// two can be navigated to in any order without Avalonia
+    /// already-has-a-parent errors. Both surfaces persist to the same
+    /// AndroidStorage.CustomConfigJson key — re-seed on tab activation
+    /// keeps them aligned.
+    /// </summary>
+    private StackPanel BuildCustomJsonSubPanel()
+    {
+        _srvCustomJsonExplainer = new TextBlock
+        {
+            Text = Localization.AdvServersCustomJsonExplainer,
+            FontSize = 11,
+            Foreground = GetBrush("TextSecondaryBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 16,
+            Margin = new Thickness(0, 0, 0, 8),
+        };
+
+        _srvCustomJsonInput = new TextBox
+        {
+            Watermark = Localization.CcCustomWatermark,
+            FontFamily = new FontFamily("monospace"),
+            FontSize = 10,
+            AcceptsReturn = true,
+            AcceptsTab = true,
+            TextWrapping = TextWrapping.NoWrap,
+            MinHeight = 200,
+            Padding = new Thickness(8, 6),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            BorderBrush = GetBrush("BorderSubtleBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+        };
+
+        _srvCustomJsonValidateBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.CcValidateButton,
+            FontSize = 11,
+            Padding = new Thickness(12, 6),
+            Background = GetBrush("SurfaceRaisedBrush"),
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(1),
+            Foreground = GetBrush("TextPrimaryBrush"),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+        };
+        _srvCustomJsonValidateBtn.Click += OnSrvCustomJsonValidateClicked;
+
+        _srvCustomJsonSaveBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.CcSaveButton,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Padding = new Thickness(14, 6),
+            Background = GetBrush("AccentSolidBrush"),
+            Foreground = GetBrush("AccentOnSolidBrush"),
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+        };
+        _srvCustomJsonSaveBtn.Click += OnSrvCustomJsonSaveClicked;
+
+        _srvCustomJsonClearBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.CcClearButton,
+            FontSize = 11,
+            Padding = new Thickness(12, 6),
+            Background = GetBrush("SurfaceRaisedBrush"),
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(1),
+            Foreground = GetBrush("TextSecondaryBrush"),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+        };
+        _srvCustomJsonClearBtn.Click += OnSrvCustomJsonClearClicked;
+
+        var btnRow = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 8,
+            Margin = new Thickness(0, 8, 0, 0),
+            Children = { _srvCustomJsonValidateBtn, _srvCustomJsonSaveBtn, _srvCustomJsonClearBtn },
+        };
+
+        _srvCustomJsonStatus = new TextBlock
+        {
+            Text = string.Empty,
+            FontSize = 10,
+            Foreground = GetBrush("TextMutedBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 8, 0, 0),
+            IsVisible = false,
+        };
+
+        var stack = new StackPanel
+        {
+            Spacing = 0,
+            Margin = new Thickness(12, 4, 12, 12),
+            Children = { _srvCustomJsonExplainer, _srvCustomJsonInput, btnRow, _srvCustomJsonStatus },
+        };
+        return stack;
+    }
+
+    /// <summary>
+    /// Footer action row for the Servers tab — desktop ServersPage.axaml
+    /// lines 354-419 parity. Test all (green) + Deep verify (accent) +
+    /// vless URI input (1*) + Remove + Add Server(s). Visible only on the
+    /// Servers sub-tab; hidden when Custom Config (JSON) is active so the
+    /// sub-tab's own Validate/Save/Clear isn't competing for footer
+    /// real-estate.
+    ///
+    /// Phase A (later) may relocate this row into a dedicated
+    /// FooterActions slot above the persistent connect/disconnect footer.
+    /// For Phase B the row docks at the bottom of the tab content itself
+    /// so the surface is visible immediately.
+    /// </summary>
+    private Border BuildServersFooterActions()
+    {
+        _srvTestAllBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.AdvServersTestAll,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Padding = new Thickness(10, 5),
+            Background = GetBrush("SuccessSolidBrush"),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+        };
+        ToolTip.SetTip(_srvTestAllBtn, Localization.SrvTipTestAll);
+        _srvTestAllBtn.Click += async (_, _) => await OnSrvTestAllClicked();
+
+        _srvDeepVerifyBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.AdvServersDeepVerify,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Padding = new Thickness(10, 5),
+            Background = GetBrush("AccentSolidBrush"),
+            Foreground = GetBrush("AccentOnSolidBrush"),
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+        };
+        // On Android the per-app sandbox can't spawn sing-box as a
+        // subprocess (see plans/vpnrouter-android-research.md §3 — libbox
+        // runs inside the VPN service, not the app process). Deep verify
+        // therefore degrades to the same TCP+TLS probe Test all uses,
+        // surfaced via tooltip so the user understands the platform
+        // limitation without the button feeling broken.
+        ToolTip.SetTip(_srvDeepVerifyBtn, Localization.AdvServersDeepVerifyAndroidNote);
+        _srvDeepVerifyBtn.Click += async (_, _) => await OnSrvDeepVerifyClicked();
+
+        _srvVlessUriInput = new TextBox
+        {
+            Watermark = Localization.WmVlessUri,
+            FontFamily = new FontFamily("monospace"),
+            FontSize = 10,
+            Padding = new Thickness(6, 4),
+            AcceptsReturn = false,
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            BorderBrush = GetBrush("BorderSubtleBrush"),
+            BorderThickness = new Thickness(1),
+        };
+
+        _srvRemoveBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.AdvServersRemove,
+            FontSize = 11,
+            Padding = new Thickness(10, 5),
+            Background = GetBrush("SurfaceRaisedBrush"),
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(1),
+            Foreground = GetBrush("TextSecondaryBrush"),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            IsEnabled = false,
+        };
+        ToolTip.SetTip(_srvRemoveBtn, Localization.TipDeleteServer);
+        _srvRemoveBtn.Click += (_, _) => OnSrvRemoveClicked();
+
+        _srvAddBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.AdvServersAddServers,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Padding = new Thickness(12, 5),
+            Background = GetBrush("AccentSolidBrush"),
+            Foreground = GetBrush("AccentOnSolidBrush"),
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+        };
+        _srvAddBtn.Click += (_, _) => OnSrvAddClicked();
+
+        // Two-row layout matches desktop's stacked DockPanel pattern:
+        //   row 0: [Test all] [Deep verify]  (left-aligned)
+        //   row 1: [vless input    ] [Remove] [Add Server(s)]
+        // On narrow phones the second row's URI input shrinks via the
+        // grid '1*' column; the action chips stay compact.
+        var actionTopRow = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 6,
+            Children = { _srvTestAllBtn, _srvDeepVerifyBtn },
+        };
+        var actionBottomRow = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+            ColumnSpacing = 6,
+            Margin = new Thickness(0, 6, 0, 0),
+        };
+        Grid.SetColumn(_srvVlessUriInput, 0);
+        Grid.SetColumn(_srvRemoveBtn, 1);
+        Grid.SetColumn(_srvAddBtn, 2);
+        actionBottomRow.Children.Add(_srvVlessUriInput);
+        actionBottomRow.Children.Add(_srvRemoveBtn);
+        actionBottomRow.Children.Add(_srvAddBtn);
+
+        var stack = new StackPanel
+        {
+            Spacing = 0,
+            Children = { actionTopRow, actionBottomRow },
+        };
         return new Border
         {
-            Background = GetBrush("SurfaceAppBrush"),
-            Child = dock,
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Background = GetBrush("SurfaceBaseBrush"),
+            Padding = new Thickness(10, 6, 10, 8),
+            Child = stack,
         };
+    }
+
+    /// <summary>
+    /// Switch between the Servers and Custom Config (JSON) sub-tabs.
+    /// Re-seeds the Custom JSON textarea from storage on activation so
+    /// the two surfaces stay in sync.
+    /// </summary>
+    private void SetServersSubTab(string sub)
+    {
+        if (sub != "servers" && sub != "custom") return;
+        if (_srvSubTab == sub) return;
+        _srvSubTab = sub;
+        ApplyServersSubTabVisuals();
+        if (sub == "custom") ReseedCustomJsonSubPanel();
+    }
+
+    /// <summary>Repaint the segmented sub-tab control + flip sub-panel
+    /// + footer-action visibility to match _srvSubTab.</summary>
+    private void ApplyServersSubTabVisuals()
+    {
+        StyleSegment(_srvSubTabServersBtn, _srvSubTab == "servers");
+        StyleSegment(_srvSubTabCustomJsonBtn, _srvSubTab == "custom");
+        if (_srvServersSubPanel is not null)
+            _srvServersSubPanel.IsVisible = _srvSubTab == "servers";
+        if (_srvCustomJsonSubPanel is not null)
+            _srvCustomJsonSubPanel.IsVisible = _srvSubTab == "custom";
+        if (_srvFooterActionsRow is not null)
+            _srvFooterActionsRow.IsVisible = _srvSubTab == "servers";
+    }
+
+    /// <summary>Pull the current Custom Config JSON from storage into
+    /// the textarea so opening the sub-tab shows the saved value.</summary>
+    private void ReseedCustomJsonSubPanel()
+    {
+        if (_srvCustomJsonInput is null) return;
+        var stored = AndroidStorage.GetCustomConfigJson() ?? string.Empty;
+        _srvCustomJsonInput.Text = stored;
+        if (_srvCustomJsonStatus is not null)
+        {
+            _srvCustomJsonStatus.Text = string.Empty;
+            _srvCustomJsonStatus.IsVisible = false;
+        }
+    }
+
+    // ── Custom JSON sub-tab handlers ───────────────────────────────────
+
+    private void OnSrvCustomJsonValidateClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_srvCustomJsonInput is null || _srvCustomJsonStatus is null) return;
+        var raw = (_srvCustomJsonInput.Text ?? string.Empty).Trim();
+        _srvCustomJsonStatus.IsVisible = true;
+
+        if (string.IsNullOrEmpty(raw))
+        {
+            _srvCustomJsonStatus.Text = Localization.CcSaveStatusEmpty;
+            _srvCustomJsonStatus.Foreground = GetBrush("DangerFgBrush");
+            return;
+        }
+
+        try
+        {
+            var (isValid, errors) = VPNRouter.Core.Services.CustomConfigInjector.Validate(raw);
+            if (!isValid)
+            {
+                _srvCustomJsonStatus.Text = string.Format(
+                    Localization.CcValidationFailed,
+                    string.Join("; ", errors));
+                _srvCustomJsonStatus.Foreground = GetBrush("DangerFgBrush");
+                return;
+            }
+            var (protocols, server) = VPNRouter.Core.Services.CustomConfigInjector.ParseConfigInfo(raw);
+            _srvCustomJsonStatus.Text = string.Format(Localization.CcValidationOk, protocols, server);
+            _srvCustomJsonStatus.Foreground = GetBrush("SuccessFgBrush");
+        }
+        catch (Exception ex)
+        {
+            _srvCustomJsonStatus.Text = string.Format(Localization.CcValidationParseError, ex.Message);
+            _srvCustomJsonStatus.Foreground = GetBrush("DangerFgBrush");
+        }
+    }
+
+    private void OnSrvCustomJsonSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_srvCustomJsonInput is null || _srvCustomJsonStatus is null) return;
+        var raw = (_srvCustomJsonInput.Text ?? string.Empty).Trim();
+        _srvCustomJsonStatus.IsVisible = true;
+
+        if (string.IsNullOrEmpty(raw))
+        {
+            _srvCustomJsonStatus.Text = Localization.CcSaveStatusEmpty;
+            _srvCustomJsonStatus.Foreground = GetBrush("DangerFgBrush");
+            return;
+        }
+
+        var (isValid, errors) = VPNRouter.Core.Services.CustomConfigInjector.Validate(raw);
+        AndroidStorage.SetCustomConfigJson(raw);
+        AndroidStorage.SetConfigMode("custom");
+        // Keep the Simple-page _ccMode mirror in sync so the segmented
+        // mode selector there reflects the just-applied "custom" choice.
+        _ccMode = "custom";
+        UpdateConfigSummary();
+
+        if (!isValid)
+        {
+            _srvCustomJsonStatus.Text = string.Format(
+                Localization.CcSaveStatusInvalid + " ({0})",
+                string.Join("; ", errors));
+            _srvCustomJsonStatus.Foreground = GetBrush("WarningFgBrush");
+            return;
+        }
+        _srvCustomJsonStatus.Text = Localization.CcSaveStatusOk;
+        _srvCustomJsonStatus.Foreground = GetBrush("SuccessFgBrush");
+    }
+
+    private void OnSrvCustomJsonClearClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_srvCustomJsonInput is not null) _srvCustomJsonInput.Text = string.Empty;
+        if (_srvCustomJsonStatus is not null) _srvCustomJsonStatus.IsVisible = false;
+        AndroidStorage.SetCustomConfigJson(null);
+        UpdateConfigSummary();
+    }
+
+    // ── Footer action handlers ─────────────────────────────────────────
+
+    /// <summary>
+    /// Deep verify on Android = same TCP+TLS probe pass as Test all
+    /// (the per-app process sandbox can't spawn sing-box as a separate
+    /// process — libbox runs inside VpnRouterService, not the app
+    /// process). Tooltip explains the limitation. Reusing
+    /// OnSrvTestAllClicked keeps progress / status text consistent.
+    /// </summary>
+    private async Task OnSrvDeepVerifyClicked() => await OnSrvTestAllClicked();
+
+    /// <summary>
+    /// Remove the highlighted active server from the current sub's list
+    /// (or the legacy single-VLESS-URI manual server). Greyed out by
+    /// default; flips to enabled in RebuildServerList when the active
+    /// server is one of the listed entries.
+    /// </summary>
+    private void OnSrvRemoveClicked()
+    {
+        var sub = _srvCurrentSub;
+        if (sub is null || sub.Servers is null || sub.Servers.Count == 0) return;
+        var activeName = AndroidStorage.GetSelectedServerName();
+        if (string.IsNullOrEmpty(activeName)) return;
+
+        var before = sub.Servers.Count;
+        sub.Servers.RemoveAll(s =>
+            string.Equals(s.Name, activeName, StringComparison.OrdinalIgnoreCase));
+        if (sub.Servers.Count == before) return;
+
+        // Clear active selection if we just removed the active server.
+        AndroidStorage.SetSelectedServerName(null);
+        // Persist the mutated subscription list back to storage so the
+        // SimplePage reflection of server count + active-server flag
+        // stays in sync.
+        var subs = AndroidStorage.GetSubscriptions();
+        var idx = subs.FindIndex(s =>
+            string.Equals(s.Id, sub.Id, StringComparison.OrdinalIgnoreCase));
+        if (idx >= 0)
+        {
+            subs[idx] = sub;
+            AndroidStorage.SetSubscriptions(subs);
+        }
+        RebuildServerList();
+        if (_srvRemoveBtn is not null) _srvRemoveBtn.IsEnabled = false;
+    }
+
+    /// <summary>
+    /// Parse the URI input as a VLESS / hy2 / tuic / ss share-link and
+    /// append the resulting server to the current sub. Falls back to
+    /// adding the entry under a synthetic "Manual" sub if no
+    /// _srvCurrentSub exists yet (first-launch case).
+    /// </summary>
+    private void OnSrvAddClicked()
+    {
+        if (_srvVlessUriInput is null) return;
+        var raw = (_srvVlessUriInput.Text ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(raw)) return;
+        if (!ServerUriParser.IsSupportedScheme(raw)) return;
+
+        VlessServerEntry parsed;
+        try
+        {
+            parsed = ServerUriParser.Parse(raw);
+        }
+        catch
+        {
+            return;
+        }
+        if (string.IsNullOrEmpty(parsed.Server) || parsed.Port <= 0) return;
+
+        var subs = AndroidStorage.GetSubscriptions();
+        var sub = _srvCurrentSub;
+        if (sub is null)
+        {
+            // Synthesize a "Manual" sub if none is active. Keeps the
+            // multi-protocol entries persistent across launches without
+            // requiring the user to set up a subscription first.
+            sub = subs.FirstOrDefault(s =>
+                string.Equals(s.Name, "Manual", StringComparison.OrdinalIgnoreCase));
+            if (sub is null)
+            {
+                sub = new SubscriptionEntry { Name = "Manual", Url = string.Empty, Enabled = true };
+                subs.Add(sub);
+            }
+            _srvCurrentSub = sub;
+        }
+        sub.Servers ??= new List<VlessServerEntry>();
+        sub.Servers.Add(parsed);
+
+        var idx = subs.FindIndex(s =>
+            string.Equals(s.Id, sub.Id, StringComparison.OrdinalIgnoreCase));
+        if (idx >= 0)
+            subs[idx] = sub;
+        else
+            subs.Add(sub);
+        AndroidStorage.SetSubscriptions(subs);
+
+        _srvVlessUriInput.Text = string.Empty;
+        RebuildServerList();
     }
 
     /// <summary>
@@ -313,6 +883,11 @@ public partial class AndroidApp
         }
         if (_srvStatusText is not null)
             _srvStatusText.Text = string.Empty;
+        // Phase B (AND-ADV-SERVERS-SUBSCRIBE): reset transient input field
+        // + re-seed Custom JSON sub-panel from storage so the sub-tab
+        // shows the saved value if the user flips to it later.
+        if (_srvVlessUriInput is not null) _srvVlessUriInput.Text = string.Empty;
+        ReseedCustomJsonSubPanel();
         RebuildServerList();
     }
 
@@ -331,19 +906,35 @@ public partial class AndroidApp
         _srvListStack.Children.Clear();
 
         var servers = _srvCurrentSub?.Servers ?? new List<VlessServerEntry>();
+        var activeName = AndroidStorage.GetSelectedServerName();
         if (servers.Count == 0)
         {
             _srvEmptyHint.IsVisible = true;
+            UpdateRemoveButtonEnabled(servers, activeName);
             return;
         }
         _srvEmptyHint.IsVisible = false;
 
         var ordered = OrderServers(servers);
-        var activeName = AndroidStorage.GetSelectedServerName();
         foreach (var srv in ordered)
         {
             _srvListStack.Children.Add(BuildServerRow(srv, activeName));
         }
+        UpdateRemoveButtonEnabled(servers, activeName);
+    }
+
+    /// <summary>Footer Remove button: enabled only when the active
+    /// server is one of the currently-listed entries.</summary>
+    private void UpdateRemoveButtonEnabled(IReadOnlyList<VlessServerEntry> servers, string? activeName)
+    {
+        if (_srvRemoveBtn is null) return;
+        if (string.IsNullOrEmpty(activeName))
+        {
+            _srvRemoveBtn.IsEnabled = false;
+            return;
+        }
+        _srvRemoveBtn.IsEnabled = servers.Any(s =>
+            string.Equals(s.Name, activeName, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -736,7 +1327,7 @@ public partial class AndroidApp
             try { _srvTestAllCts?.Dispose(); } catch { /* swallow */ }
             _srvTestAllCts = null;
             if (_srvTestAllBtn is not null)
-                _srvTestAllBtn.Content = Localization.SrvTestAll;
+                _srvTestAllBtn.Content = Localization.AdvServersTestAll;
             RebuildServerList();
         }
     }
@@ -811,7 +1402,7 @@ public partial class AndroidApp
                 string.IsNullOrWhiteSpace(_srvCurrentSub.Name) ? "(no name)" : _srvCurrentSub.Name);
         }
         if (_srvTestAllBtn is not null && _srvTestAllCts is null)
-            _srvTestAllBtn.Content = Localization.SrvTestAll;
+            _srvTestAllBtn.Content = Localization.AdvServersTestAll;
         if (_srvSortToggle is not null)
         {
             _srvSortToggle.Content = _srvSortByLatency
@@ -827,6 +1418,37 @@ public partial class AndroidApp
             ToolTip.SetTip(_srvColPing, Localization.ColPingTooltip);
         }
         if (_srvColPort is not null) _srvColPort.Text = Localization.ColPort;
+
+        // Phase B (AND-ADV-SERVERS-SUBSCRIBE) — sub-tab segments + footer
+        // action row + Custom JSON sub-panel labels.
+        if (_srvSubTabServersBtn is not null)
+            _srvSubTabServersBtn.Content = Localization.AdvServersSubTabServers;
+        if (_srvSubTabCustomJsonBtn is not null)
+            _srvSubTabCustomJsonBtn.Content = Localization.AdvServersSubTabCustomJson;
+        if (_srvDeepVerifyBtn is not null)
+        {
+            _srvDeepVerifyBtn.Content = Localization.AdvServersDeepVerify;
+            ToolTip.SetTip(_srvDeepVerifyBtn, Localization.AdvServersDeepVerifyAndroidNote);
+        }
+        if (_srvVlessUriInput is not null)
+            _srvVlessUriInput.Watermark = Localization.WmVlessUri;
+        if (_srvRemoveBtn is not null)
+        {
+            _srvRemoveBtn.Content = Localization.AdvServersRemove;
+            ToolTip.SetTip(_srvRemoveBtn, Localization.TipDeleteServer);
+        }
+        if (_srvAddBtn is not null) _srvAddBtn.Content = Localization.AdvServersAddServers;
+        if (_srvCustomJsonExplainer is not null)
+            _srvCustomJsonExplainer.Text = Localization.AdvServersCustomJsonExplainer;
+        if (_srvCustomJsonInput is not null)
+            _srvCustomJsonInput.Watermark = Localization.CcCustomWatermark;
+        if (_srvCustomJsonValidateBtn is not null)
+            _srvCustomJsonValidateBtn.Content = Localization.CcValidateButton;
+        if (_srvCustomJsonSaveBtn is not null)
+            _srvCustomJsonSaveBtn.Content = Localization.CcSaveButton;
+        if (_srvCustomJsonClearBtn is not null)
+            _srvCustomJsonClearBtn.Content = Localization.CcClearButton;
+
         // Servers tab still mounted in the Advanced shell? Rebuild rows so
         // localized status badges flip to the new locale.
         if (_srvListStack is not null) RebuildServerList();
