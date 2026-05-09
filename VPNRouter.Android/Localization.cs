@@ -891,7 +891,8 @@ internal static class Localization
     public static string AndroidToolsOpenLog => global::VPNRouter.Core.Localization.Strings.AndroidToolsOpenLog;
     public static string AndroidToolsCheckLeak => global::VPNRouter.Core.Localization.Strings.AndroidToolsCheckLeak;
 
-    // ZapretSec* exports already exist at lines 215-225 (added in the F-01
-    // Localization unification). The F-13 DPI Bypass overlay should reuse
-    // those — re-adding them here would cause CS0102 duplicate definitions.
+    // ZapretSec* labels are already re-exported earlier in this file
+    // (around line 215-225) from the v2.32.0 (AND-ZAPRET) batch. The
+    // F-13 DPI Bypass overlay reuses those existing accessors directly —
+    // re-adding here would cause CS0102 duplicate definitions.
 }
