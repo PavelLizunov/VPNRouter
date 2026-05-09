@@ -16,12 +16,10 @@ namespace VPNRouter.Android;
 
 /// <summary>
 /// v2.32.0 (Android-led, 2026-05-07) — config share overlays:
-/// <b>Export</b> (kebab → Diagnostics → "Export config"),
-/// <b>Import</b> (kebab → Diagnostics → "Import config"),
-/// <b>QR share</b> (form's 📷 QR button — replaces the
-/// <c>QrComingSoon</c> placeholder from handbook §3.4).
+/// <b>Export</b> (kebab → Diagnostics → "Export config") and
+/// <b>Import</b> (kebab → Diagnostics → "Import config").
 ///
-/// <para>All three overlays follow the same fullscreen-Border-on-top-of-
+/// <para>Both overlays follow the same fullscreen-Border-on-top-of-
 /// scroller pattern as the log viewer (Phase 7.4) and Settings overlay
 /// (AND-2): hidden by default, shown imperatively, dismissed via a ✕
 /// close button. No XAML — built in code so the same Tokens binding
@@ -61,21 +59,6 @@ public partial class AndroidApp
     private TextBlock? _cfgImportStatus;
     private ConfigShareDocument? _cfgImportPendingDoc;
     private Avalonia.Controls.Button? _menuImportConfigItem;
-
-    // QR share overlay
-    private Border? _cfgQrOverlay;
-    private TextBlock? _cfgQrTitle;
-    private TextBlock? _cfgQrCurrentServer;
-    private QrCanvas? _cfgQrCanvas;
-    private TextBlock? _cfgQrSecretBanner;
-    private Avalonia.Controls.Button? _cfgQrCopyBtn;
-    private TextBlock? _cfgQrScanLabel;
-    private TextBlock? _cfgQrScanHint;
-    private TextBox? _cfgQrPasteBox;
-    private Avalonia.Controls.Button? _cfgQrApplyBtn;
-    private Avalonia.Controls.Button? _cfgQrCloseBtn;
-    private TextBlock? _cfgQrStatus;
-    private string? _cfgQrCurrentUri;
 
     // ── Build overlays ─────────────────────────────────────────────────
 
@@ -390,175 +373,6 @@ public partial class AndroidApp
         return overlay;
     }
 
-    /// <summary>Build the QR share overlay. Replaces handbook §3.4
-    /// placeholder. Shows current active server's URI as a QR code +
-    /// clipboard-paste import field.</summary>
-    internal Border BuildQrShareOverlay()
-    {
-        _cfgQrTitle = new TextBlock
-        {
-            Text = Localization.QrShareTitle,
-            FontSize = 16,
-            FontWeight = FontWeight.Bold,
-        };
-        _cfgQrTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
-
-        _cfgQrCurrentServer = new TextBlock
-        {
-            FontSize = 12,
-            TextWrapping = TextWrapping.Wrap,
-            FontWeight = FontWeight.SemiBold,
-        };
-        _cfgQrCurrentServer.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
-
-        _cfgQrCanvas = new QrCanvas
-        {
-            Width = 280,
-            Height = 280,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            // White background with black modules — universally readable
-            // by QR scanners. Fixed colours (don't follow theme) since
-            // QR readability depends on high contrast; an inverted
-            // dark-mode QR confuses some scanners.
-            Background = Brushes.White,
-            DarkBrush = Brushes.Black,
-        };
-
-        _cfgQrSecretBanner = new TextBlock
-        {
-            Text = Localization.QrShareSecretBanner,
-            FontSize = 11,
-            TextWrapping = TextWrapping.Wrap,
-            LineHeight = 16,
-        };
-        _cfgQrSecretBanner.BindToken(TextBlock.ForegroundProperty, "WarningFgBrush");
-
-        _cfgQrCopyBtn = new Avalonia.Controls.Button
-        {
-            Content = Localization.QrShareCopyUriButton,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            Padding = new Thickness(0, 10),
-            FontSize = 13,
-            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
-        };
-        _cfgQrCopyBtn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentBgSubtleBrush");
-        _cfgQrCopyBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentFgBrush");
-        _cfgQrCopyBtn.Click += OnCfgQrCopyClicked;
-
-        _cfgQrScanLabel = new TextBlock
-        {
-            Text = Localization.QrShareScanFromClipboardLabel,
-            FontSize = 11,
-            FontWeight = FontWeight.SemiBold,
-            Margin = new Thickness(0, 8, 0, 0),
-        };
-        _cfgQrScanLabel.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
-
-        _cfgQrScanHint = new TextBlock
-        {
-            Text = Localization.QrShareScanHint,
-            FontSize = 10,
-            TextWrapping = TextWrapping.Wrap,
-            LineHeight = 14,
-        };
-        _cfgQrScanHint.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
-
-        _cfgQrPasteBox = new TextBox
-        {
-            FontSize = 11,
-            Padding = new Thickness(10, 7),
-            Watermark = "vless:// …",
-            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
-            FontFamily = new FontFamily("monospace"),
-        };
-
-        _cfgQrApplyBtn = new Avalonia.Controls.Button
-        {
-            Content = Localization.QrSharePasteButton,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            Padding = new Thickness(0, 10),
-            FontSize = 13,
-            FontWeight = FontWeight.SemiBold,
-            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
-        };
-        _cfgQrApplyBtn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentSolidBrush");
-        _cfgQrApplyBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentSolidFgBrush");
-        _cfgQrApplyBtn.Click += OnCfgQrApplyClicked;
-
-        _cfgQrStatus = new TextBlock
-        {
-            FontSize = 11,
-            TextWrapping = TextWrapping.Wrap,
-            IsVisible = false,
-        };
-        _cfgQrStatus.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
-
-        _cfgQrCloseBtn = new Avalonia.Controls.Button
-        {
-            Content = "✕",
-            FontSize = 16,
-            Width = 36,
-            Height = 36,
-            Padding = new Thickness(0),
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-        };
-        _cfgQrCloseBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextSecondaryBrush");
-        _cfgQrCloseBtn.Click += (_, _) => HideQrOverlay();
-
-        var titleBar = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(16, 12, 8, 4),
-        };
-        Grid.SetColumn(_cfgQrTitle, 0);
-        Grid.SetColumn(_cfgQrCloseBtn, 1);
-        titleBar.Children.Add(_cfgQrTitle);
-        titleBar.Children.Add(_cfgQrCloseBtn);
-
-        var stack = new StackPanel
-        {
-            Spacing = 12,
-            Margin = new Thickness(16, 4, 16, 16),
-            Children =
-            {
-                _cfgQrCurrentServer,
-                _cfgQrCanvas,
-                _cfgQrSecretBanner,
-                _cfgQrCopyBtn,
-                _cfgQrScanLabel,
-                _cfgQrScanHint,
-                _cfgQrPasteBox,
-                _cfgQrApplyBtn,
-                _cfgQrStatus,
-            },
-        };
-
-        var dock = new DockPanel { LastChildFill = true };
-        DockPanel.SetDock(titleBar, Dock.Top);
-        dock.Children.Add(titleBar);
-        var scroller = new ScrollViewer
-        {
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Content = stack,
-        };
-        dock.Children.Add(scroller);
-
-        var overlay = new Border
-        {
-            IsVisible = false,
-            Child = dock,
-        };
-        overlay.BindToken(Border.BackgroundProperty, "SurfaceAppBrush");
-        return overlay;
-    }
-
     // ── Show / hide ────────────────────────────────────────────────────
 
     public void ShowExportOverlay()
@@ -583,18 +397,6 @@ public partial class AndroidApp
     public void HideImportOverlay()
     {
         if (_cfgImportOverlay is not null) _cfgImportOverlay.IsVisible = false;
-    }
-
-    public void ShowQrOverlay()
-    {
-        if (_cfgQrOverlay is null) return;
-        BuildQrPayload();
-        _cfgQrOverlay.IsVisible = true;
-    }
-
-    public void HideQrOverlay()
-    {
-        if (_cfgQrOverlay is not null) _cfgQrOverlay.IsVisible = false;
     }
 
     private void ResetExportOverlay()
@@ -631,142 +433,6 @@ public partial class AndroidApp
             _cfgImportStatus.IsVisible = false;
         }
         if (_cfgImportPickBtn is not null) _cfgImportPickBtn.IsEnabled = true;
-    }
-
-    private void BuildQrPayload()
-    {
-        // Resolve which URI to display. Priority:
-        //   1. Active subscription server (selected by Name)
-        //   2. Manual VLESS URI (KeyVlessUri)
-        // We don't share custom JSON via QR — too big and not a single-
-        // server share use case.
-        string? uri = null;
-        string? label = null;
-
-        var server = AndroidStorage.GetActiveServer();
-        if (server is not null && !string.IsNullOrWhiteSpace(server.Server))
-        {
-            uri = TryReBuildVlessUri(server);
-            label = string.IsNullOrEmpty(server.Name) ? server.Server : server.Name;
-        }
-        if (string.IsNullOrEmpty(uri))
-        {
-            var stored = AndroidStorage.GetVlessUri();
-            if (!string.IsNullOrWhiteSpace(stored))
-            {
-                uri = stored;
-                label = stored;
-            }
-        }
-
-        _cfgQrCurrentUri = uri;
-
-        if (_cfgQrCurrentServer is not null)
-        {
-            _cfgQrCurrentServer.Text = string.IsNullOrEmpty(uri)
-                ? Localization.QrShareNoActiveServer
-                : label;
-        }
-
-        if (_cfgQrCanvas is not null)
-        {
-            if (string.IsNullOrEmpty(uri))
-            {
-                _cfgQrCanvas.SetMatrix(null);
-            }
-            else
-            {
-                try
-                {
-                    var qr = QrCode.EncodeText(uri, QrCode.Ecc.Medium);
-                    _cfgQrCanvas.SetMatrix(qr.ToMatrix());
-                }
-                catch (Exception ex)
-                {
-                    global::Android.Util.Log.Warn("VpnRouter.ConfigShare",
-                        $"QR encode failed: {ex.GetType().Name}: {ex.Message}");
-                    _cfgQrCanvas.SetMatrix(null);
-                }
-            }
-        }
-
-        if (_cfgQrCopyBtn is not null) _cfgQrCopyBtn.IsEnabled = !string.IsNullOrEmpty(uri);
-        if (_cfgQrPasteBox is not null) _cfgQrPasteBox.Text = string.Empty;
-        if (_cfgQrStatus is not null)
-        {
-            _cfgQrStatus.Text = string.Empty;
-            _cfgQrStatus.IsVisible = false;
-        }
-    }
-
-    /// <summary>
-    /// Reconstruct a vless:// URI from a stored <see cref="VlessServerEntry"/>.
-    /// We don't keep the original URI text, only parsed fields, so we
-    /// re-emit a canonical form. Format mirrors common share-link parsers
-    /// (NekoBox / v2rayNG / Hiddify). Returns empty for non-VLESS protocols
-    /// (Hysteria2/TUIC/SS) — those use different URI schemes and the
-    /// rebuild path isn't worth the complexity for v1.
-    /// </summary>
-    private static string TryReBuildVlessUri(VlessServerEntry srv)
-    {
-        // Only build URIs for VLESS protocol — other protocols (hy2/tuic/ss)
-        // need different schemes and we lose source detail at parse time.
-        var protocol = string.IsNullOrEmpty(srv.Protocol) ? "vless" : srv.Protocol.ToLowerInvariant();
-        if (protocol != "vless") return string.Empty;
-
-        var sb = new System.Text.StringBuilder();
-        sb.Append("vless://");
-        if (!string.IsNullOrEmpty(srv.Uuid)) sb.Append(srv.Uuid);
-        sb.Append('@').Append(srv.Server).Append(':').Append(srv.Port);
-
-        var qp = new List<string>();
-        if (!string.IsNullOrEmpty(srv.Flow)) qp.Add($"flow={Uri.EscapeDataString(srv.Flow)}");
-        if (!string.IsNullOrEmpty(srv.Security)) qp.Add($"security={Uri.EscapeDataString(srv.Security)}");
-
-        // Reality block — server_name → SNI, public_key → pbk, short_id → sid,
-        // fingerprint → fp. Only emit when Reality is actually populated.
-        var reality = srv.Reality;
-        if (reality is not null)
-        {
-            if (!string.IsNullOrEmpty(reality.ServerName)) qp.Add($"sni={Uri.EscapeDataString(reality.ServerName)}");
-            if (!string.IsNullOrEmpty(reality.PublicKey)) qp.Add($"pbk={Uri.EscapeDataString(reality.PublicKey)}");
-            if (!string.IsNullOrEmpty(reality.ShortId)) qp.Add($"sid={Uri.EscapeDataString(reality.ShortId)}");
-            if (!string.IsNullOrEmpty(reality.Fingerprint)) qp.Add($"fp={Uri.EscapeDataString(reality.Fingerprint)}");
-        }
-        else if (srv.Tls is not null)
-        {
-            if (!string.IsNullOrEmpty(srv.Tls.ServerName)) qp.Add($"sni={Uri.EscapeDataString(srv.Tls.ServerName)}");
-            if (!string.IsNullOrEmpty(srv.Tls.Fingerprint)) qp.Add($"fp={Uri.EscapeDataString(srv.Tls.Fingerprint)}");
-            if (!string.IsNullOrEmpty(srv.Tls.Alpn)) qp.Add($"alpn={Uri.EscapeDataString(srv.Tls.Alpn)}");
-        }
-
-        // Transport — type=tcp default; only emit when non-tcp or non-default path.
-        var transport = srv.Transport;
-        if (transport is not null && !string.IsNullOrEmpty(transport.Type))
-        {
-            qp.Add($"type={Uri.EscapeDataString(transport.Type)}");
-            if (transport.Type != "tcp" && !string.IsNullOrEmpty(transport.Path) && transport.Path != "/")
-            {
-                qp.Add($"path={Uri.EscapeDataString(transport.Path)}");
-            }
-        }
-
-        // VLESS encryption is universally "none" in practice — we add it
-        // so v2rayNG / NekoBox parsers don't choke (they sometimes
-        // require it explicitly).
-        qp.Add("encryption=none");
-
-        if (qp.Count > 0)
-        {
-            sb.Append('?');
-            sb.Append(string.Join('&', qp));
-        }
-
-        if (!string.IsNullOrEmpty(srv.Name))
-        {
-            sb.Append('#').Append(Uri.EscapeDataString(srv.Name));
-        }
-        return sb.ToString();
     }
 
     // ── Click handlers ─────────────────────────────────────────────────
@@ -947,49 +613,6 @@ public partial class AndroidApp
         ResetImportOverlay();
     }
 
-    private void OnCfgQrCopyClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (string.IsNullOrEmpty(_cfgQrCurrentUri)) return;
-        try
-        {
-            CopyToClipboard("vpnrouter-vless-uri", _cfgQrCurrentUri);
-            ShowQrStatus(Localization.QrShareCopiedToast);
-        }
-        catch (Exception ex)
-        {
-            ShowQrStatus($"{ex.GetType().Name}: {ex.Message}");
-        }
-    }
-
-    private void OnCfgQrApplyClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        var raw = _cfgQrPasteBox?.Text?.Trim() ?? string.Empty;
-        if (raw.Length == 0)
-        {
-            ShowQrStatus(string.Format(Localization.QrShareApplyFailed, "(empty)"));
-            return;
-        }
-
-        try
-        {
-            // Parse via the existing ServerUriParser so we accept any of
-            // vless / hysteria2 / tuic / ss URIs (Phase 6.4 multi-protocol
-            // support). On parse failure surface the message verbatim.
-            var entry = VPNRouter.Core.Services.ServerUriParser.Parse(raw);
-            // Persist to KeyVlessUri so the existing manual-mode flow
-            // picks it up. Don't flip ConfigMode here — the user might
-            // want to switch from subscribe to manual in the form.
-            AndroidStorage.SetVlessUri(raw);
-            ShowQrStatus(Localization.QrShareApplyOk +
-                $" ({entry.Server}:{entry.Port})");
-        }
-        catch (Exception ex)
-        {
-            ShowQrStatus(string.Format(Localization.QrShareApplyFailed,
-                $"{ex.GetType().Name}: {ex.Message}"));
-        }
-    }
-
     // ── Shared helpers ─────────────────────────────────────────────────
 
     private void ShowExportStatus(string text)
@@ -1004,13 +627,6 @@ public partial class AndroidApp
         if (_cfgImportStatus is null) return;
         _cfgImportStatus.Text = text;
         _cfgImportStatus.IsVisible = !string.IsNullOrEmpty(text);
-    }
-
-    private void ShowQrStatus(string text)
-    {
-        if (_cfgQrStatus is null) return;
-        _cfgQrStatus.Text = text;
-        _cfgQrStatus.IsVisible = !string.IsNullOrEmpty(text);
     }
 
     /// <summary>
@@ -1085,95 +701,7 @@ public partial class AndroidApp
         if (_cfgImportApplyBtn is not null) _cfgImportApplyBtn.Content = Localization.ImportApplyButton;
         if (_cfgImportCancelBtn is not null) _cfgImportCancelBtn.Content = Localization.ImportCancelButton;
 
-        if (_cfgQrTitle is not null) _cfgQrTitle.Text = Localization.QrShareTitle;
-        if (_cfgQrSecretBanner is not null) _cfgQrSecretBanner.Text = Localization.QrShareSecretBanner;
-        if (_cfgQrCopyBtn is not null) _cfgQrCopyBtn.Content = Localization.QrShareCopyUriButton;
-        if (_cfgQrScanLabel is not null) _cfgQrScanLabel.Text = Localization.QrShareScanFromClipboardLabel;
-        if (_cfgQrScanHint is not null) _cfgQrScanHint.Text = Localization.QrShareScanHint;
-        if (_cfgQrApplyBtn is not null) _cfgQrApplyBtn.Content = Localization.QrSharePasteButton;
-
         if (_menuExportConfigItem is not null) _menuExportConfigItem.Content = Localization.MenuItemExportConfig;
         if (_menuImportConfigItem is not null) _menuImportConfigItem.Content = Localization.MenuItemImportConfig;
-    }
-}
-
-/// <summary>
-/// v2.32.0 (Android-led, 2026-05-07) — minimal Avalonia control that
-/// renders a QR matrix in the Render() pass. Self-sized; the parent
-/// constrains via Width / Height. White background + black modules
-/// hard-coded for QR-scanner compatibility (some scanners refuse
-/// inverted QR codes).
-/// </summary>
-internal sealed class QrCanvas : Control
-{
-    public static readonly Avalonia.StyledProperty<IBrush?> DarkBrushProperty =
-        Avalonia.AvaloniaProperty.Register<QrCanvas, IBrush?>(nameof(DarkBrush), Brushes.Black);
-
-    public static readonly Avalonia.StyledProperty<IBrush?> BackgroundProperty =
-        Avalonia.AvaloniaProperty.Register<QrCanvas, IBrush?>(nameof(Background), Brushes.White);
-
-    public IBrush? DarkBrush
-    {
-        get => GetValue(DarkBrushProperty);
-        set => SetValue(DarkBrushProperty, value);
-    }
-
-    public IBrush? Background
-    {
-        get => GetValue(BackgroundProperty);
-        set => SetValue(BackgroundProperty, value);
-    }
-
-    private bool[,]? _matrix;
-
-    public QrCanvas()
-    {
-        // Repaint on brush change so theme/colour overrides reflect.
-        AffectsRender<QrCanvas>(DarkBrushProperty, BackgroundProperty);
-    }
-
-    public void SetMatrix(bool[,]? matrix)
-    {
-        _matrix = matrix;
-        InvalidateVisual();
-    }
-
-    public override void Render(DrawingContext context)
-    {
-        // Background fill — full bounds. White by default; if Background
-        // is null we just skip.
-        var bg = Background;
-        var fg = DarkBrush ?? Brushes.Black;
-        var rect = new Avalonia.Rect(0, 0, Bounds.Width, Bounds.Height);
-        if (bg is not null) context.FillRectangle(bg, rect);
-
-        if (_matrix is null || _matrix.GetLength(0) == 0) return;
-
-        int n = _matrix.GetLength(0);
-        // Quiet zone (empty border) — 4 modules per spec, scaled down
-        // proportionally to fit available pixels.
-        const int Quiet = 4;
-        int totalModules = n + Quiet * 2;
-        double cell = Math.Min(Bounds.Width, Bounds.Height) / totalModules;
-        if (cell <= 0) return;
-
-        double offsetX = (Bounds.Width - cell * totalModules) / 2.0 + cell * Quiet;
-        double offsetY = (Bounds.Height - cell * totalModules) / 2.0 + cell * Quiet;
-
-        for (int y = 0; y < n; y++)
-        {
-            for (int x = 0; x < n; x++)
-            {
-                if (_matrix[y, x])
-                {
-                    var px = offsetX + x * cell;
-                    var py = offsetY + y * cell;
-                    // Draw a tiny bit larger than cell to avoid sub-pixel
-                    // gaps that some Android renderers leave.
-                    context.FillRectangle(fg!,
-                        new Avalonia.Rect(px, py, cell + 0.5, cell + 0.5));
-                }
-            }
-        }
     }
 }

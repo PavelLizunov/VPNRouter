@@ -1578,12 +1578,10 @@ public partial class AndroidApp : Avalonia.Application
         _srvOverlay = BuildServerListOverlay();
 
         // v2.32.0 (Android-led, 2026-05-07) — config share overlays
-        // (export / import / QR). Defined in AndroidApp.ConfigShare.cs.
-        // All three are hidden by default, surfaced via kebab menu items
-        // (export/import) or the form's 📷 QR button (QR share).
+        // (export / import). Defined in AndroidApp.ConfigShare.cs.
+        // Both are hidden by default, surfaced via kebab menu items.
         _cfgExportOverlay = BuildExportOverlay();
         _cfgImportOverlay = BuildImportOverlay();
-        _cfgQrOverlay = BuildQrShareOverlay();
 
         // v2.32.0 (AND-PROFILES, 2026-05-08) — fullscreen routing-profile
         // catalog overlay. Triggered from the Profiles section in the kebab
@@ -1602,7 +1600,7 @@ public partial class AndroidApp : Avalonia.Application
         return new Grid
         {
             Children = { mainScroller, _logOverlay, _appPickerOverlay, _subsOverlay, _fcOverlay, _settingsOverlay, _srvOverlay,
-                         _cfgExportOverlay, _cfgImportOverlay, _cfgQrOverlay, _profilesOverlay,
+                         _cfgExportOverlay, _cfgImportOverlay, _profilesOverlay,
                          _toolsOverlay, _dpiBypassOverlay }
         };
     }
@@ -4347,12 +4345,8 @@ public partial class AndroidApp : Avalonia.Application
 
     private void OnScanQrClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        // v2.32.0 (Android-led, 2026-05-07) — replaces handbook §3.4
-        // placeholder. Opens the QR share overlay with the current
-        // active server's URI rendered as a QR code + a paste-from-
-        // clipboard import field. See AndroidApp.ConfigShare.cs for
-        // the overlay logic.
-        ShowQrOverlay();
+        // Camera-scan flow lives elsewhere; the previous QR-share overlay
+        // has been removed.
     }
 
     private void OnMenuExportConfigClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
