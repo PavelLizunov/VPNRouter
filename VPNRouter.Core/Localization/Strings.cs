@@ -1234,6 +1234,31 @@ public static class Strings
     public static string SmpRefreshButton => Ru ? "Обновить"     : "Refresh";
     public static string SmpActiveThrough => Ru ? "Через:" : "Through:";
 
+    // v2.32.0 parity audit F-11 (2026-05-09): inline auto-detect feedback
+    // shown below the SimplePage VPN-config TextBox. Mirrors Android's
+    // sub-tab pattern (Subscription / Server / Custom JSON) — desktop
+    // doesn't ship the segmented selector yet (P3 chip), so we surface
+    // the detection result as a hint line + gate Save/Refresh/Connect on
+    // <see cref="SmpInputKind"/> classification. "Detected" wording chosen
+    // to match the Avalonia-shared Tools page status patterns.
+    public static string SmpInputDetectedServer        => Ru
+        ? "Распознано: ссылка на сервер"
+        : "Detected: server link";
+    public static string SmpInputDetectedSubscription  => Ru
+        ? "Распознано: URL подписки"
+        : "Detected: subscription URL";
+    // Toast strings for the SimplePage Save/Refresh action row. Empty toast
+    // hides the floating bubble — see <c>HasSmpToast</c> binding.
+    public static string SmpSavedAsServerToast       => Ru
+        ? "Сохранено как сервер"
+        : "Saved as server";
+    public static string SmpSavedAsSubscriptionToast => Ru
+        ? "Сохранено как подписка"
+        : "Saved as subscription";
+    public static string SmpRefreshDoneToast         => Ru
+        ? "Подписка обновлена"
+        : "Subscription refreshed";
+
     // ── v2.18.0 compact Simple-mode redesign (Variant A · Calm) ──
     // Status card titles (one word when possible).
     // v2.18.3: "Protected" → "Connected" — RU audience uses VPN for access

@@ -31,10 +31,118 @@ public partial class MainWindowViewModel
     /// URI (becomes a one-server VLESS config) or an <c>http(s)://</c>
     /// subscription URL. Classification in v2.17.2 via SimpleInputDetector.
     /// </summary>
-    [ObservableProperty] private string _smpInput = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SmpInputDetectedKind))]
+    [NotifyPropertyChangedFor(nameof(SmpInputDetectedHint))]
+    [NotifyPropertyChangedFor(nameof(SmpInputDetectedHintVisible))]
+    [NotifyPropertyChangedFor(nameof(SmpSaveEnabled))]
+    [NotifyPropertyChangedFor(nameof(SmpRefreshEnabled))]
+    [NotifyPropertyChangedFor(nameof(SmpInputDirty))]
+    [NotifyPropertyChangedFor(nameof(SmpConnectEnabled))]
+    private string _smpInput = string.Empty;
 
     /// <summary>Inline error message shown below the input (empty = no error).</summary>
     [ObservableProperty] private string _smpErrorText = string.Empty;
+
+    /// <summary>
+    /// v2.32.0 parity audit F-11 (2026-05-09): Transient toast shown above the
+    /// SimplePage CTA (e.g. "Saved as Subscription"). Empty = no toast. Mirrors
+    /// the existing <see cref="RulesToastText"/> pattern; cleared automatically
+    /// after ~2.5 s via <see cref="ShowSmpToast"/>.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSmpToast))]
+    private string _smpToastText = string.Empty;
+
+    /// <summary>True when <see cref="SmpToastText"/> is non-empty — drives toast border IsVisible.</summary>
+    public bool HasSmpToast => !string.IsNullOrEmpty(SmpToastText);
+
+    /// <summary>
+    /// v2.32.0 parity audit F-11 (2026-05-09): snapshot of the input that was
+    /// last persisted via <see cref="SmpSave"/> (or auto-saved by
+    /// <see cref="SmpToggleConnectAsync"/>). Used to compute
+    /// <see cref="SmpInputDirty"/> so the Connect button stays disabled while
+    /// the user has typed something but not yet saved it. Pre-fix Connect would
+    /// silently flip ConfigMode and leave the user with an empty subscription
+    /// (F-12 in <c>parity-audit/findings.md</c>).
+    /// </summary>
+    private string _smpInputSavedSnapshot = string.Empty;
+
+    /// <summary>
+    /// True when the input field contains text that hasn't been Saved yet —
+    /// either a freshly-pasted URL the user hasn't committed, or an edited
+    /// version of an already-saved one. Empty input is NOT dirty (lets
+    /// upgraders Connect with an existing config without typing).
+    /// </summary>
+    public bool SmpInputDirty
+    {
+        get
+        {
+            var current = (_smpInput ?? string.Empty).Trim();
+            if (current.Length == 0) return false;
+            return !string.Equals(current, _smpInputSavedSnapshot, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// Auto-detected kind of the current <see cref="SmpInput"/> — drives the
+    /// "Detected: …" status hint below the field and gates Save/Refresh
+    /// buttons. Pure computed property (no caching) — recomputed on every
+    /// PropertyChanged via the NotifyPropertyChangedFor on SmpInput.
+    /// </summary>
+    public SmpInputKind SmpInputDetectedKind => SimpleInputDetector.Classify(_smpInput);
+
+    /// <summary>
+    /// Localized "Detected: VLESS server" / "Detected: Subscription URL" /
+    /// "Detected: unknown — paste vless:// or https:// link" line displayed
+    /// below the input. Mirrors Android's inline auto-detect feedback on the
+    /// Subscribe sub-tab.
+    /// </summary>
+    public string SmpInputDetectedHint => SmpInputDetectedKind switch
+    {
+        SmpInputKind.ServerUri        => Strings.SmpInputDetectedServer,
+        SmpInputKind.SubscriptionUrl  => Strings.SmpInputDetectedSubscription,
+        _                              => string.Empty,
+    };
+
+    /// <summary>True when the input contains a recognised scheme — hides the hint when empty.</summary>
+    public bool SmpInputDetectedHintVisible =>
+        SmpInputDetectedKind != SmpInputKind.Invalid;
+
+    /// <summary>
+    /// IsEnabled binding for the Save button. Save needs a valid (vless / sub)
+    /// input — wiring through this lets XAML disable the button visually
+    /// rather than relying on Save() to silently no-op.
+    /// </summary>
+    public bool SmpSaveEnabled => SmpInputDetectedKind != SmpInputKind.Invalid && SmpInputDirty;
+
+    /// <summary>
+    /// IsEnabled binding for the Refresh button. Refresh only makes sense for
+    /// subscribe mode AND once the user has a saved subscription (otherwise
+    /// there's nothing to fetch).
+    /// </summary>
+    public bool SmpRefreshEnabled => IsSubscribeMode
+        && (_settings?.App?.Subscriptions?.Any(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)) == true);
+
+    /// <summary>
+    /// IsEnabled binding for the Connect CTA. F-12 (parity audit): Connect must
+    /// stay disabled while the user has typed an URL but not Saved it, so
+    /// SmpToggleConnectAsync's silent ConfigMode flip path is unreachable from
+    /// the UI. Disconnect (already-connected) and Cancel (connecting) remain
+    /// enabled — only the disconnected → Connect transition is gated.
+    /// </summary>
+    public bool SmpConnectEnabled
+    {
+        get
+        {
+            // Already in a tunnel transition — let the user Disconnect/Cancel.
+            if (IsConnected || IsConnecting) return true;
+            // Disconnected: only allow Connect if there is no unsaved input
+            // sitting in the field. Empty input + existing saved config is
+            // fine (upgrader/auto-Connect path).
+            return !SmpInputDirty;
+        }
+    }
 
     /// <summary>
     /// Controls the "Change config or mode" Expander on SimplePage.
@@ -327,10 +435,17 @@ public partial class MainWindowViewModel
         else if (kind == SmpInputKind.ServerUri)
         {
             if (!TryApplyVless(_smpInput.Trim())) return;
+            // F-11: keep the dirty/snapshot state in sync with what we
+            // just persisted so a return trip to the form doesn't
+            // re-disable Connect.
+            _smpInputSavedSnapshot = _smpInput.Trim();
+            OnPropertyChanged(nameof(SmpInputDirty));
         }
         else if (kind == SmpInputKind.SubscriptionUrl)
         {
             if (!TryApplySubscriptionUrl(_smpInput.Trim())) return;
+            _smpInputSavedSnapshot = _smpInput.Trim();
+            OnPropertyChanged(nameof(SmpInputDirty));
         }
 
         // Tunnel mode (Split vs Full) — already bound to IsSplitTunnel via radio.
@@ -376,9 +491,18 @@ public partial class MainWindowViewModel
     /// Subscribe Advanced page; F-02 row 6 wanted parity with Android,
     /// which has Save / Refresh / QR buttons inline on the main scroller.
     /// QR is omitted on desktop (no camera surface).
+    ///
+    /// <para>
+    /// v2.32.0 parity audit F-11 (2026-05-09): on success, kicks off a
+    /// background subscription refresh (subscribe mode) and surfaces a toast
+    /// so the user has explicit feedback. Records the saved value in
+    /// <see cref="_smpInputSavedSnapshot"/> so the Connect button (gated by
+    /// <see cref="SmpConnectEnabled"/> via <see cref="SmpInputDirty"/>)
+    /// re-enables.
+    /// </para>
     /// </summary>
     [RelayCommand]
-    private void SmpSave()
+    private async Task SmpSaveAsync()
     {
         SmpErrorText = string.Empty;
         var raw = (_smpInput ?? string.Empty).Trim();
@@ -408,6 +532,98 @@ public partial class MainWindowViewModel
 
         SaveSettings();
         _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+
+        // F-11: mark this value as the persisted snapshot so SmpInputDirty
+        // flips false, which re-enables the Connect CTA + disables Save.
+        _smpInputSavedSnapshot = raw;
+        OnPropertyChanged(nameof(SmpInputDirty));
+        OnPropertyChanged(nameof(SmpSaveEnabled));
+        OnPropertyChanged(nameof(SmpRefreshEnabled));
+        OnPropertyChanged(nameof(SmpConnectEnabled));
+
+        // F-11: explicit user feedback. "Saved as Subscription" / "Saved as
+        // VLESS server" — Android shows the same after a Save tap.
+        var toast = kind == SmpInputKind.SubscriptionUrl
+            ? Strings.SmpSavedAsSubscriptionToast
+            : Strings.SmpSavedAsServerToast;
+        ShowSmpToast(toast);
+
+        // F-11: subscription mode needs a fetch before the user clicks
+        // Connect — otherwise the Servers tab is empty and Connect would
+        // bail (or worse, in F-12 silently flip ConfigMode without telling
+        // the user). Fire-and-forget; refresh failure is surfaced via the
+        // existing _logger + the Refresh button stays clickable for retry.
+        if (kind == SmpInputKind.SubscriptionUrl)
+        {
+            try
+            {
+                await RefreshAllSubscriptionsAsync();
+                ShowSmpToast(Strings.SmpRefreshDoneToast);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[Simple] SmpSave background refresh failed");
+                // Don't clear the "Saved" toast with an error — leave the
+                // success toast visible and let the user retry via Refresh.
+            }
+        }
+    }
+
+    /// <summary>
+    /// v2.32.0 parity audit F-11 (2026-05-09): set <see cref="SmpToastText"/>,
+    /// schedule a 2500 ms revert. Multiple calls cancel any pending revert so
+    /// rapid Save → Refresh shows the latest message rather than blinking.
+    /// </summary>
+    private void ShowSmpToast(string message)
+    {
+        SmpToastText = message;
+        var token = ++_smpToastToken;
+        _ = System.Threading.Tasks.Task.Delay(2500).ContinueWith(_ =>
+        {
+            if (token == _smpToastToken)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    if (token == _smpToastToken) SmpToastText = string.Empty;
+                });
+            }
+        });
+    }
+
+    private int _smpToastToken;
+
+    /// <summary>
+    /// v2.32.0 parity audit F-11 (2026-05-09): Simple-page-specific Refresh
+    /// wrapper. Delegates the actual fetching to
+    /// <see cref="RefreshAllSubscriptionsAsync"/> (the Subscribe page command)
+    /// then surfaces a toast so the user has explicit "did anything happen?"
+    /// feedback. Pre-fix the SimplePage Refresh button was bound directly to
+    /// RefreshAllSubscriptionsCommand, which silently completed in the
+    /// background — Android's equivalent shows an inline "Subscription
+    /// refreshed" status.
+    /// </summary>
+    [RelayCommand]
+    private async Task SmpRefreshAsync()
+    {
+        SmpErrorText = string.Empty;
+        ShowSmpToast(Strings.Syncing);
+        try
+        {
+            await RefreshAllSubscriptionsAsync();
+            ShowSmpToast(Strings.SmpRefreshDoneToast);
+            // Refresh changed Subscriptions[].Servers — re-evaluate gating
+            // properties so the button states match the new data.
+            OnPropertyChanged(nameof(SmpRefreshEnabled));
+            OnPropertyChanged(nameof(SmpConnectEnabled));
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[Simple] SmpRefresh failed");
+            SmpToastText = string.Empty;
+            SmpErrorText = IsRussian
+                ? $"Не удалось получить подписку: {ex.Message}"
+                : $"Couldn't fetch the subscription: {ex.Message}";
+        }
     }
 
     /// <summary>
