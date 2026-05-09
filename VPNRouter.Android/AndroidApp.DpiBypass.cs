@@ -30,8 +30,9 @@ namespace VPNRouter.Android;
 /// </summary>
 public partial class AndroidApp
 {
-    private Border? _dpiBypassOverlay;
-    private TextBlock? _dpiBypassTitleText;
+    // AND-MIGRATE-OVERLAYS (2026-05-09): the standalone DPI Bypass
+    // overlay is gone — content moves into the Advanced shell as the
+    // "DPI bypass" tab.
 
     // Top-tab strip (replaces sidebar list — Status / Strategy / Advanced).
     private int _dpiSelectedTab;
@@ -53,14 +54,19 @@ public partial class AndroidApp
     private TextBlock? _dpiFooterStatusText;
     private Avalonia.Controls.Button? _dpiFooterToggleBtn;
 
-    // Status-bar widgets cached for re-seed during ShowDpiBypassOverlay.
+    // Status-bar widgets cached for re-seed during ReseedDpiBypassTabState.
     private Ellipse? _dpiStatusBarDot;
     private TextBlock? _dpiStatusBarText;
 
-    private Border BuildDpiBypassOverlay()
+    /// <summary>
+    /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the DPI bypass
+    /// tab inside the Advanced shell. Returns the inner sub-tab strip
+    /// (Status / Strategy / Advanced) + bodies + footer Apply bar. The
+    /// outer shell provides the title bar / close button.
+    /// </summary>
+    private Control BuildDpiBypassTabContent()
     {
         var bg          = GetBrush("SurfaceAppBrush");
-        var raised      = GetBrush("SurfaceRaisedBrush");
         var subtle      = GetBrush("BorderSubtleBrush");
         var defaultB    = GetBrush("BorderDefaultBrush");
         var sunken      = GetBrush("SurfaceSunkenBrush");
@@ -73,49 +79,6 @@ public partial class AndroidApp
         var accentSolid = GetBrush("AccentSolidBrush");
         var accentOnSolid = GetBrush("AccentOnSolidBrush");
         var radiusSm    = GetRadius("RadiusSm");
-
-        // ── Title bar ────────────────────────────────────────────────────
-        _dpiBypassTitleText = new TextBlock
-        {
-            Text = Localization.DpiBypassOverlayTitle,
-            FontSize = 13,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = textP,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        var closeBtn = new Avalonia.Controls.Button
-        {
-            Content = "✕",
-            FontSize = 16,
-            Width = 36,
-            Height = 36,
-            Padding = new Thickness(0),
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Foreground = textS,
-        };
-        closeBtn.Click += OnDpiBypassCloseClicked;
-
-        var titleBar = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(8, 4),
-        };
-        Grid.SetColumn(_dpiBypassTitleText, 0);
-        Grid.SetColumn(closeBtn, 1);
-        titleBar.Children.Add(_dpiBypassTitleText);
-        titleBar.Children.Add(closeBtn);
-
-        var titleBarBorder = new Border
-        {
-            Background = raised,
-            BorderBrush = subtle,
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(8, 4),
-            Child = titleBar,
-        };
 
         // ── Top-tab strip (collapsed sidebar) ────────────────────────────
         _dpiTabStatus   = MakeSegmentButton(Localization.ZapretSecStatus,   active: true,
@@ -347,7 +310,7 @@ public partial class AndroidApp
         };
         advHealthBtn.Click += (s, e) =>
         {
-            if (_dpiBypassOverlay is not null) _dpiBypassOverlay.IsVisible = false;
+            CloseAdvancedShell();
             OnMenuHealthCheckClicked(s, e);
         };
 
@@ -366,7 +329,7 @@ public partial class AndroidApp
         };
         advLogBtn.Click += (s, e) =>
         {
-            if (_dpiBypassOverlay is not null) _dpiBypassOverlay.IsVisible = false;
+            CloseAdvancedShell();
             OnMenuOpenLogClicked(s, e);
         };
 
@@ -385,7 +348,7 @@ public partial class AndroidApp
         };
         advLeakBtn.Click += (s, e) =>
         {
-            if (_dpiBypassOverlay is not null) _dpiBypassOverlay.IsVisible = false;
+            CloseAdvancedShell();
             OnMenuCheckLeaksClicked(s, e);
         };
 
@@ -493,12 +456,10 @@ public partial class AndroidApp
             Child = footerGrid,
         };
 
-        // ── Compose: title + tabs + body + footer ────────────────────────
+        // ── Compose: tabs + body + footer ────────────────────────────────
         var dock = new DockPanel { LastChildFill = true };
-        DockPanel.SetDock(titleBarBorder, Dock.Top);
         DockPanel.SetDock(tabRow, Dock.Top);
         DockPanel.SetDock(footer, Dock.Bottom);
-        dock.Children.Add(titleBarBorder);
         dock.Children.Add(tabRow);
         dock.Children.Add(footer);
         dock.Children.Add(bodyArea);
@@ -508,7 +469,6 @@ public partial class AndroidApp
         return new Border
         {
             Background = bg,
-            IsVisible = false,
             Child = dock,
         };
     }
@@ -524,16 +484,14 @@ public partial class AndroidApp
         StyleSegmentButton(_dpiTabAdvanced, index == 2);
     }
 
-    private void OnDpiBypassCloseClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    /// <summary>
+    /// AND-MIGRATE-OVERLAYS (2026-05-09): the standalone DPI Bypass
+    /// overlay close handler is gone — the Advanced shell owns the close
+    /// affordance now. Tab activation calls <see cref="ReseedDpiBypassTabState"/>
+    /// to refresh the visible widgets from the persisted mode.
+    /// </summary>
+    private void ReseedDpiBypassTabState()
     {
-        if (_dpiBypassOverlay is not null) _dpiBypassOverlay.IsVisible = false;
-    }
-
-    private void ShowDpiBypassOverlay()
-    {
-        if (_dpiBypassOverlay is null) return;
-        // Re-seed visible widgets from the persisted mode in case Settings
-        // mutated it since the last open.
         var mode = AndroidStorage.GetDpiBypassMode();
         if (_dpiStrategyComboBox is not null)
         {
@@ -550,13 +508,6 @@ public partial class AndroidApp
             _dpiStatusBarDot.Fill = GetBrush(mode != "off"
                 ? "SuccessSolidBrush" : "TextMutedBrush");
         UpdateDpiFooterState();
-        _dpiBypassOverlay.IsVisible = true;
-    }
-
-    private void OnMenuDpiBypassClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-        ShowDpiBypassOverlay();
     }
 
     /// <summary>
@@ -589,7 +540,6 @@ public partial class AndroidApp
         }
 
         UpdateZapretChipFromState();
-        UpdateZapretStatusIndicator();
         UpdateDpiFooterState();
     }
 
@@ -622,7 +572,6 @@ public partial class AndroidApp
         }
 
         UpdateZapretChipFromState();
-        UpdateZapretStatusIndicator();
         UpdateDpiFooterState();
     }
 

@@ -29,7 +29,9 @@ namespace VPNRouter.Android;
 /// </summary>
 public partial class AndroidApp
 {
-    private Border? _fcOverlay;
+    // AND-MIGRATE-OVERLAYS (2026-05-09): the standalone Free-Configs
+    // overlay is gone — content moves into the Advanced shell as the
+    // "Public configs" tab.
     private AndroidFreeConfigsOrchestrator? _fcOrchestrator;
 
     // Sub-tab state. 0 = Search, 1 = Saved.
@@ -78,12 +80,17 @@ public partial class AndroidApp
     // status messages can quote what the user actually asked for.
     private int _fcTargetSnapshot = 10;
 
-    private Border BuildFreeConfigsOverlay()
+    /// <summary>
+    /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the Public
+    /// Configs tab inside the Advanced shell. Returns the sub-tab strip
+    /// (Search | Saved) + scrollable bodies + bottom action bar. The
+    /// shell provides the title bar / close button / outer chrome.
+    /// </summary>
+    private Control BuildFreeConfigsTabContent()
     {
         var bg        = GetBrush("SurfaceAppBrush");
         var card      = GetBrush("SurfaceBaseBrush");
         var sunken    = GetBrush("SurfaceSunkenBrush");
-        var raised    = GetBrush("SurfaceRaisedBrush");
         var subtle    = GetBrush("BorderSubtleBrush");
         var defaultB  = GetBrush("BorderDefaultBrush");
         var textP     = GetBrush("TextPrimaryBrush");
@@ -97,50 +104,6 @@ public partial class AndroidApp
         var accentOnSolid = GetBrush("AccentOnSolidBrush");
         var radiusXs = GetRadius("RadiusXs");
         var radiusSm = GetRadius("RadiusSm");
-
-        // ── Title bar (× close + title) ────────────────────────────────────
-        var title = new TextBlock
-        {
-            Text = Localization.FcOverlayTitle,
-            FontSize = 13,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = textP,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-
-        var closeBtn = new Avalonia.Controls.Button
-        {
-            Content = "✕",
-            FontSize = 16,
-            Width = 36,
-            Height = 36,
-            Padding = new Thickness(0),
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Foreground = textS,
-        };
-        closeBtn.Click += OnFreeConfigsCloseClicked;
-
-        var titleBar = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(8, 4),
-        };
-        Grid.SetColumn(title, 0);
-        Grid.SetColumn(closeBtn, 1);
-        titleBar.Children.Add(title);
-        titleBar.Children.Add(closeBtn);
-
-        var titleBarBorder = new Border
-        {
-            Background = raised,
-            BorderBrush = subtle,
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(8, 4),
-            Child = titleBar,
-        };
 
         // ── Sub-tab strip (Search | Saved) ─────────────────────────────────
         _fcTabSearch = MakeFcTabButton(Localization.FcTabSearch, _fcSelectedTab == 0);
@@ -467,12 +430,10 @@ public partial class AndroidApp
             Child = bottomStack,
         };
 
-        // ── Compose: title + tab strip + body + bottom bar ────────────────
+        // ── Compose: tab strip + body + bottom bar ────────────────────────
         var dock = new DockPanel { LastChildFill = true };
-        DockPanel.SetDock(titleBarBorder, Dock.Top);
         DockPanel.SetDock(tabRow, Dock.Top);
         DockPanel.SetDock(bottomBar, Dock.Bottom);
-        dock.Children.Add(titleBarBorder);
         dock.Children.Add(tabRow);
         dock.Children.Add(bottomBar);
         dock.Children.Add(bodyArea);
@@ -480,7 +441,6 @@ public partial class AndroidApp
         return new Border
         {
             Background = bg,
-            IsVisible = false,
             Child = dock,
         };
     }
@@ -815,12 +775,14 @@ public partial class AndroidApp
         return char.ConvertFromUtf32(c0) + char.ConvertFromUtf32(c1);
     }
 
-    // ── Show / hide overlay ───────────────────────────────────────────────
+    // ── Show / hide tab ──────────────────────────────────────────────────
+    //
+    // AND-MIGRATE-OVERLAYS (2026-05-09): the standalone overlay open/close
+    // pair is gone. The Advanced shell calls ReseedFreeConfigsTabState on
+    // tab activation and StopFreeConfigsBackgroundWork when leaving.
 
-    private async void ShowFreeConfigsOverlay()
+    private async void ReseedFreeConfigsTabState()
     {
-        if (_fcOverlay is null) return;
-
         if (_fcOrchestrator is null)
         {
             var logger = new LoggerConfiguration()
@@ -834,7 +796,6 @@ public partial class AndroidApp
             _fcOrchestrator.OnFailed    += OnFcFailed;
         }
 
-        _fcOverlay.IsVisible = true;
         await _fcOrchestrator.EnsureCacheLoadedAsync();
         ReloadFreeConfigsLists();
         // If there's saved history, default to the Saved tab (matches
@@ -845,11 +806,13 @@ public partial class AndroidApp
             SelectFreeConfigsTab(0);
     }
 
-    private void OnFreeConfigsCloseClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    /// <summary>
+    /// Cancel any in-flight find when the Advanced shell closes or
+    /// switches off the Public Configs tab — we don't want to keep
+    /// burning battery on TCP probes the user can no longer see.
+    /// </summary>
+    private void StopFreeConfigsBackgroundWork()
     {
-        if (_fcOverlay is not null) _fcOverlay.IsVisible = false;
-        // Best-effort: cancel any in-flight find when user closes the
-        // overlay so we don't burn battery on background TCP probes.
         _fcOrchestrator?.Cancel();
     }
 
@@ -971,15 +934,17 @@ public partial class AndroidApp
 
         ShowMenuFeedback(Localization.FcUsedToast);
 
-        // Close the overlay first so the consent dialog (first-launch only)
-        // doesn't pop up on top of our overlay layer.
-        if (_fcOverlay is not null) _fcOverlay.IsVisible = false;
+        // AND-MIGRATE-OVERLAYS (2026-05-09): close the Advanced shell so
+        // the consent dialog (first-launch only) and the Simple-page
+        // status card become visible — the user just chose a public
+        // config, the next visible step is "Connect".
+        CloseAdvancedShell();
 
         // Refresh the config-row summary on the main page.
         UpdateConfigSummary();
 
-        // Defer the connect call one beat so the overlay-hide animation
-        // gets a render frame before the system VPN consent dialog (if any)
+        // Defer the connect call one beat so the close animation gets a
+        // render frame before the system VPN consent dialog (if any)
         // pops in. Pure UX nicety; no behavioural effect.
         Dispatcher.UIThread.Post(() =>
         {
