@@ -48,6 +48,19 @@
          the prompt manually — we never grant ourselves the exclusion. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- lucid-pike (2026-05-09) — Simple-page QR scan. The user taps the
+         "Scan QR" button, we launch MediaStore.ActionImageCapture, and
+         decode the resulting JPEG via ZXing.Net so the VLESS / subscription
+         text drops into the VPN config TextBox. Camera is android.permission-
+         protected on Android 6+, so we ask at runtime via
+         ActivityCompat.RequestPermissions before dispatching the intent.
+         android:required="false" on the feature flag keeps non-camera
+         devices (some emulators, Android TV boxes) able to install — we
+         soft-toast on intent failure rather than blocking install. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera"
+                  android:required="false" />
+
     <application android:label="VPNRouter"
                  android:supportsRtl="true">
         <!-- Avalonia MainActivity auto-generated from C# [Activity] attribute. -->

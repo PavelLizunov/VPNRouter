@@ -74,6 +74,18 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
     private const int RequestExportConfig = 0xC01E;
     private const int RequestImportConfig = 0xC01F;
 
+    // lucid-pike (2026-05-09) — Simple-page QR scan.
+    //
+    //   RequestCodeCameraQr: shared between the runtime-permission request
+    //     (ActivityCompat.RequestPermissions) and the camera-intent
+    //     StartActivityForResult. OnRequestPermissionsResult and
+    //     OnActivityResult both branch on it.
+    //
+    // Distinct from VPN consent / config share request codes so cross-
+    // dispatch can't mistake the camera result for a VpnService.Prepare
+    // outcome.
+    private const int RequestCodeCameraQr = 0x4711;
+
     /// <summary>
     /// Phase 1.E (2026-05-04) — placeholder VLESS-Reality URI used to
     /// smoke-test the full VPNRouter.Core → ConfigGenerator → libbox
@@ -361,6 +373,15 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
             return;
         }
 
+        // lucid-pike (2026-05-09) — Simple-page QR scan returns from
+        // MediaStore.ActionImageCapture. Decode is in-process via ZXing.Net;
+        // see HandleQrCameraResult.
+        if (requestCode == RequestCodeCameraQr)
+        {
+            HandleQrCameraResult(resultCode, data);
+            return;
+        }
+
         if (requestCode != RequestVpnConsent)
         {
             return;
@@ -524,6 +545,251 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
             global::Android.Util.Log.Error("VpnRouter.ConfigShare",
                 $"import read failed: {ex.GetType().Name}: {ex.Message}");
             callback?.Invoke(false, $"{ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    // ── lucid-pike (2026-05-09) — Simple-page QR scan ──────────────────────
+    //
+    // Flow:
+    //   1. AndroidApp.OnScanQrClicked sets PendingQrScanCallback +
+    //      calls RequestQrCodeScan(this).
+    //   2. We check Manifest.Permission.Camera. If not granted, fire
+    //      ActivityCompat.RequestPermissions and bail out — the result lands
+    //      in OnRequestPermissionsResult, which either re-enters
+    //      LaunchCameraForQr() or invokes the callback with "permission_denied".
+    //   3. LaunchCameraForQr() mints a temp file URI under our cache dir via
+    //      FileProvider (the same ${applicationId}.fileprovider authority the
+    //      auto-update sideload already uses) and dispatches MediaStore.
+    //      ActionImageCapture with EXTRA_OUTPUT pointed at it. EXTRA_OUTPUT
+    //      gives us the full-resolution JPEG instead of the thumbnail bundle
+    //      Android otherwise hands back via data.Extras["data"] — much better
+    //      decode reliability for a far-away QR.
+    //   4. OnActivityResult dispatches RequestCodeCameraQr to
+    //      HandleQrCameraResult, which decodes the JPEG via ZXing.Net (see
+    //      QrCodeDecoder.cs) and invokes the callback with the text.
+    //
+    // Callback contract (string second arg):
+    //   - ok=true  → decoded QR text.
+    //   - ok=false + "permission_denied" → user denied CAMERA at runtime.
+    //   - ok=false + "cancelled" → user backed out of the camera intent.
+    //   - ok=false + "not_recognized" → image had no decodable QR.
+    //   - ok=false + anything else → error path (camera unavailable, decode
+    //     threw, etc.). Caller logs but surfaces SmpQrNotRecognized to user.
+    //
+    // The temp JPEG is deleted in the finally block of HandleQrCameraResult
+    // regardless of decode success, so we don't leave images in cache.
+
+    /// <summary>
+    /// One-shot QR-scan result callback. Set by AndroidApp before calling
+    /// <see cref="RequestQrCodeScan"/>; cleared on result delivery so a stale
+    /// callback can't fire twice if the user re-enters the flow before the
+    /// first result lands.
+    /// </summary>
+    public static Action<bool, string?>? PendingQrScanCallback;
+
+    /// <summary>Path of the temp JPEG handed to the camera intent via
+    /// EXTRA_OUTPUT. Stashed here so HandleQrCameraResult can decode it +
+    /// delete it without round-tripping through the Intent.</summary>
+    private static string? _pendingQrTempFilePath;
+
+    /// <summary>
+    /// Public entry point for the Simple-page Scan-QR button. Checks the
+    /// runtime camera permission state; if granted, dispatches the camera
+    /// intent immediately, otherwise asks the user via
+    /// ActivityCompat.RequestPermissions and re-enters the camera path on
+    /// grant in <see cref="OnRequestPermissionsResult"/>.
+    /// </summary>
+    public void RequestQrCodeScan()
+    {
+        try
+        {
+            var granted = AndroidX.Core.Content.ContextCompat.CheckSelfPermission(
+                this, global::Android.Manifest.Permission.Camera) == Permission.Granted;
+            if (granted)
+            {
+                LaunchCameraForQr();
+                return;
+            }
+            AndroidX.Core.App.ActivityCompat.RequestPermissions(
+                this,
+                new[] { global::Android.Manifest.Permission.Camera },
+                RequestCodeCameraQr);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("VpnRouter.QrScan",
+                $"RequestQrCodeScan failed: {ex.GetType().Name}: {ex.Message}");
+            var cb = PendingQrScanCallback;
+            PendingQrScanCallback = null;
+            cb?.Invoke(false, $"camera_unavailable:{ex.Message}");
+        }
+    }
+
+    private void LaunchCameraForQr()
+    {
+        try
+        {
+            // Use the existing ${applicationId}.fileprovider authority
+            // declared in AndroidManifest.xml — no extra wiring needed.
+            // Cache dir is already covered by the FileProvider's
+            // <cache-path> in res/xml/file_paths.xml.
+            var cacheDir = CacheDir!;
+            var tempFile = new Java.IO.File(
+                cacheDir,
+                $"qr_scan_{DateTime.UtcNow.Ticks}.jpg");
+            // Pre-create the file so FileProvider grants the camera app
+            // a writable URI; on some OEMs the camera app silently fails
+            // if the target file doesn't exist yet.
+            try { tempFile.CreateNewFile(); } catch { /* createNewFile is best-effort */ }
+            _pendingQrTempFilePath = tempFile.AbsolutePath;
+
+            var authority = $"{PackageName}.fileprovider";
+            var uri = AndroidX.Core.Content.FileProvider.GetUriForFile(this, authority, tempFile);
+
+            var intent = new Intent(global::Android.Provider.MediaStore.ActionImageCapture);
+            intent.PutExtra(global::Android.Provider.MediaStore.ExtraOutput, uri);
+            intent.AddFlags(ActivityFlags.GrantWriteUriPermission);
+            intent.AddFlags(ActivityFlags.GrantReadUriPermission);
+
+            // Some camera apps (notably Samsung, MIUI) don't honour
+            // EXTRA_OUTPUT if the granted permissions aren't resolved
+            // explicitly to every Activity that resolves the intent.
+            // The standard workaround:
+            try
+            {
+                var resInfos = PackageManager?.QueryIntentActivities(
+                    intent, PackageInfoFlags.MatchDefaultOnly);
+                if (resInfos is not null)
+                {
+                    foreach (var info in resInfos)
+                    {
+                        var pkg = info.ActivityInfo?.PackageName;
+                        if (!string.IsNullOrEmpty(pkg))
+                        {
+                            GrantUriPermission(pkg, uri,
+                                ActivityFlags.GrantWriteUriPermission |
+                                ActivityFlags.GrantReadUriPermission);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                global::Android.Util.Log.Warn("VpnRouter.QrScan",
+                    $"QueryIntentActivities/GrantUriPermission warmup failed: {ex.Message}");
+            }
+
+            StartActivityForResult(intent, RequestCodeCameraQr);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("VpnRouter.QrScan",
+                $"LaunchCameraForQr failed: {ex.GetType().Name}: {ex.Message}");
+            _pendingQrTempFilePath = null;
+            var cb = PendingQrScanCallback;
+            PendingQrScanCallback = null;
+            cb?.Invoke(false, $"camera_unavailable:{ex.Message}");
+        }
+    }
+
+    public override void OnRequestPermissionsResult(
+        int requestCode,
+        string[] permissions,
+        [global::Android.Runtime.GeneratedEnum] Permission[] grantResults)
+    {
+        base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != RequestCodeCameraQr) return;
+
+        if (grantResults.Length > 0 && grantResults[0] == Permission.Granted)
+        {
+            LaunchCameraForQr();
+        }
+        else
+        {
+            var cb = PendingQrScanCallback;
+            PendingQrScanCallback = null;
+            cb?.Invoke(false, "permission_denied");
+        }
+    }
+
+    private void HandleQrCameraResult(Result resultCode, Intent? data)
+    {
+        var cb = PendingQrScanCallback;
+        PendingQrScanCallback = null;
+        var tempPath = _pendingQrTempFilePath;
+        _pendingQrTempFilePath = null;
+
+        if (resultCode != Result.Ok)
+        {
+            cb?.Invoke(false, "cancelled");
+            TryDeleteQrTemp(tempPath);
+            return;
+        }
+
+        try
+        {
+            global::Android.Graphics.Bitmap? bitmap = null;
+
+            // Preferred path: full-resolution JPEG written to our temp
+            // file via EXTRA_OUTPUT. We downscale to ≤ 1280×1280 before
+            // ZXing decode so memory stays bounded on cheap devices.
+            if (!string.IsNullOrEmpty(tempPath) && System.IO.File.Exists(tempPath))
+            {
+                bitmap = QrCodeDecoder.LoadDownscaledBitmap(tempPath, 1280);
+            }
+
+            // Fallback: thumbnail extra (low-res, but better than nothing
+            // when the OEM camera app ignored EXTRA_OUTPUT).
+            if (bitmap is null && data?.Extras is not null)
+            {
+                var extra = data.Extras.Get("data");
+                if (extra is global::Android.Graphics.Bitmap thumb) bitmap = thumb;
+            }
+
+            if (bitmap is null)
+            {
+                cb?.Invoke(false, "no_image");
+                return;
+            }
+
+            string? text;
+            try { text = QrCodeDecoder.TryDecode(bitmap); }
+            finally
+            {
+                try { bitmap.Recycle(); } catch { /* best effort */ }
+            }
+
+            if (string.IsNullOrEmpty(text))
+            {
+                cb?.Invoke(false, "not_recognized");
+                return;
+            }
+
+            cb?.Invoke(true, text);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Error("VpnRouter.QrScan",
+                $"HandleQrCameraResult decode failed: {ex.GetType().Name}: {ex.Message}");
+            cb?.Invoke(false, $"decode_error:{ex.Message}");
+        }
+        finally
+        {
+            TryDeleteQrTemp(tempPath);
+        }
+    }
+
+    private static void TryDeleteQrTemp(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return;
+        try
+        {
+            if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter.QrScan",
+                $"temp QR JPEG cleanup failed at {path}: {ex.Message}");
         }
     }
 

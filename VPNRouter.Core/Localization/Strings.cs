@@ -1259,6 +1259,21 @@ public static class Strings
         ? "Подписка обновлена"
         : "Subscription refreshed";
 
+    // ── Android-only QR scan flow (lucid-pike, 2026-05-09) ───────────────
+    // Mobile-only feature: tap the QR button on the Simple page, point the
+    // camera at a VLESS / subscription QR, decoded text drops into the VPN
+    // config TextBox. Desktop has no camera — these strings live here as
+    // single-source-of-truth, but only the Android Localization wrapper
+    // exposes them to UI code.
+    public static string SmpScanQrButton => Ru ? "Сканировать QR" : "Scan QR";
+    public static string SmpQrPermissionDenied => Ru
+        ? "Камера недоступна — разреши доступ в настройках Android"
+        : "Camera permission denied — grant in Android Settings";
+    public static string SmpQrNotRecognized => Ru
+        ? "QR не распознан, попробуй ещё раз"
+        : "QR not recognized, try again";
+    public static string SmpQrScannedToast => Ru ? "QR распознан" : "QR recognized";
+
     // ── F-12 (parity audit P0, 2026-05-09) — silent ConfigMode flip guard ──
     // SmpToggleConnectAsync surfaces these when the user has typed a non-empty
     // share-link / subscription URL into the input field but has not yet
