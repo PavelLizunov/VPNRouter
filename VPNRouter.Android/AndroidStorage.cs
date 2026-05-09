@@ -523,6 +523,28 @@ public static class AndroidStorage
     public static bool SetAutoReconnectOnNetworkChange(bool value) =>
         SetBool(KeyAutoReconnectOnNetworkChange, value);
 
+    // ── AND-ADV-SHELL (2026-05-09): Advanced overlay last-active tab ────
+    //
+    // Stores the 0-based index of the tab the user last viewed in the
+    // tab-based Advanced overlay (Servers / Subscribe / Apps / Network /
+    // DPI bypass / Telegram / Public configs — see
+    // AndroidApp.AdvancedShell.cs::AdvancedTabCount). Reopen lands on the
+    // same tab.
+    //
+    // Persisted as a string for parity with other GetString-based keys;
+    // an unparseable value falls back to "0" (Servers tab).
+    private const string KeyAdvancedActiveTab = "advanced_active_tab";
+
+    public static int GetAdvancedActiveTab()
+    {
+        var raw = GetString(KeyAdvancedActiveTab);
+        if (string.IsNullOrEmpty(raw)) return 0;
+        return int.TryParse(raw, out var idx) ? idx : 0;
+    }
+
+    public static bool SetAdvancedActiveTab(int index)
+        => SetString(KeyAdvancedActiveTab, index.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
     // ── v2.32.0 (AND-4): per-server TCP+TLS test history ──────────────────
     //
     // Side-table keyed by VlessServersResolver dedup shape ("Server:Port:Uuid:Flow").
