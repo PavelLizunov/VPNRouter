@@ -138,22 +138,7 @@ public partial class AndroidApp : Avalonia.Application
     private TextBox? _serverInput;
     private TextBlock? _serverInputLabel;
     private TextBlock? _serverInputHint;
-    // v2.32.0 parity port (2026-05-09) — auto-detect hint above the action
-    // row, mirrors desktop SimplePage.axaml SmpInputDetectedHint /
-    // SmpInputDetectedHintVisible. Visible only when the typed text matches
-    // a recognised scheme (vless:// / hysteria2:// / hy2:// / tuic:// /
-    // ss:// / http(s)://). Replaces the old 3-segment Subscription/Server/
-    // Custom JSON sub-tab row — desktop has no such picker; auto-detect on
-    // a single input is the canonical UX.
-    private TextBlock? _serverInputDetectedHint;
     private TextBlock? _serverInputError;
-    // v2.32.0 parity port (2026-05-09) — Save / Refresh confirmation toast
-    // beneath the form card. Mirrors desktop's HasSmpToast border (line 371
-    // of SimplePage.axaml). Auto-clears after ~2.5 s; visible only after a
-    // successful Save / Refresh.
-    private Border? _smpToast;
-    private TextBlock? _smpToastText;
-    private System.Threading.CancellationTokenSource? _smpToastCts;
     private TextBlock? _tunnelModeLabel;
     private Avalonia.Controls.RadioButton? _splitRadio;
     private Avalonia.Controls.RadioButton? _fullRadio;
@@ -696,37 +681,26 @@ public partial class AndroidApp : Avalonia.Application
         var langRow = MakeSegmentRow(_menuLangRu, _menuLangEn);
 
         // Diagnostics + Troubleshooting + About items stay as full-width
-        // labelled buttons.
-        // v2.32.0 — "Настройки" / "Settings" added to Diagnostics so the user
-        // can reach the 4-section Settings overlay (mirrors desktop NetworkPage:
-        // Routing / Leak / Updates / Autostart) without scrolling past the
-        // collapsed form. Listed first in the section as the most-used entry.
-        _menuSettingsItem = MakeMenuItem(Localization.MenuItemSettings,
-                                         "TextPrimaryBrush", OnMenuSettingsClicked);
+        // labelled buttons. v2.32.0 desktop parity (2026-05-10): kebab is
+        // 7 items split into View / Diagnostics(3) / Troubleshooting(3) /
+        // About + Advanced toggle. Settings, Copy log path, View crash log,
+        // Export/Import config, Profiles, Free Configs, Tools and DPI
+        // bypass were post-v2.32.0 additions on Android — removed here so
+        // Android matches desktop's compact kebab. Their content is still
+        // reachable: Settings/network options live in Advanced > Network
+        // tab, custom-config import in Advanced > Subscriptions, profiles
+        // and DPI/Tools as Advanced shell tabs.
+        _menuSettingsItem = null;
         _menuOpenLogItem  = MakeMenuItem(Localization.MenuItemOpenLogs,
                                          "TextPrimaryBrush", OnMenuOpenLogClicked);
-        _menuCopyLogPathItem = MakeMenuItem(Localization.MenuItemCopyLogPath,
-                                            "TextPrimaryBrush", OnMenuCopyLogPathClicked);
-        _menuViewCrashLogItem = MakeMenuItem(Localization.MenuItemViewCrashLog,
-                                             "TextPrimaryBrush", OnMenuViewCrashLogClicked);
+        _menuCopyLogPathItem = null;
+        _menuViewCrashLogItem = null;
         _menuUpdateCheckItem = MakeMenuItem(Localization.MenuItemUpdateCheck,
                                             "TextPrimaryBrush", OnMenuUpdateCheckClicked);
-        // v2.32.0 (Android-led, 2026-05-07) — config share entries. Sit
-        // in Diagnostics next to Settings + log items (resilience-related)
-        // rather than under their own header — fewer sections = easier
-        // for first-time users.
-        _menuExportConfigItem = MakeMenuItem(Localization.MenuItemExportConfig,
-                                             "TextPrimaryBrush", OnMenuExportConfigClicked);
-        _menuImportConfigItem = MakeMenuItem(Localization.MenuItemImportConfig,
-                                             "TextPrimaryBrush", OnMenuImportConfigClicked);
-        // F-10 kebab parity (2026-05-09): destructive Reset gets the same
-        // Danger foreground tint desktop has used since v2.30.3-r1 so
-        // accidental taps are less likely on both platforms.
+        _menuExportConfigItem = null;
+        _menuImportConfigItem = null;
         _menuResetSettingsItem = MakeMenuItem(Localization.MenuItemResetSettings,
                                               "DangerSolidBrush", OnMenuResetSettingsClicked);
-        // F-10 kebab parity (2026-05-09): items previously desktop-only
-        // (IP leak / Health check / Safe mode) ported to Android so both
-        // platforms expose the same Diagnostics + Troubleshooting set.
         _menuCheckLeaksItem = MakeMenuItem(Localization.MenuItemCheckLeaks,
                                            "TextPrimaryBrush", OnMenuCheckLeaksClicked);
         _menuHealthCheckItem = MakeMenuItem(Localization.MenuItemHealthCheck,
@@ -784,57 +758,65 @@ public partial class AndroidApp : Avalonia.Application
             Spacing = 1,
         };
 
-        // v2.32.0 — Free Configs entry. Sits between Вид and Диагностика
-        // so it's discoverable without scrolling. Tap → close popup +
-        // open the Free Configs overlay.
-        // AND-MIGRATE-OVERLAYS (2026-05-09): Free Configs is now the
-        // Public configs tab inside the Advanced shell. Stub kept null so
-        // RefreshKebabLocalizedStrings's null-check still compiles.
+        // v2.32.0 desktop parity (2026-05-10): Free Configs / Profiles /
+        // Tools / DPI bypass kebab entries removed — none of these exist
+        // in v2.32.0 desktop's kebab. They're reachable as Advanced shell
+        // tabs (Public configs / DPI bypass / Telegram). Stubs stay null
+        // so RefreshKebabLocalizedStrings's null-checks compile.
         _menuFreeConfigsItem = null;
-
-        // v2.32.0 (AND-PROFILES) — Routing profiles entry. Same affordance
-        // pattern as Free Configs (own section, tap closes popup + opens
-        // overlay). Sits right after Free Configs because both fall under
-        // the "pick a config quickly" intent; Settings + Diagnostics live
-        // a level deeper in the troubleshooting hierarchy.
-        _menuProfilesItem = MakeMenuItem(Localization.MenuItemOpenProfiles,
-                                         "TextPrimaryBrush", OnMenuProfilesClicked);
-
-        // F-13 (2026-05-09) — Tools section: Tools (combined hub) +
-        // DPI bypass (dedicated detail page). Sits between Profiles and
-        // Diagnostics because configuring DPI bypass is a "pick a tool"
-        // intent like Free Configs / Profiles, not a troubleshooting
-        // step. Two items keeps parity with desktop's split (ToolsPage
-        // sub-tab + DpiBypassPage sidebar).
-        // AND-MIGRATE-OVERLAYS (2026-05-09): Tools / DPI bypass are now
-        // tabs inside the Advanced shell. Stubs kept null so the language
-        // refresh path's null-checks compile.
+        _menuProfilesItem = null;
         _menuToolsItem     = null;
         _menuDpiBypassItem = null;
 
         AppendMenuSectionWithControls(menuStack, Localization.MenuSectionView,
                                       new Control[] { themeRow, langRow });
-        AppendMenuSection(menuStack, Localization.MenuSectionProfiles,
-                          new[] { _menuProfilesItem });
-        // F-10 kebab parity (2026-05-09): canonical Diagnostics order is
-        // Settings → Open log → Copy log path → View crash log →
-        // Check IP leak → Run Health Check → Check for updates →
-        // Export config → Import config (matches desktop MainWindow.axaml).
+        // v2.32.0 desktop parity (2026-05-10): Diagnostics = Open log +
+        // Check IP leak + Check for updates (3 items, matches MainWindow.axaml
+        // line 506-523). Other items previously here (Settings, Copy log
+        // path, View crash log, Export/Import config) were post-v2.32.0
+        // additions and are removed.
         AppendMenuSection(menuStack, Localization.MenuSectionDiagnostics,
-                          new[] { _menuSettingsItem, _menuOpenLogItem, _menuCopyLogPathItem,
-                                  _menuViewCrashLogItem,
-                                  _menuCheckLeaksItem, _menuHealthCheckItem,
-                                  _menuUpdateCheckItem, _menuExportConfigItem, _menuImportConfigItem });
-        // F-10 kebab parity (2026-05-09): Troubleshooting now mirrors
-        // desktop — Restart in Safe Mode + Reset settings (red).
+                          new[] { _menuOpenLogItem, _menuCheckLeaksItem,
+                                  _menuUpdateCheckItem });
+        // v2.32.0 desktop parity (2026-05-10): Troubleshooting = Run Health
+        // Check + Restart in Safe Mode + Reset settings (3 items, matches
+        // MainWindow.axaml line 531-548). Run Health Check moves back here
+        // from Diagnostics to match desktop ordering.
         AppendMenuSection(menuStack, Localization.MenuSectionTroubleshooting,
-                          new[] { _menuRestartSafeModeItem, _menuResetSettingsItem });
+                          new[] { _menuHealthCheckItem, _menuRestartSafeModeItem,
+                                  _menuResetSettingsItem });
         // F-12 kebab visual parity (2026-05-09): About row sits inline at
         // the very bottom — no section header (matches desktop, which has
         // a divider then a single "О приложении · v2.X.Y" Button row, no
         // section label). The trailing divider appended by the previous
         // AppendMenuSection call serves as the visual separator above.
         menuStack.Children.Add(_menuVersionItem);
+
+        // v2.32.0 desktop parity (2026-05-10): bottom-row "Advanced ▸"
+        // primary CTA mirrors MainWindow.axaml line 573-575 — accent-solid
+        // pill that toggles into the Advanced shell. The Simple page also
+        // has an "Advanced settings ▸" card; both routes are intentional
+        // (kebab shortcut + dedicated card).
+        var advancedToggleBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.SmpToggleToAdvanced,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Padding = new Thickness(0, 8),
+            Margin = new Thickness(0, 6, 0, 0),
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+        };
+        advancedToggleBtn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentSolidBrush");
+        advancedToggleBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
+        advancedToggleBtn.Click += (_, _) =>
+        {
+            if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+            OpenAdvancedShell(AdvancedTab.Servers);
+        };
+        menuStack.Children.Add(advancedToggleBtn);
 
         // F-12 kebab visual parity (2026-05-09): container now matches desktop
         // MainWindow.axaml line 465 verbatim — Width=232, BorderDefault 1px,
@@ -1029,28 +1011,18 @@ public partial class AndroidApp : Avalonia.Application
 
         // ── Collapsible form (input + tunnel mode radios + autostart) ───
 
-        // v2.32.0 parity port (2026-05-09) — flat input section mirrors
-        // desktop SimplePage.axaml lines 232-294 (StackPanel Spacing="4"
-        // with label · TextBox · hint · detected-hint · error · Save+Refresh
-        // row). Pre-port Android had a 3-segment Subscription/Server/Custom
-        // JSON picker above the input + a parallel multi-line TextBox for
-        // the custom branch — neither exists on desktop, which uses a
-        // single TextBox with auto-detect on Save. Removing the picker
-        // closes parity audit F-02 row 5 (P3 deferred). Custom JSON edit
-        // path remains reachable via kebab > Diagnostics > Import config
-        // (file picker), matching desktop's flow where custom JSON is a
-        // file-import operation rather than an inline editor.
+        // Slim to v2.32.0 desktop parity (2026-05-10): label · TextBox ·
+        // hint · error. No Save / QR / Refresh action row, no auto-detect
+        // "Detected: …" line, no Save/Refresh confirmation toast. Desktop
+        // v2.32.0 SimplePage commits the typed input implicitly on Connect
+        // (see SmpToggleConnectAsync). Save / Refresh on subscriptions live
+        // in Advanced > Subscriptions tab; the QR camera flow stays in code
+        // (MainActivity / QrCodeDecoder) but no longer has a button entry.
         //
-        // _ccMode is still loaded from storage so OnSaveClicked /
-        // OnRefreshClicked / UpdateConfigSummary keep their existing
-        // three-way switch (subscribe / manual / custom) — only the UI
-        // surface for switching it goes away. The handlers
-        // OnCcModeSubClicked / OnCcModeManualClicked / OnCcModeCustomClicked
-        // / OnCcValidateClicked / OnCcSaveCustomClicked /
-        // OnCcClearCustomClicked become unreachable from Simple but are
-        // kept compile-clean — null-guards on the now-uninstantiated
-        // _ccCustomInput / _ccCustomStatus / _ccModeSubBtn / etc. fields
-        // turn each into a no-op if some other code path hits them.
+        // _ccMode is still loaded from storage so the implicit-save flow on
+        // Connect (OnSaveClicked) keeps its three-way switch
+        // (subscribe / manual / custom). Custom JSON edit remains reachable
+        // via Advanced > Subscriptions tab.
         _ccMode = AndroidStorage.GetConfigMode();
         if (_ccMode != "subscribe" && _ccMode != "manual" && _ccMode != "custom")
             _ccMode = "manual";
@@ -1074,12 +1046,6 @@ public partial class AndroidApp : Avalonia.Application
         var existingSub = AndroidStorage.GetSubscriptionUrl();
         var existingUri = AndroidStorage.GetVlessUri();
         _serverInput.Text = existingSub ?? existingUri ?? string.Empty;
-        // Drive the detected-hint visibility on every keystroke, mirroring
-        // desktop SmpInputDetectedHintVisible.
-        _serverInput.PropertyChanged += (_, ev) =>
-        {
-            if (ev.Property == TextBox.TextProperty) UpdateDetectedHint();
-        };
 
         _serverInputHint = new TextBlock
         {
@@ -1089,18 +1055,6 @@ public partial class AndroidApp : Avalonia.Application
         };
         _serverInputHint.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
-        // Auto-detect hint matches desktop SimplePage.axaml lines 253-257
-        // (FontSize="9" FontWeight="SemiBold" Foreground="AccentFgBrush"
-        // wrap, hidden until input matches a recognised scheme).
-        _serverInputDetectedHint = new TextBlock
-        {
-            FontSize = 9,
-            FontWeight = FontWeight.SemiBold,
-            TextWrapping = TextWrapping.Wrap,
-            IsVisible = false,
-        };
-        _serverInputDetectedHint.BindToken(TextBlock.ForegroundProperty, "AccentFgBrush");
-
         _serverInputError = new TextBlock
         {
             FontSize = 10,
@@ -1108,31 +1062,6 @@ public partial class AndroidApp : Avalonia.Application
             IsVisible = false,
         };
         _serverInputError.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
-
-        // Save + QR + Refresh row mirrors desktop SimplePage.axaml lines
-        // 271-293 (Save and Refresh were FontSize="10" Padding="10,4"
-        // MinHeight="0" SurfaceRaised bg BorderDefault border RadiusXs).
-        // QR is Android-only (no camera surface on desktop) but uses the
-        // same visual style so the row composition reads as a single
-        // rhythm. Spacing="6" left-to-right gap matches desktop.
-        var saveBtn = MakeSimpleSecondaryButton(Localization.ButtonSave);
-        saveBtn.Click += OnSaveClicked;
-        // lucid-pike (2026-05-09) — camera-scan flow. Button label is the
-        // localized "Scan QR" / "Сканировать QR"; OnScanQrClicked bridges
-        // to MainActivity for the runtime-permission + camera-intent round
-        // trip and pastes the decoded text back into _serverInput.
-        var qrBtn = MakeSimpleSecondaryButton(Localization.SmpScanQrButton);
-        qrBtn.Click += OnScanQrClicked;
-        var refreshBtn = MakeSimpleSecondaryButton(Localization.ButtonRefresh);
-        refreshBtn.Click += OnRefreshClicked;
-        var actionRow = new StackPanel
-        {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 6,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 2, 0, 0),
-            Children = { saveBtn, qrBtn, refreshBtn },
-        };
 
         var inputSection = new StackPanel
         {
@@ -1142,15 +1071,9 @@ public partial class AndroidApp : Avalonia.Application
                 _serverInputLabel,
                 _serverInput,
                 _serverInputHint,
-                _serverInputDetectedHint,
                 _serverInputError,
-                actionRow,
             },
         };
-
-        // Seed the detected-hint with the current input so a saved URL
-        // shows the correct "Detected: ..." copy on first render.
-        UpdateDetectedHint();
 
         // Tunnel mode (split / full)
         _tunnelModeLabel = new TextBlock
@@ -1329,32 +1252,6 @@ public partial class AndroidApp : Avalonia.Application
         _formCard.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
         _formCard.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
 
-        // v2.32.0 parity port (2026-05-09) — Save / Refresh confirmation
-        // toast under the form, mirrors desktop SimplePage.axaml lines
-        // 371-381 (Border IsVisible=HasSmpToast, AccentBgSubtle bg,
-        // AccentBorder border, RadiusXs, Padding=10,6, single-line toast
-        // text in AccentFg semibold). Hidden by default — the
-        // ShowSmpToast helper flips IsVisible+text and arms a 2.5 s
-        // dispatcher timer to clear it. Wired from OnSaveClicked /
-        // OnRefreshClicked on success paths.
-        _smpToastText = new TextBlock
-        {
-            FontSize = 10,
-            FontWeight = FontWeight.SemiBold,
-            TextWrapping = TextWrapping.Wrap,
-        };
-        _smpToastText.BindToken(TextBlock.ForegroundProperty, "AccentFgBrush");
-        _smpToast = new Border
-        {
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(radiusXs),
-            Padding = new Thickness(10, 6),
-            IsVisible = false,
-            Child = _smpToastText,
-        };
-        _smpToast.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
-        _smpToast.BindToken(Border.BorderBrushProperty, "AccentBorderBrush");
-
         // ── CTA — three mutually exclusive variants ─────────────────────
         // Disconnected (default visible): outlined accent
         _ctaConnect = new Avalonia.Controls.Button
@@ -1494,15 +1391,11 @@ public partial class AndroidApp : Avalonia.Application
         BuildUpdateBanner(radiusMd);
 
         // ── Inner stack with all sections, max 420 wide on tablets ──────
-        // v2.32.0 parity port (2026-05-09) — composition mirrors desktop
+        // v2.32.0 parity (2026-05-10): composition mirrors desktop
         // SimplePage.axaml line 33 (StackPanel Spacing="14" inside the
         // 420-wide centered Grid). Header row moves INSIDE the centered
-        // grid so the brand row scrolls with the rest of the content
-        // (matches desktop's layout — desktop's MainWindow chrome is
-        // hidden in Simple mode, so the brand row inside the page IS the
-        // header). _smpToast slides between _formCard and the CTA stack
-        // mirroring desktop line 371-381. Autostart no longer appears
-        // out here — it lives inside _formCard now.
+        // grid so the brand row scrolls with the rest of the content.
+        // No Save/Refresh toast — desktop v2.32.0 has none.
         var innerStack = new StackPanel
         {
             Spacing = 14,
@@ -1514,7 +1407,6 @@ public partial class AndroidApp : Avalonia.Application
                 _updateBanner!,
                 configRowButton,
                 _formCard,
-                _smpToast,
                 _ctaConnect,
                 _ctaConnecting,
                 _ctaDisconnect,
@@ -3288,101 +3180,6 @@ public partial class AndroidApp : Avalonia.Application
         return btn;
     }
 
-    /// <summary>
-    /// v2.32.0 parity port (2026-05-09) — small secondary button for the
-    /// Save / Refresh / QR row inside the form card. Mirrors desktop
-    /// SimplePage.axaml's per-button styling (FontSize="10" Padding="10,4"
-    /// MinHeight="0" SurfaceRaised bg + TextPrimary fg + BorderDefault
-    /// border + RadiusXs). Differs from <see cref="StyledSecondaryButton"/>
-    /// (FontSize 12 Padding 14,7) which is used elsewhere on Android for
-    /// fuller-touch-target buttons (e.g. picker overlays); the Simple form
-    /// uses these compact buttons because they share a row inside a tight
-    /// 12 px form padding and need to fit alongside a Refresh label.
-    /// </summary>
-    private Avalonia.Controls.Button MakeSimpleSecondaryButton(string label)
-    {
-        var btn = new Avalonia.Controls.Button
-        {
-            Content = label,
-            FontSize = 10,
-            FontWeight = FontWeight.Medium,
-            Padding = new Thickness(10, 4),
-            MinHeight = 0,
-            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
-            BorderThickness = new Thickness(1),
-        };
-        btn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "SurfaceRaisedBrush");
-        btn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextPrimaryBrush");
-        btn.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "BorderDefaultBrush");
-        return btn;
-    }
-
-    /// <summary>
-    /// v2.32.0 parity port (2026-05-09) — recompute the auto-detect hint
-    /// visibility + text from the current TextBox content. Mirrors
-    /// desktop's MainWindowViewModel.SimpleMode.cs SmpInputDetectedHint /
-    /// SmpInputDetectedHintVisible: hidden when input is empty, "Detected:
-    /// VLESS server" / "Detected: subscription URL" when it matches a
-    /// recognised scheme. Uses ServerUriParser.IsSupportedScheme to gate
-    /// share-link detection so vless / hysteria2 / hy2 / tuic / ss all
-    /// surface, matching the Save handler's accept list.
-    /// </summary>
-    private void UpdateDetectedHint()
-    {
-        if (_serverInputDetectedHint is null) return;
-        var raw = (_serverInput?.Text ?? string.Empty).Trim();
-        if (string.IsNullOrEmpty(raw))
-        {
-            _serverInputDetectedHint.IsVisible = false;
-            _serverInputDetectedHint.Text = string.Empty;
-            return;
-        }
-        if (ServerUriParser.IsSupportedScheme(raw))
-        {
-            _serverInputDetectedHint.Text = Localization.SmpInputDetectedServer;
-            _serverInputDetectedHint.IsVisible = true;
-            return;
-        }
-        if (raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            raw.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-        {
-            _serverInputDetectedHint.Text = Localization.SmpInputDetectedSubscription;
-            _serverInputDetectedHint.IsVisible = true;
-            return;
-        }
-        _serverInputDetectedHint.IsVisible = false;
-        _serverInputDetectedHint.Text = string.Empty;
-    }
-
-    /// <summary>
-    /// v2.32.0 parity port (2026-05-09) — show the SmpToast confirmation
-    /// for ~2.5 s, then auto-clear. Mirrors desktop SimpleMode.cs
-    /// ShowSmpToast pattern. Wired from OnSaveClicked / OnRefreshClicked
-    /// success paths so the user gets explicit feedback ("Saved" /
-    /// "Subscription refreshed") before the form-level error TextBlock
-    /// appears for any partial validation state.
-    /// </summary>
-    private void ShowSmpToast(string text)
-    {
-        if (_smpToast is null || _smpToastText is null) return;
-        _smpToastText.Text = text;
-        _smpToast.IsVisible = true;
-        _smpToastCts?.Cancel();
-        _smpToastCts = new System.Threading.CancellationTokenSource();
-        var token = _smpToastCts.Token;
-        _ = Task.Run(async () =>
-        {
-            try { await Task.Delay(2500, token).ConfigureAwait(true); }
-            catch (TaskCanceledException) { return; }
-            if (token.IsCancellationRequested) return;
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (_smpToast is not null && !token.IsCancellationRequested)
-                    _smpToast.IsVisible = false;
-            });
-        });
-    }
-
     // ── Event handlers ─────────────────────────────────────────────────
 
     private void OnConfigRowClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -3402,6 +3199,23 @@ public partial class AndroidApp : Avalonia.Application
         }
         else
         {
+            // v2.32.0 desktop parity (2026-05-10): Connect implicitly persists
+            // whatever is in the input field before requesting the tunnel —
+            // mirrors SmpToggleConnectAsync. The Save button is gone from the
+            // Simple page (subscriptions/servers managed in Advanced >
+            // Subscriptions tab); typing a vless:// or subscription URL and
+            // tapping Connect must still work. OnSaveClicked is a no-op when
+            // the input matches what's already saved, so this is idempotent.
+            // Skipped when the input is empty so an existing saved config
+            // isn't wiped on a "just connect with what I had" tap.
+            if (!string.IsNullOrWhiteSpace(_serverInput?.Text))
+            {
+                OnSaveClicked(sender, e);
+                if (_serverInputError is not null && _serverInputError.IsVisible)
+                {
+                    return;
+                }
+            }
             // v3.0 Phase 7.1 — flip VPN chip to Connecting immediately so
             // the user gets feedback while the system VPN consent dialog
             // is on screen (most visible during first-launch consent
@@ -3942,9 +3756,6 @@ public partial class AndroidApp : Avalonia.Application
                 _cachedServers = new List<VlessServerEntry>();
                 UpdateServerListView();
                 UpdateConfigSummary();
-                // v2.32.0 parity port (2026-05-09) — Save toast mirrors
-                // desktop SimplePage.axaml HasSmpToast / SmpToastText.
-                ShowSmpToast(Localization.SmpSavedAsServerToast);
             }
             catch (Exception ex)
             {
@@ -3963,7 +3774,6 @@ public partial class AndroidApp : Avalonia.Application
             _ccMode = "subscribe";
             ApplyCcModeVisuals();
             UpdateConfigSummary();
-            ShowSmpToast(Localization.SmpSavedAsSubscriptionToast);
             return;
         }
 
@@ -4124,8 +3934,6 @@ public partial class AndroidApp : Avalonia.Application
                 if (_serverList is not null) _serverList.SelectedIndex = 0;
             }
             UpdateConfigSummary();
-            // v2.32.0 parity port (2026-05-09) — Refresh-success toast.
-            ShowSmpToast(Localization.SmpRefreshDoneToast);
         }
         catch (Exception ex)
         {
@@ -4281,86 +4089,6 @@ public partial class AndroidApp : Avalonia.Application
         btn.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "BorderDefaultBrush");
         btn.Click += (_, _) => ShowSettings();
         return btn;
-    }
-
-    private void OnScanQrClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        // lucid-pike (2026-05-09) — Simple-page camera QR scan.
-        //
-        // Flow: stash a one-shot callback on MainActivity so the camera-
-        // result round-trip (permission grant → MediaStore.ACTION_IMAGE_CAPTURE
-        // → ZXing decode in MainActivity.HandleQrCameraResult) can deliver
-        // the decoded text back here. The Activity-side methods are pure
-        // Android.* and live in MainActivity.cs to keep this Avalonia file
-        // free of Android.* references; this Click handler is the bridge.
-        var activity = MainActivity.Instance;
-        if (activity is null)
-        {
-            // Activity not attached yet — extremely unlikely from a button
-            // click but cheap to guard. Surface as a "not recognized" toast
-            // since we have no permission/UX nuance to communicate.
-            ShowSmpToast(Localization.SmpQrNotRecognized);
-            return;
-        }
-
-        MainActivity.PendingQrScanCallback = (ok, payload) =>
-        {
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => HandleQrScanResult(ok, payload));
-        };
-        activity.RequestQrCodeScan();
-    }
-
-    /// <summary>
-    /// lucid-pike (2026-05-09) — receives the camera-scan result on the UI
-    /// thread (marshalled in OnScanQrClicked's lambda). Three terminal
-    /// outcomes mirror the Activity-side callback contract:
-    ///
-    ///   • <c>ok=true</c> → decoded QR text. Drop into <c>_serverInput</c>;
-    ///     the existing <c>TextChanged</c> hook fires <c>UpdateDetectedHint</c>
-    ///     so the F-11 auto-detect line ("Detected: server link" / "Detected:
-    ///     subscription URL") updates without extra wiring.
-    ///   • <c>ok=false</c> + <c>"permission_denied"</c> → user denied CAMERA
-    ///     at runtime. Toast SmpQrPermissionDenied so they know to grant in
-    ///     Android Settings.
-    ///   • <c>ok=false</c> + anything else (cancelled / not_recognized /
-    ///     decode_error) → quiet failure. "cancelled" is silent (user
-    ///     intentionally backed out); the rest surface SmpQrNotRecognized
-    ///     with a Debug log line so it's visible in adb logcat.
-    /// </summary>
-    private void HandleQrScanResult(bool ok, string? payload)
-    {
-        if (ok && !string.IsNullOrEmpty(payload))
-        {
-            if (_serverInput is not null)
-            {
-                _serverInput.Text = payload;
-                // Caret to end so the user can keep typing if they want to
-                // tweak the decoded text. UpdateDetectedHint() fires
-                // automatically via _serverInput.PropertyChanged hook (line
-                // ~1075), so the F-11 inline auto-detect refreshes.
-                _serverInput.CaretIndex = payload.Length;
-            }
-            ShowSmpToast(Localization.SmpQrScannedToast);
-            return;
-        }
-
-        if (string.Equals(payload, "permission_denied", StringComparison.OrdinalIgnoreCase))
-        {
-            ShowSmpToast(Localization.SmpQrPermissionDenied);
-            return;
-        }
-
-        if (string.Equals(payload, "cancelled", StringComparison.OrdinalIgnoreCase))
-        {
-            // User backed out — no toast (matches Save's empty-input clear
-            // path: silent when intentional).
-            return;
-        }
-
-        // not_recognized / decode_error / no_image / camera_unavailable.
-        global::Android.Util.Log.Debug("VpnRouter.QrScan",
-            $"QR scan failed: payload={payload ?? "(null)"}");
-        ShowSmpToast(Localization.SmpQrNotRecognized);
     }
 
     private void OnMenuExportConfigClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

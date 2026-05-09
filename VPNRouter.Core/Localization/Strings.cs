@@ -1191,7 +1191,7 @@ public static class Strings
     public static string SmpInputHint => Ru
         ? "Приму vless://-ссылку или URL подписки (http/https)."
         : "Accepts a vless:// link or a subscription URL (http/https).";
-    public static string SmpTunnelModeLabel => Ru ? "Что идёт через VPN" : "What goes via VPN";
+    public static string SmpTunnelModeLabel => Ru ? "Что идёт через VPN" : "Route through VPN";
     public static string SmpSplitOption => Ru
         ? "Выбранные приложения"
         : "Selected apps";
@@ -1200,12 +1200,12 @@ public static class Strings
     // selected profiles. Generic descriptor avoids the mismatch and lets
     // the Apps tab list be the source of truth.
     public static string SmpSplitHint => Ru
-        ? "По списку выбранных приложений (расширенные настройки)"
-        : "By selected apps list (advanced settings)";
+        ? "По списку выбранных приложений"
+        : "Based on your selected apps";
     public static string SmpFullOption => Ru ? "Весь трафик" : "All traffic";
     public static string SmpFullHint => Ru
         ? "Включая игры и банки"
-        : "Including games and banks";
+        : "Includes games and banking";
     public static string SmpAdvancedLink => Ru ? "Расширенные настройки ▸" : "Advanced settings ▸";
     // v2.30.7-r4 — F-1 fix: was "Free Configs" in BOTH languages
     // (D1 violation in RU + inconsistent with the new "Публичные"
@@ -1309,7 +1309,7 @@ public static class Strings
         : "Handshaking with the server — a moment.";
     public static string SmpStatusDisconnectedHint  => Ru
         ? "Трафик идёт напрямую — выбери конфиг и запусти туннель."
-        : "Traffic goes direct — pick a config and start the tunnel.";
+        : "Traffic goes straight — pick a config and start the tunnel.";
 
     // Config row — "Config · Mode" label + value parts ("subscribe · split")
     public static string SmpConfigRowLabel => Ru ? "Конфиг · Режим" : "Config · Mode";
