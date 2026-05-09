@@ -493,6 +493,14 @@ internal static class Localization
     public static string SmpInputLabel => global::VPNRouter.Core.Localization.Strings.SmpInputLabel;
     public static string SmpInputWatermark => global::VPNRouter.Core.Localization.Strings.SmpInputWatermark;
     public static string SmpInputHint => global::VPNRouter.Core.Localization.Strings.SmpInputHint;
+    // v2.32.0 parity port (2026-05-09) — auto-detect hint + Save/Refresh
+    // toast strings exposed for the Android Simple page rewrite. Same Core
+    // backing that powers desktop SmpInputDetectedHint / SmpToastText.
+    public static string SmpInputDetectedServer => global::VPNRouter.Core.Localization.Strings.SmpInputDetectedServer;
+    public static string SmpInputDetectedSubscription => global::VPNRouter.Core.Localization.Strings.SmpInputDetectedSubscription;
+    public static string SmpSavedAsServerToast => global::VPNRouter.Core.Localization.Strings.SmpSavedAsServerToast;
+    public static string SmpSavedAsSubscriptionToast => global::VPNRouter.Core.Localization.Strings.SmpSavedAsSubscriptionToast;
+    public static string SmpRefreshDoneToast => global::VPNRouter.Core.Localization.Strings.SmpRefreshDoneToast;
     public static string SmpTunnelModeLabel => global::VPNRouter.Core.Localization.Strings.SmpTunnelModeLabel;
     public static string SmpSplitOption => global::VPNRouter.Core.Localization.Strings.SmpSplitOption;
     public static string SmpSplitHint => global::VPNRouter.Core.Localization.Strings.SmpSplitHint;
