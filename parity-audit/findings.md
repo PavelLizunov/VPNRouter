@@ -320,11 +320,11 @@ P3 chip**. The auto-detect hint covers the discoverability gap for now.
 
 ---
 
-### F-12 — Connect button with URL flips ConfigMode silently ✅ closed (2026-05-09)
+### F-12 — Connect button with URL flips ConfigMode silently ✅ closed 2026-05-09
 
 Same flow continued: with `https://example.com/sub` typed in, click Connect.
 
-**Desktop pre-fix observed behavior**:
+**Desktop observed behavior** (pre-fix):
 1. Config·Mode silently flips: "manual · full" → "subscribe · full"
 2. Status stays "Not connected"
 3. Connect button greys out (disabled)
@@ -338,14 +338,30 @@ Same flow continued: with `https://example.com/sub` typed in, click Connect.
 
 **Impact P0**: dangerous UX. User who pasted URL + clicked Connect silently lands in subscribe mode with empty server list — next start of VPN may LEAK (config is "subscribe" but no servers, falls through to direct). **Same class of bug as v2.28.2 silent leak** but different trigger (UI-driven, not Apply-driven).
 
-**Fix shipped (2026-05-09)**: chose option (a) — Connect CTA is now
-gated on `SmpConnectEnabled`, which evaluates to `false` whenever
-`SmpInputDirty == true` (i.e. the user typed something that has not
-yet been Saved). The OFF Connect button binding in SimplePage.axaml
-now has `IsEnabled="{Binding SmpConnectEnabled}"`. Empty input +
-existing saved config still connects (upgrader / auto-start path).
-Disconnect / Cancel CTAs always remain enabled. Implemented as part
-of the F-11 closure — see that section for the full property graph.
+**Fix shipped (2026-05-09)** — combined both chip approaches:
+- (Connect-side gate) `SmpToggleConnectAsync` guards on
+  `IsSimpleInputAlreadySaved`: typed input that doesn't match
+  `_settings.App.Subscriptions[].Url` / `_settings.Vless.Servers[]` →
+  Connect refuses to silently mutate state, sets inline
+  `SmpErrorText = SmpSaveFirstSubscription` / `SmpSaveFirstServer`
+  pointing at the Save button, logs block at Info level. Empty input
+  keeps existing behaviour (connect with what's saved); matching input
+  falls through.
+- (CTA disable) Connect button binding additionally gated on
+  `SmpConnectEnabled` (false whenever `SmpInputDirty == true`) so the
+  user sees the Connect button disable visually before clicking.
+- (Audit trail) Every `_settings.App.ConfigMode` mutation in
+  `MainWindowViewModel*` now logs at Info level — future silent flips
+  become grep-able from the application log.
+- (Defense in depth) `LeakProtection.ValidateAppSettings(AppSettings)`
+  added at Core layer. Catches "ConfigMode=subscribe + no enabled
+  subscription with servers + no manual fallback" pre-config-generation.
+  Wired into both `VpnEngine.StartAsync` and `VpnEngine.ApplyAsync`.
+- Tests: `MainWindowViewModelTests.SmpToggleConnect_WithUnsaved*`
+  (2 cases) + `LeakProtectionAppSettingsTests` (9 cases).
+
+Same failure class as v2.28.2 silent leak — see
+`plans/session-night-shift-2026-04-25.md`.
 
 ---
 

@@ -388,11 +388,29 @@ public partial class MainWindowViewModel
 
     /// <summary>
     /// Simple-mode connect flow. If already connected → just Stop (reuses
-    /// the existing ToggleConnection path). Otherwise parses the pasted
-    /// input, writes the minimum settings needed (single VLESS entry OR
-    /// a single-entry subscriptions list), and hands off to ToggleConnection
-    /// which runs the same Connect logic Advanced uses — including
-    /// service-managed detection and WarnServiceManagedReconnect.
+    /// the existing ToggleConnection path). Otherwise:
+    ///
+    /// <list type="bullet">
+    /// <item>If <see cref="SmpInput"/> is empty or whitespace → connect with
+    ///   whatever is already saved in <c>_settings</c>. This is the common
+    ///   "Simple opened on a configured install" path.</item>
+    /// <item>If <see cref="SmpInput"/> contains a valid share-link or
+    ///   subscription URL but it has NOT been saved (i.e. <c>SmpSave</c>
+    ///   has not yet committed it) → block + show inline error pointing
+    ///   the user at the Save button. <strong>F-12 (parity audit P0,
+    ///   2026-05-09)</strong>: pre-fix the Connect button silently called
+    ///   <c>TryApplyVless</c> / <c>TryApplySubscriptionUrl</c> + flipped
+    ///   <c>ConfigMode</c> + overwrote <c>_settings.App.Subscriptions</c>
+    ///   with no feedback. Same failure class as v2.28.2 silent leak — a
+    ///   misclassified silent flip leaving <c>ConfigMode=subscribe</c>
+    ///   with empty servers, falling through to direct.</item>
+    /// <item>If <see cref="SmpInput"/> contains text that already matches
+    ///   what is saved → proceed (no mutation needed).</item>
+    /// </list>
+    ///
+    /// Hands off to <see cref="ToggleConnectionAsync"/> which runs the same
+    /// Connect logic Advanced uses — including service-managed detection
+    /// and WarnServiceManagedReconnect.
     /// </summary>
     [RelayCommand]
     private async Task SmpToggleConnectAsync()
@@ -407,7 +425,8 @@ public partial class MainWindowViewModel
 
         if (IsConnecting) return;
 
-        var kind = SimpleInputDetector.Classify(_smpInput);
+        var rawInput = (SmpInput ?? string.Empty).Trim();
+        var kind = SimpleInputDetector.Classify(rawInput);
 
         // Empty / garbage input is OK if the user already has a working
         // config in settings — we just connect with what's there. This is
@@ -432,21 +451,29 @@ public partial class MainWindowViewModel
                 return;
             }
         }
-        else if (kind == SmpInputKind.ServerUri)
+        else if (!IsSimpleInputAlreadySaved(rawInput, kind))
         {
-            if (!TryApplyVless(_smpInput.Trim())) return;
-            // F-11: keep the dirty/snapshot state in sync with what we
-            // just persisted so a return trip to the form doesn't
-            // re-disable Connect.
-            _smpInputSavedSnapshot = _smpInput.Trim();
-            OnPropertyChanged(nameof(SmpInputDirty));
+            // F-12 (parity audit P0): the user has typed a non-empty,
+            // valid-looking input that hasn't been Save'd yet. Refuse to
+            // silently flip ConfigMode + overwrite settings. Surface the
+            // inline error pointing at the Save button. The error text is
+            // the only feedback (we don't have a global toast slot wired
+            // for SimplePage); SmpErrorText is already shown right under
+            // the input + Save/Refresh buttons so the user sees it next
+            // to the action that resolves it.
+            // (F-11 chip's TryApplyVless / TryApplySubscriptionUrl helpers
+            // remain reachable from the Save button command — see
+            // SmpSaveCommand handler. We intentionally do NOT auto-save
+            // here on Connect; explicit Save click required.)
+            SmpErrorText = kind == SmpInputKind.SubscriptionUrl
+                ? Strings.SmpSaveFirstSubscription
+                : Strings.SmpSaveFirstServer;
+            _logger?.Information(
+                "[VM.Simple] Connect blocked — unsaved {Kind} input. User must press Save first to avoid silent ConfigMode flip (F-12 / v2.28.2 silent-leak class).",
+                kind);
+            return;
         }
-        else if (kind == SmpInputKind.SubscriptionUrl)
-        {
-            if (!TryApplySubscriptionUrl(_smpInput.Trim())) return;
-            _smpInputSavedSnapshot = _smpInput.Trim();
-            OnPropertyChanged(nameof(SmpInputDirty));
-        }
+        // else: input matches what's saved — no mutation needed, just proceed.
 
         // Tunnel mode (Split vs Full) — already bound to IsSplitTunnel via radio.
         _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
@@ -459,27 +486,74 @@ public partial class MainWindowViewModel
         SaveSettings();
         _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
 
-        // Subscription mode needs a fresh fetch BEFORE connect so we have
-        // servers to hand to the engine.
+        // Hand off to the shared Connect path — it already handles mode
+        // dispatch, TUN conflicts, service-managed warnings, etc. The
+        // subscription refresh used to happen here too, but per F-12 the
+        // Connect path no longer mutates persisted state — Save+Refresh
+        // are explicit steps the user takes via the inline buttons.
+        await ToggleConnectionAsync();
+    }
+
+    /// <summary>
+    /// F-12 helper: returns true if <paramref name="rawInput"/> matches what
+    /// is already persisted in <c>_settings</c> for the classified
+    /// <paramref name="kind"/>. Used by <see cref="SmpToggleConnectAsync"/>
+    /// to refuse silent ConfigMode flips on Connect — only an explicit
+    /// Save (via <see cref="SmpSave"/>) is allowed to mutate persisted
+    /// state.
+    ///
+    /// <para>Comparisons:</para>
+    /// <list type="bullet">
+    /// <item><c>SubscriptionUrl</c>: case-insensitive trim-equal match
+    ///   against any existing <c>_settings.App.Subscriptions[].Url</c>
+    ///   regardless of <c>Enabled</c> flag. The user may have disabled
+    ///   the entry through Advanced; "saved" still applies.</item>
+    /// <item><c>ServerUri</c>: parses the URI and matches the resulting
+    ///   <c>Server</c> + <c>Port</c> + <c>Uuid</c> tuple against any
+    ///   existing <c>_settings.Vless.Servers[]</c>. Hysteria2/Shadowsocks
+    ///   without UUID match on Server+Port+Password.</item>
+    /// </list>
+    ///
+    /// Parse failures fall through as "not saved" — the
+    /// <see cref="TryApplyVless"/> path (invoked from <see cref="SmpSave"/>)
+    /// will surface the parse error properly when the user clicks Save.
+    /// </summary>
+    private bool IsSimpleInputAlreadySaved(string rawInput, SmpInputKind kind)
+    {
+        if (string.IsNullOrWhiteSpace(rawInput)) return false;
+
         if (kind == SmpInputKind.SubscriptionUrl)
         {
-            try
-            {
-                await RefreshAllSubscriptionsAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "[Simple] Subscription refresh failed");
-                SmpErrorText = IsRussian
-                    ? $"Не удалось получить подписку: {ex.Message}"
-                    : $"Couldn't fetch the subscription: {ex.Message}";
-                return;
-            }
+            return _settings.App.Subscriptions?
+                .Any(s => string.Equals(
+                    (s.Url ?? string.Empty).Trim(),
+                    rawInput,
+                    StringComparison.OrdinalIgnoreCase)) == true;
         }
 
-        // Hand off to the shared Connect path — it already handles mode
-        // dispatch, TUN conflicts, service-managed warnings, etc.
-        await ToggleConnectionAsync();
+        if (kind == SmpInputKind.ServerUri)
+        {
+            VlessServerEntry parsed;
+            try { parsed = ServerUriParser.Parse(rawInput); }
+            catch { return false; }
+
+            var existing = _settings.Vless.Servers;
+            if (existing == null || existing.Count == 0) return false;
+
+            return existing.Any(e =>
+                string.Equals(e.Server ?? string.Empty, parsed.Server ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+                && e.Port == parsed.Port
+                && (
+                    // VLESS / TUIC: UUID identity
+                    (!string.IsNullOrEmpty(parsed.Uuid)
+                        && string.Equals(e.Uuid ?? string.Empty, parsed.Uuid, StringComparison.OrdinalIgnoreCase))
+                    // Hysteria2 / Shadowsocks: password identity
+                    || (string.IsNullOrEmpty(parsed.Uuid)
+                        && !string.IsNullOrEmpty(parsed.Password)
+                        && string.Equals(e.Password ?? string.Empty, parsed.Password, StringComparison.Ordinal))));
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -660,8 +734,17 @@ public partial class MainWindowViewModel
             Servers.Add(vm);
             SelectedServer = vm;
 
+            // F-12 (parity audit P0, 2026-05-09): every ConfigMode mutation
+            // is now logged at Info level so a future silent flip is at
+            // least audit-able from the application log. TryApplyVless is
+            // only called from SmpSave (the explicit Save action), so the
+            // flip happens at user request, not from a Connect click.
+            var oldMode = _settings.App.ConfigMode ?? "(unset)";
             _settings.App.ConfigMode = "generated";
             _settings.App.ActiveSubscriptionServer = string.Empty;
+            _logger?.Information(
+                "[VM.Simple] ConfigMode flipped {Old} → generated from TryApplyVless (user pressed Save with a {Scheme} share-link)",
+                oldMode, entry.Protocol ?? "vless");
             IsSubscribeMode = false;
             IsVlessMode = true;
             return true;
@@ -706,7 +789,16 @@ public partial class MainWindowViewModel
         Subscriptions.Clear();
         Subscriptions.Add(new SubscriptionViewModel(entry));
 
+        // F-12 (parity audit P0, 2026-05-09): log the flip explicitly. This
+        // is called from SmpSave (the explicit Save action) — never from
+        // Connect anymore (see SmpToggleConnectAsync IsSimpleInputAlreadySaved
+        // guard). Capturing the old mode + new mode in the log makes future
+        // silent-flip postmortems trivial to grep.
+        var oldMode = _settings.App.ConfigMode ?? "(unset)";
         _settings.App.ConfigMode = "subscribe";
+        _logger?.Information(
+            "[VM.Simple] ConfigMode flipped {Old} → subscribe from TryApplySubscriptionUrl (user pressed Save with a subscription URL)",
+            oldMode);
         IsSubscribeMode = true;
         IsVlessMode = false;
         return true;

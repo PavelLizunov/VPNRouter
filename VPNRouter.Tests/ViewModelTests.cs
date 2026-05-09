@@ -1,7 +1,9 @@
 using System.ComponentModel;
+using System.Reflection;
 using Avalonia.Headless.XUnit;
 using VPNRouter.App.Localization;
 using VPNRouter.App.ViewModels;
+using VPNRouter.Core.Models;
 
 namespace VPNRouter.Tests;
 
@@ -113,6 +115,114 @@ public class MainWindowViewModelTests
         // Second call must NOT throw (idempotent guard).
         vm.Dispose();
         Assert.True((bool)disposedField.GetValue(vm)!, "Flag stays true after second Dispose");
+    }
+
+    /// <summary>
+    /// F-12 (parity audit P0, 2026-05-09): pin the no-silent-flip guarantee.
+    /// User pastes an unsaved subscription URL into the Simple input and
+    /// clicks Connect — pre-fix this silently called
+    /// <c>TryApplySubscriptionUrl</c> + flipped <c>ConfigMode</c> +
+    /// overwrote <c>_settings.App.Subscriptions</c> with no feedback. This
+    /// test asserts the new behaviour: <c>SmpToggleConnectAsync</c> blocks
+    /// with an inline error and leaves <c>_settings.App.ConfigMode</c>
+    /// unchanged.
+    ///
+    /// <para>Same failure class as v2.28.2 silent leak — see
+    /// <c>parity-audit/findings.md</c> F-12 + <c>plans/session-night-shift-2026-04-25.md</c>.</para>
+    /// </summary>
+    [AvaloniaFact]
+    public async Task SmpToggleConnect_WithUnsavedSubscriptionUrl_BlocksAndPreservesConfigMode()
+    {
+        var vm = new MainWindowViewModel();
+
+        // The dev / test machine may already have config.yaml with saved
+        // subscriptions populated by an earlier session. Clear them via
+        // reflection so this test is deterministic on any host.
+        var settingsField = typeof(MainWindowViewModel).GetField(
+            "_settings",
+            BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var settings = (AppSettings)settingsField.GetValue(vm)!;
+        settings.App.Subscriptions = new List<SubscriptionEntry>();
+        settings.Vless.Servers = new List<VlessServerEntry>();
+        // Ensure the active VM observable collections also start empty so
+        // SaveSettings (if it ran) wouldn't repopulate from VM side.
+        vm.Subscriptions.Clear();
+        vm.Servers.Clear();
+
+        // Force a known starting ConfigMode so we can detect any flip.
+        var initialConfigMode = "generated";
+        settings.App.ConfigMode = initialConfigMode;
+
+        // Type a fresh subscription URL that is NOT in saved settings.
+        var unsavedUrl = "https://example.com/unsaved-sub-" + Guid.NewGuid().ToString("N");
+        vm.SmpInput = unsavedUrl;
+        vm.SmpErrorText = string.Empty;
+
+        // Click Connect (the button in SimplePage.axaml binds to SmpToggleConnectCommand).
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        // Assertion 1: ConfigMode must NOT have flipped silently. Pre-fix
+        // this would have moved to "subscribe".
+        Assert.Equal(
+            initialConfigMode,
+            settings.App.ConfigMode);
+
+        // Assertion 2: Subscriptions list must NOT have been overwritten
+        // with the unsaved URL. Pre-fix TryApplySubscriptionUrl wiped the
+        // list and inserted a single "simple" entry pointing at the URL.
+        Assert.Empty(settings.App.Subscriptions);
+
+        // Assertion 3: an inline error message must surface so the user
+        // understands what happened. Pre-fix this stayed empty (silent flip).
+        Assert.False(string.IsNullOrWhiteSpace(vm.SmpErrorText));
+
+        // Assertion 4: the error text must be the localised "save first"
+        // string so the user knows what to do next. We accept either the
+        // RU or EN copy depending on whatever Strings.Lang resolved to on
+        // this host — the substring test stays robust to translation
+        // refinement.
+        var msg = vm.SmpErrorText;
+        var matchesEn = msg.Contains("Save", StringComparison.OrdinalIgnoreCase);
+        var matchesRu = msg.Contains("Сохранить", StringComparison.OrdinalIgnoreCase);
+        Assert.True(matchesEn || matchesRu,
+            $"SmpErrorText should mention Save / Сохранить, got: {msg}");
+    }
+
+    /// <summary>
+    /// F-12 follow-up: same test for an unsaved single-server share-link
+    /// (vless://). Different code path inside
+    /// <c>SmpToggleConnectAsync</c> but the same invariant — Connect must
+    /// not silently overwrite <c>Vless.Servers</c> + flip ConfigMode.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task SmpToggleConnect_WithUnsavedVlessUri_BlocksAndPreservesConfigMode()
+    {
+        var vm = new MainWindowViewModel();
+
+        var settingsField = typeof(MainWindowViewModel).GetField(
+            "_settings",
+            BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var settings = (AppSettings)settingsField.GetValue(vm)!;
+        settings.App.Subscriptions = new List<SubscriptionEntry>();
+        settings.Vless.Servers = new List<VlessServerEntry>();
+        vm.Subscriptions.Clear();
+        vm.Servers.Clear();
+
+        var initialConfigMode = "subscribe";
+        settings.App.ConfigMode = initialConfigMode;
+
+        // A syntactically valid vless URI that's not in the saved list.
+        var unsavedUri =
+            "vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@1.2.3.4:443" +
+            "?security=reality&type=tcp&pbk=test&sid=abcd&fp=chrome&sni=example.com#unsaved-test";
+        vm.SmpInput = unsavedUri;
+        vm.SmpErrorText = string.Empty;
+
+        await vm.SmpToggleConnectCommand.ExecuteAsync(null);
+
+        Assert.Equal(initialConfigMode, settings.App.ConfigMode);
+        Assert.Empty(settings.Vless.Servers);
+        Assert.False(string.IsNullOrWhiteSpace(vm.SmpErrorText));
     }
 }
 

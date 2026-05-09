@@ -157,6 +157,23 @@ public class VpnEngine : IDisposable
         }
         else
         {
+            // v2.32.x F-12 (parity audit P0, 2026-05-09): defense-in-depth
+            // backstop for silent ConfigMode flips. Before doing any further
+            // work, assert that the AppSettings invariants hold: ConfigMode
+            // is consistent with the actual configured state. This catches
+            // the v2.28.2 silent-leak class of bug at the model level — if
+            // a future UI change re-introduces a silent flip, this throws
+            // here instead of generating a leaky sing-box config.
+            var pregenValidation = LeakProtection.ValidateAppSettings(settings);
+            if (!pregenValidation.IsValid)
+            {
+                var msg = string.Join(" ", pregenValidation.Errors);
+                _logger?.Error(
+                    "[VpnEngine] AppSettings invariant violation pre-generation: {Errors}",
+                    msg);
+                throw new InvalidOperationException(msg);
+            }
+
             // v2.28.2: route through the shared resolver so subscribe-mode
             // servers in App.Subscriptions[].Servers are picked up here even
             // if the GUI's MainWindowViewModel pre-aggregation didn't run
@@ -755,6 +772,21 @@ public class VpnEngine : IDisposable
             }
             else
             {
+                // v2.32.x F-12 (parity audit P0, 2026-05-09): same pre-gen
+                // invariant check as StartAsync. Catches a silent ConfigMode
+                // flip that may have leaked in between StartAsync and Apply
+                // — e.g. user toggling sub-tabs, hot-reload from
+                // settings-page change, autostart-after-config-edit.
+                var pregenValidation = LeakProtection.ValidateAppSettings(settings);
+                if (!pregenValidation.IsValid)
+                {
+                    var msg = string.Join(" ", pregenValidation.Errors);
+                    _logger?.Warning(
+                        "[VpnEngine] Apply: AppSettings invariant violation, skipping reload — {Errors}",
+                        msg);
+                    return false;
+                }
+
                 // v2.28.2 critical fix: ROOT CAUSE of the v2.28.1 field-test
                 // "flow mismatch: expected xtls-rprx-vision but got none"
                 // server-log spam (249 errors/day from one machine).

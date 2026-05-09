@@ -45,6 +45,9 @@ public static class Strings
     public static string SmpSavedAsServerToast => global::VPNRouter.Core.Localization.Strings.SmpSavedAsServerToast;
     public static string SmpSavedAsSubscriptionToast => global::VPNRouter.Core.Localization.Strings.SmpSavedAsSubscriptionToast;
     public static string SmpRefreshDoneToast => global::VPNRouter.Core.Localization.Strings.SmpRefreshDoneToast;
+    // F-12 parity audit (2026-05-09) — Connect blocker strings
+    public static string SmpSaveFirstSubscription => global::VPNRouter.Core.Localization.Strings.SmpSaveFirstSubscription;
+    public static string SmpSaveFirstServer => global::VPNRouter.Core.Localization.Strings.SmpSaveFirstServer;
     public static string AddServers => global::VPNRouter.Core.Localization.Strings.AddServers;
     public static string Remove => global::VPNRouter.Core.Localization.Strings.Remove;
     public static string AddConfig => global::VPNRouter.Core.Localization.Strings.AddConfig;
