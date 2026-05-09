@@ -35,9 +35,16 @@ namespace VPNRouter.Android;
 /// </summary>
 public partial class AndroidApp
 {
-    private Border? _srvOverlay;
+    // AND-MIGRATE-OVERLAYS (2026-05-09): the standalone Server-list overlay
+    // is gone — the per-subscription server detail UI is now the
+    // "Servers" tab inside the Advanced shell. The drill-in entry point
+    // (sub-card name area tap) deeplinks to the shell on Servers tab with
+    // the tapped sub set as _srvCurrentSub.
+    //
+    // _srvTitle remains because the body header still reads
+    // "Servers · <sub name>" so the user knows which sub they're looking
+    // at when the shell title says "Advanced settings".
     private TextBlock? _srvTitle;
-    private Avalonia.Controls.Button? _srvCloseBtn;
     private Avalonia.Controls.Button? _srvTestAllBtn;
     private Avalonia.Controls.Button? _srvSortToggle;
     private TextBlock? _srvStatusText;
@@ -69,54 +76,25 @@ public partial class AndroidApp
     private CancellationTokenSource? _srvTestAllCts;
 
     /// <summary>
-    /// Build the fullscreen Server-list overlay. Layout (top→bottom):
-    /// title bar (× close + "Серверы · &lt;sub name&gt;") → action row
-    /// (Test all + sort toggle + status) → scrollable list.
+    /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the Servers
+    /// tab inside the Advanced shell. Layout (top→bottom): subscription
+    /// label header → action row (Test all + sort toggle + status) →
+    /// scrollable list. No title bar / close — the shell provides those.
     /// </summary>
-    private Border BuildServerListOverlay()
+    private Control BuildServersTabContent()
     {
+        // Subscription label sits inline at the top of the body so the
+        // user can see which sub they're inspecting (the shell's outer
+        // title says "Advanced settings", which is sub-agnostic).
         _srvTitle = new TextBlock
         {
             Text = string.Empty,
-            FontSize = 13,
+            FontSize = 12,
             FontWeight = FontWeight.SemiBold,
             Foreground = GetBrush("TextPrimaryBrush"),
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
-        };
-
-        _srvCloseBtn = new Avalonia.Controls.Button
-        {
-            Content = "✕",
-            FontSize = 16,
-            Width = 36,
-            Height = 36,
-            Padding = new Thickness(0),
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Foreground = GetBrush("TextSecondaryBrush"),
-        };
-        _srvCloseBtn.Click += (s, e) => CloseServerListOverlay();
-
-        var titleBarGrid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(8, 4, 4, 4),
-        };
-        Grid.SetColumn(_srvTitle, 0);
-        Grid.SetColumn(_srvCloseBtn, 1);
-        titleBarGrid.Children.Add(_srvTitle);
-        titleBarGrid.Children.Add(_srvCloseBtn);
-
-        var titleBarBorder = new Border
-        {
-            Background = GetBrush("SurfaceRaisedBrush"),
-            BorderBrush = GetBrush("BorderSubtleBrush"),
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(8, 4),
-            Child = titleBarGrid,
+            Margin = new Thickness(12, 8, 12, 0),
         };
 
         // ── Action row: Test all + sort toggle + status text ──
@@ -272,10 +250,10 @@ public partial class AndroidApp
         };
 
         var dock = new DockPanel { LastChildFill = true };
-        DockPanel.SetDock(titleBarBorder, Dock.Top);
+        DockPanel.SetDock(_srvTitle!, Dock.Top);
         DockPanel.SetDock(actionRow, Dock.Top);
         DockPanel.SetDock(headerHost, Dock.Top);
-        dock.Children.Add(titleBarBorder);
+        dock.Children.Add(_srvTitle!);
         dock.Children.Add(actionRow);
         dock.Children.Add(headerHost);
         dock.Children.Add(listCard);
@@ -283,7 +261,6 @@ public partial class AndroidApp
         return new Border
         {
             Background = GetBrush("SurfaceAppBrush"),
-            IsVisible = false,
             Child = dock,
         };
     }
@@ -295,33 +272,57 @@ public partial class AndroidApp
     /// </summary>
     public void OpenServerListOverlay(SubscriptionEntry sub)
     {
-        if (_srvOverlay is null) return;
+        // AND-MIGRATE-OVERLAYS (2026-05-09): drill-in from a sub card now
+        // deeplinks to the Advanced shell on the Servers tab with the
+        // tapped sub set as _srvCurrentSub. Closing the shell triggers
+        // the same SimplePage refresh the old close handler did.
         _srvCurrentSub = sub;
         _srvResults = AndroidStorage.GetServerTestResults();
         _srvTestingKeys.Clear();
         _srvSortByLatency = false;
+        OpenAdvancedShell(AdvancedTab.Servers);
+    }
+
+    /// <summary>
+    /// Re-seed Servers tab state from persisted storage. Called by the
+    /// Advanced shell on tab activation.
+    /// </summary>
+    private void ReseedServersTabState()
+    {
+        if (_srvCurrentSub is null)
+        {
+            // No sub drilled-in yet — fall back to the first enabled sub
+            // (matches desktop ServersPage behaviour where the active
+            // sub's servers render by default).
+            var subs = AndroidStorage.GetSubscriptions();
+            _srvCurrentSub = subs.FirstOrDefault(s => s.Enabled)
+                              ?? subs.FirstOrDefault();
+        }
+        _srvResults = AndroidStorage.GetServerTestResults();
+        _srvTestingKeys.Clear();
         if (_srvSortToggle is not null)
-            _srvSortToggle.Content = Localization.SrvSortByOriginal;
+            _srvSortToggle.Content = _srvSortByLatency
+                ? Localization.SrvSortByLatencyAsc
+                : Localization.SrvSortByOriginal;
         if (_srvTitle is not null)
-            _srvTitle.Text = string.Format(Localization.ServerListTitleFmt,
-                string.IsNullOrWhiteSpace(sub.Name) ? "(no name)" : sub.Name);
+        {
+            _srvTitle.Text = _srvCurrentSub is null
+                ? string.Empty
+                : string.Format(Localization.ServerListTitleFmt,
+                    string.IsNullOrWhiteSpace(_srvCurrentSub.Name) ? "(no name)" : _srvCurrentSub.Name);
+        }
         if (_srvStatusText is not null)
             _srvStatusText.Text = string.Empty;
         RebuildServerList();
-        _srvOverlay.IsVisible = true;
     }
 
-    private void CloseServerListOverlay()
+    /// <summary>
+    /// Cancel any in-flight Test all batch when the Advanced shell closes
+    /// or switches off the Servers tab. Mirrors the old close handler.
+    /// </summary>
+    private void StopServersTabBackgroundWork()
     {
-        // Cancel any in-flight Test all batch so we don't keep firing
-        // probes against a phone the user has navigated away from.
         try { _srvTestAllCts?.Cancel(); } catch { /* swallow */ }
-        if (_srvOverlay is not null) _srvOverlay.IsVisible = false;
-        // Refresh SimplePage's inline server-list reflection — selecting
-        // a server inside the overlay flips KeySelectedServerName but the
-        // SimplePage form needs a re-read.
-        ReloadServerList();
-        UpdateConfigSummary();
     }
 
     private void RebuildServerList()
@@ -646,8 +647,12 @@ public partial class AndroidApp
 
     private void SelectServerAndClose(VlessServerEntry srv)
     {
+        // AND-MIGRATE-OVERLAYS (2026-05-09): selecting a server in the
+        // Servers tab closes the entire Advanced shell — same UX shape
+        // as the old per-overlay close (return to Simple page so the
+        // user can hit Connect on the freshly-active server).
         AndroidStorage.SetSelectedServerName(srv.Name);
-        CloseServerListOverlay();
+        CloseAdvancedShell();
     }
 
     // ── Test-all batch ─────────────────────────────────────────────────────
@@ -822,6 +827,8 @@ public partial class AndroidApp
             ToolTip.SetTip(_srvColPing, Localization.ColPingTooltip);
         }
         if (_srvColPort is not null) _srvColPort.Text = Localization.ColPort;
-        if (_srvOverlay?.IsVisible == true) RebuildServerList();
+        // Servers tab still mounted in the Advanced shell? Rebuild rows so
+        // localized status badges flip to the new locale.
+        if (_srvListStack is not null) RebuildServerList();
     }
 }

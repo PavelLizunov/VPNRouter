@@ -242,12 +242,12 @@ public partial class AndroidApp : Avalonia.Application
     // ToggleLanguageAndRefresh / null-check sites don't need refactoring.
     // Functionally retired — the About row above absorbs the repo-open click.
     private Avalonia.Controls.Button? _menuRepoItem;
-    // v2.32.0 — Free Configs entry point lives in the kebab menu (no
-    // dedicated tab on Android — single-screen layout).
+    // AND-MIGRATE-OVERLAYS (2026-05-09): Free Configs / Tools / DPI bypass
+    // dropped from the kebab — they now live as Advanced-shell tabs
+    // (Public configs / DPI bypass / Telegram) reachable via the
+    // "Advanced settings ▸" CTA on the Simple page. Field stubs kept null
+    // so the language-refresh path's null-checks compile.
     private Avalonia.Controls.Button? _menuFreeConfigsItem;
-    // F-13 (2026-05-09) — Tools + DPI Bypass overlays mirror desktop's
-    // ToolsPage + DpiBypassPage. Both reachable from a new "Tools" kebab
-    // section sandwiched between Profiles and Diagnostics.
     private Avalonia.Controls.Button? _menuToolsItem;
     private Avalonia.Controls.Button? _menuDpiBypassItem;
     private TextBlock? _menuSectionTools;
@@ -300,11 +300,11 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.Button? _logViewerCloseBtn;
     private Avalonia.Controls.Button? _logViewerRefreshBtn;
 
-    // v2.32.0 — Settings overlay mirroring desktop NetworkPage 4 sub-sections
-    // (Routing / Leak protection / Updates / Autostart). Triggered from kebab
-    // menu Diagnostics > "Настройки" / "Settings". Same fullscreen Border
-    // overlay pattern as Phase 7.4 log viewer + 7.5 per-app picker.
-    private Border? _settingsOverlay;
+    // AND-MIGRATE-OVERLAYS (2026-05-09): Settings is now the Network tab
+    // inside the Advanced shell. Field set is the same minus the
+    // overlay/title/close widgets the shell now owns; helpers live in
+    // AndroidApp.AdvancedShell.cs (BuildNetworkTabContent +
+    // ReseedNetworkTabState).
     private Avalonia.Controls.RadioButton? _settingsSplitRadio;
     private Avalonia.Controls.RadioButton? _settingsFullRadio;
     private Avalonia.Controls.CheckBox? _settingsBypassRu;
@@ -348,18 +348,14 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.Button? _menuProfilesItem;
     private TextBlock? _menuSectionProfiles;
 
-    // v3.0 Phase 7.5 — per-app filter picker overlay (handbook §5.5).
-    // Tap "Selected apps" radio → "Choose apps…" button → this overlay.
-    // ListBox of installed apps with a search filter + system-apps
-    // toggle. CheckBox per row, indeterminate state shown only during
-    // initial Set() seeding (~50 ms).
-    private Border? _appPickerOverlay;
+    // AND-MIGRATE-OVERLAYS (2026-05-09): per-app filter picker is now the
+    // Apps tab inside the Advanced shell. The "Choose apps…" button on
+    // the Simple form deeplinks via OpenAdvancedShell(AdvancedTab.Apps).
     private TextBox? _appPickerSearch;
     private Avalonia.Controls.CheckBox? _appPickerSystemToggle;
     private TextBlock? _appPickerCount;
     private ListBox? _appPickerList;
     private Avalonia.Controls.Button? _appPickerSaveBtn;
-    private Avalonia.Controls.Button? _appPickerCloseBtn;
     private Avalonia.Controls.Button? _perAppPickButton;
     private TextBlock? _perAppCountLabel;
     private List<AppListLoader.AppEntry> _appPickerCache = new();
@@ -787,8 +783,10 @@ public partial class AndroidApp : Avalonia.Application
         // v2.32.0 — Free Configs entry. Sits between Вид and Диагностика
         // so it's discoverable without scrolling. Tap → close popup +
         // open the Free Configs overlay.
-        _menuFreeConfigsItem = MakeMenuItem(Localization.MenuItemOpenFreeConfigs,
-                                            "TextPrimaryBrush", OnMenuFreeConfigsClicked);
+        // AND-MIGRATE-OVERLAYS (2026-05-09): Free Configs is now the
+        // Public configs tab inside the Advanced shell. Stub kept null so
+        // RefreshKebabLocalizedStrings's null-check still compiles.
+        _menuFreeConfigsItem = null;
 
         // v2.32.0 (AND-PROFILES) — Routing profiles entry. Same affordance
         // pattern as Free Configs (own section, tap closes popup + opens
@@ -804,19 +802,16 @@ public partial class AndroidApp : Avalonia.Application
         // intent like Free Configs / Profiles, not a troubleshooting
         // step. Two items keeps parity with desktop's split (ToolsPage
         // sub-tab + DpiBypassPage sidebar).
-        _menuToolsItem     = MakeMenuItem(Localization.MenuItemOpenTools,
-                                          "TextPrimaryBrush", OnMenuToolsClicked);
-        _menuDpiBypassItem = MakeMenuItem(Localization.MenuItemOpenDpiBypass,
-                                          "TextPrimaryBrush", OnMenuDpiBypassClicked);
+        // AND-MIGRATE-OVERLAYS (2026-05-09): Tools / DPI bypass are now
+        // tabs inside the Advanced shell. Stubs kept null so the language
+        // refresh path's null-checks compile.
+        _menuToolsItem     = null;
+        _menuDpiBypassItem = null;
 
         AppendMenuSectionWithControls(menuStack, Localization.MenuSectionView,
                                       new Control[] { themeRow, langRow });
-        AppendMenuSection(menuStack, Localization.MenuSectionFreeConfigs,
-                          new[] { _menuFreeConfigsItem });
         AppendMenuSection(menuStack, Localization.MenuSectionProfiles,
                           new[] { _menuProfilesItem });
-        AppendMenuSection(menuStack, Localization.MenuSectionTools,
-                          new[] { _menuToolsItem, _menuDpiBypassItem });
         // F-10 kebab parity (2026-05-09): canonical Diagnostics order is
         // Settings → Open log → Copy log path → View crash log →
         // Check IP leak → Run Health Check → Check for updates →
@@ -1554,28 +1549,6 @@ public partial class AndroidApp : Avalonia.Application
         // Diagnostics > "Open log" menu action reads singbox.log into
         // _logViewerContent and flips IsVisible=true.
         _logOverlay = BuildLogOverlay();
-        // v3.0 Phase 7.5 (2026-05-04) — fullscreen per-app picker
-        // overlay. Triggered from the "Choose apps…" button in the form.
-        _appPickerOverlay = BuildAppPickerOverlay();
-        // v2.32.0 (AND-1) — fullscreen Subscribe overlay (multi-
-        // subscription parity with desktop SubscribePage). Triggered from
-        // the "Расширенные настройки" advanced card. Defined in
-        // AndroidApp.SubscribePage.cs partial.
-        _subsOverlay = BuildSubsOverlay();
-
-        // v2.32.0 (AND-3) — fullscreen Free Configs overlay. Triggered from the
-        // "Бесплатные конфиги" / "Free configs" entry in the kebab menu.
-        // See AndroidApp.FreeConfigs.cs + plans/v2.32.0-android-free-configs.md.
-        _fcOverlay = BuildFreeConfigsOverlay();
-
-        // v2.32.0 (AND-2) — fullscreen Settings overlay (4-section parity with
-        // desktop NetworkPage). Triggered from kebab > Diagnostics > "Настройки".
-        _settingsOverlay = BuildSettingsOverlay();
-
-        // v2.32.0 (AND-4) — fullscreen Server-list overlay (per-server
-        // testing UI). Defined in AndroidApp.ServerList.cs partial.
-        // Triggered from a tap on the SubscribePage card's name area.
-        _srvOverlay = BuildServerListOverlay();
 
         // v2.32.0 (Android-led, 2026-05-07) — config share overlays
         // (export / import / QR). Defined in AndroidApp.ConfigShare.cs.
@@ -1586,24 +1559,24 @@ public partial class AndroidApp : Avalonia.Application
         _cfgQrOverlay = BuildQrShareOverlay();
 
         // v2.32.0 (AND-PROFILES, 2026-05-08) — fullscreen routing-profile
-        // catalog overlay. Triggered from the Profiles section in the kebab
-        // menu. Lives next to the other code-built overlays (settings,
-        // server list, config share) so it can layer above the main
-        // ScrollViewer.
+        // catalog overlay. Triggered from the Profiles section in the
+        // kebab menu. Routing profiles stay reachable via kebab — they're
+        // a quick switcher, not a feature page.
         _profilesOverlay = BuildProfilesOverlay();
 
-        // F-13 (2026-05-09) — Tools + DPI Bypass overlays (visual port of
-        // desktop's ToolsPage + DpiBypassPage). Triggered from the new
-        // "Tools" kebab section. Both layer above mainScroller like the
-        // other overlays. See AndroidApp.Tools.cs + AndroidApp.DpiBypass.cs.
-        _toolsOverlay     = BuildToolsOverlay();
-        _dpiBypassOverlay = BuildDpiBypassOverlay();
+        // AND-MIGRATE-OVERLAYS (2026-05-09) — Advanced shell. Single
+        // overlay that hosts Servers / Subscriptions / Apps / Network /
+        // DPI bypass / Telegram / Public configs as a tab strip. Replaces
+        // the kebab → feature-page pattern that diverged from desktop.
+        // Tab content is built lazily on first activation; see
+        // AndroidApp.AdvancedShell.cs.
+        _advShellOverlay = BuildAdvancedShellOverlay();
 
         return new Grid
         {
-            Children = { mainScroller, _logOverlay, _appPickerOverlay, _subsOverlay, _fcOverlay, _settingsOverlay, _srvOverlay,
+            Children = { mainScroller, _logOverlay,
                          _cfgExportOverlay, _cfgImportOverlay, _cfgQrOverlay, _profilesOverlay,
-                         _toolsOverlay, _dpiBypassOverlay }
+                         _advShellOverlay }
         };
     }
 
@@ -1734,61 +1707,15 @@ public partial class AndroidApp : Avalonia.Application
     // no Apply button — autosave matches the desktop NetworkPage's
     // "Auto-saved" footer behaviour (Strings.SettingsAutosaved).
 
-    private Border BuildSettingsOverlay()
+    /// <summary>
+    /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the Network tab
+    /// inside the Advanced shell. Mirrors desktop NetworkPage left-nav
+    /// section order (Routing → Leak → Content → Updates → Autostart →
+    /// Reliability). Returns just the scroller — no title bar, no close
+    /// button. The Advanced shell provides those.
+    /// </summary>
+    private Control BuildNetworkTabContent()
     {
-        // Title bar — title text + close button. Same shape as log viewer.
-        var titleText = new TextBlock
-        {
-            Text = Localization.SettingsTitle,
-            FontSize = 13,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = GetBrush("TextPrimaryBrush"),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-
-        var closeBtn = new Avalonia.Controls.Button
-        {
-            Content = "✕",
-            FontSize = 16,
-            Width = 36,
-            Height = 36,
-            Padding = new Thickness(0),
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Foreground = GetBrush("TextSecondaryBrush"),
-        };
-        closeBtn.Click += OnSettingsCloseClicked;
-
-        var titleBar = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(8, 4, 4, 4),
-        };
-        Grid.SetColumn(titleText, 0);
-        Grid.SetColumn(closeBtn, 1);
-        titleBar.Children.Add(titleText);
-        titleBar.Children.Add(closeBtn);
-
-        var titleBarBorder = new Border
-        {
-            Background = GetBrush("SurfaceRaisedBrush"),
-            BorderBrush = GetBrush("BorderSubtleBrush"),
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(8, 4),
-            Child = titleBar,
-        };
-
-        // Stacked sub-sections. Each returns a Border wrapping the controls
-        // for that section so the visual grouping mirrors desktop's
-        // "Border + StackPanel" cards.
-        //
-        // Section order matches desktop NetworkPage left-nav (Routing → Leak →
-        // Content → Updates → Autostart) so the user can navigate in the same
-        // mental order across platforms. Reliability is the Android-only
-        // section (Always-on / Doze / battery) and lives at the END so the
-        // desktop ordering stays unbroken.
         var inner = new StackPanel
         {
             Spacing = 18,
@@ -1811,18 +1738,7 @@ public partial class AndroidApp : Avalonia.Application
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Background = GetBrush("SurfaceAppBrush"),
         };
-
-        var dock = new DockPanel { LastChildFill = true };
-        DockPanel.SetDock(titleBarBorder, Dock.Top);
-        dock.Children.Add(titleBarBorder);
-        dock.Children.Add(scroller);
-
-        return new Border
-        {
-            Background = GetBrush("SurfaceAppBrush"),
-            IsVisible = false,
-            Child = dock,
-        };
+        return scroller;
     }
 
     /// <summary>
@@ -2627,7 +2543,10 @@ public partial class AndroidApp : Avalonia.Application
         };
     }
 
-    // ── Settings overlay event handlers ─────────────────────────────────
+    // ── Settings (Network) tab event handlers ───────────────────────────
+    // Settings now lives inside the Advanced shell as the Network tab. The
+    // standalone fullscreen overlay is gone — the kebab "Settings" entry
+    // and the Simple-page autostart inline card both deeplink here.
 
     private void OnMenuSettingsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
@@ -2635,12 +2554,23 @@ public partial class AndroidApp : Avalonia.Application
         ShowSettings();
     }
 
+    /// <summary>
+    /// Deeplink: open the Advanced shell on the Network tab. Re-seeds
+    /// control state if the tab body has already been built. Replaces the
+    /// old fullscreen Settings overlay path (gone in AND-MIGRATE-OVERLAYS).
+    /// </summary>
     private void ShowSettings()
     {
-        if (_settingsOverlay is null) return;
-        // Re-seed control state so the overlay reflects the current
-        // persisted values (in case another path updated them — e.g. the
-        // form's Selected-apps radio writes per_app_mode independently).
+        OpenAdvancedShell(AdvancedTab.Network);
+    }
+
+    /// <summary>
+    /// Re-seed Network-tab controls from <see cref="AndroidStorage"/> when
+    /// the tab is selected. Called by the Advanced shell on tab switch +
+    /// shell open. Mirrors the old ShowSettings re-seed body.
+    /// </summary>
+    private void ReseedNetworkTabState()
+    {
         _settingsLoading = true;
         try
         {
@@ -2674,9 +2604,6 @@ public partial class AndroidApp : Avalonia.Application
                     _ => 0,
                 };
             }
-            // AND-NETRES — re-seed reliability controls + refresh battery
-            // optimization state. The user may have changed the system-side
-            // exclusion since the overlay was last visible.
             if (_reliabilityAutoReconnect is not null)
                 _reliabilityAutoReconnect.IsChecked = AndroidStorage.GetAutoReconnectOnNetworkChange();
             UpdateBatteryOptimizationStatus();
@@ -2685,12 +2612,6 @@ public partial class AndroidApp : Avalonia.Application
         {
             _settingsLoading = false;
         }
-        _settingsOverlay.IsVisible = true;
-    }
-
-    private void OnSettingsCloseClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_settingsOverlay is not null) _settingsOverlay.IsVisible = false;
     }
 
     private void OnSettingsRoutingChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -4267,13 +4188,13 @@ public partial class AndroidApp : Avalonia.Application
 
     private void OnAdvCardClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        // v2.32.0 (2026-05-07) — Phase 3 placeholder replaced with
-        // Subscribe overlay open. The advanced card subtitle promises
-        // "Серверы · Подписки · Маршрутизация · Логи"; subscriptions are
-        // now real. (Servers + Routing + Logs остаются placeholder'ом
-        // под inline form / kebab menu / log overlay соответственно;
-        // subscription management was the only orphan here.)
-        OpenSubsOverlay();
+        // AND-MIGRATE-OVERLAYS (2026-05-09): the Simple-page «Расширенные
+        // настройки ▸» CTA opens the Advanced shell on the Servers tab —
+        // matches desktop MainWindow's left-nav default landing ordering.
+        // From there the user can switch to Subscriptions / Apps /
+        // Network / DPI bypass / Telegram / Public configs without
+        // bouncing back to the kebab.
+        OpenAdvancedShell(AdvancedTab.Servers);
     }
 
     /// <summary>
@@ -4942,10 +4863,22 @@ public partial class AndroidApp : Avalonia.Application
         ShowAppPicker();
     }
 
-    private async void ShowAppPicker()
+    private void ShowAppPicker()
     {
-        if (_appPickerOverlay is null) return;
+        // AND-MIGRATE-OVERLAYS (2026-05-09): "Choose apps" button now
+        // deeplinks to the Advanced shell on the Apps tab. Re-seed
+        // happens inside ReseedAppPickerTabState (called by the shell on
+        // tab activation).
+        OpenAdvancedShell(AdvancedTab.Apps);
+    }
 
+    /// <summary>
+    /// Re-seed Apps tab state from persisted storage. Called by the
+    /// Advanced shell on tab activation. Replaces the body of the old
+    /// ShowAppPicker.
+    /// </summary>
+    private async void ReseedAppPickerTabState()
+    {
         // Seed the selection set from storage so check states match what
         // the user previously saved.
         _appPickerSelected = new HashSet<string>(AndroidStorage.GetPerAppPackages(),
@@ -4968,15 +4901,11 @@ public partial class AndroidApp : Avalonia.Application
         if (_appPickerSystemToggle is not null)
             _appPickerSystemToggle.IsChecked = _appPickerSystemAppsVisible;
 
-        // Show the overlay first with a "Loading…" placeholder, then
-        // load apps off the UI thread (PackageManager.GetInstalledApplications
-        // can take 100-500 ms on slower devices).
         UpdateAppPickerCount();
         if (_appPickerList is not null)
         {
             _appPickerList.ItemsSource = new[] { Localization.PerAppLoading };
         }
-        _appPickerOverlay.IsVisible = true;
 
         try
         {
@@ -4992,11 +4921,6 @@ public partial class AndroidApp : Avalonia.Application
         ApplyAppPickerFilter();
     }
 
-    private void OnAppPickerCloseClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_appPickerOverlay is not null) _appPickerOverlay.IsVisible = false;
-    }
-
     private void OnAppPickerSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         AndroidStorage.SetPerAppPackages(_appPickerSelected);
@@ -5005,7 +4929,10 @@ public partial class AndroidApp : Avalonia.Application
         AndroidStorage.SetPerAppMode(_appPickerMode);
         AndroidStorage.SetPerAppLastMode(_appPickerMode);
         UpdatePerAppFormCountLabel();
-        if (_appPickerOverlay is not null) _appPickerOverlay.IsVisible = false;
+        // AND-MIGRATE-OVERLAYS (2026-05-09): Save no longer dismisses the
+        // surface — Apps lives as a tab inside the Advanced shell. The
+        // count label refresh + storage flush is enough; the user closes
+        // the shell when they're done.
     }
 
     private void OnAppPickerModeIncludeClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -5275,51 +5202,14 @@ public partial class AndroidApp : Avalonia.Application
             _appPickerCount.Text = string.Format(Localization.PerAppCount, _appPickerSelected.Count);
     }
 
-    private Border BuildAppPickerOverlay()
+    /// <summary>
+    /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the Apps tab
+    /// inside the Advanced shell. Returns the include/exclude segmented
+    /// row + filter row + system toggle + apps ListBox + Save bar. The
+    /// shell provides the title bar / close button.
+    /// </summary>
+    private Control BuildAppPickerTabContent()
     {
-        var title = new TextBlock
-        {
-            Text = Localization.PerAppTitle,
-            FontSize = 13,
-            FontWeight = FontWeight.SemiBold,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        title.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
-
-        _appPickerCloseBtn = new Avalonia.Controls.Button
-        {
-            Content = "✕",
-            FontSize = 16,
-            Width = 36,
-            Height = 36,
-            Padding = new Thickness(0),
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-        };
-        _appPickerCloseBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextSecondaryBrush");
-        _appPickerCloseBtn.Click += OnAppPickerCloseClicked;
-
-        var titleBar = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(8, 4, 4, 4),
-        };
-        Grid.SetColumn(title, 0);
-        Grid.SetColumn(_appPickerCloseBtn, 1);
-        titleBar.Children.Add(title);
-        titleBar.Children.Add(_appPickerCloseBtn);
-
-        var titleBarBorder = new Border
-        {
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(8, 4),
-            Child = titleBar,
-        };
-        titleBarBorder.BindToken(Border.BackgroundProperty, "SurfaceRaisedBrush");
-        titleBarBorder.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
-
         // v3.0 v2.32.0 — include/exclude segmented control + hint, sitting
         // between the title bar and the search box. Tap include → only the
         // checked apps route via VPN; tap exclude → checked apps bypass VPN
@@ -5441,29 +5331,26 @@ public partial class AndroidApp : Avalonia.Application
         _appPickerSaveBtn.Click += OnAppPickerSaveClicked;
 
         var dock = new DockPanel { LastChildFill = true };
-        DockPanel.SetDock(titleBarBorder, Dock.Top);
-        DockPanel.SetDock(_appPickerModeLabel, Dock.Top);
+        DockPanel.SetDock(_appPickerModeLabel!, Dock.Top);
         DockPanel.SetDock(modeRow, Dock.Top);
-        DockPanel.SetDock(_appPickerModeHint, Dock.Top);
+        DockPanel.SetDock(_appPickerModeHint!, Dock.Top);
         DockPanel.SetDock(filterRow, Dock.Top);
         DockPanel.SetDock(togglesRow, Dock.Top);
-        DockPanel.SetDock(_appPickerSaveBtn, Dock.Bottom);
-        dock.Children.Add(titleBarBorder);
-        dock.Children.Add(_appPickerModeLabel);
+        DockPanel.SetDock(_appPickerSaveBtn!, Dock.Bottom);
+        dock.Children.Add(_appPickerModeLabel!);
         dock.Children.Add(modeRow);
-        dock.Children.Add(_appPickerModeHint);
+        dock.Children.Add(_appPickerModeHint!);
         dock.Children.Add(filterRow);
         dock.Children.Add(togglesRow);
-        dock.Children.Add(_appPickerSaveBtn);
-        dock.Children.Add(_appPickerList);
+        dock.Children.Add(_appPickerSaveBtn!);
+        dock.Children.Add(_appPickerList!);
 
-        var overlay = new Border
+        var body = new Border
         {
-            IsVisible = false,
             Child = dock,
         };
-        overlay.BindToken(Border.BackgroundProperty, "SurfaceAppBrush");
-        return overlay;
+        body.BindToken(Border.BackgroundProperty, "SurfaceAppBrush");
+        return body;
     }
 
     private void OnMenuCopyLogPathClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -5548,17 +5435,9 @@ public partial class AndroidApp : Avalonia.Application
         }
     }
 
-    /// <summary>
-    /// v2.32.0 — kebab menu entry that surfaces the Free Configs overlay.
-    /// Closes the popup so the overlay opens cleanly above the main view.
-    /// Heavy work (cache load + pool fetch) is deferred to the overlay
-    /// itself.
-    /// </summary>
-    private void OnMenuFreeConfigsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
-        ShowFreeConfigsOverlay();
-    }
+    // AND-MIGRATE-OVERLAYS (2026-05-09): OnMenuFreeConfigsClicked retired.
+    // Free Configs is now the Public configs tab inside the Advanced shell;
+    // the kebab no longer hosts that entry.
 
     // ── F-10 kebab parity (2026-05-09) ─────────────────────────────────
     //
@@ -5744,17 +5623,19 @@ public partial class AndroidApp : Avalonia.Application
         if (_menuSectionDiagnostics is not null) _menuSectionDiagnostics.Text = Localization.MenuSectionDiagnostics;
         if (_menuSectionTroubleshooting is not null) _menuSectionTroubleshooting.Text = Localization.MenuSectionTroubleshooting;
         if (_menuSectionAbout is not null) _menuSectionAbout.Text = Localization.MenuSectionAbout;
+        // AND-MIGRATE-OVERLAYS (2026-05-09): Free Configs + Tools kebab
+        // sections retired; their items migrated to the Advanced shell.
+        // The null-check stubs below are kept for the old field references
+        // even though the items are intentionally null now.
         if (_menuSectionFreeConfigs is not null) _menuSectionFreeConfigs.Text = Localization.MenuSectionFreeConfigs;
         if (_menuFreeConfigsItem is not null) _menuFreeConfigsItem.Content = Localization.MenuItemOpenFreeConfigs;
-        // v2.32.0 (AND-PROFILES) — refresh Profiles menu strings.
         if (_menuSectionProfiles is not null) _menuSectionProfiles.Text = Localization.MenuSectionProfiles;
         if (_menuProfilesItem is not null) _menuProfilesItem.Content = Localization.MenuItemOpenProfiles;
-        // F-13 (2026-05-09) — Tools section + items.
         if (_menuSectionTools is not null) _menuSectionTools.Text = Localization.MenuSectionTools;
         if (_menuToolsItem is not null) _menuToolsItem.Content = Localization.MenuItemOpenTools;
         if (_menuDpiBypassItem is not null) _menuDpiBypassItem.Content = Localization.MenuItemOpenDpiBypass;
-        if (_toolsTitleText is not null) _toolsTitleText.Text = Localization.ToolsOverlayTitle;
-        if (_dpiBypassTitleText is not null) _dpiBypassTitleText.Text = Localization.DpiBypassOverlayTitle;
+        // Refresh Advanced-shell title + tab labels on language toggle.
+        RefreshAdvancedShellStrings();
         // F-10 kebab parity (2026-05-09) — refresh new Diagnostics +
         // Troubleshooting items.
         if (_menuCheckLeaksItem is not null) _menuCheckLeaksItem.Content = Localization.MenuItemCheckLeaks;

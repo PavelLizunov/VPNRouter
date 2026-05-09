@@ -37,17 +37,18 @@ namespace VPNRouter.Android;
 /// </summary>
 public partial class AndroidApp
 {
-    private Border? _subsOverlay;
+    // AND-MIGRATE-OVERLAYS (2026-05-09): the standalone Subscribe overlay
+    // is gone — content moves into the Advanced shell as the Subscriptions
+    // tab. Field set is the same minus the overlay/title/close widgets the
+    // shell now owns.
     private StackPanel? _subsListStack;
     private TextBlock? _subsEmptyHint;
     private TextBox? _subsNewName;
     private TextBox? _subsNewUrl;
     private Avalonia.Controls.Button? _subsAddBtn;
     private Avalonia.Controls.Button? _subsRefreshAllBtn;
-    private TextBlock? _subsTitle;
     private TextBlock? _subsSectionLabel;
     private TextBlock? _subsRefreshAllStatus;
-    private Avalonia.Controls.Button? _subsCloseBtn;
 
     /// <summary>
     /// In-memory mirror of the persisted subscription list. Modified by
@@ -70,55 +71,13 @@ public partial class AndroidApp
     private DateTime _lastDeleteTapAt = DateTime.MinValue;
 
     /// <summary>
-    /// Build the fullscreen Subscribe overlay (mirrors
-    /// <see cref="BuildAppPickerOverlay"/> structure: title bar with × +
-    /// scrollable content + bottom bar).
+    /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the
+    /// Subscriptions tab inside the Advanced shell. Returns just the
+    /// section header + card list + add form. The shell provides the
+    /// title bar / close button / outer chrome.
     /// </summary>
-    private Border BuildSubsOverlay()
+    private Control BuildSubscribeTabContent()
     {
-        _subsTitle = new TextBlock
-        {
-            Text = Localization.SubscriptionsSection,
-            FontSize = 13,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = GetBrush("TextPrimaryBrush"),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-
-        _subsCloseBtn = new Avalonia.Controls.Button
-        {
-            Content = "✕",
-            FontSize = 16,
-            Width = 36,
-            Height = 36,
-            Padding = new Thickness(0),
-            HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Foreground = GetBrush("TextSecondaryBrush"),
-        };
-        _subsCloseBtn.Click += OnSubsCloseClicked;
-
-        var titleBar = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(8, 4, 4, 4),
-        };
-        Grid.SetColumn(_subsTitle, 0);
-        Grid.SetColumn(_subsCloseBtn, 1);
-        titleBar.Children.Add(_subsTitle);
-        titleBar.Children.Add(_subsCloseBtn);
-
-        var titleBarBorder = new Border
-        {
-            Background = GetBrush("SurfaceRaisedBrush"),
-            BorderBrush = GetBrush("BorderSubtleBrush"),
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Padding = new Thickness(8, 4),
-            Child = titleBar,
-        };
-
         // Card list (one Border per SubscriptionEntry, or empty hint).
         _subsListStack = new StackPanel
         {
@@ -272,45 +231,29 @@ public partial class AndroidApp
         bodyDock.Children.Add(listScroller);
 
         var dock = new DockPanel { LastChildFill = true };
-        DockPanel.SetDock(titleBarBorder, Dock.Top);
         DockPanel.SetDock(addFormBorder, Dock.Bottom);
-        dock.Children.Add(titleBarBorder);
         dock.Children.Add(addFormBorder);
         dock.Children.Add(bodyDock);
 
         return new Border
         {
             Background = GetBrush("SurfaceAppBrush"),
-            IsVisible = false,
             Child = dock,
         };
     }
 
     /// <summary>
-    /// Public-ish entry point: open the overlay and rebuild the card
-    /// list from the latest persisted subscriptions. Triggered by the
-    /// SimplePage advanced-card tap.
+    /// Re-seed Subscriptions tab state from persisted storage. Called by
+    /// the Advanced shell on tab activation. Replaces the old
+    /// OpenSubsOverlay path (overlay is gone in AND-MIGRATE-OVERLAYS).
     /// </summary>
-    private void OpenSubsOverlay()
+    private void ReseedSubscribeTabState()
     {
-        if (_subsOverlay is null) return;
         _subs = AndroidStorage.GetSubscriptions();
         _refreshingIds.Clear();
         _pendingDeleteId = null;
         _editingId = null;
         RebuildSubsList();
-        _subsOverlay.IsVisible = true;
-    }
-
-    private void OnSubsCloseClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        if (_subsOverlay is null) return;
-        _subsOverlay.IsVisible = false;
-        // After closing, refresh the SimplePage server-list reflection
-        // so any newly fetched servers appear in the inline ListBox + the
-        // CTA button summary stays accurate.
-        ReloadServerList();
-        UpdateConfigSummary();
     }
 
     private void RebuildSubsList()
@@ -716,7 +659,6 @@ public partial class AndroidApp
     /// </summary>
     private void RefreshSubsLocalizedStrings()
     {
-        if (_subsTitle is not null) _subsTitle.Text = Localization.SubscriptionsSection;
         if (_subsSectionLabel is not null) _subsSectionLabel.Text = Localization.SubscriptionsSection;
         if (_subsRefreshAllBtn is not null) _subsRefreshAllBtn.Content = Localization.RefreshAll;
         if (_subsAddBtn is not null) _subsAddBtn.Content = Localization.AddSubscription;
@@ -725,7 +667,8 @@ public partial class AndroidApp
         if (_subsEmptyHint is not null) _subsEmptyHint.Text = Localization.LblAddSubscriptionHint;
         // Card list: cheapest path is full rebuild — strings are per-card
         // (Refreshing… spinner, refresh/delete tooltips, formatted
-        // timestamp uses "никогда"/"never"). Skip if overlay is hidden.
-        if (_subsOverlay?.IsVisible == true) RebuildSubsList();
+        // timestamp uses "никогда"/"never"). Skip if Subscriptions tab is
+        // not currently mounted in the Advanced shell.
+        if (_subsListStack is not null) RebuildSubsList();
     }
 }
