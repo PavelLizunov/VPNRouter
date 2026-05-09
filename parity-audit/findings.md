@@ -1,7 +1,12 @@
 # VPNRouter — UI/UX parity audit findings
 
 **Date**: 2026-05-09 after v2.32.0 + AND-PROFILES merge.
-**Re-test**: 2026-05-09 after F-01 (Phase H locale → Core) + F-02 (Simple parity 11/13) merged.
+**Re-test 1**: 2026-05-09 after F-01 + F-02 — static screenshot match only.
+**Re-test 2 (LIVE INTERACTIVE)**: 2026-05-09 after F-10 + F-11 + F-12 — verified press-by-press on real desktop fresh-build + Android phone:
+- F-10 ✅ canonical kebab — both kebabs now expose Find a server / Routing profiles / Copy log path / View crash log / Check IP leak / Run Health Check / Export+Import / Restart in Safe Mode / Reset (red). Desktop has residual "Advanced ▶" placeholder (cosmetic — items moved out, container still visible).
+- F-11 ✅ active VPN-config input on desktop — typed `https://example.com/sub`, "Detected: subscription URL" hint appeared, Save button enabled, Refresh greyed-until-saved.
+- F-12 ✅ silent-flip blocked — Connect button greys when input dirty/unsaved. Unit tests `SmpToggleConnect_WithUnsavedVlessUri/SubscriptionUrl_BlocksAndPreservesConfigMode` (2/2 pass) confirm guard fires + ConfigMode preserved + log line emits at Info level. `LeakProtection.ValidateAppSettings` Core-layer backstop (9 tests) closes defense-in-depth.
+- All 42 targeted tests green (incl. pre-existing CustomRulesV2_30 geosite test fixed by alignment chip).
 **Convergence**: verified visually via re-rendered composite/simple.png — desktop and Android now share brand row, status wording, default mode, app-list subtext, all-traffic subtext, autostart inline card, advanced settings card, action buttons (Save/Refresh).
 **Scope**: 9 desktop pages × Android equivalent overlays.
 **Methods used**: M1 (side-by-side), M6 (text content), M7 (locale keys),
