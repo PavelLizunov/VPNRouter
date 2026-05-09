@@ -785,6 +785,9 @@ internal static class Localization
     public static string SettingsSectionLeak => global::VPNRouter.Core.Localization.Strings.SettingsSectionLeak;
     public static string SettingsSectionUpdates => global::VPNRouter.Core.Localization.Strings.SettingsSectionUpdates;
     public static string SettingsSectionAutostart => global::VPNRouter.Core.Localization.Strings.SettingsSectionAutostart;
+    public static string SettingsSectionContent => global::VPNRouter.Core.Localization.Strings.SettingsSectionContent;
+    public static string SettingsBlockAdsLabel => global::VPNRouter.Core.Localization.Strings.SettingsBlockAdsLabel;
+    public static string SettingsBlockAdsHint => global::VPNRouter.Core.Localization.Strings.SettingsBlockAdsHint;
     public static string SettingsSectionReliability => global::VPNRouter.Core.Localization.Strings.SettingsSectionReliability;
     public static string SettingsReliabilityIntro => global::VPNRouter.Core.Localization.Strings.SettingsReliabilityIntro;
     public static string ReliabilityAlwaysOnTitle => global::VPNRouter.Core.Localization.Strings.ReliabilityAlwaysOnTitle;

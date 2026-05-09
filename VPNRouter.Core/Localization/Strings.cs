@@ -2057,6 +2057,18 @@ public static class Strings
 
     public static string SettingsSectionAutostart => Ru ? "Автозапуск" : "Autostart";
 
+    // Content section (mirrors desktop NetworkPage "Content" section).
+    public static string SettingsSectionContent => Ru ? "Контент" : "Content";
+
+    // BlockAds card (mirrors desktop MainWindowViewModel.BlockAdsLabel/Hint).
+    public static string SettingsBlockAdsLabel => Ru
+        ? "Блокировать рекламу и трекеры"
+        : "Block ads & trackers";
+
+    public static string SettingsBlockAdsHint => Ru
+        ? "Маршрутизирует AdGuard DNS через VPN. Блокирует рекламные домены, трекеры и malware."
+        : "Routes AdGuard DNS through VPN. Blocks ad domains, trackers, and malware.";
+
     // ── v2.32.0 AND-NETRES (2026-05-07) Reliability section ────────────
     //
     // No desktop equivalent — Android-only features (Always-on VPN, Doze
