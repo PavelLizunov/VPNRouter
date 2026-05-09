@@ -282,27 +282,18 @@
                 BorderBrush="{DynamicResource BorderDefaultBrush}"
                 Background="{DynamicResource SurfaceBaseBrush}">
             <Grid ColumnDefinitions="28,*,Auto,Auto" ColumnSpacing="10">
-                <!-- v2.32.0 parity audit F-02 row 1: SimplePage now owns its
-                     own mini-header (mascot + brand + chips) so that
-                     PageScreenshotTests captures show the brand identity
-                     even when the page is rendered standalone (no
-                     MainWindow chrome). At runtime in Simple mode we hide
-                     these two columns to avoid duplicating the brand row;
-                     the kebab/mode-toggle in columns 2-3 stays visible. -->
                 <Border Grid.Column="0" Width="28" Height="28"
                         CornerRadius="{StaticResource RadiusSm}"
                         Background="{DynamicResource AccentBgSubtleBrush}"
                         ClipToBounds="True"
-                        VerticalAlignment="Center"
-                        IsVisible="{Binding !IsSimpleMode}">
+                        VerticalAlignment="Center">
                     <Image Source="{Binding LogoSource}"
                            Width="26" Height="26" Stretch="Uniform"
                            RenderOptions.BitmapInterpolationMode="HighQuality"
                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
 
-                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center"
-                            IsVisible="{Binding !IsSimpleMode}">
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                     <TextBlock Text="Virtual Penguin Network"
                                FontSize="12" FontWeight="Bold"
                                Foreground="{DynamicResource TextPrimaryBrush}"
@@ -508,68 +499,18 @@
 
                                     <Border Classes="menu-divider"/>
 
-                                    <!-- F-10 kebab parity (2026-05-09):
-                                         Free configs section. Mirrors Android's
-                                         kebab → "Find a server" entry. Switches
-                                         to Advanced + Free Configs tab. -->
-                                    <TextBlock Classes="section-label"
-                                               Text="{Binding L_MenuSectionFreeConfigs}"/>
-
-                                    <Button Classes="menu-item"
-                                            Command="{Binding OpenFreeConfigsMenuCommand}"
-                                            Content="{Binding L_MenuItemOpenFreeConfigs}"/>
-
-                                    <Border Classes="menu-divider"/>
-
-                                    <!-- F-10 kebab parity (2026-05-09):
-                                         Routing profiles section. Opens a
-                                         dialog showing the BuiltInProfiles
-                                         catalog (port of Android's profiles
-                                         overlay). -->
-                                    <TextBlock Classes="section-label"
-                                               Text="{Binding L_MenuSectionProfiles}"/>
-
-                                    <Button Classes="menu-item"
-                                            Command="{Binding OpenRoutingProfilesCommand}"
-                                            Content="{Binding L_MenuItemOpenProfiles}"/>
-
-                                    <Border Classes="menu-divider"/>
-
-                                    <!-- Section: Диагностика
-                                         F-10 kebab parity (2026-05-09): item
-                                         set expanded to match Android's
-                                         Diagnostics block 1:1 — Settings,
-                                         Open log, Copy log path, View crash
-                                         log, Check IP leak, Run Health Check,
-                                         Check for updates, Export config,
-                                         Import config. Run Health Check moved
-                                         here from Troubleshooting because it's
-                                         a read-only diagnostic, not a recovery
-                                         action. -->
+                                    <!-- Section: Диагностика -->
                                     <TextBlock Classes="section-label"
                                                Text="{Binding L_SmpMenuDiagnosticsSection}"/>
 
-                                    <Button Classes="menu-item"
-                                            Command="{Binding OpenSettingsMenuCommand}"
-                                            Content="{Binding L_MenuItemSettings}"/>
                                     <Button Classes="menu-item"
                                             Command="{Binding OpenLogsCommand}"
                                             Content="{Binding L_SmpMenuOpenLogs}"
                                             ToolTip.Tip="{Binding L_TipOpenLogs}"/>
                                     <Button Classes="menu-item"
-                                            Command="{Binding CopyLogPathCommand}"
-                                            Content="{Binding L_MenuItemCopyLogPath}"/>
-                                    <Button Classes="menu-item"
-                                            Command="{Binding ViewCrashLogCommand}"
-                                            Content="{Binding L_MenuItemViewCrashLog}"/>
-                                    <Button Classes="menu-item"
                                             Command="{Binding OpenLeakTestCommand}"
                                             Content="{Binding L_SmpMenuCheckLeaks}"
                                             ToolTip.Tip="{Binding L_TipIpLeak}"/>
-                                    <Button Classes="menu-item"
-                                            Command="{Binding RunHealthCheckCommand}"
-                                            Content="{Binding L_SmpMenuHealthCheck}"
-                                            ToolTip.Tip="{Binding L_TipSmpMenuHealthCheck}"/>
                                     <!-- v2.30.7-r2 (AU-11 fix): Content was bound to the
                                          static L_SmpMenuCheckUpdates so users got NO feedback
                                          after clicking — CheckLinkText observable on UpdateVm
@@ -580,23 +521,17 @@
                                     <Button Classes="menu-item"
                                             Command="{Binding UpdateVm.CheckManuallyCommand}"
                                             Content="{Binding UpdateVm.CheckLinkText}"/>
-                                    <Button Classes="menu-item"
-                                            Command="{Binding ExportConfigCommand}"
-                                            Content="{Binding L_MenuItemExportConfig}"/>
-                                    <Button Classes="menu-item"
-                                            Command="{Binding ImportConfigCommand}"
-                                            Content="{Binding L_MenuItemImportConfig}"/>
 
                                     <Border Classes="menu-divider"/>
 
-                                    <!-- Section: Устранение неполадок
-                                         F-10 kebab parity (2026-05-09): only
-                                         destructive recovery actions live
-                                         here now — Restart in Safe Mode +
-                                         Reset config to defaults. -->
+                                    <!-- Section: Устранение неполадок -->
                                     <TextBlock Classes="section-label"
                                                Text="{Binding L_SmpMenuTroubleshootingSection}"/>
 
+                                    <Button Classes="menu-item"
+                                            Command="{Binding RunHealthCheckCommand}"
+                                            Content="{Binding L_SmpMenuHealthCheck}"
+                                            ToolTip.Tip="{Binding L_TipSmpMenuHealthCheck}"/>
                                     <Button Classes="menu-item"
                                             Command="{Binding RestartInSafeModeCommand}"
                                             Content="{Binding L_SmpMenuSafeMode}"

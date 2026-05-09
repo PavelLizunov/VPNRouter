@@ -3,7 +3,6 @@
              xmlns:vm="using:VPNRouter.App.ViewModels"
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:conv="using:VPNRouter.App"
-             xmlns:vui="using:VPNRouter.UI.Controls"
              x:Class="VPNRouter.App.Views.Pages.SimplePage"
              x:DataType="vm:MainWindowViewModel">
 
@@ -33,127 +32,44 @@
         <Grid MaxWidth="420" HorizontalAlignment="Center">
             <StackPanel Spacing="14">
 
-                <!-- ═══ Mini-header reinstated v2.32.0 (parity audit F-02
-                     row 1, F-05) ═══
-                     Android's first-page scroller shows mascot + "Virtual
-                     Penguin Network" + VPN/Zapret/TG chips at the very
-                     top — mirrors desktop's MainWindow header but inside
-                     the page itself. Re-added here so a stand-alone
-                     SimplePage capture (PageScreenshotTests) shows the
-                     brand without bringing along the whole MainWindow
-                     chrome. MainWindow's mascot + brand columns hide
-                     when IsSimpleMode=true so users don't see the brand
-                     twice at runtime; the ⋯ kebab stays in MainWindow. -->
-                <Grid ColumnDefinitions="28,*" ColumnSpacing="10">
-                    <Border Grid.Column="0" Width="28" Height="28"
-                            CornerRadius="{StaticResource RadiusSm}"
-                            Background="{DynamicResource AccentBgSubtleBrush}"
-                            ClipToBounds="True"
-                            VerticalAlignment="Center">
-                        <Image Source="{Binding LogoSource}"
-                               Width="26" Height="26" Stretch="Uniform"
-                               RenderOptions.BitmapInterpolationMode="HighQuality"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
+                <!-- ═══ Mini-header removed in v2.19.0 ═══
+                     The compact logo + brand + VPN/Zapret/TG chips + ⋯ menu
+                     now live at the MainWindow level (MainWindow.axaml Row=0),
+                     shared by both Simple and Advanced modes. This keeps
+                     total header height identical when the user flips modes
+                     and avoids duplicating the bindings across two files. -->
 
-                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                        <TextBlock Text="Virtual Penguin Network"
-                                   FontSize="12" FontWeight="Bold"
-                                   Foreground="{DynamicResource TextPrimaryBrush}"
-                                   TextTrimming="CharacterEllipsis"/>
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <!-- VPN pill chip — 3 mutually-exclusive states.
-                                 Identical bindings to MainWindow.axaml's
-                                 brand row so flipping IsSimpleMode swaps
-                                 visual location without splitting state. -->
-                            <Button Command="{Binding NavigateToVpnCommand}"
-                                    ToolTip.Tip="{Binding VpnBadgeTooltip}"
-                                    Padding="5,1" MinHeight="0"
-                                    Background="{DynamicResource SuccessBgBrush}"
-                                    BorderThickness="0"
-                                    CornerRadius="{StaticResource RadiusPill}"
-                                    Cursor="Hand"
-                                    IsVisible="{Binding SimpleStatusIsOn}">
-                                <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
-                                    <Ellipse Width="4" Height="4" VerticalAlignment="Center"
-                                             Fill="{DynamicResource SuccessSolidBrush}"/>
-                                    <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource SuccessFgBrush}"/>
-                                </StackPanel>
-                            </Button>
-                            <Button Command="{Binding NavigateToVpnCommand}"
-                                    ToolTip.Tip="{Binding VpnBadgeTooltip}"
-                                    Padding="5,1" MinHeight="0"
-                                    Background="{DynamicResource WarningBgBrush}"
-                                    BorderThickness="0"
-                                    CornerRadius="{StaticResource RadiusPill}"
-                                    Cursor="Hand"
-                                    IsVisible="{Binding SimpleStatusIsWarn}">
-                                <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
-                                    <Ellipse Classes="pulse"
-                                             Width="4" Height="4" VerticalAlignment="Center"
-                                             Fill="{DynamicResource WarningSolidBrush}"/>
-                                    <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource WarningFgBrush}"/>
-                                </StackPanel>
-                            </Button>
-                            <Button Command="{Binding NavigateToVpnCommand}"
-                                    ToolTip.Tip="{Binding VpnBadgeTooltip}"
-                                    Padding="5,1" MinHeight="0"
-                                    Background="{DynamicResource SurfaceSunkenBrush}"
-                                    BorderThickness="0"
-                                    CornerRadius="{StaticResource RadiusPill}"
-                                    Cursor="Hand"
-                                    IsVisible="{Binding SimpleStatusIsOff}">
-                                <StackPanel Orientation="Horizontal" Spacing="3" VerticalAlignment="Center">
-                                    <Ellipse Width="4" Height="4" VerticalAlignment="Center"
-                                             Fill="{DynamicResource TextMutedBrush}"/>
-                                    <TextBlock Text="VPN" FontSize="9" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource TextMutedBrush}"/>
-                                </StackPanel>
-                            </Button>
-
-                            <!-- Zapret + TG chips: Windows-only (winws.exe +
-                                 Python embeddable). IsZapretAvailable /
-                                 IsTgProxyAvailable already filter on Linux. -->
-                            <Button Command="{Binding NavigateToZapretCommand}"
-                                    ToolTip.Tip="{Binding ZapretBadgeTooltip}"
-                                    IsVisible="{Binding IsZapretAvailable}"
-                                    Padding="5,1" MinHeight="0"
-                                    Background="{Binding ZapretBadgeBrush}"
-                                    BorderThickness="0"
-                                    CornerRadius="{StaticResource RadiusPill}"
-                                    Cursor="Hand">
-                                <TextBlock Text="Zapret" FontSize="9" FontWeight="SemiBold"
-                                           Foreground="White"/>
-                            </Button>
-                            <Button Command="{Binding NavigateToTgProxyCommand}"
-                                    ToolTip.Tip="{Binding TgProxyBadgeTooltip}"
-                                    IsVisible="{Binding IsTgProxyAvailable}"
-                                    Padding="5,1" MinHeight="0"
-                                    Background="{Binding TgProxyBadgeBrush}"
-                                    BorderThickness="0"
-                                    CornerRadius="{StaticResource RadiusPill}"
-                                    Cursor="Hand">
-                                <TextBlock Text="TG" FontSize="9" FontWeight="SemiBold"
-                                           Foreground="White"/>
-                            </Button>
+                <!-- ═══ Status card — 3 variants via IsVisible on SimpleStatusIs* ═══ -->
+                <Border BorderThickness="1"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                        Background="{DynamicResource SurfaceBaseBrush}"
+                        CornerRadius="{StaticResource RadiusMd}"
+                        Padding="14">
+                    <StackPanel Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <!-- Status dot — only one visible at a time -->
+                            <Ellipse Width="10" Height="10" VerticalAlignment="Center"
+                                     Fill="{DynamicResource SuccessSolidBrush}"
+                                     IsVisible="{Binding SimpleStatusIsOn}"/>
+                            <Ellipse Width="10" Height="10" VerticalAlignment="Center"
+                                     Fill="{DynamicResource WarningSolidBrush}"
+                                     IsVisible="{Binding SimpleStatusIsWarn}"/>
+                            <Ellipse Width="10" Height="10" VerticalAlignment="Center"
+                                     Fill="{DynamicResource TextMutedBrush}"
+                                     IsVisible="{Binding SimpleStatusIsOff}"/>
+                            <TextBlock Text="{Binding SimpleStatusTitle}"
+                                       FontSize="15" FontWeight="Bold"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
                         </StackPanel>
+                        <TextBlock Text="{Binding SimpleStatusDescription}"
+                                   FontSize="10"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   Margin="20,0,0,0"
+                                   LineHeight="15"/>
                     </StackPanel>
-                </Grid>
-
-                <!-- ═══ Status card — 3 variants via IsVisible on SimpleStatusIs* ═══
-                     v3.0 Phase G step 1 (2026-05-09): visual treatment moved
-                     into the shared VPNRouter.Avalonia.UI.Controls.StatusCard
-                     UserControl so desktop + Android render the same Border /
-                     dot / typography from one .axaml. Three bool styled
-                     properties map 1:1 to the existing SimpleStatusIs* VM
-                     getters; Title/Subtitle bind verbatim. -->
-                <vui:StatusCard IsOn="{Binding SimpleStatusIsOn}"
-                                IsWarn="{Binding SimpleStatusIsWarn}"
-                                IsOff="{Binding SimpleStatusIsOff}"
-                                Title="{Binding SimpleStatusTitle}"
-                                Subtitle="{Binding SimpleStatusDescription}"/>
+                </Border>
 
                 <!-- ═══ Config row — tappable, opens the inline form ═══
                      v2.31.6-r9 A11y: same card-as-button pattern as the
@@ -217,7 +133,7 @@
                             <TextBlock Text="{Binding L_SmpInputLabel}"
                                        FontSize="11" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            <TextBox Text="{Binding SmpInput, UpdateSourceTrigger=PropertyChanged}"
+                            <TextBox Text="{Binding SmpInput}"
                                      Watermark="{Binding L_SmpInputWatermark}"
                                      FontSize="11" Padding="10,7"
                                      AcceptsReturn="False"
@@ -226,53 +142,11 @@
                                        FontSize="9"
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        TextWrapping="Wrap"/>
-                            <!-- v2.32.0 parity audit F-11 (2026-05-09): inline
-                                 auto-detect hint mirrors Android's sub-tab
-                                 feedback. Visible only when the input matches
-                                 a recognised scheme — empty input keeps the
-                                 row collapsed so the form doesn't visually
-                                 jitter on first render. -->
-                            <TextBlock Text="{Binding SmpInputDetectedHint}"
-                                       FontSize="9" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource AccentFgBrush}"
-                                       IsVisible="{Binding SmpInputDetectedHintVisible}"
-                                       TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding SmpErrorText}"
                                        FontSize="10"
                                        Foreground="{DynamicResource DangerFgBrush}"
                                        IsVisible="{Binding SmpErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                        TextWrapping="Wrap"/>
-                            <!-- v2.32.0 parity audit F-02 row 6: Save + Refresh
-                                 buttons next to the input mirror Android's
-                                 main-scroller action row. QR is Android-only
-                                 (no camera surface on desktop).
-                                 v2.32.0 F-11 (2026-05-09): IsEnabled bound to
-                                 dirty + detected-kind so Save lights up only
-                                 on a fresh recognised paste; Refresh requires
-                                 a saved subscription. -->
-                            <StackPanel Orientation="Horizontal" Spacing="6"
-                                        HorizontalAlignment="Right" Margin="0,2,0,0">
-                                <Button Command="{Binding SmpSaveCommand}"
-                                        Content="{Binding L_SmpSaveButton}"
-                                        IsEnabled="{Binding SmpSaveEnabled}"
-                                        FontSize="10" Padding="10,4"
-                                        MinHeight="0"
-                                        Background="{DynamicResource SurfaceRaisedBrush}"
-                                        Foreground="{DynamicResource TextPrimaryBrush}"
-                                        BorderBrush="{DynamicResource BorderDefaultBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="{StaticResource RadiusXs}"/>
-                                <Button Command="{Binding SmpRefreshCommand}"
-                                        Content="{Binding L_SmpRefreshButton}"
-                                        IsEnabled="{Binding SmpRefreshEnabled}"
-                                        FontSize="10" Padding="10,4"
-                                        MinHeight="0"
-                                        Background="{DynamicResource SurfaceRaisedBrush}"
-                                        Foreground="{DynamicResource TextPrimaryBrush}"
-                                        BorderBrush="{DynamicResource BorderDefaultBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="{StaticResource RadiusXs}"/>
-                            </StackPanel>
                         </StackPanel>
 
                         <!-- Tunnel mode -->
@@ -345,23 +219,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ═══ Save / Refresh toast ═══
-                     v2.32.0 parity audit F-11 (2026-05-09). Shown for ~2.5 s
-                     after Save / Refresh so the user has explicit feedback
-                     ("Saved as subscription", "Subscription refreshed").
-                     Mirrors RulesToastText pattern in Network page. -->
-                <Border IsVisible="{Binding HasSmpToast}"
-                        Background="{DynamicResource AccentBgSubtleBrush}"
-                        BorderBrush="{DynamicResource AccentBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="{StaticResource RadiusXs}"
-                        Padding="10,6">
-                    <TextBlock Text="{Binding SmpToastText}"
-                               FontSize="10" FontWeight="SemiBold"
-                               Foreground="{DynamicResource AccentFgBrush}"
-                               TextWrapping="Wrap"/>
-                </Border>
-
                 <!-- ═══ CTA — three mutually-exclusive variants ═══
                      v2.31.6-r9 A11y: each variant binds AutomationProperties.Name
                      to SimpleCtaText so screen readers announce the state-
@@ -394,15 +251,10 @@
                         CornerRadius="{StaticResource RadiusSm}"
                         AutomationProperties.Name="{Binding SimpleCtaText}"/>
 
-                <!-- OFF: Connect — outlined, accent fg.
-                     v2.32.0 parity audit F-12 (2026-05-09): IsEnabled gates
-                     Connect on SmpInputDirty so the silent ConfigMode flip
-                     (paste URL → Connect → empty subscription) is unreachable
-                     from the UI. User must Save first. -->
+                <!-- OFF: Connect — outlined, accent fg -->
                 <Button Command="{Binding SmpToggleConnectCommand}"
                         Content="{Binding SimpleCtaText}"
                         IsVisible="{Binding SimpleCtaIsDisconnected}"
-                        IsEnabled="{Binding SmpConnectEnabled}"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
                         Padding="0,12" FontSize="12" FontWeight="Bold"

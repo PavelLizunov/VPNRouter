@@ -79,7 +79,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(SimpleCtaText))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnected))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsDisconnected))]
-    [NotifyPropertyChangedFor(nameof(SmpConnectEnabled))]
     private bool _isConnected;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SimpleStatusIsOn))]
@@ -91,7 +90,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnecting))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnected))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsDisconnected))]
-    [NotifyPropertyChangedFor(nameof(SmpConnectEnabled))]
     private bool _isConnecting;
     [ObservableProperty] private string _connectButtonText = Strings.StartVPN;
     [ObservableProperty]
@@ -253,21 +251,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsZapretAvailable => OperatingSystem.IsWindows();
     /// <summary>True when bundled Telegram proxy is available on the current OS (Windows only).</summary>
     public bool IsTgProxyAvailable => OperatingSystem.IsWindows();
-    // v2.32.0 parity audit F-02 row 4 (2026-05-09): first-launch mode
-    // defaults flipped from "manual" to "subscription" so a fresh
-    // MainWindowViewModel matches Android's first-launch state. Saved
-    // configs override these via LoadSettingsIntoUI; only new users see
-    // the new default.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServerListMode))]
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
-    private bool _isVlessMode = false;
+    private bool _isVlessMode = true;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsServerListMode))]
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
-    [NotifyPropertyChangedFor(nameof(SmpRefreshEnabled))]
-    private bool _isSubscribeMode = true;
+    private bool _isSubscribeMode = false;
 
     /// <summary>True when the server ListBox should be visible (Manual or Subscribe mode).</summary>
     public bool IsServerListMode => IsVlessMode || IsSubscribeMode;
@@ -334,14 +326,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public ObservableCollection<SubscriptionViewModel> Subscriptions { get; } = new();
     [ObservableProperty] private string _newSubName = string.Empty;
     [ObservableProperty] private string _newSubUrl = string.Empty;
-    // v2.32.0 parity audit F-02 row 8 (2026-05-09): first-launch tunnel
-    // mode default flipped from "split" to "full" so a fresh ViewModel
-    // matches Android's "all traffic" first-launch radio. Saved config
-    // overrides via LoadSettingsIntoUI.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SimpleConfigModeSummary))]
     [NotifyPropertyChangedFor(nameof(IsFullTunnel))]
-    private bool _isSplitTunnel = false;
+    private bool _isSplitTunnel = true;
 
     /// <summary>
     /// v2.25.10 fix: exposes the inverse of <see cref="IsSplitTunnel"/> as a
@@ -2224,419 +2212,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         catch { /* best-effort */ }
     }
 
-    // ── F-10 kebab parity (2026-05-09) ──────────────────────────────────
-    //
-    // Items added to desktop's kebab so the menu sequence matches Android.
-    // The audit in parity-audit/findings.md §F-10 found 8+ items present
-    // on only one platform; these handlers close the desktop side of the
-    // gap (Android equivalents already exist in AndroidApp.axaml.cs).
-
-    /// <summary>
-    /// Diagnostics → "Settings". Switches to Advanced UI mode and selects
-    /// the Network tab — desktop's de-facto settings page (routing /
-    /// leak protection / DNS / autostart). Android opens an overlay; the
-    /// outcome is the same: user lands on the settings UI.
-    /// </summary>
-    [RelayCommand]
-    private void OpenSettingsMenu()
-    {
-        try
-        {
-            IsSimpleMode = false;
-            _settings.App.UiMode = "advanced";
-            SelectedTabIndex = 2; // Network tab — settings host page
-            SaveSettings();
-        }
-        catch (Exception ex)
-        {
-            _logger?.Error(ex, "[VM] OpenSettingsMenu failed");
-        }
-    }
-
-    /// <summary>
-    /// Free configs → "Find a server". Switches to Advanced + selects the
-    /// Free Configs tab. Mirrors Android's kebab → Free configs entry which
-    /// opens the FreeConfigs overlay.
-    /// </summary>
-    [RelayCommand]
-    private void OpenFreeConfigsMenu()
-    {
-        try
-        {
-            IsSimpleMode = false;
-            _settings.App.UiMode = "advanced";
-            SelectedTabIndex = 5; // Free Configs tab
-            SaveSettings();
-        }
-        catch (Exception ex)
-        {
-            _logger?.Error(ex, "[VM] OpenFreeConfigsMenu failed");
-        }
-    }
-
-    /// <summary>
-    /// Profiles → "Routing profiles". Opens a modal dialog listing the
-    /// built-in profiles; tap a card to apply it (writes the profile's
-    /// process names into the per-app filter). Mirrors Android's
-    /// ShowProfilesOverlay flow.
-    /// </summary>
-    [RelayCommand]
-    private void OpenRoutingProfiles()
-    {
-        try
-        {
-            var dlg = new VPNRouter.App.Views.RoutingProfilesDialog
-            {
-                DataContext = this,
-            };
-            var app = Avalonia.Application.Current?.ApplicationLifetime
-                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
-            var owner = app?.MainWindow;
-            if (owner != null) dlg.ShowDialog(owner);
-            else dlg.Show();
-        }
-        catch (Exception ex)
-        {
-            _logger?.Error(ex, "[VM] OpenRoutingProfiles failed");
-        }
-    }
-
-    /// <summary>
-    /// F-10 (2026-05-09) — public surface for the RoutingProfilesDialog so
-    /// it can inspect the currently-active profile selection without
-    /// reflecting into private fields. Returns the comma-separated names
-    /// from <see cref="AppSettings.ActiveProfile"/>.
-    /// </summary>
-    public string[] GetActiveProfileNames()
-        => (_settings.ActiveProfile ?? string.Empty)
-            .Split(',', StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => s.Trim())
-            .Where(s => s.Length > 0)
-            .ToArray();
-
-    /// <summary>
-    /// F-10 (2026-05-09) — apply a built-in profile selected from the
-    /// RoutingProfilesDialog. Toggles the matching <see cref="AppGroupViewModel"/>
-    /// on the Apps tab so the existing routing pipeline picks up the change
-    /// (SaveSettings rewrites <see cref="AppSettings.ActiveProfile"/>).
-    /// Passing null clears the selection — equivalent to "No profile" /
-    /// full-tunnel, mirroring Android's <c>ProfileApplication.Plan(null)</c>.
-    /// </summary>
-    public void ApplyProfileFromDialog(VPNRouter.Core.Models.Profile? profile)
-    {
-        try
-        {
-            if (!_appsLoaded)
-            {
-                // The Apps tab hasn't been opened yet, so AppGroups aren't
-                // populated. Fall back to setting ActiveProfile directly +
-                // saving so the next LoadApps run reflects the choice.
-                _settings.ActiveProfile = profile?.Name ?? string.Empty;
-                SettingsLoader.Save(_settings, AppPaths.ConfigYamlPath);
-                ShowRulesToast(profile is null
-                    ? VPNRouter.App.Localization.Strings.ProfilesClearedToast
-                    : string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                        VPNRouter.App.Localization.Strings.ProfilesAppliedToast, profile.Name));
-                return;
-            }
-
-            // Untick everything except the requested profile (or untick all
-            // when clearing). Custom Apps + custom categories are left
-            // alone — the profile picker only governs built-in groups.
-            foreach (var group in AppGroups)
-            {
-                if (group.Name == "Custom Apps" || group.IsCustomCategory) continue;
-                bool shouldBeOn = profile != null
-                    && string.Equals(group.Name, profile.Name, StringComparison.OrdinalIgnoreCase);
-                if (group.IsChecked != shouldBeOn)
-                    group.IsChecked = shouldBeOn;
-            }
-
-            SaveSettings();
-            ShowRulesToast(profile is null
-                ? VPNRouter.App.Localization.Strings.ProfilesClearedToast
-                : string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                    VPNRouter.App.Localization.Strings.ProfilesAppliedToast, profile.Name));
-        }
-        catch (Exception ex)
-        {
-            _logger?.Error(ex, "[VM] ApplyProfileFromDialog failed");
-        }
-    }
-
-    /// <summary>
-    /// Diagnostics → "Copy log path". Drops the logs directory path into
-    /// the system clipboard and surfaces a confirmation toast. Android's
-    /// equivalent shows the path in the menu-feedback area; on desktop we
-    /// reuse the global rules-toast slot.
-    /// </summary>
-    [RelayCommand]
-    private async Task CopyLogPathAsync()
-    {
-        try
-        {
-            var logsDir = AppPaths.LogsDir;
-            Directory.CreateDirectory(logsDir);
-
-            var window = GetMainWindow();
-            var clipboard = window?.Clipboard;
-            if (clipboard != null)
-            {
-                await clipboard.SetTextAsync(logsDir);
-            }
-            ShowRulesToast(logsDir);
-        }
-        catch (Exception ex)
-        {
-            _logger?.Error(ex, "[VM] CopyLogPath failed");
-        }
-    }
-
-    /// <summary>
-    /// Diagnostics → "View crash log". Opens the most recent crash report
-    /// from <c>%DataDir%/crashes/</c> in the system's default text viewer
-    /// (notepad on Windows, xdg-open on Linux, open on macOS). Surfaces a
-    /// "no crashes" toast when the directory is empty. Mirrors Android's
-    /// LoadCrashLogContent which renders the same files in an overlay.
-    /// </summary>
-    [RelayCommand]
-    private void ViewCrashLog()
-    {
-        try
-        {
-            var crashesDir = Path.Combine(AppPaths.DataDir, "crashes");
-            if (!Directory.Exists(crashesDir))
-            {
-                ShowRulesToast(VPNRouter.App.Localization.Strings.CrashLogEmpty);
-                return;
-            }
-            var files = Directory.GetFiles(crashesDir, "*.txt");
-            if (files.Length == 0)
-            {
-                ShowRulesToast(VPNRouter.App.Localization.Strings.CrashLogEmpty);
-                return;
-            }
-            var newest = files
-                .Select(p => new FileInfo(p))
-                .OrderByDescending(fi => fi.LastWriteTimeUtc)
-                .First();
-
-            ProcessStartInfo psi;
-            if (OperatingSystem.IsWindows())
-            {
-                psi = new ProcessStartInfo
-                {
-                    FileName = "notepad.exe",
-                    Arguments = $"\"{newest.FullName}\"",
-                    UseShellExecute = true,
-                };
-            }
-            else
-            {
-                var opener = OperatingSystem.IsMacOS()
-                    ? "/usr/bin/open"
-                    : "/usr/bin/xdg-open";
-                psi = new ProcessStartInfo
-                {
-                    FileName = opener,
-                    Arguments = $"\"{newest.FullName}\"",
-                    UseShellExecute = false,
-                };
-            }
-            System.Diagnostics.Process.Start(psi);
-        }
-        catch (Exception ex)
-        {
-            _logger?.Error(ex, "[VM] ViewCrashLog failed");
-        }
-    }
-
-    /// <summary>
-    /// Diagnostics → "Export config". Asks the user for a save path and
-    /// writes a <see cref="VPNRouter.Core.Services.ConfigShareDocument"/>
-    /// snapshot of subscriptions + active config-mode payload (URI for
-    /// manual / sing-box JSON for custom). Settings + per-app filter are
-    /// EXCLUDED by default to match Android's opt-in defaults — the donor
-    /// user usually doesn't want to share theme/language/routing prefs.
-    /// </summary>
-    [RelayCommand]
-    private async Task ExportConfigAsync()
-    {
-        try
-        {
-            var window = GetMainWindow();
-            if (window == null) return;
-
-            var file = await window.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-            {
-                Title = VPNRouter.App.Localization.Strings.MenuItemExportConfig,
-                SuggestedFileName = ConfigShareDocument.SuggestFilename(),
-                DefaultExtension = "json",
-                FileTypeChoices = new[]
-                {
-                    new FilePickerFileType("VPNRouter config share")
-                    {
-                        Patterns = new[] { "*.json" },
-                    },
-                },
-            });
-            if (file == null) return;
-            var path = file.TryGetLocalPath();
-            if (string.IsNullOrEmpty(path)) return;
-
-            var doc = BuildConfigShareSnapshot();
-            var json = ConfigShareDocument.Serialize(doc);
-            await File.WriteAllTextAsync(path, json);
-            ShowRulesToast(path);
-        }
-        catch (Exception ex)
-        {
-            _logger?.Error(ex, "[VM] ExportConfig failed");
-        }
-    }
-
-    /// <summary>
-    /// Diagnostics → "Import config". Lets the user pick a JSON file
-    /// produced by Export config (this app or Android), validates the
-    /// envelope via <see cref="ConfigShareDocument.TryParse"/>, and
-    /// applies subscriptions + mode-specific payload to AppSettings.
-    /// Settings + per-app filter are NOT touched (mirrors Android's
-    /// opt-out defaults — recipient may have different OS / app set).
-    /// </summary>
-    [RelayCommand]
-    private async Task ImportConfigAsync()
-    {
-        try
-        {
-            var window = GetMainWindow();
-            if (window == null) return;
-
-            var files = await window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-            {
-                Title = VPNRouter.App.Localization.Strings.MenuItemImportConfig,
-                AllowMultiple = false,
-                FileTypeFilter = new[]
-                {
-                    new FilePickerFileType("VPNRouter config share")
-                    {
-                        Patterns = new[] { "*.json" },
-                    },
-                },
-            });
-            if (files.Count == 0) return;
-            var path = files[0].TryGetLocalPath();
-            if (string.IsNullOrEmpty(path)) return;
-
-            var json = await File.ReadAllTextAsync(path);
-            var parsed = ConfigShareDocument.TryParse(json);
-            if (!parsed.Ok || parsed.Document is null)
-            {
-                ShowRulesToast(parsed.Error ?? "Import: invalid file");
-                return;
-            }
-
-            ApplyConfigShareSnapshot(parsed.Document);
-            ShowRulesToast(VPNRouter.App.Localization.Strings.MenuItemImportConfig);
-        }
-        catch (Exception ex)
-        {
-            _logger?.Error(ex, "[VM] ImportConfig failed");
-        }
-    }
-
-    /// <summary>
-    /// Build a <see cref="ConfigShareDocument"/> from the current
-    /// <see cref="AppSettings"/>. Settings + per-app blocks are deliberately
-    /// omitted — the desktop kebab item is "share my config" not "clone
-    /// my whole environment". Same default as Android.
-    /// <para>Manual VLESS URI is not exported from desktop because the
-    /// desktop schema decomposes URIs into Server/Port/Uuid/Reality fields
-    /// rather than storing the original string. Subscriptions + the active
-    /// custom-JSON payload cover the common share cases.</para>
-    /// </summary>
-    private ConfigShareDocument BuildConfigShareSnapshot()
-    {
-        var doc = new ConfigShareDocument
-        {
-            ExportedAt = DateTimeOffset.UtcNow,
-            ExportedFrom = new ExportedFromInfo
-            {
-                Platform = OperatingSystem.IsWindows() ? "windows"
-                         : OperatingSystem.IsMacOS()   ? "macos"
-                         : OperatingSystem.IsLinux()   ? "linux"
-                         : "desktop",
-                AppVersion = VPNRouter.Core.AppVersion.Version,
-            },
-            ConfigMode = _settings.App.ConfigMode,
-            Subscriptions = new List<SubscriptionEntry>(_settings.App.Subscriptions ?? new()),
-        };
-        if (string.Equals(_settings.App.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase))
-        {
-            var activeName = _settings.App.ActiveCustomConfig;
-            if (!string.IsNullOrWhiteSpace(activeName))
-            {
-                try
-                {
-                    var entry = _settings.App.CustomConfigs?
-                        .FirstOrDefault(c => string.Equals(c.Name, activeName, StringComparison.OrdinalIgnoreCase));
-                    if (entry != null && File.Exists(entry.Path))
-                    {
-                        doc.CustomConfig = new CustomConfigPayload
-                        {
-                            Name = entry.Name,
-                            SingBoxJson = File.ReadAllText(entry.Path),
-                        };
-                    }
-                }
-                catch { /* skip — custom payload is optional */ }
-            }
-        }
-        return doc;
-    }
-
-    /// <summary>
-    /// Apply a parsed <see cref="ConfigShareDocument"/> to the live
-    /// settings: replace Subscriptions list, set ConfigMode. Persists via
-    /// <see cref="SaveSettings"/>. Does NOT touch general settings or
-    /// per-app filter — those are donor preferences, not shared
-    /// configuration. Custom-JSON payload is written to disk + registered
-    /// in CustomConfigs.
-    /// </summary>
-    private void ApplyConfigShareSnapshot(ConfigShareDocument doc)
-    {
-        if (!string.IsNullOrWhiteSpace(doc.ConfigMode))
-            _settings.App.ConfigMode = doc.ConfigMode!;
-        if (doc.Subscriptions != null)
-            _settings.App.Subscriptions = new List<SubscriptionEntry>(doc.Subscriptions);
-        if (string.Equals(doc.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase) &&
-            doc.CustomConfig != null &&
-            !string.IsNullOrWhiteSpace(doc.CustomConfig.SingBoxJson))
-        {
-            try
-            {
-                var name = string.IsNullOrWhiteSpace(doc.CustomConfig.Name)
-                    ? "imported"
-                    : doc.CustomConfig.Name;
-                var dir = Path.Combine(AppPaths.DataDir, "custom-configs");
-                Directory.CreateDirectory(dir);
-                var path = Path.Combine(dir, name + ".json");
-                File.WriteAllText(path, doc.CustomConfig.SingBoxJson);
-                _settings.App.CustomConfigs ??= new List<CustomConfigEntry>();
-                if (!_settings.App.CustomConfigs.Any(c =>
-                        string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase)))
-                {
-                    _settings.App.CustomConfigs.Add(new CustomConfigEntry { Name = name, Path = path });
-                }
-                _settings.App.ActiveCustomConfig = name;
-            }
-            catch (Exception ex)
-            {
-                _logger?.Warning(ex, "[VM] ApplyConfigShareSnapshot custom payload write failed");
-            }
-        }
-        SaveSettings();
-    }
-
     // ── VLESS fields (for single-server quick edit) ──
     [ObservableProperty] private string _vlessUri = string.Empty;
 
@@ -2947,16 +2522,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (firstEnabledSub != null)
             SmpInput = firstEnabledSub.Url;
 
-        // v2.32.0 parity audit F-11 (2026-05-09): seed the SmpInput snapshot
-        // so the value loaded from settings is treated as "saved" — without
-        // this, SmpInputDirty would return true on first paint and disable
-        // the Connect CTA until the user re-typed the URL.
-        _smpInputSavedSnapshot = (SmpInput ?? string.Empty).Trim();
-        OnPropertyChanged(nameof(SmpInputDirty));
-        OnPropertyChanged(nameof(SmpSaveEnabled));
-        OnPropertyChanged(nameof(SmpRefreshEnabled));
-        OnPropertyChanged(nameof(SmpConnectEnabled));
-
         // Config mode (three-way: generated / custom / subscribe)
         // Mode is determined by which tab is active. On load, select the
         // correct tab based on saved config_mode.
@@ -2975,12 +2540,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // Set initial tab: 0=Manual, 1=Subscribe, 2=Network, 3=Applications
         SelectedTabIndex = IsSubscribeMode ? 1 : 0;
 
-        // Routing mode. v2.32.0 parity audit F-02 row 8: fallback aligned
-        // with the new "full" default (was "split"); only kicks in if
-        // RoutingMode is null/empty in YAML, which itself only happens for
-        // first-launch + corruption recovery — both already handled by
-        // SettingsLoader.LoadCore's EnsureSane pass.
-        IsSplitTunnel = !(_settings.App.RoutingMode ?? "full")
+        // Routing mode
+        IsSplitTunnel = !(_settings.App.RoutingMode ?? "split")
             .Equals("full", StringComparison.OrdinalIgnoreCase);
 
         // Russian geo bypass
@@ -3693,20 +3254,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         else
         {
-            // F-12 (parity audit P0, 2026-05-09): log every ConfigMode write
-            // from SaveSettings so a future silent flip is grep-able from
-            // the application log. Pre-fix this branch had no logging at
-            // all even though the flip is meaningful (it changes how the
-            // engine resolves servers + which UI tab the user lands on).
-            var oldMode = _settings.App.ConfigMode ?? "(unset)";
-            var newMode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "generated" : "custom";
-            _settings.App.ConfigMode = newMode;
-            if (!string.Equals(oldMode, newMode, StringComparison.OrdinalIgnoreCase))
-            {
-                _logger?.Information(
-                    "[Settings] SaveSettings ConfigMode {Old} → {New} (IsSubscribeMode={Sub}, IsVlessMode={Vless})",
-                    oldMode, newMode, IsSubscribeMode, IsVlessMode);
-            }
+            _settings.App.ConfigMode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "generated" : "custom";
         }
 
         // Persist all subscription entries (multi-subscription support)

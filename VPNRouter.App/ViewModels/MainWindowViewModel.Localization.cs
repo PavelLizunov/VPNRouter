@@ -374,8 +374,6 @@ public partial class MainWindowViewModel
     public string L_SmpCtaCancel => Strings.SmpCtaCancel;
     public string L_SmpCtaConnect => Strings.SmpCtaConnect;
     public string L_SmpCtaDisconnect => Strings.SmpCtaDisconnect;
-    public string L_SmpSaveButton => Strings.SmpSaveButton;
-    public string L_SmpRefreshButton => Strings.SmpRefreshButton;
     public string L_SmpDisconnectedTitle => Strings.SmpDisconnectedTitle;
     public string L_SmpFullHint => Strings.SmpFullHint;
     public string L_SmpFullOption => Strings.SmpFullOption;
@@ -399,18 +397,6 @@ public partial class MainWindowViewModel
     public string L_SmpMenuTheme => Strings.SmpMenuTheme;
     public string L_SmpMenuTroubleshootingSection => Strings.SmpMenuTroubleshootingSection;
     public string L_SmpMenuViewSection => Strings.SmpMenuViewSection;
-    // F-10 kebab parity (2026-05-09) — new bindings for kebab items added
-    // so desktop matches Android's canonical menu sequence.
-    public string L_MenuSectionFreeConfigs => Strings.MenuSectionFreeConfigs;
-    public string L_MenuSectionProfiles => Strings.MenuSectionProfiles;
-    public string L_MenuItemSettings => Strings.MenuItemSettings;
-    public string L_MenuItemOpenFreeConfigs => Strings.MenuItemOpenFreeConfigs;
-    public string L_MenuItemOpenProfiles => Strings.MenuItemOpenProfiles;
-    public string L_MenuItemCopyLogPath => Strings.MenuItemCopyLogPath;
-    public string L_MenuItemViewCrashLog => Strings.MenuItemViewCrashLog;
-    public string L_MenuItemExportConfig => Strings.MenuItemExportConfig;
-    public string L_MenuItemImportConfig => Strings.MenuItemImportConfig;
-    public string L_ProfilesIntro => Strings.ProfilesIntro;
     public string L_SmpPlaceholderBody => Strings.SmpPlaceholderBody;
     public string L_SmpPlaceholderSwitchToAdvanced => Strings.SmpPlaceholderSwitchToAdvanced;
     public string L_SmpPlaceholderTitle => Strings.SmpPlaceholderTitle;

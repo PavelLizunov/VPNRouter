@@ -31,118 +31,10 @@ public partial class MainWindowViewModel
     /// URI (becomes a one-server VLESS config) or an <c>http(s)://</c>
     /// subscription URL. Classification in v2.17.2 via SimpleInputDetector.
     /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(SmpInputDetectedKind))]
-    [NotifyPropertyChangedFor(nameof(SmpInputDetectedHint))]
-    [NotifyPropertyChangedFor(nameof(SmpInputDetectedHintVisible))]
-    [NotifyPropertyChangedFor(nameof(SmpSaveEnabled))]
-    [NotifyPropertyChangedFor(nameof(SmpRefreshEnabled))]
-    [NotifyPropertyChangedFor(nameof(SmpInputDirty))]
-    [NotifyPropertyChangedFor(nameof(SmpConnectEnabled))]
-    private string _smpInput = string.Empty;
+    [ObservableProperty] private string _smpInput = string.Empty;
 
     /// <summary>Inline error message shown below the input (empty = no error).</summary>
     [ObservableProperty] private string _smpErrorText = string.Empty;
-
-    /// <summary>
-    /// v2.32.0 parity audit F-11 (2026-05-09): Transient toast shown above the
-    /// SimplePage CTA (e.g. "Saved as Subscription"). Empty = no toast. Mirrors
-    /// the existing <see cref="RulesToastText"/> pattern; cleared automatically
-    /// after ~2.5 s via <see cref="ShowSmpToast"/>.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSmpToast))]
-    private string _smpToastText = string.Empty;
-
-    /// <summary>True when <see cref="SmpToastText"/> is non-empty — drives toast border IsVisible.</summary>
-    public bool HasSmpToast => !string.IsNullOrEmpty(SmpToastText);
-
-    /// <summary>
-    /// v2.32.0 parity audit F-11 (2026-05-09): snapshot of the input that was
-    /// last persisted via <see cref="SmpSave"/> (or auto-saved by
-    /// <see cref="SmpToggleConnectAsync"/>). Used to compute
-    /// <see cref="SmpInputDirty"/> so the Connect button stays disabled while
-    /// the user has typed something but not yet saved it. Pre-fix Connect would
-    /// silently flip ConfigMode and leave the user with an empty subscription
-    /// (F-12 in <c>parity-audit/findings.md</c>).
-    /// </summary>
-    private string _smpInputSavedSnapshot = string.Empty;
-
-    /// <summary>
-    /// True when the input field contains text that hasn't been Saved yet —
-    /// either a freshly-pasted URL the user hasn't committed, or an edited
-    /// version of an already-saved one. Empty input is NOT dirty (lets
-    /// upgraders Connect with an existing config without typing).
-    /// </summary>
-    public bool SmpInputDirty
-    {
-        get
-        {
-            var current = (_smpInput ?? string.Empty).Trim();
-            if (current.Length == 0) return false;
-            return !string.Equals(current, _smpInputSavedSnapshot, StringComparison.Ordinal);
-        }
-    }
-
-    /// <summary>
-    /// Auto-detected kind of the current <see cref="SmpInput"/> — drives the
-    /// "Detected: …" status hint below the field and gates Save/Refresh
-    /// buttons. Pure computed property (no caching) — recomputed on every
-    /// PropertyChanged via the NotifyPropertyChangedFor on SmpInput.
-    /// </summary>
-    public SmpInputKind SmpInputDetectedKind => SimpleInputDetector.Classify(_smpInput);
-
-    /// <summary>
-    /// Localized "Detected: VLESS server" / "Detected: Subscription URL" /
-    /// "Detected: unknown — paste vless:// or https:// link" line displayed
-    /// below the input. Mirrors Android's inline auto-detect feedback on the
-    /// Subscribe sub-tab.
-    /// </summary>
-    public string SmpInputDetectedHint => SmpInputDetectedKind switch
-    {
-        SmpInputKind.ServerUri        => Strings.SmpInputDetectedServer,
-        SmpInputKind.SubscriptionUrl  => Strings.SmpInputDetectedSubscription,
-        _                              => string.Empty,
-    };
-
-    /// <summary>True when the input contains a recognised scheme — hides the hint when empty.</summary>
-    public bool SmpInputDetectedHintVisible =>
-        SmpInputDetectedKind != SmpInputKind.Invalid;
-
-    /// <summary>
-    /// IsEnabled binding for the Save button. Save needs a valid (vless / sub)
-    /// input — wiring through this lets XAML disable the button visually
-    /// rather than relying on Save() to silently no-op.
-    /// </summary>
-    public bool SmpSaveEnabled => SmpInputDetectedKind != SmpInputKind.Invalid && SmpInputDirty;
-
-    /// <summary>
-    /// IsEnabled binding for the Refresh button. Refresh only makes sense for
-    /// subscribe mode AND once the user has a saved subscription (otherwise
-    /// there's nothing to fetch).
-    /// </summary>
-    public bool SmpRefreshEnabled => IsSubscribeMode
-        && (_settings?.App?.Subscriptions?.Any(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Url)) == true);
-
-    /// <summary>
-    /// IsEnabled binding for the Connect CTA. F-12 (parity audit): Connect must
-    /// stay disabled while the user has typed an URL but not Saved it, so
-    /// SmpToggleConnectAsync's silent ConfigMode flip path is unreachable from
-    /// the UI. Disconnect (already-connected) and Cancel (connecting) remain
-    /// enabled — only the disconnected → Connect transition is gated.
-    /// </summary>
-    public bool SmpConnectEnabled
-    {
-        get
-        {
-            // Already in a tunnel transition — let the user Disconnect/Cancel.
-            if (IsConnected || IsConnecting) return true;
-            // Disconnected: only allow Connect if there is no unsaved input
-            // sitting in the field. Empty input + existing saved config is
-            // fine (upgrader/auto-Connect path).
-            return !SmpInputDirty;
-        }
-    }
 
     /// <summary>
     /// Controls the "Change config or mode" Expander on SimplePage.
@@ -388,29 +280,11 @@ public partial class MainWindowViewModel
 
     /// <summary>
     /// Simple-mode connect flow. If already connected → just Stop (reuses
-    /// the existing ToggleConnection path). Otherwise:
-    ///
-    /// <list type="bullet">
-    /// <item>If <see cref="SmpInput"/> is empty or whitespace → connect with
-    ///   whatever is already saved in <c>_settings</c>. This is the common
-    ///   "Simple opened on a configured install" path.</item>
-    /// <item>If <see cref="SmpInput"/> contains a valid share-link or
-    ///   subscription URL but it has NOT been saved (i.e. <c>SmpSave</c>
-    ///   has not yet committed it) → block + show inline error pointing
-    ///   the user at the Save button. <strong>F-12 (parity audit P0,
-    ///   2026-05-09)</strong>: pre-fix the Connect button silently called
-    ///   <c>TryApplyVless</c> / <c>TryApplySubscriptionUrl</c> + flipped
-    ///   <c>ConfigMode</c> + overwrote <c>_settings.App.Subscriptions</c>
-    ///   with no feedback. Same failure class as v2.28.2 silent leak — a
-    ///   misclassified silent flip leaving <c>ConfigMode=subscribe</c>
-    ///   with empty servers, falling through to direct.</item>
-    /// <item>If <see cref="SmpInput"/> contains text that already matches
-    ///   what is saved → proceed (no mutation needed).</item>
-    /// </list>
-    ///
-    /// Hands off to <see cref="ToggleConnectionAsync"/> which runs the same
-    /// Connect logic Advanced uses — including service-managed detection
-    /// and WarnServiceManagedReconnect.
+    /// the existing ToggleConnection path). Otherwise parses the pasted
+    /// input, writes the minimum settings needed (single VLESS entry OR
+    /// a single-entry subscriptions list), and hands off to ToggleConnection
+    /// which runs the same Connect logic Advanced uses — including
+    /// service-managed detection and WarnServiceManagedReconnect.
     /// </summary>
     [RelayCommand]
     private async Task SmpToggleConnectAsync()
@@ -425,8 +299,7 @@ public partial class MainWindowViewModel
 
         if (IsConnecting) return;
 
-        var rawInput = (SmpInput ?? string.Empty).Trim();
-        var kind = SimpleInputDetector.Classify(rawInput);
+        var kind = SimpleInputDetector.Classify(_smpInput);
 
         // Empty / garbage input is OK if the user already has a working
         // config in settings — we just connect with what's there. This is
@@ -451,29 +324,14 @@ public partial class MainWindowViewModel
                 return;
             }
         }
-        else if (!IsSimpleInputAlreadySaved(rawInput, kind))
+        else if (kind == SmpInputKind.ServerUri)
         {
-            // F-12 (parity audit P0): the user has typed a non-empty,
-            // valid-looking input that hasn't been Save'd yet. Refuse to
-            // silently flip ConfigMode + overwrite settings. Surface the
-            // inline error pointing at the Save button. The error text is
-            // the only feedback (we don't have a global toast slot wired
-            // for SimplePage); SmpErrorText is already shown right under
-            // the input + Save/Refresh buttons so the user sees it next
-            // to the action that resolves it.
-            // (F-11 chip's TryApplyVless / TryApplySubscriptionUrl helpers
-            // remain reachable from the Save button command — see
-            // SmpSaveCommand handler. We intentionally do NOT auto-save
-            // here on Connect; explicit Save click required.)
-            SmpErrorText = kind == SmpInputKind.SubscriptionUrl
-                ? Strings.SmpSaveFirstSubscription
-                : Strings.SmpSaveFirstServer;
-            _logger?.Information(
-                "[VM.Simple] Connect blocked — unsaved {Kind} input. User must press Save first to avoid silent ConfigMode flip (F-12 / v2.28.2 silent-leak class).",
-                kind);
-            return;
+            if (!TryApplyVless(_smpInput.Trim())) return;
         }
-        // else: input matches what's saved — no mutation needed, just proceed.
+        else if (kind == SmpInputKind.SubscriptionUrl)
+        {
+            if (!TryApplySubscriptionUrl(_smpInput.Trim())) return;
+        }
 
         // Tunnel mode (Split vs Full) — already bound to IsSplitTunnel via radio.
         _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
@@ -486,218 +344,27 @@ public partial class MainWindowViewModel
         SaveSettings();
         _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
 
-        // Hand off to the shared Connect path — it already handles mode
-        // dispatch, TUN conflicts, service-managed warnings, etc. The
-        // subscription refresh used to happen here too, but per F-12 the
-        // Connect path no longer mutates persisted state — Save+Refresh
-        // are explicit steps the user takes via the inline buttons.
-        await ToggleConnectionAsync();
-    }
-
-    /// <summary>
-    /// F-12 helper: returns true if <paramref name="rawInput"/> matches what
-    /// is already persisted in <c>_settings</c> for the classified
-    /// <paramref name="kind"/>. Used by <see cref="SmpToggleConnectAsync"/>
-    /// to refuse silent ConfigMode flips on Connect — only an explicit
-    /// Save (via <see cref="SmpSave"/>) is allowed to mutate persisted
-    /// state.
-    ///
-    /// <para>Comparisons:</para>
-    /// <list type="bullet">
-    /// <item><c>SubscriptionUrl</c>: case-insensitive trim-equal match
-    ///   against any existing <c>_settings.App.Subscriptions[].Url</c>
-    ///   regardless of <c>Enabled</c> flag. The user may have disabled
-    ///   the entry through Advanced; "saved" still applies.</item>
-    /// <item><c>ServerUri</c>: parses the URI and matches the resulting
-    ///   <c>Server</c> + <c>Port</c> + <c>Uuid</c> tuple against any
-    ///   existing <c>_settings.Vless.Servers[]</c>. Hysteria2/Shadowsocks
-    ///   without UUID match on Server+Port+Password.</item>
-    /// </list>
-    ///
-    /// Parse failures fall through as "not saved" — the
-    /// <see cref="TryApplyVless"/> path (invoked from <see cref="SmpSave"/>)
-    /// will surface the parse error properly when the user clicks Save.
-    /// </summary>
-    private bool IsSimpleInputAlreadySaved(string rawInput, SmpInputKind kind)
-    {
-        if (string.IsNullOrWhiteSpace(rawInput)) return false;
-
-        if (kind == SmpInputKind.SubscriptionUrl)
-        {
-            return _settings.App.Subscriptions?
-                .Any(s => string.Equals(
-                    (s.Url ?? string.Empty).Trim(),
-                    rawInput,
-                    StringComparison.OrdinalIgnoreCase)) == true;
-        }
-
-        if (kind == SmpInputKind.ServerUri)
-        {
-            VlessServerEntry parsed;
-            try { parsed = ServerUriParser.Parse(rawInput); }
-            catch { return false; }
-
-            var existing = _settings.Vless.Servers;
-            if (existing == null || existing.Count == 0) return false;
-
-            return existing.Any(e =>
-                string.Equals(e.Server ?? string.Empty, parsed.Server ?? string.Empty, StringComparison.OrdinalIgnoreCase)
-                && e.Port == parsed.Port
-                && (
-                    // VLESS / TUIC: UUID identity
-                    (!string.IsNullOrEmpty(parsed.Uuid)
-                        && string.Equals(e.Uuid ?? string.Empty, parsed.Uuid, StringComparison.OrdinalIgnoreCase))
-                    // Hysteria2 / Shadowsocks: password identity
-                    || (string.IsNullOrEmpty(parsed.Uuid)
-                        && !string.IsNullOrEmpty(parsed.Password)
-                        && string.Equals(e.Password ?? string.Empty, parsed.Password, StringComparison.Ordinal))));
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// v2.32.0 parity audit F-02 row 6 (2026-05-09): Save command for the
-    /// SimplePage action row. Mirrors the parse + persist portion of
-    /// <see cref="SmpToggleConnectAsync"/> but stops short of Connect, so
-    /// users can persist a freshly-pasted URI / URL without committing
-    /// to a tunnel start. Pre-fix the Save action lived only on the
-    /// Subscribe Advanced page; F-02 row 6 wanted parity with Android,
-    /// which has Save / Refresh / QR buttons inline on the main scroller.
-    /// QR is omitted on desktop (no camera surface).
-    ///
-    /// <para>
-    /// v2.32.0 parity audit F-11 (2026-05-09): on success, kicks off a
-    /// background subscription refresh (subscribe mode) and surfaces a toast
-    /// so the user has explicit feedback. Records the saved value in
-    /// <see cref="_smpInputSavedSnapshot"/> so the Connect button (gated by
-    /// <see cref="SmpConnectEnabled"/> via <see cref="SmpInputDirty"/>)
-    /// re-enables.
-    /// </para>
-    /// </summary>
-    [RelayCommand]
-    private async Task SmpSaveAsync()
-    {
-        SmpErrorText = string.Empty;
-        var raw = (_smpInput ?? string.Empty).Trim();
-        if (raw.Length == 0)
-        {
-            SmpErrorText = IsRussian
-                ? "Поле пусто — вставь vless:// / hysteria2:// / tuic:// / ss:// или https://-URL подписки."
-                : "Empty — paste a vless:// / hysteria2:// / tuic:// / ss:// link or an https:// subscription URL.";
-            return;
-        }
-
-        var kind = SimpleInputDetector.Classify(raw);
-        if (kind == SmpInputKind.Invalid)
-        {
-            SmpErrorText = IsRussian
-                ? "Не похоже на валидную ссылку или подписочный URL."
-                : "Doesn't look like a valid share-link or subscription URL.";
-            return;
-        }
-
-        if (kind == SmpInputKind.ServerUri && !TryApplyVless(raw)) return;
-        if (kind == SmpInputKind.SubscriptionUrl && !TryApplySubscriptionUrl(raw)) return;
-
-        _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
-        if (IsSplitTunnel)
-            _settings.ActiveProfile = SimpleSplitProfile;
-
-        SaveSettings();
-        _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
-
-        // F-11: mark this value as the persisted snapshot so SmpInputDirty
-        // flips false, which re-enables the Connect CTA + disables Save.
-        _smpInputSavedSnapshot = raw;
-        OnPropertyChanged(nameof(SmpInputDirty));
-        OnPropertyChanged(nameof(SmpSaveEnabled));
-        OnPropertyChanged(nameof(SmpRefreshEnabled));
-        OnPropertyChanged(nameof(SmpConnectEnabled));
-
-        // F-11: explicit user feedback. "Saved as Subscription" / "Saved as
-        // VLESS server" — Android shows the same after a Save tap.
-        var toast = kind == SmpInputKind.SubscriptionUrl
-            ? Strings.SmpSavedAsSubscriptionToast
-            : Strings.SmpSavedAsServerToast;
-        ShowSmpToast(toast);
-
-        // F-11: subscription mode needs a fetch before the user clicks
-        // Connect — otherwise the Servers tab is empty and Connect would
-        // bail (or worse, in F-12 silently flip ConfigMode without telling
-        // the user). Fire-and-forget; refresh failure is surfaced via the
-        // existing _logger + the Refresh button stays clickable for retry.
+        // Subscription mode needs a fresh fetch BEFORE connect so we have
+        // servers to hand to the engine.
         if (kind == SmpInputKind.SubscriptionUrl)
         {
             try
             {
                 await RefreshAllSubscriptionsAsync();
-                ShowSmpToast(Strings.SmpRefreshDoneToast);
             }
             catch (Exception ex)
             {
-                _logger.Warning(ex, "[Simple] SmpSave background refresh failed");
-                // Don't clear the "Saved" toast with an error — leave the
-                // success toast visible and let the user retry via Refresh.
+                _logger.Warning(ex, "[Simple] Subscription refresh failed");
+                SmpErrorText = IsRussian
+                    ? $"Не удалось получить подписку: {ex.Message}"
+                    : $"Couldn't fetch the subscription: {ex.Message}";
+                return;
             }
         }
-    }
 
-    /// <summary>
-    /// v2.32.0 parity audit F-11 (2026-05-09): set <see cref="SmpToastText"/>,
-    /// schedule a 2500 ms revert. Multiple calls cancel any pending revert so
-    /// rapid Save → Refresh shows the latest message rather than blinking.
-    /// </summary>
-    private void ShowSmpToast(string message)
-    {
-        SmpToastText = message;
-        var token = ++_smpToastToken;
-        _ = System.Threading.Tasks.Task.Delay(2500).ContinueWith(_ =>
-        {
-            if (token == _smpToastToken)
-            {
-                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-                {
-                    if (token == _smpToastToken) SmpToastText = string.Empty;
-                });
-            }
-        });
-    }
-
-    private int _smpToastToken;
-
-    /// <summary>
-    /// v2.32.0 parity audit F-11 (2026-05-09): Simple-page-specific Refresh
-    /// wrapper. Delegates the actual fetching to
-    /// <see cref="RefreshAllSubscriptionsAsync"/> (the Subscribe page command)
-    /// then surfaces a toast so the user has explicit "did anything happen?"
-    /// feedback. Pre-fix the SimplePage Refresh button was bound directly to
-    /// RefreshAllSubscriptionsCommand, which silently completed in the
-    /// background — Android's equivalent shows an inline "Subscription
-    /// refreshed" status.
-    /// </summary>
-    [RelayCommand]
-    private async Task SmpRefreshAsync()
-    {
-        SmpErrorText = string.Empty;
-        ShowSmpToast(Strings.Syncing);
-        try
-        {
-            await RefreshAllSubscriptionsAsync();
-            ShowSmpToast(Strings.SmpRefreshDoneToast);
-            // Refresh changed Subscriptions[].Servers — re-evaluate gating
-            // properties so the button states match the new data.
-            OnPropertyChanged(nameof(SmpRefreshEnabled));
-            OnPropertyChanged(nameof(SmpConnectEnabled));
-        }
-        catch (Exception ex)
-        {
-            _logger.Warning(ex, "[Simple] SmpRefresh failed");
-            SmpToastText = string.Empty;
-            SmpErrorText = IsRussian
-                ? $"Не удалось получить подписку: {ex.Message}"
-                : $"Couldn't fetch the subscription: {ex.Message}";
-        }
+        // Hand off to the shared Connect path — it already handles mode
+        // dispatch, TUN conflicts, service-managed warnings, etc.
+        await ToggleConnectionAsync();
     }
 
     /// <summary>
@@ -734,17 +401,8 @@ public partial class MainWindowViewModel
             Servers.Add(vm);
             SelectedServer = vm;
 
-            // F-12 (parity audit P0, 2026-05-09): every ConfigMode mutation
-            // is now logged at Info level so a future silent flip is at
-            // least audit-able from the application log. TryApplyVless is
-            // only called from SmpSave (the explicit Save action), so the
-            // flip happens at user request, not from a Connect click.
-            var oldMode = _settings.App.ConfigMode ?? "(unset)";
             _settings.App.ConfigMode = "generated";
             _settings.App.ActiveSubscriptionServer = string.Empty;
-            _logger?.Information(
-                "[VM.Simple] ConfigMode flipped {Old} → generated from TryApplyVless (user pressed Save with a {Scheme} share-link)",
-                oldMode, entry.Protocol ?? "vless");
             IsSubscribeMode = false;
             IsVlessMode = true;
             return true;
@@ -789,16 +447,7 @@ public partial class MainWindowViewModel
         Subscriptions.Clear();
         Subscriptions.Add(new SubscriptionViewModel(entry));
 
-        // F-12 (parity audit P0, 2026-05-09): log the flip explicitly. This
-        // is called from SmpSave (the explicit Save action) — never from
-        // Connect anymore (see SmpToggleConnectAsync IsSimpleInputAlreadySaved
-        // guard). Capturing the old mode + new mode in the log makes future
-        // silent-flip postmortems trivial to grep.
-        var oldMode = _settings.App.ConfigMode ?? "(unset)";
         _settings.App.ConfigMode = "subscribe";
-        _logger?.Information(
-            "[VM.Simple] ConfigMode flipped {Old} → subscribe from TryApplySubscriptionUrl (user pressed Save with a subscription URL)",
-            oldMode);
         IsSubscribeMode = true;
         IsVlessMode = false;
         return true;

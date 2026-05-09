@@ -45,13 +45,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VPNRouter.Core\VPNRouter.Core.csproj" />
-    <!-- v3.0 Phase G step 1 (2026-05-09) — shared XAML UserControl
-         library for desktop ↔ Android visual parity. Adds <vui:StatusCard>
-         and friends; consume via xmlns:vui="using:VPNRouter.UI.Controls".
-         Project named VPNRouter.UI (not VPNRouter.Avalonia.UI) to avoid
-         shadowing the Avalonia.* namespace inside `namespace VPNRouter.*`
-         consumers. -->
-    <ProjectReference Include="..\VPNRouter.UI\VPNRouter.UI.csproj" />
   </ItemGroup>
 
   <!-- v2.31.10: expose internal helpers (e.g.
