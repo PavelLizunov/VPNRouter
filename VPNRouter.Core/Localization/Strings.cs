@@ -2411,4 +2411,66 @@ public static class Strings
 
     /// <summary>"Check IP leak" button label in Tools / Advanced.</summary>
     public static string AndroidToolsCheckLeak => Ru ? "Проверить IP-утечку" : "Check IP leak";
+
+    // AND-ADV-TOOLS-PUBLIC (2026-05-10) — Phase E of Android Advanced
+    // parity. Tools tab now hosts merged Zapret + Telegram sub-tabs;
+    // Public tab keeps the existing Search / Saved sub-tabs but with
+    // localization keys aligned to the AdvPublic* naming scheme.
+    public static string AdvToolsSubTabZapret => Ru ? "Zapret" : "Zapret";
+    public static string AdvToolsSubTabTelegram => Ru ? "Telegram-прокси" : "Telegram proxy";
+
+    /// <summary>Banner shown inside Tools > Zapret on Android explaining
+    /// the platform-impossible substitution: desktop's 5-section side-nav
+    /// (Status/Strategy/Hosts/Filters/Advanced) drives a winws.exe Cygwin
+    /// process that doesn't exist on Android. The Android port uses
+    /// sing-box's native tls_fragment outbound instead, so only the mode
+    /// picker (off / standard / aggressive) is meaningful here.</summary>
+    public static string AdvToolsZapretAndroidExplainer => Ru
+        ? "Android использует встроенный sing-box (tls_fragment) вместо winws.exe. Поэтому секции Status / Strategy / Hosts / Filters / Advanced с десктопа здесь не применимы — управление сводится к выбору режима ниже."
+        : "Android uses sing-box's native tls_fragment instead of winws.exe. The desktop Status / Strategy / Hosts / Filters / Advanced sub-sections don't apply — only the mode picker below is meaningful.";
+
+    /// <summary>Banner shown inside Tools > Telegram proxy on Android.
+    /// Desktop hosts a full TgProxy daemon (download / start / stop /
+    /// secret regeneration). Android routes Telegram traffic through the
+    /// main sing-box tunnel — no daemon needed, no controls to expose.</summary>
+    public static string AdvToolsTelegramAndroidExplainer => Ru
+        ? "На Android Telegram-трафик идёт через основной VPN-туннель — отдельный MTProto-демон не нужен. Кнопка ниже открывает приложение Telegram, если оно установлено."
+        : "On Android, Telegram traffic is routed through the main VPN tunnel — no separate MTProto daemon is needed. The button below opens the Telegram app if it's installed.";
+
+    /// <summary>"Open Telegram" deep-link button on the Telegram sub-tab.</summary>
+    public static string AdvToolsOpenTelegram => Ru ? "Открыть Telegram" : "Open Telegram";
+
+    /// <summary>Toast shown when "Open Telegram" can't find an installed
+    /// Telegram client (org.telegram.messenger missing). Falls through to
+    /// opening the Play Store listing.</summary>
+    public static string AdvToolsTelegramNotInstalled => Ru
+        ? "Telegram не установлен — открываю Play Store."
+        : "Telegram is not installed — opening Play Store.";
+
+    // ── Public tab (Phase E P1-P4) ──────────────────────────────────────
+    public static string AdvPublicSubTabSearch => Ru ? "▶ Поиск" : "▶ Search";
+    public static string AdvPublicSubTabSaved  => Ru ? "★ Сохранённые" : "★ Saved";
+
+    /// <summary>Big green CTA on Public > Search. Mirrors desktop's
+    /// "✓✓ Найти рабочие конфиги" / "✓✓ Find working configs".</summary>
+    public static string AdvPublicFindButton => Ru
+        ? "✓✓ Найти рабочие конфиги"
+        : "✓✓ Find working configs";
+
+    /// <summary>"Settings" expander label inside the green search card.</summary>
+    public static string AdvPublicSettingsExpand => Ru ? "▾ Настройки" : "▾ Settings";
+
+    /// <summary>Per-tab Connect button at the bottom of Public.</summary>
+    public static string AdvPublicConnect => Ru ? "Подключить" : "Connect";
+
+    /// <summary>Empty-state hint when the configs list is empty (pre-find).</summary>
+    public static string AdvPublicCacheEmpty => Ru
+        ? "Нажмите кнопку выше, чтобы найти рабочие публичные конфиги."
+        : "Click the button above to find working public configs.";
+
+    /// <summary>Hint shown when no row is highlighted and the bottom Connect
+    /// button is disabled.</summary>
+    public static string AdvPublicSelectRow => Ru
+        ? "Выберите конфиг из списка и нажмите «Подключить»."
+        : "Select a config from the list and click Connect.";
 }
