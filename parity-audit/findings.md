@@ -218,11 +218,11 @@ Same scenario: paste `https://example.com/sub` into the Simple page VPN config f
 
 ---
 
-### F-12 — Connect button with URL flips ConfigMode silently
+### F-12 — Connect button with URL flips ConfigMode silently ✅ closed 2026-05-09
 
 Same flow continued: with `https://example.com/sub` typed in, click Connect.
 
-**Desktop observed behavior**:
+**Desktop observed behavior** (pre-fix):
 1. Config·Mode silently flips: "manual · full" → "subscribe · full"
 2. Status stays "Not connected"
 3. Connect button greys out (disabled)
@@ -236,11 +236,34 @@ Same flow continued: with `https://example.com/sub` typed in, click Connect.
 
 **Impact P0**: dangerous UX. User who pasted URL + clicked Connect silently lands in subscribe mode with empty server list — next start of VPN may LEAK (config is "subscribe" but no servers, falls through to direct). **Same class of bug as v2.28.2 silent leak** but different trigger (UI-driven, not Apply-driven).
 
-**Fix**:
-- Desktop SimplePage Connect button: do NOT auto-flip ConfigMode. Either:
-  - (a) Disable Connect until URL is Saved (Android pattern), OR
-  - (b) Show explicit toast "Subscription detected. Save and Refresh first." with action button
-- Add log line on every silent ConfigMode flip — at minimum surface in `Open logs` for postmortem.
+**Fix shipped on branch (2026-05-09)**:
+- `SmpToggleConnectAsync` (Simple-mode Connect command) now guards on
+  `IsSimpleInputAlreadySaved`: if the typed input doesn't match anything
+  already in `_settings.App.Subscriptions[].Url` /
+  `_settings.Vless.Servers[]`, Connect refuses to silently mutate state.
+  Sets inline `SmpErrorText = SmpSaveFirstSubscription` (or
+  `SmpSaveFirstServer`) pointing the user at the Save button, and logs
+  the block at Info level. Empty input keeps existing behaviour
+  (connect with what's saved); matching input falls through.
+- Every `_settings.App.ConfigMode` mutation in `MainWindowViewModel*`
+  now logs at Info level — `[VM.Simple] ConfigMode flipped X → Y from
+  TryApplyVless / TryApplySubscriptionUrl` plus the
+  `[Settings] SaveSettings ConfigMode X → Y` line in the SaveSettings
+  catch-all branch. Future silent flips become grep-able from the
+  application log.
+- `LeakProtection.ValidateAppSettings(AppSettings)` added at Core layer
+  as a defense-in-depth backstop. Catches the bad invariant
+  "ConfigMode=subscribe + no enabled subscription with servers + no
+  manual fallback" pre-config-generation. Wired into both
+  `VpnEngine.StartAsync` and `VpnEngine.ApplyAsync` so any future UI
+  silent-flip lands here as a clear error rather than a leaky config.
+- Tests: `MainWindowViewModelTests.SmpToggleConnect_WithUnsaved*`
+  (2 cases — sub URL + vless URI) pin the no-silent-flip guarantee at
+  the VM level. `LeakProtectionAppSettingsTests` (9 cases) pin the
+  invariant logic at the Core level.
+
+Same failure class as v2.28.2 silent leak — see
+`plans/session-night-shift-2026-04-25.md`.
 
 ---
 

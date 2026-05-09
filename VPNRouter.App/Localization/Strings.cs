@@ -39,6 +39,8 @@ public static class Strings
     public static string StopVPN => global::VPNRouter.Core.Localization.Strings.StopVPN;
     public static string SmpSaveButton => global::VPNRouter.Core.Localization.Strings.SmpSaveButton;
     public static string SmpRefreshButton => global::VPNRouter.Core.Localization.Strings.SmpRefreshButton;
+    public static string SmpSaveFirstSubscription => global::VPNRouter.Core.Localization.Strings.SmpSaveFirstSubscription;
+    public static string SmpSaveFirstServer => global::VPNRouter.Core.Localization.Strings.SmpSaveFirstServer;
     public static string AddServers => global::VPNRouter.Core.Localization.Strings.AddServers;
     public static string Remove => global::VPNRouter.Core.Localization.Strings.Remove;
     public static string AddConfig => global::VPNRouter.Core.Localization.Strings.AddConfig;

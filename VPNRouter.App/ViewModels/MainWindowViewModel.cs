@@ -3267,7 +3267,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         else
         {
-            _settings.App.ConfigMode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "generated" : "custom";
+            // F-12 (parity audit P0, 2026-05-09): log every ConfigMode write
+            // from SaveSettings so a future silent flip is grep-able from
+            // the application log. Pre-fix this branch had no logging at
+            // all even though the flip is meaningful (it changes how the
+            // engine resolves servers + which UI tab the user lands on).
+            var oldMode = _settings.App.ConfigMode ?? "(unset)";
+            var newMode = IsSubscribeMode ? "subscribe" : IsVlessMode ? "generated" : "custom";
+            _settings.App.ConfigMode = newMode;
+            if (!string.Equals(oldMode, newMode, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger?.Information(
+                    "[Settings] SaveSettings ConfigMode {Old} → {New} (IsSubscribeMode={Sub}, IsVlessMode={Vless})",
+                    oldMode, newMode, IsSubscribeMode, IsVlessMode);
+            }
         }
 
         // Persist all subscription entries (multi-subscription support)

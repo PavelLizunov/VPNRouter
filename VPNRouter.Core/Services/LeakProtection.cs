@@ -11,6 +11,100 @@ public class ValidationResult
 
 public static class LeakProtection
 {
+    /// <summary>
+    /// Pre-generation invariant check on the AppSettings model. Catches
+    /// inconsistent <c>ConfigMode</c> + <c>Subscriptions</c> + <c>Vless.Servers</c>
+    /// states that would otherwise produce a silent leak (sing-box config
+    /// generated with no proxy outbound usable, traffic falling through to
+    /// direct).
+    ///
+    /// <para><strong>F-12 (parity audit P0, 2026-05-09)</strong> backstop:
+    /// this is a defense-in-depth net for any future silent <c>ConfigMode</c>
+    /// flip we miss in the UI layer. Same failure class as v2.28.2 silent
+    /// leak — there the invariant violation lived inside <c>VpnEngine.Apply</c>;
+    /// here we pin it at the model level so any caller (CLI, Service, future
+    /// admin overlay) gets the same protection without needing to remember.</para>
+    ///
+    /// <para>Errors raised:</para>
+    /// <list type="bullet">
+    /// <item><c>ConfigMode == "subscribe"</c> AND no enabled subscription has
+    ///   any <c>VlessServerEntry</c> AND <c>Vless.Servers</c> is empty →
+    ///   the engine would generate a config with empty proxy outbounds and
+    ///   traffic would fall through to direct.</item>
+    /// <item><c>ConfigMode == "generated"</c> AND <c>Vless.Servers</c> is empty
+    ///   AND no enabled subscription has servers — engine has nothing to
+    ///   route through.</item>
+    /// </list>
+    ///
+    /// Callers should run this BEFORE generating the sing-box config and
+    /// abort if <c>IsValid</c> is false. <see cref="VpnEngine.StartAsync"/>
+    /// invokes this at the top of its non-custom branch.
+    /// </summary>
+    public static ValidationResult ValidateAppSettings(AppSettings settings)
+    {
+        var errors = new List<string>();
+        var warnings = new List<string>();
+
+        if (settings == null)
+        {
+            errors.Add("AppSettings is null");
+            return new ValidationResult { Errors = errors, Warnings = warnings };
+        }
+
+        var configMode = (settings.App?.ConfigMode ?? "generated").Trim();
+        var isSubscribe = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
+        var isGenerated = configMode.Equals("generated", StringComparison.OrdinalIgnoreCase);
+        // Custom mode loads JSON from disk — out of scope for this check.
+
+        var subs = settings.App?.Subscriptions ?? new List<SubscriptionEntry>();
+        var enabledSubs = subs.Where(s => s != null && s.Enabled).ToList();
+        var enabledSubsWithServers = enabledSubs
+            .Where(s => s.Servers != null && s.Servers.Count > 0)
+            .ToList();
+        var manualServerCount = settings.Vless?.Servers?.Count ?? 0;
+        var hasLegacyVlessServer = !string.IsNullOrWhiteSpace(settings.Vless?.Server);
+
+        if (isSubscribe)
+        {
+            if (subs.Count == 0)
+            {
+                errors.Add(
+                    "ConfigMode=subscribe but no subscriptions are registered. " +
+                    "Either register a subscription URL (Subscribe tab) or switch ConfigMode " +
+                    "back to 'generated'/'custom' before connecting.");
+            }
+            else if (enabledSubs.Count == 0)
+            {
+                errors.Add(
+                    "ConfigMode=subscribe but every subscription is disabled. " +
+                    "Enable at least one subscription before connecting.");
+            }
+            else if (enabledSubsWithServers.Count == 0 && manualServerCount == 0 && !hasLegacyVlessServer)
+            {
+                // This is the F-12 silent-leak class. We have an enabled
+                // subscription but no servers fetched yet and no manual
+                // fallback — generating a config now would leave proxy
+                // outbounds empty.
+                errors.Add(
+                    "ConfigMode=subscribe but no subscription has fetched any servers and " +
+                    "no manual VLESS server is configured as a fallback. " +
+                    "Click 'Refresh All' on the Subscribe tab to fetch servers " +
+                    "before connecting (F-12 silent-leak guard, parity audit).");
+            }
+        }
+        else if (isGenerated)
+        {
+            if (manualServerCount == 0 && !hasLegacyVlessServer && enabledSubsWithServers.Count == 0)
+            {
+                errors.Add(
+                    "ConfigMode=generated but no VLESS server is configured. " +
+                    "Add a server in the Servers tab or switch to subscribe mode.");
+            }
+        }
+
+        return new ValidationResult { Errors = errors, Warnings = warnings };
+    }
+
     public static ValidationResult ValidateConfig(SingBoxConfig config)
     {
         var errors = new List<string>();
