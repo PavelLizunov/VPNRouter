@@ -148,6 +148,126 @@ so this is pure layout addition.
 
 ---
 
+## 🔴 P0 — Behavior divergences (logic, not just look — found 2026-05-09 retest)
+
+### F-10 — Kebab menu structure + items completely diverge
+
+Live interactive comparison desktop v2.32.0 (currently installed) ↔ Android freshest build:
+
+**Desktop kebab** (10 items, 4 sections, **Advanced submenu collapses additional items**):
+- View: Light / Dark / RU / EN
+- Diagnostics: Open logs · **Check IP leak** · Check for updates
+- Troubleshooting: **Run Health Check** · **Restart in Safe Mode** · **Reset config to defaults** (red, danger style)
+- About v2.32.0
+- **Advanced ▶** — collapsed submenu (Servers/Subscriptions/Zapret/TgProxy/Public configs hidden inside)
+
+**Android kebab** (15 items, 4 sections, **flat — no submenus**):
+- Appearance: Light/Dark + RU/EN
+- Free configs: **Find a server** (top of kebab, not hidden)
+- Profiles: **Routing profiles** (top of kebab, not hidden)
+- Diagnostics: Settings (opens overlay, NOT navigates to Network page) · Open log · **Copy log path** · **View crash log** · Check for updates · **Export config** · **Import config**
+- Troubleshooting: Reset settings
+- About
+
+**Per-item divergence map**:
+
+| Item | Desktop | Android |
+|---|---|---|
+| Find a server / Free configs | hidden in `Advanced ▶` submenu | top-level |
+| Routing profiles | **absent** | top-level |
+| Settings entry | navigates to Network page (full app navigation) | opens settings overlay (modal in current view) |
+| Copy log path | **absent** | present |
+| View crash log | **absent** | present |
+| Export config / Import config | **absent in kebab** | present |
+| Check IP leak | present | **absent** |
+| Run Health Check | present | **absent** |
+| Restart in Safe Mode | present | **absent** |
+| Reset config to defaults | red danger style | "Reset settings" without color emphasis |
+| Submenu | "Advanced ▶" collapsible | **none — all flat** |
+
+**Impact P0**: 8+ items exist on only one side. User who knows desktop → Android can't find Health Check / Safe Mode / IP Leak. User who knows Android → Desktop can't find Routing Profiles / Crash log / Copy log path / Export. **Mental model breaks.**
+
+**Fix strategy**: standardize on canonical kebab sequence + structure. Need design decision: which items belong on **simple** kebab vs Advanced page. Two paths:
+- (a) Mirror **all** items on both (no submenu, all flat — Android model)
+- (b) Mirror **all** items on both with consistent Advanced submenu (Desktop model)
+- Recommend (a) because it scales better on mobile where there's no big window for Advanced.
+
+---
+
+### F-11 — VPN config input is passive on desktop, active on Android
+
+Same scenario: paste `https://example.com/sub` into the Simple page VPN config field.
+
+**Desktop**:
+- Text appears in input field
+- **Config·Mode stays as "manual · full"** — does not auto-flip
+- **No Save / Refresh buttons appear** — input is just a passive text field
+- User must navigate Advanced settings → Subscriptions → manually paste again → Save
+- Effectively the Simple page input is decorative
+
+**Android**:
+- Subscription tab already active by default (sub-tabs pattern)
+- Save / QR / Refresh buttons present inline
+- Tap Save → URL persisted, server list begins fetch
+- Tap Refresh → re-pulls servers
+- One-page workflow
+
+**Impact P0**: First-launch desktop user types URL on Simple page, hits Connect, **nothing visibly happens**. Android user does same flow, sees feedback. Desktop user is left wondering "where do I save this?".
+
+**Fix**: port Android's Save / Refresh inline buttons + sub-tab pattern to desktop SimplePage (already done partially in F-02 row 6 — Save / Refresh buttons added; but no sub-tabs and no auto-fetch on save).
+
+---
+
+### F-12 — Connect button with URL flips ConfigMode silently
+
+Same flow continued: with `https://example.com/sub` typed in, click Connect.
+
+**Desktop observed behavior**:
+1. Config·Mode silently flips: "manual · full" → "subscribe · full"
+2. Status stays "Not connected"
+3. Connect button greys out (disabled)
+4. **No toast, no error, no spinner, no log entry surfaced** — user sees only that mode changed
+5. Underneath: VpnEngine attempted to fetch subscription → empty result → silently bailed
+
+**Android observed behavior** (parallel test on phone):
+- Same paste → tap Connect
+- Either: Connect button is disabled until Save tapped, OR explicit "Subscription not refreshed" toast
+- (Verified earlier: Android forces Save → Refresh → server pick before Connect can fire)
+
+**Impact P0**: dangerous UX. User who pasted URL + clicked Connect silently lands in subscribe mode with empty server list — next start of VPN may LEAK (config is "subscribe" but no servers, falls through to direct). **Same class of bug as v2.28.2 silent leak** but different trigger (UI-driven, not Apply-driven).
+
+**Fix**:
+- Desktop SimplePage Connect button: do NOT auto-flip ConfigMode. Either:
+  - (a) Disable Connect until URL is Saved (Android pattern), OR
+  - (b) Show explicit toast "Subscription detected. Save and Refresh first." with action button
+- Add log line on every silent ConfigMode flip — at minimum surface in `Open logs` for postmortem.
+
+---
+
+### F-13 — Default ConfigMode different on installed desktop v2.32.0
+
+Live shipping v2.32.0 on this machine: ConfigMode **"manual · full"**. Our F-02 fix flipped default to **"subscribe · full"** on main HEAD but that change has NOT shipped yet.
+
+**Impact P1**: any user upgrading from v2.32.0 → next stable will see ConfigMode change at next config.yaml load (because we updated the validator's allowed-default). May confuse some users. Need release note for it.
+
+**Fix**: documentation in next stable release notes. NOT a code change — already addressed by F-02.
+
+---
+
+### F-14 — Wording on installed v2.32.0 still uses pre-F-02 strings
+
+Live shipping v2.32.0:
+- "Traffic goes **straight**" (should be "direct")
+- "**Route through VPN**" label (should be "What goes via VPN")
+- "**Based on your selected apps**" subtext (should be "By selected apps list (advanced settings)")
+- "**Includes games and banking**" (should be "Including games and banks")
+
+**Impact P1**: my earlier "convergence verified" claim was wrong. PageScreenshotTests use fresh build. **Installed binary is older.** The match only holds for a future stable, not what users see today.
+
+**Fix**: ship next -rN candidate with F-01 + F-02 + F-03..F-09 fixes bundled. Then verify on fresh install (uninstall old → install new). NOT an additional code change.
+
+---
+
 ## 🟡 P2 — Polish (batch fix in v2.33+)
 
 ### F-06 — Status card icon differs
