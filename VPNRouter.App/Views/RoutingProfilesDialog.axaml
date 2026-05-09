@@ -1,0 +1,78 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:VPNRouter.App.Localization"
+        xmlns:vm="using:VPNRouter.App.ViewModels"
+        x:Class="VPNRouter.App.Views.RoutingProfilesDialog"
+        x:DataType="vm:MainWindowViewModel"
+        Title="{Binding L_MenuItemOpenProfiles}"
+        Width="420" Height="520"
+        MinWidth="360" MinHeight="420"
+        SizeToContent="Manual"
+        CanResize="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBaseBrush}">
+
+  <!-- v2.32.x (F-10 kebab parity, 2026-05-09) — desktop port of Android's
+       Routing profiles overlay. Built-in process_name catalog rendered as
+       cards; clicking a card calls back into MainWindowViewModel to toggle
+       the matching AppGroup checkbox on the Apps tab so the routing change
+       is identical to a manual Apps-tab tick. Read-only by design — apply
+       only, no edit. -->
+
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <!-- Title bar -->
+    <Border Grid.Row="0" Padding="20,16,16,12"
+            BorderThickness="0,0,0,1"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
+            Background="{DynamicResource SurfaceRaisedBrush}">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Grid.Column="0"
+                   Text="{Binding L_MenuItemOpenProfiles}"
+                   FontSize="14" FontWeight="SemiBold"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+        <Button Grid.Column="1"
+                Content="✕"
+                Click="OnCloseClick"
+                Width="32" Height="32" Padding="0"
+                FontSize="14"
+                Background="Transparent"
+                BorderThickness="0"
+                HorizontalContentAlignment="Center"
+                VerticalContentAlignment="Center"
+                Foreground="{DynamicResource TextSecondaryBrush}"/>
+      </Grid>
+    </Border>
+
+    <!-- Intro text -->
+    <Border Grid.Row="1" Padding="20,12,20,8">
+      <TextBlock Text="{Binding L_ProfilesIntro}"
+                 FontSize="11" TextWrapping="Wrap"
+                 Foreground="{DynamicResource TextSecondaryBrush}"/>
+    </Border>
+
+    <!-- Profile cards -->
+    <ScrollViewer Grid.Row="2" Padding="16,8,16,12"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+      <StackPanel x:Name="ProfilesList" Spacing="10"/>
+    </ScrollViewer>
+
+    <!-- Footer close -->
+    <Border Grid.Row="3" Padding="20,10"
+            BorderThickness="0,1,0,0"
+            BorderBrush="{DynamicResource BorderSubtleBrush}"
+            Background="{DynamicResource SurfaceRaisedBrush}">
+      <Button Content="{Binding L_AboutCloseBtn}"
+              Click="OnCloseClick"
+              HorizontalAlignment="Right"
+              Padding="20,6"
+              FontSize="11" FontWeight="SemiBold"
+              Background="{DynamicResource AccentSolidBrush}"
+              Foreground="{DynamicResource AccentOnSolidBrush}"
+              BorderThickness="0"
+              CornerRadius="{StaticResource RadiusSm}"/>
+    </Border>
+  </Grid>
+</Window>

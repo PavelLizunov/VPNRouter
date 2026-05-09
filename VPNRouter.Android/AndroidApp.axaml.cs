@@ -214,6 +214,13 @@ public partial class AndroidApp : Avalonia.Application
     // v2.32.0 — Free Configs entry point lives in the kebab menu (no
     // dedicated tab on Android — single-screen layout).
     private Avalonia.Controls.Button? _menuFreeConfigsItem;
+    // F-10 kebab parity (2026-05-09) — items added to Android Diagnostics
+    // + Troubleshooting blocks so the kebab matches desktop sequence
+    // 1:1. Pre-fix Check IP leak / Run Health Check / Restart in Safe
+    // Mode were desktop-only; now both platforms expose the same set.
+    private Avalonia.Controls.Button? _menuCheckLeaksItem;
+    private Avalonia.Controls.Button? _menuHealthCheckItem;
+    private Avalonia.Controls.Button? _menuRestartSafeModeItem;
     // Localized section header TextBlocks — kept so language toggle can refresh them.
     private TextBlock? _menuSectionView;
     private TextBlock? _menuSectionDiagnostics;
@@ -661,8 +668,20 @@ public partial class AndroidApp : Avalonia.Application
                                              "TextPrimaryBrush", OnMenuExportConfigClicked);
         _menuImportConfigItem = MakeMenuItem(Localization.MenuItemImportConfig,
                                              "TextPrimaryBrush", OnMenuImportConfigClicked);
+        // F-10 kebab parity (2026-05-09): destructive Reset gets the same
+        // Danger foreground tint desktop has used since v2.30.3-r1 so
+        // accidental taps are less likely on both platforms.
         _menuResetSettingsItem = MakeMenuItem(Localization.MenuItemResetSettings,
-                                              "TextPrimaryBrush", OnMenuResetSettingsClicked);
+                                              "DangerSolidBrush", OnMenuResetSettingsClicked);
+        // F-10 kebab parity (2026-05-09): items previously desktop-only
+        // (IP leak / Health check / Safe mode) ported to Android so both
+        // platforms expose the same Diagnostics + Troubleshooting set.
+        _menuCheckLeaksItem = MakeMenuItem(Localization.MenuItemCheckLeaks,
+                                           "TextPrimaryBrush", OnMenuCheckLeaksClicked);
+        _menuHealthCheckItem = MakeMenuItem(Localization.MenuItemHealthCheck,
+                                            "TextPrimaryBrush", OnMenuHealthCheckClicked);
+        _menuRestartSafeModeItem = MakeMenuItem(Localization.MenuItemSafeMode,
+                                                "TextPrimaryBrush", OnMenuRestartSafeModeClicked);
         _menuVersionItem = MakeMenuItem(
             $"{Localization.MenuItemVersion} {VPNRouter.Core.AppVersion.Version}",
             "TextMutedBrush", null);
@@ -695,12 +714,19 @@ public partial class AndroidApp : Avalonia.Application
                           new[] { _menuFreeConfigsItem });
         AppendMenuSection(menuStack, Localization.MenuSectionProfiles,
                           new[] { _menuProfilesItem });
+        // F-10 kebab parity (2026-05-09): canonical Diagnostics order is
+        // Settings → Open log → Copy log path → View crash log →
+        // Check IP leak → Run Health Check → Check for updates →
+        // Export config → Import config (matches desktop MainWindow.axaml).
         AppendMenuSection(menuStack, Localization.MenuSectionDiagnostics,
                           new[] { _menuSettingsItem, _menuOpenLogItem, _menuCopyLogPathItem,
                                   _menuViewCrashLogItem,
+                                  _menuCheckLeaksItem, _menuHealthCheckItem,
                                   _menuUpdateCheckItem, _menuExportConfigItem, _menuImportConfigItem });
+        // F-10 kebab parity (2026-05-09): Troubleshooting now mirrors
+        // desktop — Restart in Safe Mode + Reset settings (red).
         AppendMenuSection(menuStack, Localization.MenuSectionTroubleshooting,
-                          new[] { _menuResetSettingsItem });
+                          new[] { _menuRestartSafeModeItem, _menuResetSettingsItem });
         AppendMenuSection(menuStack, Localization.MenuSectionAbout,
                           new[] { _menuVersionItem, _menuRepoItem });
 
@@ -5089,6 +5115,124 @@ public partial class AndroidApp : Avalonia.Application
         ShowFreeConfigsOverlay();
     }
 
+    // ── F-10 kebab parity (2026-05-09) ─────────────────────────────────
+    //
+    // Items added to Android's kebab so the menu matches desktop. Each
+    // handler closes the popup first, then fires the cross-platform
+    // action with Android-appropriate plumbing.
+
+    /// <summary>
+    /// Diagnostics → "Check IP leak". Opens https://ipleak.net/ in the
+    /// system browser. Mirrors desktop's <c>OpenLeakTest</c> command —
+    /// same affordance, same URL.
+    /// </summary>
+    private void OnMenuCheckLeaksClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        try
+        {
+            var intent = new global::Android.Content.Intent(
+                global::Android.Content.Intent.ActionView,
+                global::Android.Net.Uri.Parse("https://ipleak.net/"));
+            intent.SetFlags(global::Android.Content.ActivityFlags.NewTask);
+            global::Android.App.Application.Context.StartActivity(intent);
+        }
+        catch (Exception ex)
+        {
+            ShowMenuFeedback($"Error: {ex.GetType().Name}");
+        }
+    }
+
+    /// <summary>
+    /// Diagnostics → "Run Health Check". Wraps Core <c>HealthCheck.RunAll</c>
+    /// (same code path as desktop), writes the formatted report to
+    /// <c>filesDir/last-health-check.txt</c> + reuses the singbox-log
+    /// overlay as a viewer. Mirrors desktop's notepad-pop pattern with
+    /// Android's in-app text viewer.
+    /// </summary>
+    private void OnMenuHealthCheckClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        try
+        {
+            var results = VPNRouter.Core.Services.HealthCheck.RunAll();
+            var report = VPNRouter.Core.Services.HealthCheck.FormatReport(results);
+
+            var ctx = global::Android.App.Application.Context;
+            var filesDir = ctx.FilesDir?.AbsolutePath
+                           ?? VPNRouter.Core.AppPaths.DataDir;
+            var reportPath = System.IO.Path.Combine(filesDir, "last-health-check.txt");
+            try
+            {
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(reportPath)!);
+                System.IO.File.WriteAllText(reportPath, report);
+            }
+            catch { /* still surface the report inline below */ }
+
+            if (_logOverlay is null) return;
+            if (_logViewerTitle is not null)
+                _logViewerTitle.Text = Localization.MenuItemHealthCheck;
+            if (_logViewerContent is not null)
+            {
+                _logViewerContent.Text = report;
+                if (_logViewerEmptyState is not null) _logViewerEmptyState.IsVisible = false;
+                if (_logViewerScroller is not null)
+                {
+                    _logViewerScroller.IsVisible = true;
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (_logViewerScroller is null) return;
+                        _logViewerScroller.Offset = new Vector(
+                            _logViewerScroller.Offset.X, 0);
+                    }, DispatcherPriority.Background);
+                }
+            }
+            _logOverlay.IsVisible = true;
+        }
+        catch (Exception ex)
+        {
+            ShowMenuFeedback($"Error: {ex.GetType().Name}");
+        }
+    }
+
+    /// <summary>
+    /// Troubleshooting → "Restart in Safe Mode". Sets a one-shot flag in
+    /// AndroidStorage so the next process startup skips the auto-connect /
+    /// auto-update steps, then force-restarts the activity. Mirrors
+    /// desktop's relaunch-with-<c>--safe</c> flag without the process-arg
+    /// vehicle (Android lifecycle uses Intent extras / SharedPreferences).
+    /// </summary>
+    private void OnMenuRestartSafeModeClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        try
+        {
+            // Mark next launch as safe-mode. AndroidApp.OnFrameworkInitializationCompleted
+            // (or downstream startup hooks) read this flag and skip
+            // auto-connect / auto-update / heavy bootstrap if set, then
+            // clear the flag so a subsequent launch is normal.
+            try { AndroidStorage.SetSafeModeOnNextLaunch(true); }
+            catch { /* fall through — restart still helps */ }
+
+            var ctx = global::Android.App.Application.Context;
+            var pkg = ctx.PackageName;
+            if (string.IsNullOrEmpty(pkg)) return;
+            var launchIntent = ctx.PackageManager?.GetLaunchIntentForPackage(pkg);
+            if (launchIntent is null) return;
+            launchIntent.AddFlags(global::Android.Content.ActivityFlags.ClearTop
+                                | global::Android.Content.ActivityFlags.NewTask);
+            ctx.StartActivity(launchIntent);
+            // Schedule process exit so the new activity comes up fresh
+            // (Activity.Recreate doesn't tear down the process; Safe Mode
+            // is more useful when the JVM is also restarted).
+            global::Java.Lang.JavaSystem.Exit(0);
+        }
+        catch (Exception ex)
+        {
+            ShowMenuFeedback($"Error: {ex.GetType().Name}");
+        }
+    }
+
     private void CopyToClipboard(string label, string text)
     {
         try
@@ -5158,6 +5302,11 @@ public partial class AndroidApp : Avalonia.Application
         // v2.32.0 (AND-PROFILES) — refresh Profiles menu strings.
         if (_menuSectionProfiles is not null) _menuSectionProfiles.Text = Localization.MenuSectionProfiles;
         if (_menuProfilesItem is not null) _menuProfilesItem.Content = Localization.MenuItemOpenProfiles;
+        // F-10 kebab parity (2026-05-09) — refresh new Diagnostics +
+        // Troubleshooting items.
+        if (_menuCheckLeaksItem is not null) _menuCheckLeaksItem.Content = Localization.MenuItemCheckLeaks;
+        if (_menuHealthCheckItem is not null) _menuHealthCheckItem.Content = Localization.MenuItemHealthCheck;
+        if (_menuRestartSafeModeItem is not null) _menuRestartSafeModeItem.Content = Localization.MenuItemSafeMode;
         // Profiles overlay header refresh — body cards rebuild on next open
         // (no point refreshing now since they hold non-localizable catalog
         // names like "Discord_Privacy"; only the description + chip labels

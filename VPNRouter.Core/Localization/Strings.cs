@@ -2251,4 +2251,19 @@ public static class Strings
     public static string ProfilesClearedToast => Ru
         ? "Профиль снят. Весь трафик через VPN."
         : "Profile cleared. All traffic through VPN.";
+
+    // ── Cross-platform kebab parity (F-10 fix, 2026-05-09) ─────────────
+    //
+    // Aliases that let both desktop and Android reference the same string
+    // by the canonical MenuItem* name. Pre-fix the desktop kebab used
+    // SmpMenu* keys and Android used MenuItem*; the wording was identical
+    // for these three items but the mapping diverged. Forwarding the new
+    // canonical keys to the existing SmpMenu* values keeps backward-
+    // compat for any caller still on the old naming.
+    public static string MenuItemCheckLeaks => SmpMenuCheckLeaks;
+    public static string MenuItemHealthCheck => SmpMenuHealthCheck;
+    public static string MenuItemSafeMode => SmpMenuSafeMode;
+    public static string TipMenuItemHealthCheck => TipSmpMenuHealthCheck;
+    public static string TipMenuItemSafeMode => TipSmpMenuSafeMode;
+    public static string TipMenuItemResetConfig => TipSmpMenuResetConfig;
 }
