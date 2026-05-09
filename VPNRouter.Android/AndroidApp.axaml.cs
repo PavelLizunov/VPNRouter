@@ -133,7 +133,22 @@ public partial class AndroidApp : Avalonia.Application
     private TextBox? _serverInput;
     private TextBlock? _serverInputLabel;
     private TextBlock? _serverInputHint;
+    // v2.32.0 parity port (2026-05-09) — auto-detect hint above the action
+    // row, mirrors desktop SimplePage.axaml SmpInputDetectedHint /
+    // SmpInputDetectedHintVisible. Visible only when the typed text matches
+    // a recognised scheme (vless:// / hysteria2:// / hy2:// / tuic:// /
+    // ss:// / http(s)://). Replaces the old 3-segment Subscription/Server/
+    // Custom JSON sub-tab row — desktop has no such picker; auto-detect on
+    // a single input is the canonical UX.
+    private TextBlock? _serverInputDetectedHint;
     private TextBlock? _serverInputError;
+    // v2.32.0 parity port (2026-05-09) — Save / Refresh confirmation toast
+    // beneath the form card. Mirrors desktop's HasSmpToast border (line 371
+    // of SimplePage.axaml). Auto-clears after ~2.5 s; visible only after a
+    // successful Save / Refresh.
+    private Border? _smpToast;
+    private TextBlock? _smpToastText;
+    private System.Threading.CancellationTokenSource? _smpToastCts;
     private TextBlock? _tunnelModeLabel;
     private Avalonia.Controls.RadioButton? _splitRadio;
     private Avalonia.Controls.RadioButton? _fullRadio;
@@ -755,11 +770,18 @@ public partial class AndroidApp : Avalonia.Application
             IsLightDismissEnabled = true,
         };
 
+        // v2.32.0 parity port (2026-05-09) — drop the (16, 12, 16, 4)
+        // Margin so the brand row composes cleanly inside the centered
+        // 420 Grid (mirrors desktop SimplePage.axaml line 46 — the
+        // mini-header has no outer margin; the ScrollViewer Padding +
+        // outerGrid Margin handle horizontal + vertical insets). Column
+        // 2 keeps the kebab — Android-only, since desktop's kebab lives
+        // in MainWindow chrome and is hidden behind the IsSimpleMode
+        // brand-row override.
         var headerRow = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("28,*,Auto"),
             ColumnSpacing = 10,
-            Margin = new Thickness(16, 12, 16, 4),
         };
         Grid.SetColumn(mascot, 0);
         Grid.SetColumn(brandStack, 1);
@@ -933,41 +955,31 @@ public partial class AndroidApp : Avalonia.Application
 
         // ── Collapsible form (input + tunnel mode radios + autostart) ───
 
-        // v2.32.0 (AND-CC) — three-way config-mode selector at the top
-        // of the form: Subscription | Server | Custom JSON. The
-        // "Subscription" + "Server" segments share the same single-line
-        // TextBox below (existing _serverInput); "Custom JSON" swaps it
-        // for a multi-line paste TextBox + Validate button (defined
-        // further down).
+        // v2.32.0 parity port (2026-05-09) — flat input section mirrors
+        // desktop SimplePage.axaml lines 232-294 (StackPanel Spacing="4"
+        // with label · TextBox · hint · detected-hint · error · Save+Refresh
+        // row). Pre-port Android had a 3-segment Subscription/Server/Custom
+        // JSON picker above the input + a parallel multi-line TextBox for
+        // the custom branch — neither exists on desktop, which uses a
+        // single TextBox with auto-detect on Save. Removing the picker
+        // closes parity audit F-02 row 5 (P3 deferred). Custom JSON edit
+        // path remains reachable via kebab > Diagnostics > Import config
+        // (file picker), matching desktop's flow where custom JSON is a
+        // file-import operation rather than an inline editor.
+        //
+        // _ccMode is still loaded from storage so OnSaveClicked /
+        // OnRefreshClicked / UpdateConfigSummary keep their existing
+        // three-way switch (subscribe / manual / custom) — only the UI
+        // surface for switching it goes away. The handlers
+        // OnCcModeSubClicked / OnCcModeManualClicked / OnCcModeCustomClicked
+        // / OnCcValidateClicked / OnCcSaveCustomClicked /
+        // OnCcClearCustomClicked become unreachable from Simple but are
+        // kept compile-clean — null-guards on the now-uninstantiated
+        // _ccCustomInput / _ccCustomStatus / _ccModeSubBtn / etc. fields
+        // turn each into a no-op if some other code path hits them.
         _ccMode = AndroidStorage.GetConfigMode();
         if (_ccMode != "subscribe" && _ccMode != "manual" && _ccMode != "custom")
             _ccMode = "manual";
-
-        _ccModeSubBtn = MakeSegmentButton(Localization.CcModeSubscription,
-            _ccMode == "subscribe", OnCcModeSubClicked);
-        _ccModeManualBtn = MakeSegmentButton(Localization.CcModeManual,
-            _ccMode == "manual", OnCcModeManualClicked);
-        _ccModeCustomBtn = MakeSegmentButton(Localization.CcModeCustom,
-            _ccMode == "custom", OnCcModeCustomClicked);
-
-        var ccModeGrid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,*,*"),
-            ColumnSpacing = 4,
-        };
-        Grid.SetColumn(_ccModeSubBtn, 0);
-        Grid.SetColumn(_ccModeManualBtn, 1);
-        Grid.SetColumn(_ccModeCustomBtn, 2);
-        ccModeGrid.Children.Add(_ccModeSubBtn);
-        ccModeGrid.Children.Add(_ccModeManualBtn);
-        ccModeGrid.Children.Add(_ccModeCustomBtn);
-
-        _ccModeRow = new StackPanel
-        {
-            Spacing = 4,
-            Margin = new Thickness(0, 0, 0, 4),
-            Children = { ccModeGrid }
-        };
 
         _serverInputLabel = new TextBlock
         {
@@ -988,6 +1000,12 @@ public partial class AndroidApp : Avalonia.Application
         var existingSub = AndroidStorage.GetSubscriptionUrl();
         var existingUri = AndroidStorage.GetVlessUri();
         _serverInput.Text = existingSub ?? existingUri ?? string.Empty;
+        // Drive the detected-hint visibility on every keystroke, mirroring
+        // desktop SmpInputDetectedHintVisible.
+        _serverInput.PropertyChanged += (_, ev) =>
+        {
+            if (ev.Property == TextBox.TextProperty) UpdateDetectedHint();
+        };
 
         _serverInputHint = new TextBlock
         {
@@ -997,6 +1015,18 @@ public partial class AndroidApp : Avalonia.Application
         };
         _serverInputHint.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
+        // Auto-detect hint matches desktop SimplePage.axaml lines 253-257
+        // (FontSize="9" FontWeight="SemiBold" Foreground="AccentFgBrush"
+        // wrap, hidden until input matches a recognised scheme).
+        _serverInputDetectedHint = new TextBlock
+        {
+            FontSize = 9,
+            FontWeight = FontWeight.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+            IsVisible = false,
+        };
+        _serverInputDetectedHint.BindToken(TextBlock.ForegroundProperty, "AccentFgBrush");
+
         _serverInputError = new TextBlock
         {
             FontSize = 10,
@@ -1005,100 +1035,44 @@ public partial class AndroidApp : Avalonia.Application
         };
         _serverInputError.BindToken(TextBlock.ForegroundProperty, "DangerFgBrush");
 
-        // Save + Refresh + QR button row
-        var saveBtn = StyledSecondaryButton(Localization.ButtonSave);
+        // Save + QR + Refresh row mirrors desktop SimplePage.axaml lines
+        // 271-293 (Save and Refresh were FontSize="10" Padding="10,4"
+        // MinHeight="0" SurfaceRaised bg BorderDefault border RadiusXs).
+        // QR is Android-only (no camera surface on desktop) but uses the
+        // same visual style so the row composition reads as a single
+        // rhythm. Spacing="6" left-to-right gap matches desktop.
+        var saveBtn = MakeSimpleSecondaryButton(Localization.ButtonSave);
         saveBtn.Click += OnSaveClicked;
-        var refreshBtn = StyledSecondaryButton(Localization.ButtonRefresh);
-        refreshBtn.Margin = new Thickness(8, 0, 0, 0);
-        refreshBtn.Click += OnRefreshClicked;
-        var qrBtn = StyledSecondaryButton("📷 QR");
-        qrBtn.Margin = new Thickness(8, 0, 0, 0);
+        var qrBtn = MakeSimpleSecondaryButton("📷 QR");
         qrBtn.Click += OnScanQrClicked;
+        var refreshBtn = MakeSimpleSecondaryButton(Localization.ButtonRefresh);
+        refreshBtn.Click += OnRefreshClicked;
         var actionRow = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 6,
             HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 2, 0, 0),
             Children = { saveBtn, qrBtn, refreshBtn },
-        };
-
-        _ccUriSection = new StackPanel
-        {
-            Spacing = 4,
-            // Hidden when ConfigMode == "custom".
-            IsVisible = _ccMode != "custom",
-            Children = { _serverInputLabel, _serverInput, _serverInputHint, _serverInputError, actionRow },
-        };
-
-        // ── Custom sing-box JSON section (AND-CC) ───────────────────────
-        // Multi-line TextBox + status banner + Validate / Save / Clear
-        // button row. Visible only when ConfigMode == "custom".
-        _ccCustomLabel = new TextBlock
-        {
-            Text = Localization.CcCustomLabel,
-            FontSize = 11,
-            FontWeight = FontWeight.SemiBold,
-        };
-        _ccCustomLabel.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
-
-        _ccCustomInput = new TextBox
-        {
-            FontSize = 10,
-            Padding = new Thickness(10, 7),
-            AcceptsReturn = true,
-            AcceptsTab = true,
-            TextWrapping = TextWrapping.NoWrap,
-            CornerRadius = new CornerRadius(radiusXs),
-            Watermark = Localization.CcCustomWatermark,
-            FontFamily = new FontFamily("monospace"),
-            MinHeight = 180,
-            MaxHeight = 360,
-            Text = AndroidStorage.GetCustomConfigJson() ?? string.Empty,
-        };
-
-        _ccCustomHint = new TextBlock
-        {
-            Text = Localization.CcCustomHint,
-            FontSize = 9,
-            TextWrapping = TextWrapping.Wrap,
-        };
-        _ccCustomHint.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
-
-        _ccCustomStatus = new TextBlock
-        {
-            Text = string.Empty,
-            FontSize = 10,
-            TextWrapping = TextWrapping.Wrap,
-            IsVisible = false,
-        };
-        _ccCustomStatus.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
-
-        _ccValidateBtn = StyledSecondaryButton(Localization.CcValidateButton);
-        _ccValidateBtn.Click += OnCcValidateClicked;
-        _ccSaveCustomBtn = StyledSecondaryButton(Localization.CcSaveButton);
-        _ccSaveCustomBtn.Margin = new Thickness(8, 0, 0, 0);
-        _ccSaveCustomBtn.Click += OnCcSaveCustomClicked;
-        _ccClearCustomBtn = StyledSecondaryButton(Localization.CcClearButton);
-        _ccClearCustomBtn.Margin = new Thickness(8, 0, 0, 0);
-        _ccClearCustomBtn.Click += OnCcClearCustomClicked;
-        var ccActionRow = new StackPanel
-        {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Children = { _ccValidateBtn, _ccSaveCustomBtn, _ccClearCustomBtn },
-        };
-
-        _ccCustomSection = new StackPanel
-        {
-            Spacing = 4,
-            IsVisible = _ccMode == "custom",
-            Children = { _ccCustomLabel, _ccCustomInput, _ccCustomHint, _ccCustomStatus, ccActionRow },
         };
 
         var inputSection = new StackPanel
         {
             Spacing = 4,
-            Children = { _ccModeRow, _ccUriSection, _ccCustomSection },
+            Children =
+            {
+                _serverInputLabel,
+                _serverInput,
+                _serverInputHint,
+                _serverInputDetectedHint,
+                _serverInputError,
+                actionRow,
+            },
         };
+
+        // Seed the detected-hint with the current input so a saved URL
+        // shows the correct "Detected: ..." copy on first render.
+        UpdateDetectedHint();
 
         // Tunnel mode (split / full)
         _tunnelModeLabel = new TextBlock
@@ -1246,6 +1220,16 @@ public partial class AndroidApp : Avalonia.Application
             Children = { _serverListHeader, _serverList }
         };
 
+        // v2.32.0 parity port (2026-05-09) — autostart card moves INSIDE
+        // the form Border, mirroring desktop SimplePage.axaml lines 338-362
+        // (the autostart Button is the last child of the collapsible form
+        // StackPanel, not a standalone row outside it). Pre-port Android
+        // had it between the CTA and the Advanced settings card on the
+        // outer scroll which made the form feel hollow and the autostart
+        // entry feel orphaned. Inside the form it composes with input +
+        // tunnel sections as one logical group.
+        var autostartCard = BuildAutostartInlineCard(radiusSm);
+
         _formCard = new Border
         {
             IsVisible = _formExpanded,
@@ -1255,11 +1239,43 @@ public partial class AndroidApp : Avalonia.Application
             Child = new StackPanel
             {
                 Spacing = 14,
-                Children = { inputSection, tunnelSection, listSection }
+                // listSection is Android-only (subscription server picker);
+                // sits after the autostart card so the form still ends
+                // with a clean rhythm — input → tunnel → autostart on
+                // desktop · plus → list on Android. Server list stays
+                // hidden until a subscription has been refreshed, so the
+                // visible default matches desktop exactly.
+                Children = { inputSection, tunnelSection, autostartCard, listSection }
             }
         };
         _formCard.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
         _formCard.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
+
+        // v2.32.0 parity port (2026-05-09) — Save / Refresh confirmation
+        // toast under the form, mirrors desktop SimplePage.axaml lines
+        // 371-381 (Border IsVisible=HasSmpToast, AccentBgSubtle bg,
+        // AccentBorder border, RadiusXs, Padding=10,6, single-line toast
+        // text in AccentFg semibold). Hidden by default — the
+        // ShowSmpToast helper flips IsVisible+text and arms a 2.5 s
+        // dispatcher timer to clear it. Wired from OnSaveClicked /
+        // OnRefreshClicked on success paths.
+        _smpToastText = new TextBlock
+        {
+            FontSize = 10,
+            FontWeight = FontWeight.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        _smpToastText.BindToken(TextBlock.ForegroundProperty, "AccentFgBrush");
+        _smpToast = new Border
+        {
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(radiusXs),
+            Padding = new Thickness(10, 6),
+            IsVisible = false,
+            Child = _smpToastText,
+        };
+        _smpToast.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
+        _smpToast.BindToken(Border.BorderBrushProperty, "AccentBorderBrush");
 
         // ── CTA — three mutually exclusive variants ─────────────────────
         // Disconnected (default visible): outlined accent
@@ -1313,14 +1329,6 @@ public partial class AndroidApp : Avalonia.Application
         _ctaDisconnect.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentSolidBrush");
         _ctaDisconnect.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
         _ctaDisconnect.Click += OnConnectClicked;
-
-        // ── Autostart inline card (parity audit F-02 row 11) ────────────
-        // Mirrors desktop SimplePage.axaml's autostart card. Tap → opens
-        // the existing Settings overlay (Autostart section is the last
-        // sub-section, user scrolls). Placed above the Advanced settings
-        // card so the most-asked-after "stay on across reboots" entry is
-        // surfaced inline rather than buried two taps deep in the kebab.
-        var autostartCard = BuildAutostartInlineCard(radiusSm);
 
         // ── Расширенные настройки card (placeholder navigation) ─────────
         _advCardTitle = new TextBlock
@@ -1408,20 +1416,30 @@ public partial class AndroidApp : Avalonia.Application
         BuildUpdateBanner(radiusMd);
 
         // ── Inner stack with all sections, max 420 wide on tablets ──────
+        // v2.32.0 parity port (2026-05-09) — composition mirrors desktop
+        // SimplePage.axaml line 33 (StackPanel Spacing="14" inside the
+        // 420-wide centered Grid). Header row moves INSIDE the centered
+        // grid so the brand row scrolls with the rest of the content
+        // (matches desktop's layout — desktop's MainWindow chrome is
+        // hidden in Simple mode, so the brand row inside the page IS the
+        // header). _smpToast slides between _formCard and the CTA stack
+        // mirroring desktop line 371-381. Autostart no longer appears
+        // out here — it lives inside _formCard now.
         var innerStack = new StackPanel
         {
             Spacing = 14,
             Children =
             {
+                headerRow,
                 statusCard,
                 _menuFeedback,
                 _updateBanner!,
                 configRowButton,
                 _formCard,
+                _smpToast,
                 _ctaConnect,
                 _ctaConnecting,
                 _ctaDisconnect,
-                autostartCard,
                 advCardButton,
             }
         };
@@ -1439,18 +1457,20 @@ public partial class AndroidApp : Avalonia.Application
             Children = { innerWrapper }
         };
 
-        var contentStack = new StackPanel
-        {
-            Spacing = 0,
-            Children = { headerRow, outerGrid }
-        };
-
+        // v2.32.0 parity port (2026-05-09) — ScrollViewer Padding 0,12,0,16
+        // mirrors desktop SimplePage.axaml line 30 (Padding="0,12,0,16").
+        // Pre-port the top padding lived on a separate headerRow Margin
+        // (16,12,16,4) outside the scroll content; moving it onto the
+        // ScrollViewer means the brand row now starts 12 px below the
+        // status bar instead of stacking two top margins (16+12=28).
+        // Removing the contentStack wrapper drops one redundant container
+        // — outerGrid is now the direct ScrollViewer child.
         var mainScroller = new ScrollViewer
         {
-            Content = contentStack,
+            Content = outerGrid,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Padding = new Thickness(0, 0, 0, 16),
+            Padding = new Thickness(0, 12, 0, 16),
         };
         mainScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
 
@@ -3117,6 +3137,101 @@ public partial class AndroidApp : Avalonia.Application
         return btn;
     }
 
+    /// <summary>
+    /// v2.32.0 parity port (2026-05-09) — small secondary button for the
+    /// Save / Refresh / QR row inside the form card. Mirrors desktop
+    /// SimplePage.axaml's per-button styling (FontSize="10" Padding="10,4"
+    /// MinHeight="0" SurfaceRaised bg + TextPrimary fg + BorderDefault
+    /// border + RadiusXs). Differs from <see cref="StyledSecondaryButton"/>
+    /// (FontSize 12 Padding 14,7) which is used elsewhere on Android for
+    /// fuller-touch-target buttons (e.g. picker overlays); the Simple form
+    /// uses these compact buttons because they share a row inside a tight
+    /// 12 px form padding and need to fit alongside a Refresh label.
+    /// </summary>
+    private Avalonia.Controls.Button MakeSimpleSecondaryButton(string label)
+    {
+        var btn = new Avalonia.Controls.Button
+        {
+            Content = label,
+            FontSize = 10,
+            FontWeight = FontWeight.Medium,
+            Padding = new Thickness(10, 4),
+            MinHeight = 0,
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+            BorderThickness = new Thickness(1),
+        };
+        btn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "SurfaceRaisedBrush");
+        btn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextPrimaryBrush");
+        btn.BindToken(Avalonia.Controls.Button.BorderBrushProperty, "BorderDefaultBrush");
+        return btn;
+    }
+
+    /// <summary>
+    /// v2.32.0 parity port (2026-05-09) — recompute the auto-detect hint
+    /// visibility + text from the current TextBox content. Mirrors
+    /// desktop's MainWindowViewModel.SimpleMode.cs SmpInputDetectedHint /
+    /// SmpInputDetectedHintVisible: hidden when input is empty, "Detected:
+    /// VLESS server" / "Detected: subscription URL" when it matches a
+    /// recognised scheme. Uses ServerUriParser.IsSupportedScheme to gate
+    /// share-link detection so vless / hysteria2 / hy2 / tuic / ss all
+    /// surface, matching the Save handler's accept list.
+    /// </summary>
+    private void UpdateDetectedHint()
+    {
+        if (_serverInputDetectedHint is null) return;
+        var raw = (_serverInput?.Text ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(raw))
+        {
+            _serverInputDetectedHint.IsVisible = false;
+            _serverInputDetectedHint.Text = string.Empty;
+            return;
+        }
+        if (ServerUriParser.IsSupportedScheme(raw))
+        {
+            _serverInputDetectedHint.Text = Localization.SmpInputDetectedServer;
+            _serverInputDetectedHint.IsVisible = true;
+            return;
+        }
+        if (raw.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            raw.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            _serverInputDetectedHint.Text = Localization.SmpInputDetectedSubscription;
+            _serverInputDetectedHint.IsVisible = true;
+            return;
+        }
+        _serverInputDetectedHint.IsVisible = false;
+        _serverInputDetectedHint.Text = string.Empty;
+    }
+
+    /// <summary>
+    /// v2.32.0 parity port (2026-05-09) — show the SmpToast confirmation
+    /// for ~2.5 s, then auto-clear. Mirrors desktop SimpleMode.cs
+    /// ShowSmpToast pattern. Wired from OnSaveClicked / OnRefreshClicked
+    /// success paths so the user gets explicit feedback ("Saved" /
+    /// "Subscription refreshed") before the form-level error TextBlock
+    /// appears for any partial validation state.
+    /// </summary>
+    private void ShowSmpToast(string text)
+    {
+        if (_smpToast is null || _smpToastText is null) return;
+        _smpToastText.Text = text;
+        _smpToast.IsVisible = true;
+        _smpToastCts?.Cancel();
+        _smpToastCts = new System.Threading.CancellationTokenSource();
+        var token = _smpToastCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try { await Task.Delay(2500, token).ConfigureAwait(true); }
+            catch (TaskCanceledException) { return; }
+            if (token.IsCancellationRequested) return;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_smpToast is not null && !token.IsCancellationRequested)
+                    _smpToast.IsVisible = false;
+            });
+        });
+    }
+
     // ── Event handlers ─────────────────────────────────────────────────
 
     private void OnConfigRowClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -3671,6 +3786,9 @@ public partial class AndroidApp : Avalonia.Application
                 _cachedServers = new List<VlessServerEntry>();
                 UpdateServerListView();
                 UpdateConfigSummary();
+                // v2.32.0 parity port (2026-05-09) — Save toast mirrors
+                // desktop SimplePage.axaml HasSmpToast / SmpToastText.
+                ShowSmpToast(Localization.SmpSavedAsServerToast);
             }
             catch (Exception ex)
             {
@@ -3689,6 +3807,7 @@ public partial class AndroidApp : Avalonia.Application
             _ccMode = "subscribe";
             ApplyCcModeVisuals();
             UpdateConfigSummary();
+            ShowSmpToast(Localization.SmpSavedAsSubscriptionToast);
             return;
         }
 
@@ -3849,6 +3968,8 @@ public partial class AndroidApp : Avalonia.Application
                 if (_serverList is not null) _serverList.SelectedIndex = 0;
             }
             UpdateConfigSummary();
+            // v2.32.0 parity port (2026-05-09) — Refresh-success toast.
+            ShowSmpToast(Localization.SmpRefreshDoneToast);
         }
         catch (Exception ex)
         {
