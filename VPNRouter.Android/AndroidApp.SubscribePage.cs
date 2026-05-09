@@ -150,16 +150,29 @@ public partial class AndroidApp
             Background = GetBrush("SurfaceAppBrush"),
         };
 
-        // ── Refresh-all action row + status text ───────────────────────
+        // ── Section header bar — "Subscriptions" + "Refresh all" on right.
+        //     Mirrors desktop SubscribePage.axaml lines 251-260 (Row 2).
+        //     Sits ABOVE the card list with a top divider so the heading
+        //     reads as the cards' label, not the form's.
         _subsSectionLabel = new TextBlock
         {
             Text = Localization.SubscriptionsSection,
-            FontSize = 11,
+            FontSize = 12,
             FontWeight = FontWeight.Bold,
             Foreground = GetBrush("TextPrimaryBrush"),
             VerticalAlignment = VerticalAlignment.Center,
         };
-        _subsRefreshAllBtn = StyledSecondaryButton(Localization.RefreshAll);
+        _subsRefreshAllBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.RefreshAll,
+            FontSize = 10,
+            Padding = new Thickness(8, 3),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = GetBrush("SurfaceRaisedBrush"),
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(1),
+            Foreground = GetBrush("TextPrimaryBrush"),
+        };
         _subsRefreshAllBtn.Click += OnSubsRefreshAllClicked;
         _subsRefreshAllStatus = new TextBlock
         {
@@ -169,23 +182,38 @@ public partial class AndroidApp
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
             IsVisible = false,
+            Margin = new Thickness(0, 4, 0, 0),
         };
-        var actionRow = new Grid
+        var sectionHeaderGrid = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(12, 4, 12, 0),
         };
         Grid.SetColumn(_subsSectionLabel, 0);
         Grid.SetColumn(_subsRefreshAllBtn, 1);
-        actionRow.Children.Add(_subsSectionLabel);
-        actionRow.Children.Add(_subsRefreshAllBtn);
+        sectionHeaderGrid.Children.Add(_subsSectionLabel);
+        sectionHeaderGrid.Children.Add(_subsRefreshAllBtn);
+
+        var sectionHeaderBorder = new Border
+        {
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Background = GetBrush("SurfaceBaseBrush"),
+            Padding = new Thickness(10, 6, 10, 6),
+            Child = new StackPanel
+            {
+                Spacing = 0,
+                Children = { sectionHeaderGrid, _subsRefreshAllStatus },
+            },
+        };
 
         // ── Add-subscription form (bottom) ─────────────────────────────
+        //     Mirrors desktop SubscribePage.axaml lines 338-361 (Row 4):
+        //     "100,*,Auto" name + URL + Add button with top divider.
         _subsNewName = new TextBox
         {
             Watermark = Localization.SubscriptionNameHint,
-            FontSize = 11,
-            Padding = new Thickness(8, 6),
+            FontSize = 10,
+            Padding = new Thickness(6, 4),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
             Background = GetBrush("SurfaceSunkenBrush"),
             BorderBrush = GetBrush("BorderSubtleBrush"),
@@ -194,9 +222,9 @@ public partial class AndroidApp
         _subsNewUrl = new TextBox
         {
             Watermark = Localization.SubscriptionUrlHint,
-            FontSize = 11,
+            FontSize = 10,
             FontFamily = new FontFamily("monospace"),
-            Padding = new Thickness(8, 6),
+            Padding = new Thickness(6, 4),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
             Background = GetBrush("SurfaceSunkenBrush"),
             BorderBrush = GetBrush("BorderSubtleBrush"),
@@ -207,7 +235,7 @@ public partial class AndroidApp
             Content = Localization.AddSubscription,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(12, 7),
+            Padding = new Thickness(12, 5),
             Background = GetBrush("AccentSolidBrush"),
             Foreground = GetBrush("AccentOnSolidBrush"),
             BorderThickness = new Thickness(0),
@@ -218,8 +246,7 @@ public partial class AndroidApp
         var addFormRow = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("100,*,Auto"),
-            ColumnSpacing = 6,
-            Margin = new Thickness(12, 8, 12, 12),
+            ColumnSpacing = 4,
         };
         Grid.SetColumn(_subsNewName, 0);
         Grid.SetColumn(_subsNewUrl, 1);
@@ -233,19 +260,23 @@ public partial class AndroidApp
             BorderBrush = GetBrush("BorderDefaultBrush"),
             BorderThickness = new Thickness(0, 1, 0, 0),
             Background = GetBrush("SurfaceBaseBrush"),
-            Child = new StackPanel
-            {
-                Spacing = 0,
-                Children = { actionRow, _subsRefreshAllStatus, addFormRow },
-            },
+            Padding = new Thickness(10, 6, 10, 10),
+            Child = addFormRow,
         };
+
+        // Body = section-header (top) + scrolling card list (fill).
+        // DockPanel needs the fill child to be added LAST.
+        var bodyDock = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(sectionHeaderBorder, Dock.Top);
+        bodyDock.Children.Add(sectionHeaderBorder);
+        bodyDock.Children.Add(listScroller);
 
         var dock = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(titleBarBorder, Dock.Top);
         DockPanel.SetDock(addFormBorder, Dock.Bottom);
         dock.Children.Add(titleBarBorder);
         dock.Children.Add(addFormBorder);
-        dock.Children.Add(listScroller);
+        dock.Children.Add(bodyDock);
 
         return new Border
         {
@@ -301,14 +332,19 @@ public partial class AndroidApp
     }
 
     /// <summary>
-    /// Build a single subscription card. Layout mirrors
-    /// SubscribePage.axaml lines 274-330: enabled checkbox + name +
-    /// metadata subtitle (URL · Ns · time) + spinner + ↻ refresh + ✕
-    /// delete. Editing the URL toggles the name/URL row into a TextBox
-    /// pair with Save/Cancel buttons.
+    /// Build a single subscription card. Layout mirrors desktop
+    /// <c>SubscribePage.axaml</c> lines 274-330 — the <c>srv-row</c>
+    /// template: transparent row (no card chrome), 6-column grid
+    /// <c>[chk · name+meta · spinner · ✎ · ↻ · ✕]</c>, monospace
+    /// SemiBold name + dot-separated muted metadata, ProgressBar
+    /// (40×3, indeterminate) where desktop has its <c>IsRefreshing</c>
+    /// indicator, and compact <c>srv-refresh</c>-style icon buttons
+    /// (no fixed 32×32 box). Editing toggles an inline TextBox pair.
     /// </summary>
     private Control BuildSubCard(SubscriptionEntry sub)
     {
+        // ── Column 0: enabled checkbox (24-px column to match desktop's
+        //               v2.25.10 fix — narrower clips the indicator).
         var enabledChk = new Avalonia.Controls.CheckBox
         {
             IsChecked = sub.Enabled,
@@ -323,11 +359,14 @@ public partial class AndroidApp
             AndroidStorage.SetSubscriptions(_subs);
         };
 
+        // ── Column 1: name (srv-name) + metadata (srv-host).
+        //               Both monospace + ellipsis to match desktop.
         var nameText = new TextBlock
         {
             Text = string.IsNullOrWhiteSpace(sub.Name) ? "(no name)" : sub.Name,
-            FontSize = 12,
+            FontSize = 11,
             FontWeight = FontWeight.SemiBold,
+            FontFamily = new FontFamily("monospace"),
             Foreground = GetBrush("TextPrimaryBrush"),
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
@@ -335,6 +374,7 @@ public partial class AndroidApp
         {
             Text = FormatSubMetadata(sub),
             FontSize = 9,
+            FontFamily = new FontFamily("monospace"),
             Foreground = GetBrush("TextMutedBrush"),
             TextTrimming = TextTrimming.CharacterEllipsis,
             TextWrapping = TextWrapping.NoWrap,
@@ -356,25 +396,33 @@ public partial class AndroidApp
         };
         nameStack.PointerReleased += (s, e) => OpenServerListOverlay(sub);
 
-        var spinner = new TextBlock
+        // ── Column 2: indeterminate ProgressBar (40×3) — same shape as
+        //               desktop's row spinner; only visible mid-refresh.
+        //               Fully qualified — Android.Widget.ProgressBar would
+        //               otherwise be a name collision in this assembly.
+        var spinner = new Avalonia.Controls.ProgressBar
         {
-            Text = Localization.SubsRefreshing,
-            FontSize = 9,
-            Foreground = GetBrush("AccentFgBrush"),
-            VerticalAlignment = VerticalAlignment.Center,
             IsVisible = _refreshingIds.Contains(sub.Id),
+            IsIndeterminate = true,
+            Height = 3,
+            Width = 40,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 4, 0),
+            Foreground = GetBrush("AccentSolidBrush"),
         };
 
-        var editBtn = StyledIconButton("✎", Localization.TipEditSubscription);
+        // ── Columns 3-5: ✎ edit / ↻ refresh / ✕ delete (srv-refresh
+        //                  micro-buttons — transparent, no fixed box).
+        var editBtn = StyledRowActionButton("✎", Localization.TipEditSubscription);
         editBtn.Click += (s, e) => StartEditUrl(sub);
 
-        var refreshBtn = StyledIconButton("↻", Localization.TipRefreshSubscription);
+        var refreshBtn = StyledRowActionButton("↻", Localization.TipRefreshSubscription);
         refreshBtn.IsEnabled = !_refreshingIds.Contains(sub.Id);
         refreshBtn.Click += async (s, e) => await RefreshOneAsync(sub);
 
         // 2-tap delete: first tap arms _pendingDeleteId, second tap
         // commits. Auto-disarms after 4 s of inactivity.
-        var deleteBtn = StyledIconButton("✕", Localization.TipRemoveSubscription);
+        var deleteBtn = StyledRowActionButton("✕", Localization.TipRemoveSubscription);
         if (_pendingDeleteId == sub.Id)
         {
             deleteBtn.Content = "✕?";
@@ -383,27 +431,28 @@ public partial class AndroidApp
         }
         deleteBtn.Click += (s, e) => OnDeleteSubClicked(sub);
 
-        var actionsRow = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 4,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children = { spinner, editBtn, refreshBtn, deleteBtn },
-        };
-
         var topGrid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("24,*,Auto,Auto,Auto,Auto"),
             ColumnSpacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
         };
         Grid.SetColumn(enabledChk, 0);
         Grid.SetColumn(nameStack, 1);
-        Grid.SetColumn(actionsRow, 2);
+        Grid.SetColumn(spinner, 2);
+        Grid.SetColumn(editBtn, 3);
+        Grid.SetColumn(refreshBtn, 4);
+        Grid.SetColumn(deleteBtn, 5);
         topGrid.Children.Add(enabledChk);
         topGrid.Children.Add(nameStack);
-        topGrid.Children.Add(actionsRow);
+        topGrid.Children.Add(spinner);
+        topGrid.Children.Add(editBtn);
+        topGrid.Children.Add(refreshBtn);
+        topGrid.Children.Add(deleteBtn);
 
         // Inline URL editor — only visible when this card is being edited.
+        // Indented to the name column so the editor visually nests under
+        // its row instead of competing with the chk gutter.
         Control? editorRow = null;
         if (_editingId == sub.Id)
         {
@@ -451,7 +500,7 @@ public partial class AndroidApp
             editorRow = new StackPanel
             {
                 Spacing = 4,
-                Margin = new Thickness(28, 6, 0, 0),
+                Margin = new Thickness(32, 6, 0, 0),
                 Children = { nameBox, urlBox, btnRow },
             };
         }
@@ -463,13 +512,15 @@ public partial class AndroidApp
         };
         if (editorRow is not null) content.Children.Add(editorRow);
 
+        // Outer Border = desktop's srv-row: transparent, no border,
+        // RadiusXs, padding 8,5. The list visually exists via spacing
+        // between rows, not card chrome.
         return new Border
         {
-            BorderBrush = GetBrush("BorderSubtleBrush"),
-            BorderThickness = new Thickness(1),
-            Background = GetBrush("SurfaceBaseBrush"),
-            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
-            Padding = new Thickness(10, 8),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+            Padding = new Thickness(8, 5),
             Child = content,
         };
     }
@@ -497,20 +548,28 @@ public partial class AndroidApp
         return $"{url} · {nFmt} · {time}";
     }
 
-    private Avalonia.Controls.Button StyledIconButton(string glyph, string? tooltip)
+    /// <summary>
+    /// Mirrors desktop's <c>Button.srv-refresh</c> style (SubscribePage.axaml
+    /// lines 86-98) — transparent, borderless icon button sized to its
+    /// glyph + a small touch-friendly padding bump. Pre-rev1 used a fixed
+    /// 32×32 box which made the row look like a row of square chips
+    /// instead of the lightweight icon trio used on desktop.
+    /// </summary>
+    private Avalonia.Controls.Button StyledRowActionButton(string glyph, string? tooltip)
     {
         var btn = new Avalonia.Controls.Button
         {
             Content = glyph,
-            FontSize = 13,
-            Width = 32,
-            Height = 32,
-            Padding = new Thickness(0),
+            FontSize = 14,
+            Padding = new Thickness(6, 2),
+            MinWidth = 0,
+            MinHeight = 0,
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            Foreground = GetBrush("TextSecondaryBrush"),
+            Foreground = GetBrush("TextMutedBrush"),
         };
         if (!string.IsNullOrEmpty(tooltip)) ToolTip.SetTip(btn, tooltip);
         return btn;

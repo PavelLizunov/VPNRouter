@@ -409,6 +409,11 @@ public static class AndroidStorage
     private const string KeyBypassRussianTraffic = "bypass_ru";        // bool
     private const string KeyBlockOnVpnFail = "block_on_vpn_fail";      // bool — Leak ➜ setBlocking
     private const string KeyDnsStrategy = "dns_strategy";              // "ipv4_only" | "prefer_ipv4" | "prefer_ipv6"
+    // Content section parity with desktop NetworkPage (mirrors AppSettings.App.BlockAds).
+    // Persists user intent today; AndroidConfigBuilder route wiring (geosite-ads → reject)
+    // is a follow-up — desktop reads BlockAds in ConfigGenerator.cs:96 to inject AdGuard
+    // DoH + an ads rule_set; Android still uses the user-supplied DNS unchanged.
+    private const string KeyBlockAds = "block_ads";                    // bool
     private const string KeyUpdateChannel = "update_channel";          // "stable" | "experimental"
     private const string KeyAutostartVpn = "autostart_vpn";            // bool
     private const string KeyAutostartZapret = "autostart_zapret";      // bool
@@ -450,6 +455,9 @@ public static class AndroidStorage
     public static string GetDnsStrategy() =>
         ValidateOrDefault(KeyDnsStrategy, GetString(KeyDnsStrategy), AllowedDnsStrategies, "ipv4_only");
     public static bool SetDnsStrategy(string value) => SetString(KeyDnsStrategy, value);
+
+    public static bool GetBlockAds() => GetBool(KeyBlockAds, defaultValue: false);
+    public static bool SetBlockAds(bool value) => SetBool(KeyBlockAds, value);
 
     public static string GetUpdateChannel() =>
         ValidateOrDefault(KeyUpdateChannel, GetString(KeyUpdateChannel), AllowedUpdateChannels, "stable");
@@ -961,7 +969,7 @@ public static class AndroidStorage
                 KeySelectedServerName, KeyLanguage, KeyTheme,
                 KeySubscriptions, KeyPerAppMode, KeyPerAppPackages,
                 KeyPerAppLastMode, KeyRoutingMode, KeyBypassRussianTraffic,
-                KeyBlockOnVpnFail, KeyDnsStrategy, KeyUpdateChannel,
+                KeyBlockOnVpnFail, KeyDnsStrategy, KeyBlockAds, KeyUpdateChannel,
                 KeyAutostartVpn, KeyAutostartZapret, KeyAutostartTgProxy,
                 KeyDpiBypassMode,
                 KeyActiveProfile,

@@ -785,6 +785,9 @@ internal static class Localization
     public static string SettingsSectionLeak => global::VPNRouter.Core.Localization.Strings.SettingsSectionLeak;
     public static string SettingsSectionUpdates => global::VPNRouter.Core.Localization.Strings.SettingsSectionUpdates;
     public static string SettingsSectionAutostart => global::VPNRouter.Core.Localization.Strings.SettingsSectionAutostart;
+    public static string SettingsSectionContent => global::VPNRouter.Core.Localization.Strings.SettingsSectionContent;
+    public static string SettingsBlockAdsLabel => global::VPNRouter.Core.Localization.Strings.SettingsBlockAdsLabel;
+    public static string SettingsBlockAdsHint => global::VPNRouter.Core.Localization.Strings.SettingsBlockAdsHint;
     public static string SettingsSectionReliability => global::VPNRouter.Core.Localization.Strings.SettingsSectionReliability;
     public static string SettingsReliabilityIntro => global::VPNRouter.Core.Localization.Strings.SettingsReliabilityIntro;
     public static string ReliabilityAlwaysOnTitle => global::VPNRouter.Core.Localization.Strings.ReliabilityAlwaysOnTitle;
@@ -857,4 +860,28 @@ internal static class Localization
     public static string TipMenuItemHealthCheck => global::VPNRouter.Core.Localization.Strings.TipMenuItemHealthCheck;
     public static string TipMenuItemSafeMode => global::VPNRouter.Core.Localization.Strings.TipMenuItemSafeMode;
     public static string TipMenuItemResetConfig => global::VPNRouter.Core.Localization.Strings.TipMenuItemResetConfig;
+
+    // F-13 Android visual port: Tools / DPI Bypass overlays (2026-05-09).
+    public static string MenuSectionTools => global::VPNRouter.Core.Localization.Strings.MenuSectionTools;
+    public static string MenuItemOpenTools => global::VPNRouter.Core.Localization.Strings.MenuItemOpenTools;
+    public static string MenuItemOpenDpiBypass => global::VPNRouter.Core.Localization.Strings.MenuItemOpenDpiBypass;
+    public static string ToolsOverlayTitle => global::VPNRouter.Core.Localization.Strings.ToolsOverlayTitle;
+    public static string DpiBypassOverlayTitle => global::VPNRouter.Core.Localization.Strings.DpiBypassOverlayTitle;
+    public static string ToolsTabZapret => global::VPNRouter.Core.Localization.Strings.ToolsTabZapret;
+    public static string ToolsTabTgProxy => global::VPNRouter.Core.Localization.Strings.ToolsTabTgProxy;
+    public static string AndroidZapretStatusOff => global::VPNRouter.Core.Localization.Strings.AndroidZapretStatusOff;
+    public static string AndroidZapretStatusStandard => global::VPNRouter.Core.Localization.Strings.AndroidZapretStatusStandard;
+    public static string AndroidZapretStatusAggressive => global::VPNRouter.Core.Localization.Strings.AndroidZapretStatusAggressive;
+    public static string AndroidZapretSectionNotApplicable => global::VPNRouter.Core.Localization.Strings.AndroidZapretSectionNotApplicable;
+    public static string AndroidTgProxyNotApplicable => global::VPNRouter.Core.Localization.Strings.AndroidTgProxyNotApplicable;
+    public static string AndroidDpiBypassFooterToggleOn => global::VPNRouter.Core.Localization.Strings.AndroidDpiBypassFooterToggleOn;
+    public static string AndroidDpiBypassFooterToggleOff => global::VPNRouter.Core.Localization.Strings.AndroidDpiBypassFooterToggleOff;
+    public static string AndroidToolsDiagnosticsHeader => global::VPNRouter.Core.Localization.Strings.AndroidToolsDiagnosticsHeader;
+    public static string AndroidToolsRunHealthCheck => global::VPNRouter.Core.Localization.Strings.AndroidToolsRunHealthCheck;
+    public static string AndroidToolsOpenLog => global::VPNRouter.Core.Localization.Strings.AndroidToolsOpenLog;
+    public static string AndroidToolsCheckLeak => global::VPNRouter.Core.Localization.Strings.AndroidToolsCheckLeak;
+
+    // ZapretSec* exports already exist at lines 215-225 (added in the F-01
+    // Localization unification). The F-13 DPI Bypass overlay should reuse
+    // those — re-adding them here would cause CS0102 duplicate definitions.
 }

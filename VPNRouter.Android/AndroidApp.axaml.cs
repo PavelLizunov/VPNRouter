@@ -133,7 +133,22 @@ public partial class AndroidApp : Avalonia.Application
     private TextBox? _serverInput;
     private TextBlock? _serverInputLabel;
     private TextBlock? _serverInputHint;
+    // v2.32.0 parity port (2026-05-09) — auto-detect hint above the action
+    // row, mirrors desktop SimplePage.axaml SmpInputDetectedHint /
+    // SmpInputDetectedHintVisible. Visible only when the typed text matches
+    // a recognised scheme (vless:// / hysteria2:// / hy2:// / tuic:// /
+    // ss:// / http(s)://). Replaces the old 3-segment Subscription/Server/
+    // Custom JSON sub-tab row — desktop has no such picker; auto-detect on
+    // a single input is the canonical UX.
+    private TextBlock? _serverInputDetectedHint;
     private TextBlock? _serverInputError;
+    // v2.32.0 parity port (2026-05-09) — Save / Refresh confirmation toast
+    // beneath the form card. Mirrors desktop's HasSmpToast border (line 371
+    // of SimplePage.axaml). Auto-clears after ~2.5 s; visible only after a
+    // successful Save / Refresh.
+    private Border? _smpToast;
+    private TextBlock? _smpToastText;
+    private System.Threading.CancellationTokenSource? _smpToastCts;
     private TextBlock? _tunnelModeLabel;
     private Avalonia.Controls.RadioButton? _splitRadio;
     private Avalonia.Controls.RadioButton? _fullRadio;
@@ -214,6 +229,12 @@ public partial class AndroidApp : Avalonia.Application
     // v2.32.0 — Free Configs entry point lives in the kebab menu (no
     // dedicated tab on Android — single-screen layout).
     private Avalonia.Controls.Button? _menuFreeConfigsItem;
+    // F-13 (2026-05-09) — Tools + DPI Bypass overlays mirror desktop's
+    // ToolsPage + DpiBypassPage. Both reachable from a new "Tools" kebab
+    // section sandwiched between Profiles and Diagnostics.
+    private Avalonia.Controls.Button? _menuToolsItem;
+    private Avalonia.Controls.Button? _menuDpiBypassItem;
+    private TextBlock? _menuSectionTools;
     // F-10 kebab parity (2026-05-09) — items added to Android Diagnostics
     // + Troubleshooting blocks so the kebab matches desktop sequence
     // 1:1. Pre-fix Check IP leak / Run Health Check / Restart in Safe
@@ -277,6 +298,10 @@ public partial class AndroidApp : Avalonia.Application
     // Lives inside Settings > Routing alongside split/full + bypass-RU.
     private Avalonia.Controls.ComboBox? _settingsDpiBypassMode;
     private Avalonia.Controls.ComboBox? _settingsDnsStrategy;
+    // Content section parity with desktop NetworkPage — single checkbox-card
+    // toggle for ad/tracker blocking. Persists today; the AndroidConfigBuilder
+    // route wiring (geosite-ads → reject + AdGuard DoH) is a follow-up.
+    private Avalonia.Controls.CheckBox? _settingsBlockAds;
     private Avalonia.Controls.CheckBox? _settingsReceivePrereleases;
     private TextBlock? _settingsCurrentVersion;
     private Avalonia.Controls.CheckBox? _settingsAutostartVpn;
@@ -570,12 +595,18 @@ public partial class AndroidApp : Avalonia.Application
         };
         mascot.BindToken(Border.BackgroundProperty, "AccentBgSubtleBrush");
 
+        // v2.32.0 parity port (2026-05-09) — brand title FontSize 14 → 12 to
+        // match desktop SimplePage.axaml line 60. Pre-port the heavier 14pt
+        // size made the title visually compete with the status card title
+        // (15 Bold), pushing the chip row off the same vertical rhythm as
+        // desktop. 12 Bold matches desktop exactly.
         _brandTitle = new TextBlock
         {
             Text = Localization.BrandTitle,
-            FontSize = 14,
+            FontSize = 12,
             FontWeight = FontWeight.Bold,
             VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
         };
         _brandTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
@@ -588,12 +619,16 @@ public partial class AndroidApp : Avalonia.Application
         _zapretChip = MakeChip("Zapret", "SurfaceSunkenBrush", "TextMutedBrush");
         _tgChip = MakeChip("TG", "SurfaceSunkenBrush", "TextMutedBrush");
 
+        // v2.32.0 parity port (2026-05-09) — chip row Spacing 6 → 4, drop
+        // the (8, 2, 0, 0) Margin so the row sits flush with the brand
+        // title (matches desktop SimplePage.axaml line 63 — Spacing="4",
+        // no margin, brand StackPanel handles vertical rhythm via its own
+        // Spacing="2").
         var chipRow = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 6,
+            Spacing = 4,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(8, 2, 0, 0),
             Children = { _vpnChip, _zapretChip, _tgChip }
         };
 
@@ -708,12 +743,25 @@ public partial class AndroidApp : Avalonia.Application
         _menuProfilesItem = MakeMenuItem(Localization.MenuItemOpenProfiles,
                                          "TextPrimaryBrush", OnMenuProfilesClicked);
 
+        // F-13 (2026-05-09) — Tools section: Tools (combined hub) +
+        // DPI bypass (dedicated detail page). Sits between Profiles and
+        // Diagnostics because configuring DPI bypass is a "pick a tool"
+        // intent like Free Configs / Profiles, not a troubleshooting
+        // step. Two items keeps parity with desktop's split (ToolsPage
+        // sub-tab + DpiBypassPage sidebar).
+        _menuToolsItem     = MakeMenuItem(Localization.MenuItemOpenTools,
+                                          "TextPrimaryBrush", OnMenuToolsClicked);
+        _menuDpiBypassItem = MakeMenuItem(Localization.MenuItemOpenDpiBypass,
+                                          "TextPrimaryBrush", OnMenuDpiBypassClicked);
+
         AppendMenuSectionWithControls(menuStack, Localization.MenuSectionView,
                                       new Control[] { themeRow, langRow });
         AppendMenuSection(menuStack, Localization.MenuSectionFreeConfigs,
                           new[] { _menuFreeConfigsItem });
         AppendMenuSection(menuStack, Localization.MenuSectionProfiles,
                           new[] { _menuProfilesItem });
+        AppendMenuSection(menuStack, Localization.MenuSectionTools,
+                          new[] { _menuToolsItem, _menuDpiBypassItem });
         // F-10 kebab parity (2026-05-09): canonical Diagnostics order is
         // Settings → Open log → Copy log path → View crash log →
         // Check IP leak → Run Health Check → Check for updates →
@@ -789,13 +837,17 @@ public partial class AndroidApp : Avalonia.Application
         };
         _statusTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
+        // v2.32.0 parity port (2026-05-09) — match desktop SimplePage.axaml
+        // line 167-172: FontSize 11 → 10, LineHeight 16 → 15. Smaller line
+        // height plus smaller font size keeps the description visually
+        // subordinate to the title and matches desktop's calmer rhythm.
         _statusDesc = new TextBlock
         {
             Text = Localization.SimpleStatusDescOff,
-            FontSize = 11,
+            FontSize = 10,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(20, 0, 0, 0),
-            LineHeight = 16,
+            LineHeight = 15,
         };
         _statusDesc.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
 
@@ -838,6 +890,13 @@ public partial class AndroidApp : Avalonia.Application
             Children = { _statusDot, _statusTitle },
         };
 
+        // v2.32.0 parity port (2026-05-09) — inner StackPanel Spacing 6 → 8
+        // so the gap between the dot+title row and the description matches
+        // desktop SimplePage.axaml line 150 (StackPanel Spacing="8"). The
+        // diagnostics rows (_statusHealthCheck, _statusErrorOneLiner) are
+        // Android-only additions and stay in the same stack — they only
+        // become visible during real diagnostics events, so the desktop
+        // visual at rest is identical.
         var statusCard = new Border
         {
             BorderThickness = new Thickness(1),
@@ -845,7 +904,7 @@ public partial class AndroidApp : Avalonia.Application
             Padding = new Thickness(14),
             Child = new StackPanel
             {
-                Spacing = 6,
+                Spacing = 8,
                 Children = { statusHeaderRow, _statusDesc, _statusHealthCheck, _statusErrorOneLiner },
             }
         };
@@ -1497,10 +1556,18 @@ public partial class AndroidApp : Avalonia.Application
         // ScrollViewer.
         _profilesOverlay = BuildProfilesOverlay();
 
+        // F-13 (2026-05-09) — Tools + DPI Bypass overlays (visual port of
+        // desktop's ToolsPage + DpiBypassPage). Triggered from the new
+        // "Tools" kebab section. Both layer above mainScroller like the
+        // other overlays. See AndroidApp.Tools.cs + AndroidApp.DpiBypass.cs.
+        _toolsOverlay     = BuildToolsOverlay();
+        _dpiBypassOverlay = BuildDpiBypassOverlay();
+
         return new Grid
         {
             Children = { mainScroller, _logOverlay, _appPickerOverlay, _subsOverlay, _fcOverlay, _settingsOverlay, _srvOverlay,
-                         _cfgExportOverlay, _cfgImportOverlay, _cfgQrOverlay, _profilesOverlay }
+                         _cfgExportOverlay, _cfgImportOverlay, _cfgQrOverlay, _profilesOverlay,
+                         _toolsOverlay, _dpiBypassOverlay }
         };
     }
 
@@ -1679,10 +1746,13 @@ public partial class AndroidApp : Avalonia.Application
 
         // Stacked sub-sections. Each returns a Border wrapping the controls
         // for that section so the visual grouping mirrors desktop's
-        // "Border + StackPanel" cards. v2.32.0 AND-NETRES — added
-        // Reliability section between Leak and Updates: it relates to
-        // protection-style features (keep-tunnel-alive) so it sits next
-        // to Leak for thematic clustering.
+        // "Border + StackPanel" cards.
+        //
+        // Section order matches desktop NetworkPage left-nav (Routing → Leak →
+        // Content → Updates → Autostart) so the user can navigate in the same
+        // mental order across platforms. Reliability is the Android-only
+        // section (Always-on / Doze / battery) and lives at the END so the
+        // desktop ordering stays unbroken.
         var inner = new StackPanel
         {
             Spacing = 18,
@@ -1691,9 +1761,10 @@ public partial class AndroidApp : Avalonia.Application
             {
                 BuildSettingsRoutingSection(),
                 BuildSettingsLeakSection(),
-                BuildSettingsReliabilitySection(),
+                BuildSettingsContentSection(),
                 BuildSettingsUpdatesSection(),
                 BuildSettingsAutostartSection(),
+                BuildSettingsReliabilitySection(),
             }
         };
 
@@ -4129,6 +4200,7 @@ public partial class AndroidApp : Avalonia.Application
         else if (headerText == Localization.MenuSectionAbout) _menuSectionAbout = header;
         else if (headerText == Localization.MenuSectionFreeConfigs) _menuSectionFreeConfigs = header;
         else if (headerText == Localization.MenuSectionProfiles) _menuSectionProfiles = header;
+        else if (headerText == Localization.MenuSectionTools) _menuSectionTools = header;
 
         stack.Children.Add(header);
 
@@ -4172,6 +4244,7 @@ public partial class AndroidApp : Avalonia.Application
         else if (headerText == Localization.MenuSectionAbout) _menuSectionAbout = header;
         else if (headerText == Localization.MenuSectionFreeConfigs) _menuSectionFreeConfigs = header;
         else if (headerText == Localization.MenuSectionProfiles) _menuSectionProfiles = header;
+        else if (headerText == Localization.MenuSectionTools) _menuSectionTools = header;
 
         stack.Children.Add(header);
 
@@ -4739,18 +4812,53 @@ public partial class AndroidApp : Avalonia.Application
                 a.Label.Contains(search, System.StringComparison.OrdinalIgnoreCase)
                 || a.PackageName.Contains(search, System.StringComparison.OrdinalIgnoreCase)).ToList();
 
-        var rows = filtered.Select(BuildAppRow).ToList();
+        // v3.0 — Selected / Available split mirrors desktop ApplicationsPage
+        // category structure. Sections are computed only at filter time
+        // (search/system-toggle change); per-row checkbox toggles update
+        // the selected count but leave rows in their current section so
+        // the user doesn't lose scroll position mid-tap.
+        var selectedRows = new List<AppListLoader.AppEntry>();
+        var availableRows = new List<AppListLoader.AppEntry>();
+        foreach (var app in filtered)
+        {
+            if (_appPickerSelected.Contains(app.PackageName))
+                selectedRows.Add(app);
+            else
+                availableRows.Add(app);
+        }
+
+        var rows = new List<Control>(filtered.Count + 2);
+        if (selectedRows.Count > 0)
+        {
+            rows.Add(BuildPickerSectionHeader(Localization.PerAppGroupSelected, selectedRows.Count));
+            foreach (var app in selectedRows) rows.Add(BuildAppRow(app));
+        }
+        if (availableRows.Count > 0)
+        {
+            rows.Add(BuildPickerSectionHeader(Localization.PerAppGroupAvailable, availableRows.Count));
+            foreach (var app in availableRows) rows.Add(BuildAppRow(app));
+        }
+
         _appPickerList.ItemsSource = rows;
         UpdateAppPickerCount();
     }
 
     private Control BuildAppRow(AppListLoader.AppEntry app)
     {
+        // v3.0 — visual parity with desktop ApplicationsPage Border.app-row:
+        // sunken-bg rounded block, padding 10/7, 4-pt margin between rows.
+        // Desktop has no per-app icon (Windows doesn't expose a uniform
+        // per-process icon API) so the icon slot is Android-only polish;
+        // typography (TextPrimary name + TextMuted secondary) and the
+        // rounded-block surround mirror desktop one-to-one. CheckBox sits
+        // trailing per Material list convention — desktop puts it leading,
+        // but the touch ergonomics differ (large finger tapping a leading
+        // checkbox occludes the icon/label readability mid-tap).
         var label = new TextBlock
         {
             Text = app.Label,
             FontSize = 12,
-            TextWrapping = TextWrapping.NoWrap,
+            TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
         };
         label.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
@@ -4758,7 +4866,7 @@ public partial class AndroidApp : Avalonia.Application
         {
             Text = app.PackageName,
             FontSize = 9,
-            TextWrapping = TextWrapping.NoWrap,
+            TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
         };
         pkgLine.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
@@ -4773,6 +4881,8 @@ public partial class AndroidApp : Avalonia.Application
         {
             IsChecked = _appPickerSelected.Contains(app.PackageName),
             VerticalAlignment = VerticalAlignment.Center,
+            MinHeight = 0,
+            Padding = new Thickness(0),
         };
         checkbox.IsCheckedChanged += (_, __) =>
         {
@@ -4783,16 +4893,13 @@ public partial class AndroidApp : Avalonia.Application
             UpdateAppPickerCount();
         };
 
-        // v3.0 v2.32.0 — real app icon to the left of the checkbox. The
-        // bitmap was converted by AppListLoader on the background thread
-        // (see AppIconCache), so a sync read here is safe even on cold
-        // cache. When IconBitmap is null (icon load threw, or package
-        // had no icon), the slot stays blank — better than a placeholder
-        // glyph that'd draw user attention to a non-issue.
+        // 32dp icon — Material medium list-icon size, matches the touch
+        // density of the rounded-block row. Cached Bitmap from
+        // AppIconCache; null slot stays blank rather than placeholder.
         var iconImage = new Image
         {
-            Width = 24,
-            Height = 24,
+            Width = 32,
+            Height = 32,
             VerticalAlignment = VerticalAlignment.Center,
             Stretch = Stretch.Uniform,
             Source = app.IconBitmap,
@@ -4801,28 +4908,76 @@ public partial class AndroidApp : Avalonia.Application
 
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"),
-            ColumnSpacing = 8,
-            Margin = new Thickness(8, 4),
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            ColumnSpacing = 10,
+            VerticalAlignment = VerticalAlignment.Center,
         };
-        Grid.SetColumn(checkbox, 0);
-        Grid.SetColumn(iconImage, 1);
-        Grid.SetColumn(rowText, 2);
-        grid.Children.Add(checkbox);
+        Grid.SetColumn(iconImage, 0);
+        Grid.SetColumn(rowText, 1);
+        Grid.SetColumn(checkbox, 2);
         grid.Children.Add(iconImage);
         grid.Children.Add(rowText);
+        grid.Children.Add(checkbox);
 
-        // Tap anywhere on the row toggles the check.
-        var clickable = new Border
+        var rowBorder = new Border
         {
-            Background = Brushes.Transparent,
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Padding = new Thickness(10, 7),
+            Margin = new Thickness(0, 0, 0, 4),
+            MinHeight = 44,
             Child = grid,
         };
-        clickable.PointerPressed += (_, __) =>
+        rowBorder.BindToken(Border.BackgroundProperty, "SurfaceSunkenBrush");
+        rowBorder.PointerPressed += (_, __) =>
         {
             checkbox.IsChecked = !(checkbox.IsChecked == true);
         };
-        return clickable;
+        return rowBorder;
+    }
+
+    /// <summary>
+    /// Section header for the per-app picker — mirrors desktop
+    /// ApplicationsPage cat-name + cat-count style: SemiBold secondary
+    /// label on the left, mono muted count on the right. Used to split
+    /// the picker into "Selected" / "Available" subsections so users
+    /// see at a glance what's currently routed via VPN vs the rest.
+    /// </summary>
+    private Control BuildPickerSectionHeader(string label, int count)
+    {
+        var nameTb = new TextBlock
+        {
+            Text = label,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        nameTb.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
+
+        var countTb = new TextBlock
+        {
+            Text = count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            FontSize = 9,
+            FontFamily = new FontFamily("Consolas, SF Mono, Cascadia Code, Ubuntu Mono, monospace"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(4, 0, 0, 0),
+        };
+        countTb.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+        };
+        Grid.SetColumn(nameTb, 0);
+        Grid.SetColumn(countTb, 1);
+        grid.Children.Add(nameTb);
+        grid.Children.Add(countTb);
+
+        return new Border
+        {
+            Padding = new Thickness(2, 8, 2, 4),
+            Child = grid,
+        };
     }
 
     private void UpdateAppPickerCount()
@@ -4951,6 +5106,7 @@ public partial class AndroidApp : Avalonia.Application
         {
             Text = string.Format(Localization.PerAppCount, 0),
             FontSize = 10,
+            FontFamily = new FontFamily("Consolas, SF Mono, Cascadia Code, Ubuntu Mono, monospace"),
             VerticalAlignment = VerticalAlignment.Center,
         };
         _appPickerCount.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
@@ -5302,6 +5458,12 @@ public partial class AndroidApp : Avalonia.Application
         // v2.32.0 (AND-PROFILES) — refresh Profiles menu strings.
         if (_menuSectionProfiles is not null) _menuSectionProfiles.Text = Localization.MenuSectionProfiles;
         if (_menuProfilesItem is not null) _menuProfilesItem.Content = Localization.MenuItemOpenProfiles;
+        // F-13 (2026-05-09) — Tools section + items.
+        if (_menuSectionTools is not null) _menuSectionTools.Text = Localization.MenuSectionTools;
+        if (_menuToolsItem is not null) _menuToolsItem.Content = Localization.MenuItemOpenTools;
+        if (_menuDpiBypassItem is not null) _menuDpiBypassItem.Content = Localization.MenuItemOpenDpiBypass;
+        if (_toolsTitleText is not null) _toolsTitleText.Text = Localization.ToolsOverlayTitle;
+        if (_dpiBypassTitleText is not null) _dpiBypassTitleText.Text = Localization.DpiBypassOverlayTitle;
         // F-10 kebab parity (2026-05-09) — refresh new Diagnostics +
         // Troubleshooting items.
         if (_menuCheckLeaksItem is not null) _menuCheckLeaksItem.Content = Localization.MenuItemCheckLeaks;

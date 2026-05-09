@@ -2057,6 +2057,18 @@ public static class Strings
 
     public static string SettingsSectionAutostart => Ru ? "Автозапуск" : "Autostart";
 
+    // Content section (mirrors desktop NetworkPage "Content" section).
+    public static string SettingsSectionContent => Ru ? "Контент" : "Content";
+
+    // BlockAds card (mirrors desktop MainWindowViewModel.BlockAdsLabel/Hint).
+    public static string SettingsBlockAdsLabel => Ru
+        ? "Блокировать рекламу и трекеры"
+        : "Block ads & trackers";
+
+    public static string SettingsBlockAdsHint => Ru
+        ? "Маршрутизирует AdGuard DNS через VPN. Блокирует рекламные домены, трекеры и malware."
+        : "Routes AdGuard DNS through VPN. Blocks ad domains, trackers, and malware.";
+
     // ── v2.32.0 AND-NETRES (2026-05-07) Reliability section ────────────
     //
     // No desktop equivalent — Android-only features (Always-on VPN, Doze
@@ -2307,4 +2319,77 @@ public static class Strings
     public static string TipMenuItemHealthCheck => TipSmpMenuHealthCheck;
     public static string TipMenuItemSafeMode => TipSmpMenuSafeMode;
     public static string TipMenuItemResetConfig => TipSmpMenuResetConfig;
+
+    // ── F-13 Android visual port: Tools / DPI Bypass overlays (2026-05-09) ──
+    //
+    // Strings for the new Android overlays that mirror desktop ToolsPage
+    // and DpiBypassPage. The desktop pages are reachable via the Tools
+    // tab in the main TabControl; on Android the kebab is the only
+    // non-modal entry surface, so each gets its own kebab item.
+    //
+    // Content is intentionally short — Android's narrow viewport doesn't
+    // tolerate wall-of-text section blurbs, and most of the underlying
+    // mechanism (Zapret binary, hosts-file installers, TgProxy daemon)
+    // doesn't run on Android anyway. So each overlay carries the
+    // structural shell (sub-tabs, status banners, footer toggle) but
+    // the content for non-applicable sections is a one-line "managed
+    // automatically inside the tunnel" / "not available on Android"
+    // explainer.
+    public static string MenuSectionTools => Ru ? "Инструменты" : "Tools";
+
+    public static string MenuItemOpenTools => Ru
+        ? "DPI bypass + Telegram proxy"
+        : "DPI bypass + Telegram proxy";
+
+    public static string MenuItemOpenDpiBypass => Ru
+        ? "DPI bypass (Zapret)"
+        : "DPI bypass (Zapret)";
+
+    public static string ToolsOverlayTitle => Ru ? "Инструменты" : "Tools";
+
+    public static string DpiBypassOverlayTitle => Ru ? "DPI bypass" : "DPI bypass";
+
+    /// <summary>Sub-tab strip on Android Tools overlay — left segment.</summary>
+    public static string ToolsTabZapret => Ru ? "DPI bypass" : "DPI bypass";
+
+    /// <summary>Sub-tab strip on Android Tools overlay — right segment.</summary>
+    public static string ToolsTabTgProxy => Ru ? "Telegram-прокси" : "Telegram proxy";
+
+    /// <summary>Status banner shown on Android Zapret card when DPI bypass is off.</summary>
+    public static string AndroidZapretStatusOff => Ru ? "Выключено" : "Off";
+
+    /// <summary>Status banner shown when DPI bypass is set to Standard.</summary>
+    public static string AndroidZapretStatusStandard => Ru ? "Включено: Стандарт" : "On: Standard";
+
+    /// <summary>Status banner shown when DPI bypass is set to Aggressive.</summary>
+    public static string AndroidZapretStatusAggressive => Ru ? "Включено: Агрессивно" : "On: Aggressive";
+
+    /// <summary>One-line note explaining why Hosts/Filters/Updates sections
+    /// are inactive on Android (no winws.exe binary on the platform).</summary>
+    public static string AndroidZapretSectionNotApplicable => Ru
+        ? "Эта секция недоступна на Android — порт Zapret использует встроенный механизм sing-box (tls_fragment), без отдельной службы и hosts-файлов."
+        : "This section is not applicable on Android — the Zapret port uses sing-box's native tls_fragment with no separate service or hosts files.";
+
+    /// <summary>Body text for the TgProxy card on Android Tools overlay.</summary>
+    public static string AndroidTgProxyNotApplicable => Ru
+        ? "Telegram-прокси (MTProto) пока не портирован на Android. Используй DPI bypass выше — он обходит блокировку Telegram внутри основного туннеля."
+        : "The Telegram MTProto proxy is not ported to Android yet. Use the DPI bypass above — it bypasses Telegram blocking inside the main tunnel.";
+
+    /// <summary>Footer toggle button — turns DPI bypass on/off without entering Settings.</summary>
+    public static string AndroidDpiBypassFooterToggleOn => Ru ? "Включить" : "Turn on";
+
+    /// <summary>Footer toggle button — when DPI bypass is currently on.</summary>
+    public static string AndroidDpiBypassFooterToggleOff => Ru ? "Выключить" : "Turn off";
+
+    /// <summary>Diagnostics row label inside Tools overlay (Advanced section).</summary>
+    public static string AndroidToolsDiagnosticsHeader => Ru ? "Диагностика" : "Diagnostics";
+
+    /// <summary>"Run health check" button label in Tools / Advanced.</summary>
+    public static string AndroidToolsRunHealthCheck => Ru ? "Запустить health check" : "Run health check";
+
+    /// <summary>"Open log" button label in Tools / Advanced.</summary>
+    public static string AndroidToolsOpenLog => Ru ? "Открыть лог sing-box" : "Open sing-box log";
+
+    /// <summary>"Check IP leak" button label in Tools / Advanced.</summary>
+    public static string AndroidToolsCheckLeak => Ru ? "Проверить IP-утечку" : "Check IP leak";
 }
