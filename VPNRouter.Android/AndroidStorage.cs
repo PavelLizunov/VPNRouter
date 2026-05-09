@@ -549,6 +549,59 @@ public static class AndroidStorage
     public static bool SetAdvancedActiveTab(int index)
         => SetString(KeyAdvancedActiveTab, index.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
+    // ── Phase D (AND-ADV-APPS-CATEGORIES, 2026-05-10) — Applications tab ──
+    //
+    // Two pieces of state for the new category sidebar:
+    //   • KeyApplicationsActiveCategory: internal id of the last-selected
+    //     category ("Discord_Privacy", "Browsers", "Custom", a custom id…).
+    //     Empty / null means no category selected — right pane shows the
+    //     "← Select a category" placeholder.
+    //   • KeyCustomCategoriesJson: list of user-defined CustomCategory
+    //     entries (mirrors desktop AppSettings.CustomCategories shape). Each
+    //     entry has Name + Apps[] (package names on Android) + Enabled.
+    //     Built-in categories (Discord/Browsers/etc.) live in code via
+    //     AndroidCategoryDefaults — only user-created ones are persisted.
+    private const string KeyApplicationsActiveCategory = "applications_active_category";
+    private const string KeyCustomCategoriesJson = "custom_categories_json";
+
+    public static string? GetApplicationsActiveCategory()
+        => GetString(KeyApplicationsActiveCategory);
+    public static bool SetApplicationsActiveCategory(string? id)
+        => SetString(KeyApplicationsActiveCategory, id);
+
+    public static List<CustomCategory> GetCustomCategories()
+    {
+        var json = GetString(KeyCustomCategoriesJson);
+        var result = StorageBlobRecovery.LoadOrRecover<List<CustomCategory>>(
+            json,
+            j => JsonConvert.DeserializeObject<List<CustomCategory>>(j));
+
+        if (result.Loaded) return result.Value!;
+
+        if (result.ShouldRecover)
+        {
+            QuarantineBadValue(KeyCustomCategoriesJson, json);
+            StampRecoveryNotice(
+                $"custom categories cache unreadable ({result.Reason}: {result.Detail}); reset to empty");
+        }
+        return new List<CustomCategory>();
+    }
+
+    public static bool SetCustomCategories(IEnumerable<CustomCategory>? cats)
+    {
+        try
+        {
+            if (cats is null) return SetString(KeyCustomCategoriesJson, null);
+            var list = new List<CustomCategory>(cats);
+            var json = JsonConvert.SerializeObject(list);
+            return SetString(KeyCustomCategoriesJson, json);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     // ── v2.32.0 (AND-4): per-server TCP+TLS test history ──────────────────
     //
     // Side-table keyed by VlessServersResolver dedup shape ("Server:Port:Uuid:Flow").

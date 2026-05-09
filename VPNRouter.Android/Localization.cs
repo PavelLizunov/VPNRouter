@@ -473,6 +473,11 @@ internal static class Localization
     public static string CustomDirectRulesPlaceholder => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesPlaceholder;
     public static string CustomDirectRulesErrorHeader => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesErrorHeader;
     public static string SelectCategoryHint => global::VPNRouter.Core.Localization.Strings.SelectCategoryHint;
+    // Phase D (AND-ADV-APPS-CATEGORIES, 2026-05-10).
+    public static string AdvAppsCategoryNamePlaceholder => global::VPNRouter.Core.Localization.Strings.AdvAppsCategoryNamePlaceholder;
+    public static string AdvAppsAddCategoryButton => global::VPNRouter.Core.Localization.Strings.AdvAppsAddCategoryButton;
+    public static string AdvAppsSelectCategoryHint => global::VPNRouter.Core.Localization.Strings.AdvAppsSelectCategoryHint;
+    public static string AdvAppsCategoryCustom => global::VPNRouter.Core.Localization.Strings.AdvAppsCategoryCustom;
     public static string TipBypassRu => global::VPNRouter.Core.Localization.Strings.TipBypassRu;
     public static string TipLeakBlockOnFail => global::VPNRouter.Core.Localization.Strings.TipLeakBlockOnFail;
     public static string TipLeakStrictMode => global::VPNRouter.Core.Localization.Strings.TipLeakStrictMode;
