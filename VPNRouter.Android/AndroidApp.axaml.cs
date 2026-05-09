@@ -1599,11 +1599,20 @@ public partial class AndroidApp : Avalonia.Application
         _toolsOverlay     = BuildToolsOverlay();
         _dpiBypassOverlay = BuildDpiBypassOverlay();
 
+        // AND-ADV-SHELL (2026-05-09) — tab-based Advanced overlay shell.
+        // Replaces the kebab as the primary path to Advanced features so
+        // mobile mirrors desktop's tab strip. Triggered by the "Расширенные
+        // настройки" / "Advanced settings" card on Simple page. Empty stub
+        // panes for now; the next chip (AND-ADV-MIGRATE) drops the real
+        // per-tab content into each pane and trims the kebab. Defined in
+        // AndroidApp.AdvancedShell.cs.
+        _advancedOverlay = BuildAdvancedOverlay();
+
         return new Grid
         {
             Children = { mainScroller, _logOverlay, _appPickerOverlay, _subsOverlay, _fcOverlay, _settingsOverlay, _srvOverlay,
                          _cfgExportOverlay, _cfgImportOverlay, _cfgQrOverlay, _profilesOverlay,
-                         _toolsOverlay, _dpiBypassOverlay }
+                         _toolsOverlay, _dpiBypassOverlay, _advancedOverlay }
         };
     }
 
@@ -4267,13 +4276,15 @@ public partial class AndroidApp : Avalonia.Application
 
     private void OnAdvCardClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        // v2.32.0 (2026-05-07) — Phase 3 placeholder replaced with
-        // Subscribe overlay open. The advanced card subtitle promises
-        // "Серверы · Подписки · Маршрутизация · Логи"; subscriptions are
-        // now real. (Servers + Routing + Logs остаются placeholder'ом
-        // под inline form / kebab menu / log overlay соответственно;
-        // subscription management was the only orphan here.)
-        OpenSubsOverlay();
+        // AND-ADV-SHELL (2026-05-09) — Advanced settings card now opens
+        // the tab-based Advanced overlay (Servers / Subscribe / Apps /
+        // Network / DPI bypass / Telegram / Public configs) so mobile
+        // mirrors desktop's tab strip. Pre-fix this opened only the
+        // Subscribe overlay (one of the seven advanced surfaces); the
+        // other six were reachable only via the kebab. The next chip
+        // (AND-ADV-MIGRATE) populates each tab pane with its real
+        // content + trims the now-redundant kebab entries.
+        OpenAdvancedOverlay();
     }
 
     /// <summary>
