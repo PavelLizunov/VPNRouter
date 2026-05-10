@@ -4911,11 +4911,16 @@ public partial class AndroidApp : Avalonia.Application
     /// v3.0 Phase 7.3 — set RU or EN explicitly + refresh all the
     /// labels through ToggleLanguageAndRefresh + repaint segment
     /// active state. Idempotent.
+    /// DEFCT-004 (2026-05-10): pre-fix this called Localization.ToggleAndPersist()
+    /// AND ToggleLanguageAndRefresh() — but ToggleLanguageAndRefresh internally
+    /// also toggles, so the two calls cancelled out and tapping RU/EN never
+    /// flipped state visibly. The early-return guard above already ensures
+    /// we only proceed when state needs to change, so a single internal
+    /// toggle (via ToggleLanguageAndRefresh) is sufficient.
     /// </summary>
     private void ApplyLanguage(bool ru)
     {
         if (Localization.Ru == ru) return;
-        Localization.ToggleAndPersist();
         ToggleLanguageAndRefresh();
         RepaintLanguageSegment();
     }
