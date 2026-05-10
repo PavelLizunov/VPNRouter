@@ -749,6 +749,7 @@ internal static class Localization
     public static string PerAppModeExclude => global::VPNRouter.Core.Localization.Strings.PerAppModeExclude;
     public static string PerAppPickButton => global::VPNRouter.Core.Localization.Strings.PerAppPickButton;
     public static string PerAppCount => global::VPNRouter.Core.Localization.Strings.PerAppCount;
+    public static string PerAppShowingCount => global::VPNRouter.Core.Localization.Strings.PerAppShowingCount;
     public static string PerAppLoading => global::VPNRouter.Core.Localization.Strings.PerAppLoading;
     public static string PerAppSaveButton => global::VPNRouter.Core.Localization.Strings.PerAppSaveButton;
     public static string PerAppSearchHint => global::VPNRouter.Core.Localization.Strings.PerAppSearchHint;

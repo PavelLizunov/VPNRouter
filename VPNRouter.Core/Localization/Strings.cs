@@ -1929,6 +1929,13 @@ public static class Strings
 
     public static string PerAppCount => Ru ? "Выбрано: {0}" : "Selected: {0}";
 
+    // Bug #2 (2026-05-11) — Android mobile redesign of Applications tab.
+    // Shown next to the search box so the user can verify the device-wide
+    // app enumeration is producing a sane count (some OEM ROMs hide apps
+    // from PackageManager.GetInstalledApplications; we merge with launcher
+    // queries to catch them — surfaced here for transparency).
+    public static string PerAppShowingCount => Ru ? "Показано: {0}" : "Showing: {0}";
+
     public static string PerAppLoading => Ru ? "Загружаю список приложений…" : "Loading app list…";
 
     public static string PerAppSaveButton => Ru ? "Готово" : "Done";

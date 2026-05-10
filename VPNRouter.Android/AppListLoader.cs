@@ -1,8 +1,11 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Android.App;
+using Android.Content;
 using Android.Content.PM;
 using Android.Graphics.Drawables;
+using Android.Util;
 using Avalonia.Media.Imaging;
 
 namespace VPNRouter.Android;
@@ -27,9 +30,19 @@ namespace VPNRouter.Android;
 /// <see cref="PackageManager.GetApplicationLabel"/> via the
 /// ApplicationInfo path because it tolerates missing labels (returns the
 /// package name) better than reaching into Resources directly.</para>
+///
+/// <para>Bug #2 (2026-05-11) — augment <see cref="PackageManager.GetInstalledApplications"/>
+/// with <see cref="PackageManager.QueryIntentActivities(Intent, PackageInfoFlags)"/>
+/// for <c>Intent.ACTION_MAIN</c> + <c>CATEGORY_LAUNCHER</c>. Some OEM ROMs
+/// (Xiaomi MIUI, Huawei EMUI, certain Samsung One UI builds) silently drop
+/// apps from <c>MatchAll</c> when work-profile / private-space / multi-user
+/// containers are involved, but still expose them via launcher queries. The
+/// merged set is the union of both paths, deduped by package name.</para>
 /// </summary>
 internal static class AppListLoader
 {
+    private const string LogTag = "VPNRouter.AppList";
+
     public sealed class AppEntry
     {
         public string PackageName { get; set; } = string.Empty;
@@ -61,23 +74,68 @@ internal static class AppListLoader
         var pm = ctx.PackageManager;
         if (pm is null) return new List<AppEntry>();
 
-        IList<ApplicationInfo>? apps = null;
+        var merged = new Dictionary<string, ApplicationInfo>(StringComparer.OrdinalIgnoreCase);
+        int matchAllCount = 0;
+        int launcherCount = 0;
+        int launcherUnique = 0;
+
+        // Path 1 — GetInstalledApplications (the canonical AOSP API).
         try
         {
-            // GetInstalledApplications returns ALL installed apps regardless
-            // of system/user; we filter via ApplicationInfoFlags.System.
-            apps = pm.GetInstalledApplications(PackageInfoFlags.MatchAll);
+            var apps = pm.GetInstalledApplications(PackageInfoFlags.MatchAll);
+            if (apps is not null)
+            {
+                matchAllCount = apps.Count;
+                foreach (var info in apps)
+                {
+                    var pkg = info.PackageName;
+                    if (string.IsNullOrEmpty(pkg)) continue;
+                    merged[pkg] = info;
+                }
+            }
         }
-        catch
+        catch (Exception ex)
         {
-            return new List<AppEntry>();
+            Log.Warn(LogTag, $"GetInstalledApplications failed: {ex.GetType().Name}: {ex.Message}");
         }
 
-        if (apps is null) return new List<AppEntry>();
+        // Path 2 — QueryIntentActivities(ACTION_MAIN + CATEGORY_LAUNCHER).
+        // Catches apps that some OEM ROMs hide from MatchAll. We ignore
+        // failures here entirely — the canonical path is path 1, this is
+        // strictly additive.
+        try
+        {
+            using var launcherIntent = new Intent(Intent.ActionMain);
+            launcherIntent.AddCategory(Intent.CategoryLauncher);
+            var resolved = pm.QueryIntentActivities(launcherIntent, PackageInfoFlags.MatchAll);
+            if (resolved is not null)
+            {
+                launcherCount = resolved.Count;
+                foreach (var ri in resolved)
+                {
+                    var pkg = ri?.ActivityInfo?.PackageName;
+                    if (string.IsNullOrEmpty(pkg)) continue;
+                    if (merged.ContainsKey(pkg)) continue;
+                    var info = ri!.ActivityInfo!.ApplicationInfo;
+                    if (info is null) continue;
+                    merged[pkg] = info;
+                    launcherUnique++;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn(LogTag, $"QueryIntentActivities failed: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        Log.Info(LogTag,
+            $"AppListLoader.Load(includeSystem={includeSystem}): " +
+            $"MatchAll={matchAllCount}, Launcher={launcherCount} " +
+            $"(+{launcherUnique} unique), merged={merged.Count}");
 
         var ownPackage = ctx.PackageName ?? string.Empty;
-        var result = new List<AppEntry>(apps.Count);
-        foreach (var info in apps)
+        var result = new List<AppEntry>(merged.Count);
+        foreach (var info in merged.Values)
         {
             // Hide our own package — VpnRouterService.openTun already
             // self-disallows it so the VPN doesn't loop on itself; no
