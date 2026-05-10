@@ -172,8 +172,7 @@ Per sub-section:
 | 7.3 | Adjust filter, tap Find again | Filtered results |
 | 7.4 | Tap a config row | Row highlights, "Connect to selected" enables |
 | 7.5 | Tap "Connect to selected" | VPN connects to selected free config |
-| 7.6 | Switch to "★ Saved" sub-tab | Shows favorited configs (empty if none) |
-| 7.7 | Long-press a Search row → Save | Adds to Saved sub-tab |
+| 7.6 | Switch to "★ Saved" sub-tab | Shows configs from previous Find runs (cumulative auto-save — every Verified entry is persisted, no per-row gesture). Empty on first launch. |
 
 ### TEST-8 — End-to-end VPN flow (USES user's subscription URL)
 

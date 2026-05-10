@@ -2043,8 +2043,8 @@ public static class Strings
     public static string FcOverlayTitle => Ru ? "Бесплатные конфиги" : "Free configs";
 
     public static string FcSearchHint => Ru
-        ? "Соберём список ниже из публичных источников и проверим TCP+TLS до каждого. Жми «Найти» — выберем самые быстрые."
-        : "We'll pull the list below from public sources and run TCP+TLS to each. Tap Find — we'll pick the fastest.";
+        ? "Соберём список ниже из публичных источников и проверим TCP+TLS до каждого. Жми «Найти» — выберем самые быстрые. Рабочие конфиги сохраняются автоматически — открой вкладку «★ Сохранённые», чтобы их увидеть."
+        : "We'll pull the list below from public sources and run TCP+TLS to each. Tap Find — we'll pick the fastest. Verified configs are saved automatically — open the ★ Saved tab to see them.";
 
     public static string FcFindButton => Ru ? "✓✓ Найти рабочие конфиги" : "✓✓ Find working configs";
 
