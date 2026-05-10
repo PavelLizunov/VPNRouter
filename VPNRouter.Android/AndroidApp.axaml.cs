@@ -1,9 +1,11 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Data;
 using Avalonia.Layout;
+using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -884,6 +886,21 @@ public partial class AndroidApp : Avalonia.Application
             Child = menuPanel,
             IsLightDismissEnabled = true,
         };
+
+        // DEFCT-001 (2026-05-10) — Avalonia 11.3.12 ToggleNodeInfoProvider
+        // crashes on PopulateNodeInfo (s_checkedProperty.SetValue(this, ...)
+        // bug, target type mismatch — should pass `nodeInfo`, not `this`).
+        // Tapping the kebab triggers Android's a11y traversal of the popup
+        // subtree even with no a11y service enabled, which trips the bug
+        // and aborts the app with System.Reflection.TargetException. Marking
+        // the entire popup subtree AccessibilityView=Raw drops every
+        // descendant out of the Control/Content automation views so the
+        // toggle peer never gets enumerated. Trade-off: TalkBack cannot
+        // navigate the kebab — acceptable as Phase 1 because the Simple
+        // page already has an "Advanced settings ▸" card as a parallel
+        // entry point. Deeper fix (peer attribution audit + Avalonia
+        // upstream PR) tracked separately.
+        HideSubtreeFromAccessibility(menuPanel);
 
         // v2.32.0 parity port (2026-05-09) — drop the (16, 12, 16, 4)
         // Margin so the brand row composes cleanly inside the centered
@@ -4736,6 +4753,28 @@ public partial class AndroidApp : Avalonia.Application
         };
         divider.BindToken(Border.BackgroundProperty, "BorderSubtleBrush");
         stack.Children.Add(divider);
+    }
+
+    // DEFCT-001 (2026-05-10) — recursive AccessibilityView=Raw walk over
+    // the popup subtree. See call site in the kebab construction block
+    // (around the _kebabPopup = new Popup{} statement) for the rationale.
+    // Implementation note: we walk the LOGICAL tree via ILogical so this
+    // works on the freshly-constructed subtree before it's attached to a
+    // visual root (Border.Child / Panel.Children / ContentControl.Content
+    // are all logical children at construction time). Setting the property
+    // on each StyledElement makes its eventual AutomationPeer surface as
+    // Raw, which Avalonia's IsControlElement / IsContentElement honour.
+    private static void HideSubtreeFromAccessibility(StyledElement element)
+    {
+        AutomationProperties.SetAccessibilityView(element, AccessibilityView.Raw);
+        if (element is ILogical logical)
+        {
+            foreach (var child in logical.LogicalChildren)
+            {
+                if (child is StyledElement childElement)
+                    HideSubtreeFromAccessibility(childElement);
+            }
+        }
     }
 
     private void OnKebabMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
