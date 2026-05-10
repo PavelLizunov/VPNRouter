@@ -48,8 +48,16 @@ public partial class AndroidApp
     // Search-tab widgets
     private Avalonia.Controls.Button? _fcFindButton;
     private Avalonia.Controls.Button? _fcStopButton;
-    private NumericUpDown? _fcTargetInput;
-    private NumericUpDown? _fcMaxPingInput;
+    // DEFCT-7.3-A — replaced Avalonia NumericUpDown (default ▲▼ RepeatButtons
+    // were ~22 dp tall, well below Android 48 dp touch-target spec — most taps
+    // missed and fell through to the underlying Find CTA). Now a hand-rolled
+    // [−][value][+] row with each step Button at 44 dp + an int-field source
+    // of truth so the readers in OnFreeConfigsFindClicked don't have to know
+    // about the spinner template.
+    private int _fcTargetValue = 10;
+    private int _fcMaxPingValue = 400;
+    private TextBlock? _fcTargetValueText;
+    private TextBlock? _fcMaxPingValueText;
     private Avalonia.Controls.CheckBox? _fcExcludeRu;
     private Border? _fcAdvancedPanel;
     private Avalonia.Controls.Button? _fcAdvancedToggle;
@@ -519,17 +527,10 @@ public partial class AndroidApp
             VerticalAlignment = VerticalAlignment.Center,
             Foreground = successFg,
         };
-        _fcTargetInput = new NumericUpDown
-        {
-            Value = 10,
-            Minimum = 1,
-            Maximum = 50,
-            Increment = 1,
-            FormatString = "0",
-            MinWidth = 84,
-            Padding = new Thickness(4, 2),
-            FontSize = 11,
-        };
+        var targetSpinner = BuildSpinnerControl(
+            initial: _fcTargetValue, min: 1, max: 50, step: 1, successFg,
+            display: out _fcTargetValueText,
+            onChanged: v => _fcTargetValue = v);
         var configsWord = new TextBlock
         {
             Text = Localization.FcConfigsWord,
@@ -543,7 +544,7 @@ public partial class AndroidApp
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             Spacing = 4,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { targetLabel, _fcTargetInput, configsWord }
+            Children = { targetLabel, targetSpinner, configsWord }
         };
 
         var pingLabel = new TextBlock
@@ -553,17 +554,10 @@ public partial class AndroidApp
             VerticalAlignment = VerticalAlignment.Center,
             Foreground = successFg,
         };
-        _fcMaxPingInput = new NumericUpDown
-        {
-            Value = 400,
-            Minimum = 50,
-            Maximum = 2000,
-            Increment = 50,
-            FormatString = "0",
-            MinWidth = 92,
-            Padding = new Thickness(4, 2),
-            FontSize = 11,
-        };
+        var pingSpinner = BuildSpinnerControl(
+            initial: _fcMaxPingValue, min: 50, max: 2000, step: 50, successFg,
+            display: out _fcMaxPingValueText,
+            onChanged: v => _fcMaxPingValue = v);
         var msUnit = new TextBlock
         {
             Text = Localization.FcMsUnit,
@@ -578,7 +572,7 @@ public partial class AndroidApp
             Spacing = 4,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 6, 0, 0),
-            Children = { pingLabel, _fcMaxPingInput, msUnit }
+            Children = { pingLabel, pingSpinner, msUnit }
         };
 
         _fcExcludeRu = new Avalonia.Controls.CheckBox
@@ -668,6 +662,81 @@ public partial class AndroidApp
         header.Children.Add(col2);
         header.Children.Add(col3);
         return header;
+    }
+
+    /// <summary>
+    /// DEFCT-7.3-A — replacement for NumericUpDown that meets Android's
+    /// 48 dp touch-target spec. Renders as [ − ][ value ][ + ] in a
+    /// horizontal StackPanel where each step button is 44×44 dp (close
+    /// enough to spec; the surrounding panel adds spacing). Min/max
+    /// clamp inside the click handlers so callers only see valid values.
+    /// </summary>
+    /// <param name="display">
+    /// Output param — the value-display TextBlock so the caller can keep
+    /// a reference for later updates (eg. after Find run resets the value).
+    /// </param>
+    /// <param name="onChanged">
+    /// Invoked with the post-step clamped int after each − / + tap.
+    /// Caller owns the field that stores the value.
+    /// </param>
+    private StackPanel BuildSpinnerControl(
+        int initial, int min, int max, int step, IBrush successFg,
+        out TextBlock display,
+        System.Action<int> onChanged)
+    {
+        var current = initial;
+        display = new TextBlock
+        {
+            Text = current.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            FontSize = 13,
+            FontWeight = FontWeight.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
+            MinWidth = 48,
+            Foreground = successFg,
+        };
+        var displayLocal = display; // capture for the closures below
+        var minus = MakeSpinnerStepButton("−");
+        var plus  = MakeSpinnerStepButton("+");
+        minus.Click += (_, _) =>
+        {
+            current = System.Math.Max(min, current - step);
+            displayLocal.Text = current.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            onChanged(current);
+        };
+        plus.Click += (_, _) =>
+        {
+            current = System.Math.Min(max, current + step);
+            displayLocal.Text = current.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            onChanged(current);
+        };
+        return new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { minus, display, plus },
+        };
+    }
+
+    private Avalonia.Controls.Button MakeSpinnerStepButton(string glyph)
+    {
+        var btn = new Avalonia.Controls.Button
+        {
+            Content = glyph,
+            FontSize = 16,
+            FontWeight = FontWeight.SemiBold,
+            Width = 44,
+            Height = 44,
+            Padding = new Thickness(0),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+        };
+        btn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "SurfaceSunkenBrush");
+        btn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "TextPrimaryBrush");
+        return btn;
     }
 
     /// <summary>
@@ -915,12 +984,15 @@ public partial class AndroidApp
         if (_fcOrchestrator is null) return;
         if (_fcOrchestrator.IsBusy) return;
 
-        var target = (int)(_fcTargetInput?.Value ?? 10m);
+        // DEFCT-7.3-A — read from int-field source of truth instead of the
+        // pre-fix NumericUpDown's Value (decimal?). Clamp guards stay since
+        // the spinner buttons already clamp at min/max but defensive is cheap.
+        var target = _fcTargetValue;
         if (target < 1) target = 1;
         if (target > 50) target = 50;
         _fcTargetSnapshot = target;
 
-        var maxPing = (int)(_fcMaxPingInput?.Value ?? 400m);
+        var maxPing = _fcMaxPingValue;
         if (maxPing < 50) maxPing = 50;
         if (maxPing > 2000) maxPing = 2000;
 
@@ -1124,6 +1196,12 @@ public partial class AndroidApp
 
         if (_fcSavedEmptyHint is not null)
             _fcSavedEmptyHint.IsVisible = _fcSavedResults.Count == 0;
+        if (_fcSavedHint is not null)
+            // DEFCT-7.6-A — toolbar-row hint mirrored the empty-state TextBlock so
+            // the misleading "No saved configs yet" line stayed visible above a
+            // populated list. Hide once results land; same predicate as the inner
+            // hint keeps the two TextBlocks in lockstep.
+            _fcSavedHint.IsVisible = _fcSavedResults.Count == 0;
         if (_fcSavedList is not null)
             _fcSavedList.IsVisible = _fcSavedResults.Count > 0;
         if (_fcClearAllButton is not null)
