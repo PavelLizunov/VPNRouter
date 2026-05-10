@@ -62,8 +62,15 @@
                   android:required="false" />
 
     <application android:label="VPNRouter"
+                 android:icon="@mipmap/ic_launcher"
+                 android:roundIcon="@mipmap/ic_launcher_round"
                  android:supportsRtl="true">
         <!-- Avalonia MainActivity auto-generated from C# [Activity] attribute. -->
+        <!-- Launcher icon (added 2026-05-10) — penguin_logo.png from
+             VPNRouter.App/Assets resized to 5 mipmap densities so
+             different launchers + screen DPIs pick the right size.
+             roundIcon mirrors the same image — Pixel-style adaptive
+             round icons can be added later as a separate enhancement. -->
 
         <!-- VpnRouterService is a Java class (VpnRouterService.java)
              compiled into the APK via <AndroidJavaSource>. Because it's
