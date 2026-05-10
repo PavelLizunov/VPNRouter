@@ -3902,6 +3902,16 @@ public partial class AndroidApp : Avalonia.Application
         }
         _vpnChip.BindToken(TextBlock.BackgroundProperty, bgKey);
         _vpnChip.BindToken(TextBlock.ForegroundProperty, fgKey);
+        // Bug #3 fix (2026-05-11) — mirror brushes onto the Advanced
+        // shell header chip so both surfaces share live state. The chip
+        // is null until the Advanced overlay has been built once; first
+        // open's force-rebind path covers that case.
+        if (_advVpnChip is not null)
+        {
+            _advVpnChip.Opacity = 1.0;
+            _advVpnChip.BindToken(TextBlock.BackgroundProperty, bgKey);
+            _advVpnChip.BindToken(TextBlock.ForegroundProperty, fgKey);
+        }
     }
 
     /// <summary>
@@ -3950,6 +3960,14 @@ public partial class AndroidApp : Avalonia.Application
         }
         _zapretChip.BindToken(TextBlock.BackgroundProperty, bgKey);
         _zapretChip.BindToken(TextBlock.ForegroundProperty, fgKey);
+        // Bug #3 fix (2026-05-11) — mirror brushes onto the Advanced
+        // shell header chip (same pattern as SetVpnChipState above).
+        if (_advZapretChip is not null)
+        {
+            _advZapretChip.Opacity = 1.0;
+            _advZapretChip.BindToken(TextBlock.BackgroundProperty, bgKey);
+            _advZapretChip.BindToken(TextBlock.ForegroundProperty, fgKey);
+        }
     }
 
     /// <summary>
@@ -4932,6 +4950,32 @@ public partial class AndroidApp : Avalonia.Application
         AndroidStorage.SetTheme(mode);
         RequestedThemeVariant = mode == "dark" ? ThemeVariant.Dark : ThemeVariant.Light;
 
+        // Bug #4 fix (2026-05-11) — Phase 8.2 BindToken migration is
+        // incomplete: ~247 GetBrush() snapshot call sites across the
+        // partials don't repaint on theme switch. Until that migration
+        // lands, rebuild the Avalonia MainView so every Build* helper
+        // re-runs with the new theme tokens. Activity.Recreate was
+        // tried first but crashes Mono runtime on Avalonia.Mobile
+        // (xamarin::android::Helpers::abort_application). Reassigning
+        // ISingleViewApplicationLifetime.MainView stays inside Avalonia
+        // and is safe — class-field references get overwritten by the
+        // re-run BuildSimplePageView so existing event subscriptions
+        // (MainActivity.IntentChanged → OnIntentChanged → mutates
+        // _statusCard etc.) still target the freshly-built controls.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            try { RebuildSimplePageView(); }
+            catch (Exception ex)
+            {
+                try
+                {
+                    global::Android.Util.Log.Warn("VpnRouter.Theme",
+                        $"RebuildSimplePageView after theme switch failed: {ex.GetType().Name}: {ex.Message}");
+                }
+                catch { /* swallow logging failures */ }
+            }
+        }, Avalonia.Threading.DispatcherPriority.Background);
+
         // v3.0 Phase 8.2 (2026-05-07) — every property bound via
         // BindToken auto-resolves to the new theme's value through
         // Avalonia's DynamicResource pipeline. The two surfaces that
@@ -4956,6 +5000,33 @@ public partial class AndroidApp : Avalonia.Application
         // state hasn't changed (mirrors the SetVpnChipState force path).
         SetZapretChipState(_zapretChipState, force: true);
         UpdateConnectionState(MainActivity.IntendedConnected);
+    }
+
+    /// <summary>
+    /// Bug #4 fix (2026-05-11) — rebuild the Avalonia MainView so every
+    /// GetBrush() call site re-snapshots brushes from the new theme.
+    /// Called by ApplyTheme after RequestedThemeVariant changes. Safe
+    /// to call multiple times — each invocation tears down the old
+    /// view tree via the lifetime swap and constructs a fresh one
+    /// from the current AndroidStorage / theme state.
+    /// </summary>
+    private void RebuildSimplePageView()
+    {
+        if (ApplicationLifetime is not
+            Avalonia.Controls.ApplicationLifetimes.ISingleViewApplicationLifetime singleView)
+            return;
+        // Build the new view BEFORE swapping so any construction
+        // exception leaves the old one intact and visible.
+        var fresh = BuildSimplePageView();
+        singleView.MainView = fresh;
+        // Re-seed transient UI state that BuildSimplePageView's
+        // fresh instance doesn't know about — connection state +
+        // server list cache. Mirrors OnFrameworkInitializationCompleted's
+        // post-build calls so the rebuilt view immediately reflects
+        // current reality instead of defaulting to disconnected /
+        // empty.
+        UpdateConnectionState(MainActivity.IntendedConnected);
+        ReloadServerList();
     }
 
     /// <summary>

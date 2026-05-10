@@ -67,6 +67,15 @@ public partial class AndroidApp
     private Image? _advMascotImage;
     private Avalonia.Controls.Button? _advSimpleToggleBtn;
     private Avalonia.Controls.Button? _advKebabMenuBtn;
+    // Bug #3 fix (2026-05-11) — Advanced header chips now state-bound.
+    // Pre-fix they were local-scoped TextBlocks in BuildAdvancedHeader,
+    // so SetVpnChipState / SetZapretChipState only ever updated the
+    // Simple page chips. With these fields wired and the brushes
+    // re-bound on every state flip we get live chip parity between the
+    // two surfaces. (MakeChip returns TextBlock — see SimplePage builder.)
+    private TextBlock? _advVpnChip;
+    private TextBlock? _advZapretChip;
+    private TextBlock? _advTgChip;
 
     // Persistent footer chrome (AND-ADV-CHROME 2026-05-10) — status dot +
     // text on the left, accent Start VPN button on the right. Mirrors
@@ -227,11 +236,21 @@ public partial class AndroidApp
 
         // Visual copies of VPN/Zapret/TG chips. These are static copies —
         // they show the connection state at the moment the overlay was
-        // built. Live chip-state mirroring is out-of-scope for the chrome
-        // chip; the Simple page's chips remain the canonical state surface.
-        var vpnChip = MakeChip("VPN", "SurfaceSunkenBrush", "TextMutedBrush");
-        var zapretChip = MakeChip("Zapret", "SurfaceSunkenBrush", "TextMutedBrush");
-        var tgChip = MakeChip("TG", "SurfaceSunkenBrush", "TextMutedBrush");
+        // built. (Bug #3 fix 2026-05-11) chips are now state-bound — see
+        // SetVpnChipState / SetZapretChipState which now mirror state onto
+        // _advVpnChip / _advZapretChip alongside the Simple-page chips.
+        _advVpnChip = MakeChip("VPN", "SurfaceSunkenBrush", "TextMutedBrush");
+        _advZapretChip = MakeChip("Zapret", "SurfaceSunkenBrush", "TextMutedBrush");
+        _advTgChip = MakeChip("TG", "SurfaceSunkenBrush", "TextMutedBrush");
+        // Apply current state immediately so the chip looks right on
+        // first overlay open instead of rendering Off until next change.
+        // SetVpnChipState's force-rebind branch repaints both Simple and
+        // Advanced chips through MirrorAdvancedChipState.
+        SetVpnChipState(_vpnChipState, force: true);
+        SetZapretChipState(_zapretChipState, force: true);
+        var vpnChip = _advVpnChip;
+        var zapretChip = _advZapretChip;
+        var tgChip = _advTgChip;
         var chipRow = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
