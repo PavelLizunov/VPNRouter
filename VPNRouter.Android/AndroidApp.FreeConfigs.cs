@@ -2,6 +2,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -434,6 +436,22 @@ public partial class AndroidApp
             IsEnabled = false,
         };
         _fcUseButton.Click += OnFreeConfigsUseClicked;
+        // DEFCT-7.5-A (2026-05-10) — On Avalonia 11.3 / Android, Button.Click
+        // on this specific button doesn't fire on a tap (verified live: row
+        // auto-selects, Connect styles blue + IsEnabled=true, but tap does
+        // not invoke OnFreeConfigsUseClicked — no toast, no shell-close, no
+        // SetVlessUri side effect). The button sits inside a `bottomBar`
+        // Border docked to Bottom of an inner DockPanel; the Border or one
+        // of the ancestor handlers in the Advanced shell appears to swallow
+        // the standard Click route. Tapped routes through Avalonia's gesture
+        // recognizer pipeline rather than the Button's pointer-capture path
+        // and reaches us reliably under the same conditions. We subscribe
+        // both events; OnFreeConfigsUseClicked is debounced (200 ms window)
+        // so the rare case where both fire from a single tap on a working
+        // surface only does the work once. handledEventsToo:true so any
+        // ancestor that marks the event Handled cannot suppress us.
+        _fcUseButton.AddHandler(Gestures.TappedEvent, OnFreeConfigsUseClicked,
+            RoutingStrategies.Bubble, handledEventsToo: true);
 
         var bottomStack = new StackPanel
         {
@@ -963,8 +981,19 @@ public partial class AndroidApp
         }
     }
 
+    // DEFCT-7.5-A (2026-05-10) — last-fire timestamp for the dual Click +
+    // Tapped subscription on _fcUseButton. A single tap can deliver both
+    // events; the 200 ms window collapses them to one handler invocation.
+    // Static so the timestamp survives across Public-tab rebuilds (it's
+    // shared with the per-instance buttons that are rebuilt on tab switch).
+    private static DateTime _fcUseClickedAt = DateTime.MinValue;
+
     private void OnFreeConfigsUseClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        var now = DateTime.UtcNow;
+        if ((now - _fcUseClickedAt).TotalMilliseconds < 200) return;
+        _fcUseClickedAt = now;
+
         var entry = _fcSelectedEntry;
         if (entry is null) return;
         if (string.IsNullOrEmpty(entry.RawUri)) return;
