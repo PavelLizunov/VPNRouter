@@ -101,15 +101,20 @@ public partial class AndroidApp
         // that the Simple page deliberately doesn't carry.
         var headerBorder = BuildAdvancedHeader();
 
-        // ── Tab strip — horizontally-scrollable so 6 tabs fit on narrow
-        //    phones without forced text-truncation. Each tab is a chip
-        //    styled by StyleAdvShellTab (active/inactive paint). Click
-        //    selects + builds the tab content lazily.
-        var tabPanel = new StackPanel
+        // ── Tab strip — POL-2-TABS (2026-05-10) replaced horizontal
+        //    ScrollViewer with UniformGrid so all 6 tabs distribute evenly
+        //    across the viewport. No swipe/scroll needed — every tab is
+        //    visible + tappable in one row at any phone width. Active
+        //    chip's visual distinction comes from StyleAdvShellTab
+        //    (accent background/foreground), not from being wider than
+        //    its siblings. Long labels (e.g. "Applications" / "Инструменты")
+        //    fall back to character ellipsis when the per-tab cell is
+        //    narrower than the rendered string.
+        var tabPanel = new UniformGrid
         {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 4,
-            Margin = new Thickness(8, 6, 8, 6),
+            Columns = 6,
+            Rows = 1,
+            Margin = new Thickness(6, 6, 6, 6),
         };
         foreach (AdvancedTab tab in System.Enum.GetValues(typeof(AdvancedTab)))
         {
@@ -117,19 +122,12 @@ public partial class AndroidApp
             _advShellTabButtons[tab] = btn;
             tabPanel.Children.Add(btn);
         }
-        var tabScroller = new ScrollViewer
-        {
-            Content = tabPanel,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Background = raised,
-        };
         var tabStripBorder = new Border
         {
             Background = raised,
             BorderBrush = subtle,
             BorderThickness = new Thickness(0, 0, 0, 1),
-            Child = tabScroller,
+            Child = tabPanel,
         };
 
         // ── Content host — Grid with one child per tab. Built lazily as
@@ -558,14 +556,35 @@ public partial class AndroidApp
 
     private Avalonia.Controls.Button MakeAdvShellTabButton(AdvancedTab tab)
     {
+        // POL-2-TABS — TextBlock content (vs. plain string) lets the label
+        // ellipsis-trim when the UniformGrid cell is narrower than the
+        // rendered text (long labels: "Applications" / "Инструменты"
+        // share a 6-column row on ~360 dp phones → ~60 dp per cell).
+        var label = new TextBlock
+        {
+            Text = AdvancedTabLabel(tab),
+            TextAlignment = TextAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextWrapping = TextWrapping.NoWrap,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
         var btn = new Avalonia.Controls.Button
         {
-            Content = AdvancedTabLabel(tab),
+            Content = label,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(12, 6),
+            // Tighter horizontal padding to make room for label inside the
+            // narrow per-cell space; vertical bumped so the button hits
+            // the 44-dp touch-target spec without relying on parent gap.
+            Padding = new Thickness(2, 8),
+            MinHeight = 44,
+            Margin = new Thickness(2, 0),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             BorderThickness = new Thickness(1),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Center,
         };
         btn.Click += (_, _) => SelectAdvancedTab(tab);
         StyleAdvShellTab(btn, tab == _advShellSelectedTab);
@@ -615,7 +634,16 @@ public partial class AndroidApp
         if (_advSimpleToggleBtn is not null)
             _advSimpleToggleBtn.Content = Localization.AdvSimpleToggle;
         foreach (var kv in _advShellTabButtons)
-            kv.Value.Content = AdvancedTabLabel(kv.Key);
+        {
+            // POL-2-TABS — Content is a TextBlock (for ellipsis). Update
+            // the inner Text in place so the trimming behavior survives a
+            // language toggle. Fallback path covers any future caller that
+            // sets Content to a plain string.
+            if (kv.Value.Content is TextBlock tb)
+                tb.Text = AdvancedTabLabel(kv.Key);
+            else
+                kv.Value.Content = AdvancedTabLabel(kv.Key);
+        }
         // Footer connect button + status text follow the connection state
         // (Start VPN / Stop VPN); refresh via the same helper that flips
         // them on connect/disconnect.
