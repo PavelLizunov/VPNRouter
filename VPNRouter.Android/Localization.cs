@@ -911,6 +911,23 @@ internal static class Localization
     public static string AndroidToolsOpenLog => global::VPNRouter.Core.Localization.Strings.AndroidToolsOpenLog;
     public static string AndroidToolsCheckLeak => global::VPNRouter.Core.Localization.Strings.AndroidToolsCheckLeak;
 
+    // AND-ADV-TOOLS-PUBLIC (2026-05-10) — Phase E of Android Advanced
+    // parity. Tools tab now hosts merged Zapret + Telegram sub-tabs.
+    // Public tab uses Search / Saved sub-tabs.
+    public static string AdvToolsSubTabZapret => global::VPNRouter.Core.Localization.Strings.AdvToolsSubTabZapret;
+    public static string AdvToolsSubTabTelegram => global::VPNRouter.Core.Localization.Strings.AdvToolsSubTabTelegram;
+    public static string AdvToolsZapretAndroidExplainer => global::VPNRouter.Core.Localization.Strings.AdvToolsZapretAndroidExplainer;
+    public static string AdvToolsTelegramAndroidExplainer => global::VPNRouter.Core.Localization.Strings.AdvToolsTelegramAndroidExplainer;
+    public static string AdvToolsOpenTelegram => global::VPNRouter.Core.Localization.Strings.AdvToolsOpenTelegram;
+    public static string AdvToolsTelegramNotInstalled => global::VPNRouter.Core.Localization.Strings.AdvToolsTelegramNotInstalled;
+    public static string AdvPublicSubTabSearch => global::VPNRouter.Core.Localization.Strings.AdvPublicSubTabSearch;
+    public static string AdvPublicSubTabSaved => global::VPNRouter.Core.Localization.Strings.AdvPublicSubTabSaved;
+    public static string AdvPublicFindButton => global::VPNRouter.Core.Localization.Strings.AdvPublicFindButton;
+    public static string AdvPublicSettingsExpand => global::VPNRouter.Core.Localization.Strings.AdvPublicSettingsExpand;
+    public static string AdvPublicConnect => global::VPNRouter.Core.Localization.Strings.AdvPublicConnect;
+    public static string AdvPublicCacheEmpty => global::VPNRouter.Core.Localization.Strings.AdvPublicCacheEmpty;
+    public static string AdvPublicSelectRow => global::VPNRouter.Core.Localization.Strings.AdvPublicSelectRow;
+
     // ZapretSec* labels are already re-exported earlier in this file
     // (around line 215-225) from the v2.32.0 (AND-ZAPRET) batch. The
     // F-13 DPI Bypass overlay reuses those existing accessors directly —

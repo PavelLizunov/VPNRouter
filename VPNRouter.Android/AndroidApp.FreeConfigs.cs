@@ -81,12 +81,18 @@ public partial class AndroidApp
     private int _fcTargetSnapshot = 10;
 
     /// <summary>
-    /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the Public
-    /// Configs tab inside the Advanced shell. Returns the sub-tab strip
-    /// (Search | Saved) + scrollable bodies + bottom action bar. The
-    /// shell provides the title bar / close button / outer chrome.
+    /// AND-ADV-TOOLS-PUBLIC (2026-05-10) — Phase E rename. Body content
+    /// for the Public tab inside the Advanced shell. Mirrors desktop
+    /// FreeConfigsPage.axaml: sub-tab strip (Search | Saved) + scrollable
+    /// bodies + bottom action bar. The shell provides the title bar /
+    /// close button / outer chrome.
+    ///
+    /// <para>Renamed from <c>BuildFreeConfigsTabContent</c> to align with
+    /// the desktop "Public" tab label. The legacy name is kept as a thin
+    /// alias below so the AdvancedShell dispatch keeps working until
+    /// Phase A retires the wrapper alongside the chrome rebuild.</para>
     /// </summary>
-    private Control BuildFreeConfigsTabContent()
+    private Control BuildPublicTabContent()
     {
         var bg        = GetBrush("SurfaceAppBrush");
         var card      = GetBrush("SurfaceBaseBrush");
@@ -445,6 +451,15 @@ public partial class AndroidApp
         };
     }
 
+    /// <summary>
+    /// AND-ADV-TOOLS-PUBLIC (2026-05-10) — backwards-compat alias for the
+    /// AdvancedShell dispatch. Phase A's chrome rebuild will switch the
+    /// dispatch to call <see cref="BuildPublicTabContent"/> directly and
+    /// retire this wrapper. Until then, both names resolve to the same
+    /// widget tree.
+    /// </summary>
+    private Control BuildFreeConfigsTabContent() => BuildPublicTabContent();
+
     private Avalonia.Controls.Button MakeFcTabButton(string label, bool active)
     {
         return new Avalonia.Controls.Button
@@ -798,9 +813,17 @@ public partial class AndroidApp
 
         await _fcOrchestrator.EnsureCacheLoadedAsync();
         ReloadFreeConfigsLists();
-        // If there's saved history, default to the Saved tab (matches
-        // desktop EnsureCacheLoaded behaviour).
-        if (_fcSavedResults.Count > 0)
+
+        // AND-ADV-TOOLS-PUBLIC (2026-05-10) — Phase E persistence. Restore
+        // the last-active sub-tab via AndroidStorage. Pre-Phase-E this
+        // was implicit ("default to Saved if non-empty"); the explicit
+        // KeyPublicActiveSubTab survives across overlay opens so a user
+        // who prefers Search keeps Search even after the Saved list grows
+        // populated. Fallback: if the persisted sub-tab is Saved but the
+        // saved list is empty (first launch / cleared cache), drop to
+        // Search so we don't show a blank pane.
+        var persistedSaved = AndroidStorage.GetPublicActiveSubTabIsSaved();
+        if (persistedSaved && _fcSavedResults.Count > 0)
             SelectFreeConfigsTab(1);
         else
             SelectFreeConfigsTab(0);
@@ -819,6 +842,9 @@ public partial class AndroidApp
     private void SelectFreeConfigsTab(int index)
     {
         _fcSelectedTab = index;
+        // AND-ADV-TOOLS-PUBLIC (2026-05-10) — persist the user's pick.
+        // Stored as bool: false = Search, true = Saved.
+        AndroidStorage.SetPublicActiveSubTabIsSaved(index == 1);
         if (_fcSearchBody is not null) _fcSearchBody.IsVisible = index == 0;
         if (_fcSavedBody is not null)  _fcSavedBody.IsVisible  = index == 1;
         if (_fcTabSearch is not null)

@@ -527,6 +527,22 @@ public static class AndroidStorage
     public static bool SetAutoReconnectOnNetworkChange(bool value) =>
         SetBool(KeyAutoReconnectOnNetworkChange, value);
 
+    // ── AND-ADV-TOOLS-PUBLIC (2026-05-10) — Phase E persistence ─────────
+    //
+    // Public tab has two sub-tabs (Search / Saved). Persist the last-active
+    // sub-tab so it stays selected across overlay opens (matches desktop
+    // FreeConfigsPage's SelectedFreeTabIndex round-trip via settings.yaml).
+    //
+    // Stored as a bool (false = Search, true = Saved) — only 2 sub-tabs,
+    // no need for an int-typed key. Default false (Search) matches desktop
+    // first-launch behaviour.
+    private const string KeyPublicActiveSubTab = "public_active_sub_tab";
+
+    public static bool GetPublicActiveSubTabIsSaved() =>
+        GetBool(KeyPublicActiveSubTab, defaultValue: false);
+    public static bool SetPublicActiveSubTabIsSaved(bool value) =>
+        SetBool(KeyPublicActiveSubTab, value);
+
     // ── AND-ADV-SHELL (2026-05-09): Advanced overlay last-active tab ────
     //
     // Stores the AdvancedTab enum NAME of the tab the user last viewed in
