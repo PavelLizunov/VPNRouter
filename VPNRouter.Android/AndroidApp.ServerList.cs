@@ -275,20 +275,14 @@ public partial class AndroidApp
         sortRow.Children.Add(_srvSortToggle);
         sortRow.Children.Add(_srvStatusText);
 
-        // ── Column header strip (desktop ServersPage rows 140-154 parity) ──
-        // Same column widths as the row template below — header labels
-        // align to the cell content. Tiny SemiBold caps in muted text.
+        // ── Column header strip — mobile design 2026-05-11 collapsed the
+        // desktop 4-col (Server / IP / Ping / Port) into 2 visible
+        // captions: Server + Ping. IP+Port now live in the row's
+        // meta-line. ColIp/ColPort fields stay null-but-instantiated to
+        // keep refresh and tooltip helpers null-safe.
         _srvColServer = new TextBlock
         {
             Text = Localization.ColServer,
-            FontSize = 9,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = GetBrush("TextMutedBrush"),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        _srvColIp = new TextBlock
-        {
-            Text = Localization.ColIp,
             FontSize = 9,
             FontWeight = FontWeight.SemiBold,
             Foreground = GetBrush("TextMutedBrush"),
@@ -304,29 +298,18 @@ public partial class AndroidApp
             HorizontalAlignment = HorizontalAlignment.Center,
         };
         ToolTip.SetTip(_srvColPing, Localization.ColPingTooltip);
-        _srvColPort = new TextBlock
-        {
-            Text = Localization.ColPort,
-            FontSize = 9,
-            FontWeight = FontWeight.SemiBold,
-            Foreground = GetBrush("TextMutedBrush"),
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Center,
-        };
+        _srvColIp = new TextBlock { IsVisible = false };
+        _srvColPort = new TextBlock { IsVisible = false };
         var headerGrid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("14,*,100,42,40,24"),
+            ColumnDefinitions = new ColumnDefinitions("14,*,Auto,24"),
             ColumnSpacing = 8,
             Margin = new Thickness(8, 2, 8, 4),
         };
         Grid.SetColumn(_srvColServer, 1);
-        Grid.SetColumn(_srvColIp, 2);
-        Grid.SetColumn(_srvColPing, 3);
-        Grid.SetColumn(_srvColPort, 4);
+        Grid.SetColumn(_srvColPing, 2);
         headerGrid.Children.Add(_srvColServer);
-        headerGrid.Children.Add(_srvColIp);
         headerGrid.Children.Add(_srvColPing);
-        headerGrid.Children.Add(_srvColPort);
 
         var headerHost = new Border
         {
@@ -1070,41 +1053,44 @@ public partial class AndroidApp
         ToolTip.SetTip(nameStack, Localization.SrvTipSelectServer);
         nameStack.PointerReleased += (s, e) => SelectServerAndClose(srv);
 
-        // ── IP cell — mono 9px muted, ellipsis trim ──
-        var ipText = new TextBlock
-        {
-            Text = srv.Server ?? string.Empty,
-            FontSize = 9,
-            FontFamily = new FontFamily("monospace"),
-            Foreground = GetBrush("TextMutedBrush"),
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        // Mobile design 2026-05-11 — name+meta+ping+refresh 4-col layout.
+        // The IP and Port cells collapsed into the meta-line under the
+        // server name (see hostText override below). Comment kept so the
+        // diff vs desktop's 6-col is traceable.
+        _ = hostText; // hostText is replaced below with the meta-line
+        var metaParts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(srv.Server)) metaParts.Add(srv.Server!);
+        if (srv.Port > 0) metaParts.Add(":" + srv.Port.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (!string.IsNullOrEmpty(hostSubtitle)) metaParts.Add(hostSubtitle);
+        hostText.Text = string.Join(" · ", metaParts);
+        hostText.IsVisible = !string.IsNullOrEmpty(hostText.Text);
 
-        // ── Ping cell — status-coloured mono text ("42 ms" / "—" / "×") ──
-        var (pingDisplay, pingBrush) = ResolveLatencyDisplay(hasResult ? result : null, isTesting);
-        var pingText = new TextBlock
+        // ── Ping pill — colored Border with white text on status bg ──
+        var (pingDisplay, _) = ResolveLatencyDisplay(hasResult ? result : null, isTesting);
+        var pingBgBrush = ResolveLatencyBadgeBackground(hasResult ? result : null, isTesting);
+        var pingHasData = hasResult && !isTesting && result is not null;
+        var pingTextInside = new TextBlock
         {
             Text = pingDisplay,
             FontSize = 9,
+            FontWeight = FontWeight.Bold,
             FontFamily = new FontFamily("monospace"),
-            Foreground = pingBrush,
+            Foreground = pingHasData ? Brushes.White : GetBrush("TextMutedBrush"),
+            TextAlignment = TextAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
+        };
+        var pingBadge = new Border
+        {
+            Padding = new Thickness(7, 4),
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+            Background = pingBgBrush,
+            MinWidth = 44,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = pingTextInside,
         };
         if (hasResult && !string.IsNullOrEmpty(result?.Error))
-            ToolTip.SetTip(pingText, result.Error);
-
-        // ── Port cell — mono 9px muted, centered ──
-        var portText = new TextBlock
-        {
-            Text = srv.Port.ToString(),
-            FontSize = 9,
-            FontFamily = new FontFamily("monospace"),
-            Foreground = GetBrush("TextMutedBrush"),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+            ToolTip.SetTip(pingBadge, result.Error);
 
         // ── Per-row Test button (⟳) ──
         var testBtn = new Avalonia.Controls.Button
@@ -1126,28 +1112,22 @@ public partial class AndroidApp
         ToolTip.SetTip(testBtn, Localization.SrvTipTestRow);
         testBtn.Click += async (s, e) => await TestSingleServerAsync(srv);
 
-        // 6-column row matching desktop ServersPage.axaml line 188:
-        // ColumnDefinitions="14,*,100,42,40,24" with ColumnSpacing="8".
-        // Desktop has a 7th delete column for VLESS-direct entries; on
-        // Android the servers come from a subscription, so deletion lives
-        // in the subscription card's ✕ button — we drop the per-row delete.
+        // Mobile design 2026-05-11 — 4-col row (radio · name+meta · ping
+        // pill · refresh). IP and Port collapsed into the meta-line above.
+        // Mirrors Mobile.html `.srv` grid-template-columns:16px 1fr auto auto.
         var grid = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("14,*,100,42,40,24"),
+            ColumnDefinitions = new ColumnDefinitions("14,*,Auto,24"),
             ColumnSpacing = 8,
             VerticalAlignment = VerticalAlignment.Center,
         };
         Grid.SetColumn(radioOuter, 0);
         Grid.SetColumn(nameStack, 1);
-        Grid.SetColumn(ipText, 2);
-        Grid.SetColumn(pingText, 3);
-        Grid.SetColumn(portText, 4);
-        Grid.SetColumn(testBtn, 5);
+        Grid.SetColumn(pingBadge, 2);
+        Grid.SetColumn(testBtn, 3);
         grid.Children.Add(radioOuter);
         grid.Children.Add(nameStack);
-        grid.Children.Add(ipText);
-        grid.Children.Add(pingText);
-        grid.Children.Add(portText);
+        grid.Children.Add(pingBadge);
         grid.Children.Add(testBtn);
 
         // Compact, table-like row — desktop uses Padding="8,5"
@@ -1244,6 +1224,34 @@ public partial class AndroidApp
             ServerProbeStatus.Timeout              => ("×", GetBrush("DangerSolidBrush")),
             ServerProbeStatus.SkippedNotApplicable => ("—", GetBrush("TextMutedBrush")),
             _                                      => ("—", GetBrush("TextMutedBrush")),
+        };
+    }
+
+    /// <summary>
+    /// Mobile-design ping-pill background. Mirrors
+    /// <see cref="ResolveLatencyDisplay"/>'s status mapping but yields
+    /// the solid-fill colour used as the pill's Background. The pill
+    /// text is rendered white on top (see callers in
+    /// <c>BuildAggregatedServerRow</c>) for the colored variants; the
+    /// muted "—" / "…" branches return SurfaceSunken so the pill blends
+    /// with the row background instead of showing a coloured chip when
+    /// there's no real data yet.
+    /// </summary>
+    private IBrush ResolveLatencyBadgeBackground(AndroidStorage.ServerTestResultDto? result, bool isTesting)
+    {
+        if (isTesting || result is null)
+            return GetBrush("SurfaceSunkenBrush");
+        var status = (ServerProbeStatus)result.Status;
+        return status switch
+        {
+            ServerProbeStatus.Ok                   => GetBrush("SuccessSolidBrush"),
+            ServerProbeStatus.Slow                 => GetBrush("WarningSolidBrush"),
+            ServerProbeStatus.Implausible          => GetBrush("WarningSolidBrush"),
+            ServerProbeStatus.TlsFailed            => GetBrush("DangerSolidBrush"),
+            ServerProbeStatus.Unreachable          => GetBrush("DangerSolidBrush"),
+            ServerProbeStatus.Timeout              => GetBrush("DangerSolidBrush"),
+            ServerProbeStatus.SkippedNotApplicable => GetBrush("SurfaceSunkenBrush"),
+            _                                      => GetBrush("SurfaceSunkenBrush"),
         };
     }
 

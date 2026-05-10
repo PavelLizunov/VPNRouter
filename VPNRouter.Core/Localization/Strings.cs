@@ -43,14 +43,18 @@ public static class Strings
     // than reusing the older TabServers / ModeSubscribe / TabSettings /
     // TabApps / TabFreeConfigs strings) so future Android-specific copy
     // tweaks don't bleed into Simple-mode placeholders. AdvSimpleToggle is
-    // the "+ Simple" link button that returns to Simple mode.
+    // the back-to-Simple button in the Advanced shell header. Mobile design
+    // 2026-05-11 swapped the "+ Simple" plus-prefix (read as "add Simple")
+    // for "◂ Simple" — standard Android back-affordance and matches the
+    // design's `.ahdr .back` style at Mobile.html line 78. Same glyph
+    // works for RU and EN since it's a typographic arrow not a word.
     public static string TabAdvServers => Ru ? "Серверы" : "Servers";
     public static string TabAdvSubscribe => Ru ? "Подписка" : "Subscribe";
     public static string TabAdvSettings => Ru ? "Настройки" : "Settings";
     public static string TabAdvApplications => Ru ? "Приложения" : "Applications";
     public static string TabAdvTools => Ru ? "Инструменты" : "Tools";
     public static string TabAdvPublic => Ru ? "Публичные" : "Public";
-    public static string AdvSimpleToggle => Ru ? "+ Simple" : "+ Simple";
+    public static string AdvSimpleToggle => Ru ? "← Simple" : "← Simple";
 
     // ── Config mode ──
     // v2.30.1-r3: was "VLESS Серверы" / "VLESS Servers". Renamed to plain
