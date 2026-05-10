@@ -553,32 +553,8 @@ public partial class AndroidApp
     /// </summary>
     private Control BuildSettingsTabContent() => BuildNetworkTabContent();
 
-    /// <summary>
-    /// AND-ADV-CHROME (Phase A stub) — Public tab content. Until Phase E
-    /// rebuilds this with Search / Saved sub-tabs + collapsible Settings +
-    /// per-tab Connect button, we delegate to
-    /// <see cref="BuildFreeConfigsTabContent"/> so the tab still works.
-    /// </summary>
-    private Control BuildPublicTabContent() => BuildFreeConfigsTabContent();
-
-    /// <summary>
-    /// AND-ADV-CHROME (Phase A stub) — Tools tab content. Phase E will
-    /// merge the previous DPI bypass + Telegram bodies behind sub-tabs
-    /// (Zapret / Telegram proxy) inside this single Tools tab. Until then
-    /// the tab shows a placeholder so the chrome is testable end-to-end.
-    /// </summary>
-    private Control BuildToolsTabContent()
-    {
-        var placeholder = new TextBlock
-        {
-            Text = "(Tools content TBD by Phase E chip)",
-            FontSize = 12,
-            Margin = new Thickness(16, 16),
-            TextWrapping = TextWrapping.Wrap,
-        };
-        placeholder.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
-        return placeholder;
-    }
+    // BuildPublicTabContent — moved to AndroidApp.FreeConfigs.cs (Phase E real impl)
+    // BuildToolsTabContent — moved to AndroidApp.Tools.cs (Phase E real impl)
 
     private Avalonia.Controls.Button MakeAdvShellTabButton(AdvancedTab tab)
     {
