@@ -86,28 +86,16 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
     // outcome.
     private const int RequestCodeCameraQr = 0x4711;
 
-    /// <summary>
-    /// Phase 1.E (2026-05-04) — placeholder VLESS-Reality URI used to
-    /// smoke-test the full VPNRouter.Core → ConfigGenerator → libbox
-    /// pipeline end-to-end. Same URI used in the desktop unit-test
-    /// fixture for VlessUriParser (see VPNRouter.Tests/UnitTest1.cs
-    /// VlessUriParserTests.RealityUri). Server is a real Reality
-    /// endpoint that the test suite uses; the VLESS UUID is published
-    /// in the open-source repo and works for verification but isn't a
-    /// production server.
-    ///
-    /// <para>Phase 1.F will replace this with a stored subscription
-    /// URL pulled from SettingsLoader once the Avalonia subscription
-    /// settings UI is ported. For Phase 1.E the goal is just to
-    /// confirm the Core pipeline + libbox handshake works — once the
-    /// generated JSON spawns a libbox service without errors we know
-    /// the bridge is sound.</para>
-    /// </summary>
-    private const string PlaceholderVlessUri =
-        "vless://2d54442d-158f-49e2-b225-67ba1a5b77f4@194.87.222.111:443" +
-        "?security=reality&sni=yahoo.com&fp=firefox" +
-        "&pbk=DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU&sid=78ca7952" +
-        "&spx=/&type=tcp&flow=xtls-rprx-vision&encryption=none#android-test";
+    // DEFCT-005 (2026-05-10): the Phase 1.E PlaceholderVlessUri smoke-test
+    // fallback was REMOVED here. Pre-fix, when AndroidStorage.GetActiveServer
+    // returned null (no subscription server selected, no manual URI saved),
+    // the connect path silently fell back to a hardcoded test VLESS URI
+    // pointing at a dead server. The UI showed "Connected · 0:07" but every
+    // VLESS handshake EOF'd; the user lost internet for the duration with
+    // no error surfaced. The placeholder remains accessible only via the
+    // file-based test override (`getExternalFilesDir()/test-uri.txt`) used
+    // by integration testing, so smoke-test capability is preserved without
+    // the silent-wrong-server failure mode.
 
     // Mirrors VpnRouterService.java's intent contract.
     private const string ActionStart = "com.ninitux.vpnrouter.START";
@@ -919,8 +907,30 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
             }
             else
             {
-                entry = AndroidStorage.GetActiveServer()
-                    ?? VPNRouter.Core.Services.ServerUriParser.Parse(PlaceholderVlessUri);
+                // DEFCT-005 (2026-05-10): no silent placeholder fallback
+                // here — see PlaceholderVlessUri removal above. If the user
+                // has no active server (no subscription cached, no manual
+                // URI), surface an explicit error so they know to add one
+                // instead of "connecting" to a dead test server.
+                var resolved = AndroidStorage.GetActiveServer();
+                if (resolved is null)
+                {
+                    const string msg = "No server configured. Add a subscription or paste a vless:// URI.";
+                    global::Android.Util.Log.Error("VpnRouter",
+                        $"DEFCT-005: GetActiveServer returned null — {msg}");
+                    try
+                    {
+                        TunnelErrorReported?.Invoke(msg);
+                    }
+                    catch (Exception cbEx)
+                    {
+                        global::Android.Util.Log.Warn("VpnRouter",
+                            $"DEFCT-005: TunnelErrorReported callback raised: {cbEx.Message}");
+                    }
+                    SetIntent(false);
+                    return;
+                }
+                entry = resolved;
             }
         }
         catch (Exception ex)

@@ -247,22 +247,52 @@ public static class AndroidStorage
     public static bool SetSelectedServerName(string? value) => SetString(KeySelectedServerName, value);
 
     /// <summary>
-    /// Resolve the active server entry — checks subscription server list
-    /// first (if a selection exists), falls back to any single manual URI.
-    /// Returns null if nothing's configured (caller falls back to a
-    /// placeholder for smoke-test).
+    /// Resolve the active server entry. Resolution order:
+    /// <list type="number">
+    ///   <item>Explicit selection by Name (Subscribe / Servers tab tap).</item>
+    ///   <item>First server in the cached subscription pool (DEFCT-005
+    ///   2026-05-10 fallback — see below).</item>
+    ///   <item>Manual single-URI mode (<see cref="GetVlessUri"/>).</item>
+    /// </list>
+    /// Returns null only when truly nothing is configured. The connect path
+    /// must surface that as an explicit "no server" error rather than
+    /// silently picking a hardcoded placeholder — see MainActivity.cs.
+    ///
+    /// <para><b>DEFCT-005 (2026-05-10):</b> pre-fix this method only
+    /// honoured an explicit <c>SetSelectedServerName</c>. Tapping a
+    /// SubscribePage row's <i>name column</i> set the name, but tapping
+    /// any other column on the same row didn't — so a user who added a
+    /// subscription and immediately hit Start VPN got <c>null</c> here,
+    /// fell through to a hardcoded placeholder VLESS URI in MainActivity,
+    /// and connected to a dead test server. UI showed "Connected" but no
+    /// traffic actually flowed (every VLESS handshake EOF'd). The
+    /// auto-pick-first fallback closes the gap until the row tap target
+    /// is widened to the whole row (separate UX polish task).</para>
     /// </summary>
     public static VlessServerEntry? GetActiveServer()
     {
         var selectedName = GetSelectedServerName();
+        var servers = GetServers();
         if (!string.IsNullOrEmpty(selectedName))
         {
-            var servers = GetServers();
             foreach (var s in servers)
             {
                 if (string.Equals(s.Name, selectedName, System.StringComparison.OrdinalIgnoreCase))
                     return s;
             }
+            // Selected name no longer in pool (e.g. subscription refreshed
+            // and renamed servers). Fall through to first-available below.
+        }
+
+        // DEFCT-005 fallback: subscription cache populated but no explicit
+        // selection — pick the first cached server. Persist the choice so
+        // the UI shows it as the active selection on next render.
+        if (servers.Count > 0)
+        {
+            var first = servers[0];
+            if (!string.IsNullOrEmpty(first.Name))
+                SetSelectedServerName(first.Name);
+            return first;
         }
 
         var manualUri = GetVlessUri();
