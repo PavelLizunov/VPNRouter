@@ -925,4 +925,9 @@ internal static class Localization
     public static string AdvServersCustomJsonExplainer => global::VPNRouter.Core.Localization.Strings.AdvServersCustomJsonExplainer;
     public static string AdvServersDeepVerifyAndroidNote => global::VPNRouter.Core.Localization.Strings.AdvServersDeepVerifyAndroidNote;
     public static string AdvSubscribeAggregatedEmpty => global::VPNRouter.Core.Localization.Strings.AdvSubscribeAggregatedEmpty;
+
+    // ── Phase C: Settings tab side-nav (2026-05-10) ──
+    public static string SettingsSectionRules => global::VPNRouter.Core.Localization.Strings.SettingsSectionRules;
+    public static string AdvSettingsRulesAndroidNote => global::VPNRouter.Core.Localization.Strings.AdvSettingsRulesAndroidNote;
+    public static string AdvSettingsAutostartAndroidIntro => global::VPNRouter.Core.Localization.Strings.AdvSettingsAutostartAndroidIntro;
 }

@@ -320,6 +320,27 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.CheckBox? _reliabilityAutoReconnect;
     private bool _settingsLoading = false;
 
+    // Phase C (2026-05-10): nested side-nav for the Settings tab. Mirrors
+    // desktop NetworkPage's master-detail layout — left column is a list of
+    // 6 sub-section buttons (Routing / Rules / Leak / Content / Updates /
+    // Autostart), right column swaps content based on the selected index.
+    // Index matches desktop's SelectedSettingsIndex so muscle-memory carries
+    // over. _settingsSubSectionButtons + _settingsSubSectionPanels stay in
+    // lockstep — same key set, mutated together in BuildSettingsTabContent.
+    private readonly Avalonia.Controls.Button?[] _settingsSubSectionButtons = new Avalonia.Controls.Button?[6];
+    private readonly Control?[] _settingsSubSectionPanels = new Control?[6];
+    private int _settingsSelectedSubSection = 0;
+
+    // Apply / Auto-saved footer slot. Settings persistence is auto-saved on
+    // every CheckBox/Radio/ComboBox change (existing OnSettings*Changed
+    // handlers call AndroidStorage.Set* directly). The Apply button surfaces
+    // when there's a pending change that needs the running tunnel to reload
+    // — flipping routing mode, DNS strategy, etc. while connected. The badge
+    // ("✓ Auto-saved") is the resting state.
+    private bool _settingsDirty = false;
+    private Border? _settingsAutoSavedBadge;
+    private Avalonia.Controls.Button? _settingsApplyButton;
+
     // v2.32.0 (AND-PROFILES, 2026-05-08) — routing-profile catalog overlay.
     // Tap kebab → "Routing profiles" → this overlay. List of profile cards
     // from BuiltInAndroidProfiles plus a "No profile" pseudo-card at the
@@ -1600,47 +1621,317 @@ public partial class AndroidApp : Avalonia.Application
         return overlay;
     }
 
-    // ── v2.32.0 Settings overlay (mirrors desktop NetworkPage) ──────────
+    // ── Settings tab body (Network tab inside the Advanced shell) ──────
     //
-    // Fullscreen Border layered over the main ScrollViewer (same pattern as
-    // Phase 7.4 log viewer). 4 stacked sub-sections in the order they
-    // appear on desktop: Routing → Leak protection → Updates → Autostart.
-    // Each control wires straight to AndroidStorage on change so there's
-    // no Apply button — autosave matches the desktop NetworkPage's
-    // "Auto-saved" footer behaviour (Strings.SettingsAutosaved).
+    // Phase C (2026-05-10) restructures this tab from a flat scrollable
+    // stack to a master-detail layout with side-nav + per-sub-section
+    // content pane + footer Apply bar — matching desktop NetworkPage's
+    // shape. Pre-Phase-C the four sub-sections (Routing / Leak / Updates /
+    // Autostart) were stacked in one ScrollViewer; AND-MIGRATE-OVERLAYS
+    // (2026-05-09) had brought them into the Advanced shell as the
+    // "Network" tab. The flat layout shipped fine functionally but
+    // structurally diverged from desktop, so Phase C restores parity.
 
     /// <summary>
-    /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the Network tab
-    /// inside the Advanced shell. Mirrors desktop NetworkPage left-nav
-    /// section order (Routing → Leak → Content → Updates → Autostart →
-    /// Reliability). Returns just the scroller — no title bar, no close
-    /// button. The Advanced shell provides those.
+    /// Phase C (2026-05-10) — Settings tab body. Mirrors desktop
+    /// NetworkPage.axaml's master-detail layout: a left side-nav listing
+    /// the six sub-sections (Routing / Rules / Leak / Content / Updates /
+    /// Autostart) + a right scrollable content pane swapped by the active
+    /// sub-section, with a footer Apply bar carrying the "✓ Auto-saved"
+    /// badge or the [Apply] button depending on whether there are pending
+    /// changes that need a tunnel reload to take effect.
+    ///
+    /// <para>Index order matches desktop's <c>SelectedSettingsIndex</c>
+    /// (NetworkPage.axaml:202-211 + MainWindowViewModel.IsSettings*Selected
+    /// at line 1710-1715) so user muscle-memory carries between platforms.
+    /// On Android the desktop's standalone Reliability section (Always-on
+    /// VPN + battery + auto-reconnect) is folded into the Autostart sub-
+    /// section per the parity plan's platform-impossible item table —
+    /// Always-on VPN IS the Android replacement for Windows-Service-on-boot,
+    /// so it naturally belongs there.</para>
     /// </summary>
     private Control BuildNetworkTabContent()
     {
-        var inner = new StackPanel
+        var sideNav = BuildSettingsSideNav();
+        var contentPane = BuildSettingsContentPane();
+        var footerBar = BuildSettingsFooterBar();
+
+        // Master-detail Grid: two-column body row + full-width footer row.
+        // Side-nav width matches desktop's 140 dp (NetworkPage.axaml:190
+        // ColumnDefinitions="140,*"). On Android dp ≈ logical pixel for
+        // Avalonia layout, so we use the same value.
+        var body = new Grid
         {
-            Spacing = 18,
-            Margin = new Thickness(16, 12, 16, 16),
-            Children =
-            {
-                BuildSettingsRoutingSection(),
-                BuildSettingsLeakSection(),
-                BuildSettingsContentSection(),
-                BuildSettingsUpdatesSection(),
-                BuildSettingsAutostartSection(),
-                BuildSettingsReliabilitySection(),
-            }
+            RowDefinitions = new RowDefinitions("*,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("140,*"),
+            Background = GetBrush("SurfaceAppBrush"),
         };
+        Grid.SetRow(sideNav, 0);
+        Grid.SetColumn(sideNav, 0);
+        Grid.SetRow(contentPane, 0);
+        Grid.SetColumn(contentPane, 1);
+        Grid.SetRow(footerBar, 1);
+        Grid.SetColumn(footerBar, 0);
+        Grid.SetColumnSpan(footerBar, 2);
+        body.Children.Add(sideNav);
+        body.Children.Add(contentPane);
+        body.Children.Add(footerBar);
+
+        return body;
+    }
+
+    /// <summary>
+    /// Left-column side-nav. Six button rows (Routing / Rules / Leak /
+    /// Content / Updates / Autostart). Active row paints with
+    /// <c>AccentBgSubtleBrush</c> + <c>AccentFgBrush</c> + a 2 dp left
+    /// underline (vertical bar) to match desktop NetworkPage's ListBoxItem
+    /// active style. Inactive rows use <c>TextMutedBrush</c>.
+    /// </summary>
+    private Border BuildSettingsSideNav()
+    {
+        var stack = new StackPanel
+        {
+            Spacing = 0,
+            Margin = new Thickness(0, 6, 0, 6),
+        };
+        for (int i = 0; i < 6; i++)
+        {
+            var button = MakeSettingsSubSectionButton(i);
+            _settingsSubSectionButtons[i] = button;
+            stack.Children.Add(button);
+        }
 
         var scroller = new ScrollViewer
+        {
+            Content = stack,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Background = Brushes.Transparent,
+        };
+
+        return new Border
+        {
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(0, 0, 1, 0),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            Child = scroller,
+        };
+    }
+
+    /// <summary>
+    /// One side-nav row. Tap selects the sub-section + flips the content
+    /// pane. Persists the choice via <see cref="AndroidStorage.SetSettingsActiveSubSection"/>
+    /// so reopening Advanced > Settings restores the same pane.
+    /// </summary>
+    private Avalonia.Controls.Button MakeSettingsSubSectionButton(int index)
+    {
+        var btn = new Avalonia.Controls.Button
+        {
+            Content = SettingsSubSectionLabel(index),
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Padding = new Thickness(10, 7),
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            BorderThickness = new Thickness(2, 0, 0, 0),
+            CornerRadius = new CornerRadius(0),
+        };
+        btn.Click += (_, _) => SelectSettingsSubSection(index);
+        StyleSettingsSubSectionButton(btn, index == _settingsSelectedSubSection);
+        return btn;
+    }
+
+    private static string SettingsSubSectionLabel(int index) => index switch
+    {
+        0 => Localization.SettingsSectionRouting,
+        1 => Localization.SettingsSectionRules,
+        2 => Localization.SettingsSectionLeak,
+        3 => Localization.SettingsSectionContent,
+        4 => Localization.SettingsSectionUpdates,
+        5 => Localization.SettingsSectionAutostart,
+        _ => string.Empty,
+    };
+
+    /// <summary>Active = accent fg + bg + 2 dp left bar; inactive = muted, transparent bar.</summary>
+    private void StyleSettingsSubSectionButton(Avalonia.Controls.Button btn, bool active)
+    {
+        if (active)
+        {
+            btn.Background = GetBrush("AccentBgSubtleBrush");
+            btn.Foreground = GetBrush("AccentFgBrush");
+            btn.BorderBrush = GetBrush("AccentSolidBrush");
+        }
+        else
+        {
+            btn.Background = Brushes.Transparent;
+            btn.Foreground = GetBrush("TextMutedBrush");
+            btn.BorderBrush = Brushes.Transparent;
+        }
+    }
+
+    /// <summary>
+    /// Right-column content pane. One scroller per sub-section, all built
+    /// up-front + held in <see cref="_settingsSubSectionPanels"/>. Selection
+    /// flips IsVisible on each child rather than rebuilding the tree, so
+    /// scroll position survives sub-section switches.
+    /// </summary>
+    private Control BuildSettingsContentPane()
+    {
+        // Initial selected sub-section comes from persisted state; default
+        // to Routing (index 0) on first open.
+        _settingsSelectedSubSection = AndroidStorage.GetSettingsActiveSubSection();
+
+        var host = new Grid
+        {
+            Background = GetBrush("SurfaceAppBrush"),
+        };
+
+        _settingsSubSectionPanels[0] = WrapSubSectionScroller(BuildSettingsRoutingSection());
+        _settingsSubSectionPanels[1] = WrapSubSectionScroller(BuildSettingsRulesSection());
+        _settingsSubSectionPanels[2] = WrapSubSectionScroller(BuildSettingsLeakSection());
+        _settingsSubSectionPanels[3] = WrapSubSectionScroller(BuildSettingsContentSection());
+        _settingsSubSectionPanels[4] = WrapSubSectionScroller(BuildSettingsUpdatesSection());
+
+        // Autostart pane on Android merges desktop's Autostart + Reliability —
+        // see BuildSettingsAutostartSection comment for rationale.
+        _settingsSubSectionPanels[5] = WrapSubSectionScroller(BuildSettingsAutostartSection());
+
+        for (int i = 0; i < _settingsSubSectionPanels.Length; i++)
+        {
+            var panel = _settingsSubSectionPanels[i];
+            if (panel is null) continue;
+            panel.IsVisible = i == _settingsSelectedSubSection;
+            host.Children.Add(panel);
+        }
+
+        return host;
+    }
+
+    /// <summary>
+    /// Wrap a sub-section's content stack in a ScrollViewer + outer padding
+    /// matching desktop's NetworkPage right-pane chrome (Padding="0,10,0,12"
+    /// + inner Margin="14,0,14,0"). The sunken background stays on the
+    /// outer host; this scroller is transparent.
+    /// </summary>
+    private ScrollViewer WrapSubSectionScroller(Control content)
+    {
+        var inner = new StackPanel
+        {
+            Spacing = 12,
+            Margin = new Thickness(14, 10, 14, 12),
+            Children = { content },
+        };
+
+        return new ScrollViewer
         {
             Content = inner,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Background = GetBrush("SurfaceAppBrush"),
+            Background = Brushes.Transparent,
         };
-        return scroller;
+    }
+
+    /// <summary>
+    /// Switch the active sub-section. Persists the index, flips IsVisible
+    /// on the panel set, repaints the side-nav buttons. Idempotent —
+    /// re-selecting the active section is a no-op.
+    /// </summary>
+    private void SelectSettingsSubSection(int index)
+    {
+        if (index < 0 || index >= 6) return;
+        _settingsSelectedSubSection = index;
+        AndroidStorage.SetSettingsActiveSubSection(index);
+
+        for (int i = 0; i < _settingsSubSectionPanels.Length; i++)
+        {
+            var panel = _settingsSubSectionPanels[i];
+            if (panel is not null) panel.IsVisible = i == index;
+        }
+        for (int i = 0; i < _settingsSubSectionButtons.Length; i++)
+        {
+            var btn = _settingsSubSectionButtons[i];
+            if (btn is not null) StyleSettingsSubSectionButton(btn, i == index);
+        }
+    }
+
+    /// <summary>
+    /// Footer Apply bar. Mirrors desktop NetworkPage.axaml:2213-2243 — left
+    /// side hosts the "✓ Auto-saved" badge (resting state), right side
+    /// hosts the "Apply now (reload VPN)" button. Per the Phase C spec the
+    /// two swap based on <see cref="_settingsDirty"/>: the badge shows when
+    /// no pending changes exist, the button takes its place when there are.
+    /// </summary>
+    private Border BuildSettingsFooterBar()
+    {
+        // ✓ Auto-saved badge — small SuccessFg pill stating the obvious so
+        // the user doesn't go hunting for a Save button. Mirrors desktop's
+        // L_SettingsAutosaved row.
+        var checkGlyph = new TextBlock
+        {
+            Text = "✓",
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = GetBrush("SuccessSolidBrush"),
+        };
+        var badgeText = new TextBlock
+        {
+            Text = Localization.SettingsAutosaved,
+            FontSize = 10,
+            FontWeight = FontWeight.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = GetBrush("SuccessFgBrush"),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        _settingsAutoSavedBadge = new Border
+        {
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new StackPanel
+            {
+                Orientation = Avalonia.Layout.Orientation.Horizontal,
+                Spacing = 5,
+                Children = { checkGlyph, badgeText },
+            },
+        };
+
+        // [Apply] button — swaps in when _settingsDirty is true. Click
+        // clears the dirty flag and, if currently connected, kicks a
+        // disconnect/reconnect cycle so the running tunnel picks up the
+        // new config. When not connected the click just clears the badge
+        // (next Connect will rebuild from fresh storage anyway).
+        _settingsApplyButton = new Avalonia.Controls.Button
+        {
+            Content = Localization.ApplyNowReloadVpn,
+            FontSize = 10,
+            FontWeight = FontWeight.SemiBold,
+            Padding = new Thickness(10, 5),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = GetBrush("AccentSolidBrush"),
+            Foreground = GetBrush("AccentOnSolidBrush"),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            IsVisible = false,
+        };
+        _settingsApplyButton.Click += OnSettingsApplyClicked;
+
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(_settingsAutoSavedBadge, 0);
+        Grid.SetColumn(_settingsApplyButton, 1);
+        grid.Children.Add(_settingsAutoSavedBadge);
+        grid.Children.Add(_settingsApplyButton);
+
+        return new Border
+        {
+            Padding = new Thickness(14, 7, 14, 8),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            Child = grid,
+        };
     }
 
     /// <summary>
@@ -1780,13 +2071,61 @@ public partial class AndroidApp : Avalonia.Application
     }
 
     /// <summary>
+    /// Phase C (2026-05-10) — Rules sub-section. Mirrors desktop
+    /// NetworkPage.axaml's Rules block (around line 322) but on Android the
+    /// CustomRulesParser pipeline isn't wired into AndroidConfigBuilder yet
+    /// (custom routing rules are a desktop-only knob today). Rather than
+    /// shipping a no-op text editor that pretends to take effect, we surface
+    /// a placeholder explainer that points the user to the Apps tab as the
+    /// current way to choose what goes through VPN. The side-nav slot exists
+    /// so visual parity with desktop is preserved + a future port can fill
+    /// in the editor without re-doing the chrome.
+    /// </summary>
+    private Control BuildSettingsRulesSection()
+    {
+        var sectionTitle = MakeSectionTitle(Localization.SettingsSectionRules);
+
+        var note = new TextBlock
+        {
+            Text = Localization.AdvSettingsRulesAndroidNote,
+            FontSize = 11,
+            Foreground = GetBrush("TextSecondaryBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        // Sunken Border mirrors the per-section card chrome the other
+        // sub-sections use — without it the placeholder reads as a stray
+        // paragraph instead of a deliberate empty state.
+        var card = new Border
+        {
+            Padding = new Thickness(10, 8),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = GetBrush("SurfaceSunkenBrush"),
+            BorderBrush = GetBrush("BorderSubtleBrush"),
+            BorderThickness = new Thickness(1),
+            Child = note,
+        };
+
+        var stack = new StackPanel
+        {
+            Spacing = 10,
+            Children = { sectionTitle, card }
+        };
+        return WrapSection(stack);
+    }
+
+    /// <summary>
     /// Leak protection sub-section. Desktop NetworkPage:1779-1859 packs four
     /// inline 24,* checkbox rows inside a single SurfaceSunken Border. We
     /// mirror that chrome but surface only the controls that map cleanly to
     /// the Android stack — block_on_vpn_fail (VpnService.setBlocking) and
     /// the DNS strategy combo. StrictMode / ForceIpv4 / FlushDns / StrictDns
     /// are desktop-only (Windows firewall + DNS cache flush) and intentionally
-    /// not exposed; they would be no-ops on Android.
+    /// not exposed; they would be no-ops on Android. The Block-on-VPN-fail
+    /// checkbox is the Android equivalent of desktop's firewall-netsh-based
+    /// kill switch — same UI, different mechanism (VpnService.setBlocking
+    /// instead of netsh AdvFirewall) — so we keep it visible and document
+    /// the platform difference in the hint copy.
     /// </summary>
     private Control BuildSettingsLeakSection()
     {
@@ -1937,134 +2276,12 @@ public partial class AndroidApp : Avalonia.Application
         return WrapSection(stack);
     }
 
-    /// <summary>
-    /// v2.32.0 AND-NETRES (2026-05-07) — Reliability sub-section. Surfaces
-    /// the three Android-specific knobs that keep the VPN tunnel up across
-    /// the platform-specific stress tests:
-    /// <list type="bullet">
-    ///   <item>Always-on VPN: deep-link to system VPN settings (no
-    ///   programmatic status — the API for "am I the always-on VPN
-    ///   package" is system-only since Android Q).</item>
-    ///   <item>Battery optimization: live status (PowerManager.IsIgnoringBatteryOptimizations)
-    ///   + button to either request the exclusion or open the system
-    ///   list when already excluded.</item>
-    ///   <item>Auto-reconnect on network change: persisted toggle that
-    ///   <c>VpnRouterService.fireUpdate</c> reads to decide whether to
-    ///   forward subsequent default-interface updates to libbox.</item>
-    /// </list>
-    /// </summary>
-    private Control BuildSettingsReliabilitySection()
-    {
-        var sectionTitle = MakeSectionTitle(Localization.SettingsSectionReliability);
-        var intro = new TextBlock
-        {
-            Text = Localization.SettingsReliabilityIntro,
-            FontSize = 11,
-            Foreground = GetBrush("TextSecondaryBrush"),
-            TextWrapping = TextWrapping.Wrap,
-        };
-
-        // Row 1 — Always-on VPN (deep-link). No status indicator — the
-        // ConnectivityManager.getAlwaysOnVpnPackage() API is system-app
-        // only since Android Q, so we can't reliably read it from a
-        // regular app. Hint copy explains where to look.
-        var alwaysOnTitle = new TextBlock
-        {
-            Text = Localization.ReliabilityAlwaysOnTitle,
-            FontWeight = FontWeight.SemiBold,
-            FontSize = 11,
-            Foreground = GetBrush("TextPrimaryBrush"),
-        };
-        var alwaysOnHint = new TextBlock
-        {
-            Text = Localization.ReliabilityAlwaysOnHint,
-            FontSize = 10,
-            Foreground = GetBrush("TextMutedBrush"),
-            TextWrapping = TextWrapping.Wrap,
-        };
-        var alwaysOnBtn = new Avalonia.Controls.Button
-        {
-            Content = Localization.ReliabilityAlwaysOnButton,
-            FontSize = 10,
-            Padding = new Thickness(10, 5),
-            MinHeight = 0,
-            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
-            HorizontalAlignment = HorizontalAlignment.Left,
-        };
-        alwaysOnBtn.Click += OnReliabilityAlwaysOnClicked;
-
-        // Row 2 — Battery optimization. Live status read at section build
-        // time AND each time the overlay re-opens via ShowSettings. The
-        // button text/action flips based on whether we're already excluded.
-        var batteryTitle = new TextBlock
-        {
-            Text = Localization.ReliabilityBatteryOptTitle,
-            FontWeight = FontWeight.SemiBold,
-            FontSize = 11,
-            Foreground = GetBrush("TextPrimaryBrush"),
-        };
-        _reliabilityBatteryStatusLabel = new TextBlock
-        {
-            FontSize = 10,
-            TextWrapping = TextWrapping.Wrap,
-        };
-        var batteryHint = new TextBlock
-        {
-            Text = Localization.ReliabilityBatteryOptHint,
-            FontSize = 10,
-            Foreground = GetBrush("TextMutedBrush"),
-            TextWrapping = TextWrapping.Wrap,
-        };
-        _reliabilityBatteryButton = new Avalonia.Controls.Button
-        {
-            FontSize = 10,
-            Padding = new Thickness(10, 5),
-            MinHeight = 0,
-            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
-            HorizontalAlignment = HorizontalAlignment.Left,
-        };
-        _reliabilityBatteryButton.Click += OnReliabilityBatteryClicked;
-        UpdateBatteryOptimizationStatus();
-
-        // Row 3 — Auto-reconnect toggle.
-        _reliabilityAutoReconnect = new Avalonia.Controls.CheckBox
-        {
-            IsChecked = AndroidStorage.GetAutoReconnectOnNetworkChange(),
-            MinHeight = 0,
-            Padding = new Thickness(0),
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 1, 0, 0),
-        };
-        _reliabilityAutoReconnect.IsCheckedChanged += OnReliabilityAutoReconnectChanged;
-        var autoReconnectCard = MakeCheckboxCard(_reliabilityAutoReconnect,
-            Localization.ReliabilityAutoReconnectTitle,
-            Localization.ReliabilityAutoReconnectHint);
-
-        // Row spacing: 8 between title/hint pairs, 16 between rows.
-        var alwaysOnRow = new StackPanel
-        {
-            Spacing = 4,
-            Children = { alwaysOnTitle, alwaysOnHint, alwaysOnBtn },
-        };
-        var batteryRow = new StackPanel
-        {
-            Spacing = 4,
-            Children =
-            {
-                batteryTitle,
-                _reliabilityBatteryStatusLabel,
-                batteryHint,
-                _reliabilityBatteryButton,
-            },
-        };
-
-        var stack = new StackPanel
-        {
-            Spacing = 14,
-            Children = { sectionTitle, intro, alwaysOnRow, batteryRow, autoReconnectCard },
-        };
-        return WrapSection(stack);
-    }
+    // Phase C (2026-05-10): BuildSettingsReliabilitySection was removed —
+    // its three rows (Always-on VPN, battery optimization, auto-reconnect)
+    // moved into BuildSettingsAutostartSection above so the side-nav has
+    // exactly six entries matching desktop. UpdateBatteryOptimizationStatus
+    // + the OnReliability* event handlers are still wired (see below);
+    // they're now invoked from inside the Autostart pane instead.
 
     /// <summary>
     /// Updates sub-section: prerelease channel toggle + current version
@@ -2180,20 +2397,125 @@ public partial class AndroidApp : Avalonia.Application
     }
 
     /// <summary>
-    /// Autostart sub-section: 3 toggles (VPN / Zapret / TgProxy) + DBG-3
-    /// status badge per the same predicate as desktop's
-    /// <c>ComputeAutostartStatus</c>. On Android there's no
-    /// BOOT_COMPLETED receiver wired and no Service-mode equivalent of
-    /// the Windows VPNRouterService, so the VPN toggle is permanently
-    /// in the ⛔ tier ("Will not fire: needs BOOT_COMPLETED + Service").
-    /// Zapret + TgProxy stay in the "not ported" tier — those features
-    /// are Windows-only on the desktop port today.
-    /// Persistence is real so a future BootCompletedReceiver can read
-    /// the flags without a migration.
+    /// Phase C (2026-05-10) — Autostart sub-section. Combines desktop's
+    /// Autostart (Service-install + boot toggles) and Reliability (Always-on
+    /// VPN + battery opt + auto-reconnect) sections per the parity plan's
+    /// platform-impossible item table — Always-on VPN IS Android's
+    /// replacement for Windows-Service-on-boot, so it naturally belongs
+    /// here. The 3 boot toggles (VPN/Zapret/TgProxy) keep persisting their
+    /// flags so a future BootCompletedReceiver can read them without a
+    /// migration, but they're permanently in the ⛔ tier on Android until
+    /// that receiver lands.
     /// </summary>
     private Control BuildSettingsAutostartSection()
     {
         var sectionTitle = MakeSectionTitle(Localization.SettingsSectionAutostart);
+
+        // Android-equivalence intro — explains that Always-on VPN is the
+        // way to get boot-time + network-change-time tunnel restoration
+        // without a Windows-style service. Sets expectations before the
+        // user sees the (non-firing) boot-toggle group below.
+        var androidIntro = new TextBlock
+        {
+            Text = Localization.AdvSettingsAutostartAndroidIntro,
+            FontSize = 11,
+            Foreground = GetBrush("TextSecondaryBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+
+        // ── Always-on VPN row (formerly desktop Reliability section) ──
+        var alwaysOnTitle = new TextBlock
+        {
+            Text = Localization.ReliabilityAlwaysOnTitle,
+            FontWeight = FontWeight.SemiBold,
+            FontSize = 11,
+            Foreground = GetBrush("TextPrimaryBrush"),
+        };
+        var alwaysOnHint = new TextBlock
+        {
+            Text = Localization.ReliabilityAlwaysOnHint,
+            FontSize = 10,
+            Foreground = GetBrush("TextMutedBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var alwaysOnBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.ReliabilityAlwaysOnButton,
+            FontSize = 10,
+            Padding = new Thickness(10, 5),
+            MinHeight = 0,
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        alwaysOnBtn.Click += OnReliabilityAlwaysOnClicked;
+        var alwaysOnRow = new StackPanel
+        {
+            Spacing = 4,
+            Children = { alwaysOnTitle, alwaysOnHint, alwaysOnBtn },
+        };
+
+        // ── Battery optimization row (formerly desktop Reliability) ──
+        var batteryTitle = new TextBlock
+        {
+            Text = Localization.ReliabilityBatteryOptTitle,
+            FontWeight = FontWeight.SemiBold,
+            FontSize = 11,
+            Foreground = GetBrush("TextPrimaryBrush"),
+        };
+        _reliabilityBatteryStatusLabel = new TextBlock
+        {
+            FontSize = 10,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        var batteryHint = new TextBlock
+        {
+            Text = Localization.ReliabilityBatteryOptHint,
+            FontSize = 10,
+            Foreground = GetBrush("TextMutedBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+        _reliabilityBatteryButton = new Avalonia.Controls.Button
+        {
+            FontSize = 10,
+            Padding = new Thickness(10, 5),
+            MinHeight = 0,
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        _reliabilityBatteryButton.Click += OnReliabilityBatteryClicked;
+        UpdateBatteryOptimizationStatus();
+        var batteryRow = new StackPanel
+        {
+            Spacing = 4,
+            Children =
+            {
+                batteryTitle,
+                _reliabilityBatteryStatusLabel,
+                batteryHint,
+                _reliabilityBatteryButton,
+            },
+        };
+
+        // ── Auto-reconnect on network change toggle ──
+        _reliabilityAutoReconnect = new Avalonia.Controls.CheckBox
+        {
+            IsChecked = AndroidStorage.GetAutoReconnectOnNetworkChange(),
+            MinHeight = 0,
+            Padding = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 1, 0, 0),
+        };
+        _reliabilityAutoReconnect.IsCheckedChanged += OnReliabilityAutoReconnectChanged;
+        var autoReconnectCard = MakeCheckboxCard(_reliabilityAutoReconnect,
+            Localization.ReliabilityAutoReconnectTitle,
+            Localization.ReliabilityAutoReconnectHint);
+
+        // ── Boot toggles (Windows-Service parity scaffolding) ──
+        // Pre-Phase-C these were the ENTIRE Autostart section. After Phase C
+        // they're a separate sub-block under the Always-on / battery /
+        // auto-reconnect rows because those are the controls that actually
+        // matter on Android. The boot flags keep persisting so a future
+        // BootCompletedReceiver port has its data ready.
         var bootHeader = new TextBlock
         {
             Text = Localization.AutostartBootSectionTitle,
@@ -2210,8 +2532,6 @@ public partial class AndroidApp : Avalonia.Application
             TextWrapping = TextWrapping.Wrap,
         };
 
-        // Per-component checkbox + status badge stacks. Status text
-        // mirrors the desktop ComputeAutostartStatus three-tier badge.
         _settingsAutostartVpn = new Avalonia.Controls.CheckBox
         {
             IsChecked = AndroidStorage.GetAutostartVpn(),
@@ -2262,8 +2582,20 @@ public partial class AndroidApp : Avalonia.Application
 
         var stack = new StackPanel
         {
-            Spacing = 8,
-            Children = { sectionTitle, bootHeader, bootSub, vpnStack, zapretStack, tgStack }
+            Spacing = 14,
+            Children =
+            {
+                sectionTitle,
+                androidIntro,
+                alwaysOnRow,
+                batteryRow,
+                autoReconnectCard,
+                bootHeader,
+                bootSub,
+                vpnStack,
+                zapretStack,
+                tgStack,
+            }
         };
         return WrapSection(stack);
     }
@@ -2511,6 +2843,18 @@ public partial class AndroidApp : Avalonia.Application
             if (_reliabilityAutoReconnect is not null)
                 _reliabilityAutoReconnect.IsChecked = AndroidStorage.GetAutoReconnectOnNetworkChange();
             UpdateBatteryOptimizationStatus();
+
+            // Phase C (2026-05-10): re-applying stored values via the
+            // setters above doesn't go through the OnSettings*Changed
+            // path (we're inside _settingsLoading), so we don't pick up
+            // a spurious dirty mark. Restore the persisted sub-section
+            // selection so the user lands on the same pane they last
+            // visited, and refresh the footer in case this is the first
+            // open of the tab (badges weren't built before now).
+            var persisted = AndroidStorage.GetSettingsActiveSubSection();
+            if (persisted != _settingsSelectedSubSection)
+                SelectSettingsSubSection(persisted);
+            UpdateSettingsFooterVisibility();
         }
         finally
         {
@@ -2529,26 +2873,30 @@ public partial class AndroidApp : Avalonia.Application
         var fullOn = _settingsFullRadio?.IsChecked == true;
         if (!splitOn && !fullOn) return;
         var newMode = splitOn ? "split" : "full";
-        if (AndroidStorage.GetRoutingMode() != newMode)
-            AndroidStorage.SetRoutingMode(newMode);
+        if (AndroidStorage.GetRoutingMode() == newMode) return;
+        AndroidStorage.SetRoutingMode(newMode);
+        MarkSettingsDirty();
     }
 
     private void OnSettingsBypassRuChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_settingsLoading || _settingsBypassRu is null) return;
         AndroidStorage.SetBypassRussianTraffic(_settingsBypassRu.IsChecked == true);
+        MarkSettingsDirty();
     }
 
     private void OnSettingsBlockOnVpnFailChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_settingsLoading || _settingsBlockOnVpnFail is null) return;
         AndroidStorage.SetBlockOnVpnFail(_settingsBlockOnVpnFail.IsChecked == true);
+        MarkSettingsDirty();
     }
 
     private void OnSettingsBlockAdsChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_settingsLoading || _settingsBlockAds is null) return;
         AndroidStorage.SetBlockAds(_settingsBlockAds.IsChecked == true);
+        MarkSettingsDirty();
     }
 
     private void OnSettingsDnsStrategyChanged(object? sender, Avalonia.Controls.SelectionChangedEventArgs e)
@@ -2561,12 +2909,15 @@ public partial class AndroidApp : Avalonia.Application
             _ => "ipv4_only",
         };
         AndroidStorage.SetDnsStrategy(value);
+        MarkSettingsDirty();
     }
 
     private void OnSettingsChannelChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_settingsLoading || _settingsReceivePrereleases is null) return;
         AndroidStorage.SetUpdateChannel(_settingsReceivePrereleases.IsChecked == true ? "experimental" : "stable");
+        // Update channel doesn't affect the running tunnel — no need to
+        // mark dirty. Auto-saved badge stays.
     }
 
     private void OnSettingsCheckUpdatesClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -2582,6 +2933,8 @@ public partial class AndroidApp : Avalonia.Application
     {
         if (_settingsLoading || _settingsAutostartVpn is null) return;
         AndroidStorage.SetAutostartVpn(_settingsAutostartVpn.IsChecked == true);
+        // Boot-time autostart flag — affects only the future BootCompletedReceiver
+        // path, not the currently-running tunnel. No dirty mark.
     }
 
     private void OnSettingsAutostartZapretChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -2613,6 +2966,7 @@ public partial class AndroidApp : Avalonia.Application
         };
         AndroidStorage.SetDpiBypassMode(value);
         UpdateZapretChipFromState();
+        MarkSettingsDirty();
     }
 
     // ── v2.32.0 AND-NETRES Reliability handlers ─────────────────────────
@@ -2694,13 +3048,76 @@ public partial class AndroidApp : Avalonia.Application
         if (_settingsLoading || _reliabilityAutoReconnect is null) return;
         AndroidStorage.SetAutoReconnectOnNetworkChange(
             _reliabilityAutoReconnect.IsChecked == true);
+        // VpnRouterService.fireUpdate reads this flag every default-interface
+        // change; the running tunnel picks up new behaviour on the next
+        // network event without a reconnect, so no dirty mark.
+    }
+
+    /// <summary>
+    /// Phase C (2026-05-10) — Mark Settings as having pending changes that
+    /// need a tunnel reload to take effect (routing mode flip, DNS strategy,
+    /// bypass-RU, ad-block, DPI bypass mode, block-on-VPN-fail). Swaps the
+    /// "✓ Auto-saved" footer badge for an [Apply] button. Called from each
+    /// affected OnSettings*Changed handler. Idempotent — re-marking already-
+    /// dirty state is a no-op. The flag is kept tab-local; switching to
+    /// another Advanced tab and back keeps the dirty state, which is the
+    /// expected UX (a half-applied change shouldn't quietly clear because
+    /// the user navigated elsewhere).
+    /// </summary>
+    private void MarkSettingsDirty()
+    {
+        if (_settingsDirty) return;
+        _settingsDirty = true;
+        UpdateSettingsFooterVisibility();
+    }
+
+    /// <summary>
+    /// Apply button click. Clears the dirty flag and, if the tunnel is
+    /// currently running, kicks a reconnect cycle so the running config
+    /// picks up the new settings (Android has no sing-box hot-reload path
+    /// — disconnect + reconnect is the only way to apply mid-flight). When
+    /// disconnected, the click just clears the badge — the next user-
+    /// initiated Connect will rebuild the config from fresh storage anyway.
+    /// </summary>
+    private void OnSettingsApplyClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        _settingsDirty = false;
+        UpdateSettingsFooterVisibility();
+
+        // If the tunnel is running, restart it so the new config takes
+        // effect. RequestDisconnect → IntentChanged(false) → user can tap
+        // Connect again. We deliberately don't auto-reconnect because that
+        // would be surprising — desktop's Apply button reloads in place,
+        // but the equivalent on Android is a hard cycle that kills + rebuilds
+        // the VpnService. A one-tap surprise reconnect would feel jarring.
+        var activity = MainActivity.Instance;
+        if (activity is null) return;
+        if (MainActivity.IntendedConnected)
+        {
+            activity.RequestDisconnect();
+        }
+    }
+
+    /// <summary>
+    /// Show the Auto-saved badge when there are no pending changes; show
+    /// the [Apply] button when there are. The two never co-exist in the
+    /// footer — they swap so the user's eye is drawn to the actionable
+    /// state (apply needed vs. nothing to do).
+    /// </summary>
+    private void UpdateSettingsFooterVisibility()
+    {
+        if (_settingsAutoSavedBadge is not null)
+            _settingsAutoSavedBadge.IsVisible = !_settingsDirty;
+        if (_settingsApplyButton is not null)
+            _settingsApplyButton.IsVisible = _settingsDirty;
     }
 
     /// <summary>
     /// Re-read the live battery-optimization state and refresh the label
-    /// + button. Called from <c>BuildSettingsReliabilitySection</c> at
-    /// build time AND from <c>ShowSettings</c> each time the overlay
-    /// re-opens, so a user who just granted/revoked the exclusion in
+    /// + button. Called from <c>BuildSettingsAutostartSection</c> at build
+    /// time (Phase C folded the old Reliability section into Autostart) AND
+    /// from <c>ReseedNetworkTabState</c> each time the Settings tab is
+    /// re-activated, so a user who just granted/revoked the exclusion in
     /// system settings sees the new state when they come back.
     /// </summary>
     private void UpdateBatteryOptimizationStatus()

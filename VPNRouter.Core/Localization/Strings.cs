@@ -2488,4 +2488,15 @@ public static class Strings
     public static string AdvSubscribeAggregatedEmpty => Ru
         ? "В подписках пока нет серверов — добавь подписку ниже и нажми ↻."
         : "No servers in any subscription yet — add one below and click ↻.";
+
+    // ── Phase C: Android Settings tab side-nav (2026-05-10) ─────────────
+    public static string SettingsSectionRules => Ru ? "Правила" : "Rules";
+
+    public static string AdvSettingsRulesAndroidNote => Ru
+        ? "Кастомные правила маршрутизации (домен → действие) пока не подключены на Android. Пока что используй вкладку «Приложения» — там можно выбрать, какие приложения идут через VPN."
+        : "Custom routing rules (domain → action) aren't wired into the Android tunnel yet. For now use the Apps tab to choose which apps go through VPN.";
+
+    public static string AdvSettingsAutostartAndroidIntro => Ru
+        ? "На Android системного аналога Windows-службы нет. Чтобы VPN поднимался после перезагрузки и при смене сети — включи «Always-on VPN» в системных настройках Android (кнопка ниже)."
+        : "Android has no system-level equivalent of the Windows service. To bring the VPN up after reboot and network change, enable «Always-on VPN» in Android system settings (button below).";
 }

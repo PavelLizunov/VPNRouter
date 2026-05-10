@@ -644,6 +644,21 @@ public partial class AndroidApp
         // (Start VPN / Stop VPN); refresh via the same helper that flips
         // them on connect/disconnect.
         ApplyAdvancedFooterConnectionState(MainActivity.IntendedConnected);
+
+        // Phase C (2026-05-10) — Settings tab side-nav button labels and
+        // footer Apply/Auto-saved row also need to flip on language toggle.
+        // Sub-section button text + footer captions DO have stable
+        // references, so we update them in place here.
+        if (_settingsSubSectionButtons is not null)
+        {
+            for (int i = 0; i < _settingsSubSectionButtons.Length; i++)
+            {
+                var btn = _settingsSubSectionButtons[i];
+                if (btn is not null) btn.Content = SettingsSubSectionLabel(i);
+            }
+        }
+        if (_settingsApplyButton is not null)
+            _settingsApplyButton.Content = Localization.ApplyNowReloadVpn;
     }
 
     /// <summary>
