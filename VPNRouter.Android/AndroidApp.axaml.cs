@@ -4,6 +4,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Data;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml;
@@ -1478,9 +1480,17 @@ public partial class AndroidApp : Avalonia.Application
             Children = { innerStack }
         };
 
+        // DEFCT-002 (2026-05-10) — Background=Transparent on the wrapping
+        // grid so bare gutters between the centered 420 dp content column
+        // and the ScrollViewer edges are hit-test visible. Without this,
+        // hits on the gutters land on whichever opaque element ends up
+        // beneath, instead of the ScrollViewer; the direct pointer-event
+        // handlers attached on mainScroller below need consistent gutter
+        // hit-testing to start a swipe from anywhere in the row.
         var outerGrid = new Grid
         {
             Margin = new Thickness(16, 0, 16, 0),
+            Background = Brushes.Transparent,
             Children = { innerWrapper }
         };
 
@@ -1500,6 +1510,83 @@ public partial class AndroidApp : Avalonia.Application
             Padding = new Thickness(0, 12, 0, 16),
         };
         mainScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
+
+        // DEFCT-002 (2026-05-10) — direct pointer-event scroll tracking on
+        // the outer ScrollViewer. The default ScrollViewer template's inner
+        // ScrollGestureRecognizer is unreliable on Android when the user
+        // starts a swipe on a child Button: the Button captures the pointer
+        // on PointerPressed and the inner recognizer never wins the
+        // threshold race (mirrors Avalonia issue #3146 "ListBox inside
+        // ScrollViewer prevent touch scrolling"). Avalonia 11.3 on Android
+        // does NOT route subsequent moves to ancestors via the Tunnel route
+        // once a descendant captures (verified empirically: 1 move event
+        // reaches the ancestor handler vs ~20 expected for an 800 ms swipe).
+        //
+        // Strategy: hook PointerPressed/Moved/Released on the ScrollViewer
+        // with Tunnel routing + handledEventsToo so we observe pointer
+        // motion before children handle it. Once the drag exceeds the
+        // 8 dp threshold we call Pointer.Capture(mainScroller) to steal
+        // pointer ownership from whatever child Button grabbed it. With
+        // ownership transferred, every subsequent PointerMoved is delivered
+        // directly to mainScroller and our handler fires on each frame,
+        // producing 1:1 swipe-to-scroll tracking. Each move applies an
+        // INCREMENTAL delta (current - last) to Offset, so partial event
+        // delivery still produces proportional scroll. e.Handled=true on
+        // each Move stops the inner gesture recognizer from clobbering us.
+        const double scrollStartDistance = 8.0;
+        bool isDragging = false;
+        double dragStartY = 0;
+        double lastY = 0;
+        IPointer? activePointer = null;
+        mainScroller.AddHandler(InputElement.PointerPressedEvent, (_, e) =>
+        {
+            var p = e.GetCurrentPoint(mainScroller);
+            if (p.Pointer.Type != PointerType.Touch && p.Pointer.Type != PointerType.Pen)
+                return;
+            isDragging = false;
+            dragStartY = p.Position.Y;
+            lastY = p.Position.Y;
+            activePointer = e.Pointer;
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
+        mainScroller.AddHandler(InputElement.PointerMovedEvent, (_, e) =>
+        {
+            var p = e.GetCurrentPoint(mainScroller);
+            if (p.Pointer.Type != PointerType.Touch && p.Pointer.Type != PointerType.Pen)
+                return;
+            if (activePointer is null) return;
+            var totalDeltaY = p.Position.Y - dragStartY;
+            if (!isDragging)
+            {
+                if (System.Math.Abs(totalDeltaY) < scrollStartDistance) return;
+                isDragging = true;
+                // Steal pointer capture from the child (Button) so
+                // subsequent moves route directly to mainScroller.
+                e.Pointer.Capture(mainScroller);
+            }
+            var dy = p.Position.Y - lastY;
+            lastY = p.Position.Y;
+            var maxOffset = System.Math.Max(0,
+                mainScroller.Extent.Height - mainScroller.Viewport.Height);
+            var newY = System.Math.Max(0,
+                System.Math.Min(mainScroller.Offset.Y - dy, maxOffset));
+            mainScroller.Offset = new Vector(mainScroller.Offset.X, newY);
+            e.Handled = true;
+        }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+        mainScroller.AddHandler(InputElement.PointerReleasedEvent, (_, e) =>
+        {
+            if (isDragging)
+            {
+                e.Pointer.Capture(null);
+                e.Handled = true;
+            }
+            isDragging = false;
+            activePointer = null;
+        }, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+        mainScroller.AddHandler(InputElement.PointerCaptureLostEvent, (_, _) =>
+        {
+            isDragging = false;
+            activePointer = null;
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
 
         // v3.0 Phase 7.4 (2026-05-04) — fullscreen log-viewer overlay
         // sits on top of the main content stack. Hidden by default; the
