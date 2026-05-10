@@ -217,10 +217,16 @@ public partial class AndroidApp
         var headerRow = BuildFcListHeader(textM, sunken);
 
         // 3) Search list + empty hint
+        // DEFCT-7.4-A: AlwaysSelected so that tapping the currently-selected
+        // row on Android touch is a no-op (Avalonia's default Single mode
+        // deselects on re-tap, which dropped the Connect CTA into a greyed
+        // state with _fcSelectedEntry == null). At least one row must stay
+        // selected once results exist — the bottom CTA depends on it.
         _fcSearchList = new ListBox
         {
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
+            SelectionMode = SelectionMode.AlwaysSelected,
             ItemsSource = _fcSearchResults,
             ItemTemplate = new FuncDataTemplate<FreeConfigEntry>(
                 (entry, _) => BuildFcRow(entry, isSavedTab: false),
