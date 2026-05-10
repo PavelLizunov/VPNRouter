@@ -36,6 +36,22 @@ public static class Strings
     // and all VM labels (LblTabTelegram / LblToolTgProxy) read from this.
     public static string TabTgWsProxy => Ru ? "Telegram-прокси" : "Telegram proxy";
 
+    // ── Advanced shell tab labels (AND-ADV-CHROME 2026-05-10) ──
+    // Six-tab parity with desktop MainWindow.axaml v2.32.0 ListBoxItem
+    // bindings (LblTabManual / LblTabSubscribe / LblTabNetwork / LblTabApps /
+    // LblTabTools / LblTabFreeConfigs). Defined as their own keys (rather
+    // than reusing the older TabServers / ModeSubscribe / TabSettings /
+    // TabApps / TabFreeConfigs strings) so future Android-specific copy
+    // tweaks don't bleed into Simple-mode placeholders. AdvSimpleToggle is
+    // the "+ Simple" link button that returns to Simple mode.
+    public static string TabAdvServers => Ru ? "Серверы" : "Servers";
+    public static string TabAdvSubscribe => Ru ? "Подписка" : "Subscribe";
+    public static string TabAdvSettings => Ru ? "Настройки" : "Settings";
+    public static string TabAdvApplications => Ru ? "Приложения" : "Applications";
+    public static string TabAdvTools => Ru ? "Инструменты" : "Tools";
+    public static string TabAdvPublic => Ru ? "Публичные" : "Public";
+    public static string AdvSimpleToggle => Ru ? "+ Simple" : "+ Simple";
+
     // ── Config mode ──
     // v2.30.1-r3: was "VLESS Серверы" / "VLESS Servers". Renamed to plain
     // "Серверы" / "Servers" — the sub-tab is no longer VLESS-specific

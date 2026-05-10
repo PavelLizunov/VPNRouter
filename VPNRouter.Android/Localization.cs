@@ -63,6 +63,14 @@ internal static class Localization
     public static string TabSettings => global::VPNRouter.Core.Localization.Strings.TabSettings;
     public static string TabZapret => global::VPNRouter.Core.Localization.Strings.TabZapret;
     public static string TabTgWsProxy => global::VPNRouter.Core.Localization.Strings.TabTgWsProxy;
+    // Advanced shell tab labels (AND-ADV-CHROME 2026-05-10) — desktop parity.
+    public static string TabAdvServers => global::VPNRouter.Core.Localization.Strings.TabAdvServers;
+    public static string TabAdvSubscribe => global::VPNRouter.Core.Localization.Strings.TabAdvSubscribe;
+    public static string TabAdvSettings => global::VPNRouter.Core.Localization.Strings.TabAdvSettings;
+    public static string TabAdvApplications => global::VPNRouter.Core.Localization.Strings.TabAdvApplications;
+    public static string TabAdvTools => global::VPNRouter.Core.Localization.Strings.TabAdvTools;
+    public static string TabAdvPublic => global::VPNRouter.Core.Localization.Strings.TabAdvPublic;
+    public static string AdvSimpleToggle => global::VPNRouter.Core.Localization.Strings.AdvSimpleToggle;
     public static string VlessServers => global::VPNRouter.Core.Localization.Strings.VlessServers;
     public static string CustomConfigJson => global::VPNRouter.Core.Localization.Strings.CustomConfigJson;
     public static string ModeManual => global::VPNRouter.Core.Localization.Strings.ModeManual;
