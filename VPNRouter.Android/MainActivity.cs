@@ -226,6 +226,19 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
             catch { }
         }
 
+        // DEFCT-001 partial (2026-05-10) — patch Avalonia 11.3.12's
+        // buggy ToggleNodeInfoProvider BEFORE Avalonia spins up its
+        // accessibility tree inside base.OnCreate → setContentView →
+        // AvaloniaView → new AvaloniaAccessHelper(...). The patch
+        // overwrites a static PropertyInfo field that PopulateNodeInfo
+        // misuses; once it's in place, every IToggleProvider peer in
+        // the app is safe from System.Reflection.TargetException, which
+        // closes the `adb shell uiautomator dump` crash path that the
+        // 2026-05-10 kebab-popup HideSubtreeFromAccessibility workaround
+        // could not reach. See AvaloniaToggleNodeInfoProviderPatch.cs
+        // for the full rationale.
+        AvaloniaToggleNodeInfoProviderPatch.Apply();
+
         base.OnCreate(savedInstanceState);
         Instance = this;
 
