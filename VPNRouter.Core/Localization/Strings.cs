@@ -2082,6 +2082,17 @@ public static class Strings
         ? "Найдено {0}/{1} рабочих."
         : "Found {0}/{1} working.";
 
+    /// <summary>
+    /// Android Bug&#x202F;#1 status line — Deep Verify pass progress shown
+    /// after TCP+TLS finishes. <c>{0}</c> = entries deep-verified so far,
+    /// <c>{1}</c> = total to verify (typically the user's target N).
+    /// Desktop status flow doesn't need this string because Deep Verify
+    /// there is interleaved with TCP+TLS and reuses FcStatusTesting.
+    /// </summary>
+    public static string FcStatusDeepVerifying => Ru
+        ? "Deep verify · {0}/{1}…"
+        : "Deep verify · {0}/{1}…";
+
     public static string FcStatusDoneOk => Ru
         ? "Готово. Найдено {0} конфигов."
         : "Done. Found {0} working configs.";

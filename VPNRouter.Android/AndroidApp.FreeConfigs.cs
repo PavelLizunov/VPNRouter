@@ -908,11 +908,12 @@ public partial class AndroidApp
                 .MinimumLevel.Information()
                 .CreateLogger();
             _fcOrchestrator = new AndroidFreeConfigsOrchestrator(logger);
-            _fcOrchestrator.OnStatus    += OnFcStatus;
-            _fcOrchestrator.OnProgress  += OnFcProgress;
-            _fcOrchestrator.OnFound     += OnFcFound;
-            _fcOrchestrator.OnFinished  += OnFcFinished;
-            _fcOrchestrator.OnFailed    += OnFcFailed;
+            _fcOrchestrator.OnStatus         += OnFcStatus;
+            _fcOrchestrator.OnProgress       += OnFcProgress;
+            _fcOrchestrator.OnFound          += OnFcFound;
+            _fcOrchestrator.OnFinished       += OnFcFinished;
+            _fcOrchestrator.OnFailed         += OnFcFailed;
+            _fcOrchestrator.OnEntryUpgraded  += OnFcEntryUpgraded;
         }
 
         await _fcOrchestrator.EnsureCacheLoadedAsync();
@@ -1157,6 +1158,60 @@ public partial class AndroidApp
         Dispatcher.UIThread.Post(() =>
         {
             ReloadFreeConfigsLists();
+        });
+    }
+
+    /// <summary>
+    /// Bug&#x202F;#1 (2026-05-11): orchestrator's Deep Verify pass promoted
+    /// an entry from <see cref="FreeConfigStatus.Ok"/> to
+    /// <see cref="FreeConfigStatus.Verified"/>. We need to force the row
+    /// to re-render — FreeConfigEntry doesn't implement
+    /// INotifyPropertyChanged, so the ItemTemplate's Status snapshot is
+    /// stale. The cheapest reliable refresh is replacing the entry at the
+    /// same index, which raises ObservableCollection's CollectionChanged
+    /// (NotifyCollectionChangedAction.Replace) and triggers a re-template.
+    /// Also restores selection if this was the selected row (re-tap-free
+    /// path, the user shouldn't have to re-pick the row they just chose).
+    /// </summary>
+    private void OnFcEntryUpgraded(FreeConfigEntry entry)
+    {
+        if (entry is null || string.IsNullOrEmpty(entry.Id)) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            // Search tab — main source of truth during a Find run.
+            for (int i = 0; i < _fcSearchResults.Count; i++)
+            {
+                if (string.Equals(_fcSearchResults[i].Id, entry.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    var wasSelected = ReferenceEquals(_fcSelectedEntry, _fcSearchResults[i]);
+                    _fcSearchResults[i] = entry;
+                    if (wasSelected)
+                    {
+                        _fcSelectedEntry = entry;
+                        if (_fcSearchList is not null)
+                            _fcSearchList.SelectedItem = entry;
+                    }
+                    break;
+                }
+            }
+            // Saved tab — keep it consistent in case the upgrade arrived
+            // while the user was browsing Saved between Find runs (rare,
+            // but cheap to handle).
+            for (int i = 0; i < _fcSavedResults.Count; i++)
+            {
+                if (string.Equals(_fcSavedResults[i].Id, entry.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    var wasSelected = ReferenceEquals(_fcSelectedEntry, _fcSavedResults[i]);
+                    _fcSavedResults[i] = entry;
+                    if (wasSelected)
+                    {
+                        _fcSelectedEntry = entry;
+                        if (_fcSavedList is not null)
+                            _fcSavedList.SelectedItem = entry;
+                    }
+                    break;
+                }
+            }
         });
     }
 

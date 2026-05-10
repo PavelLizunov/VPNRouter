@@ -162,6 +162,13 @@
        AndroidManifest.xml directly. -->
   <ItemGroup>
     <AndroidJavaSource Include="VpnRouterService.java" />
+    <!-- Bug #1 (2026-05-11) — libbox-backed Deep Verify for the Free
+         Configs page. Self-contained Java helper (no VpnRouterService
+         dependency) that spins a transient sing-box.Service per config
+         to upgrade single-✓ entries to ✓✓ via a real HTTP probe. C#
+         side calls verifyConfigSync(...) through reflection from
+         AndroidFreeConfigDeepVerifier.cs. -->
+    <AndroidJavaSource Include="AndroidDeepVerifyBox.java" />
     <None Include="VpnRouterService.kt" />
   </ItemGroup>
 
