@@ -81,25 +81,24 @@ public partial class AndroidApp
         var radiusSm    = GetRadius("RadiusSm");
 
         // ── Top-tab strip (collapsed sidebar) ────────────────────────────
-        _dpiTabStatus   = MakeSegmentButton(Localization.ZapretSecStatus,   active: true,
-                                            (_, _) => SelectDpiTab(0));
-        _dpiTabStrategy = MakeSegmentButton(Localization.ZapretSecStrategy, active: false,
-                                            (_, _) => SelectDpiTab(1));
-        _dpiTabAdvanced = MakeSegmentButton(Localization.ZapretSecAdvanced, active: false,
-                                            (_, _) => SelectDpiTab(2));
+        // POL-1: matches desktop ListBox sub-tab pattern via the shared
+        // MakeAdvancedSubTabButton (Padding="10,4" FontSize="11" RadiusSm).
+        // Pre-POL-1 used the kebab MakeSegmentButton helper which sized
+        // each chip Padding="0,6" FontSize=12 RadiusXs.
+        _dpiTabStatus   = MakeAdvancedSubTabButton(Localization.ZapretSecStatus,   active: true,
+                                                   (_, _) => SelectDpiTab(0));
+        _dpiTabStrategy = MakeAdvancedSubTabButton(Localization.ZapretSecStrategy, active: false,
+                                                   (_, _) => SelectDpiTab(1));
+        _dpiTabAdvanced = MakeAdvancedSubTabButton(Localization.ZapretSecAdvanced, active: false,
+                                                   (_, _) => SelectDpiTab(2));
 
-        var tabRow = new Grid
+        var tabRow = new StackPanel
         {
-            ColumnDefinitions = new ColumnDefinitions("*,*,*"),
-            ColumnSpacing = 4,
-            Margin = new Thickness(10, 8, 10, 0),
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 4,
+            Margin = new Thickness(6, 4, 6, 4),
+            Children = { _dpiTabStatus, _dpiTabStrategy, _dpiTabAdvanced },
         };
-        Grid.SetColumn(_dpiTabStatus,   0);
-        Grid.SetColumn(_dpiTabStrategy, 1);
-        Grid.SetColumn(_dpiTabAdvanced, 2);
-        tabRow.Children.Add(_dpiTabStatus);
-        tabRow.Children.Add(_dpiTabStrategy);
-        tabRow.Children.Add(_dpiTabAdvanced);
 
         // ── Status section ───────────────────────────────────────────────
         // Mirrors DpiBypassPage Status pane (lines 82-146):
@@ -479,9 +478,11 @@ public partial class AndroidApp
         if (_dpiBodyStatus   is not null) _dpiBodyStatus.IsVisible   = index == 0;
         if (_dpiBodyStrategy is not null) _dpiBodyStrategy.IsVisible = index == 1;
         if (_dpiBodyAdvanced is not null) _dpiBodyAdvanced.IsVisible = index == 2;
-        StyleSegmentButton(_dpiTabStatus,   index == 0);
-        StyleSegmentButton(_dpiTabStrategy, index == 1);
-        StyleSegmentButton(_dpiTabAdvanced, index == 2);
+        // POL-1: re-painted via StyleAdvShellTab (matches sibling sub-tab
+        // strips). Pre-POL-1 used StyleSegmentButton — kebab pill shape.
+        if (_dpiTabStatus   is not null) StyleAdvShellTab(_dpiTabStatus,   index == 0);
+        if (_dpiTabStrategy is not null) StyleAdvShellTab(_dpiTabStrategy, index == 1);
+        if (_dpiTabAdvanced is not null) StyleAdvShellTab(_dpiTabAdvanced, index == 2);
     }
 
     /// <summary>

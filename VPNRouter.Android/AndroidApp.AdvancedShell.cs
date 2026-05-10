@@ -87,9 +87,10 @@ public partial class AndroidApp
     /// </summary>
     private Border BuildAdvancedShellOverlay()
     {
-        var bg     = GetBrush("SurfaceAppBrush");
-        var raised = GetBrush("SurfaceRaisedBrush");
-        var subtle = GetBrush("BorderSubtleBrush");
+        var bg       = GetBrush("SurfaceAppBrush");
+        var raised   = GetBrush("SurfaceRaisedBrush");
+        var subtle   = GetBrush("BorderSubtleBrush");
+        var defaultB = GetBrush("BorderDefaultBrush");
 
         // ── Header (brand row + Simple toggle + kebab) ──────────────────
         // T1-T3 — replaces the v2.32.0-pre "Advanced settings + ×" title
@@ -110,6 +111,11 @@ public partial class AndroidApp
         //    its siblings. Long labels (e.g. "Applications" / "Инструменты")
         //    fall back to character ellipsis when the per-tab cell is
         //    narrower than the rendered string.
+        // POL-1-CARDS overlay (2026-05-10): the wrapping Border uses
+        // Background=Transparent + BorderBrush=BorderDefault (was
+        // SurfaceRaised + BorderSubtle) so the strip reads like the
+        // desktop ListBox sub-tab pattern instead of a coloured banner.
+        // The UniformGrid keeps POL-2's compress-to-fit structure.
         var tabPanel = new UniformGrid
         {
             Columns = 6,
@@ -124,8 +130,8 @@ public partial class AndroidApp
         }
         var tabStripBorder = new Border
         {
-            Background = raised,
-            BorderBrush = subtle,
+            Background = Brushes.Transparent,
+            BorderBrush = defaultB,
             BorderThickness = new Thickness(0, 0, 0, 1),
             Child = tabPanel,
         };
@@ -560,6 +566,12 @@ public partial class AndroidApp
         // ellipsis-trim when the UniformGrid cell is narrower than the
         // rendered text (long labels: "Applications" / "Инструменты"
         // share a 6-column row on ~360 dp phones → ~60 dp per cell).
+        // POL-1-CARDS note: the desktop ListBoxItem `Padding="10,4"` from
+        // ServersPage / FreeConfigsPage was the original alignment target,
+        // but POL-2's compress-to-fit overrides it — at 6-column UniformGrid
+        // each cell is ~60 dp on phone width and 10,4 wouldn't leave room
+        // for the label. Padding=2,8 + MinHeight=44 keeps the touch-target
+        // spec while letting the ellipsis handle long labels.
         var label = new TextBlock
         {
             Text = AdvancedTabLabel(tab),
@@ -606,6 +618,34 @@ public partial class AndroidApp
             btn.Foreground = GetBrush("TextSecondaryBrush");
             btn.BorderBrush = GetBrush("BorderSubtleBrush");
         }
+    }
+
+    /// <summary>
+    /// POL-1 (2026-05-10) — sub-tab button factory shared by Tools / DPI
+    /// bypass / Public sub-tab strips. Mirrors desktop's
+    /// `ListBoxItem Padding="10,4" FontSize="11" CornerRadius="RadiusSm"`
+    /// pattern used in ToolsPage.axaml / FreeConfigsPage.axaml so all
+    /// inner sub-tab strips read consistently with desktop. Active state
+    /// reuses <see cref="StyleAdvShellTab"/> for visual parity with the
+    /// outer tab strip.
+    /// </summary>
+    internal Avalonia.Controls.Button MakeAdvancedSubTabButton(
+        string label,
+        bool active,
+        EventHandler<Avalonia.Interactivity.RoutedEventArgs> onClick)
+    {
+        var btn = new Avalonia.Controls.Button
+        {
+            Content = label,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Padding = new Thickness(10, 4),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            BorderThickness = new Thickness(1),
+        };
+        StyleAdvShellTab(btn, active);
+        btn.Click += onClick;
+        return btn;
     }
 
     /// <summary>Localized tab label — each AdvancedTab has its own TabAdv* key.</summary>

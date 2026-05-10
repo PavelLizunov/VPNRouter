@@ -1740,6 +1740,12 @@ public partial class AndroidApp : Avalonia.Application
     /// One side-nav row. Tap selects the sub-section + flips the content
     /// pane. Persists the choice via <see cref="AndroidStorage.SetSettingsActiveSubSection"/>
     /// so reopening Advanced > Settings restores the same pane.
+    /// <para>POL-1: dropped the 2 dp left BorderThickness marker — desktop
+    /// NetworkPage uses Avalonia's default ListBoxItem:selected styling
+    /// (AccentBgSubtle bg + AccentFg fg, no left bar). The marker was an
+    /// Android-only invention and made the side-nav read inconsistently
+    /// vs Apps category list / Public sub-tabs which already match
+    /// desktop's flat styling.</para>
     /// </summary>
     private Avalonia.Controls.Button MakeSettingsSubSectionButton(int index)
     {
@@ -1751,7 +1757,7 @@ public partial class AndroidApp : Avalonia.Application
             Padding = new Thickness(10, 7),
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            BorderThickness = new Thickness(2, 0, 0, 0),
+            BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(0),
         };
         btn.Click += (_, _) => SelectSettingsSubSection(index);
@@ -1770,20 +1776,20 @@ public partial class AndroidApp : Avalonia.Application
         _ => string.Empty,
     };
 
-    /// <summary>Active = accent fg + bg + 2 dp left bar; inactive = muted, transparent bar.</summary>
+    /// <summary>Active = AccentBgSubtle bg + AccentFg fg (matches desktop
+    /// ListBoxItem:selected default); inactive = muted text, transparent bg.
+    /// POL-1: BorderBrush no longer assigned — left bar dropped.</summary>
     private void StyleSettingsSubSectionButton(Avalonia.Controls.Button btn, bool active)
     {
         if (active)
         {
             btn.Background = GetBrush("AccentBgSubtleBrush");
             btn.Foreground = GetBrush("AccentFgBrush");
-            btn.BorderBrush = GetBrush("AccentSolidBrush");
         }
         else
         {
             btn.Background = Brushes.Transparent;
             btn.Foreground = GetBrush("TextMutedBrush");
-            btn.BorderBrush = Brushes.Transparent;
         }
     }
 
@@ -5906,12 +5912,16 @@ public partial class AndroidApp : Avalonia.Application
         grid.Children.Add(nameTb);
         grid.Children.Add(countTb);
 
+        // POL-1: padding tightened to desktop ApplicationsPage cat-list
+        // pattern — `ListBoxItem Padding="4,0" MinHeight=0` + inner Grid
+        // Margin="0,4,0,4". Pre-POL-1 used 8,4 + 2,0 which made each row
+        // taller than the equivalent desktop list item.
         var border = new Border
         {
-            Padding = new Thickness(8, 4),
+            Padding = new Thickness(4, 0),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
             Background = Brushes.Transparent,
-            Margin = new Thickness(2, 0),
+            Margin = new Thickness(0),
             Child = grid,
         };
         border.PointerPressed += (_, _) => SetActiveAppCategory(id);
@@ -5974,11 +5984,15 @@ public partial class AndroidApp : Avalonia.Application
         return hits;
     }
 
-    /// <summary>Repaint the active row with accent colors; reset all others
-    /// to the default neutral look.</summary>
+    /// <summary>Repaint the active row to match desktop's
+    /// `ListBox.cat-list ListBoxItem:selected` rule from
+    /// ApplicationsPage.axaml lines 41-50: white-card background
+    /// (`SurfaceBaseBrush`), arctic foreground, Bold name. POL-1: pre-fix
+    /// used `AccentBgSubtleBrush` background which read as a tinted pill
+    /// instead of the desktop's lifted-card affordance.</summary>
     private void StyleActiveCategoryRow()
     {
-        var accentBg = GetBrush("AccentBgSubtleBrush");
+        var activeBg = GetBrush("SurfaceBaseBrush");
         var accentFg = GetBrush("AccentFgBrush");
         var defaultName = GetBrush("TextSecondaryBrush");
         var defaultCount = GetBrush("TextMutedBrush");
@@ -5986,9 +6000,12 @@ public partial class AndroidApp : Avalonia.Application
         foreach (var kv in _advAppsCategoryRowMap)
         {
             var isActive = string.Equals(kv.Key, _advAppsActiveCategoryId, System.StringComparison.OrdinalIgnoreCase);
-            kv.Value.Background = isActive ? accentBg : Brushes.Transparent;
+            kv.Value.Background = isActive ? activeBg : Brushes.Transparent;
             if (_advAppsCategoryNameMap.TryGetValue(kv.Key, out var nameTb))
+            {
                 nameTb.Foreground = isActive ? accentFg : defaultName;
+                nameTb.FontWeight = isActive ? FontWeight.Bold : FontWeight.SemiBold;
+            }
             if (_advAppsCategoryCountMap.TryGetValue(kv.Key, out var countTb))
                 countTb.Foreground = isActive ? accentFg : defaultCount;
         }

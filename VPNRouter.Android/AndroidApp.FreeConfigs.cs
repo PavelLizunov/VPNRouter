@@ -112,21 +112,24 @@ public partial class AndroidApp
         var radiusSm = GetRadius("RadiusSm");
 
         // ── Sub-tab strip (Search | Saved) ─────────────────────────────────
-        _fcTabSearch = MakeFcTabButton(Localization.FcTabSearch, _fcSelectedTab == 0);
-        _fcTabSearch.Click += (_, _) => SelectFreeConfigsTab(0);
-        _fcTabSaved = MakeFcTabButton(SavedTabHeaderText(), _fcSelectedTab == 1);
-        _fcTabSaved.Click += (_, _) => SelectFreeConfigsTab(1);
+        // POL-1: matches desktop FreeConfigsPage.axaml lines 22-37
+        // (`ListBox Padding="6,2" + ListBoxItem Padding="10,4" FontSize="11"`).
+        // Pre-POL-1 used MakeFcTabButton (Padding="0,6" FontSize=12 RadiusXs)
+        // which inflated the chips relative to desktop.
+        _fcTabSearch = MakeAdvancedSubTabButton(Localization.FcTabSearch,
+                                                _fcSelectedTab == 0,
+                                                (_, _) => SelectFreeConfigsTab(0));
+        _fcTabSaved = MakeAdvancedSubTabButton(SavedTabHeaderText(),
+                                               _fcSelectedTab == 1,
+                                               (_, _) => SelectFreeConfigsTab(1));
 
-        var tabRow = new Grid
+        var tabRow = new StackPanel
         {
-            ColumnDefinitions = new ColumnDefinitions("*,*"),
-            ColumnSpacing = 4,
-            Margin = new Thickness(10, 8, 10, 0),
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 4,
+            Margin = new Thickness(6, 4, 6, 4),
+            Children = { _fcTabSearch, _fcTabSaved },
         };
-        Grid.SetColumn(_fcTabSearch, 0);
-        Grid.SetColumn(_fcTabSaved, 1);
-        tabRow.Children.Add(_fcTabSearch);
-        tabRow.Children.Add(_fcTabSaved);
 
         // ── Search tab body ────────────────────────────────────────────────
         // 1) Green action card (Find / Stop + advanced settings expander)
@@ -170,6 +173,11 @@ public partial class AndroidApp
         };
         _fcStopButton.Click += OnFreeConfigsStopClicked;
 
+        // POL-1: BorderBrush uses SuccessBorderBrush to match desktop
+        // FreeConfigsPage.axaml line 98 (Expander
+        // `BorderBrush="{DynamicResource SuccessBorderBrush}"`).
+        // Pre-POL-1 used neutral BorderSubtleBrush which broke the green
+        // card chrome.
         _fcAdvancedToggle = new Avalonia.Controls.Button
         {
             Content = Localization.FcAdvancedSettings,
@@ -181,7 +189,7 @@ public partial class AndroidApp
             Background = Brushes.Transparent,
             Foreground = successFg,
             BorderThickness = new Thickness(0, 1, 0, 0),
-            BorderBrush = subtle,
+            BorderBrush = GetBrush("SuccessBorderBrush"),
             CornerRadius = new CornerRadius(0),
         };
         _fcAdvancedToggle.Click += OnFreeConfigsAdvancedToggle;
@@ -727,12 +735,15 @@ public partial class AndroidApp
             HorizontalAlignment = HorizontalAlignment.Center,
         };
 
+        // POL-1: row Height matches desktop FreeConfigsPage.axaml row
+        // template `Height="22"` (lines 215, 352). Pre-POL-1 used 26 dp
+        // which made each Public-tab row ~18% taller than desktop.
         var grid = new Grid
         {
             ColumnDefinitions = isSavedTab
                 ? new ColumnDefinitions("44,*,72,68,32")
                 : new ColumnDefinitions("44,*,72,68"),
-            Height = 26,
+            Height = 22,
         };
         Grid.SetColumn(country, 0);
         Grid.SetColumn(endpoint, 1);
@@ -847,14 +858,16 @@ public partial class AndroidApp
         AndroidStorage.SetPublicActiveSubTabIsSaved(index == 1);
         if (_fcSearchBody is not null) _fcSearchBody.IsVisible = index == 0;
         if (_fcSavedBody is not null)  _fcSavedBody.IsVisible  = index == 1;
+        // POL-1: re-painted via StyleAdvShellTab (matches sibling sub-tab
+        // strips). Pre-POL-1 used StyleSegmentButton — kebab pill shape.
         if (_fcTabSearch is not null)
         {
-            StyleSegmentButton(_fcTabSearch, index == 0);
+            StyleAdvShellTab(_fcTabSearch, index == 0);
             _fcTabSearch.Content = Localization.FcTabSearch;
         }
         if (_fcTabSaved is not null)
         {
-            StyleSegmentButton(_fcTabSaved, index == 1);
+            StyleAdvShellTab(_fcTabSaved, index == 1);
             _fcTabSaved.Content = SavedTabHeaderText();
         }
 

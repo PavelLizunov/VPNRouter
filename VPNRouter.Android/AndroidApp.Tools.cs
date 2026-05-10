@@ -217,21 +217,23 @@ public partial class AndroidApp
         var textS       = GetBrush("TextSecondaryBrush");
 
         // ── Sub-tab strip (Zapret | Telegram proxy) ──────────────────────
-        _toolsSubTabZapret   = MakeSegmentButton(Localization.AdvToolsSubTabZapret,   active: true,
-                                                 (_, _) => SelectToolsSubTab(0));
-        _toolsSubTabTelegram = MakeSegmentButton(Localization.AdvToolsSubTabTelegram, active: false,
-                                                 (_, _) => SelectToolsSubTab(1));
+        // POL-1: matches desktop ToolsPage.axaml lines 14-27 (`ListBox
+        // Padding="6,2"` + `ListBoxItem Padding="10,4" FontSize="11"`).
+        // Pre-POL-1 used the kebab MakeSegmentButton helper which gave each
+        // chip Padding="0,6" + FontSize=12 + RadiusXs — visually heavier
+        // than the desktop sub-tab pills.
+        _toolsSubTabZapret   = MakeAdvancedSubTabButton(Localization.AdvToolsSubTabZapret,   active: true,
+                                                        (_, _) => SelectToolsSubTab(0));
+        _toolsSubTabTelegram = MakeAdvancedSubTabButton(Localization.AdvToolsSubTabTelegram, active: false,
+                                                        (_, _) => SelectToolsSubTab(1));
 
-        var subTabRow = new Grid
+        var subTabRow = new StackPanel
         {
-            ColumnDefinitions = new ColumnDefinitions("*,*"),
-            ColumnSpacing = 4,
-            Margin = new Thickness(10, 8, 10, 0),
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 4,
+            Margin = new Thickness(6, 4, 6, 4),
+            Children = { _toolsSubTabZapret, _toolsSubTabTelegram },
         };
-        Grid.SetColumn(_toolsSubTabZapret,   0);
-        Grid.SetColumn(_toolsSubTabTelegram, 1);
-        subTabRow.Children.Add(_toolsSubTabZapret);
-        subTabRow.Children.Add(_toolsSubTabTelegram);
 
         _toolsZapretBody   = BuildToolsZapretBody(bg, sunken, defaultB, accentSolid, accentOnSolid, radiusSm, textS);
         _toolsTelegramBody = BuildToolsTelegramBody(bg, sunken, defaultB, radiusSm, textS);
@@ -293,11 +295,17 @@ public partial class AndroidApp
             Foreground = textS,
             TextWrapping = TextWrapping.Wrap,
         };
+        // POL-1: explainer + mode picker use desktop's per-card sunken
+        // pattern — DpiBypassPage.axaml lines 96-110 (Status warning) +
+        // 226-244 (Hosts cards) all wrap in `SurfaceSunkenBrush` Border
+        // with `Padding="10,8" CornerRadius="RadiusSm"`. Pre-POL-1 used
+        // `SurfaceBaseBrush` + 12,10 padding which read as full white-card
+        // chrome rather than the sunken inset desktop uses.
         var explainerCard = new Border
         {
-            Padding = new Thickness(12, 10),
+            Padding = new Thickness(10, 8),
             CornerRadius = new CornerRadius(radiusSm),
-            Background = card,
+            Background = sunken,
             BorderBrush = subtle,
             BorderThickness = new Thickness(1),
             Child = new StackPanel
@@ -323,9 +331,9 @@ public partial class AndroidApp
 
         var modePicker = new Border
         {
-            Padding = new Thickness(12, 10),
+            Padding = new Thickness(10, 8),
             CornerRadius = new CornerRadius(radiusSm),
-            Background = card,
+            Background = sunken,
             BorderBrush = subtle,
             BorderThickness = new Thickness(1),
             Child = new StackPanel
@@ -480,11 +488,15 @@ public partial class AndroidApp
             Foreground = textS,
             TextWrapping = TextWrapping.Wrap,
         };
+        // POL-1: explainer wraps in sunken card to match Zapret sub-tab +
+        // desktop DpiBypassPage section card pattern. Pre-POL-1 used
+        // SurfaceBase / 12,10 — read as a lifted card instead of the
+        // inset block desktop uses for explainers.
         var explainerCard = new Border
         {
-            Padding = new Thickness(12, 10),
+            Padding = new Thickness(10, 8),
             CornerRadius = new CornerRadius(radiusSm),
-            Background = card,
+            Background = sunken,
             BorderBrush = subtle,
             BorderThickness = new Thickness(1),
             Child = new StackPanel
@@ -559,8 +571,13 @@ public partial class AndroidApp
         _toolsSelectedSubTab = index;
         if (_toolsZapretBody   is not null) _toolsZapretBody.IsVisible   = index == 0;
         if (_toolsTelegramBody is not null) _toolsTelegramBody.IsVisible = index == 1;
-        StyleSegmentButton(_toolsSubTabZapret,   index == 0);
-        StyleSegmentButton(_toolsSubTabTelegram, index == 1);
+        // POL-1: re-styled via StyleAdvShellTab (matches the outer tab
+        // strip + sibling sub-tab strips). Pre-POL-1 used StyleSegmentButton
+        // — kebab segment shape, not the desktop sub-tab pill shape.
+        if (_toolsSubTabZapret is not null)
+            StyleAdvShellTab(_toolsSubTabZapret, index == 0);
+        if (_toolsSubTabTelegram is not null)
+            StyleAdvShellTab(_toolsSubTabTelegram, index == 1);
     }
 
     private void OnToolsZapretModeChanged(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

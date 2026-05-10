@@ -177,12 +177,16 @@ public partial class AndroidApp
     /// </summary>
     private StackPanel BuildServersSubTabBar()
     {
+        // POL-1: chip Padding/FontSize match desktop ServersPage.axaml line
+        // 129 (`Padding="10,4" FontSize="11"`); StackPanel margin matches
+        // the page's outer padding (`Margin="6,2"`). Pre-POL-1 used
+        // Padding=12,6 + Margin=12,8,12,6 — chips read taller than desktop.
         _srvSubTabServersBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersSubTabServers,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(12, 6),
+            Padding = new Thickness(10, 4),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             BorderThickness = new Thickness(1),
         };
@@ -193,7 +197,7 @@ public partial class AndroidApp
             Content = Localization.AdvServersSubTabCustomJson,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(12, 6),
+            Padding = new Thickness(10, 4),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             BorderThickness = new Thickness(1),
         };
@@ -202,8 +206,8 @@ public partial class AndroidApp
         var row = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 6,
-            Margin = new Thickness(12, 8, 12, 6),
+            Spacing = 4,
+            Margin = new Thickness(6, 4, 6, 4),
             Children = { _srvSubTabServersBtn, _srvSubTabCustomJsonBtn },
         };
         return row;
@@ -500,12 +504,15 @@ public partial class AndroidApp
     /// </summary>
     private Border BuildServersFooterActions()
     {
+        // POL-1: Test all + Deep verify use desktop's `Padding="10,4" FontSize="10"`
+        // (ServersPage.axaml lines 357-369). Pre-POL-1 used FontSize=11
+        // Padding=10,5 — buttons looked heavier than desktop.
         _srvTestAllBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersTestAll,
-            FontSize = 11,
+            FontSize = 10,
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(10, 5),
+            Padding = new Thickness(10, 4),
             Background = GetBrush("SuccessSolidBrush"),
             Foreground = Brushes.White,
             BorderThickness = new Thickness(0),
@@ -517,9 +524,9 @@ public partial class AndroidApp
         _srvDeepVerifyBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersDeepVerify,
-            FontSize = 11,
+            FontSize = 10,
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(10, 5),
+            Padding = new Thickness(10, 4),
             Background = GetBrush("AccentSolidBrush"),
             Foreground = GetBrush("AccentOnSolidBrush"),
             BorderThickness = new Thickness(0),
@@ -547,11 +554,15 @@ public partial class AndroidApp
             BorderThickness = new Thickness(1),
         };
 
+        // POL-1: Remove + Add buttons use desktop's `Padding="14,5"` from
+        // ServersPage.axaml lines 399-409 (matches the `LblAddServers`
+        // primary CTA + `LblRemove` neutral). Pre-POL-1 used Padding 10,5 +
+        // 12,5 — narrower than desktop.
         _srvRemoveBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersRemove,
             FontSize = 11,
-            Padding = new Thickness(10, 5),
+            Padding = new Thickness(14, 5),
             Background = GetBrush("SurfaceRaisedBrush"),
             BorderBrush = GetBrush("BorderDefaultBrush"),
             BorderThickness = new Thickness(1),
@@ -567,7 +578,7 @@ public partial class AndroidApp
             Content = Localization.AdvServersAddServers,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(12, 5),
+            Padding = new Thickness(14, 5),
             Background = GetBrush("AccentSolidBrush"),
             Foreground = GetBrush("AccentOnSolidBrush"),
             BorderThickness = new Thickness(0),

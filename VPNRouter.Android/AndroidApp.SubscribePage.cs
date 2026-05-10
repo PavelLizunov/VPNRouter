@@ -391,12 +391,15 @@ public partial class AndroidApp
     /// </summary>
     private Border BuildSubscribeFooterActions()
     {
+        // POL-1: Test all + Deep verify use desktop's `Padding="10,4" FontSize="10"`
+        // (SubscribePage.axaml lines 210-225 — same shape as ServersPage so
+        // both tabs read consistently in the action bar row).
         _subsAggTestAllBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersTestAll,
-            FontSize = 11,
+            FontSize = 10,
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(10, 5),
+            Padding = new Thickness(10, 4),
             Background = GetBrush("SuccessSolidBrush"),
             Foreground = Brushes.White,
             BorderThickness = new Thickness(0),
@@ -408,9 +411,9 @@ public partial class AndroidApp
         _subsAggDeepVerifyBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvServersDeepVerify,
-            FontSize = 11,
+            FontSize = 10,
             FontWeight = FontWeight.SemiBold,
-            Padding = new Thickness(10, 5),
+            Padding = new Thickness(10, 4),
             Background = GetBrush("AccentSolidBrush"),
             Foreground = GetBrush("AccentOnSolidBrush"),
             BorderThickness = new Thickness(0),
@@ -428,11 +431,15 @@ public partial class AndroidApp
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
 
+        // POL-1: Refresh all uses desktop's compact "8,3" / FontSize 10
+        // pattern from SubscribePage.axaml line 257 (`Padding="8,3" FontSize="10"`).
+        // Pre-POL-1 used Padding=10,5 + FontSize=11 — too heavy for a
+        // tertiary action sitting next to two primary CTAs.
         _subsRefreshAllBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvSubscribeRefreshAll,
-            FontSize = 11,
-            Padding = new Thickness(10, 5),
+            FontSize = 10,
+            Padding = new Thickness(8, 3),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             Background = GetBrush("SurfaceRaisedBrush"),
             BorderBrush = GetBrush("BorderDefaultBrush"),
@@ -1048,14 +1055,19 @@ public partial class AndroidApp
     /// glyph + a small touch-friendly padding bump. Pre-rev1 used a fixed
     /// 32×32 box which made the row look like a row of square chips
     /// instead of the lightweight icon trio used on desktop.
+    /// <para>POL-1: glyph size + horizontal padding tightened to the
+    /// desktop spec — `FontSize="11" Padding="2"` (was 14 + 6,2 which made
+    /// each button noticeably larger than the corresponding desktop icon).
+    /// Tap target stays touch-friendly via the row Padding="8,5" parent
+    /// + the icon's intrinsic height.</para>
     /// </summary>
     private Avalonia.Controls.Button StyledRowActionButton(string glyph, string? tooltip)
     {
         var btn = new Avalonia.Controls.Button
         {
             Content = glyph,
-            FontSize = 14,
-            Padding = new Thickness(6, 2),
+            FontSize = 11,
+            Padding = new Thickness(2),
             MinWidth = 0,
             MinHeight = 0,
             HorizontalContentAlignment = HorizontalAlignment.Center,
