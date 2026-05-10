@@ -1135,6 +1135,24 @@ public static class Strings
         ? "← Выберите категорию"
         : "← Select a category";
 
+    // ── Phase D (AND-ADV-APPS-CATEGORIES, 2026-05-10) — Applications tab on
+    // Android. The tab now mirrors desktop ApplicationsPage with a left
+    // category sidebar + right per-category app list. These three keys are
+    // surface text the desktop already had implicit equivalents for (the
+    // "← Select a category" hint maps to SelectCategoryHint above; these
+    // are the picker-mode + bottom-row shells specific to Android's
+    // package-based picker).
+    public static string AdvAppsCategoryNamePlaceholder => Ru
+        ? "Имя категории"
+        : "Category name";
+    public static string AdvAppsAddCategoryButton => Ru
+        ? "+ Новая категория"
+        : "+ New category";
+    public static string AdvAppsSelectCategoryHint => SelectCategoryHint;
+    /// <summary>Android-only catch-all (no built-in profile maps to it).
+    /// Shown at the bottom of the sidebar, scope = all installed apps.</summary>
+    public static string AdvAppsCategoryCustom => Ru ? "Свои" : "Custom";
+
     // Tooltips — Network tab
     public static string TipBypassRu => Ru
         ? "RU-диапазоны обходят VPN и идут напрямую через ISP"

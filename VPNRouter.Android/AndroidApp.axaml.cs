@@ -380,6 +380,24 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _appPickerModeHint;
     private string _appPickerMode = "include";
 
+    // Phase D (AND-ADV-APPS-CATEGORIES, 2026-05-10) — left category sidebar
+    // + right per-category content pane. Mirrors desktop ApplicationsPage
+    // (ColumnDefinitions="120,*"). Active category id persists via
+    // KeyApplicationsActiveCategory; null/empty = "Select a category"
+    // placeholder. Custom user categories live in
+    // _advAppsCustomCategories (loaded from AndroidStorage on tab activation,
+    // persisted via SetCustomCategories).
+    private string? _advAppsActiveCategoryId;
+    private StackPanel? _advAppsCategoryListPanel;
+    private TextBox? _advAppsNewCategoryInput;
+    private Avalonia.Controls.Button? _advAppsAddCategoryBtn;
+    private TextBlock? _advAppsRightPanePlaceholder;
+    private Border? _advAppsRightPaneScopeContainer;
+    private List<VPNRouter.Core.Models.CustomCategory> _advAppsCustomCategories = new();
+    private readonly Dictionary<string, Border> _advAppsCategoryRowMap = new(System.StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, TextBlock> _advAppsCategoryCountMap = new(System.StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, TextBlock> _advAppsCategoryNameMap = new(System.StringComparer.OrdinalIgnoreCase);
+
     // State
     // AND-RESTORE-SIMPLE (2026-05-09) — default true to mirror desktop
     // SimpleMode VM `_smpFormExpanded = true`. Pre-fix this defaulted to
@@ -5119,6 +5137,12 @@ public partial class AndroidApp : Avalonia.Application
     /// Re-seed Apps tab state from persisted storage. Called by the
     /// Advanced shell on tab activation. Replaces the body of the old
     /// ShowAppPicker.
+    /// <para>Phase D: also rebuilds the category sidebar (10 built-ins +
+    /// any user-defined custom categories from
+    /// <see cref="AndroidStorage.GetCustomCategories"/>) and restores the
+    /// last-active category id from
+    /// <see cref="AndroidStorage.GetApplicationsActiveCategory"/>. Empty / no
+    /// active id keeps the right pane on the placeholder.</para>
     /// </summary>
     private async void ReseedAppPickerTabState()
     {
@@ -5150,6 +5174,21 @@ public partial class AndroidApp : Avalonia.Application
             _appPickerList.ItemsSource = new[] { Localization.PerAppLoading };
         }
 
+        // Phase D — build the sidebar before the cache load so the row
+        // styling (active highlight) is in place when the user lands on
+        // the tab. Counts paint as zeros first; UpdateAllCategoryCounts
+        // refreshes them after the cache returns.
+        _advAppsCustomCategories = AndroidStorage.GetCustomCategories();
+        var savedActiveId = AndroidStorage.GetApplicationsActiveCategory();
+        _advAppsActiveCategoryId = ResolveActiveCategoryId(savedActiveId);
+        RebuildAppCategorySidebar();
+
+        var hasActive = !string.IsNullOrEmpty(_advAppsActiveCategoryId);
+        if (_advAppsRightPanePlaceholder is not null)
+            _advAppsRightPanePlaceholder.IsVisible = !hasActive;
+        if (_advAppsRightPaneScopeContainer is not null)
+            _advAppsRightPaneScopeContainer.IsVisible = hasActive;
+
         try
         {
             _appPickerCache = await System.Threading.Tasks.Task.Run(() =>
@@ -5161,7 +5200,20 @@ public partial class AndroidApp : Avalonia.Application
         {
             _appPickerCache = new List<AppListLoader.AppEntry>();
         }
+        UpdateAllCategoryCounts();
         ApplyAppPickerFilter();
+    }
+
+    /// <summary>Validate the persisted active-category id against the current
+    /// built-in list + user-defined categories. Returns null if the id no
+    /// longer maps (e.g. user removed a custom category between sessions),
+    /// so the placeholder shows on next open instead of orphan styling.</summary>
+    private string? ResolveActiveCategoryId(string? id)
+    {
+        if (string.IsNullOrEmpty(id)) return null;
+        if (AndroidCategoryDefaults.Find(id) is not null) return id;
+        if (IsUserDefinedCategory(id)) return id;
+        return null;
     }
 
     private void OnAppPickerSaveClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -5260,16 +5312,28 @@ public partial class AndroidApp : Avalonia.Application
     /// per visible app. Each row's CheckedChanged updates
     /// <see cref="_appPickerSelected"/> immediately so Save just persists
     /// the in-memory set.
+    /// <para>Phase D: rows are first scoped to the active category. Built-in
+    /// categories filter to their hint-package list; the catch-all "Custom"
+    /// shows all apps; user-created categories show all apps too (the
+    /// CustomCategory.Apps[] tag list grows as the user checks them while
+    /// the category is active).</para>
     /// </summary>
     private void ApplyAppPickerFilter()
     {
         if (_appPickerList is null) return;
         var search = _appPickerSearch?.Text?.Trim() ?? string.Empty;
+
+        // Phase D — category scope is the first filter. No active category =
+        // empty pane (placeholder is shown by SetActiveAppCategory anyway,
+        // but ItemsSource still needs to be empty so the ListBox doesn't
+        // flash the previous category's rows).
+        IEnumerable<AppListLoader.AppEntry> scoped = ScopeAppsToActiveCategory(_appPickerCache);
+
         var filtered = string.IsNullOrEmpty(search)
-            ? _appPickerCache
-            : _appPickerCache.Where(a =>
+            ? scoped
+            : scoped.Where(a =>
                 a.Label.Contains(search, System.StringComparison.OrdinalIgnoreCase)
-                || a.PackageName.Contains(search, System.StringComparison.OrdinalIgnoreCase)).ToList();
+                || a.PackageName.Contains(search, System.StringComparison.OrdinalIgnoreCase));
 
         // v3.0 — Selected / Available split mirrors desktop ApplicationsPage
         // category structure. Sections are computed only at filter time
@@ -5286,7 +5350,7 @@ public partial class AndroidApp : Avalonia.Application
                 availableRows.Add(app);
         }
 
-        var rows = new List<Control>(filtered.Count + 2);
+        var rows = new List<Control>(selectedRows.Count + availableRows.Count + 2);
         if (selectedRows.Count > 0)
         {
             rows.Add(BuildPickerSectionHeader(Localization.PerAppGroupSelected, selectedRows.Count));
@@ -5300,6 +5364,49 @@ public partial class AndroidApp : Avalonia.Application
 
         _appPickerList.ItemsSource = rows;
         UpdateAppPickerCount();
+    }
+
+    /// <summary>Filter the installed-app cache down to the apps that belong
+    /// to the active category. Built-ins use a static hint package set; the
+    /// catch-all + user-defined custom categories surface all installed
+    /// apps. Empty / unknown active id returns an empty sequence so the
+    /// right pane shows nothing while the placeholder is visible.</summary>
+    private IEnumerable<AppListLoader.AppEntry> ScopeAppsToActiveCategory(IEnumerable<AppListLoader.AppEntry> source)
+    {
+        if (string.IsNullOrEmpty(_advAppsActiveCategoryId))
+            return System.Linq.Enumerable.Empty<AppListLoader.AppEntry>();
+
+        // Custom catch-all + user-created custom categories: scope = all
+        // installed apps. Same code path so the user can pick freely from
+        // the full list either way.
+        if (AndroidCategoryDefaults.IsCustomCatchAll(_advAppsActiveCategoryId)
+            || IsUserDefinedCategory(_advAppsActiveCategoryId))
+        {
+            return source;
+        }
+
+        var def = AndroidCategoryDefaults.Find(_advAppsActiveCategoryId);
+        if (def is null || def.PackageHints.Count == 0)
+            return System.Linq.Enumerable.Empty<AppListLoader.AppEntry>();
+
+        var hintSet = new HashSet<string>(def.PackageHints, System.StringComparer.OrdinalIgnoreCase);
+        return source.Where(a => hintSet.Contains(a.PackageName));
+    }
+
+    private bool IsUserDefinedCategory(string id)
+    {
+        foreach (var cat in _advAppsCustomCategories)
+            if (string.Equals(cat.Name, id, System.StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
+    private VPNRouter.Core.Models.CustomCategory? FindUserDefinedCategory(string id)
+    {
+        foreach (var cat in _advAppsCustomCategories)
+            if (string.Equals(cat.Name, id, System.StringComparison.OrdinalIgnoreCase))
+                return cat;
+        return null;
     }
 
     private Control BuildAppRow(AppListLoader.AppEntry app)
@@ -5349,7 +5456,33 @@ public partial class AndroidApp : Avalonia.Application
                 _appPickerSelected.Add(app.PackageName);
             else
                 _appPickerSelected.Remove(app.PackageName);
+
+            // Phase D — when active category is a user-defined custom one,
+            // mirror the toggle into its Apps[] tag list so the sidebar
+            // count + persisted membership reflect what the user just did.
+            // Built-in hint lists are static; toggling there only affects
+            // _appPickerSelected.
+            if (!string.IsNullOrEmpty(_advAppsActiveCategoryId))
+            {
+                var custom = FindUserDefinedCategory(_advAppsActiveCategoryId);
+                if (custom is not null)
+                {
+                    custom.Apps ??= new List<string>();
+                    if (checkbox.IsChecked == true)
+                    {
+                        if (!custom.Apps.Any(p => string.Equals(p, app.PackageName, System.StringComparison.OrdinalIgnoreCase)))
+                            custom.Apps.Add(app.PackageName);
+                    }
+                    else
+                    {
+                        custom.Apps.RemoveAll(p => string.Equals(p, app.PackageName, System.StringComparison.OrdinalIgnoreCase));
+                    }
+                    AndroidStorage.SetCustomCategories(_advAppsCustomCategories);
+                }
+            }
+
             UpdateAppPickerCount();
+            UpdateAllCategoryCounts();
         };
 
         // 32dp icon — Material medium list-icon size, matches the touch
@@ -5446,18 +5579,129 @@ public partial class AndroidApp : Avalonia.Application
     }
 
     /// <summary>
-    /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the Apps tab
-    /// inside the Advanced shell. Returns the include/exclude segmented
-    /// row + filter row + system toggle + apps ListBox + Save bar. The
-    /// shell provides the title bar / close button.
+    /// Phase D (AND-ADV-APPS-CATEGORIES, 2026-05-10) — Applications tab body.
+    /// Mirrors desktop <c>ApplicationsPage.axaml</c> two-column master/detail
+    /// layout: ~140dp category sidebar on the left (with an inline
+    /// "+ New category" form at the bottom) and the per-category app list on
+    /// the right. The right pane shows the include/exclude mode picker, a
+    /// search box, the system-apps toggle, and a scoped checkbox list of
+    /// installed apps. The shell provides the title bar / close button.
+    /// <para>The 10 built-in categories come from <see cref="AndroidCategoryDefaults"/>;
+    /// user-created categories live in <see cref="AndroidStorage.GetCustomCategories"/>
+    /// and are appended below the catch-all "Custom" row.</para>
     /// </summary>
     private Control BuildAppPickerTabContent()
     {
-        // v3.0 v2.32.0 — include/exclude segmented control + hint, sitting
-        // between the title bar and the search box. Tap include → only the
-        // checked apps route via VPN; tap exclude → checked apps bypass VPN
-        // (matches VpnRouterService.java's addAllowedApplication /
-        // addDisallowedApplication branches).
+        // ── Left sidebar: scrollable category list + bottom-anchored "+ New" form
+        _advAppsCategoryListPanel = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Vertical,
+            Spacing = 0,
+        };
+        var sidebarScroller = new ScrollViewer
+        {
+            Content = _advAppsCategoryListPanel,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        };
+
+        _advAppsNewCategoryInput = new TextBox
+        {
+            Watermark = Localization.AdvAppsCategoryNamePlaceholder,
+            FontSize = 10,
+            Padding = new Thickness(6, 4),
+            Margin = new Thickness(4, 4, 4, 2),
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+            BorderThickness = new Thickness(1),
+        };
+        _advAppsNewCategoryInput.BindToken(TextBox.BackgroundProperty, "SurfaceBaseBrush");
+        _advAppsNewCategoryInput.BindToken(TextBox.BorderBrushProperty, "BorderSubtleBrush");
+
+        _advAppsAddCategoryBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.AdvAppsAddCategoryButton,
+            FontSize = 10,
+            FontWeight = FontWeight.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(4, 0, 4, 4),
+            Padding = new Thickness(4, 4),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            BorderThickness = new Thickness(0),
+        };
+        _advAppsAddCategoryBtn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentSolidBrush");
+        _advAppsAddCategoryBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
+        _advAppsAddCategoryBtn.Click += OnAdvAppsAddCategoryClicked;
+
+        var sidebarGrid = new Grid
+        {
+            RowDefinitions = new RowDefinitions("*,Auto,Auto"),
+        };
+        Grid.SetRow(sidebarScroller, 0);
+        Grid.SetRow(_advAppsNewCategoryInput, 1);
+        Grid.SetRow(_advAppsAddCategoryBtn, 2);
+        sidebarGrid.Children.Add(sidebarScroller);
+        sidebarGrid.Children.Add(_advAppsNewCategoryInput);
+        sidebarGrid.Children.Add(_advAppsAddCategoryBtn);
+
+        var sidebar = new Border
+        {
+            Width = 140,
+            BorderThickness = new Thickness(0, 0, 1, 0),
+            Child = sidebarGrid,
+        };
+        sidebar.BindToken(Border.BackgroundProperty, "SurfaceSunkenBrush");
+        sidebar.BindToken(Border.BorderBrushProperty, "BorderDefaultBrush");
+
+        // ── Right pane: placeholder ("← Select a category") OR scoped picker
+        _advAppsRightPanePlaceholder = new TextBlock
+        {
+            Text = Localization.AdvAppsSelectCategoryHint,
+            FontSize = 11,
+            FontStyle = FontStyle.Italic,
+            Opacity = 0.5,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        _advAppsRightPanePlaceholder.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+
+        _advAppsRightPaneScopeContainer = new Border
+        {
+            Child = BuildAppPickerScopeBody(),
+            IsVisible = false,
+        };
+
+        var rightPane = new Grid();
+        rightPane.Children.Add(_advAppsRightPaneScopeContainer);
+        rightPane.Children.Add(_advAppsRightPanePlaceholder);
+
+        // ── Shell: 140dp sidebar | * right pane
+        var shell = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+        };
+        Grid.SetColumn(sidebar, 0);
+        Grid.SetColumn(rightPane, 1);
+        shell.Children.Add(sidebar);
+        shell.Children.Add(rightPane);
+
+        var body = new Border { Child = shell };
+        body.BindToken(Border.BackgroundProperty, "SurfaceAppBrush");
+        return body;
+    }
+
+    /// <summary>
+    /// Right-pane content used when a category is active: include/exclude
+    /// segmented control + hint + search + system-apps toggle + apps ListBox
+    /// + Save bar. Factored out of <see cref="BuildAppPickerTabContent"/> so
+    /// the placeholder ("← Select a category") and the scoped body can swap
+    /// via <see cref="_advAppsRightPaneScopeContainer"/> visibility without
+    /// rebuilding the widget tree.
+    /// </summary>
+    private Control BuildAppPickerScopeBody()
+    {
         _appPickerModeLabel = new TextBlock
         {
             Text = Localization.PerAppPickerModeLabel,
@@ -5587,13 +5831,211 @@ public partial class AndroidApp : Avalonia.Application
         dock.Children.Add(togglesRow);
         dock.Children.Add(_appPickerSaveBtn!);
         dock.Children.Add(_appPickerList!);
+        return dock;
+    }
 
-        var body = new Border
+    /// <summary>
+    /// Rebuild the left category sidebar: 10 built-ins + any user-created
+    /// custom categories. Each row is a clickable Border so the whole pill
+    /// reacts to taps; the active row gets <c>AccentBgSubtleBrush</c> +
+    /// <c>AccentFgBrush</c> styling. Counts come from
+    /// <see cref="ComputeCategoryCount"/> against the cached app list.
+    /// </summary>
+    private void RebuildAppCategorySidebar()
+    {
+        if (_advAppsCategoryListPanel is null) return;
+        _advAppsCategoryListPanel.Children.Clear();
+        _advAppsCategoryRowMap.Clear();
+        _advAppsCategoryCountMap.Clear();
+        _advAppsCategoryNameMap.Clear();
+
+        // Built-ins first (Custom catch-all is the last entry in the list).
+        foreach (var def in AndroidCategoryDefaults.All)
         {
-            Child = dock,
+            var displayName = AndroidCategoryDefaults.IsCustomCatchAll(def.Id)
+                ? Localization.AdvAppsCategoryCustom
+                : Localization.GroupDisplayName(def.Id);
+            var row = MakeAppsCategoryRow(def.Id, displayName, isCustom: false);
+            _advAppsCategoryListPanel.Children.Add(row);
+        }
+
+        // User-created custom categories below the built-ins.
+        foreach (var cat in _advAppsCustomCategories)
+        {
+            if (string.IsNullOrWhiteSpace(cat.Name)) continue;
+            var row = MakeAppsCategoryRow(cat.Name, cat.Name, isCustom: true);
+            _advAppsCategoryListPanel.Children.Add(row);
+        }
+
+        UpdateAllCategoryCounts();
+        StyleActiveCategoryRow();
+    }
+
+    /// <summary>One row in the category sidebar — name on the left, optional
+    /// count on the right. Whole row is tappable; active row repaints via
+    /// <see cref="StyleActiveCategoryRow"/>.</summary>
+    private Border MakeAppsCategoryRow(string id, string displayName, bool isCustom)
+    {
+        var nameTb = new TextBlock
+        {
+            Text = displayName,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
         };
-        body.BindToken(Border.BackgroundProperty, "SurfaceAppBrush");
-        return body;
+        nameTb.BindToken(TextBlock.ForegroundProperty, "TextSecondaryBrush");
+
+        var countTb = new TextBlock
+        {
+            Text = string.Empty,
+            FontSize = 9,
+            FontFamily = new FontFamily("Consolas, SF Mono, Cascadia Code, Ubuntu Mono, monospace"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(4, 0, 4, 0),
+        };
+        countTb.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            Margin = new Thickness(0, 4, 0, 4),
+        };
+        Grid.SetColumn(nameTb, 0);
+        Grid.SetColumn(countTb, 1);
+        grid.Children.Add(nameTb);
+        grid.Children.Add(countTb);
+
+        var border = new Border
+        {
+            Padding = new Thickness(8, 4),
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+            Background = Brushes.Transparent,
+            Margin = new Thickness(2, 0),
+            Child = grid,
+        };
+        border.PointerPressed += (_, _) => SetActiveAppCategory(id);
+
+        _advAppsCategoryRowMap[id] = border;
+        _advAppsCategoryCountMap[id] = countTb;
+        _advAppsCategoryNameMap[id] = nameTb;
+        return border;
+    }
+
+    /// <summary>Recompute "selected ∩ scope" count for every sidebar row.</summary>
+    private void UpdateAllCategoryCounts()
+    {
+        foreach (var def in AndroidCategoryDefaults.All)
+        {
+            if (!_advAppsCategoryCountMap.TryGetValue(def.Id, out var tb)) continue;
+            var n = ComputeCategoryCount(def.Id);
+            tb.Text = n > 0 ? n.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty;
+        }
+        foreach (var cat in _advAppsCustomCategories)
+        {
+            if (string.IsNullOrWhiteSpace(cat.Name)) continue;
+            if (!_advAppsCategoryCountMap.TryGetValue(cat.Name, out var tb)) continue;
+            var n = ComputeCustomCategoryCount(cat);
+            tb.Text = n > 0 ? n.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty;
+        }
+    }
+
+    /// <summary>Selected packages within this built-in category's hint scope.
+    /// For the catch-all, that's "selected NOT in any built-in hint" so the
+    /// counts across all sidebar rows partition the selected set.</summary>
+    private int ComputeCategoryCount(string id)
+    {
+        if (AndroidCategoryDefaults.IsCustomCatchAll(id))
+        {
+            var allBuiltIn = AndroidCategoryDefaults.AllBuiltInPackages();
+            int n = 0;
+            foreach (var pkg in _appPickerSelected)
+                if (!allBuiltIn.Contains(pkg)) n++;
+            return n;
+        }
+
+        var def = AndroidCategoryDefaults.Find(id);
+        if (def is null) return 0;
+        int hits = 0;
+        foreach (var hint in def.PackageHints)
+            if (_appPickerSelected.Contains(hint)) hits++;
+        return hits;
+    }
+
+    /// <summary>Selected packages within a user-defined custom category's
+    /// tagged Apps[] list (mirrors desktop's Apps.Count display semantics for
+    /// custom categories: shows the user's own membership view).</summary>
+    private int ComputeCustomCategoryCount(VPNRouter.Core.Models.CustomCategory cat)
+    {
+        if (cat.Apps is null || cat.Apps.Count == 0) return 0;
+        int hits = 0;
+        foreach (var pkg in cat.Apps)
+            if (_appPickerSelected.Contains(pkg)) hits++;
+        return hits;
+    }
+
+    /// <summary>Repaint the active row with accent colors; reset all others
+    /// to the default neutral look.</summary>
+    private void StyleActiveCategoryRow()
+    {
+        var accentBg = GetBrush("AccentBgSubtleBrush");
+        var accentFg = GetBrush("AccentFgBrush");
+        var defaultName = GetBrush("TextSecondaryBrush");
+        var defaultCount = GetBrush("TextMutedBrush");
+
+        foreach (var kv in _advAppsCategoryRowMap)
+        {
+            var isActive = string.Equals(kv.Key, _advAppsActiveCategoryId, System.StringComparison.OrdinalIgnoreCase);
+            kv.Value.Background = isActive ? accentBg : Brushes.Transparent;
+            if (_advAppsCategoryNameMap.TryGetValue(kv.Key, out var nameTb))
+                nameTb.Foreground = isActive ? accentFg : defaultName;
+            if (_advAppsCategoryCountMap.TryGetValue(kv.Key, out var countTb))
+                countTb.Foreground = isActive ? accentFg : defaultCount;
+        }
+    }
+
+    /// <summary>Switch active category. Empty / null collapses the right
+    /// pane back to the placeholder. Persists via
+    /// <see cref="AndroidStorage.SetApplicationsActiveCategory"/> so the next
+    /// open lands on the same category.</summary>
+    private void SetActiveAppCategory(string? id)
+    {
+        _advAppsActiveCategoryId = id;
+        AndroidStorage.SetApplicationsActiveCategory(id);
+        var hasActive = !string.IsNullOrEmpty(id);
+        if (_advAppsRightPanePlaceholder is not null)
+            _advAppsRightPanePlaceholder.IsVisible = !hasActive;
+        if (_advAppsRightPaneScopeContainer is not null)
+            _advAppsRightPaneScopeContainer.IsVisible = hasActive;
+        StyleActiveCategoryRow();
+        ApplyAppPickerFilter();
+    }
+
+    /// <summary>Add a user-created custom category from the sidebar's
+    /// "+ New category" form. Trims input, ignores duplicates, persists, and
+    /// auto-activates the new row.</summary>
+    private void OnAdvAppsAddCategoryClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var raw = _advAppsNewCategoryInput?.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(raw)) return;
+
+        // Skip dupes: built-in id collision OR existing custom name.
+        if (AndroidCategoryDefaults.Find(raw) is not null) return;
+        foreach (var existing in _advAppsCustomCategories)
+            if (string.Equals(existing.Name, raw, System.StringComparison.OrdinalIgnoreCase))
+                return;
+
+        _advAppsCustomCategories.Add(new VPNRouter.Core.Models.CustomCategory
+        {
+            Name = raw,
+            Apps = new List<string>(),
+            Enabled = true,
+        });
+        AndroidStorage.SetCustomCategories(_advAppsCustomCategories);
+
+        if (_advAppsNewCategoryInput is not null) _advAppsNewCategoryInput.Text = string.Empty;
+        RebuildAppCategorySidebar();
+        SetActiveAppCategory(raw);
     }
 
     private void OnMenuCopyLogPathClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
