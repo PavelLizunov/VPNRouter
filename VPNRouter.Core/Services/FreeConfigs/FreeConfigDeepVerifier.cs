@@ -323,8 +323,17 @@ public sealed class FreeConfigDeepVerifier
     /// <summary>
     /// Build a minimal sing-box JSON: SOCKS inbound on loopback + single VLESS outbound.
     /// Route everything through the VLESS outbound (no split tunneling, no profiles).
+    ///
+    /// <para>v2.32.0 (Android Bug #1): exposed as <c>internal</c> and given a
+    /// nullable <paramref name="clashPort"/> so the Android libbox-backed
+    /// verifier can reuse the same builder. When <paramref name="clashPort"/>
+    /// is null we omit the <c>experimental.clash_api</c> block — Android's
+    /// verify box runs alongside the main VPN box which may already own
+    /// :9090 for hot-reload, and the verify probe doesn't need the Clash
+    /// RPC anyway (we kill the box at the end of <see cref="VerifyOneAsync"/>
+    /// instead of hot-reloading it).</para>
     /// </summary>
-    private static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int clashPort)
+    internal static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int? clashPort)
     {
         // Use JsonNode to build the config cleanly.
         var outbound = new JsonObject
@@ -428,14 +437,18 @@ public sealed class FreeConfigDeepVerifier
                     new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" },
                 },
             },
-            ["experimental"] = new JsonObject
+        };
+
+        if (clashPort is int port)
+        {
+            root["experimental"] = new JsonObject
             {
                 ["clash_api"] = new JsonObject
                 {
-                    ["external_controller"] = $"127.0.0.1:{clashPort}",
+                    ["external_controller"] = $"127.0.0.1:{port}",
                 },
-            },
-        };
+            };
+        }
 
         return root.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
     }

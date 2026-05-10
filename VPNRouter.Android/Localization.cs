@@ -805,6 +805,7 @@ internal static class Localization
     public static string FcStatusPoolEmpty => global::VPNRouter.Core.Localization.Strings.FcStatusPoolEmpty;
     public static string FcStatusTesting => global::VPNRouter.Core.Localization.Strings.FcStatusTesting;
     public static string FcStatusFound => global::VPNRouter.Core.Localization.Strings.FcStatusFound;
+    public static string FcStatusDeepVerifying => global::VPNRouter.Core.Localization.Strings.FcStatusDeepVerifying;
     public static string FcStatusDoneOk => global::VPNRouter.Core.Localization.Strings.FcStatusDoneOk;
     public static string FcStatusDoneExhausted => global::VPNRouter.Core.Localization.Strings.FcStatusDoneExhausted;
     public static string FcUseSelected => global::VPNRouter.Core.Localization.Strings.FcUseSelected;

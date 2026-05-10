@@ -18,17 +18,24 @@ namespace VPNRouter.Android;
 ///   <item>NO Avalonia.Threading.Dispatcher — Android's BuildXxxView()
 ///   already runs on UI thread; events fire synchronously and the UI
 ///   layer can dispatch back if it ever runs an op off-thread.</item>
-///   <item>NO FreeConfigDeepVerifier — Android sing-box is libbox
-///   in-process, single instance; can't spawn extra runtimes per probe.
-///   We use TCP+TLS (FreeConfigTester) as the success bar. Status=Ok,
-///   not Status=Verified.</item>
-///   <item>NO bandwidth column — without Deep Verify, no throughput
-///   measurement.</item>
+///   <item>NO bandwidth column — Deep Verify on Android doesn't run
+///   the 5&#x202F;MB throughput probe (would need a separate libbox box
+///   per measurement, doubling spin-up cost).</item>
 ///   <item>NO GC.Collect / SkiaSharp.SKGraphics.PurgeAllCaches — runtime
 ///   handles GC on Android.</item>
 ///   <item>NO per-row Recheck / RecheckAllStale — Saved tab here is a
 ///   passive snapshot of last-find. Refresh = run Find again.</item>
 /// </list>
+///
+/// <para>Bug&#x202F;#1 (v3.0 android-alpha r5+, 2026-05-11): Deep Verify is
+/// now present via <see cref="AndroidFreeConfigDeepVerifier"/>, which
+/// spins a transient libbox <c>BoxService</c> per config (SOCKS inbound
+/// only — no TUN) and HTTP-probes Cloudflare through it. Pre-fix the
+/// pipeline stopped at TCP+TLS and every entry showed single&#x202F;✓.
+/// The post-TCP-TLS Deep Verify pass upgrades successful entries to
+/// Status=Verified (✓✓) in place — see <see cref="OnEntryUpgraded"/>
+/// for the UI hook. Verify is sequential (one box at a time) since
+/// libbox's concurrent-instance behavior is uncharted.</para>
 ///
 /// <para>Cache + pool fetch use the unmodified Core services
 /// (<see cref="FreeConfigCache"/>, <see cref="FreeConfigPoolFetcher"/>,
@@ -41,6 +48,7 @@ internal sealed class AndroidFreeConfigsOrchestrator
     private readonly FreeConfigCache _cache;
     private readonly FreeConfigPoolFetcher _poolFetcher;
     private readonly FreeConfigTester _tester;
+    private readonly AndroidFreeConfigDeepVerifier _deepVerifier;
     private readonly ILogger _logger;
 
     /// <summary>
@@ -60,11 +68,11 @@ internal sealed class AndroidFreeConfigsOrchestrator
         _poolFetcher = new FreeConfigPoolFetcher(logger);
         _tester = new FreeConfigTester
         {
-            // v2.32.0: TCP+TLS = success bar on Android (no Deep Verify
-            // path). Keep TLS validation on so honeypots / dead Reality
-            // endpoints get filtered.
+            // TCP+TLS gate: filters out honeypots / dead Reality endpoints
+            // before they reach the (much slower) Deep Verify pass below.
             RequireTlsHandshake = true,
         };
+        _deepVerifier = new AndroidFreeConfigDeepVerifier(logger);
     }
 
     public bool IsBusy => _busy;
@@ -77,6 +85,17 @@ internal sealed class AndroidFreeConfigsOrchestrator
     public event Action<FreeConfigEntry>? OnFound;
     public event Action<int>? OnFinished; // verified count this run
     public event Action<string>? OnFailed;
+
+    /// <summary>
+    /// Bug&#x202F;#1: fired when an already-found entry transitions from
+    /// <see cref="FreeConfigStatus.Ok"/> (single&#x202F;✓) to
+    /// <see cref="FreeConfigStatus.Verified"/> (✓✓) after the Deep Verify
+    /// pass. The UI handler should replace the entry in its
+    /// ObservableCollection so the row re-renders with the new badge —
+    /// FreeConfigEntry is a plain POCO (no INotifyPropertyChanged), so
+    /// in-place mutation alone won't redraw.
+    /// </summary>
+    public event Action<FreeConfigEntry>? OnEntryUpgraded;
 
     /// <summary>
     /// Lazy-load the persisted saved list from cache. Idempotent — call
@@ -221,6 +240,55 @@ internal sealed class AndroidFreeConfigsOrchestrator
                     OnStatus?.Invoke(string.Format(Localization.FcStatusFound,
                         verifiedThisRun.Count, target));
                 }
+            }
+
+            // Bug #1 (2026-05-11): Deep Verify pass on the entries we just
+            // surfaced. Runs sequentially — libbox concurrent-instance
+            // behavior is uncharted (sing-box.Service was designed for one
+            // active instance per process; SagerNet's reference Android
+            // app never tested otherwise). Cost is ~3-5 s per entry on
+            // this hardware, so 10 entries ≈ 30-50 s tail latency after
+            // the user already sees them as single&#x202F;✓.
+            //
+            // Failure modes are all isolated by AndroidFreeConfigDeepVerifier:
+            // bridge unavailable → returns silently; libbox throws →
+            // logged + entry stays Ok (single ✓); per-config timeout →
+            // entry stays Ok. None of these abort the pass — we always
+            // continue to the next entry.
+            if (verifiedThisRun.Count > 0)
+            {
+                OnStatus?.Invoke(string.Format(Localization.FcStatusDeepVerifying,
+                    0, verifiedThisRun.Count));
+                int deepOk = 0;
+                for (int dvi = 0; dvi < verifiedThisRun.Count; dvi++)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    var entry = verifiedThisRun[dvi];
+                    try
+                    {
+                        await _deepVerifier.VerifyOneAsync(entry, ct);
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning(ex, "[Android.FreeConfigs] deep verify threw for {host}:{port}",
+                            entry.Host, entry.Port);
+                    }
+
+                    if (entry.Status == FreeConfigStatus.Verified)
+                    {
+                        deepOk++;
+                        // Persist the upgraded entry back into the saved
+                        // snapshot so a re-open shows ✓✓ for it without
+                        // re-running the verify pass.
+                        UpsertSaved(entry);
+                        OnEntryUpgraded?.Invoke(entry);
+                    }
+                    OnStatus?.Invoke(string.Format(Localization.FcStatusDeepVerifying,
+                        dvi + 1, verifiedThisRun.Count));
+                }
+                _logger.Information("[Android.FreeConfigs] deep verify: {ok}/{total} upgraded to ✓✓",
+                    deepOk, verifiedThisRun.Count);
             }
 
             // Persist cumulative saved set + emit final status.
