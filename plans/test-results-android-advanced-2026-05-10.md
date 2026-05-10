@@ -1,165 +1,202 @@
-# Android Advanced — TEST-RUN-ALL results — 2026-05-10
+# Android Advanced — functional test session 2026-05-10
 
-**Status:** ⛔ **BLOCKED — environment, not application**
-**Chip:** TEST-RUN-ALL (consolidated TEST-1..TEST-8)
-**Plan:** [vpnrouter-android-functional-testing-and-polish-plan.md](vpnrouter-android-functional-testing-and-polish-plan.md)
-**Worktree:** `flamboyant-varahamihira-bb39a4` on branch `claude/flamboyant-varahamihira-bb39a4` @ HEAD `765b74c`
+> **Note**: a parallel TEST-RUN-ALL chip (commit `743cba0`) also produced a report at this same path. That chip's worktree could not reach the phone (VirtualBox VM has no USB pass-through). This report supersedes it because the test was actually executed on real hardware via `slovn@192.168.0.246` (Mac mini's `adb` over SSH). Useful bootstrap insight from the other chip: a fresh git worktree needs `cp /c/Project/VPNRouter/VPNRouter.Android/Lib/libbox.aar VPNRouter.Android/Lib/` before `dotnet publish` succeeds — the AAR is gitignored. Worth folding into TEST-RUN-* chip prompts.
 
----
+**Build under test**: APK from main `765b74c` (POL-1-CARDS + POL-2-TABS landed) — `com.ninitux.vpnrouter-Signed.apk` 68.9 MB, `versionName=3.0.0-android-alpha`.
 
-## TL;DR
+**Phone**: KYOCERA A101BM (`A101BM`, serial `54499112209`), Android 12, 1080×1920 px / 450 dpi, USB-connected to Mac mini `slovn@192.168.0.246` (adb via SSH).
 
-- **TEST-1..TEST-8: ALL BLOCKED.** None of the 8 functional tests could be executed.
-- **Root cause:** target phone (KYOCERA A101BM, USB-connected, transport_id:1) is **not reachable from this VirtualBox VM via ADB.** No USB pass-through and no wireless ADB target configured.
-- **APK build itself: PASS** (re-verified). `com.ninitux.vpnrouter-Signed.apk` (67 MB) built successfully from current `main` HEAD after restoring the gitignored `VPNRouter.Android/Lib/libbox.aar`. Once the phone reconnects, install + run is one `adb install -r` away.
-- **Defects filed:** 0 application defects (all execution gates failed at install step).
-- **Action requested:** user attaches phone to VM (USB pass-through in VirtualBox host, or wireless ADB), then re-runs this chip — APK is already on disk and skips ~6 min of build.
+**Tester**: Claude Code session, automated via `adb shell input tap` / `screencap` / `uiautomator dump`.
+
+**Test asset**: `https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee`
+(deferred — could not exercise; see blockers).
 
 ---
 
-## STEP 0 — Build & install — partial PASS
+## Outcome
 
-| Step | Outcome | Evidence |
+| TEST | Status | Notes |
 |---|---|---|
-| `dotnet publish ...` (initial) | ❌ FAIL — javac errors in `VpnRouterService.java` | 16+ "method does not override or implement a method from a supertype" errors on `sendNotification`, `findConnectionOwner`, `writeLog`, `packageNameByUid`, `uidByPackageName`, plus `SimpleStringIterator`/`SimpleInterfaceIterator` methods |
-| Diagnose javac failure | Root cause: `VPNRouter.Android/Lib/libbox.aar` missing in this worktree (gitignored, copy-on-need) | `ls VPNRouter.Android/Lib/` → No such file or directory. AAR present in 14 other worktrees + main checkout (`/c/Project/VPNRouter/VPNRouter.Android/Lib/libbox.aar`). |
-| Restore `libbox.aar` | `cp /c/Project/VPNRouter/VPNRouter.Android/Lib/libbox.aar VPNRouter.Android/Lib/` | 11.7 MB AAR in place; not committed (gitignored). |
-| API sanity check | `javap io.nekohasekai.libbox.PlatformInterface` lists exactly the methods our code overrides — `findConnectionOwner`, `sendNotification`, `writeLog`, `packageNameByUid`, `uidByPackageName`. So `@Override`s are correct; earlier failure was strictly "AAR missing → interface absent → javac couldn't resolve". | — |
-| `dotnet publish ...` (retry) | ✅ PASS | `VPNRouter.Android/bin/Release/net8.0-android/com.ninitux.vpnrouter-Signed.apk` (67 MB), `publish/` mirror present too. AOT cross-compile of all 106 assemblies completed (`System.Private.CoreLib.dll → .so` etc.). |
-| `adb install -r ...` | ❌ BLOCKED — no device | See "Phone connectivity diagnostics" below |
-| `adb shell pm clear / monkey ...` | N/A — install never happened | — |
+| TEST-0 Pre-flight | PASS | Build, SCP, install, launch all work. App renders Simple page on cold start. |
+| TEST-1 Kebab (8 items) | **BLOCKED** | P0 DEFCT-001 — kebab tap crashes app via Avalonia accessibility provider. |
+| TEST-2 Servers | **BLOCKED** | Advanced shell only reachable via kebab (current build has no working "Advanced settings ▸" entry on Simple page; see DEFCT-002). |
+| TEST-3 Subscribe | **BLOCKED** | Same as TEST-2. |
+| TEST-4 Settings | **BLOCKED** | Same as TEST-2. |
+| TEST-5 Applications | **BLOCKED** | Same as TEST-2. |
+| TEST-6 Tools | **BLOCKED** | Same as TEST-2. |
+| TEST-7 Public | **BLOCKED** | Same as TEST-2. |
+| TEST-8 End-to-end VPN | **BLOCKED** | Subscription cannot be added (Subscribe tab unreachable). |
 
-**Note for next runner:** since the AAR isn't tracked by git, every fresh worktree needs `cp /c/Project/VPNRouter/VPNRouter.Android/Lib/libbox.aar VPNRouter.Android/Lib/` before `dotnet publish`. This is a known bootstrap step — not a defect, but a chip-prompt could mention it for future TEST-RUN chips.
+**Aggregate verdict**: P0 ship-blocker. Current `765b74c` build is NOT shippable to users — the kebab is a primary navigation control and tapping it crashes the app within ~1 second.
 
 ---
 
-## Phone connectivity diagnostics
+## TEST-0 Pre-flight (PASS)
 
-Followed the chip's documented contingency: "If phone disconnects mid-test: ... attempt reconnect (`adb kill-server && adb start-server && adb devices`), resume from next TEST."
+1. APK built on Windows VM: `dotnet publish VPNRouter.Android/VPNRouter.Android.csproj -c Release -p:RuntimeIdentifier=android-arm64 -p:AndroidSdkDirectory=$ANDROID_HOME -p:JavaSdkDirectory=$JAVA_HOME` → `bin/Release/net8.0-android/android-arm64/publish/com.ninitux.vpnrouter-Signed.apk` (68.9 MB).
+2. SCP to Mac → `/tmp/vpnrouter-test.apk`.
+3. `adb uninstall com.ninitux.vpnrouter` → `Success`. `adb install /tmp/vpnrouter-test.apk` → `Success`.
+4. Verified `versionName=3.0.0-android-alpha`, `versionCode=1`, `minSdk=23`, `targetSdk=34`.
+5. Launched via `adb shell monkey -p com.ninitux.vpnrouter -c android.intent.category.LAUNCHER 1`. App reaches Simple page in ~3.3 s (`ActivityTaskManager: Displayed ... +3s296ms`).
+6. Baseline rendering of Simple page (`01-launch.png`):
+   - Header brand row: penguin avatar · "Virtual Penguin Network" · chips VPN/Zapret/TG · ⋮ kebab.
+   - "Not connected" status card with `Traffic goes straight — pick a config and start the tunnel.` subtitle.
+   - "Config · Mode: manual · all traffic" row.
+   - "VPN config" textbox with placeholder `vless://... or https://...` + hint.
+   - "Route through VPN" radio group: Selected apps / All traffic (All traffic active).
+   - "Autostart — Configure VPN autostart at Windows boot" tile.
+   - Connect button (full-width pill).
+
+   All visually matches v2.32.0 desktop slim Simple page (modulo `manual · all traffic` default vs desktop's `manual · split` — accepted divergence per prior session).
+
+---
+
+## DEFCT-001 — P0 Kebab tap crashes app via Avalonia accessibility provider
+
+**Severity**: P0 (ship-blocker).
+**Surface**: Simple page kebab `⋮` (top-right header), and any subsequent navigation that re-opens the kebab popup.
+**Reproducer**: 1 step.
+
+### Steps to reproduce
+1. Cold launch app (`pm clear` + `monkey LAUNCHER` to ensure fresh state).
+2. Tap kebab — bounds `[900,200][990,289]`, e.g. `adb shell input tap 945 244`.
+3. Observe: app crashes within ~1 second; launcher takes over the screen.
+
+### Stack trace (full)
 
 ```
-PS> $adb = "$env:ANDROID_HOME\platform-tools\adb.exe"
-PS> & $adb devices -l
-List of devices attached
-                                                ← (empty — no devices)
-
-PS> & $adb kill-server; & $adb start-server; & $adb devices -l
-* daemon not running; starting now at tcp:5037
-* daemon started successfully
-List of devices attached
-                                                ← (still empty after restart)
-
-PS> & $adb get-state
-adb.exe: error: no devices/emulators found     ← confirmed via two paths
-
-PS> Get-PnpDevice | Where { $_.FriendlyName -match 'phone|portable|ADB|USB' }
-FriendlyName                                                  Status Class
-------------                                                  ------ -----
-Microphone (High Definition Audio Device)                     OK     AudioEndpoint
-USB Input Device                                              OK     HIDClass
-USB Root Hub (USB 3.0)                                        OK     USB
-Intel(R) USB 3.0 eXtensible Host Controller - 1.0 (Microsoft) OK     USB
-                                                ← no Android device class enumerated by Windows
+05-10 17:24:02.731 23935 23935 D AndroidRuntime: Shutting down VM
+05-10 17:24:02.731 23935 23935 E AndroidRuntime: FATAL EXCEPTION: main
+05-10 17:24:02.731 23935 23935 E AndroidRuntime: Process: com.ninitux.vpnrouter, PID: 23935
+05-10 17:24:02.731 23935 23935 E AndroidRuntime: android.runtime.JavaProxyThrowable: [System.Reflection.TargetException]: RFLCT_Targ_ITargMismatch
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at System.Reflection.MethodInvokerCommon.ValidateInvokeTarget(Unknown Source:0)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at System.Reflection.RuntimeMethodInfo.Invoke(Unknown Source:0)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at System.Reflection.RuntimePropertyInfo.SetValue(Unknown Source:0)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at System.Reflection.PropertyInfo.SetValue(Unknown Source:0)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at System.Reflection.PropertyInfo.SetValue(Unknown Source:0)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at Avalonia.Android.Automation.ToggleNodeInfoProvider.PopulateNodeInfo(Unknown Source:0)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at Avalonia.Android.AvaloniaAccessHelper.OnPopulateNodeForVirtualView(Unknown Source:0)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at AndroidX.CustomView.Widget.ExploreByTouchHelper.n_OnPopulateNodeForVirtualView_ILandroidx_core_view_accessibility_AccessibilityNodeInfoCompat_(Unknown Source:0)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at Android.Runtime.DynamicMethodNameCounter.7(Unknown Source:0)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at crc6431345fe65afe8d98.AvaloniaAccessHelper.n_onPopulateNodeForVirtualView(Native Method)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at crc6431345fe65afe8d98.AvaloniaAccessHelper.onPopulateNodeForVirtualView(AvaloniaAccessHelper.java:57)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at androidx.customview.widget.ExploreByTouchHelper.createNodeForChild(ExploreByTouchHelper.java:805)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at androidx.customview.widget.ExploreByTouchHelper.obtainAccessibilityNodeInfo(ExploreByTouchHelper.java:725)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at androidx.customview.widget.ExploreByTouchHelper$MyNodeProvider.createAccessibilityNodeInfo(ExploreByTouchHelper.java:1253)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at androidx.core.view.accessibility.AccessibilityNodeProviderCompat$AccessibilityNodeProviderApi19.createAccessibilityNodeInfo(AccessibilityNodeProviderCompat.java:51)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at android.view.AccessibilityInteractionController.populateAccessibilityNodeInfoForView(AccessibilityInteractionController.java:403)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at android.view.AccessibilityInteractionController.findAccessibilityNodeInfoByAccessibilityIdUiThread(AccessibilityInteractionController.java:358)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at android.os.Handler.dispatchMessage(Handler.java:106)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at android.os.Looper.loop(Looper.java:288)
+05-10 17:24:02.731 23935 23935 E AndroidRuntime:    at android.app.ActivityThread.main(ActivityThread.java:7885)
 ```
 
-**Interpretation:** The phone is not visible to the Windows guest at all — not an ADB authorization issue, not a driver issue, not a transport-id mix-up. The VirtualBox guest sees zero Android USB devices. Either:
+### Root cause analysis
 
-1. The phone is not physically plugged into the host, or
-2. The host has the phone but VirtualBox has not been configured to pass the USB device through to this guest.
+`Avalonia.Android.Automation.ToggleNodeInfoProvider.PopulateNodeInfo` is Avalonia 11.3's automation peer that exposes Toggle state (Checked/Unchecked) for `IToggleProvider`-implementing controls to Android's AccessibilityNodeInfo. It uses reflection (`PropertyInfo.SetValue`) to set a property on the AccessibilityNodeInfoCompat object. The `RFLCT_Targ_ITargMismatch` exception means the target instance's runtime type does not match the property's declaring type — a reflection target type mismatch.
 
-This is the same VM (`x3d_mutant`/`vboxuser` Win11 LTSC) used for the v2.32.0-android Phase A-E development per memory `MEMORY.md` ("Dev work lives in Windows 11 VirtualBox guest"). Phone passthrough in VirtualBox is not persistent across reboots unless explicitly attached as a "USB device filter" — likely lapsed.
+This is invoked **automatically** by Android's accessibility framework (`AccessibilityInteractionController`) any time a focusable element changes. Crucially, this happens regardless of whether TalkBack / Voice Access / any user-facing accessibility service is enabled — Android core polls for various reasons (focus tracking, animations, gesture detection). On this device, with `accessibility_enabled=0` and `enabled_accessibility_services=null`, the crash still reproduces. So this is **not** limited to users with accessibility on.
 
-**No wireless-ADB fallback is configured.** Searched `tools/`, `plans/ui-testing-workflow.md`, and recent commits for `adb connect <ip>` / `5555` references — none. (`tools/zapret/winws.exe` matches the regex but is unrelated binary content.)
+The kebab popup contains `MakeSegmentButton`-built segment rows for theme (Light|Dark) and language (RU|EN). They are plain `Avalonia.Controls.Button`, not `ToggleButton`/`CheckBox`. Yet `ToggleNodeInfoProvider` is being invoked on them, which suggests either:
+(a) Avalonia 11.3 incorrectly assigns a Toggle automation peer to plain Buttons under some condition (a Avalonia bug — see avalonia/Avalonia issues around `AvaloniaAccessHelper`), OR
+(b) Some control elsewhere in the popup tree (a `RadioButton`, `CheckBox`, or `ToggleSwitch`) has a peer with a property type mismatch.
 
----
+Searching `VPNRouter.Android/AndroidApp.axaml.cs:790-860` (kebab popup construction): the popup contains a `StackPanel` with theme/language segment rows, three diagnostic Buttons, three troubleshooting Buttons, an About row, and an Advanced toggle Button. No `CheckBox`/`ToggleSwitch`/`RadioButton`. So hypothesis (a) is more likely.
 
-## TEST-1 — Kebab functions — BLOCKED
+### Proposed fix paths (for DEFCT-001 fix chip)
 
-| # | Item | Verdict | Reason |
-|---|---|---|---|
-| 1.1 | Light/Dark toggle | BLOCKED | App not installed — phone unreachable |
-| 1.2 | RU/EN toggle | BLOCKED | — |
-| 1.3 | Open log | BLOCKED | — |
-| 1.4 | Check IP leak | BLOCKED | — |
-| 1.5 | Check for updates | BLOCKED | — |
-| 1.6 | Run Health Check | BLOCKED | — |
-| 1.7 | Restart in Safe Mode | BLOCKED | — |
-| 1.8 | Reset settings | BLOCKED | — |
+1. **Workaround A — disable accessibility on kebab popup**: set `AutomationProperties.AccessibilityView="Raw"` on the popup's root `Border` (`menuPanel`) so the entire kebab content is hidden from Android's accessibility tree. Trade-off: blind users with TalkBack cannot navigate the kebab — they have to use the visible Advanced settings card path.
 
-## TEST-2 — Servers tab — BLOCKED
+2. **Workaround B — disable Avalonia's ToggleNodeInfoProvider for buttons**: subclass `Avalonia.Controls.Button` (or set `AutomationProperties.IsRequiredForForm=false` + clear `AutomationProperties.ItemType`) so Avalonia doesn't attach a Toggle peer.
 
-All 8 actions (sub-tab swap, paste vless URI, Test all, Deep verify, row select, Remove, multi-protocol parse) — BLOCKED on install.
+3. **Upstream fix**: investigate Avalonia source (`Avalonia.Android.Automation.ToggleNodeInfoProvider`) for the reflected property name; check if it's `IsCheckedProperty` being called on a non-`ToggleButton` instance. If yes, file an Avalonia bug + apply a local patch (override `OnInitializeAccessibilityEvent` on our control wrapper).
 
-## TEST-3 — Subscribe tab (user URL) — BLOCKED
+4. **Replace segment buttons with a dropdown / inline toggle**: avoid the segment-button pattern entirely. Already deferred for desktop parity reasons, so not preferred.
 
-All 7 steps including the user-provided test URL `https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee` — BLOCKED on install. **No subscription fetch attempted; no judgement on whether the URL returns >0 servers.**
+**Recommended**: Workaround A as immediate ship-fix (1-2 LOC on the popup root); pursue (3) as follow-up to restore a11y.
 
-## TEST-4 — Settings 6 sub-sections — BLOCKED
-
-11 steps across Routing / Rules / Leak Protection / Content / Updates / Autostart — BLOCKED on install.
-
-## TEST-5 — Applications categories — BLOCKED
-
-6 steps across Discord/Browsers/+ New category — BLOCKED on install.
-
-## TEST-6 — Tools (Zapret + Telegram) — BLOCKED
-
-5 steps across Zapret modes + Telegram intent — BLOCKED on install.
-
-## TEST-7 — Public (FreeConfigs) — BLOCKED
-
-7 steps across Find/Settings expander/filter/select/Connect/Saved/long-press-save — BLOCKED on install.
-
-## TEST-8 — End-to-end VPN — BLOCKED
-
-12 steps including the **critical** ifconfig.io exit-IP probe and reboot-autostart verification — BLOCKED on install. **No VPN connection attempted.**
+### Evidence
+- `plans/test-screenshots-2026-05-10/01-launch.png` — pre-tap baseline.
+- `plans/test-screenshots-2026-05-10/02-kebab-open.png` — post-crash (launcher takes over screen).
+- Logcat extract above (full crash from `adb logcat -d`).
+- Reproduced **twice** independently in this session at `13:22:25.986` and `17:24:02.731` — same stack trace.
 
 ---
 
-## Defect catalog
+## DEFCT-002 — P1 Simple page ScrollViewer doesn't respond to swipe gestures
 
-**0 application defects filed.** No code path exercised on-device, so no functional bug could be observed. The reverse — "this is fine" — is also not a valid claim from this run.
+**Severity**: P1 (UX defect — feature partially unreachable).
+**Surface**: Simple page main content area.
+**Reproducer**: 1 step.
 
-The two non-application issues encountered were:
+### Steps to reproduce
+1. Cold launch app, observe Simple page rendered with vertical scrollbar visible on the right edge of the content area (`bounds=[0,164][1080,1621]`, scrollable=true per uiautomator dump).
+2. Swipe up on the content area: `adb shell input swipe 540 1500 540 200 200` (fast) and `adb shell input swipe 540 1100 540 400 800` (slow). Both swipes start inside the ScrollViewer bounds.
+3. Observe screencap — page does not scroll; content remains pinned to the original position. Screenshot identical to baseline.
 
-1. **WT-bootstrap (P3, infrastructure):** Fresh git worktree needs `libbox.aar` copied from main checkout before `dotnet publish` succeeds. Suggested chip-prompt enhancement (not a code defect): TEST-RUN-* chips should include `cp` step in STEP 0, or a setup script `tools/android-bootstrap.ps1` should do it. Worth one fix chip if other agents repeatedly hit this — see "Recommendations" below.
-2. **Phone connectivity (P0, environment):** target device unreachable from VM. Not a VPNRouter bug. User-actionable.
+### Impact
 
----
+The Simple page has more vertical content than fits a 1920-px viewport (visible at the bottom of `01-launch.png`: a partial white card peek under the Connect button). That card is likely the "Advanced settings ▸" CTA referenced in the codebase comment at `VPNRouter.Android/AndroidApp.axaml.cs:838-839`. Without working scroll, this CTA is **unreachable**, leaving the kebab as the only entry to Advanced — which in turn is broken (DEFCT-001).
 
-## Recommendations
+### Possible root cause
 
-### Immediate (to unblock TEST-RUN-ALL)
+Avalonia 11.3.x has known issues on Android where `ScrollViewer` may not propagate touch gestures through certain `StackPanel`/`Grid` arrangements. The ScrollViewer's `class="ScrollViewer"` and `scrollable="true"` flags are correctly set in the dump, suggesting Avalonia thinks scrolling is enabled but the gesture pipeline isn't wired.
 
-Pick one of:
+### Proposed fix paths (for DEFCT-002 fix chip)
 
-- **A. USB pass-through.** On VirtualBox host: `Devices → USB → KYOCERA A101BM` (or equivalent host-OS UI). Confirm with `adb devices` from inside VM showing `<serial>  device  transport_id:1`.
-- **B. Wireless ADB.** On phone: `Settings → Developer options → Wireless debugging → Pair device with code`. From VM: `adb pair <ip>:<port> <code>` then `adb connect <ip>:5555`. Persists across phone reconnects on same Wi-Fi.
-- **C. Run from a different host.** If the development environment is no longer the VM, point me at the host that does have the phone and I'll execute there.
+1. Verify the ScrollViewer's `HorizontalScrollBarVisibility=Disabled` and `VerticalScrollBarVisibility=Auto` settings.
+2. Check whether any child of the ScrollViewer is intercepting touch events (e.g., a Grid with `Background=Transparent` and IsHitTestVisible=true).
+3. Try wrapping the ScrollViewer's child with `Avalonia.Input.Gestures.IsScrollGestureEnabled="True"`.
+4. As a workaround: shrink the Simple page content to fit a single viewport (e.g., remove the bottom Advanced CTA, since users can also reach Advanced via kebab… once DEFCT-001 is fixed).
 
-After unblock: re-fire this same TEST-RUN-ALL chip — APK is already built at `VPNRouter.Android/bin/Release/net8.0-android/com.ninitux.vpnrouter-Signed.apk`. Skip STEP 0, jump straight to `adb install -r <path>`.
-
-### Hardening (future, optional)
-
-1. **`tools/android-bootstrap.ps1`** — one-line: `Copy-Item C:\Project\VPNRouter\VPNRouter.Android\Lib\libbox.aar VPNRouter.Android\Lib\`. Either add to `dotnet publish` PreBuildEvent or prepend to TEST-RUN-* chip prompts. Saves ~3 min of wrong-path debugging per fresh worktree.
-2. **Wireless-ADB note in `plans/ui-testing-workflow.md`** — currently only covers desktop headless tests. Add an Android section with the `adb pair` flow so other agents don't have to discover it from scratch.
-3. **TEST-RUN-* chip prompts** — pre-flight check `adb devices` and emit explicit env-block report (this file's pattern) instead of attempting tests against an empty device list. Already roughly what the parent chip prompt says ("explicit env-block if can't") — could be tightened.
-
----
-
-## Constraints honored
-
-- **No code changes.** Worktree state matches `main` HEAD `765b74c` exactly. The only change on disk is `VPNRouter.Android/Lib/libbox.aar` (gitignored).
-- **No -rN ship.** As mandated.
-- **No desktop touched.**
-- **No bug fixes.** Documented findings only, per chip prompt.
-- **Phone state.** N/A — never communicated with phone.
+### Evidence
+- `plans/test-screenshots-2026-05-10/04-bottom.xml` (uiautomator dump showing `class="ScrollViewer" scrollable="true"`).
+- `plans/test-screenshots-2026-05-10/06-simple-scrolled-hard.png` and `07-slow-scroll.png` — identical to baseline despite swipe gestures.
 
 ---
 
-## Cross-references
+## DEFCT-003 — P3 (info) AccessibilityNodeInfoDumper filters Connect / radios as invisible
 
-- Plan: [vpnrouter-android-functional-testing-and-polish-plan.md](vpnrouter-android-functional-testing-and-polish-plan.md) (TEST-1..TEST-8 lines 77-196)
-- Test asset (user-provided): `https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee`
-- HEAD: `765b74c polish(android-adv): POL-1-CARDS — align Advanced card/tile tokens to desktop`
-- Memory feedback rule: "Test launch after every release ... explicit env-block if can't" → satisfied by this report.
+**Severity**: P3 (informational; impact unknown without TalkBack user verification).
+**Surface**: Simple page accessibility tree.
+
+The uiautomator dump on the Simple page (no kebab open) returns 23566 bytes of XML but does not include nodes for the "Connect" Button, "Selected apps"/"All traffic" radio buttons, or the "Autostart" tile. Logcat shows lines like `AccessibilityNodeInfoDumper: Skipping invisible child:` for these nodes. This means a TalkBack user reading the Simple page may miss these primary controls.
+
+This is downstream of the same Avalonia 11.3 Android automation pipeline issues that cause DEFCT-001. May resolve as a side effect of DEFCT-001 fix.
+
+---
+
+## What testing did NOT cover
+
+Because TEST-1..8 are blocked, the following were **not exercised** this session:
+
+- Kebab functions: theme toggle, language toggle, log viewer, IP-leak check, update check, health check, safe-mode restart, reset settings.
+- Advanced shell: Servers list, Custom Config sub-tab, vless/hy2/tuic paste & test.
+- Advanced shell: Subscribe tab — including the user-provided test URL `https://ninitux.com/api/v1/app/config/41000af0201dccdfd6acd85bd0e9b6ee`.
+- Advanced shell: Settings sub-sections (Routing / Rules / Leak Protection / Content / Updates / Autostart).
+- Advanced shell: Applications categories, per-app picker.
+- Advanced shell: Tools (Zapret modes, Telegram intent).
+- Advanced shell: Public (FreeConfigs Find / Saved / Connect).
+- End-to-end VPN flow with real subscription URL.
+
+**Polish work landed on main (`cfef041` POL-2-TABS UniformGrid + `765b74c` POL-1-CARDS token alignment)** is also not visually verified beyond Simple page (Advanced shell tabs are unreachable until DEFCT-001 is fixed).
+
+---
+
+## Recommended next actions
+
+1. **Spawn DEFCT-001 fix chip immediately** (P0 ship-blocker). Apply Workaround A (`AutomationProperties.AccessibilityView="Raw"` on `_kebabPopup` root Border) as quickest unblock, plus pursue an upstream Avalonia investigation in parallel.
+2. **Spawn DEFCT-002 fix chip** (P1) — restore Simple page ScrollViewer touch propagation.
+3. After both fixes land, **rerun TEST-1..8** — likely a single new chip (consolidated, sequential — same pattern as planned today).
+4. Hold any rolling-rN ship until TEST-RUN-ALL passes the kebab + at least TEST-2/TEST-3 (Servers + Subscribe with real URL).
+
+## Process learnings
+
+- Phone access via SSH-to-Mac-mini works end-to-end (build on Windows VM, `scp` to Mac, `adb install` on phone). Round-trip ~30 s for an APK install.
+- `screencap` does **not** trigger the accessibility crash (it is a framebuffer dump, not an a11y tree walk). `uiautomator dump` does. Even without explicit dump, Android core polls accessibility on focus changes — so any popup with a buggy peer is risky.
+- `adb shell settings put secure accessibility_enabled 0` does not prevent the system-internal a11y polls. So this is not a usable workaround for end-users.
+- Fresh git worktree → must `cp /c/Project/VPNRouter/VPNRouter.Android/Lib/libbox.aar VPNRouter.Android/Lib/` before `dotnet publish` or javac fails (gitignored AAR; surfaced by the parallel TEST-RUN-ALL chip 743cba0).
+
+---
+
+**Test session ended at 17:34 (UTC+3) after ~15 min of phone interaction.** All artifacts captured in `plans/test-screenshots-2026-05-10/`.
