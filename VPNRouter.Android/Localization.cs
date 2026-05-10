@@ -910,4 +910,19 @@ internal static class Localization
     // (around line 215-225) from the v2.32.0 (AND-ZAPRET) batch. The
     // F-13 DPI Bypass overlay reuses those existing accessors directly —
     // re-adding here would cause CS0102 duplicate definitions.
+
+    // ── Android Advanced > Servers + Subscribe (Phase B parity, 2026-05-10) ──
+    public static string AdvServersSubTabServers => global::VPNRouter.Core.Localization.Strings.AdvServersSubTabServers;
+    public static string AdvServersSubTabCustomJson => global::VPNRouter.Core.Localization.Strings.AdvServersSubTabCustomJson;
+    public static string AdvServersTestAll => global::VPNRouter.Core.Localization.Strings.AdvServersTestAll;
+    public static string AdvServersDeepVerify => global::VPNRouter.Core.Localization.Strings.AdvServersDeepVerify;
+    public static string AdvServersRemove => global::VPNRouter.Core.Localization.Strings.AdvServersRemove;
+    public static string AdvServersAddServers => global::VPNRouter.Core.Localization.Strings.AdvServersAddServers;
+    public static string AdvSubscribeRefreshAll => global::VPNRouter.Core.Localization.Strings.AdvSubscribeRefreshAll;
+    public static string AdvSubscribeAddSubscription => global::VPNRouter.Core.Localization.Strings.AdvSubscribeAddSubscription;
+    public static string AdvSubscribeNameLabel => global::VPNRouter.Core.Localization.Strings.AdvSubscribeNameLabel;
+    public static string AdvSubscribeUrlLabel => global::VPNRouter.Core.Localization.Strings.AdvSubscribeUrlLabel;
+    public static string AdvServersCustomJsonExplainer => global::VPNRouter.Core.Localization.Strings.AdvServersCustomJsonExplainer;
+    public static string AdvServersDeepVerifyAndroidNote => global::VPNRouter.Core.Localization.Strings.AdvServersDeepVerifyAndroidNote;
+    public static string AdvSubscribeAggregatedEmpty => global::VPNRouter.Core.Localization.Strings.AdvSubscribeAggregatedEmpty;
 }

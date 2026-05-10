@@ -50,6 +50,45 @@ public partial class AndroidApp
     private TextBlock? _subsSectionLabel;
     private TextBlock? _subsRefreshAllStatus;
 
+    // ── AND-ADV-SERVERS-SUBSCRIBE Phase B (2026-05-10) ─────────────────
+    // Aggregated server list at the TOP of the Subscribe tab (mirrors
+    // desktop SubscribePage rows 109-197): 4-column table aggregating
+    // every enabled subscription's servers. Below it sits the middle
+    // action row (Test all / Deep verify / Refresh all) before the
+    // existing Subscriptions section + add form move down.
+    private StackPanel? _subsAggListStack;
+    private TextBlock? _subsAggEmptyHint;
+    private TextBlock? _subsAggColServer;
+    private TextBlock? _subsAggColIp;
+    private TextBlock? _subsAggColPing;
+    private TextBlock? _subsAggColPort;
+    private Avalonia.Controls.Button? _subsAggTestAllBtn;
+    private Avalonia.Controls.Button? _subsAggDeepVerifyBtn;
+    private TextBlock? _subsAggStatusText;
+    private TextBlock? _subsAggSectionHeaderLabel;
+
+    /// <summary>Per-server in-progress test flags for the aggregated
+    /// Subscribe-tab list. Separate from the Servers tab's
+    /// <c>_srvTestingKeys</c> so the two surfaces don't fight each
+    /// other when the user kicks off Test all on both.</summary>
+    private readonly HashSet<string> _subsAggTestingKeys = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>In-memory mirror of the persisted server-test results
+    /// dict, refreshed on each tab activation. Mutated by
+    /// <see cref="OnSubsAggTestAllClicked"/> +
+    /// <see cref="TestSingleAggregatedServerAsync"/> so progressive
+    /// updates render between flushes — the
+    /// <see cref="AndroidStorage.SetServerTestResults"/> persist happens
+    /// at end-of-batch (not per-result) to keep SharedPreferences I/O
+    /// bounded.</summary>
+    private Dictionary<string, AndroidStorage.ServerTestResultDto> _subsAggResults =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Cancellation source for the aggregated-list Test all
+    /// batch. Cancelled when the shell closes or the Subscribe tab is
+    /// switched away from.</summary>
+    private CancellationTokenSource? _subsAggTestAllCts;
+
     /// <summary>
     /// In-memory mirror of the persisted subscription list. Modified by
     /// add / remove / refresh handlers, then flushed via
@@ -71,14 +110,58 @@ public partial class AndroidApp
     private DateTime _lastDeleteTapAt = DateTime.MinValue;
 
     /// <summary>
-    /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the
-    /// Subscriptions tab inside the Advanced shell. Returns just the
-    /// section header + card list + add form. The shell provides the
-    /// title bar / close button / outer chrome.
+    /// AND-MIGRATE-OVERLAYS (2026-05-09) + AND-ADV-SERVERS-SUBSCRIBE
+    /// (Phase B, 2026-05-10) — body content for the Subscriptions tab
+    /// inside the Advanced shell. Layout mirrors desktop SubscribePage
+    /// (top → bottom):
+    ///   1. Aggregated server list (4-column table from every enabled sub)
+    ///   2. Middle action row (Test all + Deep verify + Refresh all)
+    ///   3. "Subscriptions" section header
+    ///   4. Subscriptions card list (existing per-card UI)
+    ///   5. Add-subscription form (Name + URL + Add)
     /// </summary>
     private Control BuildSubscribeTabContent()
     {
-        // Card list (one Border per SubscriptionEntry, or empty hint).
+        // ── 1. Aggregated server list (TOP) ────────────────────────────
+        var aggServerSection = BuildSubscribeAggregatedServerSection();
+
+        // ── 2. Middle action row (Test all + Deep verify + Refresh all)
+        var middleActionRow = BuildSubscribeFooterActions();
+
+        // ── 3. Section header — "Subscriptions"  (left, no Refresh all
+        //       button anymore — that moved to the middle action row).
+        _subsSectionLabel = new TextBlock
+        {
+            Text = Localization.SubscriptionsSection,
+            FontSize = 12,
+            FontWeight = FontWeight.Bold,
+            Foreground = GetBrush("TextPrimaryBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _subsRefreshAllStatus = new TextBlock
+        {
+            Text = string.Empty,
+            FontSize = 10,
+            Foreground = GetBrush("TextMutedBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsVisible = false,
+            Margin = new Thickness(0, 4, 0, 0),
+        };
+        var sectionHeaderBorder = new Border
+        {
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(0, 1, 0, 1),
+            Background = GetBrush("SurfaceBaseBrush"),
+            Padding = new Thickness(10, 6, 10, 6),
+            Child = new StackPanel
+            {
+                Spacing = 0,
+                Children = { _subsSectionLabel, _subsRefreshAllStatus },
+            },
+        };
+
+        // ── 4. Subscriptions card list (existing per-card UI) ──────────
         _subsListStack = new StackPanel
         {
             Spacing = 8,
@@ -91,86 +174,32 @@ public partial class AndroidApp
             Foreground = GetBrush("TextMutedBrush"),
             TextWrapping = TextWrapping.Wrap,
             HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 24, 0, 0),
+            Margin = new Thickness(0, 16, 0, 0),
             IsVisible = false,
         };
-
         var listRoot = new StackPanel
         {
             Spacing = 0,
             Children = { _subsListStack, _subsEmptyHint },
         };
-
-        var listScroller = new ScrollViewer
+        var subsListScroller = new ScrollViewer
         {
             Content = listRoot,
+            // Cap the card list height so it doesn't push the add-form
+            // off-screen on tall sub lists. Mirrors desktop's MaxHeight=130
+            // pattern in SubscribePage.axaml line 270.
+            MaxHeight = 180,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Background = GetBrush("SurfaceAppBrush"),
         };
 
-        // ── Section header bar — "Subscriptions" + "Refresh all" on right.
-        //     Mirrors desktop SubscribePage.axaml lines 251-260 (Row 2).
-        //     Sits ABOVE the card list with a top divider so the heading
-        //     reads as the cards' label, not the form's.
-        _subsSectionLabel = new TextBlock
-        {
-            Text = Localization.SubscriptionsSection,
-            FontSize = 12,
-            FontWeight = FontWeight.Bold,
-            Foreground = GetBrush("TextPrimaryBrush"),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        _subsRefreshAllBtn = new Avalonia.Controls.Button
-        {
-            Content = Localization.RefreshAll,
-            FontSize = 10,
-            Padding = new Thickness(8, 3),
-            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
-            Background = GetBrush("SurfaceRaisedBrush"),
-            BorderBrush = GetBrush("BorderDefaultBrush"),
-            BorderThickness = new Thickness(1),
-            Foreground = GetBrush("TextPrimaryBrush"),
-        };
-        _subsRefreshAllBtn.Click += OnSubsRefreshAllClicked;
-        _subsRefreshAllStatus = new TextBlock
-        {
-            Text = string.Empty,
-            FontSize = 10,
-            Foreground = GetBrush("TextMutedBrush"),
-            TextWrapping = TextWrapping.Wrap,
-            VerticalAlignment = VerticalAlignment.Center,
-            IsVisible = false,
-            Margin = new Thickness(0, 4, 0, 0),
-        };
-        var sectionHeaderGrid = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-        };
-        Grid.SetColumn(_subsSectionLabel, 0);
-        Grid.SetColumn(_subsRefreshAllBtn, 1);
-        sectionHeaderGrid.Children.Add(_subsSectionLabel);
-        sectionHeaderGrid.Children.Add(_subsRefreshAllBtn);
-
-        var sectionHeaderBorder = new Border
-        {
-            BorderBrush = GetBrush("BorderDefaultBrush"),
-            BorderThickness = new Thickness(0, 0, 0, 1),
-            Background = GetBrush("SurfaceBaseBrush"),
-            Padding = new Thickness(10, 6, 10, 6),
-            Child = new StackPanel
-            {
-                Spacing = 0,
-                Children = { sectionHeaderGrid, _subsRefreshAllStatus },
-            },
-        };
-
-        // ── Add-subscription form (bottom) ─────────────────────────────
+        // ── 5. Add-subscription form (bottom) ──────────────────────────
         //     Mirrors desktop SubscribePage.axaml lines 338-361 (Row 4):
         //     "100,*,Auto" name + URL + Add button with top divider.
         _subsNewName = new TextBox
         {
-            Watermark = Localization.SubscriptionNameHint,
+            Watermark = Localization.AdvSubscribeNameLabel,
             FontSize = 10,
             Padding = new Thickness(6, 4),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
@@ -180,7 +209,7 @@ public partial class AndroidApp
         };
         _subsNewUrl = new TextBox
         {
-            Watermark = Localization.SubscriptionUrlHint,
+            Watermark = Localization.AdvSubscribeUrlLabel,
             FontSize = 10,
             FontFamily = new FontFamily("monospace"),
             Padding = new Thickness(6, 4),
@@ -223,23 +252,532 @@ public partial class AndroidApp
             Child = addFormRow,
         };
 
-        // Body = section-header (top) + scrolling card list (fill).
-        // DockPanel needs the fill child to be added LAST.
-        var bodyDock = new DockPanel { LastChildFill = true };
-        DockPanel.SetDock(sectionHeaderBorder, Dock.Top);
-        bodyDock.Children.Add(sectionHeaderBorder);
-        bodyDock.Children.Add(listScroller);
-
+        // ── Compose: aggregated server section fills the top space, the
+        //    rest of the chrome docks below it. DockPanel adds the
+        //    last child as the fill child, so addFormBorder /
+        //    subsListScroller / sectionHeaderBorder / middleActionRow all
+        //    dock Bottom-to-Top, then aggServerSection takes the rest.
         var dock = new DockPanel { LastChildFill = true };
         DockPanel.SetDock(addFormBorder, Dock.Bottom);
+        DockPanel.SetDock(subsListScroller, Dock.Bottom);
+        DockPanel.SetDock(sectionHeaderBorder, Dock.Bottom);
+        DockPanel.SetDock(middleActionRow, Dock.Bottom);
         dock.Children.Add(addFormBorder);
-        dock.Children.Add(bodyDock);
+        dock.Children.Add(subsListScroller);
+        dock.Children.Add(sectionHeaderBorder);
+        dock.Children.Add(middleActionRow);
+        dock.Children.Add(aggServerSection);
 
         return new Border
         {
             Background = GetBrush("SurfaceAppBrush"),
             Child = dock,
         };
+    }
+
+    /// <summary>
+    /// Aggregated server table at the TOP of the Subscribe tab — desktop
+    /// SubscribePage.axaml rows 109-197 parity. 4-column header (Server /
+    /// IP / Ping / Port) above a scrollable list of every enabled
+    /// subscription's servers. Empty state when no enabled sub has any
+    /// servers.
+    /// </summary>
+    private DockPanel BuildSubscribeAggregatedServerSection()
+    {
+        // ── Column header strip — matches desktop's tiny SemiBold caps. ──
+        _subsAggColServer = new TextBlock
+        {
+            Text = Localization.ColServer,
+            FontSize = 9,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = GetBrush("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _subsAggColIp = new TextBlock
+        {
+            Text = Localization.ColIp,
+            FontSize = 9,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = GetBrush("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _subsAggColPing = new TextBlock
+        {
+            Text = Localization.ColPing,
+            FontSize = 9,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = GetBrush("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        ToolTip.SetTip(_subsAggColPing, Localization.ColPingTooltip);
+        _subsAggColPort = new TextBlock
+        {
+            Text = Localization.ColPort,
+            FontSize = 9,
+            FontWeight = FontWeight.SemiBold,
+            Foreground = GetBrush("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        };
+        var headerGrid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("14,*,100,42,40,24"),
+            ColumnSpacing = 8,
+            Margin = new Thickness(8, 2, 8, 4),
+        };
+        Grid.SetColumn(_subsAggColServer, 1);
+        Grid.SetColumn(_subsAggColIp, 2);
+        Grid.SetColumn(_subsAggColPing, 3);
+        Grid.SetColumn(_subsAggColPort, 4);
+        headerGrid.Children.Add(_subsAggColServer);
+        headerGrid.Children.Add(_subsAggColIp);
+        headerGrid.Children.Add(_subsAggColPing);
+        headerGrid.Children.Add(_subsAggColPort);
+
+        var headerHost = new Border
+        {
+            Margin = new Thickness(12, 8, 12, 0),
+            Child = headerGrid,
+        };
+
+        // ── Server list body + empty state ────────────────────────────
+        _subsAggListStack = new StackPanel { Spacing = 0 };
+        _subsAggEmptyHint = new TextBlock
+        {
+            Text = Localization.AdvSubscribeAggregatedEmpty,
+            FontSize = 11,
+            Foreground = GetBrush("TextMutedBrush"),
+            TextWrapping = TextWrapping.Wrap,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(16, 24, 16, 0),
+            IsVisible = false,
+        };
+        var listRoot = new StackPanel
+        {
+            Spacing = 0,
+            Children = { _subsAggListStack, _subsAggEmptyHint },
+        };
+        var listScroller = new ScrollViewer
+        {
+            Content = listRoot,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        };
+        var listCard = new Border
+        {
+            BorderBrush = GetBrush("BorderSubtleBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = GetBrush("SurfaceBaseBrush"),
+            Margin = new Thickness(12, 0, 12, 4),
+            Child = listScroller,
+        };
+
+        var dock = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(headerHost, Dock.Top);
+        dock.Children.Add(headerHost);
+        dock.Children.Add(listCard);
+        return dock;
+    }
+
+    /// <summary>
+    /// Middle action row for the Subscribe tab — Test all (green) +
+    /// Deep verify (accent) + Refresh all (right-aligned, neutral).
+    /// Desktop SubscribePage.axaml rows 204-260 parity (where Test all +
+    /// Deep verify share the row with the Refresh-all section header).
+    /// Phase A may later move this row into a dedicated FooterActions
+    /// slot; today it docks inside the tab content.
+    /// </summary>
+    private Border BuildSubscribeFooterActions()
+    {
+        _subsAggTestAllBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.AdvServersTestAll,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Padding = new Thickness(10, 5),
+            Background = GetBrush("SuccessSolidBrush"),
+            Foreground = Brushes.White,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+        };
+        ToolTip.SetTip(_subsAggTestAllBtn, Localization.SrvTipTestAll);
+        _subsAggTestAllBtn.Click += async (_, _) => await OnSubsAggTestAllClicked();
+
+        _subsAggDeepVerifyBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.AdvServersDeepVerify,
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            Padding = new Thickness(10, 5),
+            Background = GetBrush("AccentSolidBrush"),
+            Foreground = GetBrush("AccentOnSolidBrush"),
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+        };
+        ToolTip.SetTip(_subsAggDeepVerifyBtn, Localization.AdvServersDeepVerifyAndroidNote);
+        _subsAggDeepVerifyBtn.Click += async (_, _) => await OnSubsAggDeepVerifyClicked();
+
+        _subsAggStatusText = new TextBlock
+        {
+            Text = string.Empty,
+            FontSize = 10,
+            Foreground = GetBrush("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+
+        _subsRefreshAllBtn = new Avalonia.Controls.Button
+        {
+            Content = Localization.AdvSubscribeRefreshAll,
+            FontSize = 11,
+            Padding = new Thickness(10, 5),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Background = GetBrush("SurfaceRaisedBrush"),
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(1),
+            Foreground = GetBrush("TextPrimaryBrush"),
+        };
+        _subsRefreshAllBtn.Click += OnSubsRefreshAllClicked;
+
+        // 4-column row: Test all | Deep verify | progress text (1*) | Refresh all
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto"),
+            ColumnSpacing = 6,
+        };
+        Grid.SetColumn(_subsAggTestAllBtn, 0);
+        Grid.SetColumn(_subsAggDeepVerifyBtn, 1);
+        Grid.SetColumn(_subsAggStatusText, 2);
+        Grid.SetColumn(_subsRefreshAllBtn, 3);
+        grid.Children.Add(_subsAggTestAllBtn);
+        grid.Children.Add(_subsAggDeepVerifyBtn);
+        grid.Children.Add(_subsAggStatusText);
+        grid.Children.Add(_subsRefreshAllBtn);
+
+        return new Border
+        {
+            BorderBrush = GetBrush("BorderDefaultBrush"),
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Background = GetBrush("SurfaceBaseBrush"),
+            Padding = new Thickness(10, 6, 10, 6),
+            Child = grid,
+        };
+    }
+
+    /// <summary>
+    /// Aggregate every enabled subscription's servers and rebuild the
+    /// top-of-tab list. Empty state when no enabled sub has any servers.
+    /// </summary>
+    private void RebuildAggregatedServerList()
+    {
+        if (_subsAggListStack is null || _subsAggEmptyHint is null) return;
+        _subsAggListStack.Children.Clear();
+
+        var aggregated = _subs
+            .Where(s => s != null && s.Enabled && s.Servers != null)
+            .SelectMany(s => s.Servers)
+            .Where(s => !string.IsNullOrWhiteSpace(s?.Server))
+            .ToList();
+        if (aggregated.Count == 0)
+        {
+            _subsAggEmptyHint.IsVisible = true;
+            return;
+        }
+        _subsAggEmptyHint.IsVisible = false;
+
+        var activeName = AndroidStorage.GetSelectedServerName();
+        foreach (var srv in aggregated)
+        {
+            _subsAggListStack.Children.Add(BuildAggregatedServerRow(srv, activeName));
+        }
+    }
+
+    /// <summary>
+    /// Per-row template for the aggregated server table. Mirrors
+    /// <see cref="BuildServerRow"/> from <c>AndroidApp.ServerList.cs</c>
+    /// (radio | name+host | IP | Ping | Port | refresh button) but reads
+    /// from the local <c>_subsAggTestingKeys</c> + caller-supplied
+    /// results dict so the Subscribe tab's testing state stays separate
+    /// from the Servers tab's.
+    /// </summary>
+    private Control BuildAggregatedServerRow(
+        VlessServerEntry srv,
+        string? activeServerName)
+    {
+        var key = AndroidStorage.BuildServerKey(srv);
+        var hasResult = _subsAggResults.TryGetValue(key, out var result);
+        var isTesting = _subsAggTestingKeys.Contains(key);
+        var isActive = !string.IsNullOrEmpty(activeServerName)
+                       && string.Equals(srv.Name, activeServerName, StringComparison.OrdinalIgnoreCase);
+
+        // ── Radio dot — filled when active. ──
+        var radio = new Border
+        {
+            Width = 12,
+            Height = 12,
+            CornerRadius = new CornerRadius(6),
+            BorderThickness = new Thickness(1.5),
+            BorderBrush = isActive ? GetBrush("SuccessSolidBrush") : GetBrush("BorderStrongBrush"),
+            Background = isActive ? GetBrush("SuccessSolidBrush") : Brushes.Transparent,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        if (isActive)
+        {
+            radio.Child = new Avalonia.Controls.Shapes.Ellipse
+            {
+                Width = 4,
+                Height = 4,
+                Fill = Brushes.White,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+        }
+
+        var displayName = string.IsNullOrWhiteSpace(srv.Name) ? srv.Server : srv.Name;
+        var nameText = new TextBlock
+        {
+            Text = displayName,
+            FontSize = 11,
+            FontWeight = isActive ? FontWeight.Bold : FontWeight.SemiBold,
+            Foreground = isActive ? GetBrush("AccentFgBrush") : GetBrush("TextPrimaryBrush"),
+            FontFamily = new FontFamily("monospace"),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        var hostText = new TextBlock
+        {
+            Text = BuildHostSubtitle(srv),
+            FontSize = 9,
+            Foreground = GetBrush("TextMutedBrush"),
+            FontFamily = new FontFamily("monospace"),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        hostText.IsVisible = !string.IsNullOrEmpty(hostText.Text);
+        var nameStack = new Border
+        {
+            Background = Brushes.Transparent,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new StackPanel
+            {
+                Spacing = 1,
+                VerticalAlignment = VerticalAlignment.Center,
+                Children = { nameText, hostText },
+            },
+        };
+        ToolTip.SetTip(nameStack, Localization.SrvTipSelectServer);
+        nameStack.PointerReleased += (_, _) =>
+        {
+            AndroidStorage.SetSelectedServerName(srv.Name);
+            CloseAdvancedShell();
+        };
+
+        var ipText = new TextBlock
+        {
+            Text = srv.Server ?? string.Empty,
+            FontSize = 9,
+            FontFamily = new FontFamily("monospace"),
+            Foreground = GetBrush("TextMutedBrush"),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var (pingDisplay, pingBrush) = ResolveLatencyDisplay(hasResult ? result : null, isTesting);
+        var pingText = new TextBlock
+        {
+            Text = pingDisplay,
+            FontSize = 9,
+            FontFamily = new FontFamily("monospace"),
+            Foreground = pingBrush,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        if (hasResult && !string.IsNullOrEmpty(result?.Error))
+            ToolTip.SetTip(pingText, result.Error);
+        var portText = new TextBlock
+        {
+            Text = srv.Port.ToString(),
+            FontSize = 9,
+            FontFamily = new FontFamily("monospace"),
+            Foreground = GetBrush("TextMutedBrush"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var refreshBtn = new Avalonia.Controls.Button
+        {
+            Content = "⟳",
+            FontSize = 13,
+            Width = 24,
+            Height = 24,
+            Padding = new Thickness(0),
+            MinHeight = 0,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Foreground = GetBrush("TextMutedBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            IsEnabled = !isTesting,
+        };
+        ToolTip.SetTip(refreshBtn, Localization.SrvTipTestRow);
+        refreshBtn.Click += async (_, _) => await TestSingleAggregatedServerAsync(srv);
+
+        var grid = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("14,*,100,42,40,24"),
+            ColumnSpacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(radio, 0);
+        Grid.SetColumn(nameStack, 1);
+        Grid.SetColumn(ipText, 2);
+        Grid.SetColumn(pingText, 3);
+        Grid.SetColumn(portText, 4);
+        Grid.SetColumn(refreshBtn, 5);
+        grid.Children.Add(radio);
+        grid.Children.Add(nameStack);
+        grid.Children.Add(ipText);
+        grid.Children.Add(pingText);
+        grid.Children.Add(portText);
+        grid.Children.Add(refreshBtn);
+
+        return new Border
+        {
+            BorderThickness = new Thickness(0),
+            Background = isActive
+                ? GetBrush("AccentBgSubtleBrush")
+                : Brushes.Transparent,
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+            Padding = new Thickness(8, 5),
+            Child = grid,
+        };
+    }
+
+    // ── Aggregated-list test-batch handlers ────────────────────────────
+
+    private async Task OnSubsAggTestAllClicked()
+    {
+        var aggregated = _subs
+            .Where(s => s != null && s.Enabled && s.Servers != null)
+            .SelectMany(s => s.Servers)
+            .Where(s => !string.IsNullOrWhiteSpace(s?.Server))
+            .ToList();
+        if (aggregated.Count == 0) return;
+        if (_subsAggTestAllCts is not null)
+        {
+            try { _subsAggTestAllCts.Cancel(); } catch { /* swallow */ }
+            return;
+        }
+
+        _subsAggTestAllCts = new CancellationTokenSource();
+        var ct = _subsAggTestAllCts.Token;
+        // Pull a fresh snapshot from storage in case Servers tab tests
+        // mutated badges since this tab last activated.
+        _subsAggResults = AndroidStorage.GetServerTestResults();
+
+        try
+        {
+            var total = aggregated.Count;
+            var done = 0;
+            foreach (var srv in aggregated)
+                _subsAggTestingKeys.Add(AndroidStorage.BuildServerKey(srv));
+            RebuildAggregatedServerList();
+            UpdateAggregatedProgressText(0, total);
+            if (_subsAggTestAllBtn is not null)
+                _subsAggTestAllBtn.Content = Localization.SrvTesting;
+
+            using var sem = new SemaphoreSlim(4);
+            var tasks = aggregated.Select(async srv =>
+            {
+                await sem.WaitAsync(ct);
+                try
+                {
+                    var result = await TcpTlsProbe.ProbeServerAsync(srv, ct);
+                    ApplyAggregatedResult(srv, result);
+                }
+                catch (OperationCanceledException) { /* leave row */ }
+                catch
+                {
+                    ApplyAggregatedResult(srv,
+                        new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "probe error"));
+                }
+                finally
+                {
+                    sem.Release();
+                    var n = Interlocked.Increment(ref done);
+                    Dispatcher.UIThread.Post(() => UpdateAggregatedProgressText(n, total));
+                }
+            });
+            await Task.WhenAll(tasks);
+
+            var reachable = aggregated.Count(srv =>
+            {
+                if (!_subsAggResults.TryGetValue(AndroidStorage.BuildServerKey(srv), out var r)) return false;
+                var s = (ServerProbeStatus)r.Status;
+                return s is ServerProbeStatus.Ok or ServerProbeStatus.Slow;
+            });
+            if (_subsAggStatusText is not null)
+                _subsAggStatusText.Text = string.Format(Localization.SrvProgressDoneFmt, reachable, total);
+        }
+        finally
+        {
+            _subsAggTestingKeys.Clear();
+            AndroidStorage.SetServerTestResults(_subsAggResults);
+            try { _subsAggTestAllCts?.Dispose(); } catch { /* swallow */ }
+            _subsAggTestAllCts = null;
+            if (_subsAggTestAllBtn is not null)
+                _subsAggTestAllBtn.Content = Localization.AdvServersTestAll;
+            RebuildAggregatedServerList();
+        }
+    }
+
+    /// <summary>Deep verify on Android = same TCP+TLS probe pass as Test
+    /// all (sing-box can't be spawned from the app sandbox — see
+    /// <c>OnSrvDeepVerifyClicked</c>). Tooltip on the button explains
+    /// the platform limitation.</summary>
+    private async Task OnSubsAggDeepVerifyClicked() => await OnSubsAggTestAllClicked();
+
+    private async Task TestSingleAggregatedServerAsync(VlessServerEntry srv)
+    {
+        var key = AndroidStorage.BuildServerKey(srv);
+        if (_subsAggTestingKeys.Contains(key)) return;
+        _subsAggTestingKeys.Add(key);
+        RebuildAggregatedServerList();
+        try
+        {
+            var result = await TcpTlsProbe.ProbeServerAsync(srv, CancellationToken.None);
+            ApplyAggregatedResult(srv, result);
+            AndroidStorage.SetServerTestResults(_subsAggResults);
+        }
+        catch
+        {
+            ApplyAggregatedResult(srv,
+                new ServerProbeResult(ServerProbeStatus.Unreachable, 0, "probe error"));
+            AndroidStorage.SetServerTestResults(_subsAggResults);
+        }
+        finally
+        {
+            _subsAggTestingKeys.Remove(key);
+            RebuildAggregatedServerList();
+        }
+    }
+
+    private void ApplyAggregatedResult(VlessServerEntry srv, ServerProbeResult result)
+    {
+        var key = AndroidStorage.BuildServerKey(srv);
+        _subsAggResults[key] = new AndroidStorage.ServerTestResultDto
+        {
+            Status = (int)result.Status,
+            LatencyMs = result.LatencyMs,
+            LastTestedAt = DateTimeOffset.UtcNow,
+            Error = result.Error,
+        };
+        Dispatcher.UIThread.Post(RebuildAggregatedServerList);
+    }
+
+    private void UpdateAggregatedProgressText(int done, int total)
+    {
+        if (_subsAggStatusText is null) return;
+        _subsAggStatusText.Text = string.Format(Localization.SrvProgressFmt, done, total);
     }
 
     /// <summary>
@@ -253,7 +791,15 @@ public partial class AndroidApp
         _refreshingIds.Clear();
         _pendingDeleteId = null;
         _editingId = null;
+        // Phase B: clear aggregated-list testing state on re-seed so a
+        // dangling spinner from a cancelled previous run doesn't survive
+        // tab navigation. Refresh the test-result mirror from storage so
+        // badges from a Test all run on Servers tab show through here.
+        _subsAggTestingKeys.Clear();
+        _subsAggResults = AndroidStorage.GetServerTestResults();
+        if (_subsAggStatusText is not null) _subsAggStatusText.Text = string.Empty;
         RebuildSubsList();
+        RebuildAggregatedServerList();
     }
 
     private void RebuildSubsList()
@@ -264,6 +810,8 @@ public partial class AndroidApp
         if (_subs.Count == 0)
         {
             _subsEmptyHint.IsVisible = true;
+            // Aggregated list also empties when there are no subs.
+            RebuildAggregatedServerList();
             return;
         }
         _subsEmptyHint.IsVisible = false;
@@ -272,6 +820,9 @@ public partial class AndroidApp
         {
             _subsListStack.Children.Add(BuildSubCard(sub));
         }
+        // Subscription enable / refresh / delete all change which servers
+        // appear in the aggregated table — keep the two views in sync.
+        RebuildAggregatedServerList();
     }
 
     /// <summary>
@@ -660,11 +1211,32 @@ public partial class AndroidApp
     private void RefreshSubsLocalizedStrings()
     {
         if (_subsSectionLabel is not null) _subsSectionLabel.Text = Localization.SubscriptionsSection;
-        if (_subsRefreshAllBtn is not null) _subsRefreshAllBtn.Content = Localization.RefreshAll;
+        if (_subsRefreshAllBtn is not null) _subsRefreshAllBtn.Content = Localization.AdvSubscribeRefreshAll;
         if (_subsAddBtn is not null) _subsAddBtn.Content = Localization.AddSubscription;
-        if (_subsNewName is not null) _subsNewName.Watermark = Localization.SubscriptionNameHint;
-        if (_subsNewUrl is not null) _subsNewUrl.Watermark = Localization.SubscriptionUrlHint;
+        if (_subsNewName is not null) _subsNewName.Watermark = Localization.AdvSubscribeNameLabel;
+        if (_subsNewUrl is not null) _subsNewUrl.Watermark = Localization.AdvSubscribeUrlLabel;
         if (_subsEmptyHint is not null) _subsEmptyHint.Text = Localization.LblAddSubscriptionHint;
+
+        // Phase B (AND-ADV-SERVERS-SUBSCRIBE) — aggregated server table
+        // headers + middle action row + empty hint.
+        if (_subsAggColServer is not null) _subsAggColServer.Text = Localization.ColServer;
+        if (_subsAggColIp is not null) _subsAggColIp.Text = Localization.ColIp;
+        if (_subsAggColPing is not null)
+        {
+            _subsAggColPing.Text = Localization.ColPing;
+            ToolTip.SetTip(_subsAggColPing, Localization.ColPingTooltip);
+        }
+        if (_subsAggColPort is not null) _subsAggColPort.Text = Localization.ColPort;
+        if (_subsAggEmptyHint is not null)
+            _subsAggEmptyHint.Text = Localization.AdvSubscribeAggregatedEmpty;
+        if (_subsAggTestAllBtn is not null && _subsAggTestAllCts is null)
+            _subsAggTestAllBtn.Content = Localization.AdvServersTestAll;
+        if (_subsAggDeepVerifyBtn is not null)
+        {
+            _subsAggDeepVerifyBtn.Content = Localization.AdvServersDeepVerify;
+            ToolTip.SetTip(_subsAggDeepVerifyBtn, Localization.AdvServersDeepVerifyAndroidNote);
+        }
+
         // Card list: cheapest path is full rebuild — strings are per-card
         // (Refreshing… spinner, refresh/delete tooltips, formatted
         // timestamp uses "никогда"/"never"). Skip if Subscriptions tab is
