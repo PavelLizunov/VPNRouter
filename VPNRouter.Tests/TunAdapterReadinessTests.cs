@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using System.Threading.Tasks;
 using VPNRouter.Core.Services;
 using Xunit;
 
@@ -81,6 +82,142 @@ public sealed class TunAdapterReadinessTests
                 interfaceName: "VPNRouter-Test-DoesNotExist-" + Guid.NewGuid().ToString("N"),
                 context: "test.nonexistent"));
         Assert.Null(ex);
+    }
+
+    // ─── Bug-r9-H regression suite ────────────────────────────────────
+    // Pre-start cleanup of stale wintun adapters left behind by a previous
+    // sing-box CRASH (graceful Stop is already covered by
+    // DisableOrphanedAdapter on the way out). The parser is the testable
+    // surface — full PreStartCleanupAsync involves netsh + PowerShell I/O
+    // which we exercise only via the non-Windows no-op path here.
+
+    [Fact]
+    public async Task PreStartCleanupAsync_NonWindows_ReturnsZeroNoOp()
+    {
+        // On Linux/macOS this must be a silent zero-removal no-op,
+        // never throw. Pins the OperatingSystem.IsWindows() guard.
+        // On Windows the test environment shouldn't have a stale
+        // VPNRouter-TUN adapter unless the dev machine is mid-reproduce,
+        // so we don't assert on the count there.
+        var n = await TunAdapterDiagnostics.PreStartCleanupAsync(
+            logger: null, context: "test.non-windows");
+
+        if (!OperatingSystem.IsWindows())
+            Assert.Equal(0, n);
+    }
+
+    [Fact]
+    public void TunDiag_PreStartCleanup_NoTunAdapters_ReturnsSuccessNoOp()
+    {
+        // Empty netsh output — nothing to clean, parser returns empty list.
+        // PreStartCleanupAsync would log "no stale TUN adapters found" and
+        // return 0 in production; we exercise the same predicate path here.
+        Assert.Empty(TunAdapterDiagnostics.ExtractStaleAdapterNames(string.Empty));
+
+        var noTun = """
+            Admin State    State          Type             Interface Name
+            -------------------------------------------------------------------------
+            Enabled        Connected      Dedicated        Ethernet
+            Enabled        Connected      Dedicated        Wi-Fi
+            Enabled        Disconnected   Loopback         Loopback Pseudo-Interface 1
+            """;
+        Assert.Empty(TunAdapterDiagnostics.ExtractStaleAdapterNames(noTun));
+    }
+
+    [Fact]
+    public void TunDiag_PreStartCleanup_OneStaleTun_RemovesIt()
+    {
+        // VPNRouter-TUN row in netsh inventory — parser surfaces it as a
+        // removal target. PreStartCleanupAsync would then run
+        // netsh disable + Remove-NetAdapter against this name.
+        var output = """
+            Admin State    State          Type             Interface Name
+            -------------------------------------------------------------------------
+            Enabled        Connected      Dedicated        Ethernet
+            Enabled        Disconnected   Dedicated        VPNRouter-TUN
+            """;
+        var result = TunAdapterDiagnostics.ExtractStaleAdapterNames(output);
+        Assert.Single(result);
+        Assert.Equal("VPNRouter-TUN", result[0], ignoreCase: true);
+    }
+
+    [Fact]
+    public void TunDiag_PreStartCleanup_SingBoxFallbackName_Detects()
+    {
+        // sing-box's auto-name fallback when our InterfaceName isn't honoured —
+        // pattern is "sing-box-tun" + optional "-XXXX" suffix. Both forms
+        // (bare and suffixed) belong to us, both are removable.
+        var bare = TunAdapterDiagnostics.ExtractStaleAdapterNames("""
+            Admin State    State          Type             Interface Name
+            Enabled        Disconnected   Dedicated        sing-box-tun
+            """);
+        Assert.Single(bare);
+
+        var suffixed = TunAdapterDiagnostics.ExtractStaleAdapterNames("""
+            Admin State    State          Type             Interface Name
+            Enabled        Disconnected   Dedicated        sing-box-tun-abc12345
+            """);
+        Assert.Single(suffixed);
+        Assert.Equal("sing-box-tun-abc12345", suffixed[0], ignoreCase: true);
+    }
+
+    [Fact]
+    public void TunDiag_PreStartCleanup_UnrelatedWintunAdapter_LeavesAlone()
+    {
+        // CRITICAL defensive test: WireGuard, AmneziaWG, OpenVPN TAP and
+        // other coexisting VPN tools all create wintun-class adapters with
+        // their own names. PreStartCleanupAsync must NEVER touch them —
+        // Bug-r9-E (separate chip) handles "another VPN detected" UX, this
+        // path is for VPNRouter's own orphans only. A regression here
+        // would silently kill the user's other VPN.
+        var output = """
+            Admin State    State          Type             Interface Name
+            -------------------------------------------------------------------------
+            Enabled        Connected      Dedicated        Ethernet
+            Enabled        Connected      Dedicated        Wintun Userspace Tunnel
+            Enabled        Connected      Dedicated        wg-AmneziaWG
+            Enabled        Connected      Dedicated        TAP-Windows Adapter V9
+            Enabled        Connected      Dedicated        OpenVPN Wintun
+            """;
+        var result = TunAdapterDiagnostics.ExtractStaleAdapterNames(output);
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void TunDiag_PreStartCleanup_MixedAdapters_OnlyOursDetected()
+    {
+        // Realistic mixed inventory: our adapter alongside someone else's
+        // wintun. Only VPNRouter-TUN comes back; the AmneziaWG entry is
+        // left alone. Defensive belt-and-braces against the parser drifting
+        // toward broad "anything with wintun in the name" matching.
+        var output = """
+            Admin State    State          Type             Interface Name
+            -------------------------------------------------------------------------
+            Enabled        Connected      Dedicated        Ethernet
+            Enabled        Disconnected   Dedicated        VPNRouter-TUN
+            Enabled        Connected      Dedicated        Wintun Userspace Tunnel
+            Enabled        Connected      Dedicated        wg0
+            """;
+        var result = TunAdapterDiagnostics.ExtractStaleAdapterNames(output);
+        Assert.Single(result);
+        Assert.Equal("VPNRouter-TUN", result[0], ignoreCase: true);
+    }
+
+    [Fact]
+    public void TunDiag_PreStartCleanup_DuplicateRows_DedupedByName()
+    {
+        // netsh sometimes lists the same adapter twice (admin-state row +
+        // operational-state row, or after a partial rename). The parser
+        // dedupes so PreStartCleanupAsync doesn't try to remove the same
+        // device twice.
+        var output = """
+            Admin State    State          Type             Interface Name
+            -------------------------------------------------------------------------
+            Enabled        Connected      Dedicated        VPNRouter-TUN
+            Disabled       Disconnected   Dedicated        VPNRouter-TUN
+            """;
+        var result = TunAdapterDiagnostics.ExtractStaleAdapterNames(output);
+        Assert.Single(result);
     }
 
     [Fact]

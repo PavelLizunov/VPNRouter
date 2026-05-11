@@ -515,6 +515,44 @@ public class VpnEngine : IDisposable
 
         ct.ThrowIfCancellationRequested();
 
+        // 7.5. v2.32.x Bug-r9-H — pre-start sweep for stale wintun adapters
+        // left behind by a previous sing-box CRASH (graceful Stop already
+        // covered by SingBoxManager → DisableOrphanedAdapter). stas's log
+        // showed sing-box dying with FATAL "configure tun interface:
+        // Cannot create a file when that file already exists", and every
+        // subsequent start hitting the same error — the wintun device
+        // record persists, so a fresh WintunCreateAdapter refuses with
+        // ERROR_FILE_EXISTS until the orphan is forcibly removed.
+        //
+        // Strict whitelist (VPNRouter-TUN + sing-box-tun-*) — coexisting
+        // VPN tools like WireGuard / AmneziaWG / OpenVPN that also use
+        // wintun-class adapters are intentionally untouched (Bug-r9-E
+        // is the place for "another VPN detected" UX). Linux/macOS no-op.
+        int removedAdapterCount = 0;
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                removedAdapterCount = await TunAdapterDiagnostics
+                    .PreStartCleanupAsync(_logger, "VpnEngine.StartAsync");
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning(ex,
+                    "[VpnEngine] Pre-start TUN cleanup threw (non-fatal)");
+            }
+        }
+        if (removedAdapterCount > 0)
+        {
+            // Settle delay so the Windows network stack finishes tearing
+            // down the removed adapter before sing-box tries to create
+            // its replacement. Without this, the next WintunCreateAdapter
+            // can race the device-removal IRPs and hit the same FILE_EXISTS.
+            await Task.Delay(500, ct);
+        }
+
+        ct.ThrowIfCancellationRequested();
+
         // 8. Start sing-box
         OnStatus("Starting sing-box...");
 
