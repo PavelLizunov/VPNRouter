@@ -2000,13 +2000,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsSettingsAutostartSelected => SelectedSettingsIndex == 5;
 
     // Tools sub-tabs
+    // v2.32.2 (W-4) — added third tab «Emergency Channel» (wgturn).
+    // Sub-tab order on the Tools page top strip:
+    //   0 = Zapret
+    //   1 = Telegram Proxy
+    //   2 = Emergency Channel (new)
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsZapretToolSelected))]
     [NotifyPropertyChangedFor(nameof(IsTgProxyToolSelected))]
+    [NotifyPropertyChangedFor(nameof(IsEmergencyChannelToolSelected))]
     private int _selectedToolIndex;
 
     public bool IsZapretToolSelected => SelectedToolIndex == 0;
     public bool IsTgProxyToolSelected => SelectedToolIndex == 1;
+    public bool IsEmergencyChannelToolSelected => SelectedToolIndex == 2;
 
     [ObservableProperty] private AppGroupViewModel? _selectedAppGroup;
 
@@ -2556,6 +2563,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // paths (Free Configs Use, paste, subscription rebuild). Must happen
         // after _settings loads.
         WireServersOrphanTracking();
+
+        // v2.32.2 (W-4) — populate Emergency Channel card state from the
+        // settings YAML before any UI binding fires. Polls
+        // WgturnUpdater.IsInstalled() once; subsequent flips come from
+        // Download / Remove commands. Implementation in
+        // MainWindowViewModel.Wgturn.cs.
+        InitializeWgturnState();
 
         // Sub-VMs
         UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger);

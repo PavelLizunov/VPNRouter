@@ -1535,4 +1535,75 @@ public static class Strings
           @"Whitelist: C:\ProgramData\VPNRouter\zapret\ (whole folder).";
 
     public static string ZapretAvBlockCopyPath => Ru ? "Скопировать путь" : "Copy path";
+
+    // ── v2.32.2 (W-4) — Emergency Channel (wgturn) card on Tools tab ──
+    // Backup VPN that runs over VK Calls TURN servers. Surfaces a third
+    // card on the Tools tab alongside Zapret and Telegram Proxy. Has
+    // three visual states: install (not-installed), idle (installed +
+    // disconnected), connected. Strings cover all three plus the helper
+    // dropdown / button / status labels.
+
+    public static string EmergencyChannelCardTitle => Ru
+        ? "Экстренный канал (wgturn)"
+        : "Emergency Channel (wgturn)";
+
+    public static string EmergencyChannelCardTitleWithVersion(string version, string variant) => Ru
+        ? $"Экстренный канал (wgturn {version}, {variant})"
+        : $"Emergency Channel (wgturn {version}, {variant})";
+
+    public static string EmergencyChannelDescription => Ru
+        ? "Резервный VPN через VK Calls TURN. Используется когда основной канал заблокирован."
+        : "Backup VPN via VK Calls TURN. Used when the primary channel is blocked.";
+
+    public static string EmergencyChannelInstall => Ru ? "Установить (~10 MB)" : "Install (~10 MB)";
+
+    public static string EmergencyChannelInstallEmbedded => Ru
+        ? "Загрузить полную версию (~120 MB)"
+        : "Download full version (~120 MB)";
+
+    public static string EmergencyChannelConfigsLabel => Ru ? "Конфигурация:" : "Configuration:";
+
+    public static string EmergencyChannelAddConfig => Ru ? "+ Добавить" : "+ Add";
+
+    public static string EmergencyChannelVkLinkLabel => Ru ? "VK-ссылка:" : "VK link:";
+
+    public static string EmergencyChannelVkLinkHint => Ru
+        ? "Получите из VK Calls → Поделиться ссылкой"
+        : "Get from VK Calls → Share link";
+
+    public static string EmergencyChannelConnect => Ru ? "Подключить" : "Connect";
+
+    public static string EmergencyChannelDisconnect => Ru ? "Отключить" : "Disconnect";
+
+    public static string EmergencyChannelRemove => Ru ? "Удалить" : "Remove";
+
+    public static string EmergencyChannelUpdate => Ru ? "Обновить" : "Update";
+
+    public static string EmergencyChannelOpenLog => Ru ? "Открыть лог" : "Open log";
+
+    public static string EmergencyChannelDetails => Ru ? "Подробнее" : "Details";
+
+    public static string EmergencyChannelStatusNotInstalled => Ru ? "Не установлен" : "Not installed";
+
+    public static string EmergencyChannelStatusDisconnected => Ru ? "Отключён" : "Disconnected";
+
+    public static string EmergencyChannelStatusConnecting => Ru ? "Подключение..." : "Connecting...";
+
+    public static string EmergencyChannelStatusConnectedTo(string name) => Ru
+        ? $"Подключено к {name}"
+        : $"Connected to {name}";
+
+    public static string EmergencyChannelStatusFailed(string reason) => Ru
+        ? $"Сбой: {reason}"
+        : $"Failed: {reason}";
+
+    public static string EmergencyChannelPidLine(int pid) => Ru
+        ? $"PID: {pid}"
+        : $"PID: {pid}";
+
+    public static string EmergencyChannelStatusLabel => Ru ? "Статус:" : "Status:";
+
+    public static string EmergencyChannelVkLinkWatermark => Ru
+        ? "Вставьте сюда ссылку из VK Calls..."
+        : "Paste link from VK Calls...";
 }

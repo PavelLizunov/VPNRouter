@@ -560,6 +560,31 @@ public partial class MainWindowViewModel
     public string L_ConflictIgnoreTooltip => Strings.ConflictIgnoreTooltip;
     public string L_ZapretAvBlockCopyPath => Strings.ZapretAvBlockCopyPath;
 
+    // ── v2.32.2 (W-4) — Emergency Channel (wgturn) card proxies ──
+    // Static strings only — the dynamic ones (status with name, version
+    // template, PID line) read directly from Strings.* in the VM so each
+    // composition picks up live values without a manual refresh.
+    public string L_EmergencyChannelCardTitle => Strings.EmergencyChannelCardTitle;
+    public string L_EmergencyChannelDescription => Strings.EmergencyChannelDescription;
+    public string L_EmergencyChannelInstall => Strings.EmergencyChannelInstall;
+    public string L_EmergencyChannelInstallEmbedded => Strings.EmergencyChannelInstallEmbedded;
+    public string L_EmergencyChannelConfigsLabel => Strings.EmergencyChannelConfigsLabel;
+    public string L_EmergencyChannelAddConfig => Strings.EmergencyChannelAddConfig;
+    public string L_EmergencyChannelVkLinkLabel => Strings.EmergencyChannelVkLinkLabel;
+    public string L_EmergencyChannelVkLinkHint => Strings.EmergencyChannelVkLinkHint;
+    public string L_EmergencyChannelVkLinkWatermark => Strings.EmergencyChannelVkLinkWatermark;
+    public string L_EmergencyChannelConnect => Strings.EmergencyChannelConnect;
+    public string L_EmergencyChannelDisconnect => Strings.EmergencyChannelDisconnect;
+    public string L_EmergencyChannelRemove => Strings.EmergencyChannelRemove;
+    public string L_EmergencyChannelUpdate => Strings.EmergencyChannelUpdate;
+    public string L_EmergencyChannelOpenLog => Strings.EmergencyChannelOpenLog;
+    public string L_EmergencyChannelDetails => Strings.EmergencyChannelDetails;
+    public string L_EmergencyChannelStatusNotInstalled => Strings.EmergencyChannelStatusNotInstalled;
+    public string L_EmergencyChannelStatusDisconnected => Strings.EmergencyChannelStatusDisconnected;
+    public string L_EmergencyChannelStatusConnecting => Strings.EmergencyChannelStatusConnecting;
+    public string L_EmergencyChannelStatusLabel => Strings.EmergencyChannelStatusLabel;
+    public string L_LblToolEmergencyChannel => Strings.EmergencyChannelCardTitle;
+
     /// <summary>
     /// Broadcasts PropertyChanged for every L_* proxy via reflection.
     /// Runs in ~1ms for 200 properties (faster than allocating a single

@@ -1,0 +1,304 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:VPNRouter.App.ViewModels"
+             xmlns:conv="using:VPNRouter.App"
+             xmlns:loc="using:VPNRouter.App.Localization"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
+             x:Class="VPNRouter.App.Views.Pages.EmergencyChannelPage"
+             x:DataType="vm:MainWindowViewModel">
+
+    <UserControl.Resources>
+        <conv:BoolToStatusColorConverter x:Key="StatusColorConverter"/>
+    </UserControl.Resources>
+
+    <!--
+      v2.32.2 (W-4) — Emergency Channel (wgturn) sub-page on the Tools
+      tab. Mirrors the styling of TelegramPage / DpiBypassPage (the two
+      sibling Tools cards):
+        - Body ScrollViewer with `Padding="0,10,0,10"` and an inner
+          `Grid Margin="12,0,14,0"` so the right edge stays clear of
+          the vertical scrollbar reservation.
+        - Three IsVisible-gated panels driven by VM-computed flags:
+            IsWgturnCardInstallVisible    — Install (~10 MB) state.
+            IsWgturnCardIdleVisible       — Installed, disconnected.
+            IsWgturnCardConnectedVisible  — Running tunnel.
+          Avalonia doesn't have MultiBinding, so the three branches are
+          mutually exclusive computed properties on the VM.
+
+      Depends on W-1 (WgturnUpdater) + W-2 (AppPaths.WgturnCli* constants
+      already in this worktree). Build is green only once W-1 lands —
+      until then the Download command surfaces an explanatory log line
+      via the W-4 stub.
+    -->
+
+    <Grid RowDefinitions="*,Auto">
+
+        <ScrollViewer Grid.Row="0"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto"
+                      AllowAutoHide="False"
+                      Padding="0,10,0,10">
+            <Grid Margin="12,0,14,0">
+                <StackPanel Spacing="12">
+
+                    <!-- Card title (varies by install state) -->
+                    <TextBlock Text="{Binding WgturnTitleText}"
+                               FontWeight="Bold" FontSize="13"/>
+
+                    <!-- Description always visible. -->
+                    <TextBlock Text="{Binding L_EmergencyChannelDescription}"
+                               TextWrapping="Wrap"
+                               FontSize="11"
+                               LineHeight="16"
+                               Opacity="0.7"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+                    <!-- ═══ State A: Not installed ═══ -->
+                    <Border IsVisible="{Binding IsWgturnCardInstallVisible}"
+                            Padding="12,10"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Background="{DynamicResource SurfaceSunkenBrush}">
+                        <StackPanel Spacing="10">
+
+                            <!-- Status badge: Not installed -->
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Ellipse Width="8" Height="8"
+                                         VerticalAlignment="Center"
+                                         Fill="{DynamicResource TextMutedBrush}"/>
+                                <TextBlock Text="{Binding L_EmergencyChannelStatusNotInstalled}"
+                                           FontSize="11"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                            </StackPanel>
+
+                            <!-- Install + secondary download buttons row -->
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="{Binding L_EmergencyChannelInstall}"
+                                        Command="{Binding DownloadWgturnCommand}"
+                                        IsEnabled="{Binding !IsWgturnDownloading}"
+                                        FontSize="10" Padding="10,5"
+                                        FontWeight="SemiBold"
+                                        Background="{DynamicResource AccentSolidBrush}"
+                                        Foreground="{DynamicResource AccentOnSolidBrush}"
+                                        CornerRadius="{StaticResource RadiusSm}"/>
+                                <Button Content="{Binding L_EmergencyChannelDetails}"
+                                        Command="{Binding OpenWgturnDetailsCommand}"
+                                        FontSize="10" Padding="10,5"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Foreground="{DynamicResource AccentFgBrush}"/>
+                            </StackPanel>
+
+                            <!-- Secondary Embedded download (smaller) -->
+                            <Button Content="{Binding L_EmergencyChannelInstallEmbedded}"
+                                    Command="{Binding DownloadWgturnEmbeddedCommand}"
+                                    IsEnabled="{Binding !IsWgturnDownloading}"
+                                    HorizontalAlignment="Left"
+                                    FontSize="9" Padding="8,4"
+                                    Background="Transparent"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusSm}"
+                                    Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+                            <!-- Download progress indicator -->
+                            <ProgressBar IsVisible="{Binding IsWgturnDownloading}"
+                                         IsIndeterminate="True"
+                                         Height="3"
+                                         CornerRadius="{StaticResource RadiusXs}"
+                                         Foreground="{DynamicResource AccentSolidBrush}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ═══ State B: Installed, idle ═══ -->
+                    <Border IsVisible="{Binding IsWgturnCardIdleVisible}"
+                            Padding="12,10"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Background="{DynamicResource SurfaceSunkenBrush}">
+                        <StackPanel Spacing="10">
+
+                            <!-- Status: Disconnected -->
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{Binding L_EmergencyChannelStatusLabel}"
+                                           FontSize="11"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <Ellipse Width="8" Height="8"
+                                         VerticalAlignment="Center"
+                                         Fill="{DynamicResource TextMutedBrush}"/>
+                                <TextBlock Text="{Binding WgturnStatusText}"
+                                           FontSize="11"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- Configuration picker row: label + ComboBox + + Add -->
+                            <Grid ColumnDefinitions="120,*,Auto" ColumnSpacing="8">
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding L_EmergencyChannelConfigsLabel}"
+                                           FontSize="11"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <ComboBox Grid.Column="1"
+                                          ItemsSource="{Binding WgturnConfigs}"
+                                          SelectedItem="{Binding SelectedWgturnConfig}"
+                                          HorizontalAlignment="Stretch"
+                                          FontSize="11" Padding="8,4">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Name}" FontSize="11"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <Button Grid.Column="2"
+                                        Content="{Binding L_EmergencyChannelAddConfig}"
+                                        Command="{Binding AddWgturnConfigPlaceholderCommand}"
+                                        FontSize="10" Padding="8,4"
+                                        CornerRadius="{StaticResource RadiusSm}"/>
+                            </Grid>
+
+                            <!-- VK link input row -->
+                            <Grid ColumnDefinitions="120,*" ColumnSpacing="8">
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding L_EmergencyChannelVkLinkLabel}"
+                                           FontSize="11"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding WgturnVkLink}"
+                                         Watermark="{Binding L_EmergencyChannelVkLinkWatermark}"
+                                         FontSize="11" Padding="6,4"
+                                         AutomationProperties.Name="{Binding L_EmergencyChannelVkLinkLabel}"/>
+                            </Grid>
+
+                            <!-- VK link hint -->
+                            <TextBlock Text="{Binding L_EmergencyChannelVkLinkHint}"
+                                       TextWrapping="Wrap"
+                                       FontSize="9" Opacity="0.6"
+                                       Foreground="{DynamicResource TextMutedBrush}"/>
+
+                            <!-- Action buttons: Connect | Remove | Update -->
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Content="{Binding L_EmergencyChannelConnect}"
+                                        Command="{Binding ConnectWgturnCommand}"
+                                        FontSize="10" Padding="10,5"
+                                        FontWeight="SemiBold"
+                                        Background="{DynamicResource AccentSolidBrush}"
+                                        Foreground="{DynamicResource AccentOnSolidBrush}"
+                                        CornerRadius="{StaticResource RadiusSm}"/>
+                                <Button Content="{Binding L_EmergencyChannelRemove}"
+                                        Command="{Binding RemoveWgturnCommand}"
+                                        FontSize="10" Padding="10,5"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Foreground="{DynamicResource DangerSolidBrush}"/>
+                                <Button Content="{Binding L_EmergencyChannelUpdate}"
+                                        Command="{Binding UpdateWgturnCommand}"
+                                        IsEnabled="{Binding !IsWgturnDownloading}"
+                                        FontSize="10" Padding="10,5"
+                                        CornerRadius="{StaticResource RadiusSm}"/>
+                            </StackPanel>
+
+                            <ProgressBar IsVisible="{Binding IsWgturnDownloading}"
+                                         IsIndeterminate="True"
+                                         Height="3"
+                                         CornerRadius="{StaticResource RadiusXs}"
+                                         Foreground="{DynamicResource AccentSolidBrush}"/>
+
+                            <!-- Secondary links: Details | Open log -->
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <Button Content="{Binding L_EmergencyChannelDetails}"
+                                        Command="{Binding OpenWgturnDetailsCommand}"
+                                        FontSize="9" Padding="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Foreground="{DynamicResource AccentFgBrush}"/>
+                                <Button Content="{Binding L_EmergencyChannelOpenLog}"
+                                        Command="{Binding OpenWgturnLogCommand}"
+                                        FontSize="9" Padding="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Foreground="{DynamicResource AccentFgBrush}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ═══ State C: Connected ═══ -->
+                    <Border IsVisible="{Binding IsWgturnCardConnectedVisible}"
+                            Padding="12,10"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Background="{DynamicResource SurfaceSunkenBrush}">
+                        <StackPanel Spacing="10">
+
+                            <!-- Status: Connected to X (green dot) -->
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{Binding L_EmergencyChannelStatusLabel}"
+                                           FontSize="11"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <Ellipse Width="8" Height="8"
+                                         VerticalAlignment="Center"
+                                         Fill="{DynamicResource SuccessSolidBrush}"/>
+                                <TextBlock Text="{Binding WgturnStatusText}"
+                                           FontSize="11"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- PID line -->
+                            <TextBlock Text="{Binding WgturnPidLineText}"
+                                       FontSize="10"
+                                       FontFamily="Consolas,Courier New,monospace"
+                                       Opacity="0.6"/>
+
+                            <!-- Disconnect button -->
+                            <Button Content="{Binding L_EmergencyChannelDisconnect}"
+                                    Command="{Binding DisconnectWgturnCommand}"
+                                    HorizontalAlignment="Left"
+                                    FontSize="10" Padding="10,5"
+                                    FontWeight="SemiBold"
+                                    Background="{DynamicResource SurfaceBaseBrush}"
+                                    Foreground="{DynamicResource TextPrimaryBrush}"
+                                    BorderBrush="{DynamicResource BorderDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource RadiusSm}"/>
+
+                            <!-- Open log link -->
+                            <Button Content="{Binding L_EmergencyChannelOpenLog}"
+                                    Command="{Binding OpenWgturnLogCommand}"
+                                    HorizontalAlignment="Left"
+                                    FontSize="9" Padding="0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Foreground="{DynamicResource AccentFgBrush}"/>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- Footer: mirrors DpiBypass / Telegram footer (status dot +
+             text on left, primary action on right). Status + action
+             reflect the live state. -->
+        <Border Grid.Row="1" Padding="14,7,14,8"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource BorderDefaultBrush}"
+                Background="{DynamicResource SurfaceSunkenBrush}">
+            <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center" ColumnSpacing="8">
+                <StackPanel Grid.Column="0"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            VerticalAlignment="Center">
+                    <Ellipse Width="8" Height="8"
+                             VerticalAlignment="Center"
+                             Fill="{Binding IsWgturnConnected, Converter={StaticResource StatusColorConverter}}"/>
+                    <TextBlock Text="{Binding WgturnStatusText}"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

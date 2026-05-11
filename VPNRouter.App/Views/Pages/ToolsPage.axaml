@@ -24,12 +24,19 @@
             </ListBox.ItemsPanel>
             <ListBoxItem Content="{Binding LblToolZapret}"  Padding="10,4" FontSize="11"/>
             <ListBoxItem Content="{Binding LblToolTgProxy}" Padding="10,4" FontSize="11"/>
+            <!-- v2.32.2 (W-4) — third Tools sub-tab for the wgturn-core
+                 Emergency Channel card. Title reuses the same Strings.cs
+                 key the card title uses so the tab caption + card title
+                 stay in sync. -->
+            <ListBoxItem Content="{Binding L_LblToolEmergencyChannel}" Padding="10,4" FontSize="11"/>
         </ListBox>
 
         <!-- Sub-pages -->
         <Grid Grid.Row="1">
             <pages:DpiBypassPage IsVisible="{Binding IsZapretToolSelected}"/>
             <pages:TelegramPage  IsVisible="{Binding IsTgProxyToolSelected}"/>
+            <!-- v2.32.2 (W-4) — Emergency Channel (wgturn) sub-page. -->
+            <pages:EmergencyChannelPage IsVisible="{Binding IsEmergencyChannelToolSelected}"/>
         </Grid>
 
     </Grid>
