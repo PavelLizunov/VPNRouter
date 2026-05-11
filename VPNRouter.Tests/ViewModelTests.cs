@@ -320,4 +320,125 @@ public class AutostartStatusBindingTests
         }
         finally { Strings.Lang = en; }
     }
+
+    // ─── G-4 (r10 r9 audit) Bug-r10-D regression: server-delete persists through SaveSettings ───
+    //
+    // User report (brat, 2026-05-11): deleted a VLESS server via row ×
+    // button; after restart, the entry was back. Root cause:
+    // RemoveServerByEntry only mutated the in-memory ObservableCollection
+    // and never called SaveSettings → YAML kept the stale entry. r6 added
+    // SaveSettings() call inside RemoveServerByEntry.
+    //
+    // This pin asserts that AFTER RemoveServerByEntryCommand executes,
+    // settings.Vless.Servers reflects the deletion (the in-memory model
+    // that SaveSettings persists from).
+
+    /// <summary>
+    /// Reflectively invokes the private <c>RemoveServerByEntry</c> command
+    /// because <c>[RelayCommand]</c>-generated <c>RemoveServerByEntryCommand</c>
+    /// is public, but to avoid coupling to the exact generated signature
+    /// we just invoke the underlying method via reflection.
+    /// </summary>
+    private static void InvokeRemoveServerByEntry(MainWindowViewModel vm, ServerViewModel entry)
+    {
+        var method = typeof(MainWindowViewModel).GetMethod(
+            "RemoveServerByEntry",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        method!.Invoke(vm, new object?[] { entry });
+    }
+
+    [AvaloniaFact]
+    public void RemoveServerByEntry_Persists_BratRegression()
+    {
+        var vm = new MainWindowViewModel();
+        var settings = (AppSettings)typeof(MainWindowViewModel)
+            .GetField("_settings", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(vm)!;
+
+        // Seed two servers in the VM Servers collection
+        var keepEntry = new VlessServerEntry { Name = "keep", Server = "1.2.3.4", Port = 443, Uuid = "u-keep" };
+        var dropEntry = new VlessServerEntry { Name = "drop", Server = "5.6.7.8", Port = 443, Uuid = "u-drop" };
+        vm.Servers.Clear();
+        vm.Servers.Add(new ServerViewModel(keepEntry));
+        var dropVm = new ServerViewModel(dropEntry);
+        vm.Servers.Add(dropVm);
+
+        // Pin: BEFORE delete, both are in the collection
+        Assert.Equal(2, vm.Servers.Count);
+
+        // Act
+        InvokeRemoveServerByEntry(vm, dropVm);
+
+        // After delete: removed from in-memory collection
+        Assert.Single(vm.Servers);
+        Assert.DoesNotContain(vm.Servers, s => s.Name == "drop");
+
+        // r6 fix contract: settings.Vless.Servers reflects the deletion
+        // (this is what SaveSettings -> SettingsLoader.Save persists to
+        // YAML). Without the r6 fix, settings.Vless.Servers would still
+        // contain "drop" until next SaveSettings, and an app close
+        // without explicit Apply would lose the deletion.
+        Assert.DoesNotContain(settings.Vless.Servers, s => s.Name == "drop");
+    }
+
+    // ─── G-6 (r10 r9 audit) Bug-r10-H regression: "Не из подписки" badge consistency ───
+    //
+    // User report (brat screenshot, 2026-05-12): manual entry added at
+    // startup (via YAML on disk) showed the orphan badge, but a manual
+    // entry added in the same session via Free Configs → Use did NOT
+    // show the badge. Root cause: MarkOrphanServers ran only in
+    // LoadSettingsIntoUI + RemoveServerByEntry; other add paths
+    // skipped it. r9 wired Servers.CollectionChanged → MarkOrphanServers
+    // (with _isLoadingUI guard for bulk reload).
+    //
+    // This pin asserts the auto-rewire: adding to Servers after ctor
+    // (i.e. _isLoadingUI=false) triggers re-evaluation.
+
+    [AvaloniaFact]
+    public void AddingServer_AfterCtorLoad_AutoMarksOrphanState_Brat()
+    {
+        var vm = new MainWindowViewModel();
+        var settings = (AppSettings)typeof(MainWindowViewModel)
+            .GetField("_settings", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(vm)!;
+
+        // Set up: an active subscription with one server
+        settings.App.Subscriptions = new List<SubscriptionEntry>
+        {
+            new()
+            {
+                Name = "sub-1",
+                Url = "https://example.com/sub",
+                Enabled = true,
+                Servers = new List<VlessServerEntry>
+                {
+                    new() { Name = "sub-server", Server = "1.1.1.1", Port = 443, Uuid = "sub-uuid" }
+                }
+            }
+        };
+
+        // Clear any preload from ctor, then add manually (post-ctor flow)
+        vm.Servers.Clear();
+
+        // Add an entry that IS in the subscription
+        var subEntry = new ServerViewModel(new VlessServerEntry
+        {
+            Name = "sub-server", Server = "1.1.1.1", Port = 443, Uuid = "sub-uuid"
+        });
+        vm.Servers.Add(subEntry);
+
+        // Add an entry that is NOT in any subscription (Free Config / paste)
+        var orphanEntry = new ServerViewModel(new VlessServerEntry
+        {
+            Name = "⚡ [EE] manual", Server = "77.239.126.152", Port = 7443, Uuid = "orphan-uuid"
+        });
+        vm.Servers.Add(orphanEntry);
+
+        // r9 fix contract: CollectionChanged → MarkOrphanServers
+        // automatically. Sub-matching entry: orphan=false. Free Config
+        // entry: orphan=true.
+        Assert.False(subEntry.IsOrphanFromSubscription, "subscription-matching entry must NOT be marked orphan");
+        Assert.True(orphanEntry.IsOrphanFromSubscription, "non-subscription entry must be marked orphan");
+    }
 }

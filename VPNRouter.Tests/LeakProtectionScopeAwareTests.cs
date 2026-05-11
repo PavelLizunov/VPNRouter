@@ -362,4 +362,73 @@ public sealed class LeakProtectionScopeAwareTests
 
         Assert.True(result.IsValid, string.Join("; ", result.Errors));
     }
+
+    // ─── G-1 (r10 r9 audit) brat-class union: generated + sub + non-placeholder vless.servers ───
+    //
+    // The r7 fix that unblocked brat (manual Free Config entry in
+    // generated mode with sub enabled) needs an explicit "what the user
+    // would check" assertion: their picked entry passes validation.
+    // Pre-r7 union returned ONLY subscription; brat's IP was rejected.
+    // r7 added: in generated mode, also include non-placeholder
+    // vless.servers entries in the allowed list. Stas-class placeholders
+    // are still rejected via VlessServersResolver.IsPlaceholderEntry.
+    //
+    // This test pins THAT specific behaviour (the
+    // GeneratedMode_WithSubscription_ValidOutbound_Passes test above
+    // happens to exercise the same path, but its setup uses subscription
+    // server as outbound — not a manual vless.servers entry. Brat's
+    // case uses a manual entry that ISN'T in any subscription, which is
+    // semantically different).
+    [Fact]
+    public void GeneratedMode_WithSubscription_NonPlaceholderManualVlessServer_Passes_BratRegression()
+    {
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "generated";
+        // Subscription has 2 working servers
+        settings.App.Subscriptions = new List<SubscriptionEntry>
+        {
+            new()
+            {
+                Name = "main-brat",
+                Url = "https://example.com/sub",
+                Enabled = true,
+                Servers = new List<VlessServerEntry>
+                {
+                    new() { Name = "de-01 main-brat", Server = "1.2.3.4", Port = 443, Uuid = "sub-uuid-1" },
+                }
+            }
+        };
+        // User added a Free Config manually — real IP, real pubkey, NOT
+        // in any subscription, NOT a placeholder.
+        settings.Vless.Servers = new List<VlessServerEntry>
+        {
+            new()
+            {
+                Name = "⚡ [US] 193.233.217.174:443",
+                Server = "193.233.217.174",
+                Port = 443,
+                Uuid = "real-uuid-free-config",
+                Reality = new VlessRealityConfig
+                {
+                    Enabled = true,
+                    PublicKey = "real-pubkey-not-placeholder",
+                    ShortId = "deadbeef"
+                }
+            }
+        };
+        settings.Vless.ActiveServer = "⚡ [US] 193.233.217.174:443";
+
+        var config = CreateValidConfig(
+            proxyServer: "193.233.217.174",
+            proxyPort: 443,
+            proxyUuid: "real-uuid-free-config");
+
+        var result = LeakProtection.ValidateConfig(config, settings);
+
+        // The whole point of r7 fix — should PASS, not Error
+        Assert.True(result.IsValid, "Validation should pass for legitimate manual Free Config entry in generated mode. Errors: " + string.Join("; ", result.Errors));
+        Assert.DoesNotContain(result.Errors, e =>
+            e.Contains("193.233.217.174")
+            && (e.Contains("scope") || e.Contains("legacy") || e.Contains("subscription")));
+    }
 }

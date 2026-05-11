@@ -256,4 +256,100 @@ public class AutoFailoverEngineTests : IDisposable
         engine.ResetCycle();
         Assert.Empty(engine.TriedServers);
     }
+
+    // ─── G-2 (r10 r9 audit) Bug-r10-F brat regression: generated + sub + legitimate manual ───
+    //
+    // Pre-r8, in generated mode with subscription enabled, a probe
+    // failure on user's manually-picked Free Config triggered silent
+    // swap to subscription's first server. r8 added a gate: if the
+    // active is a legitimate manual (in vless.servers AND not a known
+    // placeholder per VlessServersResolver.IsPlaceholderEntry), F-E
+    // SKIPS auto-swap and surfaces a clear error instead.
+    //
+    // This pin tests the gate explicitly. Subscribe mode keeps auto-
+    // swap, manual-only mode (no sub) keeps auto-switch through manual
+    // pool — those are covered by other tests in this class.
+    [Fact]
+    public async Task GeneratedMode_SubEnabled_LegitimateManual_SkipsAutoSwap_Brat()
+    {
+        // Build state that matches brat's situation: generated mode,
+        // sub enabled with 2 working servers, user picked manual Free
+        // Config entry.
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "generated";
+        settings.App.Subscriptions = new List<SubscriptionEntry>
+        {
+            new()
+            {
+                Name = "main-brat",
+                Url = "https://example.com/sub",
+                Enabled = true,
+                Servers = new List<VlessServerEntry>
+                {
+                    new() { Name = "de-01", Server = "1.2.3.4", Port = 443, Uuid = "sub-1" },
+                    new() { Name = "is-01", Server = "5.6.7.8", Port = 443, Uuid = "sub-2" },
+                }
+            }
+        };
+        settings.Vless.Servers = new List<VlessServerEntry>
+        {
+            // Real manual entry, NOT in subscription, NOT a placeholder
+            new()
+            {
+                Name = "⚡ [EE] 77.239.126.152:7443",
+                Server = "77.239.126.152",
+                Port = 7443,
+                Uuid = "real-free-uuid",
+                Reality = new VlessRealityConfig
+                {
+                    Enabled = true,
+                    PublicKey = "real-pubkey-not-placeholder",
+                    ShortId = "abcdef01"
+                }
+            }
+        };
+        settings.Vless.ActiveServer = "⚡ [EE] 77.239.126.152:7443";
+
+        int restartCalls = 0;
+        var sanity = new ConfigSanityCheck();
+        var engine = new AutoFailoverEngine(
+            settings, sanity,
+            restart: _ => { Interlocked.Increment(ref restartCalls); return Task.FromResult(true); });
+
+        var outcome = await engine.HandleDeadConfigAsync("Clash API HTTP 504");
+
+        // No auto-swap — user-facing error returned instead
+        Assert.False(outcome.Switched);
+        Assert.Null(outcome.NewActiveServer);
+        Assert.NotNull(outcome.UserFacingMessage);
+        Assert.Equal(0, restartCalls);
+        // ActiveServer must NOT have been clobbered
+        Assert.Equal("⚡ [EE] 77.239.126.152:7443", settings.Vless.ActiveServer);
+    }
+
+    [Fact]
+    public async Task GeneratedMode_NoSubscription_LegitimateManual_StillSwapsAcrossManualPool()
+    {
+        // Edge case: legacy direct-VLESS mode (no sub). User has 2
+        // manual entries. F-E should STILL switch through them when
+        // active dies — there's no other pool, "best of manual" is the
+        // contract. This pins that the r8 gate doesn't over-block.
+        var settings = new AppSettings();
+        settings.App.ConfigMode = "generated";
+        settings.App.Subscriptions = new List<SubscriptionEntry>(); // no sub
+        settings.Vless.Servers = new List<VlessServerEntry>
+        {
+            new() { Name = "manual-1", Server = "10.0.0.1", Port = 443, Uuid = "u1" },
+            new() { Name = "manual-2", Server = "10.0.0.2", Port = 443, Uuid = "u2" },
+        };
+        settings.Vless.ActiveServer = "manual-1";
+
+        var sanity = new ConfigSanityCheck();
+        var engine = new AutoFailoverEngine(settings, sanity);
+
+        var outcome = await engine.HandleDeadConfigAsync("dead");
+
+        Assert.True(outcome.Switched);
+        Assert.Equal("manual-2", outcome.NewActiveServer);
+    }
 }
