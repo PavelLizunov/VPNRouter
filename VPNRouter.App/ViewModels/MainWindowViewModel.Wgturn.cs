@@ -161,7 +161,10 @@ public partial class MainWindowViewModel
         if (IsWgturnInstalled)
         {
             WgturnVersion = WgturnUpdater.GetLocalVersion() ?? string.Empty;
-            WgturnVariantLabel = WgturnUpdater.GetLocalVariant()?.ToString().ToLowerInvariant() ?? "slim";
+            // r10 r9 merge fix: W-1's GetLocalVariant returns non-nullable
+            // WgturnVariant (defaults to Slim on missing/unknown). The W-4
+            // stub returned nullable — adjust for real W-1 contract.
+            WgturnVariantLabel = WgturnUpdater.GetLocalVariant().ToString().ToLowerInvariant();
         }
 
         // Load persisted configs.
@@ -204,7 +207,7 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async Task UpdateWgturnAsync()
     {
-        var variant = WgturnUpdater.GetLocalVariant() ?? WgturnVariant.Slim;
+        var variant = WgturnUpdater.GetLocalVariant();
         await DownloadWgturnVariantAsync(variant);
     }
 
@@ -228,7 +231,7 @@ public partial class MainWindowViewModel
             if (IsWgturnInstalled)
             {
                 WgturnVersion = WgturnUpdater.GetLocalVersion() ?? string.Empty;
-                WgturnVariantLabel = WgturnUpdater.GetLocalVariant()?.ToString().ToLowerInvariant() ?? variant.ToString().ToLowerInvariant();
+                WgturnVariantLabel = WgturnUpdater.GetLocalVariant().ToString().ToLowerInvariant();
             }
         }
         catch (NotImplementedException nie)
