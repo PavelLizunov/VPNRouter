@@ -194,9 +194,28 @@
                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
 
-                <!-- Name + host subtitle -->
+                <!-- Name + host subtitle (+ v2.32 r10 F-C orphan badge) -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                  <TextBlock Classes="srv-name" Text="{Binding DisplayName}"/>
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Classes="srv-name" Text="{Binding DisplayName}"/>
+                    <!-- v2.32 (r10, F-C) — flags legacy vless.servers entries
+                         that aren't in any active subscription. Usually F-B
+                         migration strips these on load; badge appears as a
+                         safety net for the rare survivors. -->
+                    <Border IsVisible="{Binding IsOrphanFromSubscription}"
+                            Background="{DynamicResource WarningBgBrush}"
+                            BorderBrush="{DynamicResource WarningBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusXs}"
+                            Padding="5,1"
+                            VerticalAlignment="Center"
+                            ToolTip.Tip="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ServersOrphanTooltip}">
+                      <TextBlock Text="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_ServersOrphanBadge}"
+                                 FontSize="9"
+                                 FontWeight="SemiBold"
+                                 Foreground="{DynamicResource WarningFgBrush}"/>
+                    </Border>
+                  </StackPanel>
                   <TextBlock Classes="srv-host" Text="{Binding HostSubtitle}"
                              IsVisible="{Binding HostSubtitle, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                 </StackPanel>

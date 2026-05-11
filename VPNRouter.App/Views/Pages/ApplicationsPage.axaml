@@ -85,8 +85,33 @@
        + IsHitTestVisible=false instead of IsEnabled=false (visual hint
        that selection is unused, not that the page is broken).
        When IsSplitTunnel = true the banner row collapses (Height=Auto +
-       IsVisible=false → 0px). -->
-  <Grid RowDefinitions="Auto,*">
+       IsVisible=false → 0px).
+       v2.32 (r10) — added Row 1: Include/Exclude segmented toggle.
+       Master-detail moved to Row 2. -->
+
+  <UserControl.Styles>
+    <!-- v2.32 — segmented mode toggle (Include / Exclude). Pattern
+         mirrors the existing radio-styled buttons elsewhere; active
+         button gets AccentSolid background. -->
+    <Style Selector="ToggleButton.apps-mode-seg">
+      <Setter Property="Background" Value="{DynamicResource SurfaceBaseBrush}"/>
+      <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtleBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}"/>
+      <Setter Property="Padding" Value="10,5"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="ToggleButton.apps-mode-seg:checked /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AccentSolidBrush}"/>
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource AccentOnSolidBrush}"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,Auto,*">
 
     <!-- Full-tunnel hint banner — shown only when IsFullTunnel -->
     <Border Grid.Row="0"
@@ -114,13 +139,43 @@
       </Grid>
     </Border>
 
+    <!-- Row 1: Apps Mode segmented toggle (v2.32 r10).
+         Only meaningful in Split-tunnel mode; collapsed in Full-tunnel. -->
+    <Border Grid.Row="1"
+            IsVisible="{Binding IsSplitTunnel}"
+            Padding="14,8,14,4"
+            BorderThickness="0,0,0,1"
+            BorderBrush="{DynamicResource BorderSubtleBrush}">
+      <StackPanel Spacing="6">
+        <TextBlock Text="{Binding L_AppsModeSectionTitle}"
+                   FontSize="11" FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+          <ToggleButton Grid.Column="0"
+                        Classes="apps-mode-seg"
+                        IsChecked="{Binding IsRoutingAppsModeInclude, Mode=TwoWay}"
+                        Content="{Binding L_AppsModeInclude}"
+                        AutomationProperties.Name="{Binding L_AppsModeInclude}"/>
+          <ToggleButton Grid.Column="1"
+                        Classes="apps-mode-seg"
+                        IsChecked="{Binding IsRoutingAppsModeExclude, Mode=TwoWay}"
+                        Content="{Binding L_AppsModeExclude}"
+                        AutomationProperties.Name="{Binding L_AppsModeExclude}"/>
+        </Grid>
+        <TextBlock Text="{Binding L_CurrentAppsModeHint}"
+                   FontSize="10"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource TextMutedBrush}"/>
+      </StackPanel>
+    </Border>
+
     <!-- v2.30.3-r1 (BUG-36 fix): when Full Tunnel is active the sidebar
          category list looked clickable (low opacity but no cursor hint),
          users clicked categories 5+ times before realizing it's no-op.
          Now the disabled state is more pronounced + a not-allowed cursor
          appears on hover so the visual disabled-ness matches the actual
          IsHitTestVisible=false behaviour. -->
-    <Grid Grid.Row="1"
+    <Grid Grid.Row="2"
           ColumnDefinitions="120,*"
           Opacity="{Binding IsSplitTunnel, Converter={x:Static conv:BoolTo10or05Converter.Instance}}"
           IsHitTestVisible="{Binding IsSplitTunnel}"

@@ -396,6 +396,46 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 IsSplitTunnel = !value;
         }
     }
+
+    /// <summary>
+    /// v2.32 (r10) — Apps Include/Exclude 2-mode toggle. User feedback
+    /// "сделам 2 модм exclude и include". Backed by AM-1 chip's
+    /// AppSettings.App.RoutingAppsMode (schema v3 field). Default
+    /// "include" = legacy behaviour (selected apps -> VPN). "exclude"
+    /// inverts: selected apps -> direct, everything else -> VPN.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsRoutingAppsModeInclude))]
+    [NotifyPropertyChangedFor(nameof(IsRoutingAppsModeExclude))]
+    [NotifyPropertyChangedFor(nameof(L_CurrentAppsModeHint))]
+    private string _routingAppsMode = "include";
+
+    /// <summary>True when <see cref="RoutingAppsMode"/> = "include". Two-way
+    /// bool for radio/segmented-toggle binding.</summary>
+    public bool IsRoutingAppsModeInclude
+    {
+        get => string.Equals(RoutingAppsMode, "include", StringComparison.OrdinalIgnoreCase);
+        set { if (value) RoutingAppsMode = "include"; }
+    }
+
+    /// <summary>True when <see cref="RoutingAppsMode"/> = "exclude". Two-way
+    /// bool for radio/segmented-toggle binding.</summary>
+    public bool IsRoutingAppsModeExclude
+    {
+        get => string.Equals(RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase);
+        set { if (value) RoutingAppsMode = "exclude"; }
+    }
+
+    partial void OnRoutingAppsModeChanged(string value)
+    {
+        if (_isLoadingUI) return;
+        var canon = (value ?? "include").Trim().ToLowerInvariant();
+        if (canon != "include" && canon != "exclude") canon = "include";
+        _settings.App.RoutingAppsMode = canon;
+        SaveSettings();
+        if (IsConnected) HasPendingAppChanges = true;
+    }
+
     [ObservableProperty] private bool _bypassRussianTraffic = true;
 
     /// <summary>v2.30.0-r17 — when true, custom rules win over global
@@ -2665,6 +2705,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         IsSplitTunnel = !(_settings.App.RoutingMode ?? "split")
             .Equals("full", StringComparison.OrdinalIgnoreCase);
 
+        // v2.32 (r10) — Apps Include/Exclude 2-mode. AM-1 chip added the
+        // field + schema v3 migration; this hydrates the VM observable.
+        // AppSettingsSane already canonicalises to lowercase + falls back
+        // to "include" on unknown values.
+        RoutingAppsMode = (_settings.App.RoutingAppsMode ?? "include").Trim().ToLowerInvariant();
+
         // Russian geo bypass
         BypassRussianTraffic = _settings.App.BypassRussianTraffic;
         // v2.30.0-r17: Custom-rules-priority. "custom_first" → checkbox on.
@@ -2767,6 +2813,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 activeServer = vm;
         }
         SelectedServer = activeServer ?? Servers.FirstOrDefault();
+
+        // v2.32 (r10, F-C) — flag legacy vless.servers entries that aren't
+        // in any enabled subscription. F-B migration strips these on load,
+        // but mark anyway for the rare cases (migration not yet fired,
+        // user manually re-added an entry) so ServersPage can show
+        // "Not in subscription" badge + tooltip.
+        MarkOrphanServers();
 
         // Migrate legacy single subscription → first entry in Subscriptions list
         if (_settings.App.Subscriptions.Count == 0
@@ -3321,6 +3374,42 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         return name;
     }
 
+    /// <summary>
+    /// v2.32 (r10, F-C) — mark each entry in <see cref="Servers"/> as orphan
+    /// if it doesn't belong to any enabled subscription. The badge in
+    /// ServersPage row template binds to <c>IsOrphanFromSubscription</c>.
+    ///
+    /// <para>Match by composite key <c>{server|port|uuid}</c> (case-insensitive)
+    /// so the same physical server can be identified across name renames.</para>
+    ///
+    /// <para>Called from <c>LoadSettingsIntoUI</c> after Servers is rebuilt,
+    /// and re-runs on subscription refresh via <c>RefreshSubscriptionAsync</c>
+    /// (added in callsite there).</para>
+    /// </summary>
+    private void MarkOrphanServers()
+    {
+        var hasEnabledSubs = _settings.App.Subscriptions?
+            .Any(s => s.Enabled && (s.Servers?.Count ?? 0) > 0) == true;
+        if (!hasEnabledSubs)
+        {
+            foreach (var vm in Servers)
+                vm.IsOrphanFromSubscription = false;
+            return;
+        }
+
+        var subKeys = _settings.App.Subscriptions!
+            .Where(s => s.Enabled)
+            .SelectMany(s => s.Servers ?? new System.Collections.Generic.List<VlessServerEntry>())
+            .Select(s => $"{s.Server}|{s.Port}|{s.Uuid}")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var vm in Servers)
+        {
+            var key = $"{vm.Server}|{vm.Port}|{vm.Uuid}";
+            vm.IsOrphanFromSubscription = !subKeys.Contains(key);
+        }
+    }
+
     private void SaveSettings()
     {
         // Guard: don't save while LoadSettingsIntoUI is populating fields
@@ -3420,6 +3509,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         // Routing mode
         _settings.App.RoutingMode = IsSplitTunnel ? "split" : "full";
+
+        // v2.32 (r10) — Apps Include/Exclude 2-mode persist. Already
+        // persisted eagerly in OnRoutingAppsModeChanged but written here
+        // too so SaveSettings is the single source of truth on save.
+        var appsModeCanon = (RoutingAppsMode ?? "include").Trim().ToLowerInvariant();
+        if (appsModeCanon != "include" && appsModeCanon != "exclude") appsModeCanon = "include";
+        _settings.App.RoutingAppsMode = appsModeCanon;
 
         // v2.30.0 — full custom rules (direct/proxy/block). Parse the
         // textbox + persist the structured list + populate two diagnostic

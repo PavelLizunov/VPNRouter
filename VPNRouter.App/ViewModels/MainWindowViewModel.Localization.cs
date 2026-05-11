@@ -50,6 +50,10 @@ public partial class MainWindowViewModel
     public string L_AppsModeExclude => Strings.AppsModeExclude;
     public string L_AppsModeIncludeHint => Strings.AppsModeIncludeHint;
     public string L_AppsModeExcludeHint => Strings.AppsModeExcludeHint;
+    /// <summary>Selects which hint to show beneath the segmented toggle
+    /// based on current <see cref="RoutingAppsMode"/>.</summary>
+    public string L_CurrentAppsModeHint =>
+        IsRoutingAppsModeExclude ? L_AppsModeExcludeHint : L_AppsModeIncludeHint;
     // v2.32 — ServersPage orphan-entry marker (F-C).
     public string L_ServersOrphanBadge => Strings.ServersOrphanBadge;
     public string L_ServersOrphanTooltip => Strings.ServersOrphanTooltip;

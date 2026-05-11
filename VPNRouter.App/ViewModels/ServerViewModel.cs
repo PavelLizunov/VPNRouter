@@ -30,6 +30,16 @@ public partial class ServerViewModel : ViewModelBase
     /// <summary>True when this server is the one VPN is currently connected through.</summary>
     [ObservableProperty] private bool _isActive;
 
+    /// <summary>
+    /// v2.32 (r10, F-C) — True if this entry lives in <c>vless.servers[]</c>
+    /// but is NOT part of any active subscription. Surfaces an "Not in
+    /// subscription" badge in ServersPage so the user can spot legacy
+    /// manual entries that survived the F-B migration cleanup (e.g. user
+    /// manually re-added an entry after migration, or migration didn't
+    /// fire yet on a brand-new install).
+    /// </summary>
+    [ObservableProperty] private bool _isOrphanFromSubscription;
+
     // ── Connectivity test state (v2.15.2) ────────────────────────────────
 
     /// <summary>Last TCP+TLS probe outcome. Unknown = never tested.</summary>
