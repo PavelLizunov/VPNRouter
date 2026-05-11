@@ -558,6 +558,105 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _settings.App.RoutingAppsMode = canon;
         SaveSettings();
         if (IsConnected) HasPendingAppChanges = true;
+
+        // AM-3 (2026-05-12): mode toggle keeps two independent selection
+        // states (RoutingAppsInclude vs RoutingAppsExclude). When the
+        // active mode flips, the checkbox UI must re-read every
+        // AppItem.IsChecked from the now-active list — even apps that
+        // haven't moved still need a notification so the binding refreshes.
+        RefreshAppCheckboxes();
+    }
+
+    /// <summary>
+    /// AM-3 — read this app's checked state from the list that matches
+    /// the currently-active <see cref="RoutingAppsMode"/>. Used by the
+    /// AppItem bridge as its ReadMode callback. Case-insensitive lookup;
+    /// missing list returns false.
+    /// </summary>
+    internal bool IsAppCheckedInCurrentMode(string processName)
+    {
+        if (string.IsNullOrEmpty(processName)) return false;
+        var list = GetActiveAppList();
+        if (list == null) return false;
+        return list.Any(p =>
+            string.Equals(p, processName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// AM-3 — write this app's checked state into the list that matches
+    /// the currently-active <see cref="RoutingAppsMode"/>. Used by the
+    /// AppItem bridge as its WriteMode callback. Idempotent: adding an
+    /// already-present app is a no-op; removing a missing app is a
+    /// no-op. Persists eagerly via SaveSettings (sub-millisecond YAML
+    /// write) so toggles survive a Windows reboot even without an
+    /// explicit Apply — matches the Bug-r9-I auto-save contract for
+    /// AppGroup / AppItem changes.
+    /// </summary>
+    internal void SetAppCheckedInCurrentMode(string processName, bool isChecked)
+    {
+        if (string.IsNullOrEmpty(processName)) return;
+        var list = GetActiveAppList();
+        if (list == null) return;
+
+        var existing = list.FirstOrDefault(p =>
+            string.Equals(p, processName, StringComparison.OrdinalIgnoreCase));
+
+        if (isChecked)
+        {
+            if (existing != null) return;
+            list.Add(processName);
+        }
+        else
+        {
+            if (existing == null) return;
+            list.Remove(existing);
+        }
+
+        if (_isLoadingUI) return;
+
+        try { SaveSettings(); }
+        catch (Exception ex)
+        {
+            _logger?.Warning(ex, "[VM] SaveSettings on per-app mode-aware toggle failed");
+        }
+        if (IsConnected) HasPendingAppChanges = true;
+    }
+
+    /// <summary>
+    /// AM-3 — resolve the active list from the current mode. Defaults to
+    /// RoutingAppsInclude when the value is anything other than
+    /// "exclude" (safer default — the include path is the legacy one
+    /// users expect).
+    /// </summary>
+    private List<string>? GetActiveAppList()
+    {
+        if (_settings?.App == null) return null;
+        var isExclude = string.Equals(
+            _settings.App.RoutingAppsMode, "exclude",
+            StringComparison.OrdinalIgnoreCase);
+
+        if (isExclude)
+        {
+            return _settings.App.RoutingAppsExclude
+                ??= new List<string>();
+        }
+        return _settings.App.RoutingAppsInclude
+            ??= new List<string>();
+    }
+
+    /// <summary>
+    /// AM-3 — re-fire <see cref="AppItemViewModel.IsChecked"/> change
+    /// notifications across every app so XAML CheckBoxes refresh from
+    /// the now-active mode list. Called from
+    /// <see cref="OnRoutingAppsModeChanged"/> after the mode flip.
+    /// </summary>
+    private void RefreshAppCheckboxes()
+    {
+        foreach (var group in AppGroups)
+        {
+            foreach (var app in group.Apps)
+                app.RaiseIsCheckedChanged();
+        }
     }
 
     [ObservableProperty] private bool _bypassRussianTraffic = true;
@@ -3050,6 +3149,52 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             (_settings.ExcludedApps ?? new()).Select(s => StripExe(s ?? string.Empty)),
             StringComparer.OrdinalIgnoreCase);
 
+        // AM-3 (2026-05-12) — guarantee the active mode list is non-null so
+        // the AppItem bridge always has something to write into. Migration
+        // (Migrate_2_to_3) seeds RoutingAppsInclude from legacy
+        // CustomApps but doesn't account for Profile.Processes /
+        // CustomGroupApps / ExcludedApps semantics which live in the App
+        // layer. We complete the seeding here below.
+        _settings.App.RoutingAppsInclude ??= new List<string>();
+        _settings.App.RoutingAppsExclude ??= new List<string>();
+
+        // AM-3 — compute the legacy effective include list (Profile-driven
+        // process names of active groups minus ExcludedApps plus
+        // CustomGroupApps plus top-level CustomApps + CustomCategories
+        // apps). Used both as the AppItem ctor seed AND, when
+        // RoutingAppsInclude is empty in include mode, as the seed for
+        // the new mode-aware list. This makes the upgrade silent for
+        // users who never opened the new mode toggle: their previously
+        // routed apps stay routed.
+        var legacyIncludeNames = ComputeLegacyEffectiveIncludeNames(
+            activeProfiles, excludedSet, isFirstLaunch);
+
+        var isIncludeMode = !string.Equals(
+            _settings.App.RoutingAppsMode, "exclude",
+            StringComparison.OrdinalIgnoreCase);
+
+        // Seed RoutingAppsInclude from legacy state on first load after
+        // upgrade — only when the user hasn't explicitly populated it
+        // AND we're in include mode (legacy semantics map directly to
+        // include). Exclude mode starts empty by design; the user adds
+        // bypass apps explicitly.
+        if (isIncludeMode
+            && _settings.App.RoutingAppsInclude.Count == 0
+            && legacyIncludeNames.Count > 0)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var n in legacyIncludeNames)
+            {
+                if (string.IsNullOrWhiteSpace(n)) continue;
+                if (seen.Add(n))
+                    _settings.App.RoutingAppsInclude.Add(n);
+            }
+            _logger?.Information(
+                "[VM] AM-3: seeded RoutingAppsInclude with {Count} entries " +
+                "from legacy profile/custom state on first load",
+                _settings.App.RoutingAppsInclude.Count);
+        }
+
         // Load from profiles. Per-platform variants:
         //   macOS → default-macos.json
         //   Linux → default-linux.json (v2.21.6)
@@ -3086,7 +3231,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                             // Bug-r9-I: respect persisted per-app exclusions
                             // when the group itself is active.
                             var appChecked = isActive && !excludedSet.Contains(name);
-                            group.Apps.Add(new AppItemViewModel(name, appChecked));
+                            group.Apps.Add(CreateBridgedAppItem(name, appChecked));
                         }
 
                         // Merge user-added custom apps for this group
@@ -3100,7 +3245,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                                 if (group.Apps.Any(a => a.ProcessName.Equals(extraName, StringComparison.OrdinalIgnoreCase)))
                                     continue;
                                 var appChecked = isActive && !excludedSet.Contains(extraName);
-                                group.Apps.Add(new AppItemViewModel(extraName, appChecked, isCustom: true));
+                                group.Apps.Add(CreateBridgedAppItem(extraName, appChecked, isCustom: true));
                             }
                         }
 
@@ -3121,7 +3266,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         foreach (var app in customApps)
         {
             if (!string.IsNullOrEmpty(app))
-                customGroup.Apps.Add(new AppItemViewModel(StripExe(app), true, isCustom: true));
+                customGroup.Apps.Add(CreateBridgedAppItem(StripExe(app), true, isCustom: true));
         }
         AppGroups.Add(customGroup);
 
@@ -3133,13 +3278,109 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             foreach (var app in cat.Apps ?? new())
             {
                 if (string.IsNullOrWhiteSpace(app)) continue;
-                group.Apps.Add(new AppItemViewModel(StripExe(app), cat.Enabled, isCustom: true));
+                group.Apps.Add(CreateBridgedAppItem(StripExe(app), cat.Enabled, isCustom: true));
             }
             AppGroups.Add(group);
         }
 
         _appsLoaded = true;
         WireAppChangeTracking();
+    }
+
+    /// <summary>
+    /// AM-3 (2026-05-12) — factory for an <see cref="AppItemViewModel"/>
+    /// with the mode-aware bridge wired so its IsChecked reads from /
+    /// writes to <see cref="AppConfig.RoutingAppsInclude"/> or
+    /// <see cref="AppConfig.RoutingAppsExclude"/> based on the current
+    /// mode. The <paramref name="legacyChecked"/> is used only as a
+    /// fallback initial value; once the bridge is wired the bridge's
+    /// ReadMode is the source of truth for the IsChecked getter.
+    /// </summary>
+    private AppItemViewModel CreateBridgedAppItem(
+        string processName, bool legacyChecked, bool isCustom = false)
+    {
+        var item = new AppItemViewModel(processName, legacyChecked, isCustom);
+        item.ReadMode = IsAppCheckedInCurrentMode;
+        item.WriteMode = SetAppCheckedInCurrentMode;
+        return item;
+    }
+
+    /// <summary>
+    /// AM-3 (2026-05-12) — compute the legacy "checked = routed via VPN"
+    /// set from profile/custom-group/custom-categories data. Mirrors the
+    /// AppItem ctor seed formula used in LoadApps below. Used to bootstrap
+    /// <see cref="AppConfig.RoutingAppsInclude"/> for users upgrading
+    /// from pre-AM-3 builds where the new field had no profile-driven
+    /// seed.
+    /// </summary>
+    private List<string> ComputeLegacyEffectiveIncludeNames(
+        string[] activeProfiles, HashSet<string> excludedSet, bool isFirstLaunch)
+    {
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void TryAdd(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return;
+            if (excludedSet.Contains(name)) return;
+            if (seen.Add(name))
+                result.Add(name);
+        }
+
+        // ── 1. Profile-driven processes for active groups ──
+        var profileFile = OperatingSystem.IsMacOS() ? "default-macos.json"
+                        : OperatingSystem.IsLinux() ? "default-linux.json"
+                        : "default.json";
+        var profilePath = Path.Combine(AppContext.BaseDirectory, "profiles", profileFile);
+        if (!File.Exists(profilePath))
+            profilePath = Path.Combine(AppPaths.ProfilesDir, profileFile);
+        if (!File.Exists(profilePath))
+            profilePath = Path.Combine(AppPaths.ProfilesDir, "default.json");
+
+        if (File.Exists(profilePath))
+        {
+            try
+            {
+                var json = File.ReadAllText(profilePath);
+                var collection = Newtonsoft.Json.JsonConvert.DeserializeObject<ProfileCollection>(json);
+                if (collection?.Profiles != null)
+                {
+                    foreach (var profile in collection.Profiles)
+                    {
+                        var isActive = isFirstLaunch || activeProfiles.Any(p =>
+                            p.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
+                        if (!isActive) continue;
+                        foreach (var proc in profile.Processes)
+                            TryAdd(StripExe(proc.Name));
+
+                        if (_settings.CustomGroupApps != null
+                            && _settings.CustomGroupApps.TryGetValue(profile.Name, out var extras))
+                        {
+                            foreach (var extra in extras)
+                                TryAdd(StripExe(extra ?? string.Empty));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning(ex, "[VM] AM-3 legacy seed: failed to read profiles");
+            }
+        }
+
+        // ── 2. Top-level CustomApps (already checked semantically) ──
+        foreach (var a in _settings.CustomApps ?? new())
+            TryAdd(StripExe(a ?? string.Empty));
+
+        // ── 3. Enabled CustomCategories (apps within enabled categories) ──
+        foreach (var cat in _settings.CustomCategories ?? new())
+        {
+            if (!cat.Enabled) continue;
+            foreach (var a in cat.Apps ?? new())
+                TryAdd(StripExe(a ?? string.Empty));
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -3812,21 +4053,39 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // Custom Apps + IsCustomCategory groups are excluded from the
             // sweep because they already model "off" by removing/disabling
             // — no need for a parallel exclusion list there.
-            var excluded = new List<string>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var group in AppGroups)
+            //
+            // AM-3 (2026-05-12): the sweep only runs in INCLUDE mode.
+            // AppItem.IsChecked is now bridged to the active mode list,
+            // so in exclude mode unchecked apps don't mean "exclude from
+            // VPN" — they mean "this app isn't on the user's exclude
+            // list", which is the opposite. Running the sweep in
+            // exclude mode would push every unchecked app into
+            // ExcludedApps and silently corrupt the legacy
+            // VpnEngine.RemoveExcludedApps fallback path. We keep the
+            // legacy field stable in exclude mode (leave existing
+            // entries as-is so Apply / restart paths that still read
+            // legacy data don't surprise the user).
+            var sweepIsIncludeMode = !string.Equals(
+                _settings.App.RoutingAppsMode, "exclude",
+                StringComparison.OrdinalIgnoreCase);
+            if (sweepIsIncludeMode)
             {
-                if (group.Name == "Custom Apps" || group.IsCustomCategory) continue;
-                if (!group.IsChecked) continue;
-                foreach (var app in group.Apps)
+                var excluded = new List<string>();
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var group in AppGroups)
                 {
-                    if (app.IsChecked) continue;
-                    if (string.IsNullOrWhiteSpace(app.ProcessName)) continue;
-                    if (seen.Add(app.ProcessName))
-                        excluded.Add(app.ProcessName);
+                    if (group.Name == "Custom Apps" || group.IsCustomCategory) continue;
+                    if (!group.IsChecked) continue;
+                    foreach (var app in group.Apps)
+                    {
+                        if (app.IsChecked) continue;
+                        if (string.IsNullOrWhiteSpace(app.ProcessName)) continue;
+                        if (seen.Add(app.ProcessName))
+                            excluded.Add(app.ProcessName);
+                    }
                 }
+                _settings.ExcludedApps = excluded;
             }
-            _settings.ExcludedApps = excluded;
         }
 
         SettingsLoader.Save(_settings, AppPaths.ConfigYamlPath);
@@ -5819,7 +6078,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (target.Apps.Any(a => a.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase)))
             return;
 
-        target.Apps.Add(new AppItemViewModel(name, true, isCustom: true));
+        // AM-3 (2026-05-12) — bridge-wired add so adding a custom app
+        // writes into the active mode list straight away. Setting
+        // IsChecked=true on a fresh AppItem triggers WriteMode which
+        // appends to RoutingAppsInclude (or RoutingAppsExclude) per
+        // current mode. SaveSettings inside WriteMode persists; the
+        // explicit SaveSettings() below is retained for the
+        // category-state side-effect (CustomCategories.Apps list).
+        var newItem = CreateBridgedAppItem(name, legacyChecked: false, isCustom: true);
+        target.Apps.Add(newItem);
+        newItem.IsChecked = true;
         SaveSettings();
     }
 
