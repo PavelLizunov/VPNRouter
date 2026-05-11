@@ -1,0 +1,248 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true,
+    "output": "C:\\ProgramData\\VPNRouter\\logs\\singbox.log"
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "vpn-dns",
+        "type": "https",
+        "server": "dns.adguard-dns.com",
+        "server_port": 443,
+        "path": "/dns-query",
+        "detour": "proxy"
+      },
+      {
+        "tag": "local-dns",
+        "type": "https",
+        "server": "1.1.1.1",
+        "path": "/dns-query",
+        "detour": "dns-direct"
+      },
+      {
+        "tag": "vpnrouter-dns-ru",
+        "type": "udp",
+        "server": "77.88.8.8",
+        "detour": "dns-direct"
+      }
+    ],
+    "rules": [
+      {
+        "action": "route",
+        "server": "vpnrouter-dns-ru",
+        "rule_set": [
+          "vpnrouter-geosite-ru"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "vpnrouter-adblock"
+        ]
+      },
+      {
+        "process_name": [
+          "chrome.exe",
+          "msedge.exe",
+          "firefox.exe",
+          "brave.exe",
+          "opera.exe",
+          "opera_autoupdate.exe",
+          "vivaldi.exe",
+          "yandex.exe",
+          "browser.exe",
+          "tor.exe",
+          "waterfox.exe",
+          "librewolf.exe",
+          "floorp.exe",
+          "ungoogled-chromium.exe",
+          "chromium.exe",
+          "arc.exe",
+          "maxthon.exe",
+          "seamonkey.exe",
+          "palemoon.exe",
+          "basilisk.exe",
+          "iridium.exe",
+          "iron.exe",
+          "cent_browser.exe",
+          "thorium.exe",
+          "whale.exe",
+          "zen.exe",
+          "slack.exe",
+          "Zoom.exe",
+          "Teams.exe",
+          "Code.exe",
+          "Notion.exe",
+          "Obsidian.exe",
+          "opera_crashreporter.exe",
+          "VPNRouter.App.exe",
+          "Telegram.exe",
+          "python.exe",
+          "cmd.exe",
+          "conhost.exe",
+          "winws.exe"
+        ],
+        "action": "route",
+        "server": "vpn-dns"
+      }
+    ],
+    "final": "vpn-dns",
+    "strategy": "ipv4_only"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "VPNRouter-TUN",
+      "address": [
+        "172.19.0.1/30"
+      ],
+      "mtu": 9000,
+      "auto_route": true,
+      "strict_route": false,
+      "endpoint_independent_nat": false,
+      "stack": "system"
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "proxy",
+      "server": "195.135.255.216",
+      "server_port": 443,
+      "uuid": "352714f4-7ecc-4c22-805f-ed5c5239f5bb",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "yahoo.com",
+        "insecure": false,
+        "reality": {
+          "enabled": true,
+          "public_key": "DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU",
+          "short_id": "78ca7952"
+        },
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        },
+        "record_fragment": true,
+        "fragment_fallback_delay": "500ms"
+      },
+      "domain_resolver": "local-dns"
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "direct",
+      "tag": "dns-direct",
+      "udp_fragment": true
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff",
+        "timeout": "300ms"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "ip_is_private": true,
+        "action": "route",
+        "outbound": "direct"
+      },
+      {
+        "action": "route",
+        "outbound": "direct",
+        "rule_set": [
+          "vpnrouter-geosite-ru"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "vpnrouter-adblock"
+        ]
+      },
+      {
+        "process_name": [
+          "chrome.exe",
+          "msedge.exe",
+          "firefox.exe",
+          "brave.exe",
+          "opera.exe",
+          "opera_autoupdate.exe",
+          "vivaldi.exe",
+          "yandex.exe",
+          "browser.exe",
+          "tor.exe",
+          "waterfox.exe",
+          "librewolf.exe",
+          "floorp.exe",
+          "ungoogled-chromium.exe",
+          "chromium.exe",
+          "arc.exe",
+          "maxthon.exe",
+          "seamonkey.exe",
+          "palemoon.exe",
+          "basilisk.exe",
+          "iridium.exe",
+          "iron.exe",
+          "cent_browser.exe",
+          "thorium.exe",
+          "whale.exe",
+          "zen.exe",
+          "slack.exe",
+          "Zoom.exe",
+          "Teams.exe",
+          "Code.exe",
+          "Notion.exe",
+          "Obsidian.exe",
+          "opera_crashreporter.exe",
+          "VPNRouter.App.exe",
+          "Telegram.exe",
+          "python.exe",
+          "cmd.exe",
+          "conhost.exe",
+          "winws.exe"
+        ],
+        "action": "route",
+        "outbound": "proxy"
+      }
+    ],
+    "final": "direct",
+    "auto_detect_interface": true,
+    "default_domain_resolver": "local-dns",
+    "rule_set": [
+      {
+        "type": "local",
+        "tag": "vpnrouter-adblock",
+        "format": "binary",
+        "path": "C:\\ProgramData\\VPNRouter\\cache\\rulesets\\adblock_reject.srs"
+      },
+      {
+        "type": "local",
+        "tag": "vpnrouter-geoip-ru",
+        "format": "binary",
+        "path": "C:/ProgramData/VPNRouter/geo/geoip-ru.srs"
+      },
+      {
+        "type": "local",
+        "tag": "vpnrouter-geosite-ru",
+        "format": "binary",
+        "path": "C:/ProgramData/VPNRouter/geo/geosite-ru.srs"
+      }
+    ]
+  },
+  "experimental": {
+    "clash_api": {
+      "external_controller": "127.0.0.1:9090"
+    }
+  }
+}

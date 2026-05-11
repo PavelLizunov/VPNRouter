@@ -1,0 +1,401 @@
+schema_version: 2
+app:
+  log_level: info
+  log_file: '%ProgramData%\VPNRouter\logs\vpnrouter.log'
+  routing_mode: split
+  theme: dark
+  language: ru
+  ui_mode: advanced
+  config_mode: generated
+  custom_config: ''
+  custom_configs: []
+  active_custom_config: ''
+  subscription_url: ''
+  subscription_servers: []
+  active_subscription_server: de-01 443 Khunrath
+  subscriptions:
+  - id: 2ef1bb9a21e74d6fb8f4304b118da87d
+    name: simple
+    url: https://ninitux.com/api/v1/app/config/4e5a007b2ab25cb800d9a96d2f36bf37
+    enabled: true
+    last_refreshed_at:
+      date_time: 0001-01-01T00:00:00.0000000
+      utc_date_time: 0001-01-01T00:00:00.0000000Z
+      local_date_time: 0001-01-01T03:00:00.0000000+03:00
+      date: 0001-01-01T00:00:00.0000000
+      day: 1
+      day_of_week: Monday
+      day_of_year: 1
+      hour: 0
+      millisecond: 0
+      microsecond: 0
+      nanosecond: 0
+      minute: 0
+      month: 1
+      offset: 00:00:00
+      total_offset_minutes: 0
+      second: 0
+      ticks: 0
+      utc_ticks: 0
+      time_of_day: 00:00:00
+      year: 1
+    last_server_count: 7
+    servers:
+    - name: de-01 443 Khunrath
+      protocol: vless
+      server: 104.194.156.93
+      port: 443
+      uuid: 9029d44f-232f-4283-b055-d39f8448f43b
+      flow: xtls-rprx-vision
+      security: reality
+      reality:
+        enabled: true
+        server_name: www.microsoft.com
+        fingerprint: chrome
+        public_key: gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A
+        short_id: d86e92a0c6dd2271
+      tls:
+        enabled: false
+        server_name: ''
+        insecure: false
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: /
+        headers: {}
+      password: ''
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: native
+      obfs_type: ''
+      obfs_password: ''
+      plugin: ''
+      plugin_opts: ''
+    - name: de-01 2083 Khunrath
+      protocol: vless
+      server: 104.194.156.93
+      port: 2083
+      uuid: 9029d44f-232f-4283-b055-d39f8448f43b
+      flow: xtls-rprx-vision
+      security: reality
+      reality:
+        enabled: true
+        server_name: gateway.icloud.com
+        fingerprint: chrome
+        public_key: gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A
+        short_id: d86e92a0c6dd2271
+      tls:
+        enabled: false
+        server_name: ''
+        insecure: false
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: /
+        headers: {}
+      password: ''
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: native
+      obfs_type: ''
+      obfs_password: ''
+      plugin: ''
+      plugin_opts: ''
+    - name: is-01 443 Khunrath
+      protocol: vless
+      server: 93.95.226.167
+      port: 443
+      uuid: b9c26f53-d1bf-4f8e-8aa4-68684aa0e0f0
+      flow: xtls-rprx-vision
+      security: reality
+      reality:
+        enabled: true
+        server_name: www.microsoft.com
+        fingerprint: chrome
+        public_key: 4xRS--elmOVx36HHH2J_xEUY3An7Mnuu2tf7N6MykVw
+        short_id: fb86a31808abe3f7
+      tls:
+        enabled: false
+        server_name: ''
+        insecure: false
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: /
+        headers: {}
+      password: ''
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: native
+      obfs_type: ''
+      obfs_password: ''
+      plugin: ''
+      plugin_opts: ''
+    - name: is-01 8443 Khunrath
+      protocol: vless
+      server: 93.95.226.167
+      port: 8443
+      uuid: b9c26f53-d1bf-4f8e-8aa4-68684aa0e0f0
+      flow: xtls-rprx-vision
+      security: reality
+      reality:
+        enabled: true
+        server_name: gateway.icloud.com
+        fingerprint: chrome
+        public_key: 4xRS--elmOVx36HHH2J_xEUY3An7Mnuu2tf7N6MykVw
+        short_id: fb86a31808abe3f7
+      tls:
+        enabled: false
+        server_name: ''
+        insecure: false
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: /
+        headers: {}
+      password: ''
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: native
+      obfs_type: ''
+      obfs_password: ''
+      plugin: ''
+      plugin_opts: ''
+    - name: is-01 8444 Khunrath
+      protocol: vless
+      server: 93.95.226.167
+      port: 8444
+      uuid: b9c26f53-d1bf-4f8e-8aa4-68684aa0e0f0
+      flow: xtls-rprx-vision
+      security: reality
+      reality:
+        enabled: true
+        server_name: www.bing.com
+        fingerprint: chrome
+        public_key: 4xRS--elmOVx36HHH2J_xEUY3An7Mnuu2tf7N6MykVw
+        short_id: fb86a31808abe3f7
+      tls:
+        enabled: false
+        server_name: ''
+        insecure: false
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: /
+        headers: {}
+      password: ''
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: native
+      obfs_type: ''
+      obfs_password: ''
+      plugin: ''
+      plugin_opts: ''
+    - name: nk-01 8443 Khunrath
+      protocol: vless
+      server: 194.87.222.111
+      port: 8443
+      uuid: 53b97017-c47d-46f0-92a7-62eebac6dba9
+      flow: xtls-rprx-vision
+      security: reality
+      reality:
+        enabled: true
+        server_name: www.microsoft.com
+        fingerprint: chrome
+        public_key: uQXZyl6haf4rlQgKfTTru2pSUz6R6m6E4oyqAn8Oszg
+        short_id: 5661470c79853ade
+      tls:
+        enabled: false
+        server_name: ''
+        insecure: false
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: /
+        headers: {}
+      password: ''
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: native
+      obfs_type: ''
+      obfs_password: ''
+      plugin: ''
+      plugin_opts: ''
+    - name: nk-01 2083 Khunrath
+      protocol: vless
+      server: 194.87.222.111
+      port: 2083
+      uuid: 53b97017-c47d-46f0-92a7-62eebac6dba9
+      flow: xtls-rprx-vision
+      security: reality
+      reality:
+        enabled: true
+        server_name: gateway.icloud.com
+        fingerprint: chrome
+        public_key: uQXZyl6haf4rlQgKfTTru2pSUz6R6m6E4oyqAn8Oszg
+        short_id: 5661470c79853ade
+      tls:
+        enabled: false
+        server_name: ''
+        insecure: false
+        fingerprint: ''
+        alpn: ''
+      transport:
+        type: tcp
+        path: /
+        headers: {}
+      password: ''
+      method: ''
+      congestion_control: bbr
+      udp_relay_mode: native
+      obfs_type: ''
+      obfs_password: ''
+      plugin: ''
+      plugin_opts: ''
+  bypass_russian_traffic: true
+  custom_direct_rules: []
+  custom_rules: []
+  custom_rules_priority: toggles_first
+  force_ipv4_only: true
+  strict_mode: true
+  free_config_security_warning_acked: false
+  user_free_sources: []
+  strict_dns: true
+  block_ads: true
+  zapret_enabled: true
+  zapret_strategy: general (SIMPLE FAKE ALT2)
+  zapret_custom_args: ''
+  tg_proxy_enabled: true
+  tg_proxy_port: 1443
+  tg_proxy_secret: 9c926d11b0862759a15ef05ba46ad8d3
+  autostart_vpn: false
+  autostart_zapret: true
+  autostart_tgproxy: true
+  autostart_ui: true
+  flush_dns_on_start: true
+profile_sources:
+- type: github
+  url: https://raw.githubusercontent.com/username/vpn-profiles/main/profiles.json
+  path: 
+  update_interval: 3600
+- type: local
+  url: 
+  path: '%ProgramData%\VPNRouter\profiles\custom.json'
+  update_interval: 3600
+active_profile: Browsers,Work_Suite
+vless:
+  server: 195.135.255.216
+  port: 443
+  uuid: 352714f4-7ecc-4c22-805f-ed5c5239f5bb
+  flow: xtls-rprx-vision
+  security: reality
+  reality: &o0
+    enabled: true
+    server_name: yahoo.com
+    fingerprint: firefox
+    public_key: DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU
+    short_id: 78ca7952
+  tls:
+    enabled: false
+    server_name: ''
+    insecure: false
+    fingerprint: ''
+    alpn: ''
+  transport:
+    type: tcp
+    path: /
+    headers: {}
+  servers:
+  - name: khunrath_ln
+    protocol: vless
+    server: 195.135.255.216
+    port: 443
+    uuid: 352714f4-7ecc-4c22-805f-ed5c5239f5bb
+    flow: xtls-rprx-vision
+    security: reality
+    reality: *o0
+    tls:
+      enabled: false
+      server_name: ''
+      insecure: false
+      fingerprint: ''
+      alpn: ''
+    transport:
+      type: tcp
+      path: /
+      headers: {}
+    password: ''
+    method: ''
+    congestion_control: bbr
+    udp_relay_mode: native
+    obfs_type: ''
+    obfs_password: ''
+    plugin: ''
+    plugin_opts: ''
+  - name: is-01-grpc-test
+    protocol: vless
+    server: 93.95.226.167
+    port: 8444
+    uuid: 5550051c-2b10-4c11-8d73-b918118f86ef
+    flow: ''
+    security: reality
+    reality:
+      enabled: true
+      server_name: www.bing.com
+      fingerprint: chrome
+      public_key: 4xRS--elmOVx36HHH2J_xEUY3An7Mnuu2tf7N6MykVw
+      short_id: fb86a31808abe3f7
+    tls:
+      enabled: false
+      server_name: ''
+      insecure: false
+      fingerprint: ''
+      alpn: ''
+    transport:
+      type: grpc
+      path: TunService
+      headers: {}
+    password: ''
+    method: ''
+    congestion_control: bbr
+    udp_relay_mode: native
+    obfs_type: ''
+    obfs_password: ''
+    plugin: ''
+    plugin_opts: ''
+  active_server: khunrath_ln
+tun:
+  interface_name: VPNRouter-TUN
+  ipv4_address: 172.19.0.1/30
+  ipv6_enabled: false
+  mtu: 9000
+  auto_route: true
+  strict_route: false
+  route_exclude_address: []
+dns:
+  strategy: ipv4_only
+  vpn_dns: https://1.1.1.1/dns-query
+  local_dns: local
+singbox:
+  executable_path: '%ProgramData%\VPNRouter\bin\sing-box.exe'
+  auto_download: true
+  download_url: https://github.com/SagerNet/sing-box/releases/latest/download/sing-box-windows-amd64.zip
+  clash_api: 127.0.0.1:9090
+monitoring:
+  health_check_interval: 30
+  restart_on_failure: true
+  max_restart_attempts: 5
+  process_scan_interval: 60
+custom_apps: []
+custom_group_apps: {}
+custom_categories: []
+update:
+  github_repo: PavelLizunov/VPNRouter
+  auto_check: true
+  channel: stable
