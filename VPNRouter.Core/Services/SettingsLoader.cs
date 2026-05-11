@@ -259,7 +259,10 @@ public static class SettingsLoader
                         "schema_version", "app", "profile_sources", "active_profile",
                         "vless", "tun", "dns", "singbox", "monitoring",
                         "custom_apps", "custom_group_apps", "custom_categories", "update",
-                        "emergency_channel"
+                        "emergency_channel",
+                        // AM-1 schema-v3 keys are nested under `app:` so they're
+                        // not top-level — listed here for documentation and so
+                        // a future top-level move stays cheap.
                     };
                     var hasKnownKey = map.Children.Keys
                         .OfType<YamlScalarNode>()
