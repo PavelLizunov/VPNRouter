@@ -532,6 +532,11 @@ public partial class MainWindowViewModel
     public string L_ZapretSecStrategyDesc => Strings.ZapretSecStrategyDesc;
     public string L_ZapretSecUpdates => Strings.ZapretSecUpdates;
 
+    // ── Bug-r9-E + Bug-r9-G (2026-05-11) — pre-flight UX bindings ──
+    public string L_ConflictOtherVpnDetectedTitle => Strings.ConflictOtherVpnDetectedTitle;
+    public string L_ConflictRefreshButton => Strings.ConflictRefreshButton;
+    public string L_ZapretAvBlockCopyPath => Strings.ZapretAvBlockCopyPath;
+
     /// <summary>
     /// Broadcasts PropertyChanged for every L_* proxy via reflection.
     /// Runs in ~1ms for 200 properties (faster than allocating a single

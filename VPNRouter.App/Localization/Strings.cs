@@ -1425,4 +1425,38 @@ public static class Strings
         : string.IsNullOrEmpty(backupPath)
             ? "Config was invalid; defaults restored."
             : $"Config was invalid; defaults restored. Backup: {backupPath}";
+
+    // ── Bug-r9-E (2026-05-11) — third-party VPN conflict banner ──
+    // Shown in the MainWindow header banner when StartAsync throws
+    // ConflictingVpnException. See Bug-r9-E section in
+    // plans/vpnrouter-android-r9-user-bug-batch.md. Stas's repro
+    // (xraycore.exe from v2RayTun) surfaced the need for an explicit
+    // process-named hint instead of the cryptic "Cannot create a file
+    // when that file already exists" wintun error.
+
+    public static string ConflictOtherVpnDetectedTitle => Ru
+        ? "Обнаружен другой VPN-клиент"
+        : "Another VPN client detected";
+
+    public static string ConflictOtherVpnDetectedMessage(string processName, int pid) => Ru
+        ? $"Обнаружен другой VPN-клиент: {processName} (PID {pid}). " +
+          $"Один VPN держит TUN-адаптер за раз. Остановите {processName} перед запуском VPNRouter."
+        : $"Another VPN client detected: {processName} (PID {pid}). " +
+          $"Only one VPN can hold the TUN adapter at a time. Stop {processName} before launching VPNRouter.";
+
+    public static string ConflictRefreshButton => Ru ? "Проверить ещё раз" : "Refresh";
+
+    // ── Bug-r9-G (2026-05-11) — Zapret AV-block toast ──
+    // ZapretManager fires ImmediateExitDetected when winws.exe exits
+    // within < 2 s with non-zero code (almost always Windows Defender
+    // or third-party AV termination). The VM subscribes and shows the
+    // toast on the Tools / DPI Bypass page.
+
+    public static string ZapretAvBlockToast => Ru
+        ? "Zapret (winws.exe) был остановлен сразу после запуска. Возможно его блокирует антивирус. " +
+          @"Добавьте в исключения: C:\ProgramData\VPNRouter\zapret\ (вся папка)."
+        : "Zapret (winws.exe) exited immediately after launch. Likely an antivirus is blocking it. " +
+          @"Whitelist: C:\ProgramData\VPNRouter\zapret\ (whole folder).";
+
+    public static string ZapretAvBlockCopyPath => Ru ? "Скопировать путь" : "Copy path";
 }

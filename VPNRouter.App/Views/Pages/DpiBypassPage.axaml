@@ -83,6 +83,45 @@
                     <TextBlock Text="{Binding L_ZapretSecStatus}" FontWeight="Bold" FontSize="13"/>
                     <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.7"
                                Text="{Binding LblDpiDescription}"/>
+                    <!-- Bug-r9-G (2026-05-11) — AV-block toast.
+                         Surfaced when ZapretManager.ImmediateExitDetected
+                         fires (winws.exe exited within < 2 s with non-zero
+                         code, almost always Windows Defender). Auto-clears
+                         after 8 s; manual dismiss via X. Copy-path button
+                         puts the whitelist directory on the clipboard. -->
+                    <Border IsVisible="{Binding HasZapretAvBlockToast}"
+                            Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
+                            Background="{DynamicResource DangerBgBrush}"
+                            BorderBrush="{DynamicResource DangerBorderBrush}"
+                            BorderThickness="1">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0" Text="⛔"
+                                       Foreground="{DynamicResource DangerFgBrush}"
+                                       FontSize="12" FontWeight="Bold"
+                                       VerticalAlignment="Top"/>
+                            <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                                       FontSize="10"
+                                       Foreground="{DynamicResource DangerFgBrush}"
+                                       VerticalAlignment="Center"
+                                       Text="{Binding ZapretAvBlockToast}"/>
+                            <Button Grid.Column="2"
+                                    Content="{Binding L_ZapretAvBlockCopyPath}"
+                                    Command="{Binding CopyZapretWhitelistPathCommand}"
+                                    Padding="8,2" MinHeight="0" FontSize="10"
+                                    Background="Transparent"
+                                    BorderBrush="{DynamicResource DangerBorderBrush}"
+                                    BorderThickness="1"
+                                    Foreground="{DynamicResource DangerFgBrush}"
+                                    VerticalAlignment="Center"/>
+                            <Button Grid.Column="3" Content="✕"
+                                    Command="{Binding DismissZapretAvBlockToastCommand}"
+                                    Padding="6,2" MinHeight="0" FontSize="10"
+                                    Background="Transparent" BorderThickness="0"
+                                    Foreground="{DynamicResource DangerFgBrush}"
+                                    VerticalAlignment="Center"
+                                    ToolTip.Tip="Dismiss"/>
+                        </Grid>
+                    </Border>
                     <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
                             Background="{DynamicResource SurfaceSunkenBrush}">
                         <StackPanel Orientation="Horizontal" Spacing="8">

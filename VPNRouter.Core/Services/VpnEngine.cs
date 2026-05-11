@@ -103,6 +103,26 @@ public class VpnEngine : IDisposable
         // 0. Ensure required directories exist
         AppPaths.EnsureDirectories();
 
+        // 0a-pre. Bug-r9-E (2026-05-11): pre-flight detect competing VPN
+        // clients holding wintun. sing-box's adapter creation otherwise
+        // fails with the cryptic "Cannot create a file when that file
+        // already exists" several seconds later, after the user has
+        // already seen a "Connecting…" spinner — leaving them with no
+        // actionable hint. Throwing ConflictingVpnException here lets
+        // the App layer render a banner naming the specific process.
+        var conflicts = ConflictingVpnDetector.DetectConflictingVpnProcesses(_logger);
+        if (conflicts.Count > 0)
+        {
+            var first = conflicts[0];
+            // Message is plain English fallback — App catches the typed
+            // exception and substitutes localized copy from Strings.cs.
+            throw new ConflictingVpnException(
+                conflicts,
+                $"Another VPN client is running: {first.ProcessName} (PID {first.Pid}). " +
+                $"Only one VPN can hold the TUN adapter at a time. " +
+                $"Stop {first.ProcessName} before launching VPNRouter.");
+        }
+
         // 0a. Flush DNS cache to prevent leakage of pre-VPN resolved entries
         if (settings.App.FlushDnsOnStart)
         {

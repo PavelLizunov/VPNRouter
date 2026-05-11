@@ -210,6 +210,39 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void DismissSettingsRecoveryNotice() =>
         SettingsRecoveryNoticeText = string.Empty;
 
+    // ── Bug-r9-E (2026-05-11) — third-party VPN conflict banner ──
+    // Set when ToggleConnectionAsync catches ConflictingVpnException
+    // (thrown by VpnEngine.StartAsync via ConflictingVpnDetector). The
+    // banner names the specific process(es) so the user knows what to
+    // stop. Refresh re-runs detection so the user can dismiss after
+    // closing the other VPN; Dismiss hides until the next Connect attempt.
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasConflictingVpnWarning))]
+    private string _conflictingVpnWarningText = string.Empty;
+
+    public bool HasConflictingVpnWarning =>
+        !string.IsNullOrWhiteSpace(ConflictingVpnWarningText);
+
+    [RelayCommand]
+    private void DismissConflictingVpnWarning() =>
+        ConflictingVpnWarningText = string.Empty;
+
+    [RelayCommand]
+    private void RefreshConflictingVpn()
+    {
+        var conflicts = VPNRouter.Core.Services.ConflictingVpnDetector
+            .DetectConflictingVpnProcesses(_logger);
+        if (conflicts.Count == 0)
+        {
+            ConflictingVpnWarningText = string.Empty;
+            return;
+        }
+        var first = conflicts[0];
+        ConflictingVpnWarningText =
+            Strings.ConflictOtherVpnDetectedMessage(first.ProcessName, first.Pid);
+    }
+
     /// <summary>
     /// One-shot adapter between <see cref="SettingsLoader.ConsumeRecoveryNotice"/>
     /// and the bound <see cref="SettingsRecoveryNoticeText"/> property.
@@ -735,6 +768,71 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private System.Collections.ObjectModel.ObservableCollection<string> _zapretStrategies = new();
     private List<VPNRouter.Core.Services.ZapretStrategy> _parsedStrategies = new();
     [ObservableProperty] private bool _receivePrereleases = false;
+
+    // Bug-r9-G (2026-05-11) — Zapret AV-block toast. Set when
+    // ZapretManager.ImmediateExitDetected fires (winws.exe exited within
+    // < 2 s with non-zero code). Auto-clears after 8 s (longer than the
+    // 2-3 s rules toast pattern because the user needs time to read the
+    // whitelist path and click "Copy path"). Dismissable via X button.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasZapretAvBlockToast))]
+    private string _zapretAvBlockToast = string.Empty;
+
+    public bool HasZapretAvBlockToast => !string.IsNullOrWhiteSpace(ZapretAvBlockToast);
+
+    private System.Threading.CancellationTokenSource? _zapretAvBlockToastCts;
+
+    private void OnZapretImmediateExit()
+    {
+        // Marshal to UI thread — Process.Exited fires on a threadpool.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            ZapretAvBlockToast = Strings.ZapretAvBlockToast;
+            // Reset auto-hide timer.
+            var oldCts = _zapretAvBlockToastCts;
+            _zapretAvBlockToastCts = new System.Threading.CancellationTokenSource();
+            var token = _zapretAvBlockToastCts.Token;
+            if (oldCts != null)
+            {
+                try { oldCts.Cancel(); } catch (ObjectDisposedException) { }
+                oldCts.Dispose();
+            }
+            _ = System.Threading.Tasks.Task.Delay(8000, token).ContinueWith(t =>
+            {
+                if (t.IsCanceled) return;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    if (!token.IsCancellationRequested) ZapretAvBlockToast = string.Empty;
+                });
+            }, System.Threading.Tasks.TaskScheduler.Default);
+        });
+    }
+
+    /// <summary>
+    /// Bug-r9-G — convenience for the toast's "Copy path" button.
+    /// Puts the canonical Zapret folder into the clipboard so the user
+    /// can paste it directly into their AV's exception list.
+    /// </summary>
+    [RelayCommand]
+    private async Task CopyZapretWhitelistPathAsync()
+    {
+        var path = @"C:\ProgramData\VPNRouter\zapret\";
+        try
+        {
+            var window = Avalonia.Application.Current?.ApplicationLifetime
+                is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop
+                    ? desktop.MainWindow : null;
+            if (window?.Clipboard != null)
+                await window.Clipboard.SetTextAsync(path);
+        }
+        catch (Exception ex)
+        {
+            _logger?.Debug(ex, "[VM] Failed to copy Zapret whitelist path");
+        }
+    }
+
+    [RelayCommand]
+    private void DismissZapretAvBlockToast() => ZapretAvBlockToast = string.Empty;
 
     // Telegram proxy
     [ObservableProperty]
@@ -3658,6 +3756,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     ConnectButtonText = Strings.StopVPN;
                     StartSubRefreshTimer();
                     RefreshActiveIndicator();
+                    // Bug-r9-E: clear any stale conflict banner after a
+                    // successful start (e.g. user dismissed the other VPN
+                    // and retried — pre-r9-E the banner would linger).
+                    ConflictingVpnWarningText = string.Empty;
                 }
                 else
                 {
@@ -3681,6 +3783,28 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 StatusText = IsRussian
                     ? "VPN адаптер занят. Попробуйте ещё раз."
                     : "TUN adapter busy. Try again.";
+                ConnectButtonText = Strings.StartVPN;
+                return;
+            }
+            catch (VPNRouter.Core.Services.ConflictingVpnException cvex)
+            {
+                // Bug-r9-E (2026-05-11) — surface the named conflicting
+                // VPN as a dismissible header banner so the user knows
+                // exactly which app to close. Pre-r9-E this surfaced as
+                // the cryptic wintun "Cannot create a file when that
+                // file already exists" through the generic catch below.
+                _logger.Warning(
+                    "[VM] Conflicting VPN detected: {Count} processes ({First})",
+                    cvex.Conflicts.Count,
+                    cvex.Conflicts.Count > 0 ? cvex.Conflicts[0].ProcessName : "<empty>");
+                try { await Task.Run(() => _engine.Stop()); } catch { }
+                IsConnecting = false;
+                IsConnected = false;
+                var first = cvex.Conflicts.Count > 0 ? cvex.Conflicts[0] : null;
+                ConflictingVpnWarningText = first != null
+                    ? Strings.ConflictOtherVpnDetectedMessage(first.ProcessName, first.Pid)
+                    : cvex.Message;
+                StatusText = Strings.ConflictOtherVpnDetectedTitle;
                 ConnectButtonText = Strings.StartVPN;
                 return;
             }
@@ -4192,7 +4316,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         try
         {
-            _zapret ??= new ZapretManager(_logger);
+            if (_zapret == null)
+            {
+                _zapret = new ZapretManager(_logger);
+                // Bug-r9-G (2026-05-11): when winws.exe exits within < 2 s
+                // with non-zero code, almost always AV killed it. Stas's
+                // log: "[WRN] [Zapret] Wrapper exited (exit code: -1)"
+                // right after launch with no other diagnostics. The
+                // toast names the whitelist path explicitly so the user
+                // can paste it into their AV's exception list.
+                _zapret.ImmediateExitDetected += OnZapretImmediateExit;
+            }
             var strategyName = ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Count
                 ? ZapretStrategies[ZapretStrategyIndex] : "multisplit";
 

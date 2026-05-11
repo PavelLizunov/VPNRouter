@@ -2601,4 +2601,54 @@ public static class Strings
     public static string AdvPublicSelectRow => Ru
         ? "Выберите конфиг из списка и нажмите «Подключить»."
         : "Select a config from the list and click Connect.";
+
+    // ── Bug-r9-E (2026-05-11) — third-party VPN conflict banner ──
+    // Shown in the header banner of MainWindow when StartAsync throws
+    // ConflictingVpnException. Stas's repro: xraycore.exe from v2RayTun
+    // held wintun, sing-box silently failed adapter creation, user had
+    // no way to know what to do. These strings name the specific process
+    // and tell the user to stop it before retrying.
+
+    /// <summary>Banner title — bold leading line on the conflict banner.</summary>
+    public static string ConflictOtherVpnDetectedTitle => Ru
+        ? "Обнаружен другой VPN-клиент"
+        : "Another VPN client detected";
+
+    /// <summary>Body of the conflict banner. <paramref name="processName"/>
+    /// is the OS-level process name (e.g. <c>xraycore</c>),
+    /// <paramref name="pid"/> the PID. One VPN can hold the TUN adapter
+    /// at a time — explain that constraint so the user understands why
+    /// VPNRouter can't just coexist.</summary>
+    public static string ConflictOtherVpnDetectedMessage(string processName, int pid) => Ru
+        ? $"Обнаружен другой VPN-клиент: {processName} (PID {pid}). " +
+          $"Один VPN держит TUN-адаптер за раз. Остановите {processName} перед запуском VPNRouter."
+        : $"Another VPN client detected: {processName} (PID {pid}). " +
+          $"Only one VPN can hold the TUN adapter at a time. Stop {processName} before launching VPNRouter.";
+
+    /// <summary>"Refresh" button on the conflict banner — re-runs the
+    /// detection so the user can dismiss the banner once they've closed
+    /// the other VPN.</summary>
+    public static string ConflictRefreshButton => Ru ? "Проверить ещё раз" : "Refresh";
+
+    // ── Bug-r9-G (2026-05-11) — Zapret AV-block toast ──
+    // Detected in ZapretManager when winws.exe exits within < 2 s of
+    // launch with non-zero code — almost always Windows Defender or
+    // a third-party AV terminating it as suspicious. The user-facing
+    // message tells them which folder to whitelist; the toast carries
+    // a "Copy path" button (LblConflictCopyPath below) for convenience.
+
+    /// <summary>Toast body shown when Zapret's winws.exe exits immediately.
+    /// Includes the canonical whitelist path so the user can paste it
+    /// into their AV's exception list. Path is hardcoded
+    /// %ProgramData%\VPNRouter\zapret\ because that's where
+    /// ZapretUpdater unpacks the release.</summary>
+    public static string ZapretAvBlockToast => Ru
+        ? "Zapret (winws.exe) был остановлен сразу после запуска. Возможно его блокирует антивирус. " +
+          @"Добавьте в исключения: C:\ProgramData\VPNRouter\zapret\ (вся папка)."
+        : "Zapret (winws.exe) exited immediately after launch. Likely an antivirus is blocking it. " +
+          @"Whitelist: C:\ProgramData\VPNRouter\zapret\ (whole folder).";
+
+    /// <summary>"Copy path" button label on the Zapret AV-block toast.
+    /// Puts the whitelist directory into the clipboard.</summary>
+    public static string ZapretAvBlockCopyPath => Ru ? "Скопировать путь" : "Copy path";
 }

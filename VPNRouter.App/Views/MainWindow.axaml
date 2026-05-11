@@ -259,6 +259,52 @@
                             ToolTip.Tip="Dismiss"/>
                 </Grid>
             </Border>
+
+            <!-- ═══ Bug-r9-E (2026-05-11) Layer: third-party VPN conflict banner ═══
+                 Surfaced when StartAsync throws ConflictingVpnException
+                 (another VPN client like v2RayTun's xraycore.exe is
+                 holding wintun). Banner names the specific process so
+                 the user knows what to close. Refresh re-runs the
+                 detector; Dismiss hides until the next Connect attempt. -->
+            <Border IsVisible="{Binding HasConflictingVpnWarning}"
+                    Background="{DynamicResource DangerBgBrush}"
+                    BorderBrush="{DynamicResource DangerBorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="12,8">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
+                    <TextBlock Grid.Column="0"
+                               Text="⛔"
+                               FontSize="14"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource DangerFgBrush}"/>
+                    <StackPanel Grid.Column="1" Spacing="2"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="{Binding L_ConflictOtherVpnDetectedTitle}"
+                                   FontSize="11" FontWeight="Bold"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource DangerFgBrush}"/>
+                        <TextBlock Text="{Binding ConflictingVpnWarningText}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource DangerFgBrush}"/>
+                    </StackPanel>
+                    <Button Grid.Column="2"
+                            Content="{Binding L_ConflictRefreshButton}"
+                            Command="{Binding RefreshConflictingVpnCommand}"
+                            Padding="8,2" MinHeight="0" FontSize="11"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource DangerBorderBrush}"
+                            BorderThickness="1"
+                            Foreground="{DynamicResource DangerFgBrush}"/>
+                    <Button Grid.Column="3"
+                            Content="✕"
+                            Command="{Binding DismissConflictingVpnWarningCommand}"
+                            Padding="8,2" MinHeight="0" FontSize="11"
+                            Background="Transparent" BorderThickness="0"
+                            Foreground="{DynamicResource DangerFgBrush}"
+                            ToolTip.Tip="Dismiss"/>
+                </Grid>
+            </Border>
         </StackPanel>
 
         <!-- ═══ Compact header (v2.25.0 redesign) ═══

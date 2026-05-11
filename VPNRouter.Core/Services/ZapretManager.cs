@@ -36,6 +36,26 @@ public class ZapretManager : IDisposable
 
     public event Action<string>? OutputReceived;
 
+    /// <summary>
+    /// Bug-r9-G (2026-05-11) — fired when winws.exe exits within
+    /// <see cref="ImmediateExitWindow"/> with a non-zero code, which is
+    /// almost always AV (Windows Defender or third-party) terminating
+    /// it as suspicious. Stas's log showed
+    /// <c>[Zapret] Wrapper exited (exit code: -1)</c> within milliseconds
+    /// of launch with no other reason to fail. App's MainWindowViewModel
+    /// subscribes and shows a toast with the AV whitelist path.
+    /// </summary>
+    public event Action? ImmediateExitDetected;
+
+    /// <summary>
+    /// Window during which an exit is classified as "immediate" and
+    /// likely AV-induced. Healthy winws.exe runs indefinitely; even a
+    /// strategy-misconfig exit takes ≥ 500 ms to log + terminate.
+    /// 2 s is a conservative threshold that won't false-positive on
+    /// slow systems while still capturing the sub-100 ms AV kill path.
+    /// </summary>
+    public static readonly TimeSpan ImmediateExitWindow = TimeSpan.FromSeconds(2);
+
     public ZapretManager(ILogger? logger = null)
     {
         _logger = logger ?? Log.Logger;
@@ -93,10 +113,14 @@ public class ZapretManager : IDisposable
         if (_process == null)
             throw new InvalidOperationException("Failed to launch silent wrapper");
 
+        var startedAt = DateTime.UtcNow;
         _process.EnableRaisingEvents = true;
         _process.Exited += (_, _) =>
         {
-            _logger.Warning("[Zapret] Wrapper exited (exit code: {Code})", _process?.ExitCode);
+            var runtime = DateTime.UtcNow - startedAt;
+            var code = _process?.ExitCode;
+            _logger.Warning("[Zapret] Wrapper exited (exit code: {Code})", code);
+            DetectImmediateExit(runtime, code);
         };
 
         _logger.Information("[Zapret] Silent wrapper started (PID {Pid})", _process.Id);
@@ -153,13 +177,39 @@ public class ZapretManager : IDisposable
             throw new InvalidOperationException("Failed to start winws.exe");
         }
 
+        var startedAt = DateTime.UtcNow;
         _process.EnableRaisingEvents = true;
         _process.Exited += (_, _) =>
         {
-            _logger.Warning("[Zapret] Process exited (exit code: {Code})", _process?.ExitCode);
+            var runtime = DateTime.UtcNow - startedAt;
+            var code = _process?.ExitCode;
+            _logger.Warning("[Zapret] Process exited (exit code: {Code})", code);
+            DetectImmediateExit(runtime, code);
         };
 
         _logger.Information("[Zapret] Started (PID {Pid})", _process.Id);
+    }
+
+    /// <summary>
+    /// Bug-r9-G — classify an Exited callback as "immediate, non-zero,
+    /// likely AV-induced" and fire <see cref="ImmediateExitDetected"/>.
+    /// Pulled out of both Start paths so the rule lives in one place.
+    /// Exits with code 0 are normal stops (the .bat wrapper finishes
+    /// after winws.exe is launched) — don't surface a hint for those.
+    /// </summary>
+    private void DetectImmediateExit(TimeSpan runtime, int? exitCode)
+    {
+        if (runtime >= ImmediateExitWindow) return;
+        if (exitCode == 0) return;
+
+        _logger.Warning(
+            "[Zapret] Immediate exit detected (code={Code}, runtime={Ms}ms) — surfaced AV whitelist hint",
+            exitCode, (int)runtime.TotalMilliseconds);
+        try { ImmediateExitDetected?.Invoke(); }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[Zapret] ImmediateExitDetected handler threw");
+        }
     }
 
     /// <summary>Build arguments for legacy built-in strategies (no Flowseal needed).</summary>
