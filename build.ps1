@@ -315,64 +315,16 @@ if ($SingBoxPath -and (Test-Path $SingBoxPath)) {
     Write-Host "       Bundled upstream sing-box v$SingBoxVersion ($sbSize MB)" -ForegroundColor Green
 }
 
-# ── Bundle wgturn-cli.exe (Phase 1 of emergency channel integration) ──
-# Built from PavelLizunov/wgturn-core. Provides the wgturn-cli.exe binary
-# that VPNRouter will invoke via EmergencyChannelEngine (Phase 2) to
-# tunnel WireGuard through VK Calls' TURN infrastructure when standard
-# VPN protocols are blocked (РКН white-list mode emergency channel).
-#
-# Phase 1 just ships the artifact in app/bin/. No UI, no engine wiring.
-#
-# Source resolution order (first hit wins):
-#   1. $env:WGTURN_CORE_DIR  — explicit dev override
-#   2. tools/wgturn-cli-cache/wgturn-core/  — local cache
-#   3. gh repo clone PavelLizunov/wgturn-core → cache  — auto-clone
-#                                                       (requires gh auth)
-# If none works the step is skipped with a warning; the build still
-# produces a valid (but wgturn-less) artifact.
-Write-Host "       Bundling wgturn-cli.exe..." -ForegroundColor Yellow
-$WgturnBinDir = Join-Path $DistDir "bin"
-$WgturnCoreDir = $env:WGTURN_CORE_DIR
-if (-not $WgturnCoreDir -or -not (Test-Path "$WgturnCoreDir\cmd\wgturn-cli")) {
-    $cacheRoot = Join-Path $Root "tools\wgturn-cli-cache"
-    $cacheDir  = Join-Path $cacheRoot "wgturn-core"
-    if (Test-Path "$cacheDir\cmd\wgturn-cli") {
-        $WgturnCoreDir = $cacheDir
-    } elseif (Get-Command gh -ErrorAction SilentlyContinue) {
-        Write-Host "       Cloning PavelLizunov/wgturn-core into tools\wgturn-cli-cache\..." -ForegroundColor Gray
-        New-Item -ItemType Directory -Force -Path $cacheRoot | Out-Null
-        & gh repo clone PavelLizunov/wgturn-core $cacheDir 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0 -and (Test-Path "$cacheDir\cmd\wgturn-cli")) {
-            $WgturnCoreDir = $cacheDir
-        }
-    }
-}
-$hasGo = $null -ne (Get-Command go -ErrorAction SilentlyContinue)
-$wgturnSrcOk = $WgturnCoreDir -and (Test-Path (Join-Path $WgturnCoreDir "cmd\wgturn-cli"))
-if ($wgturnSrcOk -and $hasGo) {
-    New-Item -ItemType Directory -Force -Path $WgturnBinDir | Out-Null
-    Push-Location $WgturnCoreDir
-    try {
-        $WgturnSha = (git rev-parse --short=12 HEAD 2>&1 | Out-String).Trim()
-        if (-not $WgturnSha -or $WgturnSha -match '\s') { $WgturnSha = "unknown" }
-        $env:GOOS = "windows"
-        $env:GOARCH = "amd64"
-        $env:CGO_ENABLED = "0"
-        $wgturnOut = Join-Path $WgturnBinDir "wgturn-cli.exe"
-        $wgturnLdflags = "-s -w -X main.version=$WgturnSha"
-        go build -trimpath "-ldflags=$wgturnLdflags" -o $wgturnOut ./cmd/wgturn-cli 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "       wgturn-cli build FAILED (exit $LASTEXITCODE) - skipped." -ForegroundColor Yellow
-        } else {
-            $wgSize = [math]::Round((Get-Item $wgturnOut).Length / 1MB, 1)
-            Write-Host "       wgturn-cli.exe bundled at app\bin\ (sha $WgturnSha, $wgSize MB)" -ForegroundColor Green
-        }
-    } finally {
-        Pop-Location
-    }
-} else {
-    Write-Host "       wgturn-cli.exe SKIPPED (set WGTURN_CORE_DIR or clone into tools\wgturn-cli-cache\, requires 'go' on PATH)" -ForegroundColor Yellow
-}
+# ── wgturn-cli — downloaded on demand (v2.32.1-r3+, Zapret/TgProxy pattern) ──
+# Pre-r3 the build step here cloned PavelLizunov/wgturn-core and
+# cross-compiled wgturn-cli.exe into app/bin/. This caused:
+#   - Inconsistency between Win and Mac/Linux installers (CI couldn't clone
+#     the previously-private repo; Windows local-build had it).
+#   - ~10 MB bundled artifact that no UI surface used in r10.
+# The bundle step is removed; the Phase 2 on-demand WgturnUpdater (see
+# plans/wgturn-on-demand-download.md) handles delivery instead, in line
+# with how Zapret + Telegram-proxy are already shipped on-demand.
+Write-Host "       wgturn-cli: downloaded on demand (not bundled)" -ForegroundColor Gray
 
 # ── Zapret (DPI bypass) — downloaded on demand from Flowseal/zapret-discord-youtube ──
 Write-Host "       Zapret: downloaded on demand (not bundled)" -ForegroundColor Gray
@@ -512,15 +464,7 @@ if (Test-Path $singBoxInDist) {
     $updateFileCount++
     Write-Host "       sing-box.exe included in update (under _bootstrap/)" -ForegroundColor Gray
 }
-# Include wgturn-cli.exe (emergency channel binary, Phase 1)
-$wgturnInDist = Join-Path $WgturnBinDir "wgturn-cli.exe"
-if (Test-Path $wgturnInDist) {
-    $BootstrapBinDir = Join-Path $BootstrapDir "bin"
-    New-Item -ItemType Directory -Force -Path $BootstrapBinDir | Out-Null
-    Copy-Item $wgturnInDist $BootstrapBinDir
-    $updateFileCount++
-    Write-Host "       wgturn-cli.exe included in update (under _bootstrap/bin/)" -ForegroundColor Gray
-}
+# wgturn-cli: downloaded on demand (v2.32.1-r3+, see plans/wgturn-on-demand-download.md)
 # Zapret: downloaded on demand, not in update package
 # Also include profiles and README under _bootstrap/.
 $UpdateProfilesDst = Join-Path $BootstrapDir "profiles"
