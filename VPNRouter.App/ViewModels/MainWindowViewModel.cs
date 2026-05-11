@@ -1729,10 +1729,24 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // ServiceVm.IsInstalled/IsRunning listener is wired in the constructor.
     partial void OnAutostartVpnChanged(bool value)
     {
-        if (!_isLoadingUI) SaveSettings();
+        // 2026-05-11: SaveSettings can throw UnauthorizedAccessException
+        // (test harness without admin, or AppData ACL drift). Match the
+        // Bug-r9-I pattern from OnAppGroupPropertyChanged / OnAppItemPropertyChanged
+        // — wrap in try/catch + log so the setter never propagates an IO
+        // failure to the binding pipeline.
+        if (!_isLoadingUI)
+        {
+            try { SaveSettings(); }
+            catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto-save on AutostartVpn change failed"); }
+        }
         OnPropertyChanged(nameof(SmpAutostartChecked));
     }
-    partial void OnAutostartZapretChanged(bool value) { if (!_isLoadingUI) SaveSettings(); }
+    partial void OnAutostartZapretChanged(bool value)
+    {
+        if (_isLoadingUI) return;
+        try { SaveSettings(); }
+        catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto-save on AutostartZapret change failed"); }
+    }
     partial void OnAutostartTgProxyChanged(bool value)
     {
         if (_isLoadingUI) return;
