@@ -128,17 +128,41 @@ Android — нет).
   процесса: xraycore.exe, wireguard.exe, openvpn.exe, hiddify.exe,
   amneziavpn.exe), показывать понятный alert.
 
-**Bug-r9-F** (NEW from log) — VLESS upstream сервер недостижим.
-- Симптом: **все** sing-box connections через `outbound/vless[proxy]`
-  завершаются `dial tcp 195.135.255.216:443: i/o timeout`. Этот IP —
-  proxy-server stas'а (resolved name → 195.135.255.216). 5s timeout
-  на каждый запрос. DNS-резолв через VLESS тоже падает.
-- Это **downstream issue**: сервер либо мёртв, либо блокируется ISP
-  stas'а, либо overloaded. Не наша вина.
-- **UX-улучшение**: после N последовательных 5s i/o timeout'ов
-  показывать пользователю "Сервер из вашей подписки недоступен —
-  попробуйте другой или обновите подписку". Также автоматически
-  переключаться на следующий enabled-сервер из subscription.
+**Bug-r9-F** (NEW from log, RECLASSIFIED) — **silent fallback to dead Custom
+Config server**.
+- Симптом: **все** connections через `outbound/vless[proxy]` тайм-аутят
+  на `dial tcp 195.135.255.216:443: i/o timeout`. IP `195.135.255.216`
+  **НЕ в его подписке** (user confirmed 2026-05-11).
+- В log одновременно видны **2 outbound**:
+  1. `outbound/vless[vless-de-01 443 Khunrath]` — его named сервер
+     (из подписки, работает).
+  2. `outbound/vless[proxy]` — **generic "proxy" tag**, dial-ит чужой IP
+     `195.135.255.216:443` (тайм-аутит).
+- **Root cause гипотеза**: stas в `ConfigMode=custom` (Custom Config
+  Mode) + у него в paste'нутом sing-box JSON прописан **мёртвый сервер
+  195.135.255.216**. Source — `CustomConfigInjector.cs:248`:
+  `return ob["tag"]?.ToString() ?? "proxy"` — если в его custom JSON
+  у outbound нет явного tag, injector ставит `"proxy"`. После этого
+  route rules идут через этот "proxy" outbound → весь трафик в дохлый
+  сервер. Подписочные серверы (`vless-de-01 ...`) загружены параллельно
+  но не используются route rules.
+- **Это DEFCT-005-Desktop equivalent** — на Android мы уже фиксили
+  placeholder-leak в `MainActivity.cs` (commit 5a771a6), на desktop та же
+  proблема в Custom Config Mode pathway.
+- **Что нужно для подтверждения**:
+  - `%ProgramData%\VPNRouter\config\current.json` от stas — увидеть точное
+    содержимое outbound[proxy].
+  - `%ProgramData%\VPNRouter\config.yaml` от stas — verify
+    `app.config_mode = "custom"` + `app.custom_config = ...path...`.
+- **Fix paths**:
+  - (Defense-in-depth) `CustomConfigInjector` НЕ должен silently тегать
+    outbound как "proxy" если route rules уже ссылаются на subscription
+    outbound. Лучше использовать `custom-proxy` или явно warn'ить.
+  - LeakProtection должна детектировать: outbound name="proxy" но IP не
+    в `vless.servers` ∪ `subscriptions[*].servers` → **WARNING/BLOCK**.
+  - UX: в Simple page показать актуальный target IP/host + протокол —
+    user должен видеть какой сервер используется. Сейчас он видит только
+    "subscribe · split" без названия сервера.
 
 **Bug-r9-G** (NEW from log) — Zapret winws.exe сразу exit.
 - Симптом: `[WRN] [Zapret] Wrapper exited (exit code: -1)` →
