@@ -110,13 +110,22 @@ public static class LeakProtection
         var errors = new List<string>();
         var warnings = new List<string>();
 
-        // Bug-r9-F-DEFENSIVE (2026-05-11): warn if any proxy outbound dials a
-        // server that isn't in the user's subscription / manual VLESS list.
-        // Catches stale Custom Config Mode placeholders + silent leak class
-        // where a pasted JSON points at a dead / hostile IP. Settings are
-        // optional so existing test callers don't break.
+        // Bug-r9-F-DEFENSIVE Fix-2 (2026-05-11): warn if any proxy outbound
+        // dials a server that isn't in the user's subscription / manual VLESS
+        // list. Catches stale Custom Config Mode placeholders + silent leak
+        // class where a pasted JSON points at a dead / hostile IP.
+        //
+        // Bug-r10-F-D (2026-05-11) — scope-aware refinement on top of Fix-2.
+        // The original Fix-2 united subscription servers AND vless.servers
+        // into one set, which let stas-class leaks pass: when a legacy
+        // <c>vless.servers[]</c> placeholder shadowed a working subscription,
+        // the placeholder IP was still in the union → no warning. F-D
+        // tightens the predicate per config_mode (see
+        // <see cref="ValidateOutboundServersScopeAware"/>). Settings are
+        // optional so existing test callers (without AppSettings) don't
+        // break.
         if (settings != null)
-            ValidateOutboundServersAgainstSettings(config, settings, warnings);
+            ValidateOutboundServersScopeAware(config, settings, errors, warnings);
 
         // 1. DNS strategy must be ipv4_only
         if (config.Dns.Strategy != "ipv4_only")
@@ -316,102 +325,262 @@ public static class LeakProtection
     }
 
     /// <summary>
-    /// Bug-r9-F-DEFENSIVE (2026-05-11): walks every proxy-like outbound and
-    /// warns if its <c>server</c> is not listed in any registered
-    /// subscription or manual VLESS server. This catches stale Custom Config
-    /// Mode placeholders and silent-leak class bugs where a pasted JSON
-    /// quietly directs traffic to a dead / hostile IP.
+    /// Bug-r10-F-D (2026-05-11): scope-aware outbound validation. Replaces
+    /// the post-r9 union-based check (vless.servers ∪ subscriptions[*].servers)
+    /// which let stas-class leaks pass: when a legacy placeholder lived in
+    /// <c>vless.servers[]</c> alongside a working subscription, the
+    /// placeholder IP was still in the union → no warning.
     ///
-    /// <para>Skipped types: <c>direct</c>, <c>block</c>, <c>dns</c>,
-    /// <c>selector</c>, <c>urltest</c> — these have no <c>server</c> field
-    /// of their own. <c>dns-direct</c> tag is also skipped (internal
-    /// resolver outbound emitted by <c>CustomConfigInjector</c>).</para>
+    /// <para>F-D narrows the allow-list per <c>ConfigMode</c>:</para>
+    /// <list type="bullet">
+    /// <item><c>custom</c> — user pasted the sing-box JSON directly, so we
+    ///   don't sanity-check the server against <c>config.yaml</c> (they're
+    ///   the authority on what JSON we ship). We do still verify that a
+    ///   <c>proxy</c> outbound exists with non-empty <c>server</c> + a
+    ///   positive <c>server_port</c>; an absent / malformed proxy outbound
+    ///   would route everything to <c>direct</c> silently.</item>
+    /// <item><c>generated</c> or <c>subscribe</c> WITH any enabled
+    ///   subscription that has cached servers — the allow-list is the
+    ///   ENABLED subscriptions' servers only. <c>vless.servers[]</c> are
+    ///   treated as legacy noise and intentionally NOT trusted. An outbound
+    ///   server NOT matching any active subscription entry by
+    ///   <c>(server, port, uuid)</c> tuple emits a critical leak error.</item>
+    /// <item><c>generated</c> or <c>subscribe</c> WITHOUT enabled
+    ///   subscriptions (or none has servers yet) — the allow-list falls back
+    ///   to <c>vless.servers[]</c> + legacy <c>vless.server</c>. This is the
+    ///   pre-subscriptions direct-VLESS path; legacy entries are the only
+    ///   source of truth there.</item>
+    /// </list>
+    ///
+    /// <para>Skipped outbound types: <c>direct</c>, <c>block</c>, <c>dns</c>,
+    /// <c>selector</c>, <c>urltest</c> — none have a <c>server</c> field of
+    /// their own. <c>dns-direct</c> tag is also skipped (internal resolver
+    /// outbound emitted by <c>CustomConfigInjector</c>).</para>
     /// </summary>
-    private static void ValidateOutboundServersAgainstSettings(
-        SingBoxConfig config, AppSettings settings, List<string> warnings)
+    private static void ValidateOutboundServersScopeAware(
+        SingBoxConfig config, AppSettings settings,
+        List<string> errors, List<string> warnings)
     {
         if (config?.Outbounds == null || config.Outbounds.Count == 0)
             return;
 
-        var known = BuildKnownServerSet(settings);
-        if (known.Count == 0)
-            return; // No registered servers → nothing to compare against.
+        var configMode = (settings.App?.ConfigMode ?? "generated").Trim();
+        var isCustom = configMode.Equals("custom", StringComparison.OrdinalIgnoreCase);
+
+        if (isCustom)
+        {
+            ValidateCustomModeProxyOutbound(config, errors);
+            return;
+        }
+
+        var allowed = BuildScopedAllowedServers(settings, out var hasEnabledSubsWithServers);
 
         foreach (var ob in config.Outbounds)
         {
-            var type = (ob.Type ?? string.Empty).ToLowerInvariant();
-            if (type == "direct" || type == "block" || type == "dns"
-                || type == "selector" || type == "urltest")
+            if (!IsProxyLikeOutbound(ob))
                 continue;
 
             var server = ob.Server?.Trim();
             if (string.IsNullOrEmpty(server))
                 continue;
 
-            // Skip internal helper outbound (CustomConfigInjector emits
-            // dns-direct with udp_fragment as a non-empty direct shim).
-            if (string.Equals(ob.Tag, "dns-direct", StringComparison.OrdinalIgnoreCase))
-                continue;
+            var port = ob.ServerPort ?? 0;
+            var uuid = ob.Uuid?.Trim() ?? string.Empty;
 
-            if (!known.Contains(server))
+            if (!IsAllowed(allowed, server, port, uuid))
             {
-                warnings.Add(
-                    $"Outbound '{ob.Tag}' points to '{server}' - this server is not " +
-                    $"in your subscriptions or VLESS server list. Possible leak from " +
-                    $"stale configuration or placeholder.");
+                if (hasEnabledSubsWithServers)
+                {
+                    // Generated/Subscribe + enabled subs scope — outbound
+                    // MUST be from a subscription. Anything else is a
+                    // probable leak (legacy vless.servers shadow override
+                    // → silent traffic-routing into a dead/hostile IP).
+                    errors.Add(
+                        $"[LeakProtection] Outbound '{ob.Tag}' points to " +
+                        $"{server}:{port} which is not in the active subscription " +
+                        $"scope (subscription={true}). Possible legacy vless.servers " +
+                        $"leak — placeholder entries are shadowing live subscription " +
+                        $"servers. Review config.yaml app.subscriptions[*].servers " +
+                        $"and remove stale vless.servers entries.");
+                }
+                else
+                {
+                    // Legacy direct-VLESS scope — outbound must match
+                    // vless.servers. Keep this as a warning (existing
+                    // behaviour) so we don't break the legacy direct-mode
+                    // setup, but flag it loudly.
+                    warnings.Add(
+                        $"[LeakProtection] Outbound '{ob.Tag}' points to " +
+                        $"{server}:{port} which is not in your VLESS server list. " +
+                        $"Possible leak from stale configuration or placeholder.");
+                }
             }
         }
     }
 
     /// <summary>
-    /// Builds the case-insensitive set of server hostnames / IPs known to
-    /// the user from settings: manual VLESS list + legacy single-server
-    /// field + every enabled subscription's cached servers.
+    /// Custom-mode validator. The user pastes the entire sing-box JSON, so
+    /// we don't sanity-check server IPs against <c>config.yaml</c>. We only
+    /// verify the <c>proxy</c> outbound exists and is well-formed enough to
+    /// actually carry traffic — an absent / empty <c>server</c> would route
+    /// everything to <c>direct</c> silently.
     /// </summary>
-    private static HashSet<string> BuildKnownServerSet(AppSettings settings)
+    private static void ValidateCustomModeProxyOutbound(
+        SingBoxConfig config, List<string> errors)
     {
-        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var proxy = config.Outbounds.FirstOrDefault(o =>
+            string.Equals(o.Tag, "proxy", StringComparison.OrdinalIgnoreCase));
 
-        var legacy = settings.Vless?.Server;
-        if (!string.IsNullOrWhiteSpace(legacy))
-            set.Add(legacy.Trim());
-
-        var manual = settings.Vless?.Servers;
-        if (manual != null)
+        if (proxy == null)
         {
-            foreach (var s in manual)
-            {
-                if (!string.IsNullOrWhiteSpace(s?.Server))
-                    set.Add(s.Server.Trim());
-            }
+            errors.Add(
+                "[LeakProtection] config_mode=custom but no 'proxy' outbound " +
+                "exists in the pasted JSON. Traffic would route to 'direct' " +
+                "silently. Add a proxy outbound or switch ConfigMode.");
+            return;
         }
+
+        // urltest / selector group outbounds are valid even without a server
+        // field of their own — they delegate to children.
+        var type = (proxy.Type ?? string.Empty).ToLowerInvariant();
+        if (type == "selector" || type == "urltest")
+            return;
+
+        if (string.IsNullOrWhiteSpace(proxy.Server))
+            errors.Add(
+                "[LeakProtection] config_mode=custom: proxy outbound has an " +
+                "empty 'server' field. Traffic would fail-to-direct silently.");
+        if ((proxy.ServerPort ?? 0) <= 0)
+            errors.Add(
+                "[LeakProtection] config_mode=custom: proxy outbound has an " +
+                "invalid 'server_port' (must be > 0).");
+    }
+
+    private static bool IsProxyLikeOutbound(SingBoxOutbound ob)
+    {
+        var type = (ob.Type ?? string.Empty).ToLowerInvariant();
+        if (type == "direct" || type == "block" || type == "dns"
+            || type == "selector" || type == "urltest")
+            return false;
+
+        // CustomConfigInjector emits 'dns-direct' as a non-empty direct
+        // shim with udp_fragment=true — exempt by tag.
+        if (string.Equals(ob.Tag, "dns-direct", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Tuple-based allowed-server matcher. We compare against
+    /// <c>(server, port, uuid)</c> to defend against an IP that's known
+    /// but the port or uuid is different (probably a different physical
+    /// server). Empty uuid in the allow-list entry matches any uuid (so
+    /// Hysteria2 / Shadowsocks entries — which have no uuid — still match).
+    /// </summary>
+    private static bool IsAllowed(
+        List<VlessServerEntry> allowed, string server, int port, string uuid)
+    {
+        if (allowed.Count == 0)
+            return false;
+
+        foreach (var entry in allowed)
+        {
+            var entryServer = entry?.Server?.Trim();
+            if (string.IsNullOrEmpty(entryServer))
+                continue;
+
+            if (!string.Equals(entryServer, server, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (entry!.Port != port && port > 0 && entry.Port > 0)
+                continue;
+
+            var entryUuid = entry.Uuid?.Trim() ?? string.Empty;
+            if (!string.IsNullOrEmpty(entryUuid)
+                && !string.IsNullOrEmpty(uuid)
+                && !string.Equals(entryUuid, uuid, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Builds the scope-aware allow-list from settings. If any enabled
+    /// subscription has at least one server, returns only subscription
+    /// servers + cached subscription servers (legacy <c>vless.servers</c>
+    /// are NOT included — they may be stale placeholders). Otherwise
+    /// returns <c>vless.servers</c> + legacy single-server fallback.
+    /// </summary>
+    /// <param name="hasEnabledSubsWithServers">
+    /// True when the returned set came from the subscription scope (used
+    /// by the caller to choose Error vs Warning severity).
+    /// </param>
+    internal static List<VlessServerEntry> BuildScopedAllowedServers(
+        AppSettings settings, out bool hasEnabledSubsWithServers)
+    {
+        var subscriptionServers = new List<VlessServerEntry>();
 
         var subs = settings.App?.Subscriptions;
         if (subs != null)
         {
             foreach (var sub in subs)
             {
-                if (sub?.Servers == null) continue;
+                if (sub == null || !sub.Enabled) continue;
+                if (sub.Servers == null) continue;
                 foreach (var s in sub.Servers)
                 {
-                    if (!string.IsNullOrWhiteSpace(s?.Server))
-                        set.Add(s.Server.Trim());
+                    if (s != null && !string.IsNullOrWhiteSpace(s.Server))
+                        subscriptionServers.Add(s);
                 }
             }
         }
 
-        // Cached subscription servers (used during offline startup, see
-        // AppConfig.SubscriptionServers). Same trust level as live subs.
+        // Cached subscription servers — same trust tier as live subs
+        // (used during offline startup, populated by SubscriptionResolver
+        // before live subs land).
         var cached = settings.App?.SubscriptionServers;
         if (cached != null)
         {
             foreach (var s in cached)
             {
-                if (!string.IsNullOrWhiteSpace(s?.Server))
-                    set.Add(s.Server.Trim());
+                if (s != null && !string.IsNullOrWhiteSpace(s.Server))
+                    subscriptionServers.Add(s);
             }
         }
 
-        return set;
+        hasEnabledSubsWithServers = subscriptionServers.Count > 0;
+
+        if (hasEnabledSubsWithServers)
+            return subscriptionServers;
+
+        // Fallback: legacy direct-VLESS scope.
+        var legacy = new List<VlessServerEntry>();
+
+        var manual = settings.Vless?.Servers;
+        if (manual != null)
+        {
+            foreach (var s in manual)
+            {
+                if (s != null && !string.IsNullOrWhiteSpace(s.Server))
+                    legacy.Add(s);
+            }
+        }
+
+        var legacyServer = settings.Vless?.Server;
+        if (!string.IsNullOrWhiteSpace(legacyServer))
+        {
+            legacy.Add(new VlessServerEntry
+            {
+                Server = legacyServer!.Trim(),
+                Port = settings.Vless?.Port ?? 0,
+                Uuid = settings.Vless?.Uuid ?? string.Empty,
+            });
+        }
+
+        return legacy;
     }
 }

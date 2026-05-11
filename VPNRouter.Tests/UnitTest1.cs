@@ -1081,14 +1081,22 @@ public class LeakProtectionTests
     // ─── Bug-r9-F-DEFENSIVE (2026-05-11) — outbound IP cross-check ────────
     //
     // The outbound-IP check fires when an AppSettings is supplied. It walks
-    // every proxy-like outbound and warns if its `server` is not in the
-    // user's known set (subscription servers ∪ manual VLESS list ∪ legacy
-    // single-server field ∪ cached subscription servers). Catches stale
-    // Custom Config Mode placeholders — see stas's log in
-    // plans/vpnrouter-android-r9-user-bug-batch.md Bug-r9-F.
+    // every proxy-like outbound and compares its `server` to a scope-aware
+    // allow-list. Bug-r10-F-D (2026-05-11) refined the original Bug-r9-F-2
+    // union-based check into per-config_mode scoping:
+    //   - generated/subscribe + enabled subs → subscription servers ONLY
+    //     (legacy vless.servers ignored — see stas's leak in
+    //      plans/r10-stas-confirmed-and-apps-2mode.md §1).
+    //   - generated/subscribe + no subs → vless.servers fallback.
+    //   - custom → only check proxy outbound presence + well-formed.
+    //
+    // The two cases below retain the post-r9 semantics, but with stricter
+    // severity (Error instead of Warning) when the scope is subscription —
+    // a placeholder leak there is a P0 silent-traffic issue, not a
+    // warning-on-startup affordance.
 
     [Fact]
-    public void OutboundIpNotInSubscriptions_EmitsWarning()
+    public void OutboundIpNotInSubscriptions_EmitsError()
     {
         var config = CreateValidConfig();
         var proxy = config.Outbounds.First(o => o.Tag == "proxy");
@@ -1109,10 +1117,10 @@ public class LeakProtectionTests
 
         var result = LeakProtection.ValidateConfig(config, settings);
 
-        Assert.True(result.IsValid); // warnings don't block startup
-        Assert.Contains(result.Warnings, w =>
-            w.Contains("195.135.255.216")
-            && w.Contains("not in your subscriptions"));
+        Assert.False(result.IsValid); // F-D promotes to Error in sub scope
+        Assert.Contains(result.Errors, e =>
+            e.Contains("195.135.255.216")
+            && (e.Contains("subscription") || e.Contains("scope") || e.Contains("legacy")));
     }
 
     [Fact]
@@ -1139,7 +1147,9 @@ public class LeakProtectionTests
 
         Assert.True(result.IsValid);
         Assert.DoesNotContain(result.Warnings, w =>
-            w.Contains("not in your subscriptions"));
+            w.Contains("not in your VLESS server list"));
+        Assert.DoesNotContain(result.Errors, e =>
+            e.Contains("subscription scope") || e.Contains("legacy"));
     }
 }
 
