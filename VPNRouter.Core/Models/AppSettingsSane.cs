@@ -37,6 +37,7 @@ public static class AppSettingsSane
         settings.CustomCategories ??= new List<CustomCategory>();
         settings.ExcludedApps     ??= new List<string>();
         settings.Update           ??= new UpdateSettings();
+        settings.EmergencyChannel ??= new EmergencyChannelSettings();
 
         // Strip out null entries that YamlDotNet may emit for sequence
         // items written as bare hyphens (e.g. `profile_sources:\n  -`).

@@ -79,6 +79,41 @@ public class AppSettings
 
     [YamlMember(Alias = "update")]
     public UpdateSettings Update { get; set; } = new();
+
+    /// <summary>
+    /// r9 Phase 2 — emergency fallback channel settings (wgturn-core
+    /// integration). Persists the share URL + VK link the user pasted
+    /// in the future Phase-3 UI. The actual lifecycle service is
+    /// <see cref="VPNRouter.Core.Services.EmergencyChannel.EmergencyChannelEngine"/>.
+    /// </summary>
+    [YamlMember(Alias = "emergency_channel")]
+    public EmergencyChannelSettings EmergencyChannel { get; set; } = new();
+}
+
+/// <summary>
+/// r9 Phase 2 — persisted state for the wgturn-core emergency channel.
+/// Stored in <c>config.yaml</c> alongside the rest of AppSettings so
+/// the user doesn't have to re-paste the share URL every launch. The
+/// VK link is also persisted but typically gets re-pasted per session
+/// since each VK call uses a fresh invite.
+/// </summary>
+public class EmergencyChannelSettings
+{
+    /// <summary>True ⇒ user has opted into the emergency channel
+    /// feature. Default false — Phase 3 UI flips this when the user
+    /// connects for the first time.</summary>
+    [YamlMember(Alias = "enabled")]
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>Share URL from the wgturn server (<c>wgturn://...</c>).
+    /// Nullable so an empty config doesn't serialise a placeholder.</summary>
+    [YamlMember(Alias = "wgturn_url")]
+    public string? WgturnUrl { get; set; }
+
+    /// <summary>VK Calls invite (<c>https://vk.com/call/join/...</c>).
+    /// Optional — typically supplied at runtime per session.</summary>
+    [YamlMember(Alias = "vk_link")]
+    public string? VkLink { get; set; }
 }
 
 public class AppConfig

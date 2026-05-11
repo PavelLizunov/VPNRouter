@@ -258,7 +258,8 @@ public static class SettingsLoader
                     {
                         "schema_version", "app", "profile_sources", "active_profile",
                         "vless", "tun", "dns", "singbox", "monitoring",
-                        "custom_apps", "custom_group_apps", "custom_categories", "update"
+                        "custom_apps", "custom_group_apps", "custom_categories", "update",
+                        "emergency_channel"
                     };
                     var hasKnownKey = map.Children.Keys
                         .OfType<YamlScalarNode>()

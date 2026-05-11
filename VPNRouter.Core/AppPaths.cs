@@ -46,6 +46,13 @@ public static class AppPaths
     public static string SingBoxExePath => Path.Combine(BinDir,
         OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
 
+    // r9 Phase 2 — wgturn-core emergency fallback channel binary +
+    // dedicated log. Phase 1 (separate chip) drops the binary into
+    // BinDir at install time; this is just the path resolver.
+    public static string WgturnCliExePath => Path.Combine(BinDir,
+        OperatingSystem.IsWindows() ? "wgturn-cli.exe" : "wgturn-cli");
+    public static string WgturnCliLogPath => Path.Combine(LogsDir, "wgturn-cli.log");
+
     /// <summary>Ensure all required directories exist.</summary>
     public static void EnsureDirectories()
     {

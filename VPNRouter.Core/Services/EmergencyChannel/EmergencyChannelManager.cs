@@ -1,0 +1,292 @@
+using System.Diagnostics;
+using System.Text;
+using Serilog;
+using VPNRouter.Core.Models;
+
+namespace VPNRouter.Core.Services.EmergencyChannel;
+
+/// <summary>
+/// r9 Phase 2 — process lifecycle for <c>wgturn-cli.exe</c>. Mirrors the
+/// shape of <see cref="SingBoxManager"/>: spawn / kill / observe-exit
+/// with the same intentional-stop pattern (set
+/// <c>EnableRaisingEvents = false</c> BEFORE <c>Kill()</c> so the
+/// <see cref="Process.Exited"/> callback doesn't fire as a false crash).
+///
+/// <para>StdOut / StdErr are tee'd to a dedicated log file
+/// (<c>%ProgramData%\VPNRouter\logs\wgturn-cli.log</c>) so wgturn-cli's
+/// own structured log lines stay isolated from the main vpnrouter.log.
+/// On crash, the <see cref="Crashed"/> event fires and the engine
+/// transitions to <see cref="EmergencyChannelState.Failed"/>.</para>
+///
+/// <para>Phase-2 is desktop-only — Linux / macOS variants are placeholders
+/// (the same exe path resolver works cross-platform but the binary
+/// itself isn't shipped on non-Windows builds yet; that's Phase 1+
+/// for those platforms).</para>
+/// </summary>
+public class EmergencyChannelManager : IDisposable
+{
+    private readonly ILogger _logger;
+    private readonly string _exePath;
+    private readonly string _logPath;
+
+    private Process? _process;
+    private StreamWriter? _logWriter;
+    private readonly object _logLock = new();
+    private bool _disposed;
+
+    /// <summary>State updated by <see cref="LaunchProcess"/> /
+    /// <see cref="Stop"/> / <see cref="OnProcessExited"/>. Read-only
+    /// from the outside; the Engine consumes <see cref="Started"/> +
+    /// <see cref="Crashed"/> events instead.</summary>
+    public EmergencyChannelState State { get; private set; } = EmergencyChannelState.Disconnected;
+
+    /// <summary>PID of the running wgturn-cli, or null when not running.</summary>
+    public int? Pid => _process?.HasExited == false ? _process.Id : null;
+
+    /// <summary>Fires after a successful spawn. Carries the PID so the
+    /// engine can persist it for status display / debugging.</summary>
+    public event Action<int>? Started;
+
+    /// <summary>Fires when the process exits *unintentionally* (i.e.
+    /// not via <see cref="Stop"/>). The engine maps this to
+    /// <see cref="EmergencyChannelState.Failed"/>.</summary>
+    public event EventHandler<int?>? Crashed;
+
+    public EmergencyChannelManager(ILogger? logger = null)
+        : this(AppPaths.WgturnCliExePath, AppPaths.WgturnCliLogPath, logger) { }
+
+    /// <summary>Internal ctor used by tests to point at a stub binary
+    /// + log path. Public callers should use the parameterless overload.</summary>
+    internal EmergencyChannelManager(string exePath, string logPath, ILogger? logger = null)
+    {
+        _exePath = exePath;
+        _logPath = logPath;
+        _logger = logger ?? Log.Logger;
+    }
+
+    /// <summary>Test seam — lets unit tests substitute a custom args
+    /// string so they can spawn a stub binary (cmd.exe ping /
+    /// /usr/bin/sleep) without the production
+    /// <c>connect-url ... --vk-link ...</c> shape causing argument
+    /// errors. Production callers leave this null and the default
+    /// shape is used.</summary>
+    internal Func<EmergencyChannelConfig, string>? ArgsBuilderOverride { get; set; }
+
+    /// <summary>Spawn <c>wgturn-cli.exe connect-url &lt;url&gt; --vk-link &lt;link&gt;</c>.
+    /// Throws <see cref="FileNotFoundException"/> if the binary isn't
+    /// installed (Phase 1 chip dropped it during install) or
+    /// <see cref="InvalidOperationException"/> if a previous process
+    /// is still alive.</summary>
+    public void Start(EmergencyChannelConfig config)
+    {
+        if (config == null)
+            throw new ArgumentNullException(nameof(config));
+        if (string.IsNullOrWhiteSpace(config.WgturnUrl))
+            throw new ArgumentException("WgturnUrl is required", nameof(config));
+        if (string.IsNullOrWhiteSpace(config.VkLink))
+            throw new ArgumentException("VkLink is required at start time", nameof(config));
+
+        if (State == EmergencyChannelState.Connecting || State == EmergencyChannelState.Connected)
+        {
+            _logger.Warning("[EmergencyChannelManager] Start called while already running (state {State}, PID {Pid}) — stopping first",
+                State, Pid);
+            Stop();
+        }
+
+        // Mark intent BEFORE the binary check so a missing-binary throw
+        // lands in the Failed state — callers (Engine + UI) read state
+        // to decide whether to surface a "couldn't connect" badge.
+        State = EmergencyChannelState.Connecting;
+        try
+        {
+            if (!File.Exists(_exePath))
+                throw new FileNotFoundException(
+                    $"wgturn-cli not found at: {_exePath}. " +
+                    "Install Phase 1 chip (wgturn-cli.exe in build.ps1) drops this binary at install time. " +
+                    "For local testing, place wgturn-cli.exe at the path manually.",
+                    _exePath);
+
+            OpenLogWriter();
+            LaunchProcess(config);
+        }
+        catch
+        {
+            CloseLogWriter();
+            State = EmergencyChannelState.Failed;
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Intentional stop. Sets <c>EnableRaisingEvents = false</c> before
+    /// <c>Kill()</c> so the <see cref="Process.Exited"/> callback never
+    /// fires as a false crash event — same pattern as
+    /// <see cref="SingBoxManager.Stop"/>. Idempotent: safe to call when
+    /// the process is already dead or never started.
+    /// </summary>
+    public void Stop()
+    {
+        _logger.Information("[EmergencyChannelManager] Stopping wgturn-cli (PID {Pid})", Pid);
+
+        if (_process == null || _process.HasExited)
+        {
+            State = EmergencyChannelState.Disconnected;
+            CloseLogWriter();
+            return;
+        }
+
+        _process.EnableRaisingEvents = false;
+
+        try
+        {
+            _process.Kill(entireProcessTree: true);
+            _process.WaitForExit(5000);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[EmergencyChannelManager] Error while stopping wgturn-cli");
+        }
+        finally
+        {
+            _process.Dispose();
+            _process = null;
+            State = EmergencyChannelState.Disconnected;
+            CloseLogWriter();
+            _logger.Information("[EmergencyChannelManager] wgturn-cli stopped");
+        }
+    }
+
+    private void LaunchProcess(EmergencyChannelConfig config)
+    {
+        // wgturn-cli arg shape (cmd/wgturn-cli/connect_url.go):
+        //   wgturn-cli connect-url -url <wgturn://...> -vk-link <https://vk.com/call/join/...>
+        //
+        // Both forms are accepted by Go's flag package:
+        //   connect-url -url <URL> -vk-link <LINK>     ← we use this (explicit, safest)
+        //   connect-url <URL> -vk-link <LINK>          ← AVOID: Go's flag.Parse stops
+        //                                                 at first non-flag positional,
+        //                                                 so -vk-link gets eaten as a
+        //                                                 second positional and the
+        //                                                 URL/link pair is lost.
+        // Verified the explicit-flag form works in live test
+        // (plans/r9-actionable-without-stas.md Phase 2 verify step).
+        var args = ArgsBuilderOverride?.Invoke(config)
+            ?? $"connect-url -url \"{config.WgturnUrl}\" -vk-link \"{config.VkLink}\"";
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = _exePath,
+            Arguments = args,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+
+        _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        _process.OutputDataReceived += OnStdLine;
+        _process.ErrorDataReceived += OnStdLine;
+        _process.Exited += (_, _) => OnProcessExited();
+
+        _process.Start();
+        _process.BeginOutputReadLine();
+        _process.BeginErrorReadLine();
+
+        State = EmergencyChannelState.Connected;
+        _logger.Information("[EmergencyChannelManager] wgturn-cli started (PID {Pid})", _process.Id);
+        Started?.Invoke(_process.Id);
+    }
+
+    private void OnStdLine(object _, DataReceivedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.Data)) return;
+        WriteLogLine(e.Data);
+    }
+
+    private void OnProcessExited()
+    {
+        int? exitCode = null;
+        try
+        {
+            if (_process is { HasExited: true } p)
+                exitCode = p.ExitCode;
+        }
+        catch { /* race with Dispose / handle teardown — tolerate */ }
+
+        _logger.Warning(
+            "[EmergencyChannelManager] wgturn-cli exited unexpectedly (exit code: {Code})",
+            exitCode?.ToString() ?? "?");
+
+        State = EmergencyChannelState.Failed;
+        Crashed?.Invoke(this, exitCode);
+
+        CloseLogWriter();
+    }
+
+    private void OpenLogWriter()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(_logPath)!);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[EmergencyChannelManager] Failed to create log directory {Dir}",
+                Path.GetDirectoryName(_logPath));
+        }
+
+        lock (_logLock)
+        {
+            try
+            {
+                _logWriter?.Dispose();
+                var fs = new FileStream(_logPath, FileMode.Append, FileAccess.Write, FileShare.Read);
+                _logWriter = new StreamWriter(fs, Encoding.UTF8) { AutoFlush = true };
+                _logWriter.WriteLine($"--- wgturn-cli session start {DateTime.UtcNow:O} ---");
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[EmergencyChannelManager] Failed to open wgturn-cli log {Path}", _logPath);
+                _logWriter = null;
+            }
+        }
+    }
+
+    private void WriteLogLine(string line)
+    {
+        lock (_logLock)
+        {
+            try
+            {
+                _logWriter?.WriteLine(line);
+            }
+            catch
+            {
+                // Swallow — logging failure must never propagate into
+                // the process-output pump callbacks.
+            }
+        }
+    }
+
+    private void CloseLogWriter()
+    {
+        lock (_logLock)
+        {
+            try { _logWriter?.Dispose(); } catch { }
+            _logWriter = null;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        try { Stop(); } catch { }
+        try { _process?.Dispose(); } catch { }
+        CloseLogWriter();
+        GC.SuppressFinalize(this);
+    }
+}

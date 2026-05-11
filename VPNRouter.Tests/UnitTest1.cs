@@ -1,5 +1,6 @@
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.EmergencyChannel;
 
 namespace VPNRouter.Tests;
 
@@ -5516,5 +5517,326 @@ public class PowerEventListenerTests
         var listener = new PowerEventListener(() => { }, logger: null);
         Assert.NotNull(listener);
         listener.Dispose();
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EmergencyChannelConfig — r9 Phase 2 (wgturn-core integration)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+public class EmergencyChannelConfigTests
+{
+    [Fact]
+    public void TryParse_ValidUrl_Success()
+    {
+        const string url = "wgturn://eyJ2IjoxLCJzcCI6ImFiYyIsImNwIjoieHl6IiwiZXAiOiJleGFtcGxlLmNvbTo1NjAwMCIsImFkIjoiMTAuNy4wLjUvMjQifQ";
+        const string vk = "https://vk.com/call/join/abc-def";
+
+        Assert.True(EmergencyChannelConfig.TryParse(url, vk, out var config));
+        Assert.Equal(url, config.WgturnUrl);
+        Assert.Equal(vk, config.VkLink);
+        Assert.Null(config.Label);
+    }
+
+    [Fact]
+    public void TryParse_InvalidScheme_Fails()
+    {
+        Assert.False(EmergencyChannelConfig.TryParse("vless://server.example.com", "https://vk.com/call/join/x", out _));
+        Assert.False(EmergencyChannelConfig.TryParse("https://vk.com/call/join/x", "https://vk.com/call/join/x", out _));
+        Assert.False(EmergencyChannelConfig.TryParse("not-a-url-at-all", "https://vk.com/call/join/x", out _));
+    }
+
+    [Fact]
+    public void TryParse_MissingVkLink_Allowed()
+    {
+        const string url = "wgturn://eyJ2IjoxfQ";
+
+        // VK link is a runtime parameter — TryParse must not require it.
+        // Engine validates VK link at StartAsync time instead.
+        Assert.True(EmergencyChannelConfig.TryParse(url, out var config));
+        Assert.Equal(url, config.WgturnUrl);
+        Assert.Equal(string.Empty, config.VkLink);
+
+        // Same with explicit empty string
+        Assert.True(EmergencyChannelConfig.TryParse(url, vkLink: "", out var c2));
+        Assert.Equal(string.Empty, c2.VkLink);
+    }
+
+    [Fact]
+    public void TryParse_EmptyPayload_Fails()
+    {
+        // wgturn:// with no body or only the fragment — meaningless.
+        Assert.False(EmergencyChannelConfig.TryParse("wgturn://", "vk", out _));
+        Assert.False(EmergencyChannelConfig.TryParse("wgturn://#label-only", "vk", out _));
+        Assert.False(EmergencyChannelConfig.TryParse("", "vk", out _));
+        Assert.False(EmergencyChannelConfig.TryParse("   ", "vk", out _));
+    }
+
+    [Fact]
+    public void TryParse_WithLabel_ExtractsLabel()
+    {
+        const string url = "wgturn://eyJ2IjoxfQ#brat-pc";
+
+        Assert.True(EmergencyChannelConfig.TryParse(url, "vk", out var config));
+        Assert.Equal("brat-pc", config.Label);
+        // WgturnUrl preserves the full original string (label included)
+        // so it can be passed verbatim to wgturn-cli connect-url.
+        Assert.Equal(url, config.WgturnUrl);
+    }
+
+    [Fact]
+    public void TryParse_PercentEncodedLabel_Decoded()
+    {
+        const string url = "wgturn://eyJ2IjoxfQ#brat%20pc";
+
+        Assert.True(EmergencyChannelConfig.TryParse(url, "vk", out var config));
+        Assert.Equal("brat pc", config.Label);
+    }
+
+    [Fact]
+    public void TryParse_SchemeIsCaseInsensitive()
+    {
+        // RFC 3986: scheme is case-insensitive. The body is opaque base64
+        // so we don't normalize that, but accepting WGTURN:// guards
+        // against uppercased URLs from VK Calls clipboard quirks.
+        Assert.True(EmergencyChannelConfig.TryParse("WGTURN://eyJ2IjoxfQ", "vk", out _));
+        Assert.True(EmergencyChannelConfig.TryParse("WgTuRn://eyJ2IjoxfQ", "vk", out _));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EmergencyChannelManager + Engine — lifecycle state transitions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+public class EmergencyChannelManagerTests
+{
+    private static EmergencyChannelConfig ValidConfig() =>
+        new() { WgturnUrl = "wgturn://eyJ2IjoxfQ", VkLink = "https://vk.com/call/join/x" };
+
+    [Fact]
+    public void Stop_BeforeStart_IsIdempotent()
+    {
+        using var manager = new EmergencyChannelManager(
+            exePath: Path.Combine(Path.GetTempPath(), "nonexistent-wgturn.exe"),
+            logPath: Path.Combine(Path.GetTempPath(), $"wgturn-test-{Guid.NewGuid():N}.log"));
+
+        // Calling Stop without Start must not throw and state stays Disconnected.
+        manager.Stop();
+        manager.Stop();
+        Assert.Equal(EmergencyChannelState.Disconnected, manager.State);
+        Assert.Null(manager.Pid);
+    }
+
+    [Fact]
+    public void Start_MissingBinary_ThrowsAndStateIsFailed()
+    {
+        var bogusPath = Path.Combine(Path.GetTempPath(), $"nonexistent-wgturn-{Guid.NewGuid():N}.exe");
+        using var manager = new EmergencyChannelManager(
+            exePath: bogusPath,
+            logPath: Path.Combine(Path.GetTempPath(), $"wgturn-test-{Guid.NewGuid():N}.log"));
+
+        Assert.Throws<FileNotFoundException>(() => manager.Start(ValidConfig()));
+        Assert.Equal(EmergencyChannelState.Failed, manager.State);
+    }
+
+    [Fact]
+    public void Start_NullConfig_Throws()
+    {
+        using var manager = new EmergencyChannelManager(
+            exePath: Path.Combine(Path.GetTempPath(), "stub.exe"),
+            logPath: Path.Combine(Path.GetTempPath(), $"wgturn-test-{Guid.NewGuid():N}.log"));
+
+        Assert.Throws<ArgumentNullException>(() => manager.Start(null!));
+    }
+
+    [Fact]
+    public void Start_EmptyVkLink_Throws()
+    {
+        using var manager = new EmergencyChannelManager(
+            exePath: Path.Combine(Path.GetTempPath(), "stub.exe"),
+            logPath: Path.Combine(Path.GetTempPath(), $"wgturn-test-{Guid.NewGuid():N}.log"));
+
+        // VK link is required at start time even though TryParse accepts
+        // empty (config persisted without one, runtime paste required).
+        Assert.Throws<ArgumentException>(() =>
+            manager.Start(new EmergencyChannelConfig { WgturnUrl = "wgturn://x", VkLink = "" }));
+    }
+
+    [Fact]
+    public void StartStop_LifecycleStateTransitions_WindowsOnly()
+    {
+        // Phase-2 desktop scope is Windows; the spawn integration test
+        // uses cmd.exe as a long-running stub. Other platforms skip
+        // (still get the tests above for state-machine coverage).
+        if (!OperatingSystem.IsWindows()) return;
+
+        var cmdPath = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        if (!File.Exists(cmdPath)) return; // CI without System32 cmd — skip rather than fail
+
+        var logPath = Path.Combine(Path.GetTempPath(), $"wgturn-test-{Guid.NewGuid():N}.log");
+        try
+        {
+            using var manager = new EmergencyChannelManager(cmdPath, logPath);
+            // Override args so cmd.exe has something it can run for ~5s
+            // without exiting (ping localhost N times).
+            manager.ArgsBuilderOverride = _ => "/c ping -n 6 127.0.0.1";
+
+            int? observedPid = null;
+            int? crashExitCode = null;
+            var crashed = false;
+            manager.Started += pid => observedPid = pid;
+            manager.Crashed += (_, code) => { crashed = true; crashExitCode = code; };
+
+            Assert.Equal(EmergencyChannelState.Disconnected, manager.State);
+
+            manager.Start(ValidConfig());
+
+            // Started fires synchronously inside LaunchProcess →
+            // PID is observable immediately. State should be Connected.
+            Assert.Equal(EmergencyChannelState.Connected, manager.State);
+            Assert.NotNull(manager.Pid);
+            Assert.Equal(manager.Pid, observedPid);
+
+            // Intentional Stop must NOT raise Crashed (the EnableRaisingEvents=false
+            // pattern ensures Process.Exited callback never fires for a Stop).
+            manager.Stop();
+            Assert.Equal(EmergencyChannelState.Disconnected, manager.State);
+            Assert.Null(manager.Pid);
+
+            // Give threadpool a beat in case a stray Exited callback was queued.
+            Thread.Sleep(300);
+            Assert.False(crashed,
+                $"Crashed event must not fire on intentional Stop (got exitCode={crashExitCode})");
+
+            // wgturn-cli.log should exist and have at least the session-start marker.
+            Assert.True(File.Exists(logPath), $"Expected log at {logPath}");
+        }
+        finally
+        {
+            try { if (File.Exists(logPath)) File.Delete(logPath); } catch { }
+        }
+    }
+}
+
+public class EmergencyChannelEngineTests
+{
+    private static EmergencyChannelConfig ValidConfig() =>
+        new() { WgturnUrl = "wgturn://eyJ2IjoxfQ", VkLink = "https://vk.com/call/join/x" };
+
+    [Fact]
+    public void Initial_State_IsDisconnected()
+    {
+        using var engine = new EmergencyChannelEngine();
+        Assert.Equal(EmergencyChannelState.Disconnected, engine.State);
+        Assert.Null(engine.Pid);
+        Assert.Null(engine.ActiveLabel);
+    }
+
+    [Fact]
+    public void StopBeforeStart_NoOp()
+    {
+        using var engine = new EmergencyChannelEngine();
+        engine.Stop();
+        engine.Stop();
+        Assert.Equal(EmergencyChannelState.Disconnected, engine.State);
+    }
+
+    [Fact]
+    public async Task RestartWithoutPriorStart_Throws()
+    {
+        using var engine = new EmergencyChannelEngine();
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await engine.RestartAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task StartAsync_NullConfig_Throws()
+    {
+        using var engine = new EmergencyChannelEngine();
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            async () => await engine.StartAsync(null!, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task StartAsync_MissingBinary_TransitionsToFailedAndRaisesError()
+    {
+        // Inject a manager pointed at a non-existent binary.
+        var bogusPath = Path.Combine(Path.GetTempPath(), $"nonexistent-{Guid.NewGuid():N}.exe");
+        var logPath = Path.Combine(Path.GetTempPath(), $"wgturn-test-{Guid.NewGuid():N}.log");
+
+        using var engine = new EmergencyChannelEngine(
+            managerFactory: () => new EmergencyChannelManager(bogusPath, logPath));
+
+        var transitions = new List<EmergencyChannelState>();
+        var error = (string?)null;
+        engine.StateChanged += s => transitions.Add(s);
+        engine.ErrorOccurred += msg => error = msg;
+
+        await Assert.ThrowsAsync<FileNotFoundException>(
+            async () => await engine.StartAsync(ValidConfig(), CancellationToken.None));
+
+        Assert.Equal(EmergencyChannelState.Failed, engine.State);
+        Assert.Contains(EmergencyChannelState.Connecting, transitions);
+        Assert.Contains(EmergencyChannelState.Failed, transitions);
+        Assert.NotNull(error);
+        Assert.Contains("wgturn-cli", error!);
+    }
+
+    [Fact]
+    public async Task StartAsync_Cancelled_BeforeManagerCreated()
+    {
+        using var engine = new EmergencyChannelEngine();
+        var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            async () => await engine.StartAsync(ValidConfig(), cts.Token));
+
+        // Engine must remain in Disconnected — cancellation before any
+        // work happened means no state transitions.
+        Assert.Equal(EmergencyChannelState.Disconnected, engine.State);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AppSettings — EmergencyChannel section defaults / null-safety
+// ═══════════════════════════════════════════════════════════════════════════════
+
+public class AppSettingsEmergencyChannelTests
+{
+    [Fact]
+    public void Defaults_AreSane()
+    {
+        var settings = new AppSettings();
+        Assert.NotNull(settings.EmergencyChannel);
+        Assert.False(settings.EmergencyChannel.Enabled);
+        Assert.Null(settings.EmergencyChannel.WgturnUrl);
+        Assert.Null(settings.EmergencyChannel.VkLink);
+    }
+
+    [Fact]
+    public void EnsureSane_PopulatesNullSection()
+    {
+        var settings = new AppSettings();
+        settings.EmergencyChannel = null!; // simulate YamlDotNet returning null for `emergency_channel:` with no body
+        var fixedUp = settings.EnsureSane();
+        Assert.NotNull(fixedUp.EmergencyChannel);
+        Assert.False(fixedUp.EmergencyChannel.Enabled);
+    }
+
+    [Fact]
+    public void Parse_YamlWithEmergencyChannel_RoundTrips()
+    {
+        const string yaml = """
+            schema_version: 2
+            emergency_channel:
+              enabled: true
+              wgturn_url: "wgturn://eyJ2IjoxfQ#brat"
+              vk_link: "https://vk.com/call/join/abc"
+            """;
+        var settings = SettingsLoader.Parse(yaml);
+        Assert.True(settings.EmergencyChannel.Enabled);
+        Assert.Equal("wgturn://eyJ2IjoxfQ#brat", settings.EmergencyChannel.WgturnUrl);
+        Assert.Equal("https://vk.com/call/join/abc", settings.EmergencyChannel.VkLink);
     }
 }
