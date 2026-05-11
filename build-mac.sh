@@ -78,6 +78,45 @@ xattr -d com.apple.quarantine "$APP/Contents/MacOS/sing-box" 2>/dev/null || true
 "$APP/Contents/MacOS/sing-box" version | head -1
 echo "    sing-box bundled ($(stat -f%z "$APP/Contents/MacOS/sing-box" 2>/dev/null || stat -c%s "$APP/Contents/MacOS/sing-box") bytes)"
 
+# ── Bundle wgturn-cli (Phase 1 of emergency channel integration) ──
+# Built from PavelLizunov/wgturn-core. Provides the wgturn-cli binary
+# that VPNRouter will invoke via EmergencyChannelEngine (Phase 2) to
+# tunnel WireGuard through VK Calls' TURN infrastructure when standard
+# VPN protocols are blocked.
+#
+# Source resolution: $WGTURN_CORE_DIR > tools/wgturn-cli-cache/wgturn-core/
+# > gh repo clone PavelLizunov/wgturn-core (requires gh auth). If neither
+# works, the step is skipped with a warning and the .app still works.
+WGTURN_CORE="${WGTURN_CORE_DIR:-}"
+if [ -z "$WGTURN_CORE" ] || [ ! -d "$WGTURN_CORE/cmd/wgturn-cli" ]; then
+    if [ -d "$REPO_DIR/tools/wgturn-cli-cache/wgturn-core/cmd/wgturn-cli" ]; then
+        WGTURN_CORE="$REPO_DIR/tools/wgturn-cli-cache/wgturn-core"
+    elif command -v gh >/dev/null 2>&1; then
+        echo "    wgturn-cli: cloning PavelLizunov/wgturn-core into tools/wgturn-cli-cache/..."
+        mkdir -p "$REPO_DIR/tools/wgturn-cli-cache"
+        if gh repo clone PavelLizunov/wgturn-core "$REPO_DIR/tools/wgturn-cli-cache/wgturn-core" >/dev/null 2>&1; then
+            WGTURN_CORE="$REPO_DIR/tools/wgturn-cli-cache/wgturn-core"
+        fi
+    fi
+fi
+if [ -n "$WGTURN_CORE" ] && [ -d "$WGTURN_CORE/cmd/wgturn-cli" ] && command -v go >/dev/null 2>&1; then
+    WGTURN_SHA=$(cd "$WGTURN_CORE" && git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
+    mkdir -p "$APP/Contents/MacOS/bin"
+    echo "    wgturn-cli: building darwin-${ARCH} (sha $WGTURN_SHA)..."
+    (
+        cd "$WGTURN_CORE"
+        GOOS=darwin GOARCH="${ARCH}" CGO_ENABLED=0 go build \
+            -trimpath -ldflags="-s -w -X main.version=$WGTURN_SHA" \
+            -o "$APP/Contents/MacOS/bin/wgturn-cli" ./cmd/wgturn-cli
+    )
+    chmod +x "$APP/Contents/MacOS/bin/wgturn-cli"
+    xattr -d com.apple.quarantine "$APP/Contents/MacOS/bin/wgturn-cli" 2>/dev/null || true
+    "$APP/Contents/MacOS/bin/wgturn-cli" version || true
+    echo "    wgturn-cli bundled at Contents/MacOS/bin/ (sha $WGTURN_SHA)"
+else
+    echo "    wgturn-cli: SKIPPED (set WGTURN_CORE_DIR or clone into tools/wgturn-cli-cache/, requires go on PATH)"
+fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

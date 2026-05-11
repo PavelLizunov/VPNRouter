@@ -75,6 +75,49 @@ if (Test-Path $iconSource) {
     Copy-Item -Path $iconSource -Destination (Join-Path $AppDir "icon.png") -Force
 }
 
+# ── Bundle wgturn-cli (Phase 1 of emergency channel integration) ──
+# Built from PavelLizunov/wgturn-core. See build.ps1 for full rationale.
+# Cross-compiled here from Windows host for linux-amd64. Skipped silently
+# if source / go toolchain is unavailable — the tar.gz remains valid.
+$WgturnLinuxBin = Join-Path $AppDir "bin\wgturn-cli"
+$WgturnCoreDir = $env:WGTURN_CORE_DIR
+if (-not $WgturnCoreDir -or -not (Test-Path "$WgturnCoreDir\cmd\wgturn-cli")) {
+    $cacheDir = Join-Path $Root "tools\wgturn-cli-cache\wgturn-core"
+    if (Test-Path "$cacheDir\cmd\wgturn-cli") {
+        $WgturnCoreDir = $cacheDir
+    } elseif (Get-Command gh -ErrorAction SilentlyContinue) {
+        New-Item -ItemType Directory -Force -Path (Split-Path $cacheDir -Parent) | Out-Null
+        & gh repo clone PavelLizunov/wgturn-core $cacheDir 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0 -and (Test-Path "$cacheDir\cmd\wgturn-cli")) {
+            $WgturnCoreDir = $cacheDir
+        }
+    }
+}
+$hasGo = $null -ne (Get-Command go -ErrorAction SilentlyContinue)
+$wgturnSrcOk = $WgturnCoreDir -and (Test-Path (Join-Path $WgturnCoreDir "cmd\wgturn-cli"))
+if ($wgturnSrcOk -and $hasGo) {
+    New-Item -ItemType Directory -Force -Path (Split-Path $WgturnLinuxBin -Parent) | Out-Null
+    Push-Location $WgturnCoreDir
+    try {
+        $WgturnSha = (git rev-parse --short=12 HEAD 2>&1 | Out-String).Trim()
+        if (-not $WgturnSha -or $WgturnSha -match '\s') { $WgturnSha = "unknown" }
+        $env:GOOS = "linux"
+        $env:GOARCH = "amd64"
+        $env:CGO_ENABLED = "0"
+        $wgturnLdflags = "-s -w -X main.version=$WgturnSha"
+        go build -trimpath "-ldflags=$wgturnLdflags" -o $WgturnLinuxBin ./cmd/wgturn-cli 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "    wgturn-cli bundled at bin/ (sha $WgturnSha)" -ForegroundColor Gray
+        } else {
+            Write-Host "    wgturn-cli build FAILED - skipped." -ForegroundColor Yellow
+        }
+    } finally {
+        Pop-Location
+    }
+} else {
+    Write-Host "    wgturn-cli: SKIPPED (set WGTURN_CORE_DIR or clone into tools\wgturn-cli-cache\, requires go on PATH)" -ForegroundColor Yellow
+}
+
 Write-Host "    Layout:"
 Get-ChildItem $AppDir | ForEach-Object { Write-Host "      $($_.Name)" }
 
