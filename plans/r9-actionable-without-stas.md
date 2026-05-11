@@ -4,6 +4,15 @@
 остальные items r9-плана действенны прямо сейчас. Этот файл — короткий
 ranked-actionable список + recommended order.
 
+> **Desktop-first приоритет** (user 2026-05-11):
+> - Bug-r9-F (stas Custom Config silent leak) — **desktop**
+> - Bug-r9-I (Apps tab persist через reboot) — **desktop**
+> - wgturn-core integration — **desktop first**, потом Android
+>
+> Android-only items (Bug-r9-A glyph, Bug-r9-B "контент пропадает"
+> на Simple page) могут идти параллельно — они не блокируют desktop
+> работу, но в очереди ниже.
+
 ## Категория 1 · User-reported bugs которые можно фиксить **сразу**
 
 ### A. Bug-r9-I — Apps tab settings не выживают reboot
@@ -124,34 +133,63 @@ ranked-actionable список + recommended order.
 - **Severity**: P0 для security (silent traffic-leak в неизвестный
   сервер — privacy violation).
 
-## Категория 3 · wgturn-core integration groundwork
+## Категория 3 · wgturn-core integration groundwork (**desktop first**)
 
-Phase 1 + Phase 2 НЕ требуют ответов от user'а на 4 mutex/server/UI/
-provisioning вопроса. Можно начать прямо сейчас.
+Re-scoped 2026-05-11 — user explicitly directed «внедрения нового ядра
+тоже desktop first». Android port отложен до того как desktop работает.
 
-### I. Phase 1 — gomobile build chain
-- Установить gomobile (`go install golang.org/x/mobile/cmd/gomobile`).
-- `gomobile init`.
-- `gomobile bind -target=android -o wgturn.aar github.com/PavelLizunov/
-  wgturn-core/pkg/wgturn github.com/PavelLizunov/wgturn-core/pkg/wgkernel
-  github.com/PavelLizunov/wgturn-core/pkg/wgconf github.com/PavelLizunov/
-  wgturn-core/pkg/wgshare`.
-- Verify .aar содержит ожидаемые Java classes.
-- Положить в `VPNRouter.Android/Lib/wgturn.aar` (gitignored, как libbox).
-- Reference в `.csproj`: `<AndroidLibrary Include="Lib\wgturn.aar"
-  Bind="false" />`.
-- **Effort**: 3-4 ч (toolchain setup + bind).
-- **Risk**: wgturn-core v0.0.1-alpha — может выяснится что gomobile
-  bind не работает out-of-box и нужно патчить. Документировать blockers.
+Phase 1 (desktop binary) + Phase 2 (Core service skeleton) НЕ требуют
+ответов от user'а на 4 mutex/server/UI/provisioning вопроса. Можно
+начать прямо сейчас.
+
+### I. Phase 1 — wgturn-cli.exe в desktop build
+- Сборка `cmd/wgturn-cli` в `wgturn-cli.exe` через `go build`:
+  ```bash
+  cd /tmp/wgturn-core
+  GOOS=windows GOARCH=amd64 go build -o wgturn-cli.exe ./cmd/wgturn-cli
+  ```
+- Mirror того как мы делаем с `sing-box.exe`: положить exe в
+  `%ProgramData%\VPNRouter\bin\wgturn-cli.exe` через installer.
+  Для VPNRouter `build.ps1`:
+  ```powershell
+  Copy-Item wgturn-cli.exe -Destination "$publishDir\bin\wgturn-cli.exe"
+  ```
+- Аналогично можно собрать `linux/amd64` + `darwin/arm64` для Mac/Linux
+  builds через CI.
+- **Effort**: 1-2 ч (go build + integrate в build.ps1 + проверить запуск
+  `wgturn-cli.exe --version`).
+- **Risk**: wgturn-core v0.0.1-alpha — может потребовать `make build`
+  с дополнительными tags. Сначала verify locally что `go build` работает,
+  потом интеграция в наш build pipeline.
 
 ### J. Phase 2 — Core service skeleton
 - `VPNRouter.Core/Services/EmergencyChannel/EmergencyChannelEngine.cs`:
-  StartAsync / Stop / event lifecycle, без UI binding.
+  spawn / lifecycle для `wgturn-cli.exe connect-url <url> --vk-link <link>`
+  (mirrors `SingBoxManager.cs`).
+- `VPNRouter.Core/Services/EmergencyChannel/EmergencyChannelManager.cs`:
+  Process.Start с правильным path / args, StdOut/Err to log file,
+  Exited event handler.
 - `VPNRouter.Core/Models/EmergencyChannelConfig.cs`: model для
   `wgturn://` URL + VK link.
-- Unit tests на парсинг URL.
-- **Effort**: 2-3 ч.
-- **Dependency**: gomobile .aar существует (Phase 1 done).
+- `VPNRouter.Core/Models/AppSettings.cs`: новая `EmergencyChannel`
+  секция (enabled, wgturn_url, vk_link).
+- Unit tests на парсинг URL + lifecycle state transitions.
+- **Effort**: 3-4 ч.
+- **Dependency**: Phase 1 wgturn-cli.exe собран и доступен.
+
+### Phase 3 — Desktop UI (после Phase 2)
+- `VPNRouter.App/Views/Pages/EmergencyChannelPage.axaml`: новая страница
+  в MainWindow tabs (после Free / отдельной кнопкой).
+- ViewModel: bind на `EmergencyChannelEngine` state, paste-or-scan input
+  fields (`wgturn://` URL + VK link), Connect/Disconnect button.
+- Bandwidth indicator с подсказкой "~200 KB/s — это нормальный режим
+  fallback".
+- **Open question**: mutex policy с основным VPN (sing-box) — выяснить
+  позже.
+
+### Android Phase 1+2 — отложено
+- gomobile .aar + AndroidApp.EmergencyChannel.cs идут после того как
+  desktop UI стабилизирован.
 
 ## Категория 4 · Verification sweeps по уже-shipped работе
 
@@ -191,32 +229,49 @@ provisioning вопроса. Можно начать прямо сейчас.
 - `git worktree prune` + ручная зачистка merged branches.
 - **Effort**: 30 мин.
 
-## Рекомендованный порядок (без user blocker'а)
+## Рекомендованный порядок (desktop-first, 2026-05-11 update)
 
-**Параллель A — fast user wins** (1 день):
-1. **C** Bug-r9-E TUN conflict detection (P2, high frequency)
-2. **D** Bug-r9-G Zapret winws.exe UX hint (P3, easy)
-3. **B** Bug-r9-H stale TUN cleanup (P2)
-4. **A** Bug-r9-I Apps tab persist (P1)
+**Параллель A1 — desktop user wins** (P1 first, 1-2 дня):
+1. **A** Bug-r9-I Apps tab persist через reboot (desktop, **P1**) — самая
+   частая жалоба.
+2. **H** Bug-r9-F-DEFENSIVE Custom Config silent leak (desktop, **P0
+   privacy**) — proactive без stas.
 
-**Параллель B — security defence** (parallel с A):
-5. **H** Bug-r9-F-DEFENSIVE (P0 — privacy критично)
+**Параллель A2 — desktop sing-box UX** (P2, parallel with A1):
+3. **B** Bug-r9-H stale TUN cleanup pre-start (desktop, P2).
+4. **C** Bug-r9-E third-party VPN conflict detection (desktop, P2).
+5. **D** Bug-r9-G Zapret winws.exe AV-block UX hint (desktop, P3).
 
-**Параллель C — proactive code audits** (если есть пропускная способность):
-6. **E** Bug-r9-A audit Stop glyphs
-7. **F** Bug-r9-B audit Rebuild + event leaks
-8. **G** Bug-r9-C audit Free configs Android vs PC parity
+**Параллель B — wgturn-core desktop integration** (long-running):
+6. **I** Phase 1: wgturn-cli.exe в build.ps1 + installer.
+7. **J** Phase 2: Core service skeleton (`EmergencyChannelEngine`).
+8. Phase 3 (после J): Desktop UI tab в MainWindow.
 
-**Параллель D — wgturn-core groundwork** (long-running):
-9. **I** Phase 1 gomobile build
-10. **J** Phase 2 Core service skeleton
+**Параллель C — Android в очереди после desktop** (deprioritized):
+9. **E** Bug-r9-A Android stop glyph audit (P3 cosmetic).
+10. **F** Bug-r9-B Android "контент пропадает" audit (нужен repro).
+11. **G** Bug-r9-C Free configs Android vs PC parity audit.
+12. **K** TEST-RUN-ALL r8 Android full sweep.
+13. Android wgturn-core (gomobile .aar) — после desktop UI работает.
 
-**Параллель E — verification** (после A+B):
-11. **K** TEST-RUN-ALL r8 full sweep
+**Параллель D — infrastructure** (fill-in):
+14. **L** Codify SSH live-test pipeline (Mac→Android).
+15. **M** Cleanup stale chip worktrees.
 
-**Параллель F — infrastructure** (low priority, fill-in):
-12. **L** Codify SSH live-test pipeline
-13. **M** Cleanup stale worktrees
+## Spawn-able chips сейчас (desktop-first)
+
+1. **chip-A1-1**: Bug-r9-I — Apps tab Save bar + auto-persist (desktop).
+2. **chip-A1-2**: Bug-r9-F-DEFENSIVE — 3-in-1 defense-in-depth (CustomConfigInjector
+   tag policy + LeakProtection check + Simple page outbound display).
+3. **chip-A2-1**: Bug-r9-H — stale TUN pre-start cleanup (desktop).
+4. **chip-A2-2**: Bug-r9-E + Bug-r9-G — conflict detection + Zapret UX
+   hint (объединить в один chip, общий код в startup pre-flight).
+5. **chip-B-1**: wgturn-cli.exe desktop build integration (Phase 1).
+6. **chip-B-2**: EmergencyChannelEngine + Manager skeleton (Phase 2) —
+   запускать после chip-B-1.
+
+Итого 5-6 параллельных chip'ов на desktop фронт. Android (chips
+C-E + K) — после того как desktop стабилен.
 
 ## Что НУЖНО от user'а / других людей (blocked items)
 
