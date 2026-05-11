@@ -78,10 +78,13 @@ $appVersionFile = Join-Path $Root "VPNRouter.Core\AppVersion.cs"
 if (-not (Test-Path $appVersionFile)) {
     throw "ABORT: AppVersion.cs not found at $appVersionFile. Are you running build.ps1 from the wrong directory?"
 }
+# v2.32.1-r2: match both 'public const string Version =' (legacy) and
+# 'public static readonly string Version =' (current, switched for CI
+# verify-release-integrity friendliness — see AppVersion.cs comments).
 $appVersionLine = (Get-Content $appVersionFile |
-    Select-String 'public const string Version =' | Select-Object -First 1).Line
+    Select-String 'string Version =' | Select-Object -First 1).Line
 if (-not $appVersionLine) {
-    throw "ABORT: could not parse 'public const string Version =' from $appVersionFile."
+    throw "ABORT: could not parse 'string Version =' from $appVersionFile."
 }
 # Extract the string between the first pair of double quotes.
 if ($appVersionLine -match '"([^"]+)"') {
