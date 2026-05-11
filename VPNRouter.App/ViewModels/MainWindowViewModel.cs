@@ -79,6 +79,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(SimpleCtaText))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnected))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsDisconnected))]
+    // Bug-r9-F-DEFENSIVE — active outbound display refresh on connect.
+    [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundLine))]
+    [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundIsSuspect))]
+    [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundNormalVisible))]
+    [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundSuspectVisible))]
     private bool _isConnected;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SimpleStatusIsOn))]
@@ -90,6 +95,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnecting))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsConnected))]
     [NotifyPropertyChangedFor(nameof(SimpleCtaIsDisconnected))]
+    [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundLine))]
+    [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundIsSuspect))]
+    [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundNormalVisible))]
+    [NotifyPropertyChangedFor(nameof(SimpleActiveOutboundSuspectVisible))]
     private bool _isConnecting;
     [ObservableProperty] private string _connectButtonText = Strings.StartVPN;
     [ObservableProperty]

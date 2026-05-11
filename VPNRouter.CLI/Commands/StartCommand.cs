@@ -242,7 +242,8 @@ public class StartCommand : AsyncCommand<StartSettings>
             else
             {
                 var sbConfig = ConfigGenerator.Generate(profile, scan.ProcessNames, settings);
-                var validation = LeakProtection.ValidateConfig(sbConfig);
+                // Bug-r9-F-DEFENSIVE: settings passed for outbound-IP cross-check.
+                var validation = LeakProtection.ValidateConfig(sbConfig, settings);
 
                 foreach (var w in validation.Warnings)
                     AnsiConsole.MarkupLine($"[yellow]⚠ {w}[/]");

@@ -105,10 +105,18 @@ public static class LeakProtection
         return new ValidationResult { Errors = errors, Warnings = warnings };
     }
 
-    public static ValidationResult ValidateConfig(SingBoxConfig config)
+    public static ValidationResult ValidateConfig(SingBoxConfig config, AppSettings? settings = null)
     {
         var errors = new List<string>();
         var warnings = new List<string>();
+
+        // Bug-r9-F-DEFENSIVE (2026-05-11): warn if any proxy outbound dials a
+        // server that isn't in the user's subscription / manual VLESS list.
+        // Catches stale Custom Config Mode placeholders + silent leak class
+        // where a pasted JSON points at a dead / hostile IP. Settings are
+        // optional so existing test callers don't break.
+        if (settings != null)
+            ValidateOutboundServersAgainstSettings(config, settings, warnings);
 
         // 1. DNS strategy must be ipv4_only
         if (config.Dns.Strategy != "ipv4_only")
@@ -305,5 +313,105 @@ public static class LeakProtection
             errors.Add($"{label}: password is empty");
         if (ss.ServerPort is null or <= 0)
             errors.Add($"{label}: server_port is invalid");
+    }
+
+    /// <summary>
+    /// Bug-r9-F-DEFENSIVE (2026-05-11): walks every proxy-like outbound and
+    /// warns if its <c>server</c> is not listed in any registered
+    /// subscription or manual VLESS server. This catches stale Custom Config
+    /// Mode placeholders and silent-leak class bugs where a pasted JSON
+    /// quietly directs traffic to a dead / hostile IP.
+    ///
+    /// <para>Skipped types: <c>direct</c>, <c>block</c>, <c>dns</c>,
+    /// <c>selector</c>, <c>urltest</c> — these have no <c>server</c> field
+    /// of their own. <c>dns-direct</c> tag is also skipped (internal
+    /// resolver outbound emitted by <c>CustomConfigInjector</c>).</para>
+    /// </summary>
+    private static void ValidateOutboundServersAgainstSettings(
+        SingBoxConfig config, AppSettings settings, List<string> warnings)
+    {
+        if (config?.Outbounds == null || config.Outbounds.Count == 0)
+            return;
+
+        var known = BuildKnownServerSet(settings);
+        if (known.Count == 0)
+            return; // No registered servers → nothing to compare against.
+
+        foreach (var ob in config.Outbounds)
+        {
+            var type = (ob.Type ?? string.Empty).ToLowerInvariant();
+            if (type == "direct" || type == "block" || type == "dns"
+                || type == "selector" || type == "urltest")
+                continue;
+
+            var server = ob.Server?.Trim();
+            if (string.IsNullOrEmpty(server))
+                continue;
+
+            // Skip internal helper outbound (CustomConfigInjector emits
+            // dns-direct with udp_fragment as a non-empty direct shim).
+            if (string.Equals(ob.Tag, "dns-direct", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!known.Contains(server))
+            {
+                warnings.Add(
+                    $"Outbound '{ob.Tag}' points to '{server}' - this server is not " +
+                    $"in your subscriptions or VLESS server list. Possible leak from " +
+                    $"stale configuration or placeholder.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Builds the case-insensitive set of server hostnames / IPs known to
+    /// the user from settings: manual VLESS list + legacy single-server
+    /// field + every enabled subscription's cached servers.
+    /// </summary>
+    private static HashSet<string> BuildKnownServerSet(AppSettings settings)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var legacy = settings.Vless?.Server;
+        if (!string.IsNullOrWhiteSpace(legacy))
+            set.Add(legacy.Trim());
+
+        var manual = settings.Vless?.Servers;
+        if (manual != null)
+        {
+            foreach (var s in manual)
+            {
+                if (!string.IsNullOrWhiteSpace(s?.Server))
+                    set.Add(s.Server.Trim());
+            }
+        }
+
+        var subs = settings.App?.Subscriptions;
+        if (subs != null)
+        {
+            foreach (var sub in subs)
+            {
+                if (sub?.Servers == null) continue;
+                foreach (var s in sub.Servers)
+                {
+                    if (!string.IsNullOrWhiteSpace(s?.Server))
+                        set.Add(s.Server.Trim());
+                }
+            }
+        }
+
+        // Cached subscription servers (used during offline startup, see
+        // AppConfig.SubscriptionServers). Same trust level as live subs.
+        var cached = settings.App?.SubscriptionServers;
+        if (cached != null)
+        {
+            foreach (var s in cached)
+            {
+                if (!string.IsNullOrWhiteSpace(s?.Server))
+                    set.Add(s.Server.Trim());
+            }
+        }
+
+        return set;
     }
 }

@@ -247,6 +247,97 @@ public partial class MainWindowViewModel
         }
     }
 
+    /// <summary>
+    /// Bug-r9-F-DEFENSIVE (2026-05-11) — visible "via name@ip:port" line for
+    /// the currently active proxy outbound. Empty when disconnected or when
+    /// the engine hasn't reported an active address yet. Used by SimplePage
+    /// to surface the server users are actually routing through, so a stale
+    /// Custom Config Mode placeholder pointing to a hostile / dead IP can be
+    /// spotted at a glance instead of silently leaking traffic.
+    /// </summary>
+    public string SimpleActiveOutboundLine
+    {
+        get
+        {
+            var ip = _engine?.ActiveServerAddress;
+            if (string.IsNullOrEmpty(ip)) return string.Empty;
+
+            string? name = IsSubscribeMode
+                ? (SelectedSubscriptionServer ?? SubscriptionServers.FirstOrDefault())?.DisplayName
+                : IsVlessMode
+                    ? (SelectedServer ?? Servers.FirstOrDefault())?.DisplayName
+                    : null; // Custom mode — no per-server name from settings.
+
+            return string.IsNullOrEmpty(name)
+                ? $"{Strings.SmpStatusConnectedVia} {ip}"
+                : $"{Strings.SmpStatusConnectedVia} {name}@{ip}";
+        }
+    }
+
+    /// <summary>
+    /// True when the currently active proxy outbound dials a server that is
+    /// NOT in any registered subscription, manual VLESS list, or legacy
+    /// single-server field. Drives the red tint + warning glyph on
+    /// SimplePage so silent Custom Config Mode placeholders are visible.
+    /// Mirrors <see cref="VPNRouter.Core.Services.LeakProtection"/>'s
+    /// known-server set logic.
+    /// </summary>
+    public bool SimpleActiveOutboundIsSuspect
+    {
+        get
+        {
+            var ip = _engine?.ActiveServerAddress;
+            if (string.IsNullOrEmpty(ip) || _settings == null)
+                return false;
+
+            return !IsServerKnown(ip!, _settings);
+        }
+    }
+
+    /// <summary>Visible when the active-outbound line should render in the
+    /// normal (muted) style — connected, IP known.</summary>
+    public bool SimpleActiveOutboundNormalVisible
+        => !string.IsNullOrEmpty(SimpleActiveOutboundLine) && !SimpleActiveOutboundIsSuspect;
+
+    /// <summary>Visible when the active-outbound line should render in the
+    /// suspect (danger-tinted + ⚠) style — IP not in known servers.</summary>
+    public bool SimpleActiveOutboundSuspectVisible
+        => !string.IsNullOrEmpty(SimpleActiveOutboundLine) && SimpleActiveOutboundIsSuspect;
+
+    private static bool IsServerKnown(string ip, AppSettings settings)
+    {
+        bool MatchSet(IEnumerable<VlessServerEntry>? list)
+        {
+            if (list == null) return false;
+            foreach (var s in list)
+            {
+                if (s != null && !string.IsNullOrWhiteSpace(s.Server)
+                    && string.Equals(s.Server.Trim(), ip, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        var legacy = settings.Vless?.Server;
+        if (!string.IsNullOrWhiteSpace(legacy)
+            && string.Equals(legacy!.Trim(), ip, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (MatchSet(settings.Vless?.Servers)) return true;
+        if (MatchSet(settings.App?.SubscriptionServers)) return true;
+
+        var subs = settings.App?.Subscriptions;
+        if (subs != null)
+        {
+            foreach (var sub in subs)
+            {
+                if (MatchSet(sub?.Servers)) return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>CTA button caption — "Connect" / "Disconnect" / "Cancel".</summary>
     public string SimpleCtaText => IsConnecting
         ? Strings.SmpCtaCancel

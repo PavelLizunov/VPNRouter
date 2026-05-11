@@ -549,7 +549,9 @@ public class HealthMonitor : IDisposable
         // App-layer status pump samples HealthMonitor state.
         try
         {
-            var validation = LeakProtection.ValidateConfig(config);
+            // Bug-r9-F-DEFENSIVE: settings passed so outbound IPs are cross-
+            // checked against the user's known server list.
+            var validation = LeakProtection.ValidateConfig(config, _appSettings);
             if (!validation.IsValid)
             {
                 _logger.Warning(

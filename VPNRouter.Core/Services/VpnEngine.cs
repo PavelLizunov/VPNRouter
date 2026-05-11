@@ -453,7 +453,11 @@ public class VpnEngine : IDisposable
         else
         {
             var sbConfig = ConfigGenerator.Generate(_activeProfile, _scanResult.ProcessNames, settings);
-            var validation = LeakProtection.ValidateConfig(sbConfig);
+            // Bug-r9-F-DEFENSIVE: pass settings so outbound IPs are cross-
+            // checked against the user's known server list (catches stale
+            // placeholders that would otherwise route traffic to dead /
+            // hostile servers — see plans/vpnrouter-android-r9-user-bug-batch.md).
+            var validation = LeakProtection.ValidateConfig(sbConfig, settings);
 
             foreach (var warn in validation.Warnings)
             {
@@ -821,7 +825,9 @@ public class VpnEngine : IDisposable
                 // ever got past Apply at all (LeakProtection.ValidateConfig
                 // catches missing proxy outbound on line 67-69, but it was only
                 // being run in StartAsync, not Apply).
-                var validation = LeakProtection.ValidateConfig(sbConfig);
+                // Bug-r9-F-DEFENSIVE: settings passed so outbound IPs are
+                // cross-checked against the user's known server list.
+                var validation = LeakProtection.ValidateConfig(sbConfig, settings);
                 foreach (var warn in validation.Warnings)
                     _logger?.Warning("[VpnEngine] Apply: {Warn}", warn);
 
