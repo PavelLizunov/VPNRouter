@@ -178,6 +178,24 @@ public partial class MainWindowViewModel
     }
 
     /// <summary>
+    /// v2.32.1-r6 (Bug-r10-C) — synchronous status refresh for callers
+    /// that just changed something they expect the badges to reflect
+    /// (e.g. <c>KillConflictingVpnAsyncCommand</c>). Without this, the
+    /// adaptive poll throttle (up to 8 s when idle) can leave green
+    /// badges looking stuck on stale state for several seconds.
+    ///
+    /// <para>Resets the idle-streak counter so subsequent timer ticks
+    /// run at full 2 s cadence again — defensive against the throttle
+    /// staying high after a state transition.</para>
+    /// </summary>
+    public void ForceRefreshRuntimeStatus()
+    {
+        _runtimeIdleStreak = 0;
+        _runtimeSkipRemaining = 0;
+        UpdateRuntimeStatus();
+    }
+
+    /// <summary>
     /// Reconcile the UI's IsConnected flag (and its dependent labels) with the
     /// actual presence of a sing-box process. Called every poll tick after
     /// <see cref="UpdateRuntimeStatus"/> has refreshed the VPN badge.

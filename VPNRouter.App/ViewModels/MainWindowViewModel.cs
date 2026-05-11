@@ -318,7 +318,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             try
             {
                 using var proc = System.Diagnostics.Process.GetProcessById(info.Pid);
-                proc.Kill(entireProcessTree: true);
+                // v2.32.1-r6 (Bug-r10-C): was Kill(entireProcessTree: true).
+                // entireProcessTree walks Win32_Process WMI for descendants
+                // and kills them too — on slow machines this can block the
+                // dispatcher for seconds AND can clobber unrelated processes
+                // that share a transient parent shell. User report: Kill
+                // visually cleared Zapret + TgProxy green badges even though
+                // the actual winws.exe / python.exe stayed alive — the
+                // status poll was returning stale results during the long
+                // WMI walk. Targeted Kill (single process, no tree) is the
+                // right scope here: known-VPN-client processes don't have
+                // meaningful descendants we need to clean up.
+                proc.Kill();
                 try { await proc.WaitForExitAsync(System.Threading.CancellationToken.None); } catch { }
                 killed++;
                 _logger.Information("[VM] Killed conflicting VPN: {Name} (PID {Pid})",
@@ -341,6 +352,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // Re-run detection: any new instance started during kill?
         // PIDs ушли, но user мог запустить второй процесс параллельно.
         RefreshConflictingVpn();
+
+        // v2.32.1-r6 (Bug-r10-C): force-refresh Zapret/TgProxy runtime
+        // status. The 2s polling timer adaptively throttles to 4–8s
+        // when nothing is running — if the throttle was at 8s when
+        // user clicked Kill, the green badges could appear stuck. A
+        // single synchronous re-poll resets the streak + writes fresh
+        // values immediately.
+        try { ForceRefreshRuntimeStatus(); } catch { /* defensive */ }
 
         if (_lastConflicts.Count == 0)
         {
@@ -5337,6 +5356,26 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         Servers.Remove(entry);
         if (wasSelected)
             SelectedServer = Servers.FirstOrDefault();
+
+        // v2.32.1-r6 (Bug-r10-D): user-reported pain — user deleted a
+        // VLESS server entry that the F-C orphan badge suggested
+        // removing, but after app restart the entry reappeared because
+        // the row removal only mutated the in-memory ObservableCollection
+        // and never wrote back to YAML. SaveSettings (line ~3686) does
+        // rebuild _settings.Vless.Servers from this collection, but the
+        // function wasn't called for row-level mutations — only on
+        // Apply / connect transitions. Now we persist immediately on
+        // any × click so the deletion sticks through restart.
+        SaveSettings();
+        _logger?.Information(
+            "[VM] RemoveServerByEntry: persisted deletion of '{Name}' ({Server}:{Port}) — {Remaining} servers remain",
+            entry.Name, entry.Server, entry.Port, Servers.Count);
+
+        // F-C marker on remaining entries needs refresh — the deleted
+        // entry might have been the only orphan; or the previously
+        // active server may have been the deleted one and we need to
+        // re-mark the new selection.
+        MarkOrphanServers();
     }
 
     [RelayCommand]
