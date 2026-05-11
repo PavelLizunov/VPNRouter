@@ -70,11 +70,29 @@ public static class AppSettingsSane
         app.CustomDirectRules   ??= new List<CustomDirectRule>();
         app.CustomRules         ??= new List<CustomRule>();
         app.UserFreeSources     ??= new List<UserFreeSource>();
+        app.RoutingAppsInclude  ??= new List<string>();
+        app.RoutingAppsExclude  ??= new List<string>();
 
         app.CustomConfigs.RemoveAll(c => c == null!);
         app.CustomDirectRules.RemoveAll(r => r == null!);
         app.CustomRules.RemoveAll(r => r == null!);
         app.UserFreeSources.RemoveAll(u => u == null!);
+        app.RoutingAppsInclude.RemoveAll(s => s == null!);
+        app.RoutingAppsExclude.RemoveAll(s => s == null!);
+
+        // AM-1: only "include" / "exclude" are valid. Anything else
+        // (null, empty, typo, legacy) falls back to "include" so the
+        // engine has a deterministic branch.
+        if (!string.Equals(app.RoutingAppsMode, "include", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(app.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase))
+        {
+            app.RoutingAppsMode = "include";
+        }
+        else
+        {
+            // Canonicalise casing.
+            app.RoutingAppsMode = app.RoutingAppsMode!.ToLowerInvariant();
+        }
 
         app.SubscriptionServers.RemoveAll(s => s == null!);
         foreach (var s in app.SubscriptionServers)

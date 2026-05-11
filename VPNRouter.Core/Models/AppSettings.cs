@@ -10,8 +10,15 @@ public class AppSettings
     /// dropped section, etc.). Older configs get picked up by
     /// <see cref="VPNRouter.Core.Services.SettingsMigrator"/> and
     /// rewritten to the current schema on load.
+    ///
+    /// <para>v3 bump (2026-05-11, AM-1 + F-B): adds
+    /// <see cref="AppConfig.RoutingAppsMode"/> + the include/exclude
+    /// split lists, and seeds the F-B legacy <c>vless.servers</c>
+    /// cleanup pass for users with shadow-override entries from a
+    /// pre-subscription manual paste. See
+    /// <c>plans/r10-stas-confirmed-and-apps-2mode.md</c> §1 Fix-B / §2.</para>
     /// </summary>
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     [YamlMember(Alias = "schema_version")]
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -130,6 +137,62 @@ public class AppConfig
     /// </summary>
     [YamlMember(Alias = "routing_mode")]
     public string RoutingMode { get; set; } = "split";
+
+    /// <summary>
+    /// v2.32.x (AM-1, 2026-05-11): per-app routing mode within split tunnel.
+    /// <list type="bullet">
+    /// <item><c>"include"</c> (default, legacy behaviour) — selected apps
+    /// listed in <see cref="RoutingAppsInclude"/> are routed through the
+    /// VPN, everything else goes direct. sing-box gets
+    /// <c>{process_name: [..], action: route, outbound: proxy}</c> +
+    /// <c>route.final = "direct"</c>.</item>
+    /// <item><c>"exclude"</c> — selected apps listed in
+    /// <see cref="RoutingAppsExclude"/> are kept on the direct route,
+    /// everything else goes through the VPN. sing-box gets
+    /// <c>{process_name: [..], action: route, outbound: direct}</c> +
+    /// <c>route.final = "proxy"</c>. Useful when most apps want VPN but
+    /// a few (RU bank, Steam, vendor-specific client) must stay on the
+    /// direct route.</item>
+    /// </list>
+    ///
+    /// <para>Storage uses separate include/exclude lists (option B in
+    /// the plan) so toggling the mode preserves the user's selection
+    /// from the other mode — useful when comparing routing layouts
+    /// during testing.</para>
+    ///
+    /// <para>Only meaningful when <see cref="RoutingMode"/> is "split";
+    /// "full" tunnel routes everything through the VPN regardless and
+    /// the per-app list is ignored.</para>
+    ///
+    /// <para>See <c>plans/r10-stas-confirmed-and-apps-2mode.md</c> §2
+    /// for the rationale, schema decision, and acceptance criteria.</para>
+    /// </summary>
+    [YamlMember(Alias = "routing_apps_mode")]
+    public string RoutingAppsMode { get; set; } = "include";
+
+    /// <summary>
+    /// v2.32.x (AM-1): apps routed through the VPN when
+    /// <see cref="RoutingAppsMode"/> is "include". Each entry is a
+    /// process executable name (e.g. <c>chrome.exe</c> on Windows,
+    /// <c>firefox</c> on Linux). Empty when the user has not yet
+    /// selected anything OR when the per-app selection is currently
+    /// driven by the legacy profile system (<see cref="VPNRouter.Core.Models.Profile.Processes"/>).
+    ///
+    /// <para>Migrator copies legacy <see cref="CustomApps"/> into this
+    /// list on v2→v3 upgrade so first-time-after-upgrade users see
+    /// their previous selection.</para>
+    /// </summary>
+    [YamlMember(Alias = "routing_apps_include")]
+    public List<string> RoutingAppsInclude { get; set; } = new();
+
+    /// <summary>
+    /// v2.32.x (AM-1): apps kept on the direct route (NOT routed via
+    /// VPN) when <see cref="RoutingAppsMode"/> is "exclude". Same
+    /// process-name format as <see cref="RoutingAppsInclude"/>. Empty
+    /// when the user has not yet selected anything for exclusion.
+    /// </summary>
+    [YamlMember(Alias = "routing_apps_exclude")]
+    public List<string> RoutingAppsExclude { get; set; } = new();
 
     /// <summary>UI theme: "light" or "dark".</summary>
     [YamlMember(Alias = "theme")]

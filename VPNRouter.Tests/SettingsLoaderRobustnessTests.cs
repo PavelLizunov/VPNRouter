@@ -392,11 +392,14 @@ public class SettingsLoaderRobustnessTests : IDisposable
     // (regression — SR-4 must not break SR's predecessor migration logic)
     // ─────────────────────────────────────────────────────────────────────
     [Fact]
-    public void Load_TriggersSchemaMigration_FromV1ToV2()
+    public void Load_TriggersSchemaMigration_FromV1ToCurrent()
     {
         var path = PathFor("legacy.yaml");
         // schema_version 1 with legacy CustomDirectRules — migration step
-        // converts to CustomRules with Action="direct".
+        // converts to CustomRules with Action="direct". The full chain
+        // also walks past v2→v3 (AM-1 + F-B), which is a no-op for this
+        // fixture (no legacy custom_apps, no enabled subscriptions) but
+        // must land us on the current schema version.
         File.WriteAllText(path,
             "schema_version: 1\n" +
             "app:\n" +
@@ -409,7 +412,7 @@ public class SettingsLoaderRobustnessTests : IDisposable
         var s = SettingsLoader.Load(path);
 
         AssertSane(s);
-        Assert.Equal(2, s.SchemaVersion);
+        Assert.Equal(AppSettings.CurrentSchemaVersion, s.SchemaVersion);
         Assert.Single(s.App.CustomRules);
         Assert.Equal("direct", s.App.CustomRules[0].Action);
         Assert.Equal("ip_cidr", s.App.CustomRules[0].Type);

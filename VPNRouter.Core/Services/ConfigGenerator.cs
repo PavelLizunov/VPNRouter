@@ -27,6 +27,52 @@ public static class ConfigGenerator
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        // AM-1 (2026-05-11): per-app routing mode. Two paths:
+        //  • "exclude" — user opted into inverted-split-tunnel. Take the
+        //    processes from RoutingAppsExclude (NOT from
+        //    resolvedProcessNames) and emit route rules that send them
+        //    OUT of the proxy (action=route, outbound=direct) while
+        //    route.final flips to "proxy".
+        //  • "include" (default) — preserve legacy behaviour. The caller
+        //    supplies resolvedProcessNames via VpnEngine which already
+        //    layers Profile.Processes + CustomApps + CustomGroupApps +
+        //    ExcludedApps; we keep using that list so the legacy profile
+        //    system stays intact.
+        //
+        // Backward-compat: when RoutingAppsExclude is populated but
+        // RoutingAppsInclude is empty the user is in exclude mode and we
+        // honour their list verbatim. When both are empty (clean
+        // install, never opened Apps tab) we fall through to the legacy
+        // resolvedProcessNames path with mode=include — no surprise
+        // empty config.
+        var routingAppsMode = (settings.App.RoutingAppsMode ?? "include")
+            .ToLowerInvariant();
+        var isExcludeMode = routingAppsMode == "exclude";
+
+        List<string> appsProcessList;
+        if (isExcludeMode)
+        {
+            appsProcessList = (settings.App.RoutingAppsExclude ?? new List<string>())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Where(p => !p.Contains('*') && !p.Contains('?'))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        else
+        {
+            // Include mode. If the user explicitly populated
+            // RoutingAppsInclude we honour it verbatim (override path);
+            // otherwise we use the legacy resolved list from
+            // Profile/CustomApps. This keeps users that never touched the
+            // new toggle on their previous behaviour byte-for-byte.
+            var explicitInclude = (settings.App.RoutingAppsInclude ?? new List<string>())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Where(p => !p.Contains('*') && !p.Contains('?'))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            appsProcessList = explicitInclude.Count > 0 ? explicitInclude : processes;
+        }
+
         var logPath = AppPaths.SingBoxLogPath;
 
         var outbounds = BuildOutbounds(settings, out bool hasUdpProxy);
@@ -39,10 +85,10 @@ public static class ConfigGenerator
                 Timestamp = true,
                 Output = logPath
             },
-            Dns = BuildDns(profile, processes, settings),
+            Dns = BuildDns(profile, appsProcessList, settings, isExcludeMode),
             Inbounds = BuildInbounds(settings),
             Outbounds = outbounds,
-            Route = BuildRoute(profile, processes, settings.App.RoutingMode, hasUdpProxy),
+            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode),
             Experimental = new SingBoxExperimental()
         };
 
@@ -715,10 +761,19 @@ public static class ConfigGenerator
 
     // ─── DNS (sing-box 1.12+ format) ──────────────────────────────────────────
 
-    private static SingBoxDns BuildDns(Profile profile, List<string> processes, AppSettings settings)
+    private static SingBoxDns BuildDns(Profile profile, List<string> processes, AppSettings settings, bool isExcludeMode = false)
     {
         var routingMode = settings.App.RoutingMode ?? "split";
         var isFullTunnel = routingMode.Equals("full", StringComparison.OrdinalIgnoreCase);
+
+        // AM-1: in exclude mode `processes` holds the apps we are KEEPING
+        // direct, so route.final flips to "proxy". The DNS default
+        // mirrors that: by default DNS goes through the VPN; only the
+        // listed exclude-apps get the local resolver (so they don't leak
+        // their queries inside the tunnel when they're not even using
+        // it). StrictDns and Full tunnel keep their existing semantics
+        // (override to vpn-dns).
+        var defaultVpnDns = isFullTunnel || isExcludeMode || settings.App.StrictDns;
 
         var dns = new SingBoxDns
         {
@@ -728,8 +783,9 @@ public static class ConfigGenerator
             Strategy = settings.App.ForceIpv4Only ? "ipv4_only" : null,
             // Strict DNS: all queries via VPN (no leaks possible).
             // Full tunnel: all DNS through VPN by default.
-            // Split tunnel (default): only targeted processes use VPN DNS, rest use local.
-            Final = (isFullTunnel || settings.App.StrictDns) ? "vpn-dns" : "local-dns",
+            // Exclude mode (AM-1): unmatched apps go via VPN, so DNS final = vpn-dns.
+            // Include mode split tunnel: unmatched apps go direct, so DNS final = local-dns.
+            Final = defaultVpnDns ? "vpn-dns" : "local-dns",
             Servers = new List<DnsServer>
             {
                 // Remote DoH server routed through VPN proxy.
@@ -765,9 +821,26 @@ public static class ConfigGenerator
             // Full tunnel: all DNS goes through vpn-dns (via Final above).
             // No per-process rules needed.
         }
+        else if (isExcludeMode)
+        {
+            // Exclude mode: listed apps must resolve their queries via
+            // the local resolver so the lookups don't leak into the
+            // tunnel they're explicitly bypassing. profile.DnsMode is
+            // irrelevant here (it's a property of the legacy profile
+            // system); we mirror routing intent on the DNS layer.
+            if (processes.Count > 0)
+            {
+                dns.Rules.Add(new DnsRule
+                {
+                    ProcessName = processes.ToList(),
+                    Action      = "route",
+                    Server      = "local-dns"
+                });
+            }
+        }
         else
         {
-            // Split tunnel: targeted processes → VPN DNS (leak protection)
+            // Include split tunnel: targeted processes → VPN DNS (leak protection)
             if (processes.Count > 0 && profile.DnsMode != "direct")
             {
                 var dnsServer = profile.DnsMode == "smart" ? "local-dns" : "vpn-dns";
@@ -1147,7 +1220,7 @@ public static class ConfigGenerator
     // ─── Route (sing-box 1.12+ action-based format) ──────────────────────────
 
     private static SingBoxRoute BuildRoute(Profile profile, List<string> processes,
-        string routingMode = "split", bool hasUdpProxy = false)
+        string routingMode = "split", bool hasUdpProxy = false, bool isExcludeMode = false)
     {
         var isFullTunnel = (routingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase);
 
@@ -1171,12 +1244,21 @@ public static class ConfigGenerator
             Outbound    = "direct"
         });
 
+        // AM-1: when the user is in exclude mode under split tunnel, the
+        // listed processes get routed to "direct" (kept OUT of the
+        // tunnel) and route.final flips to "proxy" so everything else
+        // goes through the VPN. Otherwise we keep the legacy semantics:
+        // include mode in split tunnel routes the listed processes
+        // through proxy + final=direct; full tunnel routes everything
+        // through proxy and ignores the per-app list.
         if (!isFullTunnel && processes.Count > 0)
         {
-            if (hasUdpProxy)
+            var perAppOutbound = isExcludeMode ? "direct" : "proxy";
+            if (hasUdpProxy && !isExcludeMode)
             {
-                // Dual outbound: UDP traffic → proxy-udp (no flow, better for voice/video)
-                // TCP traffic → proxy (with xtls-rprx-vision, optimized for TCP)
+                // Dual outbound only matters when sending through proxy;
+                // for the exclude path the destination is always
+                // "direct" so the TCP/UDP split is meaningless.
                 rules.Add(new RouteRule
                 {
                     ProcessName = processes.ToList(),
@@ -1194,12 +1276,12 @@ public static class ConfigGenerator
             }
             else
             {
-                // Single outbound: all traffic → proxy
+                // Single outbound: listed traffic → proxy (include) or → direct (exclude)
                 rules.Add(new RouteRule
                 {
                     ProcessName = processes.ToList(),
                     Action      = "route",
-                    Outbound    = "proxy"
+                    Outbound    = perAppOutbound
                 });
             }
         }
@@ -1215,12 +1297,25 @@ public static class ConfigGenerator
         }
         // Full tunnel without UDP split: no process-specific rules — Final = "proxy" handles everything
 
+        // route.final defaults to "direct" in include mode (split), to
+        // "proxy" in full tunnel OR exclude mode. In exclude split mode
+        // the per-app rules above pin the user's exclude list to
+        // direct, and the final rule sends everything else through the
+        // VPN. Full tunnel always lands on proxy regardless of
+        // isExcludeMode (no per-app filtering when everything is
+        // tunnelled).
+        string finalOutbound;
+        if (isFullTunnel)
+            finalOutbound = "proxy";
+        else if (isExcludeMode)
+            finalOutbound = "proxy";
+        else
+            finalOutbound = "direct";
+
         return new SingBoxRoute
         {
             Rules                   = rules,
-            // Full tunnel: all non-private traffic → proxy
-            // Split tunnel: unmatched traffic → direct
-            Final                   = isFullTunnel ? "proxy" : "direct",
+            Final                   = finalOutbound,
             AutoDetectInterface     = true,
             // Required since sing-box 1.12, mandatory in 1.14
             DefaultDomainResolver   = "local-dns"
