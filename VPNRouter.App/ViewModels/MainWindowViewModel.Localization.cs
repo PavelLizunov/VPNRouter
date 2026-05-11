@@ -552,6 +552,9 @@ public partial class MainWindowViewModel
     // ── Bug-r9-E + Bug-r9-G (2026-05-11) — pre-flight UX bindings ──
     public string L_ConflictOtherVpnDetectedTitle => Strings.ConflictOtherVpnDetectedTitle;
     public string L_ConflictRefreshButton => Strings.ConflictRefreshButton;
+    // v2.32.1-r4 (Bug-r10-A) — Kill conflicting VPN button.
+    public string L_ConflictKillButton => Strings.ConflictKillButton;
+    public string L_ConflictKillTooltip => Strings.ConflictKillTooltip;
     public string L_ZapretAvBlockCopyPath => Strings.ZapretAvBlockCopyPath;
 
     /// <summary>

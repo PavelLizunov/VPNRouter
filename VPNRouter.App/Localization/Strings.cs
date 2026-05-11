@@ -1489,6 +1489,25 @@ public static class Strings
 
     public static string ConflictRefreshButton => Ru ? "Проверить ещё раз" : "Refresh";
 
+    // ── v2.32.1-r4 (Bug-r10-A) — Kill conflicting VPN button ──
+    // User report 2026-05-11: на основной Win машине app требовал убить
+    // AmneziaVPN, но кнопки kill не было — пришлось через Task Manager.
+    // Кнопка появляется в conflict banner, force-kill'ит обнаруженные
+    // процессы. Если kill fail (protected process / отказ доступа) —
+    // показывает partial-failure сообщение с подсказкой запустить от
+    // имени админа.
+    public static string ConflictKillButton => Ru ? "Завершить" : "Kill";
+
+    public static string ConflictKillTooltip => Ru
+        ? "Принудительно завершить конфликтующий VPN-процесс."
+        : "Force-terminate the conflicting VPN process.";
+
+    public static string ConflictKillPartialFailure(int killed, int failed) => Ru
+        ? $"Завершено: {killed}. Не удалось: {failed}. " +
+          "Запустите VPNRouter от имени администратора или закройте процесс вручную через Диспетчер задач."
+        : $"Killed: {killed}. Failed: {failed}. " +
+          "Run VPNRouter as administrator, or close the process manually via Task Manager.";
+
     // ── Bug-r9-G (2026-05-11) — Zapret AV-block toast ──
     // ZapretManager fires ImmediateExitDetected when winws.exe exits
     // within < 2 s with non-zero code (almost always Windows Defender

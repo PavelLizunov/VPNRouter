@@ -237,11 +237,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void DismissConflictingVpnWarning() =>
         ConflictingVpnWarningText = string.Empty;
 
+    /// <summary>
+    /// v2.32.1-r4 (Bug-r10-A) — captured conflict list for the
+    /// <c>KillConflictingVpnCommand</c> to act on without re-running
+    /// detection (which could race with the user simultaneously
+    /// closing the other VPN themselves). Mirrors what
+    /// <see cref="ConflictingVpnException.Conflicts"/> would carry.
+    /// </summary>
+    private System.Collections.Generic.IReadOnlyList<VPNRouter.Core.Services.ConflictingVpnDetector.ConflictingProcessInfo>
+        _lastConflicts = System.Array.Empty<VPNRouter.Core.Services.ConflictingVpnDetector.ConflictingProcessInfo>();
+
     [RelayCommand]
     private void RefreshConflictingVpn()
     {
         var conflicts = VPNRouter.Core.Services.ConflictingVpnDetector
             .DetectConflictingVpnProcesses(_logger);
+        _lastConflicts = conflicts;
         if (conflicts.Count == 0)
         {
             ConflictingVpnWarningText = string.Empty;
@@ -250,6 +261,70 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var first = conflicts[0];
         ConflictingVpnWarningText =
             Strings.ConflictOtherVpnDetectedMessage(first.ProcessName, first.Pid);
+    }
+
+    /// <summary>
+    /// v2.32.1-r4 (Bug-r10-A) — user-reported pain (2026-05-11): на
+    /// основной Win машине app требовал убить AmneziaVPN, но кнопки
+    /// kill не было — пришлось через Task Manager. Этот command
+    /// force-kills все processes из последней detection batch'и
+    /// (<see cref="_lastConflicts"/>). Используется через UI-кнопку
+    /// «Завершить» в conflict banner.
+    /// </summary>
+    [RelayCommand]
+    private async Task KillConflictingVpnAsync()
+    {
+        if (_lastConflicts.Count == 0)
+        {
+            // Banner ещё видим но _lastConflicts пуст — refresh first.
+            RefreshConflictingVpn();
+            if (_lastConflicts.Count == 0) return;
+        }
+
+        var killed = 0;
+        var failed = 0;
+        foreach (var info in _lastConflicts)
+        {
+            try
+            {
+                using var proc = System.Diagnostics.Process.GetProcessById(info.Pid);
+                proc.Kill(entireProcessTree: true);
+                try { await proc.WaitForExitAsync(System.Threading.CancellationToken.None); } catch { }
+                killed++;
+                _logger.Information("[VM] Killed conflicting VPN: {Name} (PID {Pid})",
+                    info.ProcessName, info.Pid);
+            }
+            catch (System.ArgumentException)
+            {
+                // Process already gone — count as success.
+                killed++;
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                _logger.Warning(ex,
+                    "[VM] Failed to kill conflicting VPN {Name} (PID {Pid}) — likely needs admin rights / protected process",
+                    info.ProcessName, info.Pid);
+            }
+        }
+
+        // Re-run detection: any new instance started during kill?
+        // PIDs ушли, но user мог запустить второй процесс параллельно.
+        RefreshConflictingVpn();
+
+        if (_lastConflicts.Count == 0)
+        {
+            ConflictingVpnWarningText = string.Empty;
+            _logger.Information("[VM] Conflict cleared ({Killed} killed, {Failed} failed)",
+                killed, failed);
+        }
+        else if (failed > 0)
+        {
+            // Some kills failed — surface a clearer message so user
+            // knows to retry as admin or manually via Task Manager.
+            ConflictingVpnWarningText =
+                Strings.ConflictKillPartialFailure(killed, failed);
+        }
     }
 
     /// <summary>
@@ -3969,6 +4044,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 // exactly which app to close. Pre-r9-E this surfaced as
                 // the cryptic wintun "Cannot create a file when that
                 // file already exists" through the generic catch below.
+                // v2.32.1-r4 (Bug-r10-A): also capture conflicts into
+                // _lastConflicts so KillConflictingVpnCommand can act
+                // on them without re-running detection (which races
+                // with the user closing the other VPN themselves).
                 _logger.Warning(
                     "[VM] Conflicting VPN detected: {Count} processes ({First})",
                     cvex.Conflicts.Count,
@@ -3976,6 +4055,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 try { await Task.Run(() => _engine.Stop()); } catch { }
                 IsConnecting = false;
                 IsConnected = false;
+                _lastConflicts = cvex.Conflicts;
                 var first = cvex.Conflicts.Count > 0 ? cvex.Conflicts[0] : null;
                 ConflictingVpnWarningText = first != null
                     ? Strings.ConflictOtherVpnDetectedMessage(first.ProcessName, first.Pid)
