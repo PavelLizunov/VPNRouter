@@ -235,24 +235,32 @@ public static class CustomConfigInjector
     /// 1. "selector" type (manual switching between protocols)
     /// 2. "urltest" type (auto-failover)
     /// 3. First non-direct/block/dns outbound (vless, hysteria2, tuic, etc.)
+    ///
+    /// <para>Bug-r9-F-DEFENSIVE (2026-05-11): if the matching outbound has no
+    /// explicit <c>tag</c>, we assign <c>"custom-proxy"</c> instead of the
+    /// historical <c>"proxy"</c> fallback. The old behaviour silently shadowed
+    /// any subscription outbound that legitimately used the tag <c>proxy</c>,
+    /// which produced a silent privacy leak when a user pasted a sing-box JSON
+    /// containing a stale / placeholder server. See plans/
+    /// vpnrouter-android-r9-user-bug-batch.md (stas log analysis).</para>
     /// </summary>
     private static string FindProxyOutboundTag(JObject config)
     {
         var outbounds = config["outbounds"] as JArray;
-        if (outbounds == null) return "proxy";
+        if (outbounds == null) return "custom-proxy";
 
         // 1. Selector (user-switchable)
         foreach (var ob in outbounds)
         {
             if (ob["type"]?.ToString() == "selector")
-                return ob["tag"]?.ToString() ?? "proxy";
+                return ResolveOrAssignProxyTag(ob);
         }
 
         // 2. URLTest (auto-failover)
         foreach (var ob in outbounds)
         {
             if (ob["type"]?.ToString() == "urltest")
-                return ob["tag"]?.ToString() ?? "proxy";
+                return ResolveOrAssignProxyTag(ob);
         }
 
         // 3. First proxy-like outbound
@@ -260,10 +268,32 @@ public static class CustomConfigInjector
         {
             var type = ob["type"]?.ToString();
             if (type != "direct" && type != "block" && type != "dns")
-                return ob["tag"]?.ToString() ?? "proxy";
+                return ResolveOrAssignProxyTag(ob);
         }
 
-        return "proxy";
+        return "custom-proxy";
+    }
+
+    /// <summary>
+    /// Returns the outbound's existing tag, or assigns <c>"custom-proxy"</c>
+    /// (mutating the outbound in place) and logs a WARN when the tag is empty.
+    /// Mutating is required so the matching <c>outbound</c> referenced in our
+    /// injected route rules actually exists in the sing-box config — otherwise
+    /// sing-box rejects the rule at startup or silently falls through.
+    /// </summary>
+    private static string ResolveOrAssignProxyTag(JToken outbound)
+    {
+        var tag = outbound["tag"]?.ToString();
+        if (!string.IsNullOrEmpty(tag))
+            return tag;
+
+        if (outbound is JObject ob)
+            ob["tag"] = "custom-proxy";
+
+        Serilog.Log.Logger.Warning(
+            "Custom Config Mode: outbound without tag - using 'custom-proxy'");
+
+        return "custom-proxy";
     }
 
     // ─── Private: Detect config format ───────────────────────────────────────

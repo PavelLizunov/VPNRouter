@@ -1077,6 +1077,70 @@ public class LeakProtectionTests
         Assert.Contains(result.Errors, e =>
             e.Contains("proxy-udp") && e.Contains("uuid"));
     }
+
+    // ─── Bug-r9-F-DEFENSIVE (2026-05-11) — outbound IP cross-check ────────
+    //
+    // The outbound-IP check fires when an AppSettings is supplied. It walks
+    // every proxy-like outbound and warns if its `server` is not in the
+    // user's known set (subscription servers ∪ manual VLESS list ∪ legacy
+    // single-server field ∪ cached subscription servers). Catches stale
+    // Custom Config Mode placeholders — see stas's log in
+    // plans/vpnrouter-android-r9-user-bug-batch.md Bug-r9-F.
+
+    [Fact]
+    public void OutboundIpNotInSubscriptions_EmitsWarning()
+    {
+        var config = CreateValidConfig();
+        var proxy = config.Outbounds.First(o => o.Tag == "proxy");
+        proxy.Server = "195.135.255.216";  // intentionally stale / unknown
+
+        var settings = new AppSettings();
+        settings.App.Subscriptions.Add(new SubscriptionEntry
+        {
+            Name = "sub-1",
+            Url = "https://example.com/sub",
+            Enabled = true,
+            Servers = new List<VlessServerEntry>
+            {
+                new() { Server = "104.194.156.93", Port = 443 },
+                new() { Server = "194.87.222.111", Port = 443 },
+            }
+        });
+
+        var result = LeakProtection.ValidateConfig(config, settings);
+
+        Assert.True(result.IsValid); // warnings don't block startup
+        Assert.Contains(result.Warnings, w =>
+            w.Contains("195.135.255.216")
+            && w.Contains("not in your subscriptions"));
+    }
+
+    [Fact]
+    public void OutboundIpInSubscriptions_NoWarning()
+    {
+        var config = CreateValidConfig();
+        var proxy = config.Outbounds.First(o => o.Tag == "proxy");
+        proxy.Server = "104.194.156.93";  // matches sub-1's first entry
+
+        var settings = new AppSettings();
+        settings.App.Subscriptions.Add(new SubscriptionEntry
+        {
+            Name = "sub-1",
+            Url = "https://example.com/sub",
+            Enabled = true,
+            Servers = new List<VlessServerEntry>
+            {
+                new() { Server = "104.194.156.93", Port = 443 },
+                new() { Server = "194.87.222.111", Port = 443 },
+            }
+        });
+
+        var result = LeakProtection.ValidateConfig(config, settings);
+
+        Assert.True(result.IsValid);
+        Assert.DoesNotContain(result.Warnings, w =>
+            w.Contains("not in your subscriptions"));
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1741,6 +1805,82 @@ public class CustomConfigInjectorTests
             if (File.Exists(tempPath))
                 File.Delete(tempPath);
         }
+    }
+
+    // ─── Bug-r9-F-DEFENSIVE (2026-05-11) — Custom Config Mode silent leak ──
+    //
+    // Setup: stas (Custom Config Mode user) routed ALL traffic through a
+    // dead `outbound/vless[proxy]` dialing 195.135.255.216:443 that wasn't
+    // in his subscription. Root cause: his pasted sing-box JSON had a
+    // vless outbound without explicit `tag`, and FindProxyOutboundTag's
+    // historical fallback was `?? "proxy"` — shadowing the subscription's
+    // `vless-{name}` outbound list with an unnamed user outbound. These
+    // tests pin the new contract: anonymous outbounds get `"custom-proxy"`
+    // (distinct from subscription tags) AND the route rules reference
+    // that tag, so the unnamed outbound is the one actually used.
+
+    [Fact]
+    public void CustomConfigInjector_OutboundWithoutTag_GetsCustomProxy()
+    {
+        // Anonymous proxy outbound — no tag field set by the user.
+        var json = """
+        {
+          "outbounds": [
+            {"type": "vless", "server": "1.2.3.4", "server_port": 443, "uuid": "x"},
+            {"type": "direct", "tag": "direct"}
+          ],
+          "route": {"rules": [], "final": "direct"}
+        }
+        """;
+
+        var result = CustomConfigInjector.Inject(json, new[] { "test.exe" }, CreateSettings());
+        var parsed = Newtonsoft.Json.Linq.JObject.Parse(result);
+        var outbounds = parsed["outbounds"] as Newtonsoft.Json.Linq.JArray;
+        Assert.NotNull(outbounds);
+
+        // The anonymous vless outbound must have been tagged "custom-proxy"
+        // (not the historical silent "proxy" fallback).
+        var vless = outbounds!.FirstOrDefault(o => o["type"]?.ToString() == "vless");
+        Assert.NotNull(vless);
+        Assert.Equal("custom-proxy", vless!["tag"]?.ToString());
+
+        // And NO outbound should be tagged "proxy" — that's the shadowing
+        // that caused the leak in stas's log.
+        Assert.DoesNotContain(outbounds!, o => o["tag"]?.ToString() == "proxy");
+    }
+
+    [Fact]
+    public void CustomConfigInjector_RouteRulesUseCustomProxy()
+    {
+        // When the proxy tag falls back to "custom-proxy", the injected
+        // route + DNS rules must reference that tag — otherwise the rule
+        // points at a non-existent outbound and sing-box silently fails
+        // over to direct (the exact silent-leak class we are defending).
+        var json = """
+        {
+          "dns": {
+            "servers": [
+              {"tag": "remote", "type": "https", "server": "1.1.1.1", "detour": ""},
+              {"tag": "local",  "type": "udp",   "server": "1.0.0.1"}
+            ],
+            "rules": []
+          },
+          "outbounds": [
+            {"type": "vless", "server": "1.2.3.4", "server_port": 443, "uuid": "x"},
+            {"type": "direct", "tag": "direct"}
+          ],
+          "route": {"rules": [], "final": "direct"}
+        }
+        """;
+
+        var result = CustomConfigInjector.Inject(json, new[] { "Discord.exe" }, CreateSettings());
+        var parsed = Newtonsoft.Json.Linq.JObject.Parse(result);
+
+        var routeRules = parsed.SelectToken("route.rules") as Newtonsoft.Json.Linq.JArray;
+        Assert.NotNull(routeRules);
+        var processRule = routeRules!.FirstOrDefault(r => r["process_name"] != null);
+        Assert.NotNull(processRule);
+        Assert.Equal("custom-proxy", processRule!["outbound"]?.ToString());
     }
 }
 

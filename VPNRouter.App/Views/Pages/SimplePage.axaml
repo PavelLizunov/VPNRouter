@@ -103,6 +103,31 @@
                                        FontSize="11" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimaryBrush}"
                                        FontFamily="Consolas, 'Segoe UI Mono', monospace"/>
+                            <!-- Bug-r9-F-DEFENSIVE (2026-05-11) - active outbound surfaced
+                                 directly so a stale Custom Config Mode placeholder pointing
+                                 at a dead / hostile IP is visible at a glance. Mutually
+                                 exclusive normal vs suspect variants share the same source
+                                 string but render in different brushes - red + a small
+                                 warning glyph when the IP is not in any registered
+                                 subscription / manual server list. -->
+                            <TextBlock Text="{Binding SimpleActiveOutboundLine}"
+                                       IsVisible="{Binding SimpleActiveOutboundNormalVisible}"
+                                       FontSize="9"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       FontFamily="Consolas, 'Segoe UI Mono', monospace"
+                                       TextWrapping="Wrap"/>
+                            <StackPanel Orientation="Horizontal" Spacing="4"
+                                        IsVisible="{Binding SimpleActiveOutboundSuspectVisible}">
+                                <TextBlock Text="⚠"
+                                           FontSize="9" FontWeight="Bold"
+                                           Foreground="{DynamicResource DangerFgBrush}"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding SimpleActiveOutboundLine}"
+                                           FontSize="9" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource DangerFgBrush}"
+                                           FontFamily="Consolas, 'Segoe UI Mono', monospace"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
                         </StackPanel>
                         <!-- v2.31.0-r4 (F-3 / UX-2): chevron now flips with
                              SmpFormExpanded so users can tell the section is
