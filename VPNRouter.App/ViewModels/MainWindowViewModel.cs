@@ -2551,6 +2551,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
 
+        // r10 r9 (Bug-r10-H): wire Servers.CollectionChanged → MarkOrphanServers
+        // so the "Не из подписки" badge stays consistent across all entry-add
+        // paths (Free Configs Use, paste, subscription rebuild). Must happen
+        // after _settings loads.
+        WireServersOrphanTracking();
+
         // Sub-VMs
         UpdateVm = new UpdateNotificationViewModel(_settings.Update, _logger);
         ServiceVm = new ServiceViewModel(_logger);
@@ -3512,7 +3518,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// </summary>
     private void MarkOrphanServers()
     {
-        var hasEnabledSubs = _settings.App.Subscriptions?
+        // r10 r9 (Bug-r10-H, 2026-05-12 brat screenshot) — null-safe guard
+        // for early calls during ctor wire-up before _settings lands.
+        if (_settings == null) return;
+
+        var hasEnabledSubs = _settings.App?.Subscriptions?
             .Any(s => s.Enabled && (s.Servers?.Count ?? 0) > 0) == true;
         if (!hasEnabledSubs)
         {
@@ -3521,7 +3531,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        var subKeys = _settings.App.Subscriptions!
+        var subKeys = _settings.App!.Subscriptions!
             .Where(s => s.Enabled)
             .SelectMany(s => s.Servers ?? new System.Collections.Generic.List<VlessServerEntry>())
             .Select(s => $"{s.Server}|{s.Port}|{s.Uuid}")
@@ -3532,6 +3542,35 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var key = $"{vm.Server}|{vm.Port}|{vm.Uuid}";
             vm.IsOrphanFromSubscription = !subKeys.Contains(key);
         }
+    }
+
+    /// <summary>
+    /// r10 r9 (Bug-r10-H, 2026-05-12 brat screenshot) — listener wired
+    /// after <c>_settings</c> is loaded to keep <c>IsOrphanFromSubscription</c>
+    /// in sync on ANY mutation of <see cref="Servers"/>. Pre-r9 the badge
+    /// re-evaluation happened only in <c>LoadSettingsIntoUI</c> (initial
+    /// load) and <c>RemoveServerByEntry</c> (× click). Other paths —
+    /// Free Configs «Использовать» (<see cref="ApplyFreeConfigAsync"/>),
+    /// VLESS URI paste, subscription refresh-into-list — added entries
+    /// directly via <c>Servers.Add</c> and the badge state stayed at
+    /// the default <c>false</c>, so freshly-added orphans showed without
+    /// the «Не из подписки» badge while older orphans had it. User saw
+    /// is-01-hy2-test marked but ⚡ [EE] not, even though both are
+    /// non-subscription manual entries — inconsistent.
+    ///
+    /// <para>Guarded by <see cref="_isLoadingUI"/> so bulk reload's
+    /// per-Add CollectionChanged events don't trigger N redundant
+    /// MarkOrphanServers calls; the explicit single call at the end
+    /// of <c>LoadSettingsIntoUI</c> covers that path.</para>
+    /// </summary>
+    private void WireServersOrphanTracking()
+    {
+        Servers.CollectionChanged += (_, _) =>
+        {
+            if (_isLoadingUI) return;
+            try { MarkOrphanServers(); }
+            catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto MarkOrphanServers on Servers change failed"); }
+        };
     }
 
     private void SaveSettings()
