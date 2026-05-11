@@ -33,45 +33,95 @@ public static class VlessServersResolver
     /// Resolve the effective VLESS server list and write it into
     /// <c>settings.Vless.Servers</c> (in-memory only, not persisted).
     /// Idempotent: repeated calls are safe.
+    ///
+    /// <para>r10 Fix-A (2026-05-11) — scope guard for subscription mode:
+    /// when <c>config_mode</c> is either "subscribe" OR "generated" and at
+    /// least one enabled subscription has servers, ONLY subscription
+    /// servers are returned. Legacy <c>vless.servers[]</c> entries are
+    /// ignored — they are remnants of direct-VLESS mode that survive
+    /// after the user adds a subscription, and a stale
+    /// <c>vless.active_server</c> pointing at one of them was silently
+    /// shadow-overriding live subscription routing (stas's case:
+    /// placeholder <c>khunrath_ln 195.135.255.216</c> shadowed working
+    /// <c>de-01 443</c>).</para>
+    ///
+    /// <para>If <c>vless.active_server</c> points to a server NOT in the
+    /// resulting scoped list, it is overwritten with the first scoped
+    /// entry's name + a WARN log is emitted via <paramref name="logger"/>.
+    /// Persisting the corrected value is the caller's responsibility
+    /// (Fix-B in <c>SettingsMigrator</c>).</para>
     /// </summary>
     /// <returns>The resolved server list (same reference as <c>settings.Vless.Servers</c> after the call).</returns>
     public static List<VlessServerEntry> Resolve(AppSettings settings, ILogger? logger = null)
     {
         var configMode = (settings.App.ConfigMode ?? "generated").Trim();
         var isSubscribe = configMode.Equals("subscribe", StringComparison.OrdinalIgnoreCase);
+        var isGenerated = configMode.Equals("generated", StringComparison.OrdinalIgnoreCase);
 
-        // Path 1: subscribe mode — aggregate enabled subscription servers.
-        // Always re-aggregate fresh so a subscription Refresh propagates
-        // into the live config on the very next Apply / Start.
-        if (isSubscribe)
+        // r10 Fix-A scope guard: aggregate subscription servers when ANY
+        // generative mode (subscribe OR generated) has enabled subs with
+        // fetched servers. In generated mode this used to fall through to
+        // Vless.Servers, allowing legacy direct-VLESS entries to shadow
+        // the working subscription.
+        var subscriptionAggregated = (settings.App.Subscriptions ?? new())
+            .Where(s => s != null && s.Enabled && s.Servers != null)
+            .SelectMany(s => s.Servers)
+            .Where(s => !string.IsNullOrWhiteSpace(s?.Server) && s.Server != "your.server.com")
+            .ToList();
+
+        var hasActiveSubscriptionServers = subscriptionAggregated.Count > 0;
+
+        // Path 1: subscribe OR generated with enabled subscriptions →
+        // SCOPED to subscription servers only. Legacy vless.servers[]
+        // are intentionally ignored here.
+        if ((isSubscribe || isGenerated) && hasActiveSubscriptionServers)
         {
-            var aggregated = (settings.App.Subscriptions ?? new())
-                .Where(s => s != null && s.Enabled && s.Servers != null)
-                .SelectMany(s => s.Servers)
-                .Where(s => !string.IsNullOrWhiteSpace(s?.Server) && s.Server != "your.server.com")
-                .ToList();
+            settings.Vless.Servers = subscriptionAggregated;
 
-            if (aggregated.Count > 0)
+            // Carry over the active selection from the subscribe-mode
+            // setting if the manual one isn't set.
+            if (string.IsNullOrEmpty(settings.Vless.ActiveServer)
+                && !string.IsNullOrEmpty(settings.App.ActiveSubscriptionServer))
             {
-                settings.Vless.Servers = aggregated;
-
-                // Carry over the active selection from the subscribe-mode
-                // setting if the manual one isn't set.
-                if (string.IsNullOrEmpty(settings.Vless.ActiveServer)
-                    && !string.IsNullOrEmpty(settings.App.ActiveSubscriptionServer))
-                {
-                    settings.Vless.ActiveServer = settings.App.ActiveSubscriptionServer;
-                }
-
-                logger?.Information(
-                    "[VlessServersResolver] Aggregated {Count} server(s) from {Subs} active subscription(s) (active: {Active})",
-                    aggregated.Count,
-                    settings.App.Subscriptions?.Count(s => s != null && s.Enabled) ?? 0,
-                    string.IsNullOrEmpty(settings.Vless.ActiveServer) ? "first" : settings.Vless.ActiveServer);
-
-                return aggregated;
+                settings.Vless.ActiveServer = settings.App.ActiveSubscriptionServer;
             }
 
+            // r10 Fix-A core check: stale active_server falls back to scoped[0].
+            // Two ways a server is "in scope": by Name match (canonical) or by
+            // host:port match (when names diverge but server identity is the
+            // same).
+            if (!string.IsNullOrEmpty(settings.Vless.ActiveServer))
+            {
+                var oldActive = settings.Vless.ActiveServer;
+                var matchByName = subscriptionAggregated.Any(s =>
+                    !string.IsNullOrEmpty(s.Name)
+                    && s.Name.Equals(oldActive, StringComparison.OrdinalIgnoreCase));
+
+                if (!matchByName)
+                {
+                    var newActive = subscriptionAggregated[0].Name;
+                    logger?.Warning(
+                        "[VlessServersResolver] Active server '{Old}' not in current scope " +
+                        "(subscription mode). Falling back to '{New}'.",
+                        oldActive,
+                        newActive);
+                    settings.Vless.ActiveServer = newActive;
+                }
+            }
+
+            logger?.Information(
+                "[VlessServersResolver] Aggregated {Count} server(s) from {Subs} active subscription(s) " +
+                "(mode: {Mode}, active: {Active})",
+                subscriptionAggregated.Count,
+                settings.App.Subscriptions?.Count(s => s != null && s.Enabled) ?? 0,
+                configMode,
+                string.IsNullOrEmpty(settings.Vless.ActiveServer) ? "first" : settings.Vless.ActiveServer);
+
+            return subscriptionAggregated;
+        }
+
+        if (isSubscribe)
+        {
             // Subscribe mode but no subscription servers (yet).
             // Fall through to manual list — could still be populated.
             logger?.Warning(
@@ -81,7 +131,10 @@ public static class VlessServersResolver
 
         // Path 2: manual VLESS config — uses Vless.Servers list, falling
         // back to legacy scalar Vless.Server fields. GetEffectiveServers
-        // already handles that fallback.
+        // already handles that fallback. Reached when:
+        //   - config_mode=generated AND no enabled subscriptions w/ servers
+        //   - config_mode=subscribe AND no enabled subscriptions w/ servers (legacy fallback)
+        //   - any other mode (custom is handled separately by VpnEngine)
         var manual = settings.Vless.GetEffectiveServers()
             .Where(s => !string.IsNullOrWhiteSpace(s.Server) && s.Server != "your.server.com")
             .ToList();
