@@ -85,6 +85,45 @@ public sealed class AutoFailoverEngine
                     "поле server, server_port, uuid или Reality public_key выглядят неверно.");
         }
 
+        // r10 r8 (Bug-r10-F, 2026-05-11 brat report) — generated-mode +
+        // subscription enabled: user explicitly picked a manual VLESS
+        // entry (Free Configs, paste) DESPITE having a subscription
+        // available. That's a clear "I want THIS server, not the
+        // subscription". Pre-r8 F-E silently swapped their choice to
+        // subscription's first server and persisted, breaking the
+        // user-clear "I clicked X, why does it route via Y" expectation.
+        // Brat's log: picked ⚡ [EE], probe timed out (Clash API 504 —
+        // many causes including network glitch, Reality protocol's
+        // masking that refuses naïve probes), F-E silently swapped to
+        // de-01.
+        //
+        // Legacy direct-VLESS mode (no subscription) keeps auto-switch
+        // because there is no alternative pool the user could've meant
+        // by "manual" — they want SOME working server in their manual list.
+        //
+        // Subscribe mode keeps auto-switch because "best available from
+        // subscription" is what subscribe mode means.
+        var hasEnabledSub = _settings.App?.Subscriptions?
+            .Any(s => s != null && s.Enabled && (s.Servers?.Count ?? 0) > 0) == true;
+
+        if (configMode == "generated"
+            && hasEnabledSub
+            && IsActiveLegitimateManual())
+        {
+            _logger?.Information(
+                "[AutoFailover] Skipping auto-swap in generated mode — active '{Active}' is a legitimate manual choice; surfacing error instead",
+                _settings.Vless.ActiveServer);
+            return new FailoverOutcome(
+                Switched: false,
+                NewActiveServer: null,
+                UserFacingMessage:
+                    $"Сервер '{_settings.Vless.ActiveServer}' не отвечает на probe " +
+                    $"({reason}). VPN запущен, но прямая проверка через сервер не " +
+                    "проходит — возможно ложное срабатывание (Reality маскируется) " +
+                    "или сервер действительно недоступен. Выберите другой сервер из " +
+                    "списка вручную или переключитесь на подписку.");
+        }
+
         // 2. Cap retries — after MaxAttempts cycles we stop and surface the
         // "all dead" alert so the user can pick a working server manually
         // or refresh their subscription.
@@ -176,6 +215,33 @@ public sealed class AutoFailoverEngine
             Switched: true,
             NewActiveServer: newName,
             UserFacingMessage: $"Переключение на сервер: {newName}");
+    }
+
+    // ─── Active-server intent classification ──────────────────────────────
+
+    /// <summary>
+    /// r10 r8 (Bug-r10-F) — true when the current
+    /// <see cref="VlessConfig.ActiveServer"/> points at an entry that:
+    /// (a) exists in <c>vless.servers</c> (so user explicitly added/picked it),
+    /// AND
+    /// (b) is NOT a known placeholder per <see cref="VlessServersResolver.IsPlaceholderEntry"/>.
+    ///
+    /// <para>Used to gate auto-failover in generated mode — for legitimate
+    /// manual choices we surface an error instead of swapping. Subscribe
+    /// mode doesn't call this; its auto-swap path is appropriate because
+    /// "best available subscription server" is the subscribe-mode contract.</para>
+    /// </summary>
+    private bool IsActiveLegitimateManual()
+    {
+        var active = _settings.Vless?.ActiveServer;
+        if (string.IsNullOrWhiteSpace(active)) return false;
+
+        var entry = (_settings.Vless?.Servers ?? new())
+            .FirstOrDefault(s => !string.IsNullOrEmpty(s?.Name)
+                && s.Name.Equals(active, StringComparison.OrdinalIgnoreCase));
+        if (entry == null) return false;
+
+        return !VlessServersResolver.IsPlaceholderEntry(entry);
     }
 
     // ─── Candidate selection ──────────────────────────────────────────────

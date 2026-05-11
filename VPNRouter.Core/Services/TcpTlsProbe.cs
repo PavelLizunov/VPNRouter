@@ -409,21 +409,38 @@ public static class TcpTlsProbe
         {
             case "vless":
             {
-                // Reality / TLS variants → full TCP+TLS+cert validation.
-                // Plain VLESS (no security, no transport TLS) → TCP only.
+                // Reality / TLS / plain VLESS dispatcher.
                 var security = (server.Security ?? string.Empty).Trim().ToLowerInvariant();
                 var hasReality = string.Equals(security, "reality", StringComparison.OrdinalIgnoreCase)
                               || (server.Reality is { Enabled: true });
                 var hasTls = string.Equals(security, "tls", StringComparison.OrdinalIgnoreCase)
                           || (server.Tls is { Enabled: true });
 
-                if (hasReality || hasTls)
+                if (hasReality)
                 {
+                    // r10 r8 (Bug-r10-G, 2026-05-11 brat report) — Reality
+                    // protocol INTENTIONALLY rejects plain TLS handshakes:
+                    // the server only responds correctly to VLESS+Reality
+                    // clients that complete the protocol-specific auth.
+                    // Naïve TLS probe sends standard ClientHello and times
+                    // out or rejects with "tls timeout" (latency ~5ms in
+                    // brat's log because TCP-handshake-then-stall). Pre-r8
+                    // we did full TLS probe → 100% false negative on every
+                    // working Reality server. Now we do TCP-only for
+                    // Reality and defer full validation to DeepVerify
+                    // (which spawns sing-box and does the real VLESS
+                    // handshake end-to-end).
+                    result = await ProbeTcpOnlyAsync(host, port, ct);
+                }
+                else if (hasTls)
+                {
+                    // Plain TLS (no Reality) — standard handshake works.
                     var sni = ResolveSni(server, host);
                     result = await ProbeAsync(host, port, sni, requireTls: true, ct);
                 }
                 else
                 {
+                    // Plain VLESS without TLS — TCP-only is the right scope.
                     result = await ProbeAsync(host, port, sni: null, requireTls: false, ct);
                 }
                 break;
