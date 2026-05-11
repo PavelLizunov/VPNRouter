@@ -2836,6 +2836,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var activeProfiles = activeProfileStr
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
+        // Bug-r9-I (2026-05-11): load per-app exclusions so unchecked apps
+        // inside active groups stay unchecked across reboot. Normalised to
+        // the StripExe form because that's what AppItemViewModel.ProcessName
+        // holds (no .exe on macOS/Linux, raw on Windows).
+        var excludedSet = new HashSet<string>(
+            (_settings.ExcludedApps ?? new()).Select(s => StripExe(s ?? string.Empty)),
+            StringComparer.OrdinalIgnoreCase);
+
         // Load from profiles. Per-platform variants:
         //   macOS → default-macos.json
         //   Linux → default-linux.json (v2.21.6)
@@ -2869,7 +2877,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                         foreach (var proc in profile.Processes)
                         {
                             var name = StripExe(proc.Name);
-                            group.Apps.Add(new AppItemViewModel(name, isActive));
+                            // Bug-r9-I: respect persisted per-app exclusions
+                            // when the group itself is active.
+                            var appChecked = isActive && !excludedSet.Contains(name);
+                            group.Apps.Add(new AppItemViewModel(name, appChecked));
                         }
 
                         // Merge user-added custom apps for this group
@@ -2882,7 +2893,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                                 var extraName = StripExe(extra);
                                 if (group.Apps.Any(a => a.ProcessName.Equals(extraName, StringComparison.OrdinalIgnoreCase)))
                                     continue;
-                                group.Apps.Add(new AppItemViewModel(extraName, isActive, isCustom: true));
+                                var appChecked = isActive && !excludedSet.Contains(extraName);
+                                group.Apps.Add(new AppItemViewModel(extraName, appChecked, isCustom: true));
                             }
                         }
 
@@ -2973,7 +2985,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (_isLoadingUI) return;
         if (e.PropertyName == nameof(AppGroupViewModel.IsChecked))
+        {
             HasPendingAppChanges = IsConnected;
+            // Bug-r9-I (2026-05-11): persist immediately so the toggle
+            // survives a Windows restart even if the user never clicks
+            // Apply (Apply is gated on IsConnected — invisible while VPN
+            // is off, which was the entire shape of the user complaint).
+            try { SaveSettings(); }
+            catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto-save on AppGroup change failed"); }
+        }
     }
 
     /// <summary>
@@ -3009,7 +3029,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (_isLoadingUI) return;
         if (e.PropertyName == nameof(AppItemViewModel.IsChecked))
+        {
             HasPendingAppChanges = IsConnected;
+            // Bug-r9-I (2026-05-11): same rationale as OnAppGroupPropertyChanged
+            // — toggle must persist even when disconnected. A group-level
+            // toggle cascades to N apps which means N saves in a row, but
+            // YAML write is sub-millisecond and the user can't toggle
+            // fast enough to make this a bottleneck.
+            try { SaveSettings(); }
+            catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto-save on AppItem change failed"); }
+        }
     }
 
     /// <summary>
@@ -3488,6 +3517,34 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     Apps = g.Apps.Select(a => a.ProcessName).ToList()
                 })
                 .ToList();
+
+            // Bug-r9-I (2026-05-11): persist per-app exclusions inside
+            // active default groups. Pre-r9-I the per-app checkbox was a
+            // transient view state — only the group-level IsChecked made
+            // it to disk. User reported (verbatim): «я каждый раз когда
+            // захожу отправляю фаерфокс в исключения... а когда перезапускаю
+            // винду галочка на нем опять стоит». Now an unchecked app
+            // inside an active group survives Save → reload → reboot via
+            // ExcludedApps + VpnEngine.RemoveExcludedApps.
+            //
+            // Custom Apps + IsCustomCategory groups are excluded from the
+            // sweep because they already model "off" by removing/disabling
+            // — no need for a parallel exclusion list there.
+            var excluded = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var group in AppGroups)
+            {
+                if (group.Name == "Custom Apps" || group.IsCustomCategory) continue;
+                if (!group.IsChecked) continue;
+                foreach (var app in group.Apps)
+                {
+                    if (app.IsChecked) continue;
+                    if (string.IsNullOrWhiteSpace(app.ProcessName)) continue;
+                    if (seen.Add(app.ProcessName))
+                        excluded.Add(app.ProcessName);
+                }
+            }
+            _settings.ExcludedApps = excluded;
         }
 
         SettingsLoader.Save(_settings, AppPaths.ConfigYamlPath);

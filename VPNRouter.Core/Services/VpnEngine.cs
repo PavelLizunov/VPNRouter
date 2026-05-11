@@ -392,6 +392,18 @@ public class VpnEngine : IDisposable
             }
         }
 
+        // Bug-r9-I (2026-05-11): per-app exclusions persisted via Apps tab.
+        // Applied AFTER all process-merge steps (default profile, custom
+        // group extras, CustomApps direct adds) so an unchecked specific
+        // app stays out of routing regardless of which path put it in
+        // _activeProfile.Processes. Safe-mode bypasses for the same
+        // reason it bypasses custom categories: if user data is what's
+        // broken startup, defaults must still work.
+        if (!SafeMode.Enabled)
+        {
+            RemoveExcludedApps(_activeProfile, settings.ExcludedApps);
+        }
+
         OnStatus($"Profile: {_activeProfile.Name} ({_activeProfile.Processes.Count} rules)");
         ct.ThrowIfCancellationRequested();
 
@@ -779,6 +791,16 @@ public class VpnEngine : IDisposable
                         Name = app, IncludeChildren = true, ScanPatterns = new[] { app }
                     });
                 }
+            }
+
+            // Bug-r9-I: per-app exclusions. Same call site as StartAsync —
+            // see comment there. ApplyAsync historically does NOT honour
+            // SafeMode.Enabled (preserving the pre-Phase-F asymmetry where
+            // hot-reload merges customisation even when a previous safe-mode
+            // boot would have skipped it), so we mirror that here.
+            if (_activeProfile != null)
+            {
+                RemoveExcludedApps(_activeProfile, settings.ExcludedApps);
             }
 
             // v2.31.8-r4: snapshot the previous process set before the
@@ -1226,6 +1248,51 @@ public class VpnEngine : IDisposable
                 collection.Profiles.Add(profile);
             }
         }
+    }
+
+    /// <summary>
+    /// Bug-r9-I (2026-05-11): drop process rules for any app the user has
+    /// individually unchecked from the Applications tab. Operates on the
+    /// fully-prepared <paramref name="profile"/> (post-merge,
+    /// post-CustomApps), so an excluded name is removed regardless of
+    /// which pathway put it on the list — bundled profile, user-added
+    /// group extra, or top-level CustomApps.
+    ///
+    /// <para><b>Suffix variance</b>: callers persist process names in their
+    /// view form (with <c>.exe</c> on Windows, stripped on macOS/Linux),
+    /// while the engine pipeline normalises everything to <c>foo.exe</c>
+    /// via <c>NormalizeName</c>. The matcher below strips <c>.exe</c> from
+    /// both sides before comparing so the variance doesn't cause silent
+    /// misses (e.g. user persists <c>firefox</c> on Linux, engine sees
+    /// <c>firefox.exe</c> after MergeUserCustomization).</para>
+    ///
+    /// <para>No-op when <paramref name="excludedApps"/> is null or empty —
+    /// the common case (no exclusions configured).</para>
+    /// </summary>
+    internal static void RemoveExcludedApps(Profile? profile, IReadOnlyList<string>? excludedApps)
+    {
+        if (profile == null) return;
+        if (excludedApps == null || excludedApps.Count == 0) return;
+
+        var excludeSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in excludedApps)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            excludeSet.Add(StripExeSuffix(raw));
+        }
+        if (excludeSet.Count == 0) return;
+
+        profile.Processes.RemoveAll(p =>
+            p != null && !string.IsNullOrEmpty(p.Name)
+            && excludeSet.Contains(StripExeSuffix(p.Name)));
+    }
+
+    private static string StripExeSuffix(string name)
+    {
+        name = name.Trim();
+        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            name = name[..^4];
+        return name;
     }
 
     private static List<IProfileSource> BuildProfileSources(AppSettings settings)

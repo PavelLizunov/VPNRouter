@@ -59,6 +59,24 @@ public class AppSettings
     [YamlMember(Alias = "custom_categories")]
     public List<CustomCategory> CustomCategories { get; set; } = new();
 
+    /// <summary>
+    /// v2.32.x (Bug-r9-I): process names the user has individually unchecked
+    /// inside an active default profile group (e.g. unchecked Firefox inside
+    /// the Browsers group so RU sites stay on the direct route). Pre-r9-I the
+    /// per-app checkbox was a transient view state — only the group's
+    /// IsChecked was persisted via <see cref="ActiveProfile"/>. The
+    /// unchecked specific app reverted on every restart. Persisting the
+    /// exclusion list closes that gap.
+    ///
+    /// <para>Entries are stored in the same form as
+    /// <c>AppItemViewModel.ProcessName</c> (with <c>.exe</c> suffix on
+    /// Windows, stripped on macOS/Linux). <see cref="VPNRouter.Core.Services.VpnEngine"/>
+    /// normalises both sides at filter time so the suffix variance does
+    /// not matter at the engine layer.</para>
+    /// </summary>
+    [YamlMember(Alias = "excluded_apps")]
+    public List<string> ExcludedApps { get; set; } = new();
+
     [YamlMember(Alias = "update")]
     public UpdateSettings Update { get; set; } = new();
 }

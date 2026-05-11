@@ -59,6 +59,7 @@ public class SettingsLoaderRobustnessTests : IDisposable
         Assert.NotNull(s.CustomApps);
         Assert.NotNull(s.CustomGroupApps);
         Assert.NotNull(s.CustomCategories);
+        Assert.NotNull(s.ExcludedApps);
         Assert.NotNull(s.Vless.Reality);
         Assert.NotNull(s.Vless.Tls);
         Assert.NotNull(s.Vless.Transport);
@@ -413,5 +414,56 @@ public class SettingsLoaderRobustnessTests : IDisposable
         Assert.Equal("direct", s.App.CustomRules[0].Action);
         Assert.Equal("ip_cidr", s.App.CustomRules[0].Type);
         Assert.Equal("LAN", s.App.CustomRules[0].Comment);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Bug-r9-I (2026-05-11): ExcludedApps round-trips through SettingsLoader
+    // Save → Load → AppSettingsSane.EnsureSane intact. Without this pin a
+    // future field rename or aliased serialiser tweak would silently break
+    // the per-app exclusion persistence the user reported as missing
+    // («каждый раз когда захожу отправляю фаерфокс в исключения... а когда
+    // перезапускаю винду галочка на нем опять стоит»).
+    // ─────────────────────────────────────────────────────────────────────
+    [Fact]
+    public void Save_ThenLoad_PersistsExcludedApps()
+    {
+        var path = PathFor("excluded-apps-roundtrip.yaml");
+        var s = new AppSettings
+        {
+            ExcludedApps = new List<string> { "firefox.exe", "msedge.exe" }
+        };
+        SettingsLoader.Save(s, path);
+
+        // Inspect raw YAML for the alias — catches a future field-rename
+        // that would migrate existing users to an empty list.
+        var yaml = File.ReadAllText(path);
+        Assert.Contains("excluded_apps:", yaml);
+        Assert.Contains("firefox.exe", yaml);
+
+        var reloaded = SettingsLoader.Load(path);
+        AssertSane(reloaded);
+        Assert.Equal(2, reloaded.ExcludedApps.Count);
+        Assert.Contains("firefox.exe", reloaded.ExcludedApps);
+        Assert.Contains("msedge.exe", reloaded.ExcludedApps);
+    }
+
+    [Fact]
+    public void Load_PreV9IConfigWithoutExcludedApps_DefaultsToEmptyList()
+    {
+        // Forward-compat: a config from before Bug-r9-I shipped won't have
+        // the excluded_apps key. EnsureSane must initialise an empty list
+        // so the rest of the pipeline can iterate without NRE.
+        var path = PathFor("legacy-no-excluded.yaml");
+        File.WriteAllText(path,
+            "schema_version: 2\n" +
+            "app:\n" +
+            "  routing_mode: split\n" +
+            "  theme: dark\n");
+
+        var s = SettingsLoader.Load(path);
+
+        AssertSane(s);
+        Assert.NotNull(s.ExcludedApps);
+        Assert.Empty(s.ExcludedApps);
     }
 }

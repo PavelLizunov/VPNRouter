@@ -35,6 +35,7 @@ public static class AppSettingsSane
         settings.CustomApps       ??= new List<string>();
         settings.CustomGroupApps  ??= new Dictionary<string, List<string>>();
         settings.CustomCategories ??= new List<CustomCategory>();
+        settings.ExcludedApps     ??= new List<string>();
         settings.Update           ??= new UpdateSettings();
 
         // Strip out null entries that YamlDotNet may emit for sequence
@@ -42,6 +43,7 @@ public static class AppSettingsSane
         settings.ProfileSources.RemoveAll(p => p == null!);
         settings.CustomApps.RemoveAll(s => s == null!);
         settings.CustomCategories.RemoveAll(c => c == null!);
+        settings.ExcludedApps.RemoveAll(s => s == null!);
         foreach (var c in settings.CustomCategories)
             c.Apps ??= new List<string>();
 
