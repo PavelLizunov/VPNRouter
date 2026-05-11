@@ -71,10 +71,42 @@ public static class VlessServersResolver
 
         var hasActiveSubscriptionServers = subscriptionAggregated.Count > 0;
 
-        // Path 1: subscribe OR generated with enabled subscriptions →
-        // SCOPED to subscription servers only. Legacy vless.servers[]
-        // are intentionally ignored here.
-        if ((isSubscribe || isGenerated) && hasActiveSubscriptionServers)
+        // r10 r7 (Bug-r10-E, 2026-05-11 brat report) — refined scope-guard
+        // trigger. Pre-r7 the guard fired when (subscribe||generated) &&
+        // hasSubs, which silently overrode user's MANUAL VLESS choice in
+        // generated mode (e.g. Free Configs entry the user clicked, US/NL
+        // servers added via paste). Brat's log showed:
+        //   ReconnectAsync.ManualVless: forced ConfigMode=generated,
+        //     ActiveServer=⚡ [US] 193.233.217.174:443
+        //   [WRN] Active server '⚡ [US]...' not in current scope.
+        //         Falling back to 'de-01 443 main-brat'.
+        // Symptoms: chosen server not highlighted, traffic routed via
+        // subscription IP instead of the picked one.
+        //
+        // Differentiation between stas vs brat:
+        //   - Stas case: vless.active_server points at an entry whose
+        //     server/pubkey/short_id match KNOWN PLACEHOLDER lists from
+        //     ConfigSanityCheck (Phase-1 F-E data) — legacy carry-over,
+        //     user never explicitly chose it.
+        //   - Brat case: vless.active_server points at an entry with real
+        //     server + real Reality fields — user explicitly clicked via
+        //     manual list / Free Configs.
+        //
+        // Guard fires when:
+        //   - Subscribe mode + sub enabled (subscribe contract), OR
+        //   - Generated mode + sub enabled AND active entry is missing
+        //     (orphan / empty / "not present in vless.servers") OR matches
+        //     a known placeholder pattern.
+        // Otherwise we respect the manual selection.
+        var activeEntry = (settings.Vless.Servers ?? new())
+            .FirstOrDefault(s => !string.IsNullOrEmpty(s?.Name)
+                && s.Name.Equals(settings.Vless.ActiveServer, StringComparison.OrdinalIgnoreCase));
+
+        var activeIsLegitimateManual = activeEntry != null && !IsPlaceholderEntry(activeEntry);
+
+        // Path 1: subscription wins
+        if (hasActiveSubscriptionServers
+            && (isSubscribe || (isGenerated && !activeIsLegitimateManual)))
         {
             settings.Vless.Servers = subscriptionAggregated;
 
@@ -152,6 +184,36 @@ public static class VlessServersResolver
         }
 
         return manual;
+    }
+
+    /// <summary>
+    /// r10 r7 (Bug-r10-E) — does this entry look like a stas-class
+    /// placeholder? Checks against <see cref="ConfigSanityCheck"/>'s
+    /// known-placeholder pattern lists (server IP, Reality public_key,
+    /// Reality short_id). Used by the scope guard to decide whether a
+    /// generated-mode active server is a legacy orphan (placeholder →
+    /// subscription wins) or a legitimate manual choice (real entry →
+    /// manual respected).
+    /// </summary>
+    internal static bool IsPlaceholderEntry(VlessServerEntry entry)
+    {
+        if (entry == null) return false;
+
+        if (!string.IsNullOrEmpty(entry.Server)
+            && ConfigSanityCheck.KnownPlaceholderServers.Contains(entry.Server))
+            return true;
+
+        var pbk = entry.Reality?.PublicKey;
+        if (!string.IsNullOrEmpty(pbk)
+            && ConfigSanityCheck.KnownPlaceholderPubkeys.Contains(pbk))
+            return true;
+
+        var sid = entry.Reality?.ShortId;
+        if (!string.IsNullOrEmpty(sid)
+            && ConfigSanityCheck.KnownPlaceholderShortIds.Contains(sid))
+            return true;
+
+        return false;
     }
 
     /// <summary>

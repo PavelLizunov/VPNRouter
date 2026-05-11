@@ -554,8 +554,45 @@ public static class LeakProtection
 
         hasEnabledSubsWithServers = subscriptionServers.Count > 0;
 
-        if (hasEnabledSubsWithServers)
+        // r10 r7 (Bug-r10-E parallel fix, 2026-05-11) — generated-mode
+        // users should be able to switch between subscription servers
+        // AND their own manually-added entries (Free Configs, paste-ins).
+        // Pre-r7 F-D returned ONLY subscription when sub was enabled,
+        // which rejected legitimate manual VLESS picks with "scope" Error.
+        // Brat's case: ConfigMode=generated, sub enabled, active=Free
+        // Config US entry → outbound.server = 193.233.217.174 → F-D pre-r7
+        // saw "not in subscription scope" → Error. Now in generated mode
+        // we UNION subscription + vless.servers so both are allowed.
+        // Stas-class placeholders are still caught by F-A resolver (swap
+        // to subscription) + F-E ConfigSanityCheck (pre-start placeholder
+        // detection), so we don't need F-D to also be a placeholder gate.
+        var configMode = (settings.App?.ConfigMode ?? "generated").Trim();
+        var isGenerated = configMode.Equals("generated", StringComparison.OrdinalIgnoreCase);
+
+        if (hasEnabledSubsWithServers && !isGenerated)
             return subscriptionServers;
+
+        if (hasEnabledSubsWithServers && isGenerated)
+        {
+            // Union subscription + non-placeholder vless.servers. We
+            // include manual entries so brat-class users (Free Configs
+            // picked, real IPs / pubkeys) can connect, but exclude any
+            // known-placeholder entries so the stas defense-in-depth
+            // gate still rejects them at validation level (even if
+            // somehow a placeholder reached ConfigGenerator).
+            var union = new List<VlessServerEntry>(subscriptionServers);
+            var manualForUnion = settings.Vless?.Servers;
+            if (manualForUnion != null)
+            {
+                foreach (var s in manualForUnion)
+                {
+                    if (s == null || string.IsNullOrWhiteSpace(s.Server)) continue;
+                    if (VlessServersResolver.IsPlaceholderEntry(s)) continue;
+                    union.Add(s);
+                }
+            }
+            return union;
+        }
 
         // Fallback: legacy direct-VLESS scope.
         var legacy = new List<VlessServerEntry>();

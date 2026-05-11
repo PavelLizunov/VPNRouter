@@ -337,4 +337,108 @@ public class VlessServersResolverScopeGuardTests
         // Active was already in scope → should be kept as-is
         Assert.Equal("nk-01 8443 Khunrath", settings.Vless.ActiveServer);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // r7 Bug-r10-E regression — brat case (2026-05-11)
+    //
+    // brat had a subscription + a Free Configs entry that he explicitly
+    // clicked, which triggers ReconnectAsync.ManualVless: forced
+    // ConfigMode=generated, Vless.Servers=[US entry], ActiveServer=US name.
+    // Pre-r7 the scope guard would fire (isGenerated + hasSubs = true),
+    // silently overwrite Vless.Servers with subscription pool + reset
+    // ActiveServer to subscription's first → US never connected, UI
+    // showed subscription IP. r7 fix: when active entry is in
+    // vless.servers AND is NOT a known placeholder, treat as legitimate
+    // manual choice and respect it.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void GeneratedMode_LegitimateManualChoice_RespectsUserSelection_BratRegression()
+    {
+        // brat-shaped state: generated mode, subscription enabled with 7
+        // working servers, AND vless.servers has 1 real Free-Configs entry
+        // that user explicitly chose (active points to it).
+        var settings = new AppSettings
+        {
+            App = new AppConfig
+            {
+                ConfigMode = "generated",
+                Subscriptions = new List<SubscriptionEntry>
+                {
+                    new()
+                    {
+                        Name = "main-brat",
+                        Url = "https://example.com/sub",
+                        Enabled = true,
+                        Servers = new List<VlessServerEntry>
+                        {
+                            MakeServer("de-01 443 main-brat", "1.2.3.4", 443),
+                            MakeServer("is-01 443 main-brat", "5.6.7.8", 443),
+                        }
+                    }
+                }
+            },
+            Vless = new VlessConfig
+            {
+                Servers = new List<VlessServerEntry>
+                {
+                    // Real Free-Configs entry — real IP, real pubkey (NOT in
+                    // KnownPlaceholderPubkeys), real short_id (NOT in
+                    // KnownPlaceholderShortIds).
+                    new()
+                    {
+                        Name = "⚡ [US] 193.233.217.174:443",
+                        Server = "193.233.217.174",
+                        Port = 443,
+                        Uuid = "f0e1d2c3-1234-5678-9abc-def012345678",
+                        Flow = "xtls-rprx-vision",
+                        Security = "reality",
+                        Reality = new VlessRealityConfig
+                        {
+                            Enabled = true,
+                            ServerName = "www.cloudflare.com",
+                            Fingerprint = "chrome",
+                            PublicKey = "free-config-real-pubkey-not-placeholder",
+                            ShortId = "deadbeef"
+                        }
+                    }
+                },
+                ActiveServer = "⚡ [US] 193.233.217.174:443"
+            }
+        };
+
+        var resolved = VlessServersResolver.Resolve(settings);
+
+        // Should respect the user's manual choice — return vless.servers
+        // (the 1 US entry), not subscription pool.
+        Assert.Single(resolved);
+        Assert.Equal("193.233.217.174", resolved[0].Server);
+        Assert.Equal("⚡ [US] 193.233.217.174:443", resolved[0].Name);
+
+        // ActiveServer must NOT be silently swapped to subscription
+        Assert.Equal("⚡ [US] 193.233.217.174:443", settings.Vless.ActiveServer);
+
+        // Vless.Servers must NOT have been clobbered with subscription pool
+        Assert.Single(settings.Vless.Servers);
+        Assert.Equal("193.233.217.174", settings.Vless.Servers[0].Server);
+        Assert.DoesNotContain(settings.Vless.Servers, s => s.Server == "1.2.3.4");
+    }
+
+    [Fact]
+    public void GeneratedMode_PlaceholderActiveEvenIfInVlessServers_FallsBackToSubscription()
+    {
+        // Edge case between stas (placeholder, swap) and brat (real, keep):
+        // confirms that even if the placeholder entry is in vless.servers
+        // AND active points at it, we STILL swap to subscription because
+        // the entry matches a known-placeholder pattern (server IP +
+        // pubkey + short_id from F-E ConfigSanityCheck data).
+        var settings = BuildStasEvidenceSettings(activeServer: "khunrath_ln");
+
+        var resolved = VlessServersResolver.Resolve(settings);
+
+        // Should NOT respect the placeholder — subscription wins
+        Assert.Equal(3, resolved.Count);
+        Assert.DoesNotContain(resolved, s => s.Server == StasPlaceholderServer);
+        Assert.NotEqual("khunrath_ln", settings.Vless.ActiveServer);
+    }
 }
