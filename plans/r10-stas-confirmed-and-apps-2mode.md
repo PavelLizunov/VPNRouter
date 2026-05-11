@@ -126,6 +126,171 @@ placeholder/leak server без визуальной обратной связи.
 - [ ] Unit tests на каждый fix с фикстурой воспроизводящей stas'овский config.yaml.
 - [ ] Migration test: load `stas-config.yaml` → assert вычищенные `vless.servers` + new active_server = subscription's first.
 
+## 1.5 · F-E — Dead config detect + auto-failover (NEW)
+
+### Триггер
+User: "По поводу старта с мертвого конфига нужно что-то придумать в плане
+какую-то проверку и переключения на живой".
+
+Сценарий stas'а — uppermost-level паттерн всего класса проблем:
+- Юзер уже в плохом состоянии (placeholder/legacy/orphan active_server).
+- App стартует, sing-box работает, traffic уходит на dead IP.
+- В UI ничего не видно — кажется что VPN OK.
+
+F-A/B/D предотвращают появление этого состояния. **F-E — defensive
+runtime layer**: даже если бывшее состояние не вычищено / не покрыто
+F-A/B, при старте VPN сами обнаруживаем "мёртвый" сервер и
+переключаемся на работающий.
+
+### Двухфазная проверка
+
+**Phase 1 — pre-start (синхронная, до запуска sing-box)**:
+проверяем `outbound[proxy]` JSON на паттерны известных placeholder'ов:
+- Known-bad public_key list (`DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU` —
+  наш Android `PlaceholderVlessUri`, possibly others from public docs).
+- Known-bad short_id list (`78ca7952`).
+- Known-bad server IP list (`195.135.255.216` для текущего инцидента;
+  расширяется со временем).
+- Empty / null server / port / uuid → invalid.
+
+Если match — НЕ запускаем sing-box. Возвращаем `DeadConfigDetected`
+event с reason. Engine ловит, пытается auto-switch (Phase 3).
+
+**Phase 2 — post-start probe (асинхронная, 15-30s после старта)**:
+после запуска sing-box проверяем connectivity:
+- Через Clash API: `GET http://127.0.0.1:9090/proxies/proxy/delay?url=http://www.gstatic.com/generate_204&timeout=5000`.
+- Если delay >= 5000 или error → probe-failed.
+- 2 probe attempts с 5s паузой → если оба fail → Dead.
+
+### Phase 3 — Auto-switch logic
+
+При `DeadConfigDetected` (от Phase 1 ИЛИ Phase 2):
+
+**ConfigMode = generated** + есть enabled subscriptions:
+1. Найти текущий `active_subscription_server` (или `vless.active_server`
+   если subscription pickel ещё не настроен).
+2. Перебрать оставшиеся servers в `subscriptions[enabled].servers` по
+   порядку (skip already-tried, skip placeholder-paterns).
+3. Для каждого: persist active_server → regenerate config → restart
+   sing-box → Phase 2 probe.
+4. Если 3 серверa подряд fail → surface UI alert "Все серверы недоступны:
+   проверьте подписку или сеть" + остановиться (НЕ зацикливаться).
+
+**ConfigMode = generated** + НЕТ subscriptions (легаси / direct VLESS):
+- Если есть `vless.servers[]` с не-placeholder entries → попробовать
+  переключиться (пометить текущий active_server как dead и взять
+  следующий не-placeholder).
+- Если все placeholder / пусто → UI alert "Конфигурация выглядит
+  тестовой/некорректной. Откройте Server Settings и подкорректируйте
+  данные" + остановиться.
+
+**ConfigMode = custom**:
+- Юзер сам paste'нул JSON, мы не вольны менять outbound'ы.
+- UI alert "Кастомный конфиг недоступен: первый probe сервера не прошёл.
+  Проверьте JSON или используйте subscribe mode".
+- Остановиться (не reattempt).
+
+### Implementation skeleton
+
+Новый файл `VPNRouter.Core/Services/ConfigSanityCheck.cs`:
+
+```csharp
+public sealed class ConfigSanityCheck
+{
+    private static readonly HashSet<string> KnownPlaceholderPubkeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU", // Android PlaceholderVlessUri + stas
+    };
+    private static readonly HashSet<string> KnownPlaceholderShortIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "78ca7952",
+    };
+    private static readonly HashSet<string> KnownPlaceholderServers = new()
+    {
+        "195.135.255.216",
+        // расширяется как находим
+    };
+
+    public PreStartResult CheckBeforeStart(JsonObject singboxConfig) { ... }
+    public async Task<ProbeResult> ProbeAsync(int clashApiPort, CancellationToken ct) { ... }
+}
+
+public sealed class AutoFailoverEngine
+{
+    private readonly VpnEngine _vpn;
+    private readonly ConfigSanityCheck _sanity;
+    private readonly ISettingsLoader _settings;
+    private int _attemptedServerCount = 0;
+    private const int MaxAttempts = 3;
+
+    public async Task<FailoverOutcome> HandleDeadConfigAsync(DeadConfigReason reason, CancellationToken ct) { ... }
+}
+```
+
+Hook в `VpnEngine.StartAsync()`:
+```csharp
+var preCheck = _sanityCheck.CheckBeforeStart(generatedConfig);
+if (preCheck.IsDead)
+{
+    _logger.Warning("[F-E] Pre-start sanity check: dead config detected ({Reason}). Attempting auto-failover.", preCheck.Reason);
+    return await _failoverEngine.HandleDeadConfigAsync(preCheck.Reason, ct);
+}
+// ... start sing-box ...
+_ = Task.Run(async () =>
+{
+    await Task.Delay(TimeSpan.FromSeconds(15), ct);  // give sing-box time to settle
+    var probe = await _sanityCheck.ProbeAsync(_clashApiPort, ct);
+    if (probe.IsDead)
+    {
+        _logger.Warning("[F-E] Post-start probe failed ({Reason}). Auto-failover.", probe.Reason);
+        await _failoverEngine.HandleDeadConfigAsync(probe.Reason, ct);
+    }
+});
+```
+
+### UI feedback
+
+`MainWindowViewModel`:
+- `AutoFailoverActive` (bool observable).
+- `AutoFailoverProgressText` ("Проверяем сервер 2 из 3...").
+- `AutoFailoverFailed` event → toast "Все серверы подписки недоступны.
+  [Открыть Servers]".
+
+`SimplePage` / `ServersPage`:
+- Если active server поменялся через failover — показать badge "Auto
+  переключение → de-01 443 Khunrath" с возможностью revert.
+
+### Acceptance
+
+- [ ] stas-evidence-config.yaml → start → Phase 1 ловит placeholder
+      pubkey/sid/server → автоматически переключается на
+      `subscriptions[0].servers[0]` = `de-01 443 Khunrath`.
+- [ ] Mock probe возвращает 5s timeout → Phase 2 ловит → переключение.
+- [ ] 3 attempt'a fail → UI alert + stop (no infinite loop).
+- [ ] Custom config mode: probe fails → alert, NO auto-switch.
+- [ ] Unit tests:
+  - `ConfigSanityCheck_DetectsPlaceholderPubkey`
+  - `ConfigSanityCheck_DetectsPlaceholderServer`
+  - `ConfigSanityCheck_PassesValidConfig`
+  - `AutoFailoverEngine_PicksNextSubscriptionServer`
+  - `AutoFailoverEngine_StopsAfter3Attempts`
+  - `AutoFailoverEngine_NoSwitchInCustomMode`
+
+### Severity
+
+P0 / safety-net. F-A/B/D предотвращают; F-E ловит уже-сломанное
+состояние у существующих пользователей.
+
+### Action items
+
+- [ ] `ConfigSanityCheck.cs` — pre-start + probe.
+- [ ] `AutoFailoverEngine.cs` — orchestration.
+- [ ] `VpnEngine.StartAsync` integration.
+- [ ] UI bindings: `MainWindowViewModel.AutoFailoverActive` + simple page badge.
+- [ ] Tests (см. acceptance).
+- [ ] Unify placeholder lists с Android `PlaceholderVlessUri` constants
+      (Core single-source-of-truth).
+
 ## 2 · Applications: Include vs Exclude — 2-mode
 
 ### Текущая поведенческая модель (как есть)
@@ -255,16 +420,35 @@ Android + tests). Можно разделить на 2 chip'а:
 | F-B | `SettingsMigrator` legacy `vless.servers` cleanup | **P0** | 2-3 ч |
 | F-C | ServersPage legacy-entry warning marker | P2 UX | 1-2 ч |
 | F-D | LeakProtection scope-aware refinement | **P0** | 1-2 ч |
+| F-E | Dead config detect + auto-failover (runtime safety net) | **P0** | 4-5 ч |
 | AM-1 | Apps 2-mode Core (settings + migrator + generator) | feature | 3-4 ч |
 | AM-2 | Apps 2-mode UI (desktop + Android + tests) | feature | 3-4 ч |
 
 ### Зависимости
 
-- F-A, F-B, F-D can run в параллель (touch different files).
+- F-A, F-D, F-E can run в параллель (touch different files).
+- F-B touches `SettingsMigrator.cs` — AM-1 тоже его модифицирует
+  → объединяем в один chip (AM-1+F-B combo) для избежания merge conflict.
 - F-C depends on F-A/B (UI marker должен read from corrected resolver
   output).
-- AM-1 first → AM-2.
+- AM-1+F-B first → AM-2.
 - AM не блокирует F-*.
+
+### Execution wave plan (2026-05-11)
+
+**Wave 1 (parallel chips, spawn together):**
+- F-A: VlessServersResolver scope guard.
+- F-D: LeakProtection scope-aware.
+- F-E: ConfigSanityCheck + AutoFailoverEngine + VpnEngine integration.
+- AM-1+F-B combined: SettingsMigrator (legacy vless.servers cleanup +
+  new RoutingApps* fields default) + AppSettings + ConfigGenerator
+  include/exclude branching.
+
+**Wave 2 (inline, after wave 1 merges back):**
+- F-C: ServersPage UI marker for orphan vless.servers entries.
+- AM-2: ApplicationsPage segmented toggle + ViewModel binding +
+  localization + Android Applications partial.
+- Integration tests across all fixes (stas-evidence fixture).
 
 ### Что было сделано в r9 (committed)
 - ✅ Bug-r9-I (Apps tab persist + auto-save) — `d72420f`.
