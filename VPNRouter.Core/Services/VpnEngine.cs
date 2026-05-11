@@ -25,6 +25,17 @@ public class VpnEngine : IDisposable
     private readonly Func<IProcessMonitor> _monitorFactory;
     private readonly ILogger? _logger;
 
+    // F-E (2026-05-11): runtime safety net for dead/placeholder configs.
+    // Created lazily on first StartAsync to avoid leaking HttpClient when
+    // VpnEngine is constructed but never used. Lives for the engine's
+    // lifetime so cycle state (tried-server list) survives back-to-back
+    // failovers; reset on every successful start.
+    private ConfigSanityCheck? _sanityCheck;
+    private AutoFailoverEngine? _failover;
+    // Post-start probe runs in the background; we cancel it on Stop so a
+    // queued probe doesn't fire failover after the user manually disconnects.
+    private CancellationTokenSource? _probeCts;
+
     private bool _disposed;
 
     // ─── Public state ────────────────────────────────────────────────────────
@@ -78,6 +89,14 @@ public class VpnEngine : IDisposable
     /// process — without it, stop/status commands race against stale PIDs
     /// the moment HealthMonitor does its first restart.</summary>
     public event Action<int>? SingBoxStarted;
+
+    /// <summary>F-E (2026-05-11): fired when <see cref="AutoFailoverEngine"/>
+    /// switches to a different server after the pre-start sanity check or
+    /// post-start Clash API probe flagged the active one as dead. Carries
+    /// the user-readable message (e.g. "Переключение на сервер: backup-2").
+    /// Consumers (App / CLI) surface this as a toast or status line so the
+    /// user understands why the active server changed mid-connect.</summary>
+    public event Action<string>? AutoFailoverTriggered;
 
     public VpnEngine(
         IProcessScanner scanner,
@@ -508,6 +527,78 @@ public class VpnEngine : IDisposable
 
         ct.ThrowIfCancellationRequested();
 
+        // 5.5. F-E (2026-05-11): runtime safety net — static placeholder
+        // / dead-config detection BEFORE sing-box launches.
+        //
+        // F-A/B/D prevent the bad state from being created in the first
+        // place; F-E catches a user who's already in it (active_server
+        // points at a placeholder from a v3.0 Android smoke build, or a
+        // legacy direct entry that was never refreshed). Without this,
+        // sing-box launches cleanly with an outbound that connects to a
+        // dead / hostile server, the user sees "Connected" but no traffic
+        // flows. See plans/r10-stas-confirmed-and-apps-2mode.md §1.5.
+        //
+        // Custom-mode bypasses the check — user's JSON is their problem.
+        if (!isCustomConfig)
+        {
+            _sanityCheck ??= new ConfigSanityCheck(_logger);
+            var preCheck = _sanityCheck.CheckBeforeStart(configJson);
+            if (preCheck.IsDead)
+            {
+                _logger?.Warning(
+                    "[VpnEngine] F-E pre-start dead config: {Reason} (field: {Field})",
+                    preCheck.Reason, preCheck.OffendingField);
+
+                // Wire AutoFailoverEngine with a restart delegate that
+                // calls back into StartAsync. The lambda captures the
+                // current settings reference so the failover-mutated
+                // ActiveServer reaches the second pass.
+                _failover ??= new AutoFailoverEngine(
+                    settings,
+                    _sanityCheck,
+                    restart: async (innerCt) =>
+                    {
+                        try
+                        {
+                            await StartAsync(settings, innerCt);
+                            return true;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.Warning(ex,
+                                "[VpnEngine] F-E restart delegate threw inside StartAsync");
+                            return false;
+                        }
+                    },
+                    logger: _logger);
+
+                var outcome = await _failover.HandleDeadConfigAsync(
+                    preCheck.Reason ?? "dead config", ct);
+
+                if (outcome.UserFacingMessage != null)
+                    AutoFailoverTriggered?.Invoke(outcome.UserFacingMessage);
+
+                if (outcome.Switched)
+                {
+                    // The restart delegate already re-entered StartAsync
+                    // and either succeeded or threw. Either way, the
+                    // outer caller's flow is done — we MUST NOT continue
+                    // launching sing-box with the dead config below.
+                    _logger?.Information(
+                        "[VpnEngine] F-E switched to {New} — abort outer StartAsync flow",
+                        outcome.NewActiveServer);
+                    return;
+                }
+
+                // Failover refused to switch (custom mode / no candidates /
+                // MaxAttempts) — surface the reason. Match the pre-existing
+                // "no servers" pattern so callers see a consistent error.
+                Warning?.Invoke(outcome.UserFacingMessage ?? preCheck.Reason ?? "Dead config");
+                throw new InvalidOperationException(
+                    outcome.UserFacingMessage ?? preCheck.Reason ?? "Dead VPN config");
+            }
+        }
+
         // 6. Ensure sing-box binary exists and is up-to-date
         var exePath = OperatingSystem.IsWindows()
             ? Environment.ExpandEnvironmentVariables(settings.SingBox.ExecutablePath)
@@ -658,6 +749,69 @@ public class VpnEngine : IDisposable
         }, ct);
 
         ct.ThrowIfCancellationRequested();
+
+        // 8.5. F-E post-start probe — verify connectivity via Clash API.
+        // Runs out-of-band (fire-and-forget) so initial start latency is
+        // unchanged. If both probe attempts fail, calls AutoFailoverEngine
+        // which swaps the active server and re-enters StartAsync via the
+        // restart delegate already wired in step 5.5.
+        //
+        // Settle delay (15s) gives sing-box time to bring up the TUN +
+        // settle DNS rules before we measure delay. Without it the first
+        // probe almost always fails on cold start. ProbeCts is cancelled
+        // by Stop() so a delayed probe doesn't fire failover after the
+        // user has manually disconnected.
+        if (!isCustomConfig && _sanityCheck != null)
+        {
+            _probeCts?.Cancel();
+            _probeCts?.Dispose();
+            _probeCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var probeCt = _probeCts.Token;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(15), probeCt);
+                    var clashPort = ParseClashApiPort(settings.SingBox.ClashApi);
+                    var probe = await _sanityCheck.ProbeAsync(clashPort, probeCt);
+                    if (probe.IsDead && !probeCt.IsCancellationRequested)
+                    {
+                        _logger?.Warning(
+                            "[VpnEngine] F-E post-start probe failed: {Reason}",
+                            probe.Reason);
+
+                        _failover ??= new AutoFailoverEngine(
+                            settings, _sanityCheck,
+                            restart: async (innerCt) =>
+                            {
+                                try
+                                {
+                                    Stop();
+                                    await StartAsync(settings, innerCt);
+                                    return true;
+                                }
+                                catch (Exception ex)
+                                {
+                                    _logger?.Warning(ex,
+                                        "[VpnEngine] F-E probe-driven restart threw");
+                                    return false;
+                                }
+                            },
+                            logger: _logger);
+
+                        var outcome = await _failover.HandleDeadConfigAsync(
+                            probe.Reason ?? "probe failed", probeCt);
+                        if (outcome.UserFacingMessage != null)
+                            AutoFailoverTriggered?.Invoke(outcome.UserFacingMessage);
+                    }
+                }
+                catch (OperationCanceledException) { /* Stop() cancelled — fine */ }
+                catch (Exception ex)
+                {
+                    _logger?.Debug(ex, "[VpnEngine] F-E probe task threw (non-fatal)");
+                }
+            }, probeCt);
+        }
 
         // 9. Firewall rules stay DISABLED while VPN is running.
         // sing-box TUN handles routing — firewall block is only needed if sing-box crashes.
@@ -1045,6 +1199,10 @@ public class VpnEngine : IDisposable
         try { WindowsDnsHardening.Restore(_logger); } catch { }
 #endif
 
+        // F-E (2026-05-11): cancel any queued post-start probe so it
+        // doesn't fire AutoFailover after a manual disconnect.
+        try { _probeCts?.Cancel(); } catch { }
+
         try { _healthMonitor?.Stop(); } catch { }
         try { _etw?.Stop(); } catch { }
 
@@ -1119,6 +1277,9 @@ public class VpnEngine : IDisposable
         _disposed = true;
 
         if (IsRunning) Stop();
+        try { _probeCts?.Cancel(); } catch { }
+        try { _probeCts?.Dispose(); } catch { }
+        _probeCts = null;
         GC.SuppressFinalize(this);
     }
 
@@ -1128,6 +1289,22 @@ public class VpnEngine : IDisposable
     {
         _logger?.Information("[VpnEngine] {Status}", message);
         StatusChanged?.Invoke(message);
+    }
+
+    /// <summary>
+    /// F-E helper — parse "host:port" into just the port. Returns the
+    /// sing-box default (9090) on parse failure so the probe still tries.
+    /// </summary>
+    internal static int ParseClashApiPort(string? hostPort)
+    {
+        const int Default = 9090;
+        if (string.IsNullOrWhiteSpace(hostPort)) return Default;
+        var colonIdx = hostPort.LastIndexOf(':');
+        if (colonIdx < 0 || colonIdx == hostPort.Length - 1) return Default;
+        var portStr = hostPort[(colonIdx + 1)..];
+        return int.TryParse(portStr, out var port) && port > 0 && port <= 65535
+            ? port
+            : Default;
     }
 
     /// <summary>
