@@ -5,6 +5,18 @@
 v0.1.0 released; пожелание — wire по образцу Zapret / TgProxy, чтобы
 binary тянулся отдельно по требованию, а не bundled в installer.
 
+## User decisions (2026-05-11 follow-up)
+
+| Q | Решение |
+|---|---|
+| 1. Variant default | **Slim по умолчанию + авто-fallback на embedded при «no browser found»** |
+| 2. Path layout | `{DataDir}/wgturn/bin/wgturn-cli` (параллельно zapret/, tg-proxy/) |
+| 3. UI placement | **Tools tab — отдельная карточка рядом с Zapret и Telegram Proxy** |
+| 4. Auto-update mechanism | **Логика как у Zapret и TgProxy** (один UpdateChecker poll + toast при новой версии) |
+| 5. SHA256 sidecars | **Skip on-launch verification; file issue upstream → когда добавят sidecars, flip on verify.** Updater написан so-that `expectedSha256` параметр уже принимается, просто null для v0.1.0 |
+| 6. Chip breakdown | **3 параллельных (W-1/W-2/W-3) + W-4 UI после W-1 готова** |
+| 7. **Functional flow** | См. секцию 12 ниже — забыл, юзер указал на необходимость UI inputs: wgturn URL (issued by operator) + VK link (paste by user) |
+
 ## 1 · Goal / Non-goals
 
 ### Goal
@@ -410,3 +422,230 @@ P2 / infrastructure cleanup. Не блокирует r10 cut. Решает:
 **Spawn W-1 + W-2 + W-3 параллельно chip'ами** после r10 cut'а (когда
 stable v2.32.1 опубликован). UI part (W-4) — отдельный chip позже,
 когда дизайн Emergency Channel секции готов.
+
+## 12 · Functional flow + UI inputs (P0, был упущен в research v1)
+
+### Modelling — что нужно от юзера
+
+Параллель с VLESS subscription flow:
+
+| Параметр | Где берется | Аналог в основном VPN |
+|---|---|---|
+| `wgturn://...` config URL | **Сервер (оператор)** выдает юзеру так же как VLESS subscription / server entry — через Telegram-бот, manually, или через свой провижн механизм | Аналог `VlessServerEntry` |
+| VK call join link (`https://vk.com/call/join/<callID>`) | **Юзер сам** копирует из VK Calls — открывает VK Calls, нажимает «Поделиться ссылкой», вставляет в наше поле | Нет аналога — это специфично wgturn |
+
+Один wgturn config обычно multi-session — юзер сохранил его один раз,
+дальше каждый connect требует свежий VK link (call link короткоживущий,
+обновляется при каждом конкретном звонке-канале).
+
+### Storage model
+
+```csharp
+// VPNRouter.Core/Models/AppSettings.cs — секция wgturn:
+public class WgturnConfigSection
+{
+    [YamlMember(Alias = "configs")]
+    public List<WgturnEntry> Configs { get; set; } = new();
+
+    [YamlMember(Alias = "active_config")]
+    public string ActiveConfig { get; set; } = string.Empty;
+
+    [YamlMember(Alias = "last_vk_link")]
+    public string LastVkLink { get; set; } = string.Empty;
+    // (опционально — авто-fill prev, но юзер должен понимать что
+    // VK link короткоживущий и обычно нужно brать свежий)
+
+    [YamlMember(Alias = "variant")]
+    public string Variant { get; set; } = "slim";
+    // "slim" | "embedded" — какая версия binary установлена
+
+    [YamlMember(Alias = "version")]
+    public string Version { get; set; } = string.Empty;
+    // последняя установленная версия (e.g. "v0.1.0")
+}
+
+public class WgturnEntry
+{
+    [YamlMember(Alias = "name")]
+    public string Name { get; set; } = string.Empty;
+    // user-friendly label, например "Operator-A"
+
+    [YamlMember(Alias = "url")]
+    public string Url { get; set; } = string.Empty;
+    // полный `wgturn://...` URL
+
+    [YamlMember(Alias = "added_at")]
+    public DateTimeOffset AddedAt { get; set; }
+}
+```
+
+YAML пример:
+```yaml
+wgturn:
+  configs:
+    - name: Operator-A
+      url: wgturn://eyJ2IjoxLCJzcCI6...#alice
+      added_at: 2026-05-11T12:00:00Z
+    - name: Backup
+      url: wgturn://eyJ2IjoxLCJzcCI6...#bob
+      added_at: 2026-05-10T08:30:00Z
+  active_config: Operator-A
+  last_vk_link: 'https://vk.com/call/join/abc123'
+  variant: slim
+  version: v0.1.0
+```
+
+### Migration (schema v3 → v4)
+
+В `SettingsMigrator.Migrate_3_to_4`:
+- Создать `_settings.Wgturn = new WgturnConfigSection()` если null.
+- Если `{DataDir}/bin/wgturn-cli[.exe]` существует (Phase 1 install) →
+  переместить в `{DataDir}/wgturn/bin/`.
+- (Опционально) попытаться прочитать `{DataDir}/bin/wgturn-cli-version.txt`
+  если был — записать в `_settings.Wgturn.Version`.
+
+### UI layout — Tools tab → Emergency Channel card
+
+Параллель с существующими card'ами в `ToolsPage.axaml`:
+
+```
+┌─ Tools ─────────────────────────────────────┐
+│                                              │
+│ ┌─ Zapret (DPI bypass) ─────────────────┐   │
+│ │ ✓ Installed v.X.Y.Z                    │   │
+│ │ [Manage Strategies]  [Update]          │   │
+│ └────────────────────────────────────────┘   │
+│                                              │
+│ ┌─ Telegram-прокси ─────────────────────┐   │
+│ │ ✓ Installed                            │   │
+│ │ Port: 1443  Secret: 9c92...            │   │
+│ │ [Manage]   [Update]                    │   │
+│ └────────────────────────────────────────┘   │
+│                                              │
+│ ┌─ Экстренный канал (wgturn) ───────────┐   │  ← NEW
+│ │ ⚪ Не установлен                       │   │
+│ │ Резервный VPN через VK Calls TURN.    │   │
+│ │ [Установить (~10 MB)]  [Подробнее]    │   │
+│ └────────────────────────────────────────┘   │
+└──────────────────────────────────────────────┘
+```
+
+После установки card раскрывается до:
+
+```
+┌─ Экстренный канал (wgturn v0.1.0, slim) ─┐
+│ Статус: ⚪ Отключён                       │
+│                                            │
+│ Конфигурация: [Operator-A     ▼]  [+]    │
+│ VK-ссылка:    [Вставьте сюда...........]  │
+│                                            │
+│   [Подключить]      [Удалить]  [Обновить] │
+│                                            │
+│ ↗ Подробнее   ↗ Открыть лог               │
+└────────────────────────────────────────────┘
+```
+
+При подключении меняется на:
+```
+┌─ Экстренный канал (wgturn v0.1.0, slim) ─┐
+│ Статус: ● Подключено к Operator-A         │
+│ PID: 12345                                │
+│                                            │
+│   [Отключить]                             │
+│                                            │
+│ ↗ Открыть лог                             │
+└────────────────────────────────────────────┘
+```
+
+«Подробнее» открывает отдельную страницу `EmergencyChannelPage`
+по образцу `TelegramPage` / `DpiBypassPage`:
+- Управление сохранёнными configs (+/-/edit)
+- История последних подключений (опционально)
+- Раздел «Что это?» с пояснением legal / privacy / 200KB/s cap
+
+### UI Inputs validation
+
+- **wgturn URL**: regex `^wgturn://[A-Za-z0-9_\-+/=]+(#.+)?$`. Не пытаемся
+  decode JSON payload — это работа wgturn-cli при запуске.
+- **VK link**: regex `^https?://vk\.com/call/join/[a-zA-Z0-9_-]+(\?.*)?$`.
+  Soft warning если не VK domain, hard reject если совсем не URL.
+
+### Connect flow
+
+```pseudo
+1. User clicks [Подключить]
+2. VM проверяет: WgturnUpdater.IsInstalled() == true → иначе ошибка
+3. VM проверяет: activeConfig != null && vkLink не пуст → иначе подсветка inputs
+4. VM persist'ит vkLink в settings.Wgturn.LastVkLink + Save
+5. VM создает EmergencyChannelConfig:
+     { WgturnUrl = activeConfig.Url, VkLink = vkLink }
+6. VM зовет EmergencyChannelEngine.StartAsync(config) — он уже готов в Phase 2
+7. UI слушает event'ы: Started → ● Подключено, Crashed → ✗ Сбой + сообщение
+```
+
+### Disconnect flow
+
+```pseudo
+1. User clicks [Отключить]
+2. VM зовет EmergencyChannelEngine.StopAsync()
+3. UI слушает state change → ⚪ Отключён
+```
+
+### Status events surface
+
+`EmergencyChannelManager` уже эмитит `Started` + `Crashed`. Нужно
+добавить:
+- `StateChanged` event (Disconnected / Connecting / Connected / Failed)
+  для bind'инга в UI без manual polling
+- `LastLogLine` observable property для inline-показа в card
+  (опционально, MVP — можно без этого)
+
+Эти добавки идут в W-1 chip — близко к WgturnUpdater, разные классы но
+один файл.
+
+### Localization (RU/EN)
+
+В `Strings.cs` добавить:
+- `EmergencyChannelCardTitle` ("Экстренный канал (wgturn)" / "Emergency Channel (wgturn)")
+- `EmergencyChannelDescription` ("Резервный VPN через VK Calls TURN. Используется когда основной канал заблокирован." / "Backup VPN via VK Calls TURN. Used when the primary channel is blocked.")
+- `EmergencyChannelInstall` ("Установить (~10 MB)" / "Install (~10 MB)")
+- `EmergencyChannelInstallEmbedded` ("Загрузить полную версию (~120 MB)" / "Download full version (~120 MB)")
+- `EmergencyChannelConfigsLabel` ("Конфигурация:" / "Configuration:")
+- `EmergencyChannelVkLinkLabel` ("VK-ссылка:" / "VK link:")
+- `EmergencyChannelVkLinkHint` ("Получите из VK Calls → Поделиться ссылкой" / "Get from VK Calls → Share link")
+- `EmergencyChannelConnect` ("Подключить" / "Connect")
+- `EmergencyChannelDisconnect` ("Отключить" / "Disconnect")
+- `EmergencyChannelOpenLog` ("Открыть лог" / "Open log")
+- `EmergencyChannelDetailsLink` ("Подробнее" / "Details")
+- `EmergencyChannelStateConnected(name)` ("Подключено к {name}" / "Connected to {name}")
+- `EmergencyChannelStateDisconnected` ("Отключён" / "Disconnected")
+- `EmergencyChannelStateConnecting` ("Подключение..." / "Connecting...")
+- `EmergencyChannelStateFailed(reason)` ("Сбой: {reason}" / "Failed: {reason}")
+- `EmergencyChannelDetailsBody` (full long text про legal / 200KB/s cap / VK shapes)
+
+### Updated chip breakdown (after this section)
+
+| Chip | Scope | Effort |
+|---|---|---|
+| **W-1** | `WgturnUpdater.cs` + `WgturnVariant` enum + `WgturnConfigSection` + `WgturnEntry` модели + state machine events в Engine + unit tests | 4-5 ч |
+| **W-2** | `AppPaths` move + `SettingsMigrator` v3→v4 (path move + add `wgturn` section + import old version.txt) + migration tests | 2-3 ч |
+| **W-3** | `build.ps1` cleanup (drop bundle step + remove `bin\wgturn-cli.exe` from ZIP layout) + Auto-Update CI test re-run | 1 ч |
+| **W-4** | `ToolsPage.axaml` card + VM properties + commands + Localization strings + `EmergencyChannelPage` detail | 5-6 ч |
+
+W-1/W-2/W-3 параллельно (touch разные файлы). W-4 после W-1 (зависит от
+public API + settings model).
+
+### Connect flow integration with sing-box
+
+**Открытый вопрос**: когда юзер активирует wgturn — основной sing-box
+тоннель должен:
+- (a) **продолжать работать параллельно** (split — process_name routing
+  через sing-box + остальное через wgturn WG-tunnel)?
+- (b) **выключаться** (один-в-моменте, либо основной либо wgturn)?
+- (c) **остаться вторичным fallback** — основной тоннель пытается, если
+  падает (HealthMonitor detect), automatic switch на wgturn?
+
+Я склоняюсь к **(c) automatic fallback**, но это user design decision —
+нужно обсуждать отдельно когда дойдет до integration. На MVP / Tools card
+делаем (b) одиночное подключение / ручной toggle, без integration с
+основным VpnEngine. Юзер сам решает что включить.
