@@ -365,6 +365,11 @@ public partial class AndroidApp : Avalonia.Application
     private TextBox? _appPickerSearch;
     private Avalonia.Controls.CheckBox? _appPickerSystemToggle;
     private TextBlock? _appPickerCount;
+    // Bug #2 (2026-05-11) — mobile redesign: small "Showing N apps" hint
+    // next to the system-apps toggle so the user can verify the device-
+    // wide app enumeration count after the launcher-activities fallback
+    // landed in AppListLoader.
+    private TextBlock? _appPickerShowingCount;
     private ListBox? _appPickerList;
     private Avalonia.Controls.Button? _appPickerSaveBtn;
     private Avalonia.Controls.Button? _perAppPickButton;
@@ -5386,16 +5391,19 @@ public partial class AndroidApp : Avalonia.Application
         // styling (active highlight) is in place when the user lands on
         // the tab. Counts paint as zeros first; UpdateAllCategoryCounts
         // refreshes them after the cache returns.
+        //
+        // Bug #2 (2026-05-11) — mobile redesign: default to the
+        // CustomCatchAll category on first open (no saved active id) so
+        // the apps list is immediately populated. Pre-fix the right pane
+        // showed a "← Select a category" placeholder, which on phone read
+        // as "the tab is empty" — users had to discover the chip row to
+        // get any apps to show. Defaulting to CustomCatchAll = "all apps"
+        // matches user intent ("выбор приложений неудобен на телефоне").
         _advAppsCustomCategories = AndroidStorage.GetCustomCategories();
         var savedActiveId = AndroidStorage.GetApplicationsActiveCategory();
-        _advAppsActiveCategoryId = ResolveActiveCategoryId(savedActiveId);
+        _advAppsActiveCategoryId = ResolveActiveCategoryId(savedActiveId)
+            ?? AndroidCategoryDefaults.CustomCatchAllId;
         RebuildAppCategorySidebar();
-
-        var hasActive = !string.IsNullOrEmpty(_advAppsActiveCategoryId);
-        if (_advAppsRightPanePlaceholder is not null)
-            _advAppsRightPanePlaceholder.IsVisible = !hasActive;
-        if (_advAppsRightPaneScopeContainer is not null)
-            _advAppsRightPaneScopeContainer.IsVisible = hasActive;
 
         try
         {
@@ -5572,6 +5580,18 @@ public partial class AndroidApp : Avalonia.Application
 
         _appPickerList.ItemsSource = rows;
         UpdateAppPickerCount();
+        // Bug #2 (2026-05-11) — surface the visible-app count so users
+        // can verify the launcher-activities fallback in AppListLoader is
+        // doing its job. Sum of selectedRows + availableRows == filtered
+        // apps within active category scope (post-search). When the user
+        // toggles "System apps" the reload reseeds _appPickerCache before
+        // this runs.
+        if (_appPickerShowingCount is not null)
+        {
+            _appPickerShowingCount.Text = string.Format(
+                Localization.PerAppShowingCount,
+                selectedRows.Count + availableRows.Count);
+        }
     }
 
     /// <summary>Filter the installed-app cache down to the apps that belong
@@ -5800,102 +5820,95 @@ public partial class AndroidApp : Avalonia.Application
     /// </summary>
     private Control BuildAppPickerTabContent()
     {
-        // ── Left sidebar: scrollable category list + bottom-anchored "+ New" form
+        // Bug #2 (2026-05-11) — single-column mobile-first layout. The
+        // pre-fix design cloned desktop's 2-pane Grid (140dp sidebar +
+        // right pane) which left ~330dp for the right pane on a 1080-px
+        // phone — too cramped for icon + label + package + checkbox.
+        // Replaced with a vertical DockPanel: search → horizontal
+        // category chip row → +New row → mode picker → mode hint →
+        // count/system-toggle row → app list (fills) → sticky Save.
+        //
+        // Reference points: Material Design app picker pattern
+        // (filter chips on top), desktop divergence intentional per user
+        // feedback ("Выбор приложений идентичный desktop неудобен на
+        // телефоне"). The fields _advAppsRightPanePlaceholder /
+        // _advAppsRightPaneScopeContainer stay declared because other
+        // call sites null-check them, but they no longer participate in
+        // the visual tree.
+
+        // ── Horizontal chip strip (categories) ───────────────────────
         _advAppsCategoryListPanel = new StackPanel
         {
-            Orientation = Avalonia.Layout.Orientation.Vertical,
-            Spacing = 0,
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 6,
         };
-        var sidebarScroller = new ScrollViewer
+        var chipScroller = new ScrollViewer
         {
             Content = _advAppsCategoryListPanel,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Margin = new Thickness(8, 4, 8, 4),
         };
 
+        // ── "+ New category" inline row (always visible, compact) ────
         _advAppsNewCategoryInput = new TextBox
         {
             Watermark = Localization.AdvAppsCategoryNamePlaceholder,
-            FontSize = 10,
-            Padding = new Thickness(6, 4),
-            Margin = new Thickness(4, 4, 4, 2),
+            FontSize = 11,
+            Padding = new Thickness(8, 6),
             CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
             BorderThickness = new Thickness(1),
         };
-        _advAppsNewCategoryInput.BindToken(TextBox.BackgroundProperty, "SurfaceBaseBrush");
+        _advAppsNewCategoryInput.BindToken(TextBox.BackgroundProperty, "SurfaceSunkenBrush");
         _advAppsNewCategoryInput.BindToken(TextBox.BorderBrushProperty, "BorderSubtleBrush");
 
         _advAppsAddCategoryBtn = new Avalonia.Controls.Button
         {
             Content = Localization.AdvAppsAddCategoryButton,
-            FontSize = 10,
+            FontSize = 11,
             FontWeight = FontWeight.SemiBold,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(4, 0, 4, 4),
-            Padding = new Thickness(4, 4),
-            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            Padding = new Thickness(12, 6),
+            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
             BorderThickness = new Thickness(0),
         };
         _advAppsAddCategoryBtn.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentSolidBrush");
         _advAppsAddCategoryBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
         _advAppsAddCategoryBtn.Click += OnAdvAppsAddCategoryClicked;
 
-        var sidebarGrid = new Grid
+        var addCategoryRow = new Grid
         {
-            RowDefinitions = new RowDefinitions("*,Auto,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 6,
+            Margin = new Thickness(8, 0, 8, 6),
         };
-        Grid.SetRow(sidebarScroller, 0);
-        Grid.SetRow(_advAppsNewCategoryInput, 1);
-        Grid.SetRow(_advAppsAddCategoryBtn, 2);
-        sidebarGrid.Children.Add(sidebarScroller);
-        sidebarGrid.Children.Add(_advAppsNewCategoryInput);
-        sidebarGrid.Children.Add(_advAppsAddCategoryBtn);
+        Grid.SetColumn(_advAppsNewCategoryInput, 0);
+        Grid.SetColumn(_advAppsAddCategoryBtn, 1);
+        addCategoryRow.Children.Add(_advAppsNewCategoryInput);
+        addCategoryRow.Children.Add(_advAppsAddCategoryBtn);
 
-        var sidebar = new Border
-        {
-            Width = 140,
-            BorderThickness = new Thickness(0, 0, 1, 0),
-            Child = sidebarGrid,
-        };
-        sidebar.BindToken(Border.BackgroundProperty, "SurfaceSunkenBrush");
-        sidebar.BindToken(Border.BorderBrushProperty, "BorderDefaultBrush");
-
-        // ── Right pane: placeholder ("← Select a category") OR scoped picker
-        _advAppsRightPanePlaceholder = new TextBlock
-        {
-            Text = Localization.AdvAppsSelectCategoryHint,
-            FontSize = 11,
-            FontStyle = FontStyle.Italic,
-            Opacity = 0.5,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextAlignment = TextAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
-        };
-        _advAppsRightPanePlaceholder.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
-
+        // ── Scope body (mode picker + filters + apps list + Save) ────
+        var scopeBody = BuildAppPickerScopeBody();
         _advAppsRightPaneScopeContainer = new Border
         {
-            Child = BuildAppPickerScopeBody(),
-            IsVisible = false,
+            Child = scopeBody,
+            IsVisible = true,
         };
 
-        var rightPane = new Grid();
-        rightPane.Children.Add(_advAppsRightPaneScopeContainer);
-        rightPane.Children.Add(_advAppsRightPanePlaceholder);
+        // Field still declared but unused in mobile layout. Pre-fix the
+        // right pane could swap to a "← Select a category" placeholder;
+        // mobile design defaults the active category to CustomCatchAll
+        // (all apps), so the apps list is always populated.
+        _advAppsRightPanePlaceholder = null;
 
-        // ── Shell: 140dp sidebar | * right pane
-        var shell = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-        };
-        Grid.SetColumn(sidebar, 0);
-        Grid.SetColumn(rightPane, 1);
-        shell.Children.Add(sidebar);
-        shell.Children.Add(rightPane);
+        var dock = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(chipScroller, Dock.Top);
+        DockPanel.SetDock(addCategoryRow, Dock.Top);
+        dock.Children.Add(chipScroller);
+        dock.Children.Add(addCategoryRow);
+        dock.Children.Add(_advAppsRightPaneScopeContainer);
 
-        var body = new Border { Child = shell };
+        var body = new Border { Child = dock };
         body.BindToken(Border.BackgroundProperty, "SurfaceAppBrush");
         return body;
     }
@@ -5973,6 +5986,7 @@ public partial class AndroidApp : Avalonia.Application
             IsChecked = _appPickerSystemAppsVisible,
             MinHeight = 0,
             Padding = new Thickness(4, 0),
+            VerticalAlignment = VerticalAlignment.Center,
         };
         _appPickerSystemToggle.IsCheckedChanged += OnAppPickerSystemToggleChanged;
 
@@ -5985,6 +5999,20 @@ public partial class AndroidApp : Avalonia.Application
         };
         _appPickerCount.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
+        // Bug #2 (2026-05-11) — "Showing N apps" hint sits next to the
+        // system-toggle so users can verify the enumeration is producing
+        // a sane count. Pre-fix the user reported apps missing on Xiaomi
+        // MIUI; the launcher-activities fallback in AppListLoader plus
+        // this visible count makes the regression detectable at a glance.
+        _appPickerShowingCount = new TextBlock
+        {
+            Text = string.Format(Localization.PerAppShowingCount, 0),
+            FontSize = 10,
+            FontFamily = new FontFamily("Consolas, SF Mono, Cascadia Code, Ubuntu Mono, monospace"),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _appPickerShowingCount.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+
         var filterRow = new Grid
         {
             ColumnDefinitions = new ColumnDefinitions("*,Auto"),
@@ -5996,12 +6024,17 @@ public partial class AndroidApp : Avalonia.Application
         filterRow.Children.Add(_appPickerSearch);
         filterRow.Children.Add(_appPickerCount);
 
-        var togglesRow = new StackPanel
+        // Compact row: [☐ System apps]   spacer   Showing: N
+        var togglesRow = new Grid
         {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            ColumnSpacing = 8,
             Margin = new Thickness(8, 4, 8, 4),
-            Children = { _appPickerSystemToggle },
         };
+        Grid.SetColumn(_appPickerSystemToggle, 0);
+        Grid.SetColumn(_appPickerShowingCount, 2);
+        togglesRow.Children.Add(_appPickerSystemToggle);
+        togglesRow.Children.Add(_appPickerShowingCount);
 
         _appPickerList = new ListBox
         {
@@ -6025,17 +6058,24 @@ public partial class AndroidApp : Avalonia.Application
         _appPickerSaveBtn.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentOnSolidBrush");
         _appPickerSaveBtn.Click += OnAppPickerSaveClicked;
 
+        // Bug #2 (2026-05-11) — mobile-first dock order: search-first at
+        // the top (most-used on phone, thumb-reach), then include/exclude
+        // mode + hint, then the system-toggle / showing-count row, then
+        // the apps list (fills), and a sticky Save button at the bottom.
+        // Pre-fix put mode label + buttons above search; on phone that
+        // wasted prime thumb-reach real estate on a setting users rarely
+        // change after first run.
         var dock = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(filterRow, Dock.Top);
         DockPanel.SetDock(_appPickerModeLabel!, Dock.Top);
         DockPanel.SetDock(modeRow, Dock.Top);
         DockPanel.SetDock(_appPickerModeHint!, Dock.Top);
-        DockPanel.SetDock(filterRow, Dock.Top);
         DockPanel.SetDock(togglesRow, Dock.Top);
         DockPanel.SetDock(_appPickerSaveBtn!, Dock.Bottom);
+        dock.Children.Add(filterRow);
         dock.Children.Add(_appPickerModeLabel!);
         dock.Children.Add(modeRow);
         dock.Children.Add(_appPickerModeHint!);
-        dock.Children.Add(filterRow);
         dock.Children.Add(togglesRow);
         dock.Children.Add(_appPickerSaveBtn!);
         dock.Children.Add(_appPickerList!);
@@ -6079,9 +6119,15 @@ public partial class AndroidApp : Avalonia.Application
         StyleActiveCategoryRow();
     }
 
-    /// <summary>One row in the category sidebar — name on the left, optional
-    /// count on the right. Whole row is tappable; active row repaints via
-    /// <see cref="StyleActiveCategoryRow"/>.</summary>
+    /// <summary>One chip in the horizontal category strip — name + optional
+    /// count rendered inline as a compact pill. Whole chip is tappable; active
+    /// chip repaints via <see cref="StyleActiveCategoryRow"/> with an accent
+    /// border and tinted background.
+    /// <para>Bug #2 (2026-05-11): replaced the vertical sidebar row layout
+    /// with a compact horizontal pill (Material filter-chip pattern). The
+    /// pre-fix row spanned the full sidebar width (~120dp); chip width is now
+    /// driven by content + 10/6 padding so 6-8 chips fit in a single 1080px
+    /// row with horizontal scroll for the rest.</para></summary>
     private Border MakeAppsCategoryRow(string id, string displayName, bool isCustom)
     {
         var nameTb = new TextBlock
@@ -6100,32 +6146,26 @@ public partial class AndroidApp : Avalonia.Application
             FontSize = 9,
             FontFamily = new FontFamily("Consolas, SF Mono, Cascadia Code, Ubuntu Mono, monospace"),
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(4, 0, 4, 0),
+            Margin = new Thickness(4, 0, 0, 0),
         };
         countTb.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
-        var grid = new Grid
+        var inner = new StackPanel
         {
-            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            Margin = new Thickness(0, 4, 0, 4),
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { nameTb, countTb },
         };
-        Grid.SetColumn(nameTb, 0);
-        Grid.SetColumn(countTb, 1);
-        grid.Children.Add(nameTb);
-        grid.Children.Add(countTb);
 
-        // POL-1: padding tightened to desktop ApplicationsPage cat-list
-        // pattern — `ListBoxItem Padding="4,0" MinHeight=0` + inner Grid
-        // Margin="0,4,0,4". Pre-POL-1 used 8,4 + 2,0 which made each row
-        // taller than the equivalent desktop list item.
         var border = new Border
         {
-            Padding = new Thickness(4, 0),
-            CornerRadius = new CornerRadius(GetRadius("RadiusXs")),
+            Padding = new Thickness(10, 6),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             Background = Brushes.Transparent,
-            Margin = new Thickness(0),
-            Child = grid,
+            BorderThickness = new Thickness(1),
+            Child = inner,
         };
+        border.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
         border.PointerPressed += (_, _) => SetActiveAppCategory(id);
 
         _advAppsCategoryRowMap[id] = border;
@@ -6186,15 +6226,16 @@ public partial class AndroidApp : Avalonia.Application
         return hits;
     }
 
-    /// <summary>Repaint the active row to match desktop's
-    /// `ListBox.cat-list ListBoxItem:selected` rule from
-    /// ApplicationsPage.axaml lines 41-50: white-card background
-    /// (`SurfaceBaseBrush`), arctic foreground, Bold name. POL-1: pre-fix
-    /// used `AccentBgSubtleBrush` background which read as a tinted pill
-    /// instead of the desktop's lifted-card affordance.</summary>
+    /// <summary>Repaint the active chip with an accent border + tinted
+    /// background. Bug #2 (2026-05-11): pre-fix this used the desktop's
+    /// "lifted-card" affordance (SurfaceBaseBrush) which was illegible on a
+    /// horizontal chip strip — chips need a visible border state, not a
+    /// background lift. Now uses BorderAccentBrush + AccentBgSubtleBrush.</summary>
     private void StyleActiveCategoryRow()
     {
-        var activeBg = GetBrush("SurfaceBaseBrush");
+        var activeBg = GetBrush("AccentBgSubtleBrush");
+        var activeBorder = GetBrush("BorderAccentBrush");
+        var inactiveBorder = GetBrush("BorderSubtleBrush");
         var accentFg = GetBrush("AccentFgBrush");
         var defaultName = GetBrush("TextSecondaryBrush");
         var defaultCount = GetBrush("TextMutedBrush");
@@ -6203,6 +6244,7 @@ public partial class AndroidApp : Avalonia.Application
         {
             var isActive = string.Equals(kv.Key, _advAppsActiveCategoryId, System.StringComparison.OrdinalIgnoreCase);
             kv.Value.Background = isActive ? activeBg : Brushes.Transparent;
+            kv.Value.BorderBrush = isActive ? activeBorder : inactiveBorder;
             if (_advAppsCategoryNameMap.TryGetValue(kv.Key, out var nameTb))
             {
                 nameTb.Foreground = isActive ? accentFg : defaultName;
@@ -6213,19 +6255,17 @@ public partial class AndroidApp : Avalonia.Application
         }
     }
 
-    /// <summary>Switch active category. Empty / null collapses the right
-    /// pane back to the placeholder. Persists via
+    /// <summary>Switch active category. Persists via
     /// <see cref="AndroidStorage.SetApplicationsActiveCategory"/> so the next
-    /// open lands on the same category.</summary>
+    /// open lands on the same category.
+    /// <para>Bug #2 (2026-05-11) — mobile redesign dropped the placeholder
+    /// surface (the pre-fix 2-pane layout swapped placeholder ↔ scope body
+    /// when id was empty). The scope body is now the only content surface,
+    /// always visible; chip strip drives the filter.</para></summary>
     private void SetActiveAppCategory(string? id)
     {
         _advAppsActiveCategoryId = id;
         AndroidStorage.SetApplicationsActiveCategory(id);
-        var hasActive = !string.IsNullOrEmpty(id);
-        if (_advAppsRightPanePlaceholder is not null)
-            _advAppsRightPanePlaceholder.IsVisible = !hasActive;
-        if (_advAppsRightPaneScopeContainer is not null)
-            _advAppsRightPaneScopeContainer.IsVisible = hasActive;
         StyleActiveCategoryRow();
         ApplyAppPickerFilter();
     }
