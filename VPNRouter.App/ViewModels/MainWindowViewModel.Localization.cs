@@ -44,6 +44,19 @@ public partial class MainWindowViewModel
     // disable, see ApplicationsPage.axaml).
     public string L_AppsFullTunnelBanner => Strings.AppsFullTunnelBanner;
     public string L_AppsFullTunnelBannerAction => Strings.AppsFullTunnelBannerAction;
+    // v2.32 — Apps Include/Exclude 2-mode segmented toggle.
+    public string L_AppsModeSectionTitle => Strings.AppsModeSectionTitle;
+    public string L_AppsModeInclude => Strings.AppsModeInclude;
+    public string L_AppsModeExclude => Strings.AppsModeExclude;
+    public string L_AppsModeIncludeHint => Strings.AppsModeIncludeHint;
+    public string L_AppsModeExcludeHint => Strings.AppsModeExcludeHint;
+    // v2.32 — ServersPage orphan-entry marker (F-C).
+    public string L_ServersOrphanBadge => Strings.ServersOrphanBadge;
+    public string L_ServersOrphanTooltip => Strings.ServersOrphanTooltip;
+    // v2.32 — Auto-failover (F-E) UI status surfacing.
+    public string L_AutoFailoverProbing => Strings.AutoFailoverProbing;
+    public string L_AutoFailoverExhausted => Strings.AutoFailoverExhausted;
+    public string L_AutoFailoverCustomMode => Strings.AutoFailoverCustomMode;
     // v2.30.0 — Custom rules engine (direct/proxy/block).
     public string L_CustomRulesTitle => Strings.CustomRulesTitle;
     public string L_CustomRulesDescription => Strings.CustomRulesDescription;

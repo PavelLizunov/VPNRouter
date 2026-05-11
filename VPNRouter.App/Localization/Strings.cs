@@ -885,6 +885,49 @@ public static class Strings
         ? "Переключить на Раздельный туннель"
         : "Switch to split tunnel";
 
+    // v2.32 — Apps Include/Exclude 2-mode segmented toggle.
+    // User feedback: "сделам 2 модм exclude и include". Default mode
+    // (Include) = behaviour unchanged (selected apps → VPN, rest direct).
+    // Exclude = inverse: selected apps → direct, rest → VPN.
+    public static string AppsModeSectionTitle => Ru
+        ? "Режим маршрутизации"
+        : "Routing mode";
+    public static string AppsModeInclude => Ru
+        ? "Только выбранные → VPN"
+        : "Selected only → VPN";
+    public static string AppsModeExclude => Ru
+        ? "Кроме выбранных → VPN"
+        : "All except selected → VPN";
+    public static string AppsModeIncludeHint => Ru
+        ? "Отмеченные приложения идут через VPN, остальные — напрямую (обычный split-tunnel)."
+        : "Checked apps go through VPN; everything else stays direct (regular split-tunnel).";
+    public static string AppsModeExcludeHint => Ru
+        ? "Отмеченные приложения идут напрямую (мимо VPN), остальной трафик идёт через VPN."
+        : "Checked apps bypass VPN (direct); everything else goes through VPN.";
+
+    // v2.32 — ServersPage marker for orphan vless.servers entries that
+    // aren't in any active subscription. After F-A/B fixes the migrator
+    // strips these on load, but for diagnostic clarity we still flag
+    // any survivors in the UI.
+    public static string ServersOrphanBadge => Ru ? "Не из подписки" : "Not in subscription";
+    public static string ServersOrphanTooltip => Ru
+        ? "Этот сервер не входит в активные подписки — старая ручная запись. Если он вам не нужен, удалите его."
+        : "This server isn't part of any active subscription — it's a legacy manual entry. If you don't need it, remove it.";
+
+    // v2.32 — F-E auto-failover surfacing.
+    public static string AutoFailoverProbing => Ru
+        ? "Проверяем подключение..."
+        : "Probing connection...";
+    public static string AutoFailoverSwitching(int n, int total, string serverName) => Ru
+        ? $"Сервер недоступен. Переключаемся ({n}/{total}) → {serverName}"
+        : $"Server unreachable. Switching ({n}/{total}) → {serverName}";
+    public static string AutoFailoverExhausted => Ru
+        ? "Все серверы подписки недоступны. Проверьте сеть или подписку."
+        : "All subscription servers are unreachable. Check network or subscription.";
+    public static string AutoFailoverCustomMode => Ru
+        ? "Кастомный конфиг не отвечает. Проверьте JSON-конфигурацию."
+        : "Custom config isn't responding. Check JSON configuration.";
+
     // v2.29.0 — Custom direct rules (Network → Routing → expander).
     // Mac tester request 2026-04-29: «хотелось бы расширенную настройку
     // конфига, у меня есть кейсы с wireguard где мне хотелось бы самому
