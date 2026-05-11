@@ -149,11 +149,15 @@ Config server**.
 - **Это DEFCT-005-Desktop equivalent** — на Android мы уже фиксили
   placeholder-leak в `MainActivity.cs` (commit 5a771a6), на desktop та же
   proблема в Custom Config Mode pathway.
-- **Что нужно для подтверждения**:
+- **Что нужно для подтверждения** (⏸ **HOLD — ждём пока stas вернётся**, 2026-05-11):
   - `%ProgramData%\VPNRouter\config\current.json` от stas — увидеть точное
     содержимое outbound[proxy].
   - `%ProgramData%\VPNRouter\config.yaml` от stas — verify
     `app.config_mode = "custom"` + `app.custom_config = ...path...`.
+  - Когда stas снова на связи → запросить эти 2 файла через user'а →
+    подтвердить или опровергнуть гипотезу → spawn fix-chip с 3 defense-
+    in-depth изменениями (CustomConfigInjector tag policy +
+    LeakProtection check + Simple-page outbound display).
 - **Fix paths**:
   - (Defense-in-depth) `CustomConfigInjector` НЕ должен silently тегать
     outbound как "proxy" если route rules уже ссылаются на subscription
@@ -171,6 +175,62 @@ Config server**.
   и тихо убивает) или missing dependency.
 - **Fix**: вывести более ясное сообщение и предложить добавить
   `%ProgramData%\VPNRouter\zapret\` в whitelist AV.
+
+**Bug-r9-I** (NEW from user report 2026-05-11) — **Apps tab настройки не
+persist'ятся через перезагрузку Windows**.
+
+- User quote (verbatim):
+  > "Привет! Слушай, а есть какая то отдельная кнопка для сохранения
+  > настроек? я прост каждый раз когда захожу отправляю фаерфокс в
+  > исключения потому что там ру сайты, а когда перезапускаю винду
+  > галочка на нем опять стоит"
+
+- Симптом (desktop): user в Applications tab переводит Firefox в
+  **Exclude** (через VPN не идёт — чтобы RU сайты работали напрямую).
+  После reboot'а Windows checkbox опять стоит в "Include" (через VPN).
+  Изменение **исчезает** при перезапуске винды.
+
+- Возможные root causes:
+  1. **Auto-save не срабатывает** на toggle — нужен explicit Save
+     button. User спрашивает "есть ли отдельная кнопка для сохранения"
+     — значит её точно не видит. Если на desktop нет Save bar (или
+     она спрятана), его toggle живёт только в-памяти до перезапуска.
+  2. **Service vs User app** запись idle race — если VPNRouter Service
+     стартует первым на boot и читает старый config.yaml, потом user-app
+     открывает Apps tab и user toggle'ит → но Service не реагирует, и
+     при следующем boot Service опять стартует с тем же старым config.
+  3. **Settings save в неправильное место**: per-user `%AppData%` вместо
+     `%ProgramData%` — если LocalSystem service пишет в `%ProgramData%`
+     но user-app читает/пишет в `%AppData%`, конфликт.
+  4. **Auto-start реверт**: Windows boot → VPNRouter starts → читает
+     дефолтный профиль → перекрывает user-кастомизации.
+
+- **Acceptance**:
+  - [ ] User добавляет Firefox в Exclude, перезагружает Windows, заходит
+        в Apps tab → Firefox по-прежнему в Exclude.
+  - [ ] Если auto-save не работает — добавить explicit "Save" bar.
+  - [ ] Если конфликт записи Service ↔ User-app — единый source of truth
+        в `%ProgramData%\VPNRouter\config.yaml` + проверка timestamp.
+
+- **Investigation steps**:
+  1. Воспроизвести: установить v2.32.0 stable, открыть Apps, toggle
+     Firefox → Exclude, посмотреть `config.yaml` (timestamp + содержимое).
+  2. Reboot Windows.
+  3. Открыть Apps снова — проверить state.
+  4. Если изменение есть в `config.yaml` но UI показывает Include →
+     проблема в load path UI.
+  5. Если изменения нет в `config.yaml` → save не сработал.
+  6. Проверить есть ли visible "Save" / Apply bar в десктопе.
+
+- **Surfaces**:
+  - `VPNRouter.App/ViewModels/MainWindowViewModel.cs`:`SaveSettings` —
+    desktop save path.
+  - `VPNRouter.App/Views/Pages/ApplicationsPage.axaml` — Apps tab UI.
+  - `VPNRouter.Core/SettingsLoader.cs` — read/write config.yaml.
+  - `VPNRouter.Service/` — service-mode auto-start read path.
+
+- **Severity**: P1 (high-frequency user pain — каждый reboot заново
+  настраивать; раздражает но не блокирует функционал).
 
 **Bug-r9-H** (NEW from log) — stale TUN после crash sing-box.
 - После crash'а на TUN init (Bug-r9-E), следующий старт sing-box тоже
