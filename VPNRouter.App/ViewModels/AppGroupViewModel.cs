@@ -7,6 +7,17 @@ namespace VPNRouter.App.ViewModels;
 /// <summary>
 /// ViewModel for a profile group in the Applications tab.
 /// Contains a list of apps that belong to this profile.
+///
+/// <para>v2.32.2 (AM-3, 2026-05-12): when the group-level master
+/// CheckBox is toggled, the cascade flips every app's
+/// <see cref="AppItemViewModel.IsChecked"/> — and since AppItem's
+/// IsChecked is now bridged to the active mode list
+/// (RoutingAppsInclude / RoutingAppsExclude), every app's write goes
+/// straight into the right list. The group-level checked state itself
+/// is NOT mode-aware; it represents "is this profile active" and is
+/// persisted into <see cref="Models.AppSettings.ActiveProfile"/> /
+/// <see cref="Models.CustomCategory.Enabled"/> regardless of routing
+/// mode.</para>
 /// </summary>
 public partial class AppGroupViewModel : ViewModelBase
 {
@@ -36,6 +47,13 @@ public partial class AppGroupViewModel : ViewModelBase
 
     partial void OnIsCheckedChanged(bool value)
     {
+        // Cascade to every app in the group. Each AppItem.IsChecked
+        // setter is now mode-aware (AM-3) — it writes to the active
+        // RoutingAppsInclude / RoutingAppsExclude list via the bridge
+        // callbacks wired by MainWindowViewModel.LoadApps. N writes in
+        // a row is acceptable: SaveSettings is sub-millisecond and the
+        // host VM debounces nothing here, matching the legacy cascade
+        // behaviour that Bug-r9-I's auto-save piggybacks on.
         foreach (var app in Apps)
             app.IsChecked = value;
     }
