@@ -17,8 +17,15 @@ public class AppSettings
     /// cleanup pass for users with shadow-override entries from a
     /// pre-subscription manual paste. See
     /// <c>plans/r10-stas-confirmed-and-apps-2mode.md</c> §1 Fix-B / §2.</para>
+    ///
+    /// <para>v4 bump (2026-05-12, W-2): wgturn-cli binary moved from
+    /// shared <c>bin/</c> into dedicated <c>wgturn/bin/</c> subtree
+    /// (parallel to <c>zapret/</c>, <c>tg-proxy/</c>) ahead of the W-1
+    /// on-demand download flow. Migration moves any pre-existing
+    /// binary + version stamp out of the legacy location. See
+    /// <c>plans/wgturn-on-demand-download.md</c> §3 + §5.</para>
     /// </summary>
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     [YamlMember(Alias = "schema_version")]
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;

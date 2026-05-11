@@ -46,11 +46,17 @@ public static class AppPaths
     public static string SingBoxExePath => Path.Combine(BinDir,
         OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
 
-    // r9 Phase 2 — wgturn-core emergency fallback channel binary +
-    // dedicated log. Phase 1 (separate chip) drops the binary into
-    // BinDir at install time; this is just the path resolver.
-    public static string WgturnCliExePath => Path.Combine(BinDir,
+    // v2.32.2 W-2 (2026-05-12) — wgturn-cli on-demand download via
+    // WgturnUpdater. Moved out of shared bin/ into dedicated wgturn/
+    // directory (parallel to zapret/, tg-proxy/). v2.32.1 had path in
+    // shared bin/ — see SettingsMigrator.Migrate_3_to_4 for one-shot
+    // move of any pre-existing binary.
+    public static string WgturnDir => Path.Combine(DataDir, "wgturn");
+    public static string WgturnBinDir => Path.Combine(WgturnDir, "bin");
+    public static string WgturnCliExePath => Path.Combine(WgturnBinDir,
         OperatingSystem.IsWindows() ? "wgturn-cli.exe" : "wgturn-cli");
+    public static string WgturnVersionPath => Path.Combine(WgturnDir, "version.txt");
+    public static string WgturnVariantPath => Path.Combine(WgturnDir, "variant.txt");
     public static string WgturnCliLogPath => Path.Combine(LogsDir, "wgturn-cli.log");
 
     /// <summary>Ensure all required directories exist.</summary>
@@ -60,6 +66,7 @@ public static class AppPaths
         Directory.CreateDirectory(LogsDir);
         Directory.CreateDirectory(CacheDir);
         Directory.CreateDirectory(BinDir);
+        Directory.CreateDirectory(WgturnBinDir);
         Directory.CreateDirectory(ProfilesDir);
         Directory.CreateDirectory(GeoDir);
     }
