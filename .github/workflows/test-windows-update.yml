@@ -82,8 +82,12 @@ jobs:
           # Reading the constant directly avoids that whole class of mismatch
           # bugs. The dispatch input is preserved for future extensions but
           # not consumed today.
+          # v2.32.1-r2: AppVersion switched const string -> static readonly
+          # string (see AppVersion.cs comments for the verify-release-
+          # integrity alignment fix). Regex widened to substring 'string
+          # Version =' so it matches both modifier shapes.
           $line = Get-Content VPNRouter.Core/AppVersion.cs |
-                  Select-String 'public const string Version =' |
+                  Select-String 'string Version =' |
                   Select-Object -First 1
           if (-not $line) { throw "Could not find AppVersion.Version in VPNRouter.Core/AppVersion.cs" }
           if ($line -notmatch '"([^"]+)"') { throw "Could not parse AppVersion line: $line" }
