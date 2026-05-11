@@ -156,11 +156,24 @@ jobs:
           # may coexist; we only assert the EXPECTED one is present, not
           # that it's the only match.
           cat > /tmp/extract_versions.py <<'PY'
+          # v2.32.1-r2: scan UTF-16-LE strings at BOTH byte alignments.
+          # CLR's #US heap stores strings 2-byte aligned WITHIN the heap,
+          # but the heap's start offset in the PE file is not guaranteed
+          # to be word-aligned in the byte stream — so a literal can land
+          # at an odd file offset. Decoding the whole file as utf-16-le
+          # from offset 0 only catches even-aligned literals; decoding
+          # from offset 1 catches odd-aligned ones. Concatenating both
+          # decodes lets us find any LE-encoded string regardless of
+          # alignment. (We also scan UTF-16-BE as a defensive measure
+          # though .NET PE binaries should never produce BE literals.)
           import re, sys
           data = open(sys.argv[1], 'rb').read()
-          text = data.decode('utf-16-le', errors='ignore')
+          text_le_0 = data.decode('utf-16-le', errors='ignore')
+          text_le_1 = data[1:].decode('utf-16-le', errors='ignore')
+          text_be_0 = data.decode('utf-16-be', errors='ignore')
+          combined = text_le_0 + '\0' + text_le_1 + '\0' + text_be_0
           seen = []
-          for m in re.findall(r'2\.\d+\.\d+(?:-r\d+)?', text):
+          for m in re.findall(r'2\.\d+\.\d+(?:-r\d+)?', combined):
               if m not in seen:
                   seen.append(m)
           for s in seen:
