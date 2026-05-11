@@ -264,6 +264,36 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
+    /// v2.32.1-r5 (Bug-r10-B) — session-scoped opt-out from
+    /// <see cref="ConflictingVpnDetector"/>. Set by
+    /// <see cref="IgnoreVpnConflictAndConnectAsyncCommand"/>; consumed
+    /// (and reset to false) by the next <see cref="ToggleConnectionAsync"/>
+    /// in its single call to <see cref="VpnEngine.StartAsync"/>. Session-only
+    /// — следующий Connect снова detect'ит.
+    /// </summary>
+    private bool _skipConflictCheckOnce;
+
+    /// <summary>
+    /// v2.32.1-r5 (Bug-r10-B) — «Игнорировать» button. Bypasses
+    /// ConflictingVpnDetector on THIS Connect (session-scoped), clears
+    /// banner, retries Connect. Use case: AmneziaVPN.exe sitting idle
+    /// in tray (process running but wintun not held — false positive).
+    /// Если юзер ошибся — sing-box упадёт с оригинальной wintun ошибкой
+    /// в downstream catch'е, recoverable.
+    /// </summary>
+    [RelayCommand]
+    private async Task IgnoreVpnConflictAndConnectAsync()
+    {
+        _skipConflictCheckOnce = true;
+        ConflictingVpnWarningText = string.Empty;
+        _logger.Information("[VM] User opted to ignore VPN conflict — retrying Connect with bypass");
+        if (!IsConnected && !IsConnecting)
+        {
+            await ToggleConnectionAsync();
+        }
+    }
+
+    /// <summary>
     /// v2.32.1-r4 (Bug-r10-A) — user-reported pain (2026-05-11): на
     /// основной Win машине app требовал убить AmneziaVPN, но кнопки
     /// kill не было — пришлось через Task Manager. Этот command
@@ -3964,7 +3994,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             try
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
+                // v2.32.1-r5 (Bug-r10-B): session-scoped opt-out from
+                // ConflictingVpnDetector. _skipConflictCheckOnce is set
+                // by IgnoreVpnConflictCommand. Consumed exactly once —
+                // resets immediately after so the NEXT Connect attempt
+                // re-detects.
+                var skipConflictCheck = _skipConflictCheckOnce;
+                _skipConflictCheckOnce = false;
+                await Task.Run(() => _engine.StartAsync(_settings, cts.Token, skipConflictCheck), cts.Token);
 
                 // v2.20.6: poll _engine.IsRunning up to 10 seconds, on a
                 // thread-pool thread, WITHOUT the 30 s StartAsync CTS.

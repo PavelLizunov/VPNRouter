@@ -555,6 +555,9 @@ public partial class MainWindowViewModel
     // v2.32.1-r4 (Bug-r10-A) — Kill conflicting VPN button.
     public string L_ConflictKillButton => Strings.ConflictKillButton;
     public string L_ConflictKillTooltip => Strings.ConflictKillTooltip;
+    // v2.32.1-r5 (Bug-r10-B) — Ignore conflict button.
+    public string L_ConflictIgnoreButton => Strings.ConflictIgnoreButton;
+    public string L_ConflictIgnoreTooltip => Strings.ConflictIgnoreTooltip;
     public string L_ZapretAvBlockCopyPath => Strings.ZapretAvBlockCopyPath;
 
     /// <summary>

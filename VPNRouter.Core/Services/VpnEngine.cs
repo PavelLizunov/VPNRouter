@@ -117,7 +117,18 @@ public class VpnEngine : IDisposable
     /// Checks CancellationToken after each major step to allow clean abort
     /// when the service receives a stop signal during startup.
     /// </summary>
-    public async Task StartAsync(AppSettings settings, CancellationToken ct = default)
+    /// <param name="skipVpnConflictCheck">
+    /// v2.32.1-r5 (Bug-r10-B): when true, skips the
+    /// <see cref="ConflictingVpnDetector"/> pre-flight check. UI surfaces
+    /// an «Игнорировать» button alongside «Завершить» in the conflict
+    /// banner — clicking it sets a session-scoped flag the VM passes here.
+    /// Use case: AmneziaVPN GUI client sitting idle in tray (process running
+    /// but wintun not held), or multi-adapter setups where 2 VPNs coexist.
+    /// If the user is wrong, sing-box's own adapter-creation will still fail
+    /// downstream with the wintun «file already exists» error — recoverable,
+    /// not destructive.
+    /// </param>
+    public async Task StartAsync(AppSettings settings, CancellationToken ct = default, bool skipVpnConflictCheck = false)
     {
         // 0. Ensure required directories exist
         AppPaths.EnsureDirectories();
@@ -129,17 +140,25 @@ public class VpnEngine : IDisposable
         // already seen a "Connecting…" spinner — leaving them with no
         // actionable hint. Throwing ConflictingVpnException here lets
         // the App layer render a banner naming the specific process.
-        var conflicts = ConflictingVpnDetector.DetectConflictingVpnProcesses(_logger);
-        if (conflicts.Count > 0)
+        // r5 adds session-scoped opt-out via skipVpnConflictCheck.
+        if (!skipVpnConflictCheck)
         {
-            var first = conflicts[0];
-            // Message is plain English fallback — App catches the typed
-            // exception and substitutes localized copy from Strings.cs.
-            throw new ConflictingVpnException(
-                conflicts,
-                $"Another VPN client is running: {first.ProcessName} (PID {first.Pid}). " +
-                $"Only one VPN can hold the TUN adapter at a time. " +
-                $"Stop {first.ProcessName} before launching VPNRouter.");
+            var conflicts = ConflictingVpnDetector.DetectConflictingVpnProcesses(_logger);
+            if (conflicts.Count > 0)
+            {
+                var first = conflicts[0];
+                // Message is plain English fallback — App catches the typed
+                // exception and substitutes localized copy from Strings.cs.
+                throw new ConflictingVpnException(
+                    conflicts,
+                    $"Another VPN client is running: {first.ProcessName} (PID {first.Pid}). " +
+                    $"Only one VPN can hold the TUN adapter at a time. " +
+                    $"Stop {first.ProcessName} before launching VPNRouter.");
+            }
+        }
+        else
+        {
+            _logger?.Information("[VpnEngine] Skipping conflicting-VPN pre-flight check (user opt-in)");
         }
 
         // 0a. Flush DNS cache to prevent leakage of pre-VPN resolved entries

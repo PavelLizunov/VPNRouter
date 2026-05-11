@@ -271,15 +271,11 @@
                     BorderBrush="{DynamicResource DangerBorderBrush}"
                     BorderThickness="0,0,0,1"
                     Padding="12,8">
-                <!-- v2.32.1-r4 (Bug-r10-A) — добавлена кнопка «Завершить»
-                     (Kill) между Refresh и ✕. User report: на основной Win
-                     машине app требовал убить AmneziaVPN перед запуском,
-                     но кнопки убить через само приложение не было — юзер
-                     искал процесс в Task Manager и убивал там. Теперь
-                     можно одним кликом из banner. Если kill fail
-                     (protected process / нет admin прав) — сообщение
-                     меняется на partial-failure с подсказкой. -->
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8">
+                <!-- v2.32.1-r4 (Bug-r10-A): kill button.
+                     v2.32.1-r5 (Bug-r10-B): добавлена «Игнорировать»
+                     для session-scoped opt-out (false positive case
+                     когда AmneziaVPN.exe в трее не держит wintun). -->
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
                     <TextBlock Grid.Column="0"
                                Text="⛔"
                                FontSize="14"
@@ -307,6 +303,16 @@
                             Foreground="White"
                             BorderThickness="0"/>
                     <Button Grid.Column="3"
+                            Content="{Binding L_ConflictIgnoreButton}"
+                            Command="{Binding IgnoreVpnConflictAndConnectCommand}"
+                            ToolTip.Tip="{Binding L_ConflictIgnoreTooltip}"
+                            Padding="10,3" MinHeight="0" FontSize="11"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource DangerBorderBrush}"
+                            BorderThickness="1"
+                            Foreground="{DynamicResource DangerFgBrush}"/>
+                    <Button Grid.Column="4"
                             Content="{Binding L_ConflictRefreshButton}"
                             Command="{Binding RefreshConflictingVpnCommand}"
                             Padding="8,2" MinHeight="0" FontSize="11"
@@ -314,7 +320,7 @@
                             BorderBrush="{DynamicResource DangerBorderBrush}"
                             BorderThickness="1"
                             Foreground="{DynamicResource DangerFgBrush}"/>
-                    <Button Grid.Column="4"
+                    <Button Grid.Column="5"
                             Content="✕"
                             Command="{Binding DismissConflictingVpnWarningCommand}"
                             Padding="8,2" MinHeight="0" FontSize="11"

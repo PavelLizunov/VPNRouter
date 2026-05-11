@@ -1508,6 +1508,20 @@ public static class Strings
         : $"Killed: {killed}. Failed: {failed}. " +
           "Run VPNRouter as administrator, or close the process manually via Task Manager.";
 
+    // ── v2.32.1-r5 (Bug-r10-B) — Ignore conflict button ──
+    // Session-scoped opt-out: bypass ConflictingVpnDetector on next
+    // Connect attempt only. Use case: AmneziaVPN.exe sitting idle in
+    // tray (process running but не держит wintun → false positive),
+    // multi-adapter setups. Recoverable: если юзер ошибся, sing-box
+    // упадёт с оригинальной wintun ошибкой downstream.
+    public static string ConflictIgnoreButton => Ru ? "Игнорировать" : "Ignore";
+
+    public static string ConflictIgnoreTooltip => Ru
+        ? "Игнорировать предупреждение и попытаться подключиться. " +
+          "Полезно если другой VPN запущен, но не подключён."
+        : "Ignore the warning and try to connect anyway. " +
+          "Useful when the other VPN is running but not connected.";
+
     // ── Bug-r9-G (2026-05-11) — Zapret AV-block toast ──
     // ZapretManager fires ImmediateExitDetected when winws.exe exits
     // within < 2 s with non-zero code (almost always Windows Defender
