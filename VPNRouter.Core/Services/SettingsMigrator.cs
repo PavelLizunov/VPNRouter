@@ -38,6 +38,7 @@ public static class SettingsMigrator
                 0 => Migrate_0_to_1(settings),
                 1 => Migrate_1_to_2(settings, logger),
                 2 => Migrate_2_to_3(settings, logger),
+                3 => Migrate_3_to_4(settings, logger),
                 _ => throw new InvalidOperationException(
                     $"No SettingsMigrator step defined for schema v{v} -> v{v + 1}. " +
                     $"This means the config file schema is newer than the running app — " +
@@ -298,6 +299,86 @@ public static class SettingsMigrator
 
         // F-B: legacy vless.servers cleanup. Idempotent.
         CleanupOrphanVlessServers(s, logger);
+
+        return s;
+    }
+
+    /// <summary>
+    /// v2.32.2 (W-2, 2026-05-12): wgturn-cli binary moved from the
+    /// shared <c>bin/</c> directory into a dedicated <c>wgturn/bin/</c>
+    /// subtree (parallel to <c>zapret/</c>, <c>tg-proxy/</c>) ahead of
+    /// the W-1 on-demand download flow. v2.32.1 was the first release
+    /// to bundle <c>wgturn-cli.exe</c> in the shared <c>bin/</c>; any
+    /// pre-existing binary + version stamp must be relocated so the
+    /// new <see cref="AppPaths.WgturnCliExePath"/> resolves to a real
+    /// file on first launch after upgrade.
+    ///
+    /// <para>Best-effort + idempotent — every IO operation is wrapped
+    /// in <c>try/catch</c> so a locked / missing source never throws
+    /// out of the migrator (we tolerate a stale legacy binary; the
+    /// W-1 downloader will (re)fetch into the new location if it's
+    /// missing). Re-running the step on already-migrated state is a
+    /// no-op because the source files no longer exist.</para>
+    ///
+    /// <para>No yaml schema changes — only on-disk layout. Bumping
+    /// the schema version is the trigger for the one-shot move; the
+    /// settings object itself is returned unchanged.</para>
+    /// </summary>
+    private static AppSettings Migrate_3_to_4(AppSettings s, ILogger? logger)
+    {
+        // 1. Relocate legacy bin/wgturn-cli[.exe] -> wgturn/bin/wgturn-cli[.exe]
+        try
+        {
+            var legacyExeName = OperatingSystem.IsWindows() ? "wgturn-cli.exe" : "wgturn-cli";
+            var legacyPath = Path.Combine(AppPaths.BinDir, legacyExeName);
+            var newPath = AppPaths.WgturnCliExePath;
+
+            if (File.Exists(legacyPath) && !File.Exists(newPath))
+            {
+                var newDir = Path.GetDirectoryName(newPath);
+                if (!string.IsNullOrEmpty(newDir))
+                    Directory.CreateDirectory(newDir);
+                File.Move(legacyPath, newPath);
+                logger?.Information(
+                    "[SettingsMigrator] v3->v4 (W-2): moved legacy wgturn-cli " +
+                    "from {Legacy} to {New}",
+                    legacyPath, newPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Best-effort — never block settings load on a migration IO
+            // hiccup. W-1 downloader will reseed on demand.
+            logger?.Warning(ex,
+                "[SettingsMigrator] v3->v4 (W-2): wgturn-cli binary relocation " +
+                "skipped due to IO error");
+        }
+
+        // 2. Relocate any pre-existing version stamp written by an
+        //    earlier hand-installed copy. Older bundles wrote
+        //    bin/wgturn-cli-version.txt next to the exe.
+        try
+        {
+            var legacyVer = Path.Combine(AppPaths.BinDir, "wgturn-cli-version.txt");
+            var newVer = AppPaths.WgturnVersionPath;
+            if (File.Exists(legacyVer) && !File.Exists(newVer))
+            {
+                var newDir = Path.GetDirectoryName(newVer);
+                if (!string.IsNullOrEmpty(newDir))
+                    Directory.CreateDirectory(newDir);
+                File.Move(legacyVer, newVer);
+                logger?.Information(
+                    "[SettingsMigrator] v3->v4 (W-2): moved legacy version stamp " +
+                    "from {Legacy} to {New}",
+                    legacyVer, newVer);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.Warning(ex,
+                "[SettingsMigrator] v3->v4 (W-2): wgturn-cli version stamp " +
+                "relocation skipped due to IO error");
+        }
 
         return s;
     }
