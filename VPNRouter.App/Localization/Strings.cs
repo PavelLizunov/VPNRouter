@@ -1563,7 +1563,16 @@ public static class Strings
 
     public static string EmergencyChannelConfigsLabel => Ru ? "Конфигурация:" : "Configuration:";
 
-    public static string EmergencyChannelAddConfig => Ru ? "+ Добавить" : "+ Add";
+    public static string EmergencyChannelAddConfig => Ru ? "Добавить конфигурацию" : "Add configuration";
+
+    // r10 r9+ (Bug-r10-I): inputs for the inline add-config form.
+    public static string EmergencyChannelAddConfigNameWatermark => Ru
+        ? "Имя (необязательно)"
+        : "Name (optional)";
+    public static string EmergencyChannelAddConfigUrlWatermark => Ru
+        ? "wgturn://..."
+        : "wgturn://...";
+    public static string EmergencyChannelAddConfigBtn => Ru ? "Добавить" : "Add";
 
     public static string EmergencyChannelVkLinkLabel => Ru ? "VK-ссылка:" : "VK link:";
 

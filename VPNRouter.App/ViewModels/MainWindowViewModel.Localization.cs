@@ -570,6 +570,10 @@ public partial class MainWindowViewModel
     public string L_EmergencyChannelInstallEmbedded => Strings.EmergencyChannelInstallEmbedded;
     public string L_EmergencyChannelConfigsLabel => Strings.EmergencyChannelConfigsLabel;
     public string L_EmergencyChannelAddConfig => Strings.EmergencyChannelAddConfig;
+    // r10 r9+ (Bug-r10-I): add-config form L_-getters
+    public string L_EmergencyChannelAddConfigNameWatermark => Strings.EmergencyChannelAddConfigNameWatermark;
+    public string L_EmergencyChannelAddConfigUrlWatermark => Strings.EmergencyChannelAddConfigUrlWatermark;
+    public string L_EmergencyChannelAddConfigBtn => Strings.EmergencyChannelAddConfigBtn;
     public string L_EmergencyChannelVkLinkLabel => Strings.EmergencyChannelVkLinkLabel;
     public string L_EmergencyChannelVkLinkHint => Strings.EmergencyChannelVkLinkHint;
     public string L_EmergencyChannelVkLinkWatermark => Strings.EmergencyChannelVkLinkWatermark;

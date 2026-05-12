@@ -100,6 +100,43 @@ public partial class MainWindowViewModel
     /// Drives the Connect command's payload (the URL portion).</summary>
     [ObservableProperty] private WgturnEntry? _selectedWgturnConfig;
 
+    /// <summary>
+    /// r10 r9+ (Bug-r10-I, brat 2026-05-12) — input field for adding
+    /// a new wgturn config to <see cref="WgturnConfigs"/>. Two-way bound
+    /// to a TextBox in the add-form. Empty until user pastes the
+    /// <c>wgturn://...</c> URL their operator gave them. Pre-r9+ there
+    /// was no input — the AddConfig command read from
+    /// <see cref="WgturnVkLink"/> as both URL AND VK link, which was
+    /// confusing UX (user couldn't add a config without misusing the
+    /// VK-link field).
+    /// </summary>
+    [ObservableProperty] private string _newWgturnConfigUrl = string.Empty;
+
+    /// <summary>Optional name for the new config. Auto-generated as
+    /// <c>Operator-NN</c> if left empty at Add time.</summary>
+    [ObservableProperty] private string _newWgturnConfigName = string.Empty;
+
+    /// <summary>True iff <see cref="NewWgturnConfigUrl"/> looks like a
+    /// valid wgturn:// URL — drives the Add button's IsEnabled binding
+    /// so users get immediate visual feedback before pressing.</summary>
+    public bool IsNewWgturnConfigUrlValid =>
+        !string.IsNullOrWhiteSpace(NewWgturnConfigUrl)
+        && NewWgturnConfigUrl.Trim().StartsWith("wgturn://", StringComparison.OrdinalIgnoreCase);
+
+    partial void OnNewWgturnConfigUrlChanged(string value)
+        => OnPropertyChanged(nameof(IsNewWgturnConfigUrlValid));
+
+    /// <summary>
+    /// r10 r9+ — hoisted engine field so <see cref="DisconnectWgturnAsync"/>
+    /// can actually call Stop on the same instance Connect started. Pre-r9+
+    /// the engine was local to ConnectWgturnAsync's using block — Disconnect
+    /// could only flip UI flags but the process was already alive in the
+    /// background (or just freshly killed by using-block dispose). Now
+    /// the field is non-null between Connect and Disconnect; Stop is
+    /// called explicitly on Disconnect.
+    /// </summary>
+    private EmergencyChannelEngine? _wgturnEngine;
+
     /// <summary>Status text displayed on the Connected-state card. Built
     /// from <see cref="IsWgturnConnecting"/> + <see cref="IsWgturnConnected"/>
     /// + <see cref="SelectedWgturnConfig"/>'s label.</summary>
@@ -321,28 +358,32 @@ public partial class MainWindowViewModel
         IsWgturnConnecting = true;
         try
         {
-            // The real engine wiring happens once W-1 + W-2 land — for
-            // now we instantiate locally so the lifecycle is testable.
-            // Engine + Manager classes are already in Core (Phase 2),
-            // so this call path actually works against the stub
-            // wgturn-cli check.
-            using var engine = new EmergencyChannelEngine(_logger);
-            engine.StateChanged += OnWgturnEngineStateChanged;
-            engine.ErrorOccurred += msg => _logger.Warning("[Wgturn] Engine error: {Msg}", msg);
+            // r10 r9+ (Bug-r10-I): hoist engine to field so Disconnect can
+            // actually Stop it. Dispose any leftover instance first
+            // (e.g. previous failed Connect, app force-close before
+            // clean Stop).
+            try { _wgturnEngine?.Dispose(); } catch { }
+            _wgturnEngine = new EmergencyChannelEngine(_logger);
+            _wgturnEngine.StateChanged += OnWgturnEngineStateChanged;
+            _wgturnEngine.ErrorOccurred += msg => _logger.Warning("[Wgturn] Engine error: {Msg}", msg);
 
-            await engine.StartAsync(cfg).ConfigureAwait(true);
-            WgturnPid = engine.Pid;
-            IsWgturnConnected = engine.State == EmergencyChannelState.Connected;
+            await _wgturnEngine.StartAsync(cfg).ConfigureAwait(true);
+            WgturnPid = _wgturnEngine.Pid;
+            IsWgturnConnected = _wgturnEngine.State == EmergencyChannelState.Connected;
         }
         catch (FileNotFoundException fnf)
         {
             _logger.Warning("[Wgturn] Connect failed — wgturn-cli missing: {Msg}", fnf.Message);
             IsWgturnConnected = false;
+            try { _wgturnEngine?.Dispose(); } catch { }
+            _wgturnEngine = null;
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "[Wgturn] Connect failed");
             IsWgturnConnected = false;
+            try { _wgturnEngine?.Dispose(); } catch { }
+            _wgturnEngine = null;
         }
         finally
         {
@@ -350,21 +391,36 @@ public partial class MainWindowViewModel
         }
     }
 
-    /// <summary>Stop the emergency channel. Engine is owned per-Connect
-    /// for now (Phase-2 scope) — Disconnect just flips the UI state
-    /// flags; the engine's Stop is invoked by its Dispose because the
-    /// using-block in <see cref="ConnectWgturnAsync"/> already closed.</summary>
+    /// <summary>Stop the emergency channel. r10 r9+ (Bug-r10-I) actually
+    /// calls Stop on the hoisted <see cref="_wgturnEngine"/> field set
+    /// during ConnectWgturnAsync. Pre-r9+ this just flipped UI flags
+    /// while the wgturn-cli process kept running (or was already dead
+    /// from the using-block in Connect). Idempotent — safe to call
+    /// when not connected.</summary>
     [RelayCommand]
-    private Task DisconnectWgturnAsync()
+    private async Task DisconnectWgturnAsync()
     {
-        // Phase-2 scope: the EmergencyChannelEngine instance is short-
-        // lived (created inside ConnectWgturnAsync, disposed when that
-        // method exits). Once W-1 / W-2 land we'll hoist it to a field
-        // and call Stop() here. Until then, just flip the UI state.
-        IsWgturnConnected = false;
-        IsWgturnConnecting = false;
-        WgturnPid = null;
-        return Task.CompletedTask;
+        try
+        {
+            var engine = _wgturnEngine;
+            if (engine != null)
+            {
+                _logger.Information("[Wgturn] Disconnect: stopping engine PID {Pid}", engine.Pid);
+                await Task.Run(() => engine.Stop()).ConfigureAwait(true);
+                try { engine.Dispose(); } catch { }
+                _wgturnEngine = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[Wgturn] Disconnect: error while stopping");
+        }
+        finally
+        {
+            IsWgturnConnected = false;
+            IsWgturnConnecting = false;
+            WgturnPid = null;
+        }
     }
 
     /// <summary>Open the wgturn-cli log file with the OS default handler.
@@ -408,31 +464,75 @@ public partial class MainWindowViewModel
         }
     }
 
-    /// <summary>Add a new <see cref="WgturnEntry"/> from the current
-    /// VK link / URL inputs. The VK link is NOT part of the entry —
-    /// only the wgturn URL portion is. For W-4 we keep the add flow
-    /// simple: the next-pasted text is treated as both the URL and
-    /// auto-naming source. Future Phase 3 can split this into a dialog.</summary>
+    /// <summary>
+    /// r10 r9+ (Bug-r10-I) — real "Add config" flow.
+    /// Reads <see cref="NewWgturnConfigUrl"/> + <see cref="NewWgturnConfigName"/>
+    /// (the two TextBox inputs in the add-form). Validates the URL
+    /// (must start with <c>wgturn://</c> + structurally parseable),
+    /// generates a name if the user left it empty, adds a new
+    /// <see cref="WgturnEntry"/>, persists settings, clears inputs.
+    /// Skips silently if URL is empty/invalid — UI's <see cref="IsNewWgturnConfigUrlValid"/>
+    /// gate already disables the button in that case.
+    /// </summary>
     [RelayCommand]
-    private void AddWgturnConfigPlaceholder()
+    private void AddWgturnConfig()
     {
-        // Phase-2 placeholder: future PR adds a small dialog. For now
-        // we accept whatever string is currently in WgturnVkLink AS A
-        // PLACEHOLDER — real impl will swap to a paste-URL prompt.
-        if (string.IsNullOrWhiteSpace(WgturnVkLink)) return;
-        if (!EmergencyChannelConfig.TryParse(WgturnVkLink, out _)) return;
+        var rawUrl = (NewWgturnConfigUrl ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(rawUrl))
+        {
+            _logger.Information("[Wgturn] AddWgturnConfig skipped — URL empty");
+            return;
+        }
+        if (!EmergencyChannelConfig.TryParse(rawUrl, out _))
+        {
+            _logger.Warning("[Wgturn] AddWgturnConfig: URL failed structural parse: {Url}", rawUrl);
+            return;
+        }
 
-        var name = $"Operator-{WgturnConfigs.Count + 1:00}";
+        var name = (NewWgturnConfigName ?? "").Trim();
+        if (string.IsNullOrEmpty(name))
+            name = $"Operator-{WgturnConfigs.Count + 1:00}";
+
         var entry = new WgturnEntry
         {
             Name = name,
-            Url = WgturnVkLink.Trim(),
+            Url = rawUrl,
             AddedAt = DateTimeOffset.UtcNow,
         };
         WgturnConfigs.Add(entry);
         _settings.EmergencyChannel.Configs.Add(entry);
         SelectedWgturnConfig = entry;
         SaveSettings();
+
+        // Clear inputs so subsequent Add ops start fresh.
+        NewWgturnConfigUrl = string.Empty;
+        NewWgturnConfigName = string.Empty;
+
+        _logger.Information("[Wgturn] Added config '{Name}' ({Count} total)", name, WgturnConfigs.Count);
+    }
+
+    /// <summary>r10 r9+ (Bug-r10-I) — remove the currently selected
+    /// config from <see cref="WgturnConfigs"/> and persist.
+    /// SelectedWgturnConfig auto-falls back to the next entry (or null).</summary>
+    [RelayCommand]
+    private void RemoveSelectedWgturnConfig()
+    {
+        var sel = SelectedWgturnConfig;
+        if (sel == null) return;
+
+        WgturnConfigs.Remove(sel);
+        _settings.EmergencyChannel.Configs.RemoveAll(e =>
+            string.Equals(e.Name, sel.Name, StringComparison.Ordinal)
+            && string.Equals(e.Url, sel.Url, StringComparison.Ordinal));
+
+        SelectedWgturnConfig = WgturnConfigs.FirstOrDefault();
+        if (SelectedWgturnConfig != null)
+            _settings.EmergencyChannel.ActiveConfig = SelectedWgturnConfig.Name;
+        else
+            _settings.EmergencyChannel.ActiveConfig = string.Empty;
+
+        SaveSettings();
+        _logger.Information("[Wgturn] Removed config '{Name}' ({Count} remain)", sel.Name, WgturnConfigs.Count);
     }
 
     private void OnWgturnEngineStateChanged(EmergencyChannelState state)

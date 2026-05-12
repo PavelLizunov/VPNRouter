@@ -132,7 +132,11 @@
                                            VerticalAlignment="Center"/>
                             </StackPanel>
 
-                            <!-- Configuration picker row: label + ComboBox + + Add -->
+                            <!-- v2.32.2-r2 (Bug-r10-I, brat report) — Configuration picker row:
+                                 label + ComboBox + ✕ remove. Pre-r2 the "+ Add" button next to
+                                 the picker dual-purposed the VK-link input as the wgturn-URL
+                                 source (confusing UX). r2 splits this — picker just selects
+                                 from saved entries; the dedicated add-form sits below. -->
                             <Grid ColumnDefinitions="120,*,Auto" ColumnSpacing="8">
                                 <TextBlock Grid.Column="0"
                                            Text="{Binding L_EmergencyChannelConfigsLabel}"
@@ -151,11 +155,48 @@
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
                                 <Button Grid.Column="2"
-                                        Content="{Binding L_EmergencyChannelAddConfig}"
-                                        Command="{Binding AddWgturnConfigPlaceholderCommand}"
-                                        FontSize="10" Padding="8,4"
-                                        CornerRadius="{StaticResource RadiusSm}"/>
+                                        Content="✕"
+                                        Command="{Binding RemoveSelectedWgturnConfigCommand}"
+                                        IsEnabled="{Binding SelectedWgturnConfig, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                        FontSize="11" Padding="8,4"
+                                        ToolTip.Tip="{Binding L_EmergencyChannelRemove}"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Foreground="{DynamicResource DangerSolidBrush}"/>
                             </Grid>
+
+                            <!-- r2 Add-config form: Name (optional) + wgturn:// URL + Add button.
+                                 Add is disabled until URL starts with wgturn:// (IsNewWgturnConfigUrlValid). -->
+                            <Border Padding="10,8"
+                                    CornerRadius="{StaticResource RadiusSm}"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                    BorderThickness="1"
+                                    Background="{DynamicResource SurfaceBaseBrush}">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="{Binding L_EmergencyChannelAddConfig}"
+                                               FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                                        <TextBox Grid.Column="0"
+                                                 Text="{Binding NewWgturnConfigName}"
+                                                 Watermark="{Binding L_EmergencyChannelAddConfigNameWatermark}"
+                                                 FontSize="10" Padding="6,3"/>
+                                        <TextBox Grid.Column="1"
+                                                 Text="{Binding NewWgturnConfigUrl}"
+                                                 Watermark="{Binding L_EmergencyChannelAddConfigUrlWatermark}"
+                                                 FontSize="10" Padding="6,3"
+                                                 FontFamily="Consolas,Courier New,monospace"/>
+                                    </Grid>
+                                    <Button Content="{Binding L_EmergencyChannelAddConfigBtn}"
+                                            Command="{Binding AddWgturnConfigCommand}"
+                                            IsEnabled="{Binding IsNewWgturnConfigUrlValid}"
+                                            HorizontalAlignment="Left"
+                                            FontSize="10" Padding="10,4"
+                                            FontWeight="SemiBold"
+                                            CornerRadius="{StaticResource RadiusSm}"
+                                            Background="{DynamicResource AccentSolidBrush}"
+                                            Foreground="{DynamicResource AccentOnSolidBrush}"/>
+                                </StackPanel>
+                            </Border>
 
                             <!-- VK link input row -->
                             <Grid ColumnDefinitions="120,*" ColumnSpacing="8">
