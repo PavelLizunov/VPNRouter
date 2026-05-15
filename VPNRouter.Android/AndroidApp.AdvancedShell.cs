@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -125,13 +126,27 @@ public partial class AndroidApp
         // SurfaceRaised + BorderSubtle) so the strip reads like the
         // desktop ListBox sub-tab pattern instead of a coloured banner.
         // The UniformGrid keeps POL-2's compress-to-fit structure.
+        // 2026-05-15 (Bug-AND-003, brat live-test): hide Tools tab on
+        // Android. Zapret + Telegram-proxy are Windows-only features —
+        // showing the tab as «coming soon» (current state) confuses
+        // users who see «Инструменты» offer no actual function. Same
+        // rationale as Mac/Linux where Tools isn't surfaced. Tab strip
+        // contracts from 6 → 5 columns, giving each remaining label
+        // ~20% more horizontal room (helps Bug-AND-001 truncation too).
+        // The AdvancedTab.Tools enum value is kept so any existing code
+        // path that still references it compiles, but the tab is never
+        // rendered or activated.
+        var visibleTabs = System.Enum.GetValues(typeof(AdvancedTab))
+            .Cast<AdvancedTab>()
+            .Where(t => t != AdvancedTab.Tools)
+            .ToList();
         var tabPanel = new UniformGrid
         {
-            Columns = 6,
+            Columns = visibleTabs.Count,
             Rows = 1,
             Margin = new Thickness(6, 6, 6, 6),
         };
-        foreach (AdvancedTab tab in System.Enum.GetValues(typeof(AdvancedTab)))
+        foreach (var tab in visibleTabs)
         {
             var btn = MakeAdvShellTabButton(tab);
             _advShellTabButtons[tab] = btn;
@@ -248,15 +263,19 @@ public partial class AndroidApp
         // Advanced chips through MirrorAdvancedChipState.
         SetVpnChipState(_vpnChipState, force: true);
         SetZapretChipState(_zapretChipState, force: true);
+        // 2026-05-15 (Bug-AND-002 brat live-test, second code path):
+        // Advanced shell has its own header chip row separate from
+        // Simple-page chips. Same fix as in BuildSimpleMode header:
+        // hide Zapret + TG chips on Android (not applicable platform).
+        // _advZapretChip / _advTgChip kept allocated for legacy update
+        // paths that touch them, just excluded from the visual row.
         var vpnChip = _advVpnChip;
-        var zapretChip = _advZapretChip;
-        var tgChip = _advTgChip;
         var chipRow = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             Spacing = 4,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { vpnChip, zapretChip, tgChip },
+            Children = { vpnChip },
         };
 
         var brandStack = new StackPanel
@@ -603,14 +622,20 @@ public partial class AndroidApp
         var btn = new Avalonia.Controls.Button
         {
             Content = label,
-            FontSize = 11,
+            // 2026-05-15 (Bug-AND-001 round 2): FontSize 11→10 to ensure
+            // «Приложения» (longest visible label at 10 chars) fits
+            // without ellipsis on 1080-wide phones after 5-column drop.
+            FontSize = 10,
             FontWeight = FontWeight.SemiBold,
-            // Tighter horizontal padding to make room for label inside the
-            // narrow per-cell space; vertical bumped so the button hits
-            // the 44-dp touch-target spec without relying on parent gap.
-            Padding = new Thickness(2, 8),
+            // 2026-05-15 (Bug-AND-001, brat live-test): after Bug-AND-003
+            // dropped Tools tab (6 → 5 columns), all labels fit EXCEPT
+            // «Приложения» (10 chars) still truncated to «Приложе...».
+            // Trimmed Padding 2,8 → 0,8 + Margin 2,0 → 1,0 to claim
+            // ~10 px more per tab — enough for «Приложения» SemiBold
+            // FontSize=11 to render in full.
+            Padding = new Thickness(0, 8),
             MinHeight = 44,
-            Margin = new Thickness(2, 0),
+            Margin = new Thickness(1, 0),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
             BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Stretch,

@@ -661,25 +661,29 @@ public partial class AndroidApp : Avalonia.Application
         _brandTitle.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
         // v3.0 Phase 7.1 — start all chips in Off state. VPN chip transitions
-        // through Connecting → On as the tunnel comes up. Zapret + TG stay Off
-        // because those features aren't ported yet.
+        // through Connecting → On as the tunnel comes up.
         // v3.0 Phase 8.2 — chips ride DynamicResource via MakeChip's key
         // parameters so they auto-repaint on theme variant change.
+        //
+        // 2026-05-15 (Bug-AND-002 brat live-test): hide Zapret + TG chips
+        // entirely on Android. Pre-fix: chips were always rendered Off
+        // because «those features aren't ported yet». User feedback:
+        // «не нужно отображать zapret и tg прокси так как из нет, условно
+        // ведь на мак мы их не отображет». Same rationale as Mac/Linux —
+        // platform-not-applicable features should be hidden, not shown
+        // as perpetually-Off. The _zapretChip / _tgChip fields are kept
+        // (still touched by some legacy update paths) but excluded from
+        // the visual chip row.
         _vpnChip = MakeChip("VPN", "SurfaceSunkenBrush", "TextMutedBrush");
         _zapretChip = MakeChip("Zapret", "SurfaceSunkenBrush", "TextMutedBrush");
         _tgChip = MakeChip("TG", "SurfaceSunkenBrush", "TextMutedBrush");
 
-        // v2.32.0 parity port (2026-05-09) — chip row Spacing 6 → 4, drop
-        // the (8, 2, 0, 0) Margin so the row sits flush with the brand
-        // title (matches desktop SimplePage.axaml line 63 — Spacing="4",
-        // no margin, brand StackPanel handles vertical rhythm via its own
-        // Spacing="2").
         var chipRow = new StackPanel
         {
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             Spacing = 4,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { _vpnChip, _zapretChip, _tgChip }
+            Children = { _vpnChip }
         };
 
         var brandStack = new StackPanel
@@ -1035,8 +1039,12 @@ public partial class AndroidApp : Avalonia.Application
             // v3.0 Phase 7.3 — initial glyph follows _formExpanded so the
             // chevron points down when the form is auto-expanded on
             // first launch (mirrors OnConfigRowClicked's flip logic).
+            // v2.32.0 parity port (2026-05-09) — chevron FontSize 14 → 13 to
+            // match desktop SimplePage.axaml line 218 (FontSize="13"). The
+            // 14pt size made the chevron heavier than the surrounding 11pt
+            // value text; 13pt sits flush with the value baseline.
             Text = _formExpanded ? "⌄" : "›",
-            FontSize = 14,
+            FontSize = 13,
             VerticalAlignment = VerticalAlignment.Center,
         };
         _configRowChevron.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
@@ -2122,17 +2130,19 @@ public partial class AndroidApp : Avalonia.Application
         var bypassCard = MakeCheckboxCard(_settingsBypassRu,
             Localization.BypassRussianTrafficLabel, Localization.BypassRussianTrafficHint);
 
-        // v2.32.0 (AND-ZAPRET) — DPI bypass card. Mirrors the desktop
-        // DpiBypassPage Strategy ComboBox + warning banner, collapsed
-        // into a single radio-card-styled picker because the rest of
-        // desktop's controls (hosts files, IPSet filter, diagnostics
-        // button) don't have an Android counterpart yet.
-        var dpiCard = BuildDpiBypassCard();
+        // 2026-05-15 (Bug-AND-004, brat live-test): DPI bypass (Zapret)
+        // card removed from Routing tab on Android. Zapret is Windows-
+        // only — the card was showing a non-functional picker with a
+        // confusing «...в отличие от Windows-версии Zapret» footnote.
+        // Same rationale as Bug-AND-002/003: platform-not-applicable
+        // features hidden, not shown as stubs. BuildDpiBypassCard()
+        // method retained in case a future Android-native DPI bypass
+        // implementation lands.
 
         var stack = new StackPanel
         {
             Spacing = 10,
-            Children = { sectionTitle, description, splitCard, fullCard, bypassCard, dpiCard }
+            Children = { sectionTitle, description, splitCard, fullCard, bypassCard }
         };
         return WrapSection(stack);
     }
