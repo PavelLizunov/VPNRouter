@@ -33,7 +33,30 @@ SAGERNET_GOMOBILE_VERSION="${SAGERNET_GOMOBILE_VERSION:-v0.1.12}"
 BUILD_DIR="${BUILD_DIR:-$HOME/build}"
 SING_BOX_DIR="$BUILD_DIR/sing-box"
 OUT_DIR="$BUILD_DIR/libbox-out"
-TAGS="${TAGS:-with_gvisor,with_quic,with_grpc,with_utls,with_wireguard,with_clash_api}"
+# Curated tag set:
+#   with_gvisor    — TUN/stack
+#   with_quic      — Hysteria2/TUIC support
+#   with_utls      — Reality TLS impersonation
+#   with_wireguard — WireGuard outbound (used for emergency channel)
+#   with_clash_api — Hot-reload via Clash API (matches desktop)
+#
+# Plus required workaround tags discovered 2026-05-12:
+#   badlinkname              — bypass Go linkname stricter checks
+#   tfogo_checklinkname0     — bypass TFOGO's own linkname check (sing-box dep)
+#
+# Plus required ldflag:
+#   -checklinkname=0         — disable linker's name-mangling check
+#
+# Why these workarounds: Go 1.25+ tightened linkname rules. sing-box uses
+# `//go:linkname` to access unexported runtime symbols (e.g. os.checkPidfdOnce)
+# for socket/pidfd polling. Without these tags + ldflag, every gomobile bind
+# fails at link stage. Source: sing-box/cmd/internal/build_libbox/main.go
+# (canonical tag set), Makefile lib_android_new target.
+#
+# We explicitly OMIT (vs sing-box default build_libbox):
+#   with_naive_outbound,with_tailscale  — cronet-go has C++ exception
+#       relocation 315 incompat with NDK 27 lld. We don't need either.
+TAGS="${TAGS:-with_gvisor,with_quic,with_utls,with_wireguard,with_clash_api,badlinkname,tfogo_checklinkname0}"
 ANDROID_API="${ANDROID_API:-26}"
 ANDROID_TARGET="${ANDROID_TARGET:-android/arm64}"
 
@@ -94,28 +117,32 @@ echo "[INFO] ensuring sagernet/gomobile@$SAGERNET_GOMOBILE_VERSION installed..."
 go install -v "github.com/sagernet/gomobile/cmd/gomobile@$SAGERNET_GOMOBILE_VERSION" 2>&1 | tail -1
 go install -v "github.com/sagernet/gomobile/cmd/gobind@$SAGERNET_GOMOBILE_VERSION" 2>&1 | tail -1
 
-# ── Step 3b: build via sing-box internal tool ──
+# ── Step 3b: gomobile bind with curated tags ──
+# We deliberately DO NOT use `go run ./cmd/internal/build_libbox -target android`
+# even though sing-box's Makefile uses it. That tool pulls in tags
+# with_naive_outbound,with_tailscale,etc., which transitively depend on
+# cronet-go. cronet-go's prebuilt libcronet.a uses C++ exception
+# unwinding metadata (relocation 315) that NDK 27's lld linker cannot
+# parse — every link fails with «unknown relocation (315) against typeinfo».
+#
+# Our curated tag set keeps the protocols we actually use (VLESS+Reality
+# via with_utls, WireGuard, gVisor for TUN, QUIC for hysteria2 if needed,
+# clash_api for hot-reload). No naive, no tailscale → no cronet → no
+# relocation 315.
 mkdir -p "$OUT_DIR"
-cd "$SING_BOX_DIR"
-echo "[INFO] running build_libbox (this can take 3-5 min on M-series)..."
-if ! go run ./cmd/internal/build_libbox -target android 2>&1 | tee "$OUT_DIR/build.log" | tail -20; then
-  echo "[FAIL] build_libbox exited non-zero. Full log: $OUT_DIR/build.log" >&2
+cd "$SING_BOX_DIR/experimental/libbox"
+echo "[INFO] running gomobile bind (curated tags, this can take 3-5 min on M-series)..."
+if ! gomobile bind -v \
+    -target="$ANDROID_TARGET" \
+    -androidapi="$ANDROID_API" \
+    -ldflags="-s -w -X github.com/sagernet/sing-box/constant.Version=$SING_BOX_VERSION" \
+    -tags="$TAGS" \
+    -o "$OUT_DIR/libbox.aar" \
+    ./ 2>&1 | tee "$OUT_DIR/gomobile.log" | tail -20; then
+  echo "[FAIL] gomobile bind exited non-zero. Full log: $OUT_DIR/gomobile.log" >&2
   exit 2
 fi
-
-# Find the produced AAR (build_libbox outputs into sing-box-for-android repo
-# OR into a known relative path — search both).
-PRODUCED_AAR=$(find "$SING_BOX_DIR/.." -name 'libbox.aar' -newer "$OUT_DIR/build.log" 2>/dev/null | head -1)
-if [ -z "$PRODUCED_AAR" ] || [ ! -f "$PRODUCED_AAR" ]; then
-  # Fallback: look in SING_BOX_DIR itself
-  PRODUCED_AAR=$(find "$SING_BOX_DIR" -name 'libbox.aar' 2>/dev/null | head -1)
-fi
-if [ -z "$PRODUCED_AAR" ] || [ ! -f "$PRODUCED_AAR" ]; then
-  echo "[FAIL] AAR not found after build_libbox. Check $OUT_DIR/build.log." >&2
-  exit 2
-fi
-cp "$PRODUCED_AAR" "$OUT_DIR/libbox.aar"
-echo "[OK] AAR produced at $PRODUCED_AAR ($(ls -lh $OUT_DIR/libbox.aar | awk '{print $5}'))"
+echo "[OK] AAR produced: $(ls -lh $OUT_DIR/libbox.aar | awk '{print $5}')"
 
 # ── Step 4: validate AAR ──
 if ! unzip -l "$OUT_DIR/libbox.aar" | grep -q "jni/arm64-v8a/libgojni.so"; then

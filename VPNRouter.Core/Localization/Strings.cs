@@ -284,9 +284,17 @@ public static class Strings
         : $"Configure VPN autostart at {OsDisplayName} boot";
     // Generic subtitle used on Android inline card (no Service-installed/stopped
     // distinction yet — Android lifecycle differs from Windows Service).
+    // 2026-05-15 fix (Bug-AND-loc-001, brat live-test on KYOCERA A101BM):
+    // pre-fix this card said «при старте Windows» on Android too because the
+    // Russian template was hardcoded. Use OsDisplayName so the platform
+    // shows correctly (Android phones say «при загрузке Android»).
     public static string SmpAutostartCardSubtitle => Ru
-        ? "Настроить автозапуск VPN при старте Windows"
-        : "Configure VPN autostart at Windows boot";
+        ? (OperatingSystem.IsAndroid()
+            ? "Настроить автозапуск VPN при загрузке устройства"
+            : $"Настроить автозапуск VPN при старте {OsDisplayName}")
+        : (OperatingSystem.IsAndroid()
+            ? "Configure VPN autostart on device boot"
+            : $"Configure VPN autostart at {OsDisplayName} boot");
 
     // ── Dialogs ──
     public static string FailedStartVpn => Ru ? "Не удалось запустить VPN:" : "Failed to start VPN:";

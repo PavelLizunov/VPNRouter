@@ -20,25 +20,68 @@
 
 ## 0 · Контекст и цели проекта
 
-### Что есть сегодня (Phase 0 — done)
+### Что есть сегодня — REALITY CHECK 2026-05-15
 
-`VPNRouter.Android` проект:
-- Avalonia 11.3 для UI (cross-platform Core + Android)
-- `EnableAndroidTarget=true` opt-in build на `VPNRouter.Core`
-- AOT cross-compiled single APK, debug-signed, ~47 MB (arm64)
-- Скелет: `AndroidManifest.xml`, `MainActivity`, `AndroidApp` stub
-- Build: `dotnet build VPNRouter.Android/VPNRouter.Android.csproj -c Release /p:EnableAndroidTarget=true /p:AndroidSdkDirectory=$ANDROID_HOME /p:JavaSdkDirectory=$JAVA_HOME`
-- CI: `build-android.yml` (skip-gracefully когда нет keystore — Phase A не сделан)
+**Major realignment**: исходная версия этого документа (1.0, 2026-05-12)
+была написана на основе устаревшего `MEMORY.md` который говорил «Phase 0
+done, Phase 1 next». Реальная проверка проекта показала, что Phase 0,
+1, 2 и большая часть 3 уже сделаны:
 
-### Что нужно (Phase 1+)
+**Verified via APK install on KYOCERA A101BM (Android 12) 2026-05-15**:
+- ✅ APK builds (`dotnet build VPNRouter.Android.csproj` — 0 errors, 3:16)
+- ✅ App launches without crash (PID assigned, MainActivity opens)
+- ✅ Avalonia UI fully rendered: brand header «Virtual Penguin Network»,
+     VPN/Zapret/TG badges, status card, mode picker, VLESS URI input,
+     app-selection radio, autostart row, «Подключить» button
+- ✅ libbox.aar wired at `VPNRouter.Android/Lib/libbox.aar` (12 MB,
+     gitignored, built earlier in session by previous Claude)
+- ✅ `VpnRouterService.java` (1196 LOC) — full VPN service impl
+- ✅ `AndroidDeepVerifyBox.java` (603 LOC) — libbox-backed Free Configs
+     deep verify
+- ✅ 9 `AndroidApp.*.cs` partial files covering: AdvancedShell, AutoUpdate,
+     ConfigShare, DpiBypass, FreeConfigs, ServerList, SubscribePage, Tools
+- ✅ `AndroidConfigBuilder.cs` — generates sing-box config matching Core
+- ✅ `AndroidUpdater.cs` — auto-update mechanism (with intent flow)
+- ✅ Settings/profiles via shared `VPNRouter.Core` source-link
+- ✅ Phase 1.A keystore secret pending (CI skips gracefully per Bug-r10-J)
 
-| Phase | Scope | Ключевые риски |
+### Phase state (corrected)
+
+| Phase | Scope | Status |
 |---|---|---|
-| **Phase 1** | libbox.aar from sagernet/sing-box-for-android + `VpnRouterService.kt` shim для VPN tunnel | Native AAR ABI mismatch, lifecycle leaks, JNI surface |
-| **Phase 2** | Avalonia App.axaml — real UI port (Simple page minimum viable) | Avalonia mobile target maturity, touch interactions |
-| **Phase 3** | Settings/profiles parity с desktop (multi-platform AppPaths) | YAML compatibility, schema migration on mobile |
-| **Phase 4** | Battery + foreground service polish, Doze mode handling | Android lifecycle, OEM-specific battery managers (Xiaomi, Samsung) |
-| **Phase 5** | Distribution: Google Play / F-Droid / direct APK + auto-update | Play Store privacy review, signing key custody |
+| **Phase 0** | APK builds, scaffold | ✅ DONE |
+| **Phase 1** | libbox.aar + VpnService | ✅ DONE (Java-side service, libbox AAR wired) |
+| **Phase 2** | Avalonia App.axaml UI port | ✅ DONE (Simple + Advanced shell + sub-pages) |
+| **Phase 3** | Settings/profiles parity | ✅ MOSTLY (via shared Core source-link; per-platform AppPaths working) |
+| **Phase 3.5** | Per-page polish + Android-specific UX | ⏳ in progress (this is where current iterations happen) |
+| **Phase 4** | Battery / lifecycle / Doze / OEM polish | ⏸ pending |
+| **Phase 5** | Distribution (Play / F-Droid / APK auto-update) | ⏸ partial (auto-update direct APK works; Play Store not started) |
+
+### Что реально следующее (2026-05-15)
+
+Не «libbox bootstrap» (already done), а итеративная работа:
+1. **Bug fixes** — localization mismatches («Windows» текст в Android),
+   обработка edge cases per real-device testing
+2. **Live VPN connect verification** — paste working subscription, Connect,
+   verify traffic flows through tunnel (instrumented end-to-end)
+3. **Test coverage audit** — что уже покрыто, что упущено per §3 layers
+4. **Performance baselines** — first capture с реального устройства (A101BM)
+5. **Phase 4 prep** — Doze mode, foreground service notification polish
+
+### libbox build path (canonical for FUTURE rebuilds)
+
+When sing-box version bumps require new AAR — use
+`plans/android-phase-1-libbox-build.md` + `tools/build-libbox-aar.sh`.
+Key learnings documented there:
+- Use sagernet/gomobile fork v0.1.12, NOT upstream golang.org/x/mobile
+- Curated tag set: `with_gvisor,with_quic,with_utls,with_wireguard,with_clash_api,badlinkname,tfogo_checklinkname0`
+- ldflag: `-checklinkname=0`
+- Skip `with_naive_outbound,with_tailscale` (cronet-go NDK 27 lld incompat)
+- Pin to Go 1.25.x (1.26+ has unrelated linkname issue)
+
+Existing AAR (`VPNRouter.Android/Lib/libbox.aar`, May 7 2026, sha256
+`239c4101...`) works for current sing-box version. Don't rebuild
+unless protocol/upstream changes.
 
 ### Non-goals (выяснить до начала Phase 1)
 
