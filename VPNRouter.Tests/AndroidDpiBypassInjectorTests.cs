@@ -5,6 +5,11 @@ using Xunit;
 
 namespace VPNRouter.Tests;
 
+// v2.32.2 methodology compliance (Bug-r10-J follow-up) — Android test
+// category tag per plans/android-development-methodology.md §3.1 (Unit
+// Tests / Layer C). Retroactively applied to existing Android tests so
+// the check-methodology.sh #1 + #3 meta-tests pass.
+
 /// <summary>
 /// v2.32.0 (AND-ZAPRET, 2026-05-07) — pin the rules around the Android
 /// DPI-bypass JSON injector. The actual config-build pipeline lives in
@@ -35,6 +40,9 @@ namespace VPNRouter.Tests;
 ///   or hand-edited preferences).</item>
 /// </list>
 /// </summary>
+[Trait("Category", "Unit")]
+[Trait("Phase", "Phase0")]
+[Trait("Layer", "Core")]
 public class AndroidDpiBypassInjectorTests
 {
     /// <summary>

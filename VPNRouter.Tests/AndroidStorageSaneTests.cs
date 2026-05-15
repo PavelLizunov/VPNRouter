@@ -38,6 +38,9 @@ namespace VPNRouter.Tests;
 ///   result (idempotent).</item>
 /// </list>
 /// </summary>
+[Trait("Category", "Unit")]
+[Trait("Phase", "Phase0")]
+[Trait("Layer", "Core")]
 public class AndroidStorageSaneTests
 {
     private sealed class FakeStore
