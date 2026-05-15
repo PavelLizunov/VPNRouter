@@ -20,13 +20,50 @@ Conclusion: need full bootstrap of Go-mobile pipeline + sing-box clone + first b
 | Decision | Choice | Rationale |
 |---|---|---|
 | Build host | Mac (`mm4.local`, slovn@192.168.0.246) | ARM64 + already used for mac DMG builds |
-| Pinned sing-box version | `v1.13.10` (matches desktop bundle per `MEMORY.md`) | Same protocol behaviour Win/Mac/Linux/Android |
+| Pinned sing-box version | **`v1.14.0-alpha.24`** (matches SFA upstream version.properties) | v1.13.10 hit Go 1.25/1.26 linker error `os.checkPidfdOnce`. SFA upstream actually pins to v1.14 for Android — its `version.properties` says `VERSION_NAME=1.14.0-alpha.24` + `GO_VERSION=go1.25.9`. v1.14 has `go 1.24.7` min in go.mod and known-works with Go 1.25 gomobile. **Desktop sing-box stays at v1.13.10 — that's CLI build, different toolchain. Android binding diverges to v1.14 for stability.** |
+| Pinned Go version | **Go 1.25.x** (NOT 1.26) | sing-box link fails on Go 1.26 with `invalid reference to os.checkPidfdOnce` — confirmed both v1.13.10 and v1.14 affected. Brew install `go@1.25` (keg-only). Bootstrap script uses `/opt/homebrew/opt/go@1.25/bin/go`. |
 | gomobile target | `android` (NOT `androidaar`) | Produces AAR with Java/Kotlin bindings |
 | Android API min | 26 (matches methodology §2 min SDK) | Covers > 95% active devices |
 | Target ABI | arm64-v8a only initially | matches Phase 0 single-APK arm64 |
+| NDK version | 27.2.12479018 | Already installed on Mac; works with gomobile Android binding |
 | AAR storage | `VPNRouter.Android/libs/libbox.aar` | Local file ref in csproj — same pattern SFA uses |
 | Commit strategy | **NOT commit AAR to git** (large binary). Cache locally + CI rebuild. | Git history small, reproducible builds |
 | Re-build trigger | When `MEMORY.md` records sing-box bump OR libbox API change | Manual rebuild + version.properties update |
+
+### Key learning from first build attempts (2026-05-12)
+
+1. **🔴 CRITICAL: Use sagernet's gomobile FORK, NOT golang.org/x/mobile**.
+   `golang.org/x/mobile/cmd/gomobile@latest` (upstream) produces a linker
+   error `link: invalid reference to os.checkPidfdOnce` regardless of
+   Go version (tested 1.25.10, 1.26.3) or sing-box version (v1.13.10,
+   v1.14.0-alpha.24). The fix discovered in `sing-box/Makefile`:
+   ```
+   lib_android:
+       go run ./cmd/internal/build_libbox -target android
+   lib_android_new:
+       go install -v github.com/sagernet/gomobile/cmd/gomobile@v0.1.12
+       go install -v github.com/sagernet/gomobile/cmd/gobind@v0.1.12
+   ```
+   Sagernet maintains a fork with workarounds specific to sing-box's
+   build needs. Pin: `v0.1.12`.
+
+2. **Use sing-box's internal build_libbox tool, not raw `gomobile bind`**.
+   `go run ./cmd/internal/build_libbox -target android` handles all the
+   right flags, output paths, and post-processing. Raw `gomobile bind`
+   misses required setup steps.
+
+3. **Go-version requirement**: sing-box v1.14.0-alpha.24's go.mod declares
+   `go 1.24.7` minimum. SFA upstream `version.properties` says
+   `GO_VERSION=go1.25.9`. Use Go 1.25 to match upstream CI.
+
+4. **sing-box version pin**: Android port pins to v1.14.0-alpha.24
+   (matches SFA `version.properties`). Desktop CLI keeps v1.13.10
+   (different binary, different release schedule). Don't try to unify —
+   SFA's `version.properties` is the canonical source of "tested-together"
+   versions for the Android side.
+
+5. **`go get golang.org/x/mobile/bind` is NOT needed** when using
+   sagernet/gomobile fork. The fork handles its own dependency graph.
 
 ## Phase 1.1 acceptance criteria
 

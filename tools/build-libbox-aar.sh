@@ -24,7 +24,12 @@
 
 set -euo pipefail
 
-SING_BOX_VERSION="${SING_BOX_VERSION:-v1.13.10}"
+SING_BOX_VERSION="${SING_BOX_VERSION:-v1.14.0-alpha.24}"
+# CRITICAL: sagernet maintains a FORK of gomobile with sing-box-specific
+# workarounds. Upstream golang.org/x/mobile/cmd/gomobile@latest produces
+# linker error `os.checkPidfdOnce` on every Go version tried (1.25, 1.26).
+# Pin to the fork version SFA uses (per sing-box Makefile lib_android_new):
+SAGERNET_GOMOBILE_VERSION="${SAGERNET_GOMOBILE_VERSION:-v0.1.12}"
 BUILD_DIR="${BUILD_DIR:-$HOME/build}"
 SING_BOX_DIR="$BUILD_DIR/sing-box"
 OUT_DIR="$BUILD_DIR/libbox-out"
@@ -33,11 +38,23 @@ ANDROID_API="${ANDROID_API:-26}"
 ANDROID_TARGET="${ANDROID_TARGET:-android/arm64}"
 
 # Locate toolchain — set defaults if env not already configured.
+# CRITICAL: Go 1.26+ breaks sing-box v1.13.10 build with
+# "invalid reference to os.checkPidfdOnce" linker error. Pin to Go 1.25
+# (matches SFA upstream version.properties GO_VERSION=go1.25.9).
+# Override via GO_BIN_PATH if you've installed elsewhere.
+GO_BIN_PATH="${GO_BIN_PATH:-/opt/homebrew/opt/go@1.25/bin}"
+if [ ! -x "$GO_BIN_PATH/go" ]; then
+  echo "[FAIL] Go 1.25 not found at $GO_BIN_PATH/go" >&2
+  echo "        Install: brew install go@1.25" >&2
+  echo "        Or set GO_BIN_PATH=<your go 1.25 install>/bin" >&2
+  exit 1
+fi
 ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/opt/homebrew/share/android-commandlinetools}"
 ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_SDK_ROOT/ndk/27.2.12479018}"
 export ANDROID_SDK_ROOT ANDROID_NDK_HOME
 export ANDROID_HOME="$ANDROID_SDK_ROOT"
-export PATH="/opt/homebrew/bin:$HOME/go/bin:$PATH"
+# Put pinned Go 1.25 FIRST in PATH so `go` and `gomobile` use it.
+export PATH="$GO_BIN_PATH:/opt/homebrew/bin:$HOME/go/bin:$PATH"
 
 echo "── build-libbox-aar.sh ──"
 echo "  sing-box version:  $SING_BOX_VERSION"
@@ -72,21 +89,33 @@ fi
 ACTUAL_VERSION=$(cd "$SING_BOX_DIR" && git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)
 echo "[OK] sing-box checked out: $ACTUAL_VERSION"
 
-# ── Step 3: gomobile bind ──
+# ── Step 3a: install sagernet's gomobile fork (key discovery) ──
+echo "[INFO] ensuring sagernet/gomobile@$SAGERNET_GOMOBILE_VERSION installed..."
+go install -v "github.com/sagernet/gomobile/cmd/gomobile@$SAGERNET_GOMOBILE_VERSION" 2>&1 | tail -1
+go install -v "github.com/sagernet/gomobile/cmd/gobind@$SAGERNET_GOMOBILE_VERSION" 2>&1 | tail -1
+
+# ── Step 3b: build via sing-box internal tool ──
 mkdir -p "$OUT_DIR"
-cd "$SING_BOX_DIR/experimental/libbox"
-echo "[INFO] running gomobile bind (this can take 3-5 min on M-series)..."
-if ! gomobile bind -v \
-    -target="$ANDROID_TARGET" \
-    -androidapi="$ANDROID_API" \
-    -ldflags="-s -w -X github.com/sagernet/sing-box/constant.Version=$SING_BOX_VERSION" \
-    -tags="$TAGS" \
-    -o "$OUT_DIR/libbox.aar" \
-    ./ 2>&1 | tee "$OUT_DIR/gomobile.log" | tail -20; then
-  echo "[FAIL] gomobile bind exited non-zero. Full log: $OUT_DIR/gomobile.log" >&2
+cd "$SING_BOX_DIR"
+echo "[INFO] running build_libbox (this can take 3-5 min on M-series)..."
+if ! go run ./cmd/internal/build_libbox -target android 2>&1 | tee "$OUT_DIR/build.log" | tail -20; then
+  echo "[FAIL] build_libbox exited non-zero. Full log: $OUT_DIR/build.log" >&2
   exit 2
 fi
-echo "[OK] AAR produced: $(ls -lh $OUT_DIR/libbox.aar | awk '{print $5}')"
+
+# Find the produced AAR (build_libbox outputs into sing-box-for-android repo
+# OR into a known relative path — search both).
+PRODUCED_AAR=$(find "$SING_BOX_DIR/.." -name 'libbox.aar' -newer "$OUT_DIR/build.log" 2>/dev/null | head -1)
+if [ -z "$PRODUCED_AAR" ] || [ ! -f "$PRODUCED_AAR" ]; then
+  # Fallback: look in SING_BOX_DIR itself
+  PRODUCED_AAR=$(find "$SING_BOX_DIR" -name 'libbox.aar' 2>/dev/null | head -1)
+fi
+if [ -z "$PRODUCED_AAR" ] || [ ! -f "$PRODUCED_AAR" ]; then
+  echo "[FAIL] AAR not found after build_libbox. Check $OUT_DIR/build.log." >&2
+  exit 2
+fi
+cp "$PRODUCED_AAR" "$OUT_DIR/libbox.aar"
+echo "[OK] AAR produced at $PRODUCED_AAR ($(ls -lh $OUT_DIR/libbox.aar | awk '{print $5}'))"
 
 # ── Step 4: validate AAR ──
 if ! unzip -l "$OUT_DIR/libbox.aar" | grep -q "jni/arm64-v8a/libgojni.so"; then
