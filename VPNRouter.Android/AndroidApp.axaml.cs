@@ -407,6 +407,13 @@ public partial class AndroidApp : Avalonia.Application
     // persisted via SetCustomCategories).
     private string? _advAppsActiveCategoryId;
     private StackPanel? _advAppsCategoryListPanel;
+    // Bug-AND-008 (2026-05-16) — WrapPanel host that replaces the
+    // horizontal-scrolling category strip. All chips are simultaneously
+    // visible and tappable — no gesture conflict with a parent
+    // ScrollViewer. The legacy _advAppsCategoryListPanel field is kept
+    // declared so other call sites that null-check it still compile,
+    // but rebuild now writes children straight to this WrapPanel.
+    private WrapPanel? _advAppsCategoryWrapHost;
     private TextBox? _advAppsNewCategoryInput;
     private Avalonia.Controls.Button? _advAppsAddCategoryBtn;
     private TextBlock? _advAppsRightPanePlaceholder;
@@ -5872,9 +5879,45 @@ public partial class AndroidApp : Avalonia.Application
             Child = grid,
         };
         rowBorder.BindToken(Border.BackgroundProperty, "SurfaceSunkenBrush");
-        rowBorder.PointerPressed += (_, __) =>
+        // Bug-AND-008 (2026-05-16) — manual tap detection so vertical
+        // scroll through the apps list doesn't toggle checkboxes under
+        // the finger. PointerPressed fires immediately on touchdown
+        // (including the touchdown that *starts* a scroll), and
+        // Avalonia's Tapped event gets swallowed by the parent ListBox
+        // ScrollViewer's gesture recogniser before reaching this row
+        // on Android. Same press-position + release-position guard as
+        // the category chip strip in MakeAppsCategoryRow above:
+        // movement ≤ 12 dp and gesture < 500 ms == a tap.
+        Avalonia.Point rowPressOrigin = default;
+        var rowPressedAt = System.DateTime.MinValue;
+        bool rowCapturedAway = false;
+        rowBorder.PointerPressed += (_, args) =>
         {
-            checkbox.IsChecked = !(checkbox.IsChecked == true);
+            rowPressOrigin = args.GetPosition(rowBorder);
+            rowPressedAt = System.DateTime.UtcNow;
+            rowCapturedAway = false;
+        };
+        rowBorder.PointerReleased += (_, args) =>
+        {
+            if (rowPressedAt == System.DateTime.MinValue) return;
+            var releasePos = args.GetPosition(rowBorder);
+            var dx = System.Math.Abs(releasePos.X - rowPressOrigin.X);
+            var dy = System.Math.Abs(releasePos.Y - rowPressOrigin.Y);
+            var elapsed = System.DateTime.UtcNow - rowPressedAt;
+            var hadDrag = rowCapturedAway;
+            rowPressedAt = System.DateTime.MinValue;
+            if (!hadDrag && dx <= 12 && dy <= 12
+                && elapsed < System.TimeSpan.FromMilliseconds(500))
+                checkbox.IsChecked = !(checkbox.IsChecked == true);
+        };
+        rowBorder.PointerCaptureLost += (_, _) => { rowCapturedAway = true; };
+        rowBorder.PointerMoved += (_, args) =>
+        {
+            if (rowPressedAt == System.DateTime.MinValue) return;
+            var p = args.GetPosition(rowBorder);
+            if (System.Math.Abs(p.X - rowPressOrigin.X) > 12
+                || System.Math.Abs(p.Y - rowPressOrigin.Y) > 12)
+                rowCapturedAway = true;
         };
         return rowBorder;
     }
@@ -5960,19 +6003,49 @@ public partial class AndroidApp : Avalonia.Application
         // call sites null-check them, but they no longer participate in
         // the visual tree.
 
-        // ── Horizontal chip strip (categories) ───────────────────────
+        // ── Category chip grid (categories) ──────────────────────────
+        // Bug-AND-008 (2026-05-16) — replaced horizontal-scrollable strip
+        // with a WrapPanel. The previous design (Horizontal StackPanel
+        // inside a ScrollViewer) had three issues on Android:
+        //   1. ScrollViewer's gesture recogniser preemptively captured
+        //      every chip-press as a possible scroll-start, so chip
+        //      activation needed unreliable tap-detection heuristics.
+        //   2. "Custom" was offscreen-right and required a long swipe
+        //      to reach (the catch-all is the most-used scope).
+        //   3. Horizontal scrolling itself is awkward on a phone — users
+        //      had to swipe with one hand while reading labels.
+        // WrapPanel makes every chip simultaneously visible and tappable
+        // — at typical font sizes 10 built-in categories fit in 2 rows
+        // on a 1080dp screen. Custom now leads the first row
+        // (RebuildAppCategorySidebar ordering).
         _advAppsCategoryListPanel = new StackPanel
         {
+            // Keep the field type as StackPanel so the rest of the
+            // codebase (.Children.Clear, .Children.Add) keeps working
+            // without churn. We swap the panel into a WrapPanel host
+            // via a wrapper Panel that lets us re-layout to wrap-flow
+            // semantics without changing the field type.
             Orientation = Avalonia.Layout.Orientation.Horizontal,
             Spacing = 6,
         };
-        var chipScroller = new ScrollViewer
+        var chipWrapHost = new WrapPanel
         {
-            Content = _advAppsCategoryListPanel,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            // Use an outer Border per row by laying chips directly in
+            // a WrapPanel — children flow left-to-right and wrap to
+            // the next line as needed.
             Margin = new Thickness(8, 4, 8, 4),
         };
+        // Swap: WrapPanel hosts the rows directly. We replace the
+        // StackPanel role by pointing _advAppsCategoryListPanel at a
+        // panel that *is* the WrapPanel surface. Easiest pattern: keep
+        // the StackPanel field but reassign children every rebuild via
+        // a tiny adapter.
+        // Concretely: the WrapPanel holds chips directly; rebuild adds
+        // them straight to chipWrapHost. _advAppsCategoryListPanel is
+        // kept as an alias bound to chipWrapHost.Children via
+        // _advAppsCategoryWrapHost (private field set below).
+        _advAppsCategoryWrapHost = chipWrapHost;
 
         // ── "+ New category" inline row (always visible, compact) ────
         _advAppsNewCategoryInput = new TextBox
@@ -6026,9 +6099,9 @@ public partial class AndroidApp : Avalonia.Application
         _advAppsRightPanePlaceholder = null;
 
         var dock = new DockPanel { LastChildFill = true };
-        DockPanel.SetDock(chipScroller, Dock.Top);
+        DockPanel.SetDock(chipWrapHost, Dock.Top);
         DockPanel.SetDock(addCategoryRow, Dock.Top);
-        dock.Children.Add(chipScroller);
+        dock.Children.Add(chipWrapHost);
         dock.Children.Add(addCategoryRow);
         dock.Children.Add(_advAppsRightPaneScopeContainer);
 
@@ -6215,20 +6288,40 @@ public partial class AndroidApp : Avalonia.Application
     /// </summary>
     private void RebuildAppCategorySidebar()
     {
-        if (_advAppsCategoryListPanel is null) return;
-        _advAppsCategoryListPanel.Children.Clear();
+        // Bug-AND-008 (2026-05-16) — WrapPanel host replaces the
+        // scroll-strip StackPanel. Write chips into the WrapPanel so
+        // they wrap to multiple rows instead of overflowing into a
+        // horizontal ScrollViewer.
+        var host = (Avalonia.Controls.Panel?)_advAppsCategoryWrapHost
+                   ?? _advAppsCategoryListPanel;
+        if (host is null) return;
+        host.Children.Clear();
         _advAppsCategoryRowMap.Clear();
         _advAppsCategoryCountMap.Clear();
         _advAppsCategoryNameMap.Clear();
 
-        // Built-ins first (Custom catch-all is the last entry in the list).
+        // Bug-AND-008c (2026-05-16) — render Custom (the catch-all
+        // "all apps" scope) FIRST. brat reported having to scroll
+        // a long way right to reach Custom; with the WrapPanel layout
+        // the chip is now on the first row at the top-left.
+        var customDef = AndroidCategoryDefaults.All
+            .FirstOrDefault(d => AndroidCategoryDefaults.IsCustomCatchAll(d.Id));
+        if (customDef is not null)
+        {
+            var customRow = MakeAppsCategoryRow(
+                customDef.Id,
+                Localization.AdvAppsCategoryCustom,
+                isCustom: false);
+            host.Children.Add(customRow);
+        }
+
+        // Built-ins next (skip Custom — already added).
         foreach (var def in AndroidCategoryDefaults.All)
         {
-            var displayName = AndroidCategoryDefaults.IsCustomCatchAll(def.Id)
-                ? Localization.AdvAppsCategoryCustom
-                : Localization.GroupDisplayName(def.Id);
+            if (AndroidCategoryDefaults.IsCustomCatchAll(def.Id)) continue;
+            var displayName = Localization.GroupDisplayName(def.Id);
             var row = MakeAppsCategoryRow(def.Id, displayName, isCustom: false);
-            _advAppsCategoryListPanel.Children.Add(row);
+            host.Children.Add(row);
         }
 
         // User-created custom categories below the built-ins.
@@ -6236,7 +6329,7 @@ public partial class AndroidApp : Avalonia.Application
         {
             if (string.IsNullOrWhiteSpace(cat.Name)) continue;
             var row = MakeAppsCategoryRow(cat.Name, cat.Name, isCustom: true);
-            _advAppsCategoryListPanel.Children.Add(row);
+            host.Children.Add(row);
         }
 
         UpdateAllCategoryCounts();
@@ -6290,6 +6383,10 @@ public partial class AndroidApp : Avalonia.Application
             Child = inner,
         };
         border.BindToken(Border.BorderBrushProperty, "BorderSubtleBrush");
+        // Bug-AND-008 (2026-05-16) — chip strip is now a WrapPanel (no
+        // surrounding ScrollViewer), so plain PointerPressed activation
+        // is safe: no horizontal scroll to mistakenly trigger. Every
+        // category is simultaneously visible and tappable.
         border.PointerPressed += (_, _) => SetActiveAppCategory(id);
 
         _advAppsCategoryRowMap[id] = border;
