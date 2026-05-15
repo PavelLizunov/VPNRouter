@@ -1332,10 +1332,15 @@ public partial class AndroidApp : Avalonia.Application
             IsVisible = _formExpanded,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(radiusSm),
-            Padding = new Thickness(12),
+            // Bug-AND-010 (2026-05-16) — 5" small-phone audit. Padding
+            // 12→10 and Spacing 14→11 to bring the input + tunnel +
+            // autostart trio closer together. Saves ~12 dp vertical so
+            // Connect button stays visible above the system nav bar on
+            // a 5" 720p phone without scrolling.
+            Padding = new Thickness(10),
             Child = new StackPanel
             {
-                Spacing = 14,
+                Spacing = 11,
                 // listSection is Android-only (subscription server picker);
                 // sits after the autostart card so the form still ends
                 // with a clean rhythm — input → tunnel → autostart on
@@ -1355,7 +1360,11 @@ public partial class AndroidApp : Avalonia.Application
             Content = Localization.ButtonConnect,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
-            Padding = new Thickness(0, 12),
+            // Bug-AND-010 — Connect/Connecting/Disconnect CTA pad trim
+            // (12→10 vertical) shaves 4 dp per CTA. Still meets the 44 dp
+            // Material touch target (12px font + 10*2 padding = 32 dp,
+            // plus the implicit MinHeight=44 inherited from style).
+            Padding = new Thickness(0, 10),
             FontSize = 12,
             FontWeight = FontWeight.Bold,
             BorderThickness = new Thickness(1),
@@ -1373,7 +1382,11 @@ public partial class AndroidApp : Avalonia.Application
             Content = Localization.ButtonConnecting,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
-            Padding = new Thickness(0, 12),
+            // Bug-AND-010 — Connect/Connecting/Disconnect CTA pad trim
+            // (12→10 vertical) shaves 4 dp per CTA. Still meets the 44 dp
+            // Material touch target (12px font + 10*2 padding = 32 dp,
+            // plus the implicit MinHeight=44 inherited from style).
+            Padding = new Thickness(0, 10),
             FontSize = 12,
             FontWeight = FontWeight.Bold,
             BorderThickness = new Thickness(0),
@@ -1390,7 +1403,11 @@ public partial class AndroidApp : Avalonia.Application
             Content = Localization.ButtonDisconnect,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center,
-            Padding = new Thickness(0, 12),
+            // Bug-AND-010 — Connect/Connecting/Disconnect CTA pad trim
+            // (12→10 vertical) shaves 4 dp per CTA. Still meets the 44 dp
+            // Material touch target (12px font + 10*2 padding = 32 dp,
+            // plus the implicit MinHeight=44 inherited from style).
+            Padding = new Thickness(0, 10),
             FontSize = 12,
             FontWeight = FontWeight.Bold,
             BorderThickness = new Thickness(0),

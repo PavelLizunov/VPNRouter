@@ -56,19 +56,26 @@ public class StatusCard : UserControl
         BindBrush(_dotWarn, Shape.FillProperty, "WarningSolidBrush");
         BindBrush(_dotOff, Shape.FillProperty, "TextMutedBrush");
 
-        _titleText = new TextBlock { FontSize = 15, FontWeight = FontWeight.Bold, VerticalAlignment = VerticalAlignment.Center };
+        // Bug-AND-010 (2026-05-16) — 5" small-phone audit. brat reported
+        // "у меня телефон 5 дюймов и все в приложении немного
+        // большеваное". StatusCard was the largest single element on
+        // Simple page (Title 15px + Padding 14 + Subtitle 10 lineheight
+        // 15 + StackPanel spacing 8 ≈ ~120dp tall). Tightened to ~92dp
+        // by trimming font / padding / line-height; visual hierarchy
+        // (Bold accent dot title, muted subtitle) preserved.
+        _titleText = new TextBlock { FontSize = 14, FontWeight = FontWeight.Bold, VerticalAlignment = VerticalAlignment.Center };
         BindBrush(_titleText, TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
-        _subtitleText = new TextBlock { FontSize = 10, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(20, 0, 0, 0), LineHeight = 15 };
+        _subtitleText = new TextBlock { FontSize = 10, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(18, 0, 0, 0), LineHeight = 13 };
         BindBrush(_subtitleText, TextBlock.ForegroundProperty, "TextSecondaryBrush");
 
-        var headerRow = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
+        var headerRow = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         headerRow.Children.Add(_dotOn);
         headerRow.Children.Add(_dotWarn);
         headerRow.Children.Add(_dotOff);
         headerRow.Children.Add(_titleText);
 
-        var stack = new StackPanel { Spacing = 8 };
+        var stack = new StackPanel { Spacing = 6 };
         stack.Children.Add(headerRow);
         stack.Children.Add(_subtitleText);
 
@@ -76,7 +83,7 @@ public class StatusCard : UserControl
         {
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(14),
+            Padding = new Thickness(12, 11),
             Child = stack,
         };
         BindBrush(border, Border.BorderBrushProperty, "BorderDefaultBrush");

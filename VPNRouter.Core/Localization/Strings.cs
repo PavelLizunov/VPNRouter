@@ -1376,8 +1376,12 @@ public static class Strings
     // "Публичные" tab name (was "Free Configs" hardcoded EN in both
     // languages, D1 + inconsistency).
     public static string SmpAdvCardSubtitle => Ru
-        ? "Серверы · Подписки · Zapret · Telegram-прокси · Публичные"
-        : "Servers · Subscriptions · Zapret · Telegram proxy · Public";
+        ? (OperatingSystem.IsAndroid()
+            ? "Серверы · Подписки · Настройки · Приложения · Публичные"
+            : "Серверы · Подписки · Zapret · Telegram-прокси · Публичные")
+        : (OperatingSystem.IsAndroid()
+            ? "Servers · Subscriptions · Settings · Applications · Public"
+            : "Servers · Subscriptions · Zapret · Telegram proxy · Public");
 
     // Mini-header menu items (⋯ flyout)
     public static string SmpMenuTheme         => Ru ? "Тема"                   : "Theme";
