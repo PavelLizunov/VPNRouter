@@ -131,6 +131,15 @@ public partial class AndroidApp : Avalonia.Application
     private DateTime _lastHealthLogMTime;
     private bool _lastHealthOk;
     private bool _firstProbePending;
+    // Bug-AND-006 (2026-05-16) — cache last formatted uptime so the
+    // 1 Hz diagnostics tick only mutates Avalonia text properties when
+    // the second actually flipped (i.e. once per second the title
+    // changes from "0:42" to "0:43"; in-between calls have nothing to
+    // do). Without the guard each tick wrote both _statusCard.Title
+    // and _advFooterStatusText.Text unconditionally, dirtying their
+    // visual trees even when the value was identical to the previous
+    // frame.
+    private string? _lastFormattedUptimeTitle;
 
     // Config row button
     private TextBlock? _configRowLabel;
@@ -1521,6 +1530,16 @@ public partial class AndroidApp : Avalonia.Application
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Padding = new Thickness(0, 12, 0, 16),
+            // Bug-AND-007b (2026-05-16) — explicitly Focusable so the
+            // scroll-gesture handler can shift focus from a focused
+            // TextBox to the scroller itself when a drag starts. By
+            // default ScrollViewer's Focusable is false on Avalonia 11,
+            // and calling .Focus() on a non-focusable control is a
+            // no-op — which left the TextBox still focused after a
+            // swipe, so the next tap couldn't re-pop the IME (Android
+            // only shows the keyboard when focus *enters* the TextBox,
+            // not when an already-focused one is re-tapped).
+            Focusable = true,
         };
         mainScroller.BindToken(ScrollViewer.BackgroundProperty, "SurfaceAppBrush");
 
@@ -1575,6 +1594,40 @@ public partial class AndroidApp : Avalonia.Application
                 // Steal pointer capture from the child (Button) so
                 // subsequent moves route directly to mainScroller.
                 e.Pointer.Capture(mainScroller);
+                // Bug-AND-007b (2026-05-16) — when the press landed on a
+                // TextBox (e.g. _serverInput at the top of the Simple
+                // page), Avalonia's TextBox focuses on PointerPressed
+                // *before* the drag threshold trips. Result: the soft
+                // keyboard popped up every time a swipe happened to
+                // start inside the URL TextBox area, ruining the
+                // scroll. Once we've decided this is a drag, blur the
+                // currently focused TextBox AND ask Android's
+                // InputMethodManager to hide the keyboard. Two-step
+                // because Avalonia's Focus() alone doesn't tear down
+                // the IME — Mono.Android's mainline `TextBox` peer
+                // pre-emptively shows the keyboard the moment the
+                // pointer presses, before our focus-shuffle runs.
+                try
+                {
+                    var topLevel = global::Avalonia.Controls.TopLevel.GetTopLevel(mainScroller);
+                    var focused = topLevel?.FocusManager?.GetFocusedElement();
+                    if (focused is Avalonia.Controls.TextBox)
+                    {
+                        // Move focus away from the TextBox (Avalonia
+                        // bookkeeping side).
+                        mainScroller.Focus();
+                        // And tell Android directly to hide the soft
+                        // keyboard (IME side). Without this the IMM
+                        // keeps the keyboard up because the show was
+                        // already queued before we shuffled focus.
+                        HideAndroidSoftKeyboard();
+                    }
+                }
+                catch
+                {
+                    // Focus shuffle is best-effort — don't let a focus
+                    // glitch break the swipe.
+                }
             }
             var dy = p.Position.Y - lastY;
             lastY = p.Position.Y;
@@ -4114,20 +4167,45 @@ public partial class AndroidApp : Avalonia.Application
         try
         {
             // 1. Uptime — refresh title every tick while connected.
+            //
+            // Bug-AND-006 (2026-05-16) — only mutate Avalonia text
+            // properties when the formatted string actually changed.
+            // The 1 Hz tick fires twice within the same second under
+            // dispatcher contention, and even Avalonia's equality
+            // guards on TextBlock.Text/StyledProperty still walk the
+            // setter path to compare strings. On budget Android
+            // devices that path was a measurable contributor to the
+            // user-reported overheating.
             if (_connectionStartedAt is DateTime startUtc)
             {
                 var elapsed = DateTime.UtcNow - startUtc;
                 var uptimeTitle = string.Format(
                     Localization.SimpleStatusTitleOnWithUptime,
                     FormatUptime(elapsed));
-                if (_statusCard is not null)
-                    _statusCard.Title = uptimeTitle;
-                // AND-ADV-CHROME (2026-05-10) — mirror the uptime suffix
-                // into the Advanced shell's footer status text so the
-                // "Connected · M:SS" copy matches between Simple + Advanced
-                // surfaces.
-                if (_advFooterStatusText is not null)
-                    _advFooterStatusText.Text = uptimeTitle;
+                if (!string.Equals(uptimeTitle, _lastFormattedUptimeTitle, System.StringComparison.Ordinal))
+                {
+                    _lastFormattedUptimeTitle = uptimeTitle;
+                    if (_statusCard is not null)
+                        _statusCard.Title = uptimeTitle;
+                    // AND-ADV-CHROME (2026-05-10) — mirror the uptime suffix
+                    // into the Advanced shell's footer status text so the
+                    // "Connected · M:SS" copy matches between Simple +
+                    // Advanced surfaces. Bug-AND-006 — skip the write when
+                    // the Advanced shell is collapsed (the TextBlock is
+                    // off-screen + culled, but the property setter still
+                    // raises an InvalidateMeasure walk through its parent
+                    // tree which we can avoid entirely).
+                    if (_advFooterStatusText is not null
+                        && _advShellOverlay is not null
+                        && _advShellOverlay.IsVisible)
+                    {
+                        _advFooterStatusText.Text = uptimeTitle;
+                    }
+                }
+            }
+            else
+            {
+                _lastFormattedUptimeTitle = null;
             }
 
             // 2. Health probe — every 30 s, only while connected. The first
@@ -4274,6 +4352,42 @@ public partial class AndroidApp : Avalonia.Application
                 (int)elapsed.TotalHours, elapsed.Minutes, elapsed.Seconds);
         }
         return string.Format("{0}:{1:D2}", elapsed.Minutes, elapsed.Seconds);
+    }
+
+    /// <summary>
+    /// Bug-AND-007b (2026-05-16) — hide the Android soft keyboard
+    /// directly through Android's <c>InputMethodManager</c>. Used by
+    /// the scroll-gesture handler in the main page builder: when a
+    /// swipe starts inside a focused TextBox, Avalonia's own
+    /// <c>Focus()</c> shuffle isn't enough to dismiss the IME on
+    /// Mono.Android — the keyboard show was already queued by the
+    /// TextBox peer on PointerPressed. Calling
+    /// <c>hideSoftInputFromWindow</c> on the activity's current window
+    /// token is the deterministic way to tear it down.
+    /// <para>Best-effort: any exception is swallowed (e.g. if the
+    /// activity is mid-finishing or the service has no window token).
+    /// The worst case is the keyboard stays up, which is the
+    /// pre-fix behaviour — no regression.</para>
+    /// </summary>
+    private static void HideAndroidSoftKeyboard()
+    {
+        try
+        {
+            var ctx = global::Android.App.Application.Context;
+            if (ctx is null) return;
+            var imm = (global::Android.Views.InputMethods.InputMethodManager?)
+                ctx.GetSystemService(global::Android.Content.Context.InputMethodService);
+            if (imm is null) return;
+            var activity = global::VPNRouter.Android.MainActivity.Instance;
+            var token = activity?.Window?.DecorView?.WindowToken;
+            if (token is null) return;
+            imm.HideSoftInputFromWindow(token, global::Android.Views.InputMethods.HideSoftInputFlags.None);
+        }
+        catch
+        {
+            // Best-effort — don't let a stale window token surface a
+            // crash inside the scroll-gesture critical path.
+        }
     }
 
     private void UpdateConfigSummary()

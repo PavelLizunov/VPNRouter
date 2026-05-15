@@ -495,6 +495,19 @@ public partial class AndroidApp
         if (_advShellOverlay is null) return;
         SelectAdvancedTab(tab);
         _advShellOverlay.IsVisible = true;
+        // Bug-AND-006 (2026-05-16) — OnDiagnosticsTick now skips the
+        // _advFooterStatusText write while the shell is collapsed.
+        // Force a one-shot sync here so the footer label shows the
+        // current uptime the moment the shell opens (otherwise it
+        // would display whatever was last written before the shell
+        // was hidden, until the next second flip).
+        if (_advFooterStatusText is not null && _connectionStartedAt is DateTime startUtc)
+        {
+            var elapsed = DateTime.UtcNow - startUtc;
+            _advFooterStatusText.Text = string.Format(
+                Localization.SimpleStatusTitleOnWithUptime,
+                FormatUptime(elapsed));
+        }
     }
 
     /// <summary>

@@ -59,15 +59,25 @@ internal static class AppListLoader
 
     public static List<AppEntry> ListUserApps()
     {
-        return Load(includeSystem: false);
+        // Bug-AND-007 (2026-05-16) — surface system apps that match a
+        // curated category hint even when the "Show system apps" toggle is
+        // off. Many OEM-bundled apps (Chrome on KYOCERA, Edge on certain
+        // Samsung builds, Yandex Browser on Russian ROMs, Telegram on some
+        // budget OEMs) ship with the SYSTEM flag set. Without this
+        // override, the Browsers / Messengers / Streaming categories
+        // appear empty on stock devices even though the user clearly
+        // recognises those apps. The full "Show system apps" toggle
+        // still adds the remaining OEM bloat (Google Play Services,
+        // carrier helpers, etc.) on top.
+        return Load(includeSystem: false, curatedHintAllowlist: AndroidCategoryDefaults.AllBuiltInPackages());
     }
 
     public static List<AppEntry> ListAllApps()
     {
-        return Load(includeSystem: true);
+        return Load(includeSystem: true, curatedHintAllowlist: null);
     }
 
-    private static List<AppEntry> Load(bool includeSystem)
+    private static List<AppEntry> Load(bool includeSystem, HashSet<string>? curatedHintAllowlist)
     {
         var ctx = Application.Context;
         if (ctx is null) return new List<AppEntry>();
@@ -143,7 +153,19 @@ internal static class AppListLoader
             if (info.PackageName == ownPackage) continue;
 
             var isSystem = (info.Flags & ApplicationInfoFlags.System) != 0;
-            if (isSystem && !includeSystem) continue;
+            // Bug-AND-007 (2026-05-16) — keep system apps that are
+            // explicitly listed in a curated category hint set, even
+            // when includeSystem == false. This is what surfaces
+            // Chrome (system app on KYOCERA + most stock ROMs) inside
+            // the Browsers category without forcing the user to flip
+            // the "Show system apps" toggle.
+            if (isSystem && !includeSystem)
+            {
+                if (curatedHintAllowlist is null
+                    || string.IsNullOrEmpty(info.PackageName)
+                    || !curatedHintAllowlist.Contains(info.PackageName))
+                    continue;
+            }
 
             string label;
             try

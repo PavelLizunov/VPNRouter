@@ -268,10 +268,29 @@ public static class AndroidConfigBuilder
                 {
                     logObj.Remove("output");
                 }
-                // Bump log level to debug for now so we can see why
-                // upstream connections fail. Phase 5 dial back to info
-                // once routing is solid.
-                logObj["level"] = "debug";
+                // Bug-AND-006 (2026-05-16) — preserve the level the
+                // caller chose in AndroidConfigBuilder (settings.App
+                // .LogLevel, default "info"). Previously this line
+                // hard-coded "debug" for Phase 5 diagnostics. Every TCP
+                // / UDP connection at debug emits 2-4 lines through the
+                // Go→JNI→logcat bridge with ANSI color allocations —
+                // measured ~95 lines/100 ms with a single Telegram
+                // session and was a major contributor to the 40 %
+                // idle-CPU drain the user reported (phone overheats).
+                // Keep "debug" only when the AppSettings level is
+                // explicitly set to debug/trace; otherwise leave the
+                // value the caller already wrote into the JSON.
+                var existingLevel = logObj["level"]?.GetValue<string>();
+                if (string.IsNullOrEmpty(existingLevel)
+                    || string.Equals(existingLevel, "trace", System.StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(existingLevel, "debug", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    // Force to info if the caller forgot to set a level
+                    // or if Phase-5-era "debug" defaults leaked through.
+                    // Users who explicitly need debug logs can toggle
+                    // via the upcoming Diagnostics tab.
+                    logObj["level"] = "info";
+                }
             }
 
             // 2. inbounds[*].type=tun → set Android-friendly TUN options
