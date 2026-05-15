@@ -236,6 +236,10 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.Button? _menuVersionItem;
     private TextBlock? _menuAboutLabel;
     private TextBlock? _menuVersionPill;
+    // Bug-AND-009 follow-up (2026-05-16) — promote kebab "Advanced ▸"
+    // button to a field so language toggle refreshes its label
+    // (RU "Расширенный ▸" / EN "Advanced ▸").
+    private Avalonia.Controls.Button? _menuAdvancedToggleBtn;
     // _menuRepoItem retained as field-level null-stub so existing
     // ToggleLanguageAndRefresh / null-check sites don't need refactoring.
     // Functionally retired — the About row above absorbs the repo-open click.
@@ -874,6 +878,9 @@ public partial class AndroidApp : Avalonia.Application
             Padding = new Thickness(0, 8),
             Margin = new Thickness(0, 6, 0, 0),
             FontSize = 11,
+            // Bug-AND-009 follow-up — store on field so the language
+            // toggle refresh can re-stamp Content with the localized
+            // string (otherwise the EN/RU label drifts after toggle).
             FontWeight = FontWeight.SemiBold,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
@@ -885,6 +892,7 @@ public partial class AndroidApp : Avalonia.Application
             if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
             OpenAdvancedShell(AdvancedTab.Servers);
         };
+        _menuAdvancedToggleBtn = advancedToggleBtn;
         menuStack.Children.Add(advancedToggleBtn);
 
         // F-12 kebab visual parity (2026-05-09): container now matches desktop
@@ -5151,6 +5159,27 @@ public partial class AndroidApp : Avalonia.Application
         if (ApplicationLifetime is not
             Avalonia.Controls.ApplicationLifetimes.ISingleViewApplicationLifetime singleView)
             return;
+        // Bug-AND-009 (2026-05-16) — capture navigation state BEFORE
+        // the rebuild so we can restore the user's position afterwards.
+        // brat reported "content disappears" when switching theme: the
+        // pre-fix RebuildSimplePageView dropped them back to the Simple
+        // page no matter what tab of the Advanced shell they had open
+        // (because BuildSimplePageView creates a fresh Advanced shell
+        // overlay whose IsVisible defaults to false).
+        var advancedWasOpen = _advShellOverlay?.IsVisible == true;
+        var advancedTab = _advShellSelectedTab;
+        // Bug-AND-009 follow-up — clear the lazy tab-content cache
+        // before the rebuild. Each tab's Control reference is owned
+        // by the OLD overlay tree which is about to be replaced; if
+        // EnsureTabContentBuilt finds the tab key already present
+        // (true after first activation of any tab), it skips
+        // construction and re-adds the stale Control to the NEW host,
+        // producing the empty-body bug brat hit ("вкладка выбрана,
+        // содержимое пропало"). Also clear button refs so the new
+        // BuildAdvancedShellOverlay loop's tabPanel.Children.Add
+        // doesn't end up wired to dead buttons.
+        _advShellTabContent.Clear();
+        _advShellTabButtons.Clear();
         // Build the new view BEFORE swapping so any construction
         // exception leaves the old one intact and visible.
         var fresh = BuildSimplePageView();
@@ -5163,6 +5192,23 @@ public partial class AndroidApp : Avalonia.Application
         // empty.
         UpdateConnectionState(MainActivity.IntendedConnected);
         ReloadServerList();
+        // Bug-AND-009 — restore Advanced-shell navigation if the user
+        // had it open. The fresh BuildSimplePageView created a NEW
+        // _advShellOverlay field reference (via BuildAdvancedShellOverlay),
+        // so reopening uses the rebuilt-with-the-new-theme overlay tree.
+        if (advancedWasOpen)
+        {
+            try { OpenAdvancedShell(advancedTab); }
+            catch (Exception ex)
+            {
+                try
+                {
+                    global::Android.Util.Log.Warn("VpnRouter.Theme",
+                        $"Restore Advanced shell after rebuild failed: {ex.GetType().Name}: {ex.Message}");
+                }
+                catch { /* swallow logging failures */ }
+            }
+        }
     }
 
     /// <summary>
@@ -6783,6 +6829,12 @@ public partial class AndroidApp : Avalonia.Application
         // string), so refresh that field directly. Version pill stays put —
         // not localized. _menuRepoItem is a null stub (combined into About).
         if (_menuAboutLabel is not null) _menuAboutLabel.Text = Localization.SmpMenuAbout;
+        // Bug-AND-009 follow-up (2026-05-16) — kebab "Advanced ▸"
+        // toggle button. Sat as a local var pre-fix and missed
+        // language refresh, so its label drifted out of sync with the
+        // rest of the menu.
+        if (_menuAdvancedToggleBtn is not null)
+            _menuAdvancedToggleBtn.Content = Localization.SmpToggleToAdvanced;
         // Section headers
         if (_menuSectionView is not null) _menuSectionView.Text = Localization.MenuSectionView;
         if (_menuSectionDiagnostics is not null) _menuSectionDiagnostics.Text = Localization.MenuSectionDiagnostics;

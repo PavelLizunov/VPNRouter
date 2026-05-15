@@ -760,6 +760,37 @@ public partial class AndroidApp
         }
         if (_settingsApplyButton is not null)
             _settingsApplyButton.Content = Localization.ApplyNowReloadVpn;
+        // Bug-AND-009 follow-up (2026-05-16) — most Advanced-shell tab
+        // bodies bake localized strings into Border/TextBlock children
+        // at construction time and don't expose per-string field refs
+        // for in-place updates (only Settings sub-section + Apply
+        // button are refreshable above). Rather than thread refresh
+        // helpers through every tab, drop the lazy-build cache so the
+        // currently-visible tab rebuilds itself in the new language.
+        // _advShellContentHost.Children must be flushed too so the
+        // old (stale-language) Control instance is not double-added.
+        try
+        {
+            if (_advShellContentHost is not null)
+            {
+                foreach (var kv in _advShellTabContent)
+                    _advShellContentHost.Children.Remove(kv.Value);
+            }
+            _advShellTabContent.Clear();
+            // Re-build + show the current tab in the new language. The
+            // overlay's visibility / selected-tab id are preserved.
+            if (_advShellOverlay is not null && _advShellOverlay.IsVisible)
+                SelectAdvancedTab(_advShellSelectedTab);
+        }
+        catch (System.Exception ex)
+        {
+            try
+            {
+                global::Android.Util.Log.Warn("VpnRouter.Lang",
+                    $"Advanced-tab language rebuild failed: {ex.GetType().Name}: {ex.Message}");
+            }
+            catch { /* swallow logging failures */ }
+        }
     }
 
     /// <summary>
