@@ -95,6 +95,16 @@ public static class AndroidConfigBuilder
         // layer or in the AndroidStorage cache without affecting the
         // sing-box JSON.
         settings.App.BypassRussianTraffic = AndroidStorage.GetBypassRussianTraffic();
+        // Bug-AND-012 (2026-05-16) — surface BlockAds toggle into the
+        // generated sing-box config. Pre-fix AndroidStorage had the
+        // get/set pair (KeyBlockAds, GetBlockAds, SetBlockAds) plumbed
+        // through Settings UI but AndroidConfigBuilder never copied it
+        // into settings.App.BlockAds, so the toggle was silently a
+        // no-op. ConfigGenerator.ApplyAdBlock injects the rule-set +
+        // DNS reject + route reject when this flag is set; on Android
+        // the rule-set cache lives under RuleSetCacheManager (Core
+        // path resolves via AppPaths → FilesDir on Android).
+        settings.App.BlockAds = AndroidStorage.GetBlockAds();
         settings.App.ForceIpv4Only = AndroidStorage.GetDnsStrategy() switch
         {
             "prefer_ipv6" => false,
@@ -182,6 +192,11 @@ public static class AndroidConfigBuilder
         settings.App.LogLevel = "info";
         settings.App.ConfigMode = "custom";
         settings.App.BypassRussianTraffic = AndroidStorage.GetBypassRussianTraffic();
+        // Bug-AND-012 (2026-05-16) — same BlockAds wiring as the
+        // generated path. CustomConfigInjector respects BlockAds via
+        // ConfigGenerator's ApplyAdBlock helper after the injector's
+        // process-rule pass.
+        settings.App.BlockAds = AndroidStorage.GetBlockAds();
         settings.App.ForceIpv4Only = AndroidStorage.GetDnsStrategy() switch
         {
             "prefer_ipv6" => false,
