@@ -123,6 +123,30 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
     public static MainActivity? Instance { get; private set; }
 
     /// <summary>
+    /// Bug-AND-011 (2026-05-16) — runtime check for whether this build
+    /// was signed with a debug key + has Android's debuggable flag set.
+    /// Used to gate diagnostic side-channels (config dump, test-uri
+    /// override) that would leak credentials on a release build.
+    /// Release builds always return false; debug-keystore builds return
+    /// true. Reads ApplicationInfo.Flags rather than a compile-time
+    /// constant so the same DLL can be reused across configurations
+    /// without recompile.
+    /// </summary>
+    private bool IsDebuggable()
+    {
+        try
+        {
+            var appInfo = ApplicationInfo;
+            if (appInfo is null) return false;
+            return (appInfo.Flags & global::Android.Content.PM.ApplicationInfoFlags.Debuggable) != 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Fires whenever <see cref="RequestConnect"/> /
     /// <see cref="RequestDisconnect"/> changes the user-visible tunnel
     /// intent. The Avalonia UI subscribes so it can flip the button label
@@ -804,22 +828,33 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
         // only, NOT sing-box's internal logger. Result: empty stderr
         // file even when routing failed silently.
         //
-        // Path: /sdcard/Android/data/com.ninitux.vpnrouter/files/singbox.log
+        // Bug-AND-011 / Critical-1 (2026-05-16 code review): write the
+        // sing-box log to the app's private sandbox FilesDir instead of
+        // GetExternalFilesDir() (which is world-readable on pre-API-30
+        // and trivially extractable via adb / file-manager on all API
+        // levels). sing-box at level=info emits remote hostnames, UUIDs,
+        // and Reality handshake metadata — production users should not
+        // be leaking that to anything but their own diagnostics tap.
+        // The path is still reachable for debug via `adb shell run-as`
+        // on a debuggable build OR a future "Export logs" Settings flow
+        // that copies via Storage Access Framework with explicit consent.
+        //
+        // Path: /data/data/com.ninitux.vpnrouter/files/singbox.log
         string? singboxLogPath = null;
         try
         {
-            var extDir = GetExternalFilesDir(null);
-            if (extDir is not null)
+            var filesDir = FilesDir;
+            if (filesDir is not null)
             {
-                singboxLogPath = System.IO.Path.Combine(extDir.AbsolutePath, "singbox.log");
+                singboxLogPath = System.IO.Path.Combine(filesDir.AbsolutePath, "singbox.log");
                 global::Android.Util.Log.Info("VpnRouter",
-                    $"Phase 6.1: sing-box log.output → {singboxLogPath}");
+                    $"Bug-AND-011: sing-box log.output → {singboxLogPath} (private sandbox)");
             }
         }
         catch (Exception ex)
         {
             global::Android.Util.Log.Warn("VpnRouter",
-                $"Phase 6.1: GetExternalFilesDir failed — {ex.GetType().Name}: {ex.Message}");
+                $"Bug-AND-011: FilesDir failed — {ex.GetType().Name}: {ex.Message}");
         }
 
         // v2.32.0 (AND-CC, 2026-05-07) — branch on stored ConfigMode.
@@ -859,20 +894,26 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
                 return;
             }
 
-            try
+            // Bug-AND-011 / Critical-1 (2026-05-16 code review): config-dump
+            // writes the full sing-box JSON (VLESS UUID, server, Reality
+            // public key + short id, SNI, custom user JSON) to disk. Gate
+            // behind ApplicationInfo.Flags.Debuggable so release builds
+            // never leak credentials, and only write to FilesDir (private
+            // sandbox) when enabled.
+            if (IsDebuggable() && singboxLogPath is not null)
             {
-                if (singboxLogPath is not null)
+                try
                 {
                     var configDumpPath = System.IO.Path.Combine(
                         System.IO.Path.GetDirectoryName(singboxLogPath)!,
                         "config-dump.json");
                     System.IO.File.WriteAllText(configDumpPath, configJson);
                 }
-            }
-            catch (Exception dumpEx)
-            {
-                global::Android.Util.Log.Warn("VpnRouter",
-                    $"AND-CC: config dump failed — {dumpEx.GetType().Name}: {dumpEx.Message}");
+                catch (Exception dumpEx)
+                {
+                    global::Android.Util.Log.Warn("VpnRouter",
+                        $"AND-CC: config dump failed — {dumpEx.GetType().Name}: {dumpEx.Message}");
+                }
             }
 
             DispatchTunnelStart(configJson);
@@ -893,25 +934,36 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
         VPNRouter.Core.Models.VlessServerEntry entry;
         try
         {
+            // Bug-AND-011 / Critical-2 (2026-05-16 code review): the
+            // test-uri.txt override is a takeover surface. Any app or
+            // person with shared-storage write (USB / adb / file-manager
+            // / other-app-with-permission) could drop a file that
+            // silently redirects all VPN traffic through an attacker
+            // server. Gate behind ApplicationInfo.Flags.Debuggable AND
+            // move to FilesDir so a release build cannot honour an
+            // externally-planted override even if one were placed.
             string? testUri = null;
-            try
+            if (IsDebuggable())
             {
-                var extDir = GetExternalFilesDir(null);
-                if (extDir is not null)
+                try
                 {
-                    var path = System.IO.Path.Combine(extDir.AbsolutePath, "test-uri.txt");
-                    if (System.IO.File.Exists(path))
+                    var filesDir = FilesDir;
+                    if (filesDir is not null)
                     {
-                        testUri = System.IO.File.ReadAllText(path).Trim();
-                        global::Android.Util.Log.Info("VpnRouter",
-                            $"Phase 6.4: test-uri.txt override active ({testUri.Length} chars)");
+                        var path = System.IO.Path.Combine(filesDir.AbsolutePath, "test-uri.txt");
+                        if (System.IO.File.Exists(path))
+                        {
+                            testUri = System.IO.File.ReadAllText(path).Trim();
+                            global::Android.Util.Log.Info("VpnRouter",
+                                $"Bug-AND-011: test-uri.txt override active (debug build, {testUri.Length} chars)");
+                        }
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                global::Android.Util.Log.Warn("VpnRouter",
-                    $"Phase 6.4: test-uri.txt read failed — {ex.GetType().Name}: {ex.Message}");
+                catch (Exception ex)
+                {
+                    global::Android.Util.Log.Warn("VpnRouter",
+                        $"Bug-AND-011: test-uri.txt read failed — {ex.GetType().Name}: {ex.Message}");
+                }
             }
 
             if (!string.IsNullOrEmpty(testUri))
@@ -965,9 +1017,13 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
             // world-readable file for offline inspection. Useful when
             // diagnosing routing issues like "TCP packets never reach
             // TUN inbound".
-            try
+            // Bug-AND-011 / Critical-1 (2026-05-16 code review): config
+            // dump gated behind debug-only build flag (see comment in
+            // the custom-mode branch above). Release builds never write
+            // the full sing-box JSON to disk.
+            if (IsDebuggable() && singboxLogPath is not null)
             {
-                if (singboxLogPath is not null)
+                try
                 {
                     var configDumpPath = System.IO.Path.Combine(
                         System.IO.Path.GetDirectoryName(singboxLogPath)!,
@@ -976,11 +1032,11 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
                     global::Android.Util.Log.Info("VpnRouter",
                         $"Phase 6.2 debug: config dumped to {configDumpPath} ({configJson.Length} chars)");
                 }
-            }
-            catch (Exception dumpEx)
-            {
-                global::Android.Util.Log.Warn("VpnRouter",
-                    $"Phase 6.2 debug: config dump failed — {dumpEx.GetType().Name}: {dumpEx.Message}");
+                catch (Exception dumpEx)
+                {
+                    global::Android.Util.Log.Warn("VpnRouter",
+                        $"Phase 6.2 debug: config dump failed — {dumpEx.GetType().Name}: {dumpEx.Message}");
+                }
             }
         }
         catch (Exception ex)

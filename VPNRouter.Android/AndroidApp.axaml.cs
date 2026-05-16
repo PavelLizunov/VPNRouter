@@ -498,11 +498,14 @@ public partial class AndroidApp : Avalonia.Application
 
             var view = BuildSimplePageView();
             singleView.MainView = view;
-            MainActivity.IntentChanged += OnIntentChanged;
-            // v2.32.0 (AND-DIAG) — surface tunnel errors in the status
-            // card. Receiver fires from a binder dispatch thread so the
-            // handler posts to UI thread before mutating Avalonia state.
-            MainActivity.TunnelErrorReported += OnTunnelErrorReported;
+            // Bug-AND-011 / High-4 (2026-05-16 code review): re-attach
+            // via the helper so we can detach when the view is torn
+            // down (config-change-driven AndroidApp reconstruction).
+            // Pre-fix the static event held a strong reference to every
+            // previously-created AndroidApp instance, indefinitely
+            // retaining the visual tree + _appPickerCache + Bitmaps.
+            // Idempotent: subscribes only once per AndroidApp instance.
+            AttachLifecycleEvents();
             UpdateConnectionState(MainActivity.IntendedConnected);
             ReloadServerList();
 
@@ -3727,7 +3730,12 @@ public partial class AndroidApp : Avalonia.Application
         {
             try
             {
-                var stream = AssetLoader.Open(new Uri("avares://VPNRouter.Android/Assets/penguin_mascot.png"));
+                // Bug-AND-011 / Medium-4 (2026-05-16 code review) —
+                // dispose the asset stream after Bitmap copies the
+                // bytes internally. Pre-fix leaked one stream per
+                // process; minor on its own but a copy-paste hazard
+                // for the icon-loader pattern reused across this file.
+                using var stream = AssetLoader.Open(new Uri("avares://VPNRouter.Android/Assets/penguin_mascot.png"));
                 _mascotLight = new Bitmap(stream);
             }
             catch
@@ -3873,6 +3881,40 @@ public partial class AndroidApp : Avalonia.Application
         Dispatcher.UIThread.Post(() => UpdateConnectionState(connected));
     }
 
+    /// <summary>
+    /// Bug-AND-011 / High-4 (2026-05-16 code review) — central
+    /// subscribe / unsubscribe helper for static lifecycle events
+    /// (<see cref="MainActivity.IntentChanged"/>,
+    /// <see cref="MainActivity.TunnelErrorReported"/>). Pre-fix only
+    /// the subscribe side was wired
+    /// (OnFrameworkInitializationCompleted), so every reconstructed
+    /// AndroidApp instance accumulated a subscriber on the static
+    /// event, indefinitely retaining the previous visual tree +
+    /// Bitmap cache. The static tracker below ensures only ONE
+    /// AndroidApp has subscriptions live at a time — calling
+    /// Attach on a new instance detaches the previous one
+    /// automatically.
+    /// </summary>
+    private static AndroidApp? s_currentLifecycleSubscriber;
+    private bool _lifecycleEventsAttached;
+    private void AttachLifecycleEvents()
+    {
+        var prev = System.Threading.Interlocked.Exchange(ref s_currentLifecycleSubscriber, this);
+        if (prev is not null && !ReferenceEquals(prev, this))
+            prev.DetachLifecycleEvents();
+        if (_lifecycleEventsAttached) return;
+        _lifecycleEventsAttached = true;
+        MainActivity.IntentChanged += OnIntentChanged;
+        MainActivity.TunnelErrorReported += OnTunnelErrorReported;
+    }
+    private void DetachLifecycleEvents()
+    {
+        if (!_lifecycleEventsAttached) return;
+        _lifecycleEventsAttached = false;
+        try { MainActivity.IntentChanged -= OnIntentChanged; } catch { }
+        try { MainActivity.TunnelErrorReported -= OnTunnelErrorReported; } catch { }
+    }
+
     private void UpdateConnectionState(bool connected)
     {
         if (_statusCard is null) return;
@@ -3979,8 +4021,15 @@ public partial class AndroidApp : Avalonia.Application
         // Off → On all need to clear the animation that was driving Opacity.
         // On a forced re-bind we still want to restart the pulse if state
         // is Connecting so the breathing animation stays in sync.
-        _vpnPulseCts?.Cancel();
+        // Bug-AND-011 / High-6 (2026-05-16 code review) — capture +
+        // null + Cancel + Dispose. Pre-fix the CTS was Cancelled but
+        // never Disposed, leaking the Timer + ManualResetEvent on
+        // every state transition (and chips toggle on every Connect /
+        // Disconnect / DPI bypass mode change).
+        var prevVpnCts = _vpnPulseCts;
         _vpnPulseCts = null;
+        try { prevVpnCts?.Cancel(); } catch { }
+        prevVpnCts?.Dispose();
         _vpnChip.Opacity = 1.0;
 
         string bgKey, fgKey;
@@ -4037,8 +4086,12 @@ public partial class AndroidApp : Avalonia.Application
         if (_zapretChipState == state && !force) return;
         _zapretChipState = state;
 
-        _zapretPulseCts?.Cancel();
+        // Bug-AND-011 / High-6 (2026-05-16) — same CTS dispose pattern
+        // as SetVpnChipState.
+        var prevZapretCts = _zapretPulseCts;
         _zapretPulseCts = null;
+        try { prevZapretCts?.Cancel(); } catch { }
+        prevZapretCts?.Dispose();
         _zapretChip.Opacity = 1.0;
 
         string bgKey, fgKey;
