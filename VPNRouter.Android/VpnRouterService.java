@@ -327,7 +327,18 @@ public final class VpnRouterService extends VpnService {
     }
 
     private void startTunnel() {
-        startForeground(NOTIFICATION_ID, buildNotification());
+        // Bug-AND-011 / Medium-5 (2026-05-16 code review) — call the
+        // 3-arg startForeground on Android 14+ (API 34) with explicit
+        // FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED. The 2-arg form
+        // works today via manifest declaration but is fragile under
+        // future ANR enforcement; the explicit form is the documented
+        // best practice for VPN services on API 34+.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, buildNotification(),
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED);
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification());
+        }
 
         // AND-NETRES: hold a partial wake-lock during the ~5 s connect-init
         // window. Without it, on a screen-off / Doze device the kernel
@@ -483,17 +494,19 @@ public final class VpnRouterService extends VpnService {
         options.setFixAndroidStack(false);
         Libbox.setup(options);
 
-        // v3.0 Phase 5b — redirect Go-side stderr to externally-readable
-        // path so we can pull it via plain adb shell cat (no root, no
-        // run-as). getExternalFilesDir() returns
-        // /sdcard/Android/data/<pkg>/files/ which is world-readable and
-        // doesn't require WRITE_EXTERNAL_STORAGE on Android Q+.
+        // Bug-AND-011 / Critical-1 follow-up (2026-05-16 code review):
+        // route Go-side stderr to the app's private sandbox FilesDir
+        // instead of getExternalFilesDir(). Pre-fix the sing-box
+        // stderr (which captures Go-runtime panics and Reality
+        // handshake traces) was world-readable via adb / file manager
+        // / USB. Now stays inside /data/data/com.ninitux.vpnrouter/files/
+        // (only this app's UID can read it). For diagnostics on a
+        // debug build, use `adb shell run-as com.ninitux.vpnrouter cat`.
         try {
-            File extDir = getExternalFilesDir(null);
-            File targetDir = (extDir != null) ? extDir : workingDir;
-            File stderrFile = new File(targetDir, "singbox.stderr.log");
+            File stderrFile = new File(filesDir, "singbox.stderr.log");
             Libbox.redirectStderr(stderrFile.getAbsolutePath());
-            Log.i(LOG_TAG, "Phase 5b: stderr → " + stderrFile.getAbsolutePath());
+            Log.i(LOG_TAG, "Bug-AND-011: stderr → " + stderrFile.getAbsolutePath()
+                    + " (private sandbox)");
         } catch (Exception e) {
             Log.w(LOG_TAG, "redirectStderr failed: " + e.getMessage());
         }
