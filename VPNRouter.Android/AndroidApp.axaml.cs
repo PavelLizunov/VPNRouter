@@ -1154,6 +1154,39 @@ public partial class AndroidApp : Avalonia.Application
         var existingUri = AndroidStorage.GetVlessUri();
         _serverInput.Text = existingSub ?? existingUri ?? string.Empty;
 
+        // Bug-AND-023 (2026-05-17, user-requested "сканирование qr code
+        // чтоб добавить подписку или конфиг через qr") — QR scan button
+        // next to the Simple-page input field. Tap → MainActivity
+        // dispatches MediaStore camera intent → ZXing decodes JPEG →
+        // callback fills _serverInput.Text with the decoded URI.
+        // QrCodeDecoder + RequestQrCodeScan plumbing already existed
+        // (lucid-pike, 2026-05-09) but the button entry had been
+        // removed during earlier UX polish; this restores it.
+        var smpQrButton = new Avalonia.Controls.Button
+        {
+            Content = "📷",
+            FontSize = 14,
+            Width = 44,
+            Padding = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            CornerRadius = new CornerRadius(radiusXs),
+        };
+        smpQrButton.BindToken(Avalonia.Controls.Button.BackgroundProperty, "AccentBgSubtleBrush");
+        smpQrButton.BindToken(Avalonia.Controls.Button.ForegroundProperty, "AccentFgBrush");
+        ToolTip.SetTip(smpQrButton, Localization.SmpScanQrButton);
+        smpQrButton.Click += OnSimpleQrScanClicked;
+
+        var inputRow = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 6,
+        };
+        Grid.SetColumn(_serverInput, 0);
+        Grid.SetColumn(smpQrButton, 1);
+        inputRow.Children.Add(_serverInput);
+        inputRow.Children.Add(smpQrButton);
+
         _serverInputHint = new TextBlock
         {
             Text = Localization.SmpInputHint,
@@ -1176,7 +1209,7 @@ public partial class AndroidApp : Avalonia.Application
             Children =
             {
                 _serverInputLabel,
-                _serverInput,
+                inputRow,
                 _serverInputHint,
                 _serverInputError,
             },
@@ -3828,6 +3861,44 @@ public partial class AndroidApp : Avalonia.Application
         _formExpanded = !_formExpanded;
         if (_formCard is not null) _formCard.IsVisible = _formExpanded;
         if (_configRowChevron is not null) _configRowChevron.Text = _formExpanded ? "⌄" : "›";
+    }
+
+    /// <summary>
+    /// Bug-AND-023 (2026-05-17) — QR scan handler on Simple page. Sets
+    /// the MainActivity static one-shot callback, then dispatches the
+    /// camera intent. On success the callback marshals back to UI
+    /// thread, fills _serverInput.Text with the decoded URI, and
+    /// surfaces a toast. On error the toast surfaces the failure
+    /// (permission denied / not recognised). One-shot — re-tap to scan
+    /// again.
+    /// </summary>
+    private void OnSimpleQrScanClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var activity = MainActivity.Instance;
+        if (activity is null) return;
+        MainActivity.PendingQrScanCallback = (success, text) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!success || string.IsNullOrWhiteSpace(text))
+                {
+                    var msg = text switch
+                    {
+                        "permission_denied" => Localization.SmpQrPermissionDenied,
+                        "not_recognized"    => Localization.SmpQrNotRecognized,
+                        _                    => Localization.SmpQrNotRecognized,
+                    };
+                    ShowMenuFeedback(msg);
+                    return;
+                }
+                if (_serverInput is not null)
+                {
+                    _serverInput.Text = text.Trim();
+                    ShowMenuFeedback(Localization.SmpQrScannedToast);
+                }
+            });
+        };
+        activity.RequestQrCodeScan();
     }
 
     private void OnConnectClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

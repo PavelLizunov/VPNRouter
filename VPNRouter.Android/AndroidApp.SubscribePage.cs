@@ -231,16 +231,37 @@ public partial class AndroidApp
         };
         _subsAddBtn.Click += OnSubsAddClicked;
 
+        // Bug-AND-023 (2026-05-17, user-requested QR scanning) — QR
+        // button between URL field and Add so a user can paste a
+        // subscription URL by scanning the QR shown in the provider's
+        // panel.
+        var subsQrBtn = new Avalonia.Controls.Button
+        {
+            Content = "📷",
+            FontSize = 14,
+            Padding = new Thickness(0),
+            Width = 40,
+            Background = GetBrush("AccentBgSubtleBrush"),
+            Foreground = GetBrush("AccentFgBrush"),
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(GetRadius("RadiusSm")),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+        };
+        ToolTip.SetTip(subsQrBtn, Localization.SmpScanQrButton);
+        subsQrBtn.Click += OnSubscribeQrScanClicked;
+
         var addFormRow = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("100,*,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("100,*,Auto,Auto"),
             ColumnSpacing = 4,
         };
         Grid.SetColumn(_subsNewName, 0);
         Grid.SetColumn(_subsNewUrl, 1);
-        Grid.SetColumn(_subsAddBtn, 2);
+        Grid.SetColumn(subsQrBtn, 2);
+        Grid.SetColumn(_subsAddBtn, 3);
         addFormRow.Children.Add(_subsNewName);
         addFormRow.Children.Add(_subsNewUrl);
+        addFormRow.Children.Add(subsQrBtn);
         addFormRow.Children.Add(_subsAddBtn);
 
         var addFormBorder = new Border
@@ -1109,6 +1130,43 @@ public partial class AndroidApp
         _subs.RemoveAll(s => string.Equals(s.Id, sub.Id, StringComparison.Ordinal));
         AndroidStorage.SetSubscriptions(_subs);
         RebuildSubsList();
+    }
+
+    /// <summary>
+    /// Bug-AND-023 (2026-05-17) — QR-scan handler for the Subscribe-tab
+    /// Add form. Decoded text fills the _subsNewUrl field (the user
+    /// still needs to type a Name and tap Add — we don't auto-add
+    /// because subscription providers sometimes encode a vless URI in
+    /// the QR rather than a subscription URL, and the user may want
+    /// to cancel before saving).
+    /// </summary>
+    private void OnSubscribeQrScanClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var activity = MainActivity.Instance;
+        if (activity is null) return;
+        MainActivity.PendingQrScanCallback = (success, text) =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!success || string.IsNullOrWhiteSpace(text))
+                {
+                    var msg = text switch
+                    {
+                        "permission_denied" => Localization.SmpQrPermissionDenied,
+                        "not_recognized"    => Localization.SmpQrNotRecognized,
+                        _                    => Localization.SmpQrNotRecognized,
+                    };
+                    ShowMenuFeedback(msg);
+                    return;
+                }
+                if (_subsNewUrl is not null)
+                {
+                    _subsNewUrl.Text = text.Trim();
+                    ShowMenuFeedback(Localization.SmpQrScannedToast);
+                }
+            });
+        };
+        activity.RequestQrCodeScan();
     }
 
     private async void OnSubsAddClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
