@@ -281,6 +281,12 @@ public static class Strings
         ? "Сервер не настроен. Добавьте подписку или вставьте vless://-URI."
         : "No server configured. Add a subscription or paste a vless:// URI.";
 
+    // Bug-AND-019 (2026-05-16) — long-press → tap-to-confirm delete UX
+    // for user-defined custom categories on the Applications tab.
+    public static string AndroidDeleteCategoryConfirm => Ru
+        ? "Удалить?"
+        : "Tap to delete";
+
     public static string SmpAutostartCardTitle => Ru
         ? "Автозапуск"
         : "Autostart";

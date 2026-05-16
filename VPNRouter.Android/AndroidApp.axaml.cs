@@ -6523,6 +6523,19 @@ public partial class AndroidApp : Avalonia.Application
         // category is simultaneously visible and tappable.
         border.PointerPressed += (_, _) => SetActiveAppCategory(id);
 
+        // Bug-AND-019 (2026-05-16) — long-press on a user-defined custom
+        // category brings up a delete confirmation. Built-in categories
+        // (Discord, Browsers, Custom catch-all, etc.) are immutable and
+        // ignore the gesture.
+        if (isCustom)
+        {
+            border.AddHandler(Gestures.HoldingEvent, (_, e) =>
+            {
+                if (e.HoldingState == HoldingState.Started)
+                    PromptDeleteCustomCategory(id);
+            });
+        }
+
         _advAppsCategoryRowMap[id] = border;
         _advAppsCategoryCountMap[id] = countTb;
         _advAppsCategoryNameMap[id] = nameTb;
@@ -6619,10 +6632,75 @@ public partial class AndroidApp : Avalonia.Application
     /// always visible; chip strip drives the filter.</para></summary>
     private void SetActiveAppCategory(string? id)
     {
+        // Bug-AND-019 — intercept the tap for pending-delete confirm.
+        // If we committed a delete the sidebar was rebuilt; activation
+        // for the deleted id should be skipped (Custom catch-all
+        // already became active inside the consume helper).
+        if (ConsumePendingDeleteIfMatches(id)) return;
         _advAppsActiveCategoryId = id;
         AndroidStorage.SetApplicationsActiveCategory(id);
         StyleActiveCategoryRow();
         ApplyAppPickerFilter();
+    }
+
+    /// <summary>
+    /// Bug-AND-019 (2026-05-16) — track which user-defined custom
+    /// category was just long-pressed. The chip enters an inline
+    /// "tap-to-confirm-delete" state; a second tap on the same chip
+    /// drops it from <see cref="_advAppsCustomCategories"/>, a tap on
+    /// anything else (different chip, app row, etc.) cancels.
+    /// </summary>
+    private string? _pendingDeleteCategoryId;
+
+    private void PromptDeleteCustomCategory(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return;
+        if (!IsUserDefinedCategory(id)) return;
+        _pendingDeleteCategoryId = id;
+        // Repaint the chip's text to surface the inline confirmation
+        // ("✗ Tap again to delete"). Active state still applies so the
+        // chip stays visually anchored.
+        if (_advAppsCategoryNameMap.TryGetValue(id, out var tb) && tb is not null)
+        {
+            tb.Text = "✗ " + Localization.AndroidDeleteCategoryConfirm;
+            tb.Foreground = GetBrush("DangerFgBrush");
+        }
+    }
+
+    /// <summary>Called by SetActiveAppCategory when the user taps a chip.
+    /// If a delete is pending and the user tapped the SAME chip, commit
+    /// the delete. Otherwise (different chip or different surface),
+    /// cancel and revert the inline state.</summary>
+    private bool ConsumePendingDeleteIfMatches(string? tappedId)
+    {
+        var pending = _pendingDeleteCategoryId;
+        if (string.IsNullOrEmpty(pending)) return false;
+        _pendingDeleteCategoryId = null;
+        if (!string.Equals(pending, tappedId, System.StringComparison.OrdinalIgnoreCase))
+        {
+            // Cancel — repaint the original label on the previously
+            // pending chip via a sidebar rebuild (cheaper than tracking
+            // original label).
+            RebuildAppCategorySidebar();
+            return false;
+        }
+        // Commit delete.
+        try
+        {
+            _advAppsCustomCategories.RemoveAll(c =>
+                string.Equals(c.Name, pending, System.StringComparison.OrdinalIgnoreCase));
+            AndroidStorage.SetCustomCategories(_advAppsCustomCategories);
+            if (string.Equals(_advAppsActiveCategoryId, pending, System.StringComparison.OrdinalIgnoreCase))
+                _advAppsActiveCategoryId = AndroidCategoryDefaults.CustomCatchAllId;
+            RebuildAppCategorySidebar();
+            ApplyAppPickerFilter();
+        }
+        catch (System.Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter.Categories",
+                $"Bug-AND-019 delete failed: {ex.GetType().Name}: {ex.Message}");
+        }
+        return true;
     }
 
     /// <summary>Add a user-created custom category from the sidebar's

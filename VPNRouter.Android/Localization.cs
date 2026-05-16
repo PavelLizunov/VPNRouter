@@ -141,6 +141,8 @@ internal static class Localization
     public static string AutostartLoginAppDescription => global::VPNRouter.Core.Localization.Strings.AutostartLoginAppDescription;
     public static string ServiceRunningLine(int pid) => global::VPNRouter.Core.Localization.Strings.ServiceRunningLine(pid);
     public static string ServiceStoppedLine => global::VPNRouter.Core.Localization.Strings.ServiceStoppedLine;
+    public static string AndroidErrorNoServerConfigured => global::VPNRouter.Core.Localization.Strings.AndroidErrorNoServerConfigured;
+    public static string AndroidDeleteCategoryConfirm => global::VPNRouter.Core.Localization.Strings.AndroidDeleteCategoryConfirm;
     public static string SmpAutostartCardTitle => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardTitle;
     public static string SmpAutostartCardOn => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardOn;
     public static string SmpAutostartCardOff => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardOff;
