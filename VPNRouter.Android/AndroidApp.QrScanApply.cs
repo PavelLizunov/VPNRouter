@@ -230,37 +230,21 @@ public partial class AndroidApp
             return;
         }
 
-        // Merge the fetched server list into the saved Servers list so
-        // Advanced → Servers reflects what the subscription gave us.
-        // Dedupe per row by host:port:uuid (same key OnFreeConfigsUseClicked uses).
+        // Bug-AND-023 v4 (2026-05-17, user-reported "сервера подписки также
+        // продублировались из страницы подписки на страницу сервер"): pre-v4
+        // we merged entry.Servers into AndroidStorage.GetServers() so the
+        // connect resolver could find them. That made every subscription
+        // server appear on both Subscribe and Servers tabs.
+        //
+        // v4 leaves the subscription's Servers in-place (inside the
+        // SubscriptionEntry only) and relies on the GetActiveServer
+        // walking-subscriptions tier added in the same fix. SetSelectedServerName
+        // is enough — GetActiveServer resolves it against the in-memory
+        // sub.Servers list when the connect path runs.
         VlessServerEntry firstServer;
         try
         {
-            var all = AndroidStorage.GetServers() ?? new List<VlessServerEntry>();
             firstServer = entry.Servers[0];
-            foreach (var s in entry.Servers)
-            {
-                var dup = all.FirstOrDefault(x =>
-                    string.Equals(x.Server, s.Server, StringComparison.OrdinalIgnoreCase) &&
-                    x.Port == s.Port &&
-                    string.Equals(x.Uuid, s.Uuid, StringComparison.OrdinalIgnoreCase));
-                if (dup is null)
-                {
-                    // Apply the same unique-name pass we use for QR vless
-                    // scans so we don't collide with manually-added rows
-                    // named "vps-de" etc.
-                    var baseName = string.IsNullOrWhiteSpace(s.Name)
-                        ? (s.Server ?? "server")
-                        : s.Name!;
-                    var displayName = baseName;
-                    int suffix = 2;
-                    while (all.Any(x => string.Equals(x.Name, displayName, StringComparison.OrdinalIgnoreCase)))
-                        displayName = $"{baseName} #{suffix++}";
-                    s.Name = displayName;
-                    all.Add(s);
-                }
-            }
-            AndroidStorage.SetServers(all);
             AndroidStorage.SetSelectedServerName(firstServer.Name);
             AndroidStorage.SetSubscriptionUrl(url);
             AndroidStorage.SetVlessUri(null);

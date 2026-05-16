@@ -231,6 +231,24 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
             catch { }
         }
 
+        // Bug-AND-023 v4 (2026-05-17, user-reported "сервера подписки также
+        // продублировались из страницы подписки на страницу сервер"): one-
+        // shot cleanup of KeyServersJson rows that mirror subscription
+        // servers (v3 SetSubscriptions duplicated them on every save).
+        // Stamps a SharedPreferences flag on completion so the parse cost
+        // is paid exactly once per install. Bug-AND-011-style best-effort:
+        // any failure logs + skips, never blocks startup.
+        try { AndroidStorage.PruneSubServerDuplicatesOnce(); }
+        catch (Exception ex)
+        {
+            try
+            {
+                global::Android.Util.Log.Warn("VpnRouter.Storage",
+                    $"PruneSubServerDuplicatesOnce raised: {ex.GetType().Name}: {ex.Message}");
+            }
+            catch { }
+        }
+
         // v2.32.0 SR-2 — bump launch-failure counter BEFORE
         // base.OnCreate (which spins up Avalonia). This way, any crash
         // inside Avalonia init / view-model construction / first-frame

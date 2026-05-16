@@ -52,6 +52,26 @@ public static class AndroidStorage
     // one-entry list.
     private const string KeySubscriptions = "subscriptions_json";
 
+    // Bug-AND-023 v4 (2026-05-17) — one-shot migration flag for the
+    // "subscription servers shouldn't appear on the Servers tab too"
+    // cleanup. v3 had two distinct paths writing the same content into
+    // KeyServersJson:
+    //   (a) SetSubscriptions implicitly rebuilt KeyServersJson as the
+    //       union of every enabled subscription's Servers (aggregated
+    //       pool) — making KeyServersJson a duplicate of subscription
+    //       content rather than a separate "manual" list.
+    //   (b) ApplyScannedSubscriptionUrlAsync (Bug-AND-023 v3) further
+    //       merged the freshly-fetched subscription's Servers into
+    //       KeyServersJson, redundantly.
+    // v4 cuts both paths; KeyServersJson is now a pure standalone list
+    // (free-config "Use" picks + manual vless:// URIs + QR vless:// scans).
+    // The Servers tab UI already only renders _srvCurrentSub?.Servers
+    // (the in-memory current SubscriptionEntry's list, not GetServers),
+    // so this change is invisible to callers — except for users who
+    // upgraded from v3 with already-populated KeyServersJson dupes.
+    // PruneSubServerDuplicatesOnce strips those.
+    private const string KeyV4SubServersPruneDone = "v4_sub_servers_prune_done";
+
     // ── v2.32.0 (AND-CC): config mode + custom sing-box JSON ────────────
     //
     // Three-way enum mirroring desktop's AppSettings.App.ConfigMode:
@@ -161,10 +181,19 @@ public static class AndroidStorage
 
     /// <summary>
     /// Replace the list of subscriptions atomically. Pass null/empty to
-    /// clear. Also flushes the aggregated <see cref="GetServers"/> pool
-    /// (union of all entries' Servers, dedup by Server:Port:Uuid:Flow)
-    /// so the connect path keeps working without a separate rebuild
-    /// step.
+    /// clear.
+    /// <para>Bug-AND-023 v4 (2026-05-17, user-reported "сервера подписки
+    /// также продублировались из страницы подписки на страницу сервер"):
+    /// pre-v4 this method also flushed an aggregated <see cref="GetServers"/>
+    /// pool (union of every enabled subscription's Servers). That made
+    /// KeyServersJson a redundant copy of subscription content, which
+    /// showed up as "every server in Subscribe tab also appears in Servers
+    /// tab". v4 drops the implicit rebuild — KeyServersJson is now a pure
+    /// standalone list (free-config picks, manual URIs, QR vless scans).
+    /// <see cref="GetActiveServer"/> was extended in the same fix to walk
+    /// both standalone Servers AND every subscription's in-memory Servers
+    /// list so the connect path keeps working without the duplicate
+    /// storage.</para>
     /// </summary>
     public static bool SetSubscriptions(IEnumerable<SubscriptionEntry>? subs)
     {
@@ -172,27 +201,100 @@ public static class AndroidStorage
         {
             var list = subs is null ? new List<SubscriptionEntry>() : new List<SubscriptionEntry>(subs);
             var json = JsonConvert.SerializeObject(list);
-            var ok = SetString(KeySubscriptions, json);
-
-            // Rebuild aggregated server pool — dedup matches desktop
-            // VlessServersResolver.Resolve key shape (Server:Port:Uuid:Flow).
-            var pool = new List<VlessServerEntry>();
-            var seen = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
-            foreach (var s in list)
-            {
-                if (!s.Enabled || s.Servers == null) continue;
-                foreach (var srv in s.Servers)
-                {
-                    var key = $"{srv.Server}:{srv.Port}:{srv.Uuid}:{srv.Flow}";
-                    if (seen.Add(key)) pool.Add(srv);
-                }
-            }
-            SetServers(pool);
-            return ok;
+            return SetString(KeySubscriptions, json);
         }
         catch
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Bug-AND-023 v4 (2026-05-17) — one-shot cleanup for users upgrading
+    /// from v3 where SetSubscriptions auto-rebuilt KeyServersJson as the
+    /// aggregated subscription pool. After upgrade their KeyServersJson
+    /// contains a copy of every subscription server (host:port:uuid
+    /// identical), and Advanced → Servers shows the same rows the
+    /// Subscribe tab does.
+    ///
+    /// Strategy: read both lists, remove from standalone any entry whose
+    /// host:port:uuid matches a subscription server. Persist the trimmed
+    /// standalone list, mark the flag, never run again. Idempotent on
+    /// fresh installs (no subs OR no standalone → no work).
+    ///
+    /// Risk: a user manually added a server with the same host:port:uuid
+    /// AS a subscription server (e.g. they pasted the same URL into both
+    /// the Add-VLESS box and the Add-Subscription box). Their manual row
+    /// will be removed by the prune. Acceptable: same endpoint = same
+    /// tunnel, the subscription copy still works. The prune is the lesser
+    /// evil compared to surfacing every subscription server twice.
+    /// </summary>
+    internal static void PruneSubServerDuplicatesOnce()
+    {
+        if (GetBool(KeyV4SubServersPruneDone, defaultValue: false)) return;
+
+        try
+        {
+            var subsJson = GetString(KeySubscriptions);
+            if (string.IsNullOrWhiteSpace(subsJson))
+            {
+                // Fresh install — nothing to prune. Stamp the flag so we
+                // don't pay the parse cost on every cold start.
+                SetBool(KeyV4SubServersPruneDone, true);
+                return;
+            }
+
+            List<SubscriptionEntry>? subs;
+            try
+            {
+                subs = JsonConvert.DeserializeObject<List<SubscriptionEntry>>(subsJson);
+            }
+            catch
+            {
+                // Corrupt blob — let GetSubscriptions handle the recovery
+                // path; we'll re-attempt the prune on the next launch.
+                return;
+            }
+            if (subs == null || subs.Count == 0)
+            {
+                SetBool(KeyV4SubServersPruneDone, true);
+                return;
+            }
+
+            var subKeys = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            foreach (var s in subs)
+            {
+                if (s?.Servers == null) continue;
+                foreach (var srv in s.Servers)
+                {
+                    if (srv == null) continue;
+                    subKeys.Add($"{srv.Server}:{srv.Port}:{srv.Uuid}");
+                }
+            }
+            if (subKeys.Count == 0)
+            {
+                SetBool(KeyV4SubServersPruneDone, true);
+                return;
+            }
+
+            var standalone = GetServers();
+            int before = standalone.Count;
+            standalone.RemoveAll(s =>
+                s != null && subKeys.Contains($"{s.Server}:{s.Port}:{s.Uuid}"));
+
+            if (standalone.Count != before)
+            {
+                global::Android.Util.Log.Info("VpnRouter.Storage",
+                    $"PruneSubServerDuplicatesOnce: removed {before - standalone.Count} duplicate(s) from KeyServersJson");
+                SetServers(standalone);
+            }
+            SetBool(KeyV4SubServersPruneDone, true);
+        }
+        catch (System.Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter.Storage",
+                $"PruneSubServerDuplicatesOnce threw: {ex.GetType().Name}: {ex.Message}");
+            // Don't stamp the flag on error — retry on next launch.
         }
     }
 
@@ -273,6 +375,8 @@ public static class AndroidStorage
     {
         var selectedName = GetSelectedServerName();
         var servers = GetServers();
+
+        // ── Tier 1: explicit selection by Name in the standalone list ───
         if (!string.IsNullOrEmpty(selectedName))
         {
             foreach (var s in servers)
@@ -280,13 +384,33 @@ public static class AndroidStorage
                 if (string.Equals(s.Name, selectedName, System.StringComparison.OrdinalIgnoreCase))
                     return s;
             }
-            // Selected name no longer in pool (e.g. subscription refreshed
-            // and renamed servers). Fall through to first-available below.
         }
 
-        // DEFCT-005 fallback: subscription cache populated but no explicit
-        // selection — pick the first cached server. Persist the choice so
-        // the UI shows it as the active selection on next render.
+        // ── Tier 2 (Bug-AND-023 v4, 2026-05-17): explicit selection by Name
+        //    in any enabled subscription's Servers list.
+        // Pre-v4 the connect resolver only knew about the aggregated
+        // KeyServersJson pool, which SetSubscriptions kept in sync by
+        // duplicating every subscription server into it. v4 stops the
+        // duplication (see SetSubscriptions docstring); GetActiveServer
+        // walks subscriptions in-memory instead. Same lookup cost, no
+        // visible duplicate rows on the Servers tab.
+        var subscriptions = GetSubscriptionsBare();
+        if (!string.IsNullOrEmpty(selectedName))
+        {
+            foreach (var sub in subscriptions)
+            {
+                if (sub == null || !sub.Enabled || sub.Servers == null) continue;
+                foreach (var srv in sub.Servers)
+                {
+                    if (srv == null) continue;
+                    if (string.Equals(srv.Name, selectedName, System.StringComparison.OrdinalIgnoreCase))
+                        return srv;
+                }
+            }
+        }
+
+        // ── Tier 3: DEFCT-005 fallback — first cached server in the
+        //    standalone list. Persist the choice for the next render.
         if (servers.Count > 0)
         {
             var first = servers[0];
@@ -295,6 +419,21 @@ public static class AndroidStorage
             return first;
         }
 
+        // ── Tier 4 (Bug-AND-023 v4): no standalone selection? Pick the
+        //    first server from the first enabled subscription. Same
+        //    "auto-pick on first connect after add" affordance the
+        //    aggregated-pool flow gave us pre-v4.
+        foreach (var sub in subscriptions)
+        {
+            if (sub == null || !sub.Enabled || sub.Servers == null || sub.Servers.Count == 0) continue;
+            var first = sub.Servers[0];
+            if (first == null) continue;
+            if (!string.IsNullOrEmpty(first.Name))
+                SetSelectedServerName(first.Name);
+            return first;
+        }
+
+        // ── Tier 5: legacy single-URI mode (manual paste / pre-2.32.0). ──
         var manualUri = GetVlessUri();
         if (!string.IsNullOrWhiteSpace(manualUri))
         {
@@ -312,6 +451,27 @@ public static class AndroidStorage
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Bug-AND-023 v4 (2026-05-17) — bare deserialize without the
+    /// legacy-migration / recovery wrapping that <see cref="GetSubscriptions"/>
+    /// applies. Used by <see cref="GetActiveServer"/> so we don't recurse
+    /// into the prune-once cleanup (which itself reads subscriptions).
+    /// Returns empty list on any parse error.
+    /// </summary>
+    private static List<SubscriptionEntry> GetSubscriptionsBare()
+    {
+        var json = GetString(KeySubscriptions);
+        if (string.IsNullOrWhiteSpace(json)) return new List<SubscriptionEntry>();
+        try
+        {
+            return JsonConvert.DeserializeObject<List<SubscriptionEntry>>(json) ?? new List<SubscriptionEntry>();
+        }
+        catch
+        {
+            return new List<SubscriptionEntry>();
+        }
     }
 
     // ── Phase 1.H: UI preferences ───────────────────────────────────────────

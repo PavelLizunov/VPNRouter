@@ -855,12 +855,36 @@ public partial class AndroidApp
     {
         if (_srvCurrentSub is null)
         {
-            // No sub drilled-in yet — fall back to the first enabled sub
-            // (matches desktop ServersPage behaviour where the active
-            // sub's servers render by default).
+            // Bug-AND-023 v4 (2026-05-17, user-reported "сервера подписки
+            // также продублировались из страницы подписки на страницу
+            // сервер"): pre-v4 the default fell through to "first enabled
+            // subscription", which meant the Servers tab showed the same
+            // list as the Subscribe tab's aggregated view — two tabs,
+            // identical content. Desktop's ServersPage shows ONLY the
+            // standalone Vless.Servers list (manual paste + free-config
+            // picks), NEVER subscription servers; subscription servers
+            // live on the Subscribe tab exclusively.
+            //
+            // v4 mirrors that by defaulting to the synthetic "Manual"
+            // subscription. It's created on first manual server add
+            // (AndroidApp.ServerList.cs OnAddManualServerClicked path);
+            // if it doesn't exist yet (fresh install + only QR-added
+            // subscriptions), we synthesize an empty in-memory one so
+            // the tab renders the "no manual servers yet" empty state
+            // instead of dropping into a sibling subscription's list.
+            // Drill-in from a Subscribe card (OpenServerListOverlay)
+            // still works the same way — it sets _srvCurrentSub
+            // explicitly to that sub, bypassing this default.
             var subs = AndroidStorage.GetSubscriptions();
-            _srvCurrentSub = subs.FirstOrDefault(s => s.Enabled)
-                              ?? subs.FirstOrDefault();
+            _srvCurrentSub = subs.FirstOrDefault(s =>
+                string.Equals(s.Name, "Manual", StringComparison.OrdinalIgnoreCase))
+                ?? new SubscriptionEntry
+                {
+                    Name = "Manual",
+                    Url = string.Empty,
+                    Enabled = true,
+                    Servers = new List<VlessServerEntry>(),
+                };
         }
         _srvResults = AndroidStorage.GetServerTestResults();
         _srvTestingKeys.Clear();
