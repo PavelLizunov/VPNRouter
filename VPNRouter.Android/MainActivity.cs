@@ -980,7 +980,10 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
                 var resolved = AndroidStorage.GetActiveServer();
                 if (resolved is null)
                 {
-                    const string msg = "No server configured. Add a subscription or paste a vless:// URI.";
+                    // Bug-AND-015 (2026-05-16) — use localized string so
+                    // RU users see RU error text. Pre-fix the message
+                    // was hardcoded EN regardless of current language.
+                    var msg = global::VPNRouter.Core.Localization.Strings.AndroidErrorNoServerConfigured;
                     global::Android.Util.Log.Error("VpnRouter",
                         $"DEFCT-005: GetActiveServer returned null — {msg}");
                     try

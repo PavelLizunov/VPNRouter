@@ -273,6 +273,13 @@ public static class Strings
     // "how do I disable it?" confusion in r1 testing. The card now just
     // navigates into Advanced → Network → Autostart where the full flow
     // (install / configure / uninstall) lives.
+    // Bug-AND-015 (2026-05-16, manual test pass iter 23) — empty-Connect
+    // error message ("No server configured…") was hardcoded EN in
+    // MainActivity.cs. Surface a localized string so RU users see RU.
+    public static string AndroidErrorNoServerConfigured => Ru
+        ? "Сервер не настроен. Добавьте подписку или вставьте vless://-URI."
+        : "No server configured. Add a subscription or paste a vless:// URI.";
+
     public static string SmpAutostartCardTitle => Ru
         ? "Автозапуск"
         : "Autostart";
