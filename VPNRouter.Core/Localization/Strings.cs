@@ -129,7 +129,8 @@ public static class Strings
     public static string ColSecurity => Ru ? "Защита" : "Security";
     // v2.25.3 — extra column labels for the redesigned Servers / Subscribe rows
     public static string ColIp => "IP";
-    public static string ColPing => "Ping";
+    // Bug-AND-016 (2026-05-16): was unilingual EN.
+    public static string ColPing => Ru ? "Пинг" : "Ping";
     // v2.30.6-r1 (UX-23/32 fix): tooltip on Ping column header — explains
     // the "—" placeholder users see before any test has been run.
     public static string ColPingTooltip => Ru
@@ -2248,13 +2249,21 @@ public static class Strings
     // CurrentVersion / CheckForUpdates
     public static string UpdateChannelHeader => Ru ? "Канал обновлений" : "Update channel";
 
+    // Bug-AND-017 (2026-05-16, polish iter 31): RU mixed half-EN
+    // ("prerelease", "experimental канал"). Now fully Russian.
     public static string ReceivePrereleasesLabel => Ru
-        ? "Получать prerelease обновления (experimental канал)"
+        ? "Получать пре-релизы (экспериментальный канал)"
         : "Receive prereleases (experimental channel)";
 
-    public static string CurrentVersionLabel => Ru ? "Текущая версия" : "Current version";
+    // Bug-AND-018 (2026-05-16): both RU "Текущая версия" and EN "Current
+    // version" overflowed the narrow card column on Android. Short
+    // forms paired with the actual version number below convey the
+    // same meaning.
+    public static string CurrentVersionLabel => Ru ? "Версия" : "Version";
 
-    public static string CheckForUpdatesButton => Ru ? "Проверить обновления" : "Check for updates";
+    // Bug-AND-018 (2026-05-16): full-width RU label crowded the version
+    // column on 5" phones. Short form fits beside the version stack.
+    public static string CheckForUpdatesButton => Ru ? "Проверить" : "Check for updates";
 
     public static string AutostartLabelVpn => Ru
         ? "Запускать VPN при старте системы"
@@ -2497,13 +2506,15 @@ public static class Strings
     public static string AdvServersSubTabServers => Ru ? "Серверы" : "Servers";
 
     /// <summary>Sub-tab label inside Servers tab — Custom sing-box JSON config view.</summary>
-    public static string AdvServersSubTabCustomJson => Ru ? "Custom Config (JSON)" : "Custom Config (JSON)";
+    /// Bug-AND-016 (2026-05-16, manual test pass): was unilingual EN.
+    public static string AdvServersSubTabCustomJson => Ru ? "Свой конфиг (JSON)" : "Custom Config (JSON)";
 
     /// <summary>Footer action button — runs TCP+TLS probe on every listed server.</summary>
     public static string AdvServersTestAll => Ru ? "Тест все" : "Test all";
 
     /// <summary>Footer action button — runs deep HTTP-through-tunnel verification on every listed server.</summary>
-    public static string AdvServersDeepVerify => Ru ? "Deep verify" : "Deep verify";
+    /// Bug-AND-016 (2026-05-16): was unilingual EN.
+    public static string AdvServersDeepVerify => Ru ? "Глубокая проверка" : "Deep verify";
 
     /// <summary>Footer action button — removes the highlighted/active server from the list.</summary>
     public static string AdvServersRemove => Ru ? "Удалить" : "Remove";

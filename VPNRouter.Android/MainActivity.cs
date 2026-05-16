@@ -286,6 +286,31 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
         {
             RegisterReceiver(_tunnelReceiver, filter);
         }
+
+        // Bug-AND-011 / Medium-3 follow-up (2026-05-16) — sweep leftover
+        // QR scan JPEGs from CacheDir on every fresh launch. LaunchCameraForQr
+        // mints a temp file before StartActivityForResult; if the activity
+        // throws OR the OS kills the process between intent send and result,
+        // _pendingQrTempFilePath is reset to null but the JPEG persists.
+        // OnCreate is the right place — pendingQrTempFilePath is also static
+        // so any "still in flight" file is owned by a *previous* activity
+        // instance whose result we'll never receive anyway.
+        try
+        {
+            var cacheDir = CacheDir;
+            if (cacheDir is not null && System.IO.Directory.Exists(cacheDir.AbsolutePath))
+            {
+                foreach (var f in System.IO.Directory.GetFiles(cacheDir.AbsolutePath, "qr_scan_*.jpg"))
+                {
+                    try { System.IO.File.Delete(f); } catch { /* best-effort */ }
+                }
+            }
+        }
+        catch (System.Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter",
+                $"Bug-AND-011/Medium-3: QR temp sweep threw: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     protected override void OnDestroy()

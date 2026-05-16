@@ -2588,6 +2588,9 @@ public partial class AndroidApp : Avalonia.Application
             Text = Localization.CurrentVersionLabel,
             FontSize = 10,
             Opacity = 0.7,
+            // Bug-AND-018 (2026-05-16, polish iter 32) — paired with
+            // shortened RU "Версия" label so the row fits without wrap.
+            TextTrimming = TextTrimming.CharacterEllipsis,
         };
         var versionStack = new StackPanel
         {
@@ -3921,6 +3924,10 @@ public partial class AndroidApp : Avalonia.Application
         _lifecycleEventsAttached = false;
         try { MainActivity.IntentChanged -= OnIntentChanged; } catch { }
         try { MainActivity.TunnelErrorReported -= OnTunnelErrorReported; } catch { }
+        // Bug-AND-011 / Low-1 — release the diagnostics timer alongside
+        // event subscriptions so the retired AndroidApp drops its only
+        // remaining strong reference path into Avalonia's dispatcher.
+        DisposeDiagnosticsTimer();
     }
 
     private void UpdateConnectionState(bool connected)
@@ -4253,6 +4260,21 @@ public partial class AndroidApp : Avalonia.Application
         if (_statusHealthCheck is not null) _statusHealthCheck.IsVisible = false;
         // Title resets to plain "Not connected" inside UpdateConnectionState,
         // so we don't touch _statusCard.Title here.
+    }
+
+    /// <summary>
+    /// Bug-AND-011 / Low-1 (2026-05-16) — explicitly tear down the
+    /// diagnostics DispatcherTimer when the AndroidApp instance is
+    /// being abandoned (lifecycle event swap or harness rebuild). The
+    /// timer was never released pre-fix; under recreation paths every
+    /// retired AndroidApp kept its own timer rooted in the static
+    /// MainActivity.* events. Idempotent + null-safe.
+    /// </summary>
+    private void DisposeDiagnosticsTimer()
+    {
+        if (_diagnosticsTimer is null) return;
+        try { _diagnosticsTimer.Stop(); } catch { /* best-effort */ }
+        _diagnosticsTimer = null;
     }
 
     private void OnDiagnosticsTick()
