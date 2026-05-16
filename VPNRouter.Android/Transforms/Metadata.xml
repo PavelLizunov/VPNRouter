@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Bug-AND-023 v2 (2026-05-17) — binding-metadata transforms.
+
+  Mono.Android's binding generator chokes on a handful of zxing-android-embedded
+  and zxing-core classes because the auto-generated C# bridges fail to override
+  abstract methods carrying Java generics (Java's type erasure surfaces the
+  ResultParser.parse(Result) signature with a different runtime parameter than
+  the C# binding sees, etc.). Bind="false" on the AndroidLibrary item is the
+  documented escape hatch but in current .NET 8 Android it does not suppress
+  generation for transitive types — the binding tool still walks the entire
+  jar and writes broken C# for these classes.
+
+  The fix: tell the binding tool to skip these specific types (and the
+  ResultParser hierarchy) entirely. The corresponding .class entries stay in
+  the runtime jar untouched, so Java code (QrScanLauncher.java) and the
+  bundled CaptureActivity still see them at link time. We just don't expose
+  them to C#, which we don't need anyway — the C# side reaches into the
+  scanner via reflection (Java.Lang.Class.ForName) on QrScanLauncher only.
+
+  Packages dropped:
+    com.google.zxing.client.result      — every Result*Parser subclass
+                                          fails the override check.
+    com.google.zxing.oned.rss.expanded.decoders — AbstractExpandedDecoder
+                                          references GeneralAppIdDecoder
+                                          which doesn't import cleanly.
+  Classes dropped:
+    com.journeyapps.barcodescanner.ScanContract — generic ActivityResultContract
+                                                  override mismatch.
+    com.journeyapps.barcodescanner.Size         — Comparable<Size> erasure.
+-->
+<metadata>
+  <remove-node path="/api/package[@name='com.google.zxing.client.result']" />
+  <remove-node path="/api/package[@name='com.google.zxing.oned.rss.expanded.decoders']" />
+  <remove-node path="/api/package[@name='com.journeyapps.barcodescanner']/class[@name='ScanContract']" />
+  <remove-node path="/api/package[@name='com.journeyapps.barcodescanner']/class[@name='Size']" />
+  <!-- The CameraInstance binding references package-private CameraThread,
+       and the rest of the .camera package contains a tangle of Camera1-API
+       internals we never touch from C# (the live preview lives entirely in
+       Java via CaptureActivity, launched by QrScanLauncher). Drop the whole
+       sub-package from the C# bindings to skip the broken cross-references. -->
+  <remove-node path="/api/package[@name='com.journeyapps.barcodescanner.camera']" />
+</metadata>

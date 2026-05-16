@@ -3880,17 +3880,23 @@ public partial class AndroidApp : Avalonia.Application
         {
             Dispatcher.UIThread.Post(() =>
             {
-                if (!success || string.IsNullOrWhiteSpace(text))
+                if (!success)
                 {
+                    // Bug-AND-023 v2 (2026-05-17): "cancelled" arrives when
+                    // the user back-presses out of the live scanner. That
+                    // isn't an error — they just changed their mind — so
+                    // skip the toast. Other failure codes still surface so
+                    // the user knows why nothing happened.
+                    if (text == "cancelled") return;
                     var msg = text switch
                     {
                         "permission_denied" => Localization.SmpQrPermissionDenied,
-                        "not_recognized"    => Localization.SmpQrNotRecognized,
                         _                    => Localization.SmpQrNotRecognized,
                     };
                     ShowMenuFeedback(msg);
                     return;
                 }
+                if (string.IsNullOrWhiteSpace(text)) return;
                 if (_serverInput is not null)
                 {
                     _serverInput.Text = text.Trim();

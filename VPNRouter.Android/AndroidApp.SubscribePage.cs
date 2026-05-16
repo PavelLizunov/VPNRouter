@@ -1148,17 +1148,21 @@ public partial class AndroidApp
         {
             Dispatcher.UIThread.Post(() =>
             {
-                if (!success || string.IsNullOrWhiteSpace(text))
+                if (!success)
                 {
+                    // Bug-AND-023 v2 (2026-05-17) — see the Simple-page
+                    // handler in AndroidApp.axaml.cs for the cancelled-vs-
+                    // error rationale.
+                    if (text == "cancelled") return;
                     var msg = text switch
                     {
                         "permission_denied" => Localization.SmpQrPermissionDenied,
-                        "not_recognized"    => Localization.SmpQrNotRecognized,
                         _                    => Localization.SmpQrNotRecognized,
                     };
                     ShowMenuFeedback(msg);
                     return;
                 }
+                if (string.IsNullOrWhiteSpace(text)) return;
                 if (_subsNewUrl is not null)
                 {
                     _subsNewUrl.Text = text.Trim();

@@ -153,6 +153,36 @@
          libbox.aar classpath is consumed natively without any C#
          translation layer. -->
     <AndroidLibrary Include="Lib\libbox.aar" Bind="false" />
+
+    <!-- Bug-AND-023 v2 (2026-05-17) — zxing-android-embedded for live-
+         preview QR scanning (replacing the v1 ACTION_IMAGE_CAPTURE photo
+         flow which felt off — user had to frame + press shutter + wait
+         for ZXing.Net to decode the JPEG, instead of just pointing the
+         camera and getting an instant detect like every other Android
+         QR-capable app).
+
+         Bind="false" — same rationale as libbox above. We expose the
+         scanner through a thin Java bridge (QrScanLauncher.java) which
+         is compiled in-tree via <AndroidJavaSource> below. The aar's
+         own AndroidManifest declares CaptureActivity so the manifest
+         merger picks it up automatically. Core ZXing decoder ships as
+         a plain .jar (com.google.zxing:core) that the embedded aar
+         depends on at runtime. -->
+    <AndroidLibrary Include="Lib\zxing-android-embedded-4.3.0.aar">
+      <!-- Bind metadata: Mono.Android's binding generator chokes on a
+           handful of generic-heavy classes (ResultParser hierarchy,
+           ScanContract, Size with Comparable<T>). Bind="false" is
+           documented as the escape hatch but in current .NET 8 Android
+           it still walks transitive types — see Transforms/Metadata.xml
+           for the targeted "remove-node" rules that hide just the broken
+           subset from C#, leaving the .class entries intact at runtime
+           for QrScanLauncher.java to use. -->
+      <Bind>true</Bind>
+    </AndroidLibrary>
+    <AndroidLibrary Include="Lib\zxing-core-3.5.3.jar">
+      <Bind>true</Bind>
+    </AndroidLibrary>
+    <TransformFile Include="Transforms\Metadata.xml" />
   </ItemGroup>
 
   <!-- Java service implementation. .NET Android compiles AndroidJavaSource
@@ -169,6 +199,10 @@
          side calls verifyConfigSync(...) through reflection from
          AndroidFreeConfigDeepVerifier.cs. -->
     <AndroidJavaSource Include="AndroidDeepVerifyBox.java" />
+    <!-- Bug-AND-023 v2 (2026-05-17) — Java bridge over IntentIntegrator
+         from zxing-android-embedded. C# side (MainActivity.cs) reaches
+         into it via reflection because the aar import uses Bind="false". -->
+    <AndroidJavaSource Include="QrScanLauncher.java" />
     <None Include="VpnRouterService.kt" />
   </ItemGroup>
 
