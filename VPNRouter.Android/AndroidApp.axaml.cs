@@ -5932,6 +5932,16 @@ public partial class AndroidApp : Avalonia.Application
             else
                 _appPickerSelected.Remove(app.PackageName);
 
+            // Bug-AND-013 (2026-05-16) — persist on every toggle so the
+            // selection survives a tab rebuild (theme/lang switch goes
+            // through ReseedAppPickerTabState which reads
+            // AndroidStorage.GetPerAppPackages back into the in-memory
+            // set). Pre-fix the Save button was the only persist path,
+            // and a theme flip mid-edit silently dropped every unsaved
+            // tap. Now the Done button is purely a visual "close"
+            // affordance (storage is already up to date).
+            AndroidStorage.SetPerAppPackages(_appPickerSelected);
+
             // Phase D — when active category is a user-defined custom one,
             // mirror the toggle into its Apps[] tag list so the sidebar
             // count + persisted membership reflect what the user just did.
@@ -5995,46 +6005,22 @@ public partial class AndroidApp : Avalonia.Application
             Child = grid,
         };
         rowBorder.BindToken(Border.BackgroundProperty, "SurfaceSunkenBrush");
-        // Bug-AND-008 (2026-05-16) — manual tap detection so vertical
-        // scroll through the apps list doesn't toggle checkboxes under
-        // the finger. PointerPressed fires immediately on touchdown
-        // (including the touchdown that *starts* a scroll), and
-        // Avalonia's Tapped event gets swallowed by the parent ListBox
-        // ScrollViewer's gesture recogniser before reaching this row
-        // on Android. Same press-position + release-position guard as
-        // the category chip strip in MakeAppsCategoryRow above:
-        // movement ≤ 12 dp and gesture < 500 ms == a tap.
-        Avalonia.Point rowPressOrigin = default;
-        var rowPressedAt = System.DateTime.MinValue;
-        bool rowCapturedAway = false;
-        rowBorder.PointerPressed += (_, args) =>
-        {
-            rowPressOrigin = args.GetPosition(rowBorder);
-            rowPressedAt = System.DateTime.UtcNow;
-            rowCapturedAway = false;
-        };
-        rowBorder.PointerReleased += (_, args) =>
-        {
-            if (rowPressedAt == System.DateTime.MinValue) return;
-            var releasePos = args.GetPosition(rowBorder);
-            var dx = System.Math.Abs(releasePos.X - rowPressOrigin.X);
-            var dy = System.Math.Abs(releasePos.Y - rowPressOrigin.Y);
-            var elapsed = System.DateTime.UtcNow - rowPressedAt;
-            var hadDrag = rowCapturedAway;
-            rowPressedAt = System.DateTime.MinValue;
-            if (!hadDrag && dx <= 12 && dy <= 12
-                && elapsed < System.TimeSpan.FromMilliseconds(500))
-                checkbox.IsChecked = !(checkbox.IsChecked == true);
-        };
-        rowBorder.PointerCaptureLost += (_, _) => { rowCapturedAway = true; };
-        rowBorder.PointerMoved += (_, args) =>
-        {
-            if (rowPressedAt == System.DateTime.MinValue) return;
-            var p = args.GetPosition(rowBorder);
-            if (System.Math.Abs(p.X - rowPressOrigin.X) > 12
-                || System.Math.Abs(p.Y - rowPressOrigin.Y) > 12)
-                rowCapturedAway = true;
-        };
+        // Bug-AND-008 / Bug-AND-013 (2026-05-16) — synthetic "tap row
+        // to toggle" was the source of the scroll-toggle accidents in
+        // the original brat report. Every implementation candidate had
+        // an issue:
+        //   - Bare PointerPressed: fired mid-scroll → mass toggles.
+        //   - Manual time+distance: ListBoxItem captures the pointer
+        //     for selection, swallowing PointerReleased on the inner
+        //     Border so even genuine taps were ignored.
+        //   - Tapped event: ScrollViewer's recognizer marks it Handled
+        //     on scrolls before it bubbles past the inner Border.
+        // Resolution: drop the row-Border tap handler. Users toggle via
+        // the explicit CheckBox at the row's trailing edge — the
+        // checkbox handler (above) is the single source of selection
+        // truth and already auto-persists to AndroidStorage (Bug-AND-013).
+        // CheckBox is large enough (32 dp visual + 44 dp implicit
+        // Material touch target) to remain ergonomic with one hand.
         return rowBorder;
     }
 
