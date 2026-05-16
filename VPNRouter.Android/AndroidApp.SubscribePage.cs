@@ -1146,7 +1146,7 @@ public partial class AndroidApp
         if (activity is null) return;
         MainActivity.PendingQrScanCallback = (success, text) =>
         {
-            Dispatcher.UIThread.Post(() =>
+            Dispatcher.UIThread.Post(async () =>
             {
                 if (!success)
                 {
@@ -1162,12 +1162,11 @@ public partial class AndroidApp
                     ShowMenuFeedback(msg);
                     return;
                 }
-                if (string.IsNullOrWhiteSpace(text)) return;
-                if (_subsNewUrl is not null)
-                {
-                    _subsNewUrl.Text = text.Trim();
-                    ShowMenuFeedback(Localization.SmpQrScannedToast);
-                }
+                // Bug-AND-023 v3 (2026-05-17) — same magic-1-step dispatch
+                // as the Simple-page button. Either button is now a
+                // single-tap "scan → connect" if the QR contains a usable
+                // vless:// URI or a subscription URL.
+                await ApplyScannedTextAsync(text);
             });
         };
         activity.RequestQrCodeScan();

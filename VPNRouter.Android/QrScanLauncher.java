@@ -55,7 +55,17 @@ public final class QrScanLauncher {
     public static void launch(Activity activity) {
         IntentIntegrator integrator = new IntentIntegrator(activity);
         integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE);
-        integrator.setOrientationLocked(false);
+        // Bug-AND-023 v3 (2026-05-17) — lock orientation to whatever the
+        // launching activity uses (portrait for MainActivity). v2 had this
+        // false which let the CaptureActivity follow the device sensor;
+        // tester reported scans were "very slow, had to flip the phone"
+        // because every reorientation tore the camera preview down and
+        // reinitialised autofocus. Locking pins the preview pipeline so
+        // ZXing's autodetect can run continuously on a stable frame
+        // stream. The user can still scan a QR they're holding sideways
+        // — they just have to hold the phone the way the rest of the app
+        // expects (portrait).
+        integrator.setOrientationLocked(true);
         // No beep — VPN setup UX is silent everywhere else, the sudden
         // shutter sound felt jarring on the v1 photo-capture flow too.
         integrator.setBeepEnabled(false);
@@ -64,8 +74,7 @@ public final class QrScanLauncher {
         // still shows a viewfinder rectangle, which is enough hint.
         integrator.setPrompt("");
         // Use the bundled CaptureActivity (declared in the aar's
-        // AndroidManifest). No portrait lock so users with phones in
-        // a landscape grip can still scan.
+        // AndroidManifest). Orientation handling above.
         integrator.setCaptureActivity(CaptureActivity.class);
         integrator.initiateScan();
     }

@@ -105,6 +105,25 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
                        android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Bug-AND-023 v3 (2026-05-17) — zxing-android-embedded ships its
+             CaptureActivity declared with android:screenOrientation=
+             "sensorLandscape" in its bundled AndroidManifest. That hard-
+             code forces the QR scanner to launch in landscape regardless
+             of the launching activity's orientation, which is exactly the
+             "had to flip the phone" UX the tester reported. The Android
+             manifest merger lets us override that attribute by re-declaring
+             the same activity name with tools:replace; the .class file
+             stays in the aar (we don't subclass anything), only the
+             manifest entry gets rewritten at merge time.
+             "fullSensor" keeps the auto-rotate behaviour of v2 (so users
+             holding the phone in any of the 4 orientations get a correctly
+             rotated preview) while letting setOrientationLocked(true) at
+             runtime pin to whichever orientation the user actually has —
+             no more forced landscape kick. -->
+        <activity android:name="com.journeyapps.barcodescanner.CaptureActivity"
+                  android:screenOrientation="fullSensor"
+                  tools:replace="android:screenOrientation" />
     </application>
 
 </manifest>

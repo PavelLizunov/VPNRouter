@@ -1337,29 +1337,18 @@ public partial class AndroidApp : Avalonia.Application
             }
         };
 
-        // Subscription server list (only visible when subscription has servers)
-        _serverListHeader = new TextBlock
-        {
-            Text = Localization.AvailableServers,
-            FontSize = 11,
-            FontWeight = FontWeight.SemiBold,
-            IsVisible = false,
-        };
-        _serverListHeader.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
-        _serverList = new ListBox
-        {
-            MaxHeight = 240,
-            IsVisible = false,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-        };
-        _serverList.SelectionChanged += OnServerSelectionChanged;
-
-        var listSection = new StackPanel
-        {
-            Spacing = 4,
-            Children = { _serverListHeader, _serverList }
-        };
+        // Bug-AND-023 v3 (2026-05-17, user-reported "там был список серверов
+        // подписки, чего нет в desktop версии"): the Simple-page subscription
+        // server list was Android-only and rendered every server from every
+        // subscription as a ListBox embedded INSIDE the form. Desktop's
+        // SimplePage has no such picker — server selection lives entirely
+        // in Advanced → Servers. v3 drops the list from the Simple page to
+        // bring it to parity. The _serverList field is kept (still nullable)
+        // so the existing UpdateServerListView / OnServerSelectionChanged
+        // paths can stay; they all no-op when the controls are null.
+        // ReloadServerList() is still useful as a side-effect-free cache
+        // warmer for _cachedServers, which is read by the Advanced-tab
+        // server-picker code.
 
         // v2.32.0 parity port (2026-05-09) — autostart card moves INSIDE
         // the form Border, mirroring desktop SimplePage.axaml lines 338-362
@@ -1385,13 +1374,11 @@ public partial class AndroidApp : Avalonia.Application
             Child = new StackPanel
             {
                 Spacing = 11,
-                // listSection is Android-only (subscription server picker);
-                // sits after the autostart card so the form still ends
-                // with a clean rhythm — input → tunnel → autostart on
-                // desktop · plus → list on Android. Server list stays
-                // hidden until a subscription has been refreshed, so the
-                // visible default matches desktop exactly.
-                Children = { inputSection, tunnelSection, autostartCard, listSection }
+                // Bug-AND-023 v3 — Children mirror desktop exactly:
+                // input → tunnel → autostart. The old Android-only
+                // listSection (subscription server picker) has been
+                // dropped per user-reported desktop-parity request.
+                Children = { inputSection, tunnelSection, autostartCard }
             }
         };
         _formCard.BindToken(Border.BackgroundProperty, "SurfaceBaseBrush");
@@ -3878,7 +3865,7 @@ public partial class AndroidApp : Avalonia.Application
         if (activity is null) return;
         MainActivity.PendingQrScanCallback = (success, text) =>
         {
-            Dispatcher.UIThread.Post(() =>
+            Dispatcher.UIThread.Post(async () =>
             {
                 if (!success)
                 {
@@ -3896,12 +3883,12 @@ public partial class AndroidApp : Avalonia.Application
                     ShowMenuFeedback(msg);
                     return;
                 }
-                if (string.IsNullOrWhiteSpace(text)) return;
-                if (_serverInput is not null)
-                {
-                    _serverInput.Text = text.Trim();
-                    ShowMenuFeedback(Localization.SmpQrScannedToast);
-                }
+                // Bug-AND-023 v3 (2026-05-17) — "магия 1-действия". Auto-
+                // dispatch by URI scheme: vless:// → add as server +
+                // Connect; http(s):// → add subscription, refresh, pick
+                // first server, Connect. See AndroidApp.QrScanApply.cs for
+                // the full routing logic.
+                await ApplyScannedTextAsync(text);
             });
         };
         activity.RequestQrCodeScan();

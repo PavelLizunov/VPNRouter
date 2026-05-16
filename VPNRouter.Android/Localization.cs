@@ -523,6 +523,12 @@ internal static class Localization
     public static string SmpQrPermissionDenied => global::VPNRouter.Core.Localization.Strings.SmpQrPermissionDenied;
     public static string SmpQrNotRecognized => global::VPNRouter.Core.Localization.Strings.SmpQrNotRecognized;
     public static string SmpQrScannedToast => global::VPNRouter.Core.Localization.Strings.SmpQrScannedToast;
+    // Bug-AND-023 v3 (2026-05-17) — magic 1-step QR-scan auto-apply toasts.
+    public static string SmpQrConnecting => global::VPNRouter.Core.Localization.Strings.SmpQrConnecting;
+    public static string SmpQrSubscriptionFetching => global::VPNRouter.Core.Localization.Strings.SmpQrSubscriptionFetching;
+    public static string SmpQrSubscriptionEmpty => global::VPNRouter.Core.Localization.Strings.SmpQrSubscriptionEmpty;
+    public static string SmpQrSubscriptionFailed => global::VPNRouter.Core.Localization.Strings.SmpQrSubscriptionFailed;
+    public static string SmpQrUnsupportedScheme => global::VPNRouter.Core.Localization.Strings.SmpQrUnsupportedScheme;
     public static string SmpTunnelModeLabel => global::VPNRouter.Core.Localization.Strings.SmpTunnelModeLabel;
     public static string SmpSplitOption => global::VPNRouter.Core.Localization.Strings.SmpSplitOption;
     public static string SmpSplitHint => global::VPNRouter.Core.Localization.Strings.SmpSplitHint;

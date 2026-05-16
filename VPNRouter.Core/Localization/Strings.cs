@@ -1334,6 +1334,29 @@ public static class Strings
         : "QR not recognized, try again";
     public static string SmpQrScannedToast => Ru ? "QR распознан" : "QR recognized";
 
+    // ── Bug-AND-023 v3 (2026-05-17, user: "магия 1-действия") — ───────────
+    // Live-preview QR scan now auto-routes the payload by URI scheme:
+    //   vless:// / hy2:// / tuic:// / ss://  → add as server + Connect
+    //   http:// / https://                   → add as subscription, refresh,
+    //                                          pick first server, Connect
+    // Pre-v3 the user had to type a name, press Add, then Connect — three
+    // taps for a flow that should be zero.
+    public static string SmpQrConnecting => Ru
+        ? "QR распознан, подключаюсь…"
+        : "QR recognized, connecting…";
+    public static string SmpQrSubscriptionFetching => Ru
+        ? "Загружаю подписку…"
+        : "Fetching subscription…";
+    public static string SmpQrSubscriptionEmpty => Ru
+        ? "Подписка пуста — ни одного сервера"
+        : "Subscription is empty — no servers";
+    public static string SmpQrSubscriptionFailed => Ru
+        ? "Не удалось загрузить подписку"
+        : "Failed to fetch subscription";
+    public static string SmpQrUnsupportedScheme => Ru
+        ? "QR не содержит vless:// или подписку"
+        : "QR doesn't contain vless:// or a subscription URL";
+
     // ── F-12 (parity audit P0, 2026-05-09) — silent ConfigMode flip guard ──
     // SmpToggleConnectAsync surfaces these when the user has typed a non-empty
     // share-link / subscription URL into the input field but has not yet
