@@ -48,8 +48,25 @@ namespace VPNRouter.Android;
 /// </summary>
 internal sealed class AndroidFreeConfigDeepVerifier
 {
-    /// <summary>URL probed for verification — same as desktop.</summary>
+    /// <summary>Primary probe URL — Cloudflare's trace endpoint (multiline
+    /// key=value, includes ip= which we check is non-private).</summary>
     private const string ProbeUrl = "https://www.cloudflare.com/cdn-cgi/trace";
+
+    /// <summary>Bug-AND-022 (2026-05-17, user-reported "Находит мёртвые
+    /// конфиги"): a single Cloudflare probe was a permissive gate.
+    /// Reality configs with a cosmetically-correct handshake but
+    /// broken routing could pass the one-shot probe yet drop user
+    /// traffic the moment the tunnel actually came up. Verifying
+    /// against a SECOND independent endpoint (also Cloudflare-fronted
+    /// but a different host + TLS fingerprint surface) catches most
+    /// of those false positives without adding much per-config cost.
+    ///
+    /// <para>Chose <c>1.1.1.1/cdn-cgi/trace</c> over a third-party
+    /// host (httpbin / google) because (a) it's Cloudflare-side too —
+    /// no risk of upstream-blocking-by-country and (b) the response
+    /// shape matches the primary probe so we can reuse the parse
+    /// path.</para></summary>
+    private const string SecondaryProbeUrl = "https://1.1.1.1/cdn-cgi/trace";
 
     /// <summary>Overall per-config timeout, including libbox spin-up.</summary>
     private static readonly TimeSpan OverallTimeout = TimeSpan.FromSeconds(12);
@@ -176,17 +193,82 @@ internal sealed class AndroidFreeConfigDeepVerifier
 
             if (ok)
             {
-                cfg.Status = FreeConfigStatus.Verified;
-                cfg.LastDeepVerifyAt = DateTime.UtcNow;
-                cfg.LastError = null;
-                // Mirror desktop's policy: keep the TCP-ping latency value
-                // for the badge (HTTP RTT through SOCKS includes 5+
-                // round-trips and reads "slow" to the user). Only fall back
-                // to HTTP latency if no TCP ping was recorded.
-                if (cfg.LatencyMs <= 0 && latencyMs > 0)
-                    cfg.LatencyMs = latencyMs;
-                _logger.Information("[Android.DV] {host}:{port} [{cc}] ✓✓ VERIFIED in {ms}ms (total {total}ms)",
-                    cfg.Host, cfg.Port, cc, latencyMs, sw.ElapsedMilliseconds);
+                // Bug-AND-022 (2026-05-17): primary probe (cloudflare.com)
+                // passed. Run a SECOND probe to 1.1.1.1 over the SAME
+                // box session — catches configs that survive one round
+                // trip but drop the second. The Java side reuses the
+                // already-running BoxService when called within the same
+                // bridge invocation, so this is just an extra HTTP RTT
+                // (typically +1-2 s).
+                //
+                // Note: verifyConfigSync builds a fresh BoxService per
+                // call, so we have to invoke the bridge a second time
+                // with a different probeUrl and the original config.
+                // This doubles the libbox spin-up cost (~2 s extra).
+                // Acceptable trade for false-positive reduction.
+                var sw2 = Stopwatch.StartNew();
+                int socksPort2;
+                string configJson2;
+                bool secondOk = false;
+                string? secondErr = null;
+                try
+                {
+                    socksPort2 = FindFreePort();
+                    var vless2 = VlessUriParser.Parse(cfg.RawUri);
+                    configJson2 = FreeConfigDeepVerifier.BuildSingleOutboundConfig(
+                        vless2, socksPort2, clashPort: null);
+                    using var overallCts2 = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    overallCts2.CancelAfter(OverallTimeout);
+                    var resultJson2 = await Task.Run(() =>
+                    {
+                        try
+                        {
+                            return InvokeJavaVerifySync(ctx, configJson2, socksPort2,
+                                (int)OverallTimeout.TotalMilliseconds, SecondaryProbeUrl);
+                        }
+                        catch (Exception ex)
+                        {
+                            global::Android.Util.Log.Warn("VpnRouter.DV",
+                                $"Java secondary invocation threw: {ex.GetType().Name}: {ex.Message}");
+                            return null;
+                        }
+                    }, overallCts2.Token).ConfigureAwait(false);
+                    if (!string.IsNullOrEmpty(resultJson2))
+                    {
+                        var root2 = JsonNode.Parse(resultJson2);
+                        secondOk = root2?["ok"]?.GetValue<bool>() ?? false;
+                        secondErr = root2?["err"]?.GetValue<string?>();
+                    }
+                    else
+                    {
+                        secondErr = "bridge null on secondary";
+                    }
+                }
+                catch (Exception ex2)
+                {
+                    secondErr = $"secondary threw: {ex2.GetType().Name}";
+                }
+
+                if (secondOk)
+                {
+                    cfg.Status = FreeConfigStatus.Verified;
+                    cfg.LastDeepVerifyAt = DateTime.UtcNow;
+                    cfg.LastError = null;
+                    // Mirror desktop's policy: keep TCP-ping latency for
+                    // the badge.
+                    if (cfg.LatencyMs <= 0 && latencyMs > 0)
+                        cfg.LatencyMs = latencyMs;
+                    _logger.Information("[Android.DV] {host}:{port} [{cc}] ✓✓ VERIFIED (both probes ok, total {total}ms)",
+                        cfg.Host, cfg.Port, cc, sw.ElapsedMilliseconds + sw2.ElapsedMilliseconds);
+                }
+                else
+                {
+                    // Primary ok but secondary failed — false positive.
+                    // Don't mark Verified, surface the secondary error.
+                    cfg.LastError = $"primary ok, secondary {secondErr ?? "failed"}";
+                    _logger.Information("[Android.DV] {host}:{port} [{cc}] ✗ false-positive: {err} (total {total}ms)",
+                        cfg.Host, cfg.Port, cc, cfg.LastError, sw.ElapsedMilliseconds + sw2.ElapsedMilliseconds);
+                }
             }
             else
             {

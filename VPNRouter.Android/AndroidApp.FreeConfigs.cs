@@ -1071,13 +1071,63 @@ public partial class AndroidApp
         if (entry is null) return;
         if (string.IsNullOrEmpty(entry.RawUri)) return;
 
-        // Persist the chosen URI as a manual VLESS config — clears any
-        // subscription-mode state so MainActivity.StartTunnelService picks
-        // up the new URI via AndroidStorage.GetActiveServer.
+        // Bug-AND-021 (2026-05-17, user-reported "после подключения не
+        // переносит в список серверов"): pre-fix this cleared the Servers
+        // list entirely (SetServers(null)) and stashed the URI as a
+        // manual VLESS config. Result: chosen free config wasn't visible
+        // in Advanced > Servers, and any other servers the user had
+        // collected got wiped.
+        //
+        // Now we mirror desktop MainWindowViewModel.ApplyFreeConfigAsync:
+        //   - Parse URI into VlessServerEntry.
+        //   - Check if same host:port:uuid already exists in Servers.
+        //   - If new: add with unique display name (collision-safe).
+        //   - Set as SelectedServerName so GetActiveServer picks it up.
+        //   - Keep existing servers (no wipe).
+        // Subscription gets cleared because free config = manual mode.
+        try
+        {
+            var vless = VPNRouter.Core.Services.VlessUriParser.Parse(entry.RawUri);
+            var servers = AndroidStorage.GetServers() ?? new System.Collections.Generic.List<VPNRouter.Core.Models.VlessServerEntry>();
+            // Match by host:port:uuid (display name can vary). Reuse the
+            // existing entry's name so the user's curated label sticks.
+            var existing = servers.FirstOrDefault(s =>
+                string.Equals(s.Server, vless.Server, System.StringComparison.OrdinalIgnoreCase) &&
+                s.Port == vless.Port &&
+                string.Equals(s.Uuid, vless.Uuid, System.StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                AndroidStorage.SetSelectedServerName(existing.Name);
+            }
+            else
+            {
+                // Unique-name pass — "⚡ free" + #2, #3, … if collisions.
+                var baseName = string.IsNullOrWhiteSpace(vless.Name) ? "⚡ free" : vless.Name!;
+                var displayName = baseName;
+                int suffix = 2;
+                while (servers.Any(s => string.Equals(s.Name, displayName, System.StringComparison.OrdinalIgnoreCase)))
+                    displayName = $"{baseName} #{suffix++}";
+                vless.Name = displayName;
+                servers.Add(vless);
+                AndroidStorage.SetServers(servers);
+                AndroidStorage.SetSelectedServerName(displayName);
+            }
+        }
+        catch (System.Exception ex)
+        {
+            // Parse / persist failed — fall back to the legacy
+            // single-URI path so the user still gets a Connect attempt.
+            global::Android.Util.Log.Warn("VpnRouter.FC",
+                $"Bug-AND-021: persist into Servers failed — {ex.GetType().Name}: {ex.Message}");
+            AndroidStorage.SetServers(null);
+            AndroidStorage.SetSelectedServerName(null);
+        }
+        // Manual mode stores the raw URI as legacy fallback. The new
+        // active-server resolver (GetActiveServer) reads the Servers
+        // list + SelectedServerName first; the URI is only used if both
+        // are null (which we just made false above on the happy path).
         AndroidStorage.SetVlessUri(entry.RawUri);
         AndroidStorage.SetSubscriptionUrl(null);
-        AndroidStorage.SetServers(null);
-        AndroidStorage.SetSelectedServerName(null);
 
         ShowMenuFeedback(Localization.FcUsedToast);
 
