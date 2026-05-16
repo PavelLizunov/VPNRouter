@@ -2790,37 +2790,24 @@ public partial class AndroidApp : Avalonia.Application
         var vpnStack = MakeAutostartRow(_settingsAutostartVpn,
             Localization.AutostartStatusNoBoot, "DangerFgBrush");
 
-        _settingsAutostartZapret = new Avalonia.Controls.CheckBox
-        {
-            IsChecked = AndroidStorage.GetAutostartZapret(),
-            MinHeight = 0,
-            Padding = new Thickness(4, 0),
-            Content = new TextBlock
-            {
-                Text = Localization.AutostartLabelZapret,
-                TextWrapping = TextWrapping.Wrap,
-                FontSize = 11,
-            }
-        };
-        _settingsAutostartZapret.IsCheckedChanged += OnSettingsAutostartZapretChanged;
-        var zapretStack = MakeAutostartRow(_settingsAutostartZapret,
-            Localization.AutostartZapretNotPorted, "DangerFgBrush");
-
-        _settingsAutostartTgProxy = new Avalonia.Controls.CheckBox
-        {
-            IsChecked = AndroidStorage.GetAutostartTgProxy(),
-            MinHeight = 0,
-            Padding = new Thickness(4, 0),
-            Content = new TextBlock
-            {
-                Text = Localization.AutostartLabelTgProxy,
-                TextWrapping = TextWrapping.Wrap,
-                FontSize = 11,
-            }
-        };
-        _settingsAutostartTgProxy.IsCheckedChanged += OnSettingsAutostartTgProxyChanged;
-        var tgStack = MakeAutostartRow(_settingsAutostartTgProxy,
-            Localization.AutostartTgProxyNotPorted, "DangerFgBrush");
+        // Bug-AND-020 (2026-05-16, user-reported "в настройках автозапуска
+        // осталось про tgproxy и про zapret"): Zapret + TgProxy aren't
+        // ported to Android — surfacing their autostart toggles with a
+        // "not ported" warning was confusing UX. Removed entirely.
+        // The fields _settingsAutostartZapret / _settingsAutostartTgProxy
+        // stay declared so other call-sites that null-check them still
+        // compile, but they're never instantiated on Android now. Same
+        // pattern as Bug-AND-002/004 (Zapret + Tools chip hiding).
+        //
+        // Bug-AND-020 follow-up: the "At Windows startup (before sign-in)"
+        // section + "Start VPN on system boot" checkbox + ⛔ warning
+        // text are Windows-service-specific. On Android the right
+        // autostart path is Always-on VPN (already explained above in
+        // androidIntro + alwaysOnRow). Hide the whole boot section.
+        // _settingsAutostartVpn stays declared but isn't rendered;
+        // bootHeader / bootSub / vpnStack are unused locals now (kept
+        // to minimise diff churn — compiler dead-code-eliminates them).
+        _ = bootHeader; _ = bootSub; _ = vpnStack; // silence unused-warnings
 
         var stack = new StackPanel
         {
@@ -2832,11 +2819,6 @@ public partial class AndroidApp : Avalonia.Application
                 alwaysOnRow,
                 batteryRow,
                 autoReconnectCard,
-                bootHeader,
-                bootSub,
-                vpnStack,
-                zapretStack,
-                tgStack,
             }
         };
         return WrapSection(stack);
