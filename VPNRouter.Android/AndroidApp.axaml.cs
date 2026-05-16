@@ -387,6 +387,14 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.Button? _appPickerSaveBtn;
     private Avalonia.Controls.Button? _perAppPickButton;
     private TextBlock? _perAppCountLabel;
+    // Bug-AND-014 (2026-05-16, full manual test pass iter 18) — promote
+    // Simple-page inline-autostart card text to fields so the language
+    // refresh updates them. Pre-fix the strings were captured into local
+    // TextBlock vars inside BuildAutostartInlineCard, so a RU↔EN toggle
+    // left "Autostart" / "Configure VPN autostart on device boot" in
+    // English on a Russian-language device.
+    private TextBlock? _autostartCardTitleText;
+    private TextBlock? _autostartCardSubText;
     private List<AppListLoader.AppEntry> _appPickerCache = new();
     private HashSet<string> _appPickerSelected = new(System.StringComparer.OrdinalIgnoreCase);
     private bool _appPickerSystemAppsVisible = false;
@@ -4821,21 +4829,23 @@ public partial class AndroidApp : Avalonia.Application
     /// </summary>
     private Control BuildAutostartInlineCard(double radiusSm)
     {
-        var titleText = new TextBlock
+        // Bug-AND-014 (2026-05-16) — promote title + subtitle to
+        // instance fields so ToggleLanguageAndRefresh can update them.
+        _autostartCardTitleText = new TextBlock
         {
             Text = Localization.SmpAutostartCardTitle,
             FontSize = 11,
             FontWeight = FontWeight.SemiBold,
         };
-        titleText.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
+        _autostartCardTitleText.BindToken(TextBlock.ForegroundProperty, "TextPrimaryBrush");
 
-        var subText = new TextBlock
+        _autostartCardSubText = new TextBlock
         {
             Text = Localization.SmpAutostartCardSubtitle,
             FontSize = 9,
             TextWrapping = TextWrapping.Wrap,
         };
-        subText.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
+        _autostartCardSubText.BindToken(TextBlock.ForegroundProperty, "TextMutedBrush");
 
         var chevron = new TextBlock
         {
@@ -4856,7 +4866,7 @@ public partial class AndroidApp : Avalonia.Application
         {
             Spacing = 2,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { titleText, subText },
+            Children = { _autostartCardTitleText, _autostartCardSubText },
         };
         Grid.SetColumn(stack, 0);
         Grid.SetColumn(chevron, 1);
@@ -6891,6 +6901,15 @@ public partial class AndroidApp : Avalonia.Application
         // rest of the menu.
         if (_menuAdvancedToggleBtn is not null)
             _menuAdvancedToggleBtn.Content = Localization.SmpToggleToAdvanced;
+        // Bug-AND-014 (2026-05-16, manual test pass iter 18) — Simple-page
+        // autostart card text + per-app "Choose apps…" button were
+        // baked-in at build time. Refresh on language toggle.
+        if (_autostartCardTitleText is not null)
+            _autostartCardTitleText.Text = Localization.SmpAutostartCardTitle;
+        if (_autostartCardSubText is not null)
+            _autostartCardSubText.Text = Localization.SmpAutostartCardSubtitle;
+        if (_perAppPickButton is not null)
+            _perAppPickButton.Content = Localization.PerAppPickButton;
         // Section headers
         if (_menuSectionView is not null) _menuSectionView.Text = Localization.MenuSectionView;
         if (_menuSectionDiagnostics is not null) _menuSectionDiagnostics.Text = Localization.MenuSectionDiagnostics;
