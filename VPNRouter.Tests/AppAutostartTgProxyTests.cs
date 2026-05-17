@@ -198,10 +198,17 @@ public sealed class AppAutostartTgProxyTests
             System.StringComparison.Ordinal);
         if (idx < 0) return src;
         var start = System.Math.Max(0, idx);
-        // Constructor + epilogue runs ~70 lines; capture up to ~5000 chars
-        // to safely include `_ = BootstrapAutostartAsync();` and the
-        // closing brace.
-        var end = System.Math.Min(src.Length, idx + 5000);
+        // Q14 (2026-05-17): widened window 5000 → 9000 chars. The
+        // MainWindowViewModel ctor has grown across v2.32.x releases —
+        // recovery banner consume, branch protection notice, placeholder
+        // prune, autostart bootstrap, conflict detector init — so
+        // `_ = BootstrapAutostartAsync();` (currently at line ~2778
+        // relative to ctor declaration at ~2669, ~110 lines / ~5500
+        // chars deep) was falling outside the 5000-char window and the
+        // pin failed. 9000 keeps comfortable margin for future ctor
+        // growth without picking up unrelated callsites (the ctor +
+        // its immediate epilogue still fit well under that bound).
+        var end = System.Math.Min(src.Length, idx + 9000);
         return src.Substring(start, end - start);
     }
 }
