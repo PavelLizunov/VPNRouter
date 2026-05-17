@@ -171,32 +171,69 @@ public static class WindowsDnsHardening
     /// metric=1 means highest priority; metric=0 means automatic.
     /// </summary>
     private static bool TrySetTunMetric(int metric, ILogger log)
+        => TrySetTunMetricViaRunner(metric, _runnerOverride ?? new ProcessRunner(), log, TunInterfaceAlias);
+
+    /// <summary>
+    /// Phase 2G test seam — netsh call routed through <see cref="IProcessRunner"/>.
+    /// Internal so <c>VPNRouter.Tests</c> can inject a <c>FakeProcessRunner</c>
+    /// and assert the request shape (executable, args, timeout) without
+    /// spawning real netsh. The static facade <see cref="TrySetTunMetric(int, ILogger)"/>
+    /// wraps this with a default <see cref="ProcessRunner"/> so production
+    /// callers see no behaviour change.
+    /// </summary>
+    /// <param name="metric">Interface metric (1=highest priority, 0=auto).</param>
+    /// <param name="runner">Process runner — real or fake.</param>
+    /// <param name="log">Logger.</param>
+    /// <param name="interfaceAlias">Adapter name; tests pin this to a known
+    /// value to verify the shape, prod uses <see cref="TunInterfaceAlias"/>.</param>
+    /// <returns>True iff netsh returned exit code 0. False on timeout, nonzero
+    /// exit, or any thrown exception (logged but not surfaced — the caller's
+    /// state-tracking flag absorbs the failure as "we didn't change metric").</returns>
+    internal static bool TrySetTunMetricViaRunner(
+        int metric,
+        IProcessRunner runner,
+        ILogger log,
+        string interfaceAlias)
     {
+        if (string.IsNullOrWhiteSpace(interfaceAlias))
+        {
+            log.Debug("[DnsHardening] netsh metric skipped — empty interface alias");
+            return false;
+        }
+
         try
         {
-            // PowerShell: Set-NetIPInterface -InterfaceAlias "VPNRouter-TUN" -InterfaceMetric N
-            // Avoid PowerShell startup overhead — use netsh directly
-            var args = $"interface ipv4 set interface \"{TunInterfaceAlias}\" metric={metric}";
-            var psi = new ProcessStartInfo
+            // ArgumentList-style args (not single string) so we don't have to
+            // worry about shell quoting around the alias (which may contain
+            // spaces on locales we haven't seen).
+            var req = new ProcessRequest(
+                ExecutablePath: "netsh.exe",
+                Arguments: new[]
+                {
+                    "interface",
+                    "ipv4",
+                    "set",
+                    "interface",
+                    interfaceAlias,
+                    $"metric={metric}"
+                },
+                CaptureStdout: true,
+                CaptureStderr: true,
+                Timeout: TimeSpan.FromSeconds(5));
+
+            var result = runner.RunAsync(req).GetAwaiter().GetResult();
+
+            if (result.TimedOut)
             {
-                FileName = "netsh.exe",
-                Arguments = args,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-
-            using var proc = Process.Start(psi);
-            if (proc == null) return false;
-            proc.WaitForExit(5000);
-
-            if (proc.ExitCode == 0)
+                log.Debug("[DnsHardening] netsh metric set timed out");
+                return false;
+            }
+            if (result.ExitCode == 0)
             {
                 log.Debug("[DnsHardening] Set TUN metric={Metric}", metric);
                 return true;
             }
-            log.Debug("[DnsHardening] netsh metric set returned {Code}", proc.ExitCode);
+            log.Debug("[DnsHardening] netsh metric set returned {Code}", result.ExitCode);
             return false;
         }
         catch (Exception ex)
@@ -205,6 +242,17 @@ public static class WindowsDnsHardening
             return false;
         }
     }
+
+    /// <summary>
+    /// Test override — when non-null, <see cref="TrySetTunMetric(int, ILogger)"/>
+    /// uses this runner instead of constructing a real <see cref="ProcessRunner"/>.
+    /// Allows the existing static <see cref="Apply"/> / <see cref="Restore"/>
+    /// public API to be exercised end-to-end with a fake netsh. Tests MUST
+    /// reset this back to <c>null</c> in a try/finally so other tests aren't
+    /// poisoned. Not thread-safe — assumes serial xUnit execution within the
+    /// fixture (single test class), which matches our existing test pattern.
+    /// </summary>
+    internal static IProcessRunner? _runnerOverride;
 
     private static void SaveState(HardeningState state)
     {

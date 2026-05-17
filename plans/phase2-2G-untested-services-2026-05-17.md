@@ -326,6 +326,56 @@ probe semantics beyond minimal seam wiring."
   no new attack surface; tri-field fingerprint delegated to
   PlaceholderGuard single-source-of-truth.
 
+### Wave 7a-1 — `HostsManager` + `WindowsDnsHardening` (2026-05-18)
+
+**Status**: PASS — both CRITICAL services now have dedicated coverage.
+
+**Production changes** (minimal — only `WindowsDnsHardening` needed a seam):
+- `WindowsDnsHardening.cs`: refactored `TrySetTunMetric` to route through
+  `IProcessRunner`. Pre-refactor used a manual `$"interface ipv4 set
+  interface \"{TunInterfaceAlias}\" metric={metric}"` shell-string concat
+  with quoting; post-refactor passes args as `IReadOnlyList<string>` to
+  `ProcessRequest.Arguments` which maps to `ProcessStartInfo.ArgumentList`
+  — no shell parsing, no manual quoting. Added `_runnerOverride` internal
+  test seam and an empty-alias defense-in-depth guard.
+  - HostsManager itself needed no production change — Wave 6's 2D-2
+    commit already wired ctor-injected IFileSystem with static facade
+    preserved.
+
+**Tests added**:
+- `HostsManagerTests.cs` — happy path / idempotency (never duplicate
+  Discord block) / failure modes (IOException on write) / "MUST NOT
+  overwrite user entries" pin / round-trip (apply → remove restores
+  exact pre-state)
+- `WindowsDnsHardeningTests.cs` — happy path / arg-correctness (exact
+  netsh.exe + ArgumentList shape) / nonzero-exit / runner-throws /
+  empty-alias guard / idempotency
+- `Fakes/ThrowingFileSystem.cs` — new test helper for HostsManager
+  failure-mode coverage (extends InMemoryFileSystem behaviour)
+
+**Test delta**: +23 (875 → 898 in 7a-1's worktree; in main's current
+trajectory this lands as +23 on top of accumulated Wave 7 tests).
+
+**Verification gates**:
+- [x] HostsManagerTests.cs: 8+ tests covering all CRITICAL shapes
+- [x] WindowsDnsHardeningTests.cs: 8+ tests
+- [x] Gate 1 build 0 errors
+- [x] Gate 2 scoped suite +23 tests, all pass
+- [x] Gate 4 security-review: WindowsDnsHardening refactor is a NET
+  IMPROVEMENT — ArgumentList eliminates a manual-quoting injection
+  surface that existed in the pre-refactor shell-string concat path.
+  No new attack surface. The `_runnerOverride` static field is internal
+  (InternalsVisibleTo) and not user-controllable.
+- [x] Hook gates pass
+
+**Surprises**:
+1. Both 7a-1 and 7b-1 independently added PLATFORM_WINDOWS define to
+   the test csproj. Integrator kept 7b-1's version (committed first);
+   functionally equivalent.
+2. HostsManager required zero production change — Wave 6's 2D-2 had
+   already done the seam work. Tests just plug into the existing
+   InMemoryFileSystem fake from `Fakes/`.
+
 ## Follow-up
 
 - Phase 3D may consolidate `HostsManager` + `WindowsDnsHardening` under a unified `ISystemStateMutator` if their test shapes match.
