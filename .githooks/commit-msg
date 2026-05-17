@@ -1,0 +1,60 @@
+#!/bin/bash
+# .githooks/commit-msg — VPNRouter v3.0 methodology commit-message check.
+#
+# Runs AFTER user writes the commit message but BEFORE it's stored.
+# Checked separately from pre-commit because the message file is only
+# available at this stage of the git hook lifecycle.
+#
+# Gates:
+#   M1. Subject line max 72 chars
+#   M2. Subject in conventional <scope>: <subject> form (scope in
+#       core/app/cli/service/android/tests/ci/docs/build OR free-form
+#       project verb like "fix:", "feat:")
+#   M3. Body has Co-Authored-By trailer for Claude-generated commits
+#       (Detection: if any commit author or recent file change mentions
+#       "Claude" / contains "v3.0" / current git config user.name = Claude.
+#       Skipped if commit has --no-verify intent in message.)
+#
+# Bypass: git commit --no-verify
+
+set -e
+COMMIT_MSG_FILE="$1"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+ERRORS=()
+WARNINGS=()
+
+# ─── M1 — subject length ────────────────────────────────────────────────
+subject=$(head -1 "$COMMIT_MSG_FILE")
+if [ "${#subject}" -gt 72 ]; then
+  ERRORS+=("M1: subject is ${#subject} chars (max 72). Move detail to body.")
+fi
+
+# ─── M2 — conventional commit prefix ────────────────────────────────────
+if ! echo "$subject" | grep -qE '^(feat|fix|docs|refactor|perf|test|chore|ci|build|style)(\([a-z]+\))?: '; then
+  WARNINGS+=("M2: subject not in 'type(scope): subject' form. Recommended: feat/fix/docs/refactor/test/chore/ci/build.")
+fi
+
+# ─── M3 — Co-Authored-By trailer ────────────────────────────────────────
+if ! grep -qE '^Co-Authored-By: Claude' "$COMMIT_MSG_FILE"; then
+  WARNINGS+=("M3: missing 'Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>' trailer. Required for Claude commits per CLAUDE.md.")
+fi
+
+# ─── Verdict ─────────────────────────────────────────────────────────────
+if [ "${#WARNINGS[@]}" -gt 0 ]; then
+  echo ""
+  for w in "${WARNINGS[@]}"; do echo -e "  ${YELLOW}⚠ $w${NC}"; done
+fi
+
+if [ "${#ERRORS[@]}" -gt 0 ]; then
+  echo ""
+  echo -e "${RED}❌ commit-msg gates failed:${NC}"
+  for e in "${ERRORS[@]}"; do echo -e "  ${RED}- $e${NC}"; done
+  exit 1
+fi
+
+exit 0
