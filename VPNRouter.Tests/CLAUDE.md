@@ -5,18 +5,19 @@ Avalonia GUI). Harness активен, см. секцию ниже.
 
 ## Layout
 
+Один класс — один файл (после Phase 2E extraction, 2026-05-17). `UnitTest1.cs`
+удалён, 42 класса развалены по `<ClassName>.cs`. Auto-discovered через
+`Get-ChildItem VPNRouter.Tests\*.cs`. Постоянные helpers / infrastructure:
+
 ```
 VPNRouter.Tests.csproj           ← references Core + App, Avalonia.Headless + Avalonia.Headless.XUnit
 TestAppBuilder.cs                ← assembly-level Avalonia AppBuilder для [AvaloniaFact]
-UnitTest1.cs                     ← Core regression + UI-data tests без dispatcher (~4500 строк)
 HeadlessGuiTests.cs              ← MainWindow / AboutWindow smoke + button click routing
 PageScreenshotTests.cs           ← per-page PNG snapshots в screenshots/
 ScreenshotHelper.cs              ← Capture + CapturePage помощники
 VisualDiffHelper.cs              ← v2.31.5: SkiaSharp pixel-tolerance compare для baseline-diff
 VisualDiffTests.cs               ← v2.31.5: regression-diff DpiBypass / Telegram / Tools против screenshots/baseline/
 ViewModelTests.cs                ← MainWindowViewModel wiring (e.g. SmpAutostartChecked re-notify)
-ConfigGeneratorDuplicateNameTests.cs  ← наследие отдельного класса
-VpnEngineTunFingerprintTests.cs       ← наследие отдельного класса
 ```
 
 ## Headless harness
@@ -33,32 +34,64 @@ offscreen-render → `window.CaptureRenderedFrame()` для PNG snapshots.
 
 ## Test classes
 
-| Класс | Что покрывает | Count |
-|---|---|---|
-| `GetEffectiveServersTests` | `VlessConfig.GetEffectiveServers` — backward-compat для legacy single-server fields | 4 |
-| `ConfigGeneratorTests` | DNS strategy, route rules, outbound generation для split/full tunnel | 14 (+2 skipped) |
-| `Inject_ActualCustomConfig_SingBoxCheck` | integration test: custom config injection passes `sing-box check` | 1 |
-| `Inject_WithBypassRussianTraffic_PassesSingBoxCheck` | integration test: geo bypass injection passes | 1 |
-| `VlessServersResolverTests` | v2.28.2: subscription→VLESS aggregation в 8 case'ах | 8 |
-| `ConfigGeneratorEmptyServersGuardTests` | v2.28.2: hard guard + e2e subscribe→resolve→generate | 2 |
-| `Generate_FromSubscribeMode_PassesSingBoxCheck` | v2.28.2: integration — generated JSON valid под sing-box check | 1 |
-| `FreeConfigAggregatorPreserveTests` | v2.28.3-r5: cache merge logic (Verified preserved, recent Ok preserved, etc.) | 9 |
-| `ProfileManagerJsonDosGuardTests` | v2.31.0-r1 (CO-4): `MaxDepth=32` JSON guard | 2 |
-| `HealthMonitorTimerRaceTests` | v2.31.0-r1 (CO-1): atomic timer-swap conservation | 1 |
-| `HealthMonitorRecoveryGapTests` | v2.31.5-r2: post-crash recovery via `_shouldBeRunning` intent flag (User-reported VPN-loss bug) | 5 |
-| `FirewallManagerLocalizedNetshTests` | v2.31.0-r1 (CO-5): block-aware netsh parser | 2 |
-| `RuntimeStatusDetectorHandleLeakTests` | v2.31.1-r1 (AU-9): `Process[]` dispose pattern callable-stability | 2 |
-| `TcpPingOnlyPlausibilityGateTests` | v2.31.2-r1 (F-25 prevent-new): preserve LatencyMs on probe failure | 1 |
-| `FreeConfigCacheMigrationTests` | v2.31.3-r1 (F-25 heal-old): sub-5ms LatencyMs reset to 0 | 1 |
-| `FreeConfigItemViewModelDisplayTests` | v2.31.3-r1: Verified+0 → "— ✓✓" (graceful unknown state) | 2 |
-| `BoolToChevronConverterTests` | v2.31.0-r4 (F-3): default vs param glyph paths | 2 |
-| `AvailableRuleTypesSurfaceTests` | v2.31.0-r4 (AU-10): domain_regex + process_path в Cards-mode ComboBox | 1 |
-| `LeakProtectionTests` | `ValidateConfig` invariants + protocol-aware dispatch (VLESS/Hy2/TUIC, v2.30.1-r4) + smart-mode local-dns (v2.31.x) + proxy-udp branch | 19 |
-| `SubscriptionFetcherParserTests` | v2.31.5+: 3 subscription body formats (JSON wrapper / raw base64 / plain URIs) + dedup + unsupported-scheme filter | 8 |
-| `MainWindowViewModelTests` (ViewModelTests.cs) | v2.27 Bug B: SmpAutostartChecked re-notify on three inputs | 1 |
-| `HeadlessGuiTests` | MainWindow/AboutWindow ctor smoke + width screenshots + button input routing | 4 |
-| `PageScreenshotTests` | 9 page snapshots + NetworkPage Autostart sub-tab + 3 narrow-window variants | 14 |
-| `VisualDiffTests` | v2.31.5: pixel-tolerance regression vs `screenshots/baseline/` для DpiBypass / Telegram / Tools (Windows-only) | 3 |
+> После Phase 2E extraction (2026-05-17): один класс — один `.cs` файл.
+> 42 класса из бывшего `UnitTest1.cs` развалены по `<ClassName>.cs`. Любой
+> новый regression-тест ДОЛЖЕН идти в свой файл (не складировать в
+> shared bag). Auto-discovery: `Get-ChildItem VPNRouter.Tests\*Tests.cs`.
+
+### Бывший `UnitTest1.cs` (Phase 2E)
+
+| Класс / файл | Что покрывает |
+|---|---|
+| `GetEffectiveServersTests` | `VlessConfig.GetEffectiveServers` — backward-compat для legacy single-server fields |
+| `ConfigGeneratorTests` | DNS strategy, route rules, outbound generation для split/full tunnel + 2 sing-box check integration tests |
+| `LeakProtectionAppSettingsTests` | F-12 / parity audit P0: `ValidateAppSettings` defence-in-depth backstop for silent ConfigMode flips |
+| `LeakProtectionTests` | `ValidateConfig` invariants + protocol-aware dispatch (VLESS/Hy2/TUIC, v2.30.1-r4) + smart-mode local-dns + proxy-udp branch |
+| `VlessUriParserTests` | `VlessUriParser.Parse` URI shapes + invalid-input rejection |
+| `CustomConfigInjectorTests` | Custom-config inject pipeline: split-tunnel routing inject, action-vs-legacy dispatch, sing-box check integration |
+| `VlessServersResolverTests` | v2.28.2: subscription→VLESS aggregation в 8 case'ах |
+| `ConfigGeneratorEmptyServersGuardTests` | v2.28.2: hard guard + e2e subscribe→resolve→generate + sing-box check integration |
+| `FreeConfigAggregatorPreserveTests` | v2.28.3-r5: cache merge logic (Verified preserved, recent Ok preserved, etc.) |
+| `FreeConfigKeepPolicyTests` | v2.28.5: trim policy on search end (drops dead/unverified entries) |
+| `FreeConfigSavedRetentionTests` | v2.28.6 Phase 1: Saved-list 30d retention cap + LastVerifyFailedAt schema |
+| `FreeConfigEntrySchemaTests` | v2.28.6 Phase 1: FreeConfigEntry schema additions |
+| `FreeConfigFreshnessTierTests` | v2.28.6 Phase 5: freshness math (tier classification, opacity, sort key) |
+| `FreeConfigRecheckMergeTests` | Recheck merge: success keeps fresh values; failure restores prior good values |
+| `AutostartHelperShapeTests` | v2.29.0-r2: cross-platform AutostartHelper shape + idempotency |
+| `CustomDirectRulesGeneratorTests` | v2.29.0-r4: `ConfigGenerator.BuildCustomDirectRouteRule` + `ApplyCustomDirectRules` insertion order |
+| `CustomDirectRulesParserTests` | v2.29.0-r4: text-format parser/serializer for "Custom direct rules" textbox |
+| `FreeConfigDeepVerifyCheckpointTests` | v2.29.0-r7+ Phase 3C: `LastDeepVerifyAt` field + 6h skip window |
+| `CustomRulesV2_30_ParserTests` | v2.30.0: full custom rules engine — parser branch |
+| `CustomRulesV2_30_GeneratorTests` | v2.30.0: full custom rules engine — ConfigGenerator branch |
+| `CustomRulesV2_30_MigrationTests` | v2.30.0: migration from v2.29.0-r4 CustomDirectRule schema |
+| `CustomRulesImportExportTests` | v2.30.0-r3: 3-format import/export (CSV / VPNRouter JSON / sing-box-native) |
+| `ServerUriParserTests` | v2.30.1-r3: multi-protocol URI parsing (Hy2 / TUIC / SS-2022 / ShadowTLS) |
+| `LeakProtectionMultiProtocolTests` | v2.30.1-r4: per-protocol outbound validation dispatch |
+| `ProfileManagerJsonDosGuardTests` | v2.31.0-r1 (CO-4): `MaxDepth=32` JSON guard |
+| `HealthMonitorTimerRaceTests` | v2.31.0-r1 (CO-1): atomic timer-swap conservation |
+| `HealthMonitorRecoveryGapTests` | v2.31.5-r2: post-crash recovery via `_shouldBeRunning` intent flag (User-reported VPN-loss bug) |
+| `FirewallManagerLocalizedNetshTests` | v2.31.0-r1 (CO-5): block-aware netsh parser |
+| `RuntimeStatusDetectorHandleLeakTests` | v2.31.1-r1 (AU-9): `Process[]` dispose pattern callable-stability |
+| `TcpPingOnlyPlausibilityGateTests` | v2.31.2-r1 (F-25 prevent-new): preserve LatencyMs on probe failure |
+| `FreeConfigCacheMigrationTests` | v2.31.3-r1 (F-25 heal-old): sub-5ms LatencyMs reset to 0 |
+| `AvailableRuleTypesSurfaceTests` | v2.31.0-r4 (AU-10): domain_regex + process_path в Cards-mode ComboBox |
+| `FreeConfigItemViewModelDisplayTests` | v2.31.3-r1: Verified+0 → "— ✓✓" (graceful unknown state) |
+| `BoolToChevronConverterTests` | v2.31.0-r4 (F-3): default vs param glyph paths |
+| `SubscriptionFetcherParserTests` | v2.31.5+: 3 subscription body formats (JSON wrapper / raw base64 / plain URIs) + dedup + unsupported-scheme filter |
+| `MergeUserCustomizationTests` | v2.31.6-r10 Phase F: extracted `MergeUserCustomization` helper (CustomGroupApps, CustomCategories, .exe normalisation) |
+| `PowerEventListenerTests` | v2.31.6-r10 Phase D: Windows session/power event listener (idempotent Start, safe Dispose) |
+| `EmergencyChannelConfigTests` | r9 Phase 2 (wgturn-core integration): config defaults / null-safety |
+| `EmergencyChannelManagerTests` | EmergencyChannelManager lifecycle state transitions |
+| `EmergencyChannelEngineTests` | EmergencyChannelEngine lifecycle state transitions |
+| `AppSettingsEmergencyChannelTests` | AppSettings — EmergencyChannel section defaults / null-safety |
+| `PlaceholderGuardTests` | v2.32.3 (Z:\kanareik incident follow-up): kill placeholder credentials for every user — PlaceholderGuard paths |
+
+### Sibling regression suites (existing, not touched by 2E)
+
+Auto-discovery: `Get-ChildItem VPNRouter.Tests\*Tests.cs`. Other files
+(`*Helper.cs`, `TestAppBuilder.cs`, `ViewModelTests.cs`,
+`HeadlessGuiTests.cs`, `PageScreenshotTests.cs`, `VisualDiffTests.cs`)
+follow the same convention.
 
 ## Запустить
 

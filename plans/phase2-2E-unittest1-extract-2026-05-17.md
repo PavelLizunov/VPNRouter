@@ -73,4 +73,48 @@ Must show same total count (842) and same passing count (839).
 - [ ] **Docs**: VPNRouter.Tests/CLAUDE.md updated with new test class inventory
 
 ## Outcome
-*(filled by agent after impl)*
+**PASS** (2026-05-17, Wave 5 agent)
+
+### Summary
+Pure mechanical extraction of `VPNRouter.Tests/UnitTest1.cs` (6,175 LOC, 42
+classes, 313 tests) into per-class files. Zero logic change. Build green
+on first try; test count identical to baseline.
+
+### Numbers
+- **Classes extracted**: 42 (matches inventory)
+- **New files created**: 42 (`VPNRouter.Tests/<ClassName>.cs`)
+- **`UnitTest1.cs`**: deleted (6,175 LOC → 0)
+- **Total test files in project**: 55 (baseline incl. `UnitTest1.cs`) → 96
+  (55 − 1 + 42)
+- **Test count**:
+  - Filtered (Core regression, baseline gate): **839 passed / 3 skipped /
+    842 total** — IDENTICAL to baseline.
+  - Full project (incl. Headless/Screenshot/VisualDiff): **872** tests
+    enumerated via `dotnet test --list-tests` — IDENTICAL to baseline.
+
+### Verification
+- `dotnet build VPNRouter.Tests/VPNRouter.Tests.csproj -c Release` →
+  **0 errors, 0 warnings** (the bare test project itself; full-solution
+  build has the standing App-layer warnings from other projects).
+- `dotnet test --filter "FullyQualifiedName!~Headless&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff"` →
+  **839 passed**, same as pre-extraction baseline.
+- Leading XML doc comments and `// ═══` section dividers were captured into
+  each extracted file (so doc context lives with the class it describes).
+  Only inter-class blank lines were dropped.
+
+### Files touched
+- **Created**: 42 new files in `VPNRouter.Tests/`.
+- **Deleted**: `VPNRouter.Tests/UnitTest1.cs`.
+- **Edited**: `VPNRouter.Tests/CLAUDE.md` — Layout section refreshed +
+  Test classes table expanded to all 42 former-UnitTest1 classes (was
+  ~25 rows).
+
+### Not touched (per constraint)
+- `VPNRouter.Core` — read-only.
+- `VPNRouter.App` — read-only.
+- `VPNRouter.Service` / `.CLI` / `.Android` — read-only.
+- No test assertions, fixtures, or data modified.
+- No commit created (integrator commits).
+
+### Stage status
+All changes are unstaged; no `git add` / `git commit` performed.
