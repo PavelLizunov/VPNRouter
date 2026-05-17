@@ -80,8 +80,60 @@ Target: main `AndroidApp.axaml.cs` shrinks to ~1,000 LOC (constructor, DI wiring
 - [ ] **Gate 4 simplify**: per-partial diff <100 LOC of restructure
 - [ ] **Hook gates** pass
 
-## Outcome
-*(filled by agent)*
+## Outcome (2026-05-18)
+
+**Status**: PASS — Gates 1+2+4+6 green. Gate 5 MCP verify FLAGGED for integrator (worktree agent has no Android emulator/device).
+
+**LOC delta**:
+
+| File | Lines |
+|---|---|
+| `AndroidApp.axaml.cs` | **7,177 → 4,904** (−2,273) |
+| `AndroidApp.VpnLifecycle.cs` (new) | 666 |
+| `AndroidApp.Notifications.cs` (new) | 443 |
+| `AndroidApp.Permissions.cs` (new) | 165 |
+| `AndroidApp.UiBindings.cs` (new) | 1,206 |
+| Total new partials | **2,480 LOC** |
+
+Like Wave 8's MVM split, the final size (4,904 LOC) is higher than the brief's
+~1,000 LOC target. The remaining 4,904 LOC are deeply cross-concern AppLifecycle
++ ViewBinding orchestration — splitting them would either move methods out of
+the partial class (forbidden under Gate 6) or split methods mid-flow.
+
+**Characterization snapshot strategy** (Option C — emergent):
+The brief offered Option A (conditional ProjectReference to VPNRouter.Android)
+and Option B (load assembly at test runtime). Both have problems on a host
+without Android SDK. The agent invented **Option C: source-parsing**:
+- `VPNRouter.Tests/AndroidAppSourceSurfaceHashHelper.cs` (673 LOC) — parses the
+  AndroidApp partial-class .cs source files at test time via simple lexer +
+  brace tracking, extracts public/internal member signatures, builds the same
+  shape `PublicSurfaceHashHelper` does over reflection.
+- Pros: works on any host without Android SDK; cross-platform; no assembly load.
+- Cons: source parser must be correct; one bug fixed mid-extraction
+  (`=>` arrow vs generic `>` ambiguity).
+
+`AndroidAppCharacterizationTests.cs` (103 LOC) pins the hash. Hash matches pre
+and post split — Gate 6 PASS.
+
+**Verification gates**:
+- [x] Gate 1 build 0 errors (solution build — Android target gated by EnableAndroidTarget)
+- [x] Gate 2 scoped suite 1005 pass / 4 skip / 0 fail (+1 new pass, +1 new skip from `AndroidAppDumpMembersFact` Skip-by-default)
+- [-] Gate 5 MCP verify FLAGGED — worktree agent has no Android emulator. Integrator runs Gate 5 separately or defers to next user-facing Android release.
+- [x] Gate 6 characterization source-hash matches pre/post split
+- [x] Gate 4 simplify: per-partial diff is flat cut+paste; one unused `using System.Linq;` removed; field declarations moved to consumer partial (`s_currentLifecycleSubscriber` + `_lifecycleEventsAttached` from main to VpnLifecycle); unused diagnostic test deleted
+- [x] Hook gates pass
+
+**Surprises**:
+1. AndroidApp.axaml.cs was already partitioned into 11 pre-existing partials
+   (AutoUpdate, QrScanApply, DpiBypass, ConfigShare, Tools, AdvancedShell,
+   SubscribePage, FreeConfigs, ServerList totaling ~7000 LOC). Wave 9 added
+   4 more partials, bringing the total to 15. The "monolith" was thus less
+   monolithic than the brief implied — it was already 15K LOC across multiple
+   files.
+2. VPNRouter.Tests can't reference VPNRouter.Android without the Android target
+   enabled. The source-parsing approach (Option C) bypasses this entirely.
+3. Source parser had a bug on `=>` (expression-bodied member) confused with
+   generic `>` — fixed mid-extraction by tracking expression-body state.
 
 ## Follow-up
 
