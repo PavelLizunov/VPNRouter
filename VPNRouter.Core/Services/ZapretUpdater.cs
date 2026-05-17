@@ -631,6 +631,17 @@ public class ZapretUpdater
     private static string? ExtractWinwsArgs(string batPath, string binPath, string listsPath)
     {
         var lines = File.ReadAllLines(batPath);
+        return ExtractWinwsArgsFromLines(lines, binPath, listsPath);
+    }
+
+    /// <summary>
+    /// Pure-function variant of <see cref="ExtractWinwsArgs"/> for tests:
+    /// takes in-memory .bat lines (no file system read) and returns the
+    /// parsed arg string. Extracted in v3.0 Phase 2G (2026-05-18) so the
+    /// strategy parser can be exercised without writing temp files.
+    /// </summary>
+    internal static string? ExtractWinwsArgsFromLines(string[] lines, string binPath, string listsPath)
+    {
 
         // Find the "start" command line and join continuations
         var cmdBuilder = new System.Text.StringBuilder();

@@ -156,11 +156,7 @@ public class ZapretManager : IDisposable
         // 2. SET variables for paths (CMD variable expansion handles quoting
         //    correctly for Cygwin, direct literal paths fail with "cannot access")
         var batPath = Path.Combine(binDir, "_vpnrouter_launch.bat");
-        var batContent = "@echo off\r\n" +
-            $"set \"BIN={binDir}{Path.DirectorySeparatorChar}\"\r\n" +
-            $"set \"LISTS={ZapretUpdater.ListsDir}{Path.DirectorySeparatorChar}\"\r\n" +
-            $"cd /d \"%BIN%\"\r\n" +
-            $"winws.exe {args}\r\n";
+        var batContent = BuildCygwinLaunchBat(binDir, ZapretUpdater.ListsDir, args);
         File.WriteAllText(batPath, batContent);
 
         var psi = new ProcessStartInfo
@@ -210,6 +206,48 @@ public class ZapretManager : IDisposable
         {
             _logger.Debug(ex, "[Zapret] ImmediateExitDetected handler threw");
         }
+    }
+
+    /// <summary>
+    /// Build the Cygwin-compatible launch .bat content for <c>winws.exe</c>.
+    /// Extracted from <see cref="Start"/> in v3.0 Phase 2G (2026-05-18) so the
+    /// regression test for the v2.9.x Cygwin lesson (CLAUDE.md) can pin the
+    /// contract:
+    ///
+    /// <list type="bullet">
+    ///   <item><description><c>SET BIN=</c> + <c>SET LISTS=</c> required —
+    ///     Cygwin winws.exe path resolution fails on literal Windows paths
+    ///     embedded directly in the command line ("cannot access file" error).
+    ///     CMD variable expansion must produce them for Cygwin's POSIX-style
+    ///     resolver to do the right thing.</description></item>
+    ///   <item><description><c>cd /d %BIN%</c> before invoking winws.exe so
+    ///     the relative `bin/` subdirectory layout the strategy expects works.
+    ///     </description></item>
+    ///   <item><description>Trailing <c>Path.DirectorySeparatorChar</c> on the
+    ///     SET values: legacy Flowseal scripts assume the SET values end in
+    ///     a slash so downstream <c>%BIN%winws.exe</c> joins cleanly without
+    ///     an extra Path.Combine.</description></item>
+    /// </list>
+    ///
+    /// This is internal because tests live in the same assembly via
+    /// InternalsVisibleTo; do not expose publicly without re-checking the
+    /// quoting rules below.
+    /// </summary>
+    internal static string BuildCygwinLaunchBat(string binDir, string listsDir, string args)
+    {
+        // Use Windows path separator explicitly — the .bat file runs in cmd.exe
+        // on Windows only, and the trailing slash is what downstream Flowseal
+        // scripts rely on. Hard-coded `\` instead of Path.DirectorySeparatorChar
+        // would be wrong on non-Windows hosts, but ZapretManager.Start is
+        // Windows-only by virtue of needing winws.exe. We use
+        // Path.DirectorySeparatorChar for symmetry with the original code so
+        // when this builder runs on a Mac/Linux test runner the chars stay
+        // consistent (it's a string-shape test, not an exec test).
+        return "@echo off\r\n" +
+            $"set \"BIN={binDir}{Path.DirectorySeparatorChar}\"\r\n" +
+            $"set \"LISTS={listsDir}{Path.DirectorySeparatorChar}\"\r\n" +
+            "cd /d \"%BIN%\"\r\n" +
+            $"winws.exe {args}\r\n";
     }
 
     /// <summary>Build arguments for legacy built-in strategies (no Flowseal needed).</summary>

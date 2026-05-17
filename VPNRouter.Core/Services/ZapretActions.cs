@@ -16,9 +16,12 @@ public static class ZapretActions
     // v3.0 Phase 2D (2026-05-17): IProcessRunner seam for sc/netsh shells.
     // Default = real ProcessRunner; tests assign FakeProcessRunner to drive
     // canned exit codes / stdout / stderr without invoking real `sc`.
-    // Refactored call sites: RunSc (POC). Remaining call sites
-    // (IsServiceRunning, IsAnyServiceMatching, RunNetsh, ServiceExists)
-    // are Phase 2G work — see plans/phase2-2D-iprocessrunner-2026-05-17.md.
+    // Refactored call sites (Phase 2G sub-wave 7b-2, 2026-05-18):
+    // RunSc (POC), IsServiceRunning, IsAnyServiceMatching, ServiceExists,
+    // RunNetsh. Open process-touching surface that remains direct-Process:
+    // ClearDiscordCacheAsync (kills Discord), CheckProxyLine (registry read),
+    // RunTests (powershell shell-exec), OpenServiceMenu (cmd shell-exec
+    // with runas verb — UAC). Per plans/phase2-2G-untested-services-2026-05-17.md.
     private static IProcessRunner _processRunner = new ProcessRunner();
 
     /// <summary>Test-only seam: swap in a fake. Production paths use the
@@ -477,20 +480,26 @@ public static class ZapretActions
         catch (Exception ex) { return $"✗ {svc}: {ex.Message}"; }
     }
 
-    private static bool ServiceExists(string svc)
+    // v3.0 Phase 2G (2026-05-18): migrated to IProcessRunner so tests can
+    // inject FakeProcessRunner. `internal` (not private) so the test seam
+    // in VPNRouter.Tests can call directly via InternalsVisibleTo —
+    // exercising the method without simulating the entire
+    // RemoveZapretServiceAsync orchestration. Behavioural surface
+    // preserved: an exception path (FileNotFoundException etc.) still
+    // collapses to `false` so the consuming `StopDeleteServiceLineAsync`
+    // can fall through to "not installed".
+    internal static bool ServiceExists(string svc)
     {
         try
         {
-            var psi = new ProcessStartInfo("sc", $"query \"{svc}\"")
-            {
-                UseShellExecute = false, CreateNoWindow = true,
-                RedirectStandardOutput = true, RedirectStandardError = true
-            };
-            using var p = Process.Start(psi);
-            p?.WaitForExit(2000);
-            var output = p?.StandardOutput.ReadToEnd() ?? "";
-            return output.Contains("SERVICE_NAME", StringComparison.OrdinalIgnoreCase)
-                || output.Contains("STATE", StringComparison.OrdinalIgnoreCase);
+            var task = _processRunner.RunAsync(
+                new ProcessRequest(
+                    ExecutablePath: "sc",
+                    Arguments: new[] { "query", svc },
+                    Timeout: TimeSpan.FromSeconds(2)));
+            var result = task.GetAwaiter().GetResult();
+            return result.Stdout.Contains("SERVICE_NAME", StringComparison.OrdinalIgnoreCase)
+                || result.Stdout.Contains("STATE", StringComparison.OrdinalIgnoreCase);
         }
         catch { return false; }
     }
@@ -502,7 +511,10 @@ public static class ZapretActions
     // service names we pass contain spaces (callers: StopDeleteServiceLineAsync
     // only — pure verb + svc-name). If that changes, switch callers to pass
     // IReadOnlyList<string> directly instead of relying on Split.
-    private static async Task RunSc(string args)
+    //
+    // v3.0 Phase 2G (2026-05-18): made `internal` so tests in VPNRouter.Tests
+    // can exercise the executable+ArgumentList composition assertion.
+    internal static async Task RunSc(string args)
     {
         var argList = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         await _processRunner.RunAsync(
@@ -530,60 +542,72 @@ public static class ZapretActions
 
     // ── Service query helpers ──
 
-    private static bool IsServiceRunning(string serviceName)
+    // v3.0 Phase 2G (2026-05-18): migrated to IProcessRunner + made `internal`
+    // for tests. Note the case-sensitivity contract: `sc query NAME` emits
+    // an output block containing the literal token "RUNNING" (or "STOPPED",
+    // "PAUSED", etc.) when the service exists; we compare with
+    // OrdinalIgnoreCase to mirror the legacy parser. A nonzero exit code
+    // (service doesn't exist, 1060) yields empty Stdout → returns false.
+    internal static bool IsServiceRunning(string serviceName)
     {
         try
         {
-            var psi = new ProcessStartInfo("sc", $"query \"{serviceName}\"")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            using var p = Process.Start(psi);
-            p?.WaitForExit(2000);
-            var output = p?.StandardOutput.ReadToEnd() ?? "";
-            return output.Contains("RUNNING", StringComparison.OrdinalIgnoreCase);
+            var task = _processRunner.RunAsync(
+                new ProcessRequest(
+                    ExecutablePath: "sc",
+                    Arguments: new[] { "query", serviceName },
+                    Timeout: TimeSpan.FromSeconds(2)));
+            var result = task.GetAwaiter().GetResult();
+            return result.Stdout.Contains("RUNNING", StringComparison.OrdinalIgnoreCase);
         }
         catch { return false; }
     }
 
-    private static bool IsAnyServiceMatching(string substring)
+    // v3.0 Phase 2G (2026-05-18): migrated to IProcessRunner + made `internal`.
+    // `sc query state= all` enumerates *all* service states; we scan the dump
+    // for a case-insensitive substring match. This is intentionally permissive
+    // because the diagnostic surface ("⚠ VPN service running — may conflict")
+    // shouldn't be brittle about exact wording — false positives are visible
+    // to the user, false negatives silently hide conflicts.
+    //
+    // ArgumentList passes "state=" and "all" as separate tokens to match the
+    // legacy shell-string contract (`"query state= all"` parsed with a single
+    // space between `state=` and `all`).
+    internal static bool IsAnyServiceMatching(string substring)
     {
         try
         {
-            var psi = new ProcessStartInfo("sc", "query state= all")
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            using var p = Process.Start(psi);
-            p?.WaitForExit(3000);
-            var output = p?.StandardOutput.ReadToEnd() ?? "";
-            return output.Contains(substring, StringComparison.OrdinalIgnoreCase);
+            var task = _processRunner.RunAsync(
+                new ProcessRequest(
+                    ExecutablePath: "sc",
+                    Arguments: new[] { "query", "state=", "all" },
+                    Timeout: TimeSpan.FromSeconds(3)));
+            var result = task.GetAwaiter().GetResult();
+            return result.Stdout.Contains(substring, StringComparison.OrdinalIgnoreCase);
         }
         catch { return false; }
     }
 
-    private static bool RunNetsh(string args, out string output)
+    // v3.0 Phase 2G (2026-05-18): migrated to IProcessRunner + made `internal`.
+    // Splits the legacy shell-style args on whitespace for the same reason
+    // RunSc does: existing callers only pass simple verb+noun strings like
+    // "interface tcp show global" — no embedded spaces or quoted args. The
+    // `out string output` shape is kept (vs. returning a tuple) to minimise
+    // diff for the consumer (CheckTcpTimestampsLine).
+    internal static bool RunNetsh(string args, out string output)
     {
         output = "";
         try
         {
-            var psi = new ProcessStartInfo("netsh", args)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-            using var p = Process.Start(psi);
-            p?.WaitForExit(3000);
-            output = p?.StandardOutput.ReadToEnd() ?? "";
-            return p?.ExitCode == 0;
+            var argList = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var task = _processRunner.RunAsync(
+                new ProcessRequest(
+                    ExecutablePath: "netsh",
+                    Arguments: argList,
+                    Timeout: TimeSpan.FromSeconds(3)));
+            var result = task.GetAwaiter().GetResult();
+            output = result.Stdout;
+            return result.ExitCode == 0;
         }
         catch { return false; }
     }

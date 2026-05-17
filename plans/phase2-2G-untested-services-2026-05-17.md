@@ -200,6 +200,71 @@ rows × test methods.
 3. ETW PID 0 / -1 are pass-through in `TranslateProcessEvent`, not
    filtered — filter belongs in the consumer (HealthMonitor / ProcessScanner).
 
+### Wave 7b-2 — `ZapretActions` + Cygwin .bat regression pin (2026-05-18)
+
+**Status**: PASS — 4 gates green.
+
+**Production changes** (minimal seams per scope boundary):
+- `ZapretActions.cs` (+70/-56): `IsServiceRunning`, `ServiceExists`,
+  `IsAnyServiceMatching`, `RunNetsh` migrated from direct `Process.Start`
+  to `IProcessRunner.RunAsync`. Bumped to `internal` for `InternalsVisibleTo`
+  test access. `RunSc` was already migrated in Wave 6 POC.
+- `ZapretManager.cs` (+42/-6): extracted the Cygwin .bat builder as
+  `internal static string BuildCygwinLaunchBat(binDir, listsDir, args)`.
+  The body of `Start()` now calls this helper — behaviour preserved.
+  The regression-prevention test for the v2.9.x SET BIN= / SET LISTS=
+  lesson can now pin the contract without invoking the filesystem.
+- `ZapretUpdater.cs` (+11/-0): extracted pure-function
+  `internal static string? ExtractWinwsArgsFromLines(lines[], binPath, listsPath)`
+  so the strategy parser is testable without a real Flowseal .bat on disk.
+
+**Test added** — `ZapretActionsTests.cs` (396 LOC, 13 tests):
+- 3 IsServiceRunning: RUNNING → true (+ ProcessRequest shape pin),
+  STOPPED → false (regression: legacy parser matched "STATE" substring),
+  runner-throws → false
+- 2 ServiceExists: `sc qc` returns content → true, 1060 "not found" → false
+- 2 IsAnyServiceMatching: substring hit + miss
+- 1 RunSc shape pin: `"stop zapret"` → `["stop", "zapret"]` + 5s timeout
+- 2 RunNetsh: zero-exit → true + out-param populated, nonzero-exit →
+  false but still populates output (so caller can log the failure)
+- **1 Cygwin .bat regression pin** — asserts SET BIN= / SET LISTS= /
+  `cd /d %BIN%` and NO literal Windows paths. This is the v2.9.x lesson
+  documented in `CLAUDE.md` GR Cygwin gotcha turned into machine-enforced.
+- 2 strategy parser: single-line strips exe + returns args; `^` line
+  continuation joins + `%LISTS%` substitutes correctly
+
+**Test delta**: +13 in scoped suite (875 → 888 in 7b-2's worktree).
+Target was 8-12; exceeded slightly to cover all shapes plus regression pin.
+
+**Out-of-scope (Phase 2G follow-up flagged in brief)**:
+Still direct `Process.Start` in ZapretActions: `ClearDiscordCacheAsync`
+(kills Discord — would need an IProcessRunner.Kill seam),
+`OpenHostsEditHelpers` (notepad/explorer shell-exec), `RunTests`
+(PowerShell shell-exec), `OpenServiceMenu` (cmd shell-exec with
+`runas` verb). These need either IProcessRunner extensions or special
+UAC handling (`Verb = "runas"` isn't covered by ProcessRunner per
+its security notes).
+
+**Verification gates**:
+- [x] ZapretActionsTests.cs: 13 (target 8-12)
+- [x] Cygwin convention test included (regression-prevention pin)
+- [x] Gate 1 build 0 errors
+- [x] Gate 2 scoped suite +13 tests, all pass
+- [x] Gate 4 security-review: IProcessRunner uses `ProcessStartInfo.ArgumentList`,
+  so migrated paths are MORE secure than legacy `$"query \"{serviceName}\""`
+  shell-string concat. Timeouts preserved (2s/3s/5s). No env-var
+  injection. `UseShellExecute=false` enforced by wrapper.
+
+**Surprises**:
+1. `SettingsLoaderRobustnessTests` shows pre-existing parallelism flake
+   (different tests fail on different runs of the full suite; passes in
+   isolation). Independently reproduced WITHOUT 7b-2's changes — unrelated.
+   Phase 2G follow-up will fix by switching the test class to
+   `InMemoryFileSystem`.
+2. Brief listed Cygwin .bat scope as ZapretActions, but the actual
+   builder lives in `ZapretManager.Start`. Extracted to ZapretManager's
+   logical zone (still DPI-bypass).
+
 ## Follow-up
 
 - Phase 3D may consolidate `HostsManager` + `WindowsDnsHardening` under a unified `ISystemStateMutator` if their test shapes match.
