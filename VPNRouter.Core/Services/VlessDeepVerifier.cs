@@ -321,7 +321,13 @@ public sealed class VlessDeepVerifier
             },
         };
 
-        return root.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
+        // Pass null (uses JsonSerializerOptions.Default with reflection-based resolver).
+        // Custom `new JsonSerializerOptions { WriteIndented = false }` lacks a TypeInfoResolver
+        // and triggers "JsonSerializerOptions instance must specify a TypeInfoResolver" on
+        // some .NET 8 runtimes (notably ubuntu-latest CI) when JsonValueCustomized<string>
+        // tries to serialize the alpn array entries (TUIC). Defaults are already
+        // WriteIndented=false so behaviour is identical.
+        return root.ToJsonString();
     }
 
     internal static int FindFreePort()

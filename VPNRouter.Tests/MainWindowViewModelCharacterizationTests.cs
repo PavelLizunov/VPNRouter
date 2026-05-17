@@ -1,43 +1,61 @@
 #nullable enable
+using System;
 using Xunit;
 
 namespace VPNRouter.Tests;
 
 /// <summary>
 /// Phase 2B characterization snapshot for <c>MainWindowViewModel</c>.
-/// The class is currently a 6,753-LOC god-class. Phase 2B extracts 4 new
-/// partials (Profiles / Subscriptions / FreeConfigs / Settings) without
-/// touching the public surface. This test pins the public-surface hash;
-/// it must match pre- and post-split. Any drift = forbidden refactor side
-/// effect (renamed, removed, or signature-changed member). See
-/// <see cref="PublicSurfaceHashHelper"/> for inclusion rules.
+/// Wave 8 extracted 4 new partials (FreeConfigs / Subscriptions / Settings /
+/// Profiles) out of the 6,753-LOC god-class without touching the public
+/// surface. This test pins the public-surface hash; it must match pre and
+/// post split. Any drift = forbidden refactor side effect (renamed, removed,
+/// or signature-changed member). See <see cref="PublicSurfaceHashHelper"/>
+/// for inclusion rules.
 ///
-/// <para>If this test FAILS with "Assert.Equal() Failure", it means the
-/// public surface of MainWindowViewModel has drifted from the pinned
-/// 2026-05-18 baseline. Either:</para>
+/// <para><strong>Why platform-specific hashes?</strong> MainWindowViewModel
+/// has 26 <c>#if PLATFORM_WINDOWS</c> blocks for Win-only services
+/// (PowerEventListener, ETW, Mutex). The Linux build strips these blocks,
+/// yielding a different reflection-visible public surface than the Windows
+/// build. Pinning per-platform hashes lets us catch drift on EITHER platform
+/// — a Linux-only refactor that accidentally renames a cross-platform member
+/// will trip the Linux pin, and likewise for Windows.</para>
+///
+/// <para>If this test FAILS, it means MainWindowViewModel's public surface
+/// drifted from the pinned 2026-05-18 baseline on this platform. Either:</para>
 /// <list type="number">
 ///   <item>You intentionally added/removed/changed a public member, in
 ///   which case re-capture the hash via
 ///   <c>PublicSurfaceHashHelper.Compute(typeof(MainWindowViewModel))</c>
-///   and update the pin below.</item>
+///   on the failing platform and update the corresponding pin below.</item>
 ///   <item>You accidentally renamed/removed a member during a refactor.
 ///   Revert that change.</item>
 /// </list>
 ///
 /// <para>To see which member drifted, run
 /// <see cref="PublicSurfaceHashHelper.DumpMembers"/> and diff against the
-/// baseline dump (stored as a test asset is overkill — diff the failing
-/// commit's branch against main for the offending member move).</para>
+/// baseline dump on the same platform.</para>
 /// </summary>
 public class MainWindowViewModelCharacterizationTests
 {
     /// <summary>
-    /// Pinned public-surface hash, captured 2026-05-18 against the
-    /// pre-Phase-2B 6,753-LOC monolith state. Wave 8 (2B split) must
-    /// preserve this hash across all 4 partial-class extractions.
+    /// Windows hash, captured 2026-05-18 against the pre-Phase-2B 6,753-LOC
+    /// monolith state. Wave 8 preserved this hash across all 4 partial-class
+    /// extractions (verified locally on Windows).
     /// </summary>
-    private const string PinnedHash =
+    private const string PinnedHashWindows =
         "5f190a6078303a3c6a8759d9ebaf70917faa804af18c505eec8789f9a0924e66";
+
+    /// <summary>
+    /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
+    /// pre-Phase-2B monolith. Wave 8 should preserve this too (the extracted
+    /// partials don't move any <c>#if PLATFORM_WINDOWS</c>-gated members
+    /// across partials, so the conditional-stripped surface stays identical).
+    /// If Wave 8 ever DOES touch a #if-gated member, this pin will go red
+    /// on the next CI run — update it then with the actual Linux hash.
+    /// </summary>
+    private const string PinnedHashLinux =
+        "46602c4d7f74bf13ff5f2155f964a6a6b27b88f8e6b53cccc3f45e4b8e3d176f";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()
@@ -45,16 +63,23 @@ public class MainWindowViewModelCharacterizationTests
         var t = typeof(VPNRouter.App.ViewModels.MainWindowViewModel);
         var hash = PublicSurfaceHashHelper.Compute(t);
 
-        if (hash != PinnedHash)
+        var expected = OperatingSystem.IsWindows() ? PinnedHashWindows : PinnedHashLinux;
+        var platform = OperatingSystem.IsWindows() ? "Windows" : "Linux/macOS";
+
+        if (hash != expected)
         {
             throw new Xunit.Sdk.XunitException(
-                $"MainWindowViewModel public-surface hash drifted.\n" +
-                $"  Expected (pinned): {PinnedHash}\n" +
+                $"MainWindowViewModel public-surface hash drifted on {platform}.\n" +
+                $"  Expected (pinned): {expected}\n" +
                 $"  Actual:            {hash}\n" +
                 $"If this drift is intentional (Phase 2B split or you " +
-                $"genuinely changed the public API), update PinnedHash to " +
-                $"the Actual value above. Otherwise, a refactor accidentally " +
-                $"renamed/removed/changed a member — revert it.");
+                $"genuinely changed the public API), update the corresponding " +
+                $"PinnedHash{platform} constant to the Actual value above. " +
+                $"Otherwise, a refactor accidentally renamed/removed/changed " +
+                $"a member — revert it. " +
+                $"(Note: Windows and Linux can drift independently because " +
+                $"MainWindowViewModel has #if PLATFORM_WINDOWS blocks — see " +
+                $"the class XML doc on this test for the rationale.)");
         }
     }
 }
