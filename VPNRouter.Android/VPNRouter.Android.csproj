@@ -77,22 +77,6 @@
     <Compile Include="..\VPNRouter.Core\**\*.cs"
              Exclude="..\VPNRouter.Core\bin\**;..\VPNRouter.Core\obj\**"
              LinkBase="Core" />
-
-    <!-- v3.0 Phase G step 1 (2026-05-09): link VPNRouter.UI shared
-         XAML UserControl library sources + .axaml resources. Same
-         pattern as Core source-link above; ProjectReference is avoided
-         here because Android already source-links Core, and a
-         ProjectReference to a Core-referencing UI project would
-         duplicate Core's types in the Android assembly. The shared
-         UI project is intentionally kept Core-free so this source-link
-         path works cleanly. .axaml gets bundled into the Android
-         assembly's resources so the compiled-XAML pipeline can pair
-         each x:Class with its markup in this assembly's context. -->
-    <Compile Include="..\VPNRouter.UI\**\*.cs"
-             Exclude="..\VPNRouter.UI\bin\**;..\VPNRouter.UI\obj\**"
-             LinkBase="UI" />
-    <AvaloniaResource Include="..\VPNRouter.UI\Controls\**\*.axaml"
-                      Link="UI\Controls\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- Cross-platform packages that VPNRouter.Core depends on. Mirror
@@ -100,7 +84,7 @@
        Core's source files directly above (no ProjectReference to pull
        its package graph). -->
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Serilog" Version="3.1.1" />
     <PackageReference Include="Serilog.Sinks.Console" Version="5.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
@@ -115,7 +99,7 @@
     <PackageReference Include="Avalonia.Android" Version="11.3.12" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <!-- v2.32.0 (2026-05-07) — FileProvider for auto-update APK
          hand-off (Android 7+ requires content:// URIs in cross-app
          intents). Avalonia.Android already pulls in much of AndroidX
@@ -129,7 +113,7 @@
          decoder runs on .NET Standard 2.0 / .NET 8 / Mono Android. Encoder
          half is unused here (desktop has its own pure-C# QrCode encoder
          under VPNRouter.Core/Services/QrCode.cs). -->
-    <PackageReference Include="ZXing.Net" Version="0.16.10" />
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
   </ItemGroup>
 
   <!-- libbox.aar — sing-box gomobile binding. Built locally via:

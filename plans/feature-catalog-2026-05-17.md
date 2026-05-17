@@ -1013,8 +1013,9 @@ High-complexity features touching many services — most leverage for a redesign
    per v2.32.2 plans. Worth doing alongside the per-page-VM split (#1).
 9. **Service mode ServiceInstaller.RunSc dead `Verb = "runas"`** — minor
    but documented; refactor or delete during v3.0 polish.
-10. **`Worker.cs` in `VPNRouter.Service`** — dead scaffold per
-    `CLAUDE.md`. Delete during v3.0 cleanup.
+10. **`Worker.cs` in `VPNRouter.Service`** — already removed in commit
+    `a002ed6` (earlier v2.27 cleanup). Stale reference; the file is no
+    longer present in `HEAD`. Resolved by Phase 1 Q12 (2026-05-17).
 
 ---
 

@@ -1290,8 +1290,6 @@ public static class Strings
         : "Installs VPNRouter as a Windows Service so the VPN comes up at boot, before you log in.";
     public static string SmpStartVpn => Ru ? "▶  Запустить VPN" : "▶  Start VPN";
     public static string SmpStopVpn => Ru ? "⏹  Остановить VPN" : "⏹  Stop VPN";
-    public static string SmpSaveButton    => Ru ? "Сохранить"    : "Save";
-    public static string SmpRefreshButton => Ru ? "Обновить"     : "Refresh";
     public static string SmpActiveThrough => Ru ? "Через:" : "Through:";
 
     // v2.32.0 parity audit F-11 (2026-05-09): inline auto-detect feedback
@@ -1377,22 +1375,6 @@ public static class Strings
     public static string PlaceholderPruneBannerAllGone => Ru
         ? "Обновление v2.32.3: все сохранённые серверы оказались шаблонными. Добавь настоящий vless:// или подписку, чтобы продолжить."
         : "v2.32.3 upgrade: all saved servers were placeholders. Add a real vless:// or a subscription to continue.";
-
-    // ── F-12 (parity audit P0, 2026-05-09) — silent ConfigMode flip guard ──
-    // SmpToggleConnectAsync surfaces these when the user has typed a non-empty
-    // share-link / subscription URL into the input field but has not yet
-    // pressed Save. Pre-fix the Connect button silently overwrote settings +
-    // flipped ConfigMode (manual·full → subscribe·full) with no feedback —
-    // same failure class as v2.28.2 silent leak. Now Connect blocks and asks
-    // the user to commit the input via Save first; that explicit step makes
-    // the ConfigMode change visible (toast + log line in SaveSettings).
-    public static string SmpSaveFirstSubscription => Ru
-        ? "Сначала нажми «Сохранить», потом «Подключить» — иначе подписочный URL не запишется в конфиг."
-        : "Tap Save first, then Connect — otherwise the subscription URL won't be persisted.";
-
-    public static string SmpSaveFirstServer => Ru
-        ? "Сначала нажми «Сохранить», потом «Подключить» — иначе ссылка не запишется в конфиг."
-        : "Tap Save first, then Connect — otherwise the share-link won't be persisted.";
 
     // ── v2.18.0 compact Simple-mode redesign (Variant A · Calm) ──
     // Status card titles (one word when possible).

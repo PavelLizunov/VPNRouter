@@ -17,6 +17,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "VPNRouter.Tools", "VPNRoute
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PoolAggregator", "VPNRouter.Tools\PoolAggregator\PoolAggregator.csproj", "{43D986ED-81AC-4542-BFAF-C0CE535EE088}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VPNRouter.Android", "VPNRouter.Android\VPNRouter.Android.csproj", "{1E1BC019-F81F-4AA2-93D5-4BC65B566C10}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VpnRouterTestMcp", "tools\VpnRouterTestMcp\VpnRouterTestMcp.csproj", "{5BCBA32F-85BF-4CAD-8004-3957AB8AC386}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -50,8 +54,15 @@ Global
 		{43D986ED-81AC-4542-BFAF-C0CE535EE088}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{43D986ED-81AC-4542-BFAF-C0CE535EE088}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{43D986ED-81AC-4542-BFAF-C0CE535EE088}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1E1BC019-F81F-4AA2-93D5-4BC65B566C10}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1E1BC019-F81F-4AA2-93D5-4BC65B566C10}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5BCBA32F-85BF-4CAD-8004-3957AB8AC386}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5BCBA32F-85BF-4CAD-8004-3957AB8AC386}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5BCBA32F-85BF-4CAD-8004-3957AB8AC386}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5BCBA32F-85BF-4CAD-8004-3957AB8AC386}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{43D986ED-81AC-4542-BFAF-C0CE535EE088} = {149CE1E1-AD68-43DB-A825-A0AFD342DC74}
+		{5BCBA32F-85BF-4CAD-8004-3957AB8AC386} = {149CE1E1-AD68-43DB-A825-A0AFD342DC74}
 	EndGlobalSection
 EndGlobal
