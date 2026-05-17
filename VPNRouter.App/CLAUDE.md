@@ -11,11 +11,17 @@ App.axaml                          ← глобальные ресурсы + The
 Styles/Tokens.axaml                ← дизайн-токены: цвета, отступы, радиусы. Использовать СЕМАНТИЧЕСКИЕ имена
 Localization/Strings.cs            ← вся локализация. Bilingual (Ru/En). Static getters L_FieldName.
 ViewModels/
-  MainWindowViewModel.cs           ← основная VM (~3500 строк, partial — split across files)
+  MainWindowViewModel.cs                  ← основная VM (~5300 строк, partial — split across 10 files after Phase 2B 2026-05-18)
+  MainWindowViewModel.AutostartBootstrap.cs
+  MainWindowViewModel.FreeConfigs.cs      ← Phase 2B Wave 8: ApplyFreeConfigAsync + ShowFreeConfigSecurityWarningAsync
   MainWindowViewModel.Localization.cs
+  MainWindowViewModel.Profiles.cs         ← Phase 2B Wave 8: LoadApps + app/category commands + DeployBundledProfiles + StripExe
   MainWindowViewModel.RuntimeStatus.cs
   MainWindowViewModel.ServerTesting.cs
+  MainWindowViewModel.Settings.cs         ← Phase 2B Wave 8: Version/About/Reset/Theme/Lang/UiMode/Autostart commands
   MainWindowViewModel.SimpleMode.cs
+  MainWindowViewModel.Subscriptions.cs    ← Phase 2B Wave 8: subscription CRUD + auto-refresh timer
+  MainWindowViewModel.Wgturn.cs
   FreeConfigs/
     FreeConfigsPageViewModel.cs    ← Free Configs page VM
     FreeConfigItemViewModel.cs     ← row VM
@@ -64,8 +70,20 @@ private async Task ConnectAsync() { ... }
 ```
 
 ### Partial classes
-`MainWindowViewModel` разбит на 5 partial файлов чтоб не плодить 5000-строчный
-god-object. Каждый partial — одна тематика (Localization / RuntimeStatus / etc).
+`MainWindowViewModel` разбит на 10 partial файлов (после Phase 2B Wave 8,
+2026-05-18) чтоб не плодить 6750-строчный god-object. Каждый partial — одна
+тематика (Localization / RuntimeStatus / ServerTesting / SimpleMode / Wgturn /
+AutostartBootstrap + Phase 2B: Profiles / Subscriptions / FreeConfigs /
+Settings). Главный `MainWindowViewModel.cs` уменьшился с 6753 до ~5300 строк
+(constructor + cross-concern orchestration: LoadSettingsIntoUI / SaveSettings /
+ToggleConnectionAsync / Reconnect / Zapret + TgProxy commands / OnEngineStatus
+event handler / Quit / Dispose остаются в нём).
+
+**Characterization snapshot**: `VPNRouter.Tests/MainWindowViewModelCharacterizationTests.cs`
+pin'ит public-surface SHA-256 hash. Любая будущая extraction из MVM
+обязана сохранить hash — иначе reflection-based test упадёт с конкретным
+diff what changed. Полная семантика — в комментариях самого test class'а
++ `VPNRouter.Tests/PublicSurfaceHashHelper.cs`.
 
 ### Bilingual UI
 `Localization/Strings.cs` — `public static string FcRefresh => Ru ? "Обновить" : "Refresh";`
