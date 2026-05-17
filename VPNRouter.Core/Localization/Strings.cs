@@ -1357,6 +1357,27 @@ public static class Strings
         ? "QR не содержит vless:// или подписку"
         : "QR doesn't contain vless:// or a subscription URL";
 
+    // v2.32.3 (2026-05-17) — placeholder credentials rejection toasts.
+    // Triggered when the user scans / pastes / subscribes to a vless URL
+    // whose Reality public_key (or short_id, or server IP) matches the
+    // known PlaceholderVlessUri leftover from old Android smoke-test
+    // builds. F-E catches it at Connect; v2.32.3 input gates catch it
+    // before the credential ever lands in storage. UI message has to
+    // tell the user this is THEIR provider's problem, not a VPNRouter
+    // bug — otherwise they think the app is broken.
+    public static string PlaceholderCredentialRejected => Ru
+        ? "Эта ссылка содержит шаблонные ключи Reality — настоящего VPN-сервера в ней нет. Получи рабочий vless:// у своего провайдера."
+        : "This link contains placeholder Reality credentials — no real VPN server behind it. Get a working vless:// from your provider.";
+    public static string PlaceholderSubscriptionDropped => Ru
+        ? "Подписка вернула {0} шаблонных серверов — они пропущены. Если повторится — пожалуйся провайдеру."
+        : "Subscription returned {0} placeholder servers — skipped. Report to your provider if this keeps happening.";
+    public static string PlaceholderPruneBanner => Ru
+        ? "Обновление v2.32.3: убрано {0} небезопасных серверов из конфига (шаблонные ключи Reality, с которыми VPN не работает)."
+        : "v2.32.3 upgrade: removed {0} unsafe servers from your config (placeholder Reality keys — VPN couldn't work with them).";
+    public static string PlaceholderPruneBannerAllGone => Ru
+        ? "Обновление v2.32.3: все сохранённые серверы оказались шаблонными. Добавь настоящий vless:// или подписку, чтобы продолжить."
+        : "v2.32.3 upgrade: all saved servers were placeholders. Add a real vless:// or a subscription to continue.";
+
     // ── F-12 (parity audit P0, 2026-05-09) — silent ConfigMode flip guard ──
     // SmpToggleConnectAsync surfaces these when the user has typed a non-empty
     // share-link / subscription URL into the input field but has not yet

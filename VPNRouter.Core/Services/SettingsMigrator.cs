@@ -51,6 +51,165 @@ public static class SettingsMigrator
     }
 
     /// <summary>
+    /// v2.32.3 (2026-05-17): aggressive one-shot sweep that strips
+    /// <i>any</i> entry tagged as a known-bad placeholder by
+    /// <see cref="PlaceholderGuard"/> from the persisted settings tree.
+    /// Targets the legacy <see cref="VlessConfig.Server"/> scalar trio,
+    /// the manual <see cref="VlessConfig.Servers"/> list, and every
+    /// <see cref="SubscriptionEntry.Servers"/> list on every
+    /// <see cref="AppConfig.Subscriptions"/> entry.
+    ///
+    /// <para>The Reality placeholder <c>DnT9hI…</c> leaked from old
+    /// Android smoke-test code and has lived in real user configs for
+    /// weeks. F-A / F-D / F-E catch it at start/validate/runtime but
+    /// each layer rejects-or-bypasses; only this migrator step actually
+    /// purges the bytes from disk so the user stops seeing the dead
+    /// entry in the Servers tab.</para>
+    ///
+    /// <para>Conservative wipe semantics — never touches an entry that
+    /// <see cref="PlaceholderGuard"/> reports as clean. For the scalar
+    /// trio (<see cref="VlessConfig.Server"/> +
+    /// <see cref="VlessConfig.Reality"/>), a single hit zeroes the
+    /// related fields atomically (server, port, uuid, reality) because
+    /// the bad pubkey usually surfaces together with bad server/uuid
+    /// values from the same placeholder source; leaving the port or
+    /// uuid behind would invite another silent half-config.</para>
+    ///
+    /// <para>If <see cref="VlessConfig.ActiveServer"/> pointed at an
+    /// entry we just removed, clear it — caller / UI is expected to
+    /// auto-pick or prompt. We deliberately don't auto-promote a
+    /// surviving entry because the placeholder set is small and the
+    /// risk of picking another stale entry as "active" outweighs the
+    /// UX hit of one extra click.</para>
+    ///
+    /// <para>Returns the total number of items removed (scalar wipe =
+    /// 1, plus one per list element). Idempotent — re-running on
+    /// already-cleaned state returns 0 with no log noise.</para>
+    /// </summary>
+    public static int PruneKnownPlaceholders(AppSettings settings, ILogger? logger)
+    {
+        if (settings == null) return 0;
+        int removed = 0;
+
+        // (a) Scalar Vless.* trio — pubkey/sid/server.
+        var vless = settings.Vless;
+        if (vless != null)
+        {
+            var scalarHit = PlaceholderGuard.Inspect(
+                vless.Reality?.PublicKey,
+                vless.Reality?.ShortId,
+                vless.Server);
+            if (scalarHit != null)
+            {
+                var truncated = TruncateForLog(MatchedScalarValue(vless, scalarHit));
+                logger?.Warning(
+                    "[v2.32.3] PruneKnownPlaceholders: removed placeholder {Field} from {Location} (was: {Value})",
+                    scalarHit,
+                    "vless (scalar)",
+                    truncated);
+                vless.Server = string.Empty;
+                vless.Port = 0;
+                vless.Uuid = string.Empty;
+                vless.Reality = new VlessRealityConfig();
+                removed++;
+            }
+
+            // (b) Vless.Servers list.
+            if (vless.Servers != null && vless.Servers.Count > 0)
+            {
+                var initial = vless.Servers.Count;
+                vless.Servers.RemoveAll(entry =>
+                {
+                    var field = PlaceholderGuard.Inspect(entry);
+                    if (field == null) return false;
+                    var truncated = TruncateForLog(MatchedEntryValue(entry, field));
+                    logger?.Warning(
+                        "[v2.32.3] PruneKnownPlaceholders: removed placeholder {Field} from {Location} (was: {Value})",
+                        field,
+                        $"vless.servers[{(string.IsNullOrEmpty(entry?.Name) ? "(unnamed)" : entry!.Name)}]",
+                        truncated);
+                    return true;
+                });
+                removed += initial - vless.Servers.Count;
+            }
+        }
+
+        // (c) Each subscription's Servers list.
+        var subs = settings.App?.Subscriptions;
+        if (subs != null)
+        {
+            foreach (var sub in subs)
+            {
+                if (sub?.Servers == null || sub.Servers.Count == 0) continue;
+                var initial = sub.Servers.Count;
+                sub.Servers.RemoveAll(entry =>
+                {
+                    var field = PlaceholderGuard.Inspect(entry);
+                    if (field == null) return false;
+                    var truncated = TruncateForLog(MatchedEntryValue(entry, field));
+                    logger?.Warning(
+                        "[v2.32.3] PruneKnownPlaceholders: removed placeholder {Field} from {Location} (was: {Value})",
+                        field,
+                        $"app.subscriptions[{(string.IsNullOrEmpty(sub.Name) ? "(unnamed)" : sub.Name)}].servers[{(string.IsNullOrEmpty(entry?.Name) ? "(unnamed)" : entry!.Name)}]",
+                        truncated);
+                    return true;
+                });
+                removed += initial - sub.Servers.Count;
+            }
+        }
+
+        // (d) ActiveServer pointed at something we removed → clear it.
+        // Caller / UI handles graceful replacement (we deliberately do
+        // NOT auto-pick — the surviving entries may be from a different
+        // subscription / different mode than the user expected).
+        if (vless != null && !string.IsNullOrEmpty(vless.ActiveServer))
+        {
+            var effective = vless.GetEffectiveServers();
+            var stillPresent = effective.Any(s =>
+                string.Equals(s.Name, vless.ActiveServer, StringComparison.OrdinalIgnoreCase));
+            if (!stillPresent)
+            {
+                logger?.Warning(
+                    "[v2.32.3] PruneKnownPlaceholders: vless.active_server '{Active}' was on a pruned entry; cleared",
+                    vless.ActiveServer);
+                vless.ActiveServer = string.Empty;
+            }
+        }
+
+        return removed;
+    }
+
+    /// <summary>Truncate a placeholder value for log output (full value
+    /// is reconstructable via the static hash-sets in
+    /// <see cref="ConfigSanityCheck"/>; here we only need enough to
+    /// disambiguate which fingerprint matched).</summary>
+    private static string TruncateForLog(string? v)
+    {
+        if (string.IsNullOrEmpty(v)) return "(empty)";
+        return v.Length <= 16 ? v : $"{v[..8]}…{v[^4..]}";
+    }
+
+    private static string MatchedScalarValue(VlessConfig v, string field) => field switch
+    {
+        "reality.public_key" => v.Reality?.PublicKey ?? string.Empty,
+        "reality.short_id"   => v.Reality?.ShortId   ?? string.Empty,
+        "server"             => v.Server                ?? string.Empty,
+        _ => string.Empty,
+    };
+
+    private static string MatchedEntryValue(VlessServerEntry? e, string field)
+    {
+        if (e == null) return string.Empty;
+        return field switch
+        {
+            "reality.public_key" => e.Reality?.PublicKey ?? string.Empty,
+            "reality.short_id"   => e.Reality?.ShortId   ?? string.Empty,
+            "server"             => e.Server                ?? string.Empty,
+            _ => string.Empty,
+        };
+    }
+
+    /// <summary>
     /// Cleanup orphan <see cref="VlessConfig.Servers"/> entries that
     /// aren't part of any enabled subscription. Closes the
     /// stas-class shadow-override bug at the config-load layer

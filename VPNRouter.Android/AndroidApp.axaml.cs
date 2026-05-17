@@ -565,10 +565,29 @@ public partial class AndroidApp : Avalonia.Application
         var coreNotice = VPNRouter.Core.Services.SettingsLoader.ConsumeRecoveryNotice();
         var androidNotice = AndroidStorage.ConsumeRecoveryNotice();
         var safeMode = AndroidStorage.ConsumeSafeModeBanner();
+        // v2.32.3 (Z:\kanareik incident) — placeholder-prune count from
+        // PruneKnownPlaceholdersOnce. Distinct from the generic recovery
+        // notice because the message+CTA is specific.
+        var placeholderCount = AndroidStorage.GetPlaceholderPruneCount();
 
-        var parts = new System.Collections.Generic.List<string>(3);
+        var parts = new System.Collections.Generic.List<string>(4);
         if (!string.IsNullOrWhiteSpace(coreNotice)) parts.Add(coreNotice);
         if (!string.IsNullOrWhiteSpace(androidNotice)) parts.Add(androidNotice);
+        if (placeholderCount > 0)
+        {
+            // Distinguish "all servers were placeholders" from "some were"
+            // by peeking at remaining storage. If nothing's left after the
+            // prune, surface the "add a real server" CTA; otherwise the
+            // milder count-only banner. Same Strings keys as desktop.
+            var anyServerLeft =
+                (AndroidStorage.GetServers().Count > 0) ||
+                AndroidStorage.GetSubscriptions().Any(s => s?.Servers?.Count > 0);
+            parts.Add(anyServerLeft
+                ? string.Format(Localization.PlaceholderPruneBanner, placeholderCount)
+                : Localization.PlaceholderPruneBannerAllGone);
+            // One-shot — clear so we don't re-surface on next launch.
+            AndroidStorage.ClearPlaceholderPruneCount();
+        }
         if (safeMode)
         {
             parts.Add(Localization.Ru
@@ -4619,6 +4638,16 @@ public partial class AndroidApp : Avalonia.Application
                 _cachedServers = new List<VlessServerEntry>();
                 UpdateServerListView();
                 UpdateConfigSummary();
+            }
+            catch (PlaceholderConfigException ex)
+            {
+                // v2.32.3 — see ApplyScannedServerUri for context. Paste
+                // path uses the same guard, distinct error so user knows
+                // it's a credential problem.
+                global::Android.Util.Log.Warn("VpnRouter.Simple",
+                    $"Paste: placeholder rejected — field={ex.OffendingField}");
+                _serverInputError.Text = Localization.PlaceholderCredentialRejected;
+                _serverInputError.IsVisible = true;
             }
             catch (Exception ex)
             {

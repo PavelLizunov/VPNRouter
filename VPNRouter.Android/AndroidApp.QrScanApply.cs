@@ -92,6 +92,19 @@ public partial class AndroidApp
         {
             parsed = ServerUriParser.Parse(uri);
         }
+        catch (PlaceholderConfigException ex)
+        {
+            // v2.32.3 (Z:\kanareik incident) — input gate via PlaceholderGuard
+            // rejected the scanned QR because it carries leftover Android
+            // smoke-test credentials (pubkey=DnT9hI...nckU or its short_id /
+            // server IP). User probably scanned a "sample" QR from a forum
+            // or old tutorial. Distinct toast so they know it's a credential
+            // problem, not a scheme/format problem.
+            global::Android.Util.Log.Warn("VpnRouter.QrScan",
+                $"ApplyScannedServerUri: placeholder rejected — field={ex.OffendingField} value={ex.OffendingValue}");
+            ShowMenuFeedback(Localization.PlaceholderCredentialRejected);
+            return;
+        }
         catch (Exception ex)
         {
             global::Android.Util.Log.Warn("VpnRouter.QrScan",

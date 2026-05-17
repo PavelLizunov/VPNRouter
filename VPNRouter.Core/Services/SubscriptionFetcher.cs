@@ -33,10 +33,26 @@ public static class SubscriptionFetcher
     /// </summary>
     public static async Task<List<VlessServerEntry>> FetchAsync(string url, ILogger? logger = null, CancellationToken ct = default)
     {
+        var (entries, _) = await FetchWithDiagnosticsAsync(url, logger, ct);
+        return entries;
+    }
+
+    /// <summary>
+    /// Same as <see cref="FetchAsync"/> but also returns the number of
+    /// entries that were silently dropped because they matched a known
+    /// placeholder fingerprint (<see cref="PlaceholderGuard"/>). Used by
+    /// <see cref="RefreshEntryAsync"/> to surface a dedicated warning so
+    /// users understand *why* their fetched server count is lower than
+    /// the provider's apparent list size.
+    /// </summary>
+    internal static async Task<(List<VlessServerEntry> Entries, int DroppedPlaceholders)>
+        FetchWithDiagnosticsAsync(string url, ILogger? logger = null, CancellationToken ct = default)
+    {
         var result = new List<VlessServerEntry>();
+        var droppedPlaceholders = 0;
 
         if (string.IsNullOrWhiteSpace(url))
-            return result;
+            return (result, 0);
 
         try
         {
@@ -46,14 +62,22 @@ public static class SubscriptionFetcher
             if (string.IsNullOrWhiteSpace(response))
             {
                 logger?.Warning("[Subscription] Empty response from {Url}", url);
-                return result;
+                return (result, 0);
             }
 
             // v2.31.5+: parsing extracted to ParseBody for unit-testability
             // without an HTTP round-trip. Behaviour-preserving — FetchAsync
             // is still the only production caller and the user-visible
             // pipeline (HTTP → parse → dedup → list) is identical.
-            result = ParseBody(response, logger);
+            result = ParseBody(response, out droppedPlaceholders, logger);
+
+            if (droppedPlaceholders > 0)
+            {
+                logger?.Warning(
+                    "[Subscription] Dropped {DroppedCount} entries with placeholder credentials from {Url} " +
+                    "(likely test/sample URLs scraped by provider). User's other servers preserved.",
+                    droppedPlaceholders, url);
+            }
 
             logger?.Information("[Subscription] Fetched {Count} servers from {Url}", result.Count, url);
         }
@@ -62,7 +86,7 @@ public static class SubscriptionFetcher
             logger?.Error(ex, "[Subscription] Fetch failed for {Url}", url);
         }
 
-        return result;
+        return (result, droppedPlaceholders);
     }
 
     /// <summary>
@@ -85,8 +109,26 @@ public static class SubscriptionFetcher
     /// parser branches directly via <c>InternalsVisibleTo</c>; not part
     /// of the public Core API.</para>
     /// </summary>
-    internal static List<VlessServerEntry> ParseBody(string responseBody, ILogger? logger = null)
+    internal static List<VlessServerEntry> ParseBody(string responseBody, ILogger? logger = null) =>
+        ParseBody(responseBody, out _, logger);
+
+    /// <summary>
+    /// Overload of <see cref="ParseBody(string, ILogger?)"/> that also reports
+    /// how many entries were silently dropped because they matched a known
+    /// placeholder fingerprint (<see cref="PlaceholderGuard"/>). The caller
+    /// (e.g. <see cref="RefreshEntryAsync"/>) can use this count to log a
+    /// dedicated warning so users see *why* a subscription "lost" entries.
+    ///
+    /// <para>Why drop instead of throw: subscriptions in the wild scrape
+    /// sample vless:// URLs from forums / Telegram channels. One placeholder
+    /// in a list of seven shouldn't blow away the other six working servers.
+    /// Lossy filtering keeps the user connected with the clean entries while
+    /// still flagging the bad ones via the log path.</para>
+    /// </summary>
+    internal static List<VlessServerEntry> ParseBody(
+        string responseBody, out int droppedPlaceholders, ILogger? logger = null)
     {
+        droppedPlaceholders = 0;
         var result = new List<VlessServerEntry>();
         if (string.IsNullOrWhiteSpace(responseBody)) return result;
 
@@ -149,7 +191,38 @@ public static class SubscriptionFetcher
             try
             {
                 var entry = ServerUriParser.Parse(line);
+
+                // v2.32.3 placeholder filter: silently drop entries that
+                // match known placeholder bait (e.g. the
+                // DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU pubkey from
+                // pre-r10 Android smoke builds). Subscription providers
+                // sometimes scrape sample URLs from forums / Telegram and
+                // re-publish them — one bad entry shouldn't kill the whole
+                // import. The post-loop counter feeds a single aggregated
+                // warning at the caller so the user can find out via log
+                // why their server count dropped.
+                //
+                // Defence-in-depth: ServerUriParser / VlessUriParser already
+                // throws PlaceholderConfigException for known fingerprints
+                // (Phase 2a). We catch that separately below — but also keep
+                // this explicit check in case a future protocol parser is
+                // added without the upstream gate, or the parser path is
+                // bypassed by a future shortcut.
+                if (PlaceholderGuard.IsPlaceholder(entry))
+                {
+                    droppedPlaceholders++;
+                    continue;
+                }
+
                 result.Add(entry);
+            }
+            catch (PlaceholderConfigException)
+            {
+                // Parser already rejected the entry as placeholder bait —
+                // count it for the aggregated warning instead of dropping
+                // it into the generic "Failed to parse" bucket (which
+                // implies a user-fixable typo).
+                droppedPlaceholders++;
             }
             catch (Exception ex)
             {
@@ -185,8 +258,22 @@ public static class SubscriptionFetcher
     {
         if (entry == null || string.IsNullOrWhiteSpace(entry.Url)) return 0;
 
-        var servers = await FetchAsync(entry.Url, logger, ct);
+        // Use the diagnostics overload so RefreshEntryAsync can surface
+        // the placeholder count itself. FetchWithDiagnosticsAsync already
+        // emits the canonical warning at the fetch site; we also emit a
+        // parallel warning here so callers that subscribe a *separate*
+        // logger to RefreshEntryAsync (e.g. UI status panel) still see
+        // the placeholder drop. Both messages stay aligned.
+        var (servers, droppedPlaceholders) = await FetchWithDiagnosticsAsync(entry.Url, logger, ct);
         if (ct.IsCancellationRequested) return 0;
+
+        if (droppedPlaceholders > 0 && logger != null)
+        {
+            logger.Warning(
+                "[Subscription] Refresh for {Url} dropped {DroppedCount} placeholder entries " +
+                "(likely test/sample URLs scraped by provider). User's other servers preserved.",
+                entry.Url, droppedPlaceholders);
+        }
 
         // Only overwrite the cached server list on a successful fetch. If
         // FetchAsync returns 0 (network error, DNS failure, provider 500,

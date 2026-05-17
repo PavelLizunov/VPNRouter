@@ -17,10 +17,46 @@ public static class CustomConfigInjector
     /// <summary>
     /// Inject process routing into a raw sing-box JSON config.
     /// Returns the modified JSON string ready for sing-box.
+    ///
+    /// <para>v2.32.3-r1 (2026-05-17): throws <see cref="PlaceholderConfigException"/>
+    /// when the first proxy-typed outbound in <paramref name="rawJson"/> carries
+    /// a known placeholder fingerprint (Reality public_key, Reality short_id,
+    /// or server IP — see <see cref="PlaceholderGuard"/>). This is the
+    /// custom-config equivalent of F-A/B/D's input gates: we want users who
+    /// paste a sing-box JSON containing the Android smoke-test placeholder
+    /// (the <c>DnT9...</c> pubkey) to get an actionable error at paste time
+    /// instead of letting sing-box launch and then F-E catching it.</para>
     /// </summary>
     public static string Inject(string rawJson, IEnumerable<string> processNames, AppSettings settings)
     {
         var config = JObject.Parse(rawJson);
+
+        // ── Phase 2c placeholder gate (v2.32.3-r1) ────────────────────────
+        // Inspect the FIRST proxy-typed outbound (same heuristic
+        // ConfigSanityCheck uses at runtime). The shared helper lives in
+        // ConfigSanityCheck so the two layers stay in sync — single source
+        // of truth on a parsed sing-box outbound.
+        var outboundsForGate = config["outbounds"] as JArray;
+        if (outboundsForGate != null && outboundsForGate.Count > 0)
+        {
+            var proxyForGate = ConfigSanityCheck.FindFirstProxyOutbound(outboundsForGate);
+            if (proxyForGate != null)
+            {
+                var offendingField = ConfigSanityCheck.InspectOutbound(proxyForGate);
+                if (offendingField != null)
+                {
+                    var reality = proxyForGate["tls"]?["reality"] as JObject;
+                    var offendingValue = offendingField switch
+                    {
+                        "reality.public_key" => reality?["public_key"]?.Value<string>() ?? "",
+                        "reality.short_id" => reality?["short_id"]?.Value<string>() ?? "",
+                        "server" => proxyForGate["server"]?.Value<string>() ?? "",
+                        _ => "",
+                    };
+                    throw new PlaceholderConfigException(offendingField, offendingValue);
+                }
+            }
+        }
 
         // Filter wildcards — sing-box process_name doesn't support globs.
         // Preserve original case — sing-box matching is case-sensitive.

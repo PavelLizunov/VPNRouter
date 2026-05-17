@@ -529,6 +529,11 @@ internal static class Localization
     public static string SmpQrSubscriptionEmpty => global::VPNRouter.Core.Localization.Strings.SmpQrSubscriptionEmpty;
     public static string SmpQrSubscriptionFailed => global::VPNRouter.Core.Localization.Strings.SmpQrSubscriptionFailed;
     public static string SmpQrUnsupportedScheme => global::VPNRouter.Core.Localization.Strings.SmpQrUnsupportedScheme;
+    // v2.32.3 (2026-05-17) — placeholder credentials rejection / migration banner.
+    public static string PlaceholderCredentialRejected => global::VPNRouter.Core.Localization.Strings.PlaceholderCredentialRejected;
+    public static string PlaceholderSubscriptionDropped => global::VPNRouter.Core.Localization.Strings.PlaceholderSubscriptionDropped;
+    public static string PlaceholderPruneBanner => global::VPNRouter.Core.Localization.Strings.PlaceholderPruneBanner;
+    public static string PlaceholderPruneBannerAllGone => global::VPNRouter.Core.Localization.Strings.PlaceholderPruneBannerAllGone;
     public static string SmpTunnelModeLabel => global::VPNRouter.Core.Localization.Strings.SmpTunnelModeLabel;
     public static string SmpSplitOption => global::VPNRouter.Core.Localization.Strings.SmpSplitOption;
     public static string SmpSplitHint => global::VPNRouter.Core.Localization.Strings.SmpSplitHint;

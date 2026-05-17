@@ -72,6 +72,17 @@ public static class AndroidStorage
     // PruneSubServerDuplicatesOnce strips those.
     private const string KeyV4SubServersPruneDone = "v4_sub_servers_prune_done";
 
+    // v2.32.3 (2026-05-17, Z:\kanareik incident) — one-shot migration flag
+    // for the "permanently exorcise PlaceholderVlessUri leftovers from
+    // every user's storage" cleanup. Mirrors the desktop SettingsMigrator
+    // sibling pass — walks both KeyServersJson and KeySubscriptions[].Servers
+    // and removes any entry whose Reality pubkey / short_id / server IP
+    // matches the known stas-class placeholder fingerprints. Counter is
+    // surfaced via KeyPlaceholderPruneCount so the AndroidApp banner can
+    // tell the user how many credentials were yanked on this upgrade.
+    private const string KeyV4PlaceholderPruneDone = "v4_placeholder_prune_done";
+    private const string KeyPlaceholderPruneCount = "v4_placeholder_prune_count";
+
     // ── v2.32.0 (AND-CC): config mode + custom sing-box JSON ────────────
     //
     // Three-way enum mirroring desktop's AppSettings.App.ConfigMode:
@@ -297,6 +308,145 @@ public static class AndroidStorage
             // Don't stamp the flag on error — retry on next launch.
         }
     }
+
+    /// <summary>
+    /// v2.32.3 (2026-05-17, Z:\kanareik incident) — one-shot cleanup of
+    /// placeholder Reality credentials in storage. The fingerprint set is
+    /// the same one <see cref="PlaceholderGuard"/> uses everywhere; this
+    /// method is the Android-side equivalent of desktop's
+    /// <c>SettingsMigrator.PruneKnownPlaceholders</c>.
+    ///
+    /// <para>What gets pruned:</para>
+    /// <list type="bullet">
+    ///   <item>Entries from <c>KeyServersJson</c> (standalone manual list)
+    ///   whose pubkey / short_id / server IP matches a placeholder.</item>
+    ///   <item>Entries from each <see cref="SubscriptionEntry.Servers"/> in
+    ///   <c>KeySubscriptions</c> with the same match.</item>
+    ///   <item><see cref="KeySelectedServerName"/> is cleared if it pointed
+    ///   to a now-removed entry — connect path won't silently fall back to
+    ///   a deleted name.</item>
+    /// </list>
+    ///
+    /// <para>Idempotent: stamps <c>KeyV4PlaceholderPruneDone</c> on success
+    /// (or on a confirmed-clean store) so the parse cost is paid exactly
+    /// once per install. Updates <c>KeyPlaceholderPruneCount</c> for the
+    /// UI banner. Best-effort: any exception is logged + swallowed so the
+    /// app keeps launching.</para>
+    /// </summary>
+    internal static void PruneKnownPlaceholdersOnce()
+    {
+        if (GetBool(KeyV4PlaceholderPruneDone, defaultValue: false)) return;
+
+        try
+        {
+            int totalRemoved = 0;
+
+            // (a) Standalone list — KeyServersJson.
+            var standalone = GetServers();
+            int beforeStandalone = standalone.Count;
+            standalone.RemoveAll(s => PlaceholderGuard.IsPlaceholder(s));
+            int removedStandalone = beforeStandalone - standalone.Count;
+            if (removedStandalone > 0)
+            {
+                SetServers(standalone);
+                totalRemoved += removedStandalone;
+                global::Android.Util.Log.Info("VpnRouter.Storage",
+                    $"PruneKnownPlaceholdersOnce: removed {removedStandalone} placeholder entry(ies) from KeyServersJson");
+            }
+
+            // (b) Per-subscription Servers lists — KeySubscriptions[].Servers.
+            // Read directly via JsonConvert (mirror PruneSubServerDuplicatesOnce
+            // pattern) so we don't recurse into GetSubscriptions's legacy-
+            // migration / recovery wrapping during this early-boot pass.
+            var subsJson = GetString(KeySubscriptions);
+            if (!string.IsNullOrWhiteSpace(subsJson))
+            {
+                List<SubscriptionEntry>? subs = null;
+                try
+                {
+                    subs = JsonConvert.DeserializeObject<List<SubscriptionEntry>>(subsJson);
+                }
+                catch
+                {
+                    // Corrupt blob — let GetSubscriptions handle it on
+                    // first access; retry prune on next launch.
+                    return;
+                }
+                if (subs != null)
+                {
+                    int removedFromSubs = 0;
+                    foreach (var sub in subs)
+                    {
+                        if (sub?.Servers == null) continue;
+                        var before = sub.Servers.Count;
+                        sub.Servers.RemoveAll(s => PlaceholderGuard.IsPlaceholder(s));
+                        removedFromSubs += before - sub.Servers.Count;
+                    }
+                    if (removedFromSubs > 0)
+                    {
+                        SetSubscriptions(subs);
+                        totalRemoved += removedFromSubs;
+                        global::Android.Util.Log.Info("VpnRouter.Storage",
+                            $"PruneKnownPlaceholdersOnce: removed {removedFromSubs} placeholder entry(ies) across {subs.Count} subscription(s)");
+                    }
+                }
+            }
+
+            // (c) Selected-server-name dangling pointer. After (a)+(b), if
+            // KeySelectedServerName no longer matches any standalone OR any
+            // subscription entry, clear it. GetActiveServer's tier fallback
+            // chain (v4) will pick a healthy default on next connect.
+            var selectedName = GetSelectedServerName();
+            if (!string.IsNullOrEmpty(selectedName))
+            {
+                bool stillExists = standalone.Any(s =>
+                    string.Equals(s?.Name, selectedName, System.StringComparison.OrdinalIgnoreCase));
+                if (!stillExists && !string.IsNullOrWhiteSpace(subsJson))
+                {
+                    try
+                    {
+                        var freshSubs = JsonConvert.DeserializeObject<List<SubscriptionEntry>>(GetString(KeySubscriptions) ?? "[]");
+                        stillExists = freshSubs?.Any(sub =>
+                            sub?.Servers?.Any(srv =>
+                                string.Equals(srv?.Name, selectedName, System.StringComparison.OrdinalIgnoreCase)) == true) ?? false;
+                    }
+                    catch { /* swallow — treat as missing */ }
+                }
+                if (!stillExists)
+                {
+                    SetSelectedServerName(null);
+                    global::Android.Util.Log.Info("VpnRouter.Storage",
+                        $"PruneKnownPlaceholdersOnce: cleared dangling KeySelectedServerName='{selectedName}' (entry no longer in storage)");
+                }
+            }
+
+            // Persist count for AndroidApp banner pickup on first frame.
+            if (totalRemoved > 0)
+            {
+                SetInt(KeyPlaceholderPruneCount, totalRemoved);
+            }
+
+            SetBool(KeyV4PlaceholderPruneDone, true);
+        }
+        catch (System.Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter.Storage",
+                $"PruneKnownPlaceholdersOnce threw: {ex.GetType().Name}: {ex.Message}");
+            // Don't stamp the flag on error — retry on next launch.
+        }
+    }
+
+    /// <summary>
+    /// v2.32.3 — count of placeholder entries removed by the most recent
+    /// <see cref="PruneKnownPlaceholdersOnce"/> pass. Read by AndroidApp
+    /// on first frame to render the migration banner; should be cleared
+    /// after the banner is dismissed by the user (via
+    /// <see cref="ClearPlaceholderPruneCount"/>).
+    /// </summary>
+    public static int GetPlaceholderPruneCount() => GetInt(KeyPlaceholderPruneCount, defaultValue: 0);
+
+    /// <summary>Clear the banner counter so it doesn't show again on next launch.</summary>
+    public static void ClearPlaceholderPruneCount() => SetInt(KeyPlaceholderPruneCount, 0);
 
     /// <summary>
     /// Persisted list of servers from the last successful subscription fetch.
@@ -1022,6 +1172,42 @@ public static class AndroidStorage
             using var editor = prefs.Edit();
             if (editor == null) return false;
             editor.PutBoolean(key, value);
+            return editor.Commit();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    // v2.32.3 (2026-05-17) — int helpers added for KeyPlaceholderPruneCount.
+    // Same pattern as Bool variants; reuse PrefsName + Application.Context.
+    private static int GetInt(string key, int defaultValue)
+    {
+        try
+        {
+            var ctx = Application.Context;
+            if (ctx == null) return defaultValue;
+            var prefs = ctx.GetSharedPreferences(PrefsName, FileCreationMode.Private);
+            return prefs?.GetInt(key, defaultValue) ?? defaultValue;
+        }
+        catch
+        {
+            return defaultValue;
+        }
+    }
+
+    private static bool SetInt(string key, int value)
+    {
+        try
+        {
+            var ctx = Application.Context;
+            if (ctx == null) return false;
+            var prefs = ctx.GetSharedPreferences(PrefsName, FileCreationMode.Private);
+            if (prefs == null) return false;
+            using var editor = prefs.Edit();
+            if (editor == null) return false;
+            editor.PutInt(key, value);
             return editor.Commit();
         }
         catch

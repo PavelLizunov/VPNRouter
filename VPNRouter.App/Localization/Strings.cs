@@ -1469,6 +1469,19 @@ public static class Strings
             ? "Config was invalid; defaults restored."
             : $"Config was invalid; defaults restored. Backup: {backupPath}";
 
+    // v2.32.3 (2026-05-17, Z:\kanareik incident) — placeholder-prune banner.
+    // Shown once when SettingsMigrator.PruneKnownPlaceholders strips placeholder
+    // Reality credentials from a user's config. {0} is the count of removed
+    // entries. The "AllGone" branch fires when nothing healthy is left and the
+    // user must add a real server to continue.
+    public static string PlaceholderPruneBanner => Ru
+        ? "Обновление v2.32.3: убрано {0} небезопасных серверов из конфига (шаблонные ключи Reality, с которыми VPN не работает)."
+        : "v2.32.3 upgrade: removed {0} unsafe servers from your config (placeholder Reality keys — VPN couldn't work with them).";
+
+    public static string PlaceholderPruneBannerAllGone => Ru
+        ? "Обновление v2.32.3: все сохранённые серверы оказались шаблонными. Добавь настоящий vless:// или подписку, чтобы продолжить."
+        : "v2.32.3 upgrade: all saved servers were placeholders. Add a real vless:// or a subscription to continue.";
+
     // ── Bug-r9-E (2026-05-11) — third-party VPN conflict banner ──
     // Shown in the MainWindow header banner when StartAsync throws
     // ConflictingVpnException. See Bug-r9-E section in

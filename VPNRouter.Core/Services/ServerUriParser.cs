@@ -23,10 +23,24 @@ namespace VPNRouter.Core.Services;
 /// <item><c>tuic://</c> — TUIC v5 (uuid:password userinfo)</item>
 /// <item><c>ss://</c> — Shadowsocks (incl. 2022 ciphers + ShadowTLS plugin opts)</item>
 /// </list>
+///
+/// <para>v2.32.3 input gate (2026-05-17): the vless:// branch inherits
+/// placeholder rejection from <see cref="VlessUriParser.Parse"/>. The
+/// Hysteria2 / TUIC / Shadowsocks branches additionally pipe their
+/// output through <see cref="PlaceholderGuard.Inspect(VlessServerEntry?)"/>
+/// — placeholder server-IPs in particular can land in non-VLESS URIs
+/// too (Z:\kanareik-class incident).</para>
 /// </summary>
 public static class ServerUriParser
 {
     /// <summary>Parse any supported share-link URI. Throws <see cref="FormatException"/> on unsupported scheme or malformed input.</summary>
+    /// <remarks>
+    /// v2.32.3: VLESS goes through <see cref="VlessUriParser.Parse"/> which
+    /// has its own placeholder check. Non-VLESS branches get an explicit
+    /// gate here. <see cref="PlaceholderConfigException"/> is distinct from
+    /// <see cref="FormatException"/> so callers can render "fix your VPN
+    /// provider URL" rather than "fix your typo" guidance.
+    /// </remarks>
     public static VlessServerEntry Parse(string uri)
     {
         uri = (uri ?? string.Empty).Trim();
@@ -34,25 +48,51 @@ public static class ServerUriParser
             throw new FormatException("Empty URI");
 
         if (uri.StartsWith("vless://", StringComparison.OrdinalIgnoreCase))
-            return VlessUriParser.Parse(uri);
+            return VlessUriParser.Parse(uri); // VLESS path checks placeholder internally.
 
+        VlessServerEntry entry;
         if (uri.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
             uri.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase))
-            return ParseHysteria2(uri);
+            entry = ParseHysteria2(uri);
+        else if (uri.StartsWith("tuic://", StringComparison.OrdinalIgnoreCase))
+            entry = ParseTuic(uri);
+        else if (uri.StartsWith("ss://", StringComparison.OrdinalIgnoreCase))
+            entry = ParseShadowsocks(uri);
+        else
+            throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss://. Got: {Truncate(uri, 40)}");
 
-        if (uri.StartsWith("tuic://", StringComparison.OrdinalIgnoreCase))
-            return ParseTuic(uri);
+        // v2.32.3 input gate (2026-05-17) — placeholder fingerprints can
+        // surface in any protocol's server IP. Reject before the entry
+        // escapes the parser. Z:\kanareik-class incident: placeholder
+        // credential leaked through subscription cache, F-E (runtime)
+        // caught it at Connect but user was already stuck.
+        var offendingField = PlaceholderGuard.Inspect(entry);
+        if (offendingField != null)
+        {
+            var offendingValue = offendingField switch
+            {
+                "reality.public_key" => entry.Reality?.PublicKey ?? string.Empty,
+                "reality.short_id"   => entry.Reality?.ShortId ?? string.Empty,
+                "server"             => entry.Server,
+                _                    => string.Empty,
+            };
+            throw new PlaceholderConfigException(offendingField, offendingValue);
+        }
 
-        if (uri.StartsWith("ss://", StringComparison.OrdinalIgnoreCase))
-            return ParseShadowsocks(uri);
-
-        throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss://. Got: {Truncate(uri, 40)}");
+        return entry;
     }
 
     /// <summary>Try variant — returns null on any error.</summary>
+    /// <remarks>
+    /// v2.32.3: also returns null for
+    /// <see cref="PlaceholderConfigException"/>. Callers that want the
+    /// typed reason should use <see cref="Parse(string)"/>.
+    /// </remarks>
     public static VlessServerEntry? TryParse(string uri)
     {
         try { return Parse(uri); }
+        catch (PlaceholderConfigException) { return null; }
+        catch (FormatException) { return null; }
         catch { return null; }
     }
 

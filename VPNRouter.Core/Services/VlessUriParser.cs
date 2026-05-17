@@ -10,6 +10,17 @@ namespace VPNRouter.Core.Services;
 public static class VlessUriParser
 {
     /// <summary>Parse a single vless:// URI into a VlessServerEntry.</summary>
+    /// <remarks>
+    /// v2.32.3 input gate (2026-05-17): after successful structural parse,
+    /// the produced entry is routed through <see cref="PlaceholderGuard"/>.
+    /// If any field matches a known-bad placeholder fingerprint (pubkey /
+    /// short_id / server), the parser throws
+    /// <see cref="PlaceholderConfigException"/> instead of returning a
+    /// poisoned entry. Foundation for the Z:\kanareik-class incident
+    /// fix — F-E catches placeholders at Connect time but the user
+    /// can't dial out; rejecting at parse-time prevents the placeholder
+    /// from ever reaching subscription cache / settings storage.
+    /// </remarks>
     public static VlessServerEntry Parse(string uri)
     {
         uri = uri.Trim();
@@ -93,6 +104,25 @@ public static class VlessUriParser
             };
         }
 
+        // v2.32.3 input gate (2026-05-17) — reject placeholder URLs at
+        // parse time. See Z:\kanareik incident: stas's android-port
+        // placeholder pubkey "DnT9..." leaked into a real user config via
+        // subscription cache, F-E caught it at Connect but the user
+        // couldn't dial out. Routing every entry through PlaceholderGuard
+        // here means the bad credential never makes it into storage.
+        var offendingField = PlaceholderGuard.Inspect(entry);
+        if (offendingField != null)
+        {
+            var offendingValue = offendingField switch
+            {
+                "reality.public_key" => entry.Reality?.PublicKey ?? string.Empty,
+                "reality.short_id"   => entry.Reality?.ShortId ?? string.Empty,
+                "server"             => entry.Server,
+                _                    => string.Empty,
+            };
+            throw new PlaceholderConfigException(offendingField, offendingValue);
+        }
+
         return entry;
     }
 
@@ -115,9 +145,21 @@ public static class VlessUriParser
     }
 
     /// <summary>Try to parse a VLESS URI, returning null on failure.</summary>
+    /// <remarks>
+    /// v2.32.3 input gate (2026-05-17): also returns null when the URL
+    /// matches a placeholder fingerprint
+    /// (<see cref="PlaceholderConfigException"/>). Callers that want to
+    /// distinguish "couldn't parse" from "placeholder rejected" should
+    /// use <see cref="Parse(string)"/> and catch the typed exception.
+    /// In-loop bulk filters (subscription line-walker, ParseMultiple
+    /// equivalents) stay clean by relying on the boolean "drop on null"
+    /// pattern.
+    /// </remarks>
     public static VlessServerEntry? TryParse(string uri)
     {
         try { return Parse(uri); }
+        catch (PlaceholderConfigException) { return null; }
+        catch (FormatException) { return null; }
         catch { return null; }
     }
 }

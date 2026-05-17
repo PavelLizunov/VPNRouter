@@ -249,6 +249,25 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
             catch { }
         }
 
+        // v2.32.3 (2026-05-17, Z:\kanareik incident follow-up) — one-shot
+        // cleanup of placeholder Reality credentials (pubkey=DnT9hI...nckU
+        // and its short_id / server-IP siblings) from KeyServersJson +
+        // KeySubscriptions[].Servers. The fingerprints leaked from old
+        // Android smoke-test code (PlaceholderVlessUri, removed DEFCT-005)
+        // into user share-links and propagated through forum/Telegram
+        // sample URLs. Same best-effort contract as the line above —
+        // any failure logs + skips, never blocks startup.
+        try { AndroidStorage.PruneKnownPlaceholdersOnce(); }
+        catch (Exception ex)
+        {
+            try
+            {
+                global::Android.Util.Log.Warn("VpnRouter.Storage",
+                    $"PruneKnownPlaceholdersOnce raised: {ex.GetType().Name}: {ex.Message}");
+            }
+            catch { }
+        }
+
         // v2.32.0 SR-2 — bump launch-failure counter BEFORE
         // base.OnCreate (which spins up Avalonia). This way, any crash
         // inside Avalonia init / view-model construction / first-frame

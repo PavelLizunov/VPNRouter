@@ -219,6 +219,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private void DismissSettingsRecoveryNotice() =>
         SettingsRecoveryNoticeText = string.Empty;
 
+    // ── v2.32.3 (2026-05-17, Z:\kanareik incident) — placeholder-prune banner ──
+    // Populated by ConsumePlaceholderPruneNotice() reading SettingsMigrator's
+    // count from AppConfig. Sibling to SettingsRecoveryNoticeText but distinct
+    // because the message is specific (placeholder Reality keys, not a generic
+    // "we reset something") and the user needs different guidance: add a real
+    // vless:// URL or subscription instead of trying to recover the wiped
+    // entries (those entries were never real to begin with).
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPlaceholderPruneNotice))]
+    private string _placeholderPruneNoticeText = string.Empty;
+
+    public bool HasPlaceholderPruneNotice =>
+        !string.IsNullOrWhiteSpace(PlaceholderPruneNoticeText);
+
+    [RelayCommand]
+    private void DismissPlaceholderPruneNotice() =>
+        PlaceholderPruneNoticeText = string.Empty;
+
     // ── Bug-r9-E (2026-05-11) — third-party VPN conflict banner ──
     // Set when ToggleConnectionAsync catches ConflictingVpnException
     // (thrown by VpnEngine.StartAsync via ConflictingVpnDetector). The
@@ -393,6 +412,31 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SettingsRecoveryNoticeText =
             Strings.SettingsRecoveredFromBadConfig(string.Empty)
             + " (" + recovery + ")";
+    }
+
+    /// <summary>
+    /// v2.32.3 (2026-05-17) — sibling of ConsumeSettingsRecoveryNotice for
+    /// the placeholder-prune banner. SettingsMigrator stamps a count + UTC
+    /// timestamp on AppConfig when it strips placeholder credentials; this
+    /// adapter reads them once via
+    /// <see cref="SettingsLoader.ConsumePlaceholderPruneNotice"/> and binds
+    /// the resulting human message to <see cref="PlaceholderPruneNoticeText"/>.
+    /// Two branches: at least one healthy server survives (normal banner)
+    /// vs nothing left in vless.servers + no subscriptions (allGone banner
+    /// that nudges the user to add a real server).
+    /// </summary>
+    private void ConsumePlaceholderPruneNotice()
+    {
+        var consumed = SettingsLoader.ConsumePlaceholderPruneNotice(_settings);
+        if (consumed.Count == 0) return;
+
+        var hasAnyServerLeft =
+            (_settings.Vless.GetEffectiveServers().Count > 0) ||
+            (_settings.App.Subscriptions?.Any(s => s.Servers?.Count > 0) == true);
+
+        PlaceholderPruneNoticeText = hasAnyServerLeft
+            ? string.Format(Strings.PlaceholderPruneBanner, consumed.Count)
+            : Strings.PlaceholderPruneBannerAllGone;
     }
 
     /// <summary>
@@ -2740,6 +2784,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // pin in AppAutostartTgProxyTests.Bootstrap_IsInvokedFromConstructor
         // (5000-char ctor window) still locates the bootstrap call.
         ConsumeSettingsRecoveryNotice();
+        // v2.32.3 (Z:\kanareik incident) — placeholder-prune banner.
+        ConsumePlaceholderPruneNotice();
     }
 
     /// <summary>

@@ -357,7 +357,48 @@ public static class SettingsLoader
             catch { /* migration itself succeeded; re-save failure is non-fatal */ }
         }
 
+        // v2.32.3 (2026-05-17): aggressive one-shot wipe of known-bad
+        // placeholder credentials (Reality pubkey `DnT9hI…` and friends)
+        // that leaked from old Android smoke-test code and survived in
+        // real user configs for weeks. The F-A / F-D / F-E layers catch
+        // it at start/validate/runtime, but only this loader-side prune
+        // actually erases the bytes from disk so the dead entry stops
+        // appearing in the Servers tab. Idempotent — re-running on
+        // already-clean state is a 0-cost no-op.
+        var pruneCount = SettingsMigrator.PruneKnownPlaceholders(settings, null);
+        if (pruneCount > 0)
+        {
+            settings.App.PlaceholderPruneCount = pruneCount;
+            settings.App.PlaceholderPruneAtUtc_Str =
+                DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+            // Persist the cleaned form immediately so the user doesn't
+            // see the pruned entries on next restart. Mirror the schema-
+            // migrator save pattern above — best-effort, non-fatal on
+            // write failure (the in-memory tree is still clean).
+            try { Save(settings); }
+            catch { /* re-save failure is non-fatal — in-memory clean wins this session */ }
+        }
+
         return settings;
+    }
+
+    /// <summary>
+    /// v2.32.3 — counterpart accessor for <see cref="AppConfig.PlaceholderPruneCount"/>:
+    /// returns the current value alongside the timestamp and clears the
+    /// in-memory pair so the UI banner surfaces only once per launch.
+    /// The persisted yaml fields stay populated (they're forensic) until
+    /// the next save naturally rewrites them — callers that want the
+    /// banner suppressed on subsequent runs should call this method
+    /// AND then trigger an explicit <see cref="Save"/>.
+    /// </summary>
+    public static (int Count, string AtUtc) ConsumePlaceholderPruneNotice(AppSettings settings)
+    {
+        if (settings?.App == null) return (0, string.Empty);
+        var count = settings.App.PlaceholderPruneCount;
+        var at = settings.App.PlaceholderPruneAtUtc_Str ?? string.Empty;
+        settings.App.PlaceholderPruneCount = 0;
+        settings.App.PlaceholderPruneAtUtc_Str = string.Empty;
+        return (count, at);
     }
 
     public static void Save(AppSettings settings, string? path = null)

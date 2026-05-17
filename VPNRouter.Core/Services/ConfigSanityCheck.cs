@@ -99,16 +99,7 @@ public sealed class ConfigSanityCheck
         // tuic / shadowsocks / trojan). We treat the FIRST proxy-typed
         // outbound as the active one — same heuristic CustomConfigInjector
         // uses to identify the proxy tag.
-        JObject? proxy = null;
-        foreach (var ob in outbounds.OfType<JObject>())
-        {
-            var type = ob["type"]?.Value<string>()?.ToLowerInvariant() ?? "";
-            if (type is "vless" or "hysteria2" or "tuic" or "shadowsocks" or "trojan")
-            {
-                proxy = ob;
-                break;
-            }
-        }
+        var proxy = FindFirstProxyOutbound(outbounds);
 
         if (proxy == null)
         {
@@ -146,46 +137,96 @@ public sealed class ConfigSanityCheck
                     "outbound.uuid");
         }
 
-        // ── Placeholder fingerprint match ──
-        // Reality config is nested under tls.reality for vless+reality.
-        var reality = proxy["tls"]?["reality"] as JObject;
-        if (reality != null)
+        // ── Placeholder fingerprint match (delegated to PlaceholderGuard) ──
+        // v2.32.3-r1 (2026-05-17): inspection logic moved to InspectOutbound
+        // so CustomConfigInjector and any future caller share the same
+        // single-source-of-truth check. Kept the per-field log lines here
+        // because they include the actual value (more useful in production
+        // logs than the typed exception).
+        var offendingField = InspectOutbound(proxy);
+        if (offendingField != null)
         {
-            var pubkey = reality["public_key"]?.Value<string>();
-            if (!string.IsNullOrEmpty(pubkey) && KnownPlaceholderPubkeys.Contains(pubkey))
+            var reality = proxy["tls"]?["reality"] as JObject;
+            switch (offendingField)
             {
-                _logger?.Warning(
-                    "[ConfigSanityCheck] Placeholder Reality public_key detected: {Key}",
-                    pubkey);
-                return new PreStartCheckResult(true,
-                    $"Reality public_key matches known placeholder ({pubkey})",
-                    "outbound.tls.reality.public_key");
+                case "reality.public_key":
+                {
+                    var pubkey = reality?["public_key"]?.Value<string>();
+                    _logger?.Warning(
+                        "[ConfigSanityCheck] Placeholder Reality public_key detected: {Key}",
+                        pubkey);
+                    return new PreStartCheckResult(true,
+                        $"Reality public_key matches known placeholder ({pubkey})",
+                        "outbound.tls.reality.public_key");
+                }
+                case "reality.short_id":
+                {
+                    var shortId = reality?["short_id"]?.Value<string>();
+                    _logger?.Warning(
+                        "[ConfigSanityCheck] Placeholder Reality short_id detected: {ShortId}",
+                        shortId);
+                    return new PreStartCheckResult(true,
+                        $"Reality short_id matches known placeholder ({shortId})",
+                        "outbound.tls.reality.short_id");
+                }
+                case "server":
+                {
+                    _logger?.Warning(
+                        "[ConfigSanityCheck] Placeholder server IP detected: {Server}",
+                        server);
+                    return new PreStartCheckResult(true,
+                        $"Proxy server IP matches known placeholder ({server})",
+                        "outbound.server");
+                }
             }
-
-            var shortId = reality["short_id"]?.Value<string>();
-            if (!string.IsNullOrEmpty(shortId) && KnownPlaceholderShortIds.Contains(shortId))
-            {
-                _logger?.Warning(
-                    "[ConfigSanityCheck] Placeholder Reality short_id detected: {ShortId}",
-                    shortId);
-                return new PreStartCheckResult(true,
-                    $"Reality short_id matches known placeholder ({shortId})",
-                    "outbound.tls.reality.short_id");
-            }
-        }
-
-        if (KnownPlaceholderServers.Contains(server))
-        {
-            _logger?.Warning(
-                "[ConfigSanityCheck] Placeholder server IP detected: {Server}",
-                server);
-            return new PreStartCheckResult(true,
-                $"Proxy server IP matches known placeholder ({server})",
-                "outbound.server");
         }
 
         // All gates passed.
         return new PreStartCheckResult(false, null, null);
+    }
+
+    /// <summary>
+    /// Locates the first proxy-typed outbound in a sing-box <c>outbounds</c>
+    /// array (vless / hysteria2 / tuic / shadowsocks / trojan). Returns
+    /// <c>null</c> when none is present. Shared between
+    /// <see cref="CheckBeforeStart(JObject)"/> and
+    /// <see cref="CustomConfigInjector"/>'s placeholder gate so both layers
+    /// pick the same outbound to inspect.
+    /// </summary>
+    internal static JObject? FindFirstProxyOutbound(JArray outbounds)
+    {
+        foreach (var ob in outbounds.OfType<JObject>())
+        {
+            var type = ob["type"]?.Value<string>()?.ToLowerInvariant() ?? "";
+            if (type is "vless" or "hysteria2" or "tuic" or "shadowsocks" or "trojan")
+                return ob;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Inspects a single sing-box proxy outbound JObject for placeholder
+    /// fingerprints (Reality public_key, Reality short_id, server IP).
+    /// Returns the matching field name (<c>"reality.public_key"</c>,
+    /// <c>"reality.short_id"</c>, <c>"server"</c>) or <c>null</c> when the
+    /// outbound is clean. Matches the field-name convention used by
+    /// <see cref="PlaceholderGuard.Inspect(string?, string?, string?)"/>.
+    ///
+    /// <para>v2.32.3-r1 (2026-05-17): extracted from
+    /// <see cref="CheckBeforeStart(JObject)"/> so the custom-config injector
+    /// can reject placeholder credentials at Inject time using the same
+    /// detection logic as the runtime safety net.</para>
+    /// </summary>
+    public static string? InspectOutbound(JObject? proxy)
+    {
+        if (proxy == null) return null;
+
+        var reality = proxy["tls"]?["reality"] as JObject;
+        var pubkey = reality?["public_key"]?.Value<string>();
+        var shortId = reality?["short_id"]?.Value<string>();
+        var server = proxy["server"]?.Value<string>();
+
+        return PlaceholderGuard.Inspect(pubkey, shortId, server);
     }
 
     /// <summary>

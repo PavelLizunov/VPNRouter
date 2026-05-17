@@ -474,6 +474,33 @@ public class AppConfig
     /// </summary>
     [YamlMember(Alias = "flush_dns_on_start")]
     public bool FlushDnsOnStart { get; set; } = true;
+
+    /// <summary>
+    /// v2.32.3 (2026-05-17): one-shot counter populated by
+    /// <see cref="VPNRouter.Core.Services.SettingsMigrator.PruneKnownPlaceholders"/>
+    /// when the load-time placeholder-fingerprint sweep removed at least one
+    /// stale credential from <see cref="VlessConfig.Server"/> scalars,
+    /// <see cref="VlessConfig.Servers"/>, or
+    /// <see cref="SubscriptionEntry.Servers"/>. Persisted across saves so
+    /// the desktop UI can surface a "we cleaned N placeholder entries"
+    /// banner once and then call
+    /// <see cref="VPNRouter.Core.Services.SettingsLoader.ConsumePlaceholderPruneNotice"/>
+    /// to clear it. Default 0 — old yamls without the field deserialize
+    /// cleanly and never trigger the banner.
+    /// </summary>
+    [YamlMember(Alias = "placeholder_prune_count")]
+    public int PlaceholderPruneCount { get; set; }
+
+    /// <summary>
+    /// v2.32.3 (2026-05-17): ISO-8601 UTC timestamp recorded alongside
+    /// <see cref="PlaceholderPruneCount"/> for forensic correlation against
+    /// vpnrouter*.log entries. String-typed (not <see cref="DateTimeOffset"/>)
+    /// to keep the yaml round-trip lossless on locales whose
+    /// YamlDotNet date formatter disagrees with the chosen invariant
+    /// representation. Empty when no prune has happened.
+    /// </summary>
+    [YamlMember(Alias = "placeholder_prune_at_utc")]
+    public string PlaceholderPruneAtUtc_Str { get; set; } = string.Empty;
 }
 
 /// <summary>A single VLESS subscription source (URL + its servers).</summary>
