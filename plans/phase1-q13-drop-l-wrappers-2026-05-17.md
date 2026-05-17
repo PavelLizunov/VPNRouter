@@ -37,7 +37,65 @@ Also: PageScreenshotTests + HeadlessGuiTests + VisualDiffTests must all pass aft
 - [ ] **Hook gates**: pre-commit + commit-msg both green
 
 ## Outcome
-*(filled by agent after impl)*
+
+**Status: PASS** — 266 dead `L_X` wrappers deleted, all gates green.
+
+### Inventory
+- Total `L_X` getters in file: **531** (matches audit)
+- Zero-external-ref candidates (initial sweep): **268**
+- Preserved (zero external refs but used in-file by live getter): **2**
+  - `L_AppsModeIncludeHint`, `L_AppsModeExcludeHint` — consumed by `L_CurrentAppsModeHint` (XAML-bound in `ApplicationsPage.axaml`)
+- **Final delete count: 266** (within audit's ±30 of 270)
+
+### Cross-reference methodology
+- Grep across all project subdirs: `VPNRouter.App/`, `VPNRouter.Tests/`, `VPNRouter.Android/`, `VPNRouter.Core/`, `VPNRouter.CLI/`, `VPNRouter.GUI/`, `VPNRouter.Service/`
+- File globs: `*.cs` + `*.axaml`
+- Self-ref filter: excluded `MainWindowViewModel.Localization.cs` from match counts
+- Self-dep sweep: identified `L_CurrentAppsModeHint` ternary refs to `L_AppsModeIncludeHint`/`L_AppsModeExcludeHint`; removed from kill list before any deletion
+- Spot-check (5 random names): confirmed zero external refs
+
+### LOC removed
+- File before: **607 lines** (38.9 KB)
+- File after: **341 lines** (≈22.6 KB)
+- **Net reduction: 266 lines** (-43.8% of file body, matches kill count exactly)
+- 265 `L_X` getters remain (531 - 266 = 265, sanity ✓)
+
+### Batch results
+| Batch | Names | Build | Tests (non-headless) | Notes |
+|---|---|---|---|---|
+| 1 | 40 | 0 errors | 839 passed (1 flake transient) | flake: `SettingsValidatorTests.Load_RoutesInvalidConfig_…` (pre-existing parallel-fs race; passes on re-run) |
+| 2 | 40 | 0 errors | 839 passed | clean |
+| 3 | 40 | 0 errors | 839 passed | clean |
+| 4 | 40 | 0 errors | 839 passed | clean |
+| 5 | 40 | 0 errors | 839 passed | clean |
+| 6 | 40 | 0 errors | 839 passed | clean |
+| 7 | 26 | 0 errors | 838 then 839 (re-run) | another transient flake: `MainWindowViewModelAppsModeTests.SetAppCheckedInCurrentMode_…` — passes in isolation; reproduced as parallel-fs race; verified post-batch re-run = 839 green |
+
+**No batch reverts required.** Both observed test failures were flaky parallel-execution races independent of the localization file change (passed on isolation re-run; documented in `VPNRouter.Tests/CLAUDE.md` as a known infra quirk).
+
+### Final test counts
+- Full non-headless suite: **839 passed**, 0 failed, 3 skipped (842 total) — re-confirmed green after batch 7
+- **Headless suite (binding regression net):**
+  - `HeadlessGuiTests` — 4 individual facts + `MainWindow_FullApp_Narrow` (4 widths theory) = **8 PASS**
+  - `PageScreenshotTests` — **19 PASS** (all 14 page snapshots + 5 NetworkPage Autostart sub-tab variants)
+  - `VisualDiffTests` — **3 PASS** (DpiBypass / Telegram / Tools baseline match)
+
+All categories of XAML-binding regression detectors green. No `{Binding L_FooBar}` strings in XAML broke because of deletions.
+
+### Wrappers NOT deleted (despite audit saying dead)
+2 wrappers preserved due to **in-file dependency chain** (audit's grep didn't account for L_CurrentAppsModeHint cross-referencing them):
+1. `L_AppsModeIncludeHint`
+2. `L_AppsModeExcludeHint`
+
+Without these, `L_CurrentAppsModeHint` (live, XAML-bound, in `ApplicationsPage.axaml`) would fail to compile.
+
+### Files changed
+- `VPNRouter.App/ViewModels/MainWindowViewModel.Localization.cs` (modified, -266 lines)
+- `plans/q13-deletion-list.txt` (new, audit trail with all 531 wrappers + ref counts + preserve decisions)
+- `plans/phase1-q13-drop-l-wrappers-2026-05-17.md` (this file, Outcome section filled)
+
+### Commit status
+Changes staged but **not committed** (per brief instruction).
 
 **Sequence**: this task runs LAST in Phase 1 because:
 - Other Phase 1 tasks land first → tests stay clean baseline
