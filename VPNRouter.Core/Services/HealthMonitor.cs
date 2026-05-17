@@ -527,52 +527,30 @@ public class HealthMonitor : IDisposable
             }
         }
 
-        // v2.28.2: defense-in-depth — also resolve here. HealthMonitor's
-        // _appSettings reference is normally kept consistent by VpnEngine's
-        // Resolve() at StartAsync, but if something clears _appSettings.Vless.
-        // Servers between then and a hot-reload trigger from health rescan,
-        // we'd produce a broken config (no proxy outbound). Resolve again to
-        // be safe — idempotent if already populated.
-        VlessServersResolver.Resolve(_appSettings);
-
-        var config = ConfigGenerator.Generate(_activeProfile, processNames, _appSettings);
-
-        // v2.31.9-r5 — same chokepoint pattern as r4's TUN-readiness fix.
-        // Pre-r5 LeakProtection.ValidateConfig was called only from
-        // VpnEngine.StartAsync + VpnEngine.Apply. HealthMonitor's auto-
-        // restart path bypassed it: subscription glitches, edge-cases in
-        // VlessServersResolver, or any other rebuild-time invariant
-        // breakage could ship a leak-prone config to sing-box silently.
-        // Validate here too — if validation fails we WARN but proceed
-        // with the broken config (better than no recovery), and the
-        // user-side toast surfaces the leak warning the next time the
-        // App-layer status pump samples HealthMonitor state.
-        try
-        {
-            // Bug-r9-F-DEFENSIVE: settings passed so outbound IPs are cross-
-            // checked against the user's known server list.
-            var validation = LeakProtection.ValidateConfig(config, _appSettings);
-            if (!validation.IsValid)
-            {
-                _logger.Warning(
-                    "[HealthMonitor] LeakProtection flagged restart config: errors=[{Errors}] warnings=[{Warnings}]",
-                    string.Join(" | ", validation.Errors),
-                    string.Join(" | ", validation.Warnings));
-            }
-            else if (validation.Warnings.Count > 0)
-            {
-                _logger.Information(
-                    "[HealthMonitor] LeakProtection restart-config warnings: {Warnings}",
-                    string.Join(" | ", validation.Warnings));
-            }
-        }
-        catch (Exception ex)
-        {
-            // Validation must NEVER block recovery — it's an advisory.
-            _logger.Warning(ex, "[HealthMonitor] LeakProtection.ValidateConfig threw (non-fatal)");
-        }
-
-        return ConfigGenerator.Serialize(config);
+        // Phase 2F (2026-05-17): config-generation pipeline extracted into
+        // ConfigPipeline.Generate so VpnEngine + HealthMonitor share the
+        // exact same Resolve → Generate → Validate → Serialize sequence.
+        // This closes the v2.28.2 silent-leak bug class (parallel pipelines
+        // drifting over time). Advisory ValidationMode preserves the r5
+        // recovery contract: validation failure logs+warns, doesn't throw
+        // (so a transient invariant glitch doesn't block HealthMonitor's
+        // auto-restart path).
+        //
+        // Pre-2F this body inlined:
+        //   1. VlessServersResolver.Resolve (defense-in-depth, idempotent)
+        //   2. ConfigGenerator.Generate
+        //   3. LeakProtection.ValidateConfig (advisory — r5 chokepoint)
+        //   4. ConfigGenerator.Serialize
+        // All four steps now live in ConfigPipeline. Behaviour is identical:
+        // same exception surface (none, advisory mode swallows + logs),
+        // same WARN log lines, same serialised output.
+        return ConfigPipeline.Generate(
+            _activeProfile,
+            processNames,
+            _appSettings,
+            ConfigPipeline.ValidationMode.Advisory,
+            warningSink: null, // HealthMonitor surfaces leaks via logger only
+            logger: _logger);
     }
 
     /// <summary>

@@ -522,26 +522,27 @@ public class VpnEngine : IDisposable
         }
         else
         {
-            var sbConfig = ConfigGenerator.Generate(_activeProfile, _scanResult.ProcessNames, settings);
-            // Bug-r9-F-DEFENSIVE: pass settings so outbound IPs are cross-
-            // checked against the user's known server list (catches stale
-            // placeholders that would otherwise route traffic to dead /
-            // hostile servers — see plans/vpnrouter-android-r9-user-bug-batch.md).
-            var validation = LeakProtection.ValidateConfig(sbConfig, settings);
-
-            foreach (var warn in validation.Warnings)
-            {
-                _logger?.Warning("[VpnEngine] {Warn}", warn);
-                Warning?.Invoke(warn);
-            }
-
-            if (!validation.IsValid)
-            {
-                var errors = string.Join("; ", validation.Errors);
-                throw new InvalidOperationException($"Config validation failed: {errors}");
-            }
-
-            configJson = ConfigGenerator.Serialize(sbConfig);
+            // Phase 2F (2026-05-17): config-generation pipeline extracted into
+            // ConfigPipeline.Generate so VpnEngine + HealthMonitor share the
+            // exact same Resolve → Generate → Validate → Serialize sequence.
+            // This closes the v2.28.2 silent-leak bug class (parallel pipelines
+            // drifting over time). The strict ValidationMode preserves the
+            // pre-2F StartAsync contract: validation failure throws and aborts
+            // the start. Warnings still fan out via the Warning event so the
+            // UI surfaces them.
+            //
+            // Note: the empty-servers check happens inside ConfigPipeline now
+            // (was inline at line ~242 pre-2F). Same error message via
+            // VlessServersResolver.DescribeEmptyReason — callers that catch
+            // InvalidOperationException for the "no servers" case continue
+            // to work unchanged.
+            configJson = ConfigPipeline.Generate(
+                _activeProfile,
+                _scanResult.ProcessNames,
+                settings,
+                ConfigPipeline.ValidationMode.Strict,
+                warningSink: msg => Warning?.Invoke(msg),
+                logger: _logger);
         }
 
         ct.ThrowIfCancellationRequested();
