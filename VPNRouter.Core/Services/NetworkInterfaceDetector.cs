@@ -94,12 +94,21 @@ public static class NetworkInterfaceDetector
     /// Matches against known keywords in both Name and Description.
     /// </summary>
     private static bool IsWireGuardInterface(NetworkInterface iface)
+        => IsWireGuardName(iface.Name, iface.Description);
+
+    /// <summary>
+    /// v3.0 Phase 2G (sub-wave 7b-1, 2026-05-18): name/description keyword
+    /// match split out from <see cref="IsWireGuardInterface"/> so it can be
+    /// unit-tested without instantiating a real <see cref="NetworkInterface"/>
+    /// (which is abstract and only constructed by the OS network stack).
+    /// </summary>
+    internal static bool IsWireGuardName(string? name, string? description)
     {
         foreach (var keyword in WgKeywords)
         {
-            if (iface.Description.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            if (description != null && description.Contains(keyword, StringComparison.OrdinalIgnoreCase))
                 return true;
-            if (iface.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            if (name != null && name.Contains(keyword, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
 
@@ -114,8 +123,12 @@ public static class NetworkInterfaceDetector
     /// to /24 so the entire VPN subnet (e.g. 10.9.1.0/24) is excluded from TUN routing,
     /// otherwise only the local peer IP is excluded and traffic to other peers
     /// (like the gateway at 10.9.1.1) gets captured by TUN.
+    ///
+    /// v3.0 Phase 2G (sub-wave 7b-1, 2026-05-18): visibility widened from
+    /// <c>private</c> to <c>internal</c> so unit tests can pin the
+    /// edge cases (regular /24, point-to-point /32 widening, IPv6 reject).
     /// </summary>
-    private static string? CalculateSubnet(IPAddress address, IPAddress mask)
+    internal static string? CalculateSubnet(IPAddress address, IPAddress mask)
     {
         try
         {
@@ -153,8 +166,11 @@ public static class NetworkInterfaceDetector
     /// <summary>
     /// Counts the number of set bits (1s) in a subnet mask to get prefix length.
     /// Example: 255.255.255.0 → 24
+    ///
+    /// v3.0 Phase 2G (sub-wave 7b-1, 2026-05-18): visibility widened to
+    /// <c>internal</c> for unit-test coverage.
     /// </summary>
-    private static int CountBits(byte[] maskBytes)
+    internal static int CountBits(byte[] maskBytes)
     {
         int count = 0;
         foreach (var b in maskBytes)

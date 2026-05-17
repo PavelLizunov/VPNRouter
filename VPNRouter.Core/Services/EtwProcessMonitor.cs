@@ -132,12 +132,8 @@ public class EtwProcessMonitor : IProcessMonitor
             {
                 try
                 {
-                    ProcessStarted?.Invoke(this, new ProcessEventArgs
-                    {
-                        ProcessId = data.ProcessID,
-                        ProcessName = data.ImageFileName,
-                        ParentProcessId = data.ParentID
-                    });
+                    var args = TranslateProcessEvent(data.ProcessID, data.ImageFileName, data.ParentID);
+                    ProcessStarted?.Invoke(this, args);
                 }
                 catch (Exception ex)
                 {
@@ -149,12 +145,8 @@ public class EtwProcessMonitor : IProcessMonitor
             {
                 try
                 {
-                    ProcessStopped?.Invoke(this, new ProcessEventArgs
-                    {
-                        ProcessId = data.ProcessID,
-                        ProcessName = data.ImageFileName,
-                        ParentProcessId = data.ParentID
-                    });
+                    var args = TranslateProcessEvent(data.ProcessID, data.ImageFileName, data.ParentID);
+                    ProcessStopped?.Invoke(this, args);
                 }
                 catch (Exception ex)
                 {
@@ -176,6 +168,31 @@ public class EtwProcessMonitor : IProcessMonitor
             // will be null at this point so Stop will short-circuit.
             _sessionReady.Set();
         }
+    }
+
+    /// <summary>
+    /// v3.0 Phase 2G (sub-wave 7b-1, 2026-05-18): translate the raw fields
+    /// from a <see cref="Microsoft.Diagnostics.Tracing.TraceEvent"/> into
+    /// the cross-platform <see cref="ProcessEventArgs"/> shape. Extracted
+    /// from the inline lambdas inside <see cref="RunSession"/> so the
+    /// translation can be unit-tested without spinning up a real ETW
+    /// session (which requires Admin + a live process emitting events).
+    ///
+    /// Defensive normalisation: ETW occasionally surfaces transient
+    /// process slots with PID 0 (idle/system) or negative PID (deleted /
+    /// pre-fork transient) — pass them through as-is so callers can
+    /// decide whether to filter. ImageFileName from the kernel can be
+    /// null in rare corner cases (early process slot, partial event);
+    /// normalise to empty string so downstream consumers don't NRE.
+    /// </summary>
+    internal static ProcessEventArgs TranslateProcessEvent(int processId, string? imageFileName, int parentProcessId)
+    {
+        return new ProcessEventArgs
+        {
+            ProcessId = processId,
+            ProcessName = imageFileName ?? string.Empty,
+            ParentProcessId = parentProcessId
+        };
     }
 
     public void Dispose()

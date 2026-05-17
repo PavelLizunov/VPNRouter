@@ -142,6 +142,64 @@ Tests written (target was 3-5, delivered 6 to cover all useful smoke shapes):
 3. `DetectPreviousCrashInstance` always-consumes-the-stale-file contract was the most subtle invariant — pinned in 4 tests so a regression that forgets `TryDeleteInstance` surfaces immediately.
 4. One xUnit1031 warning (`.GetAwaiter().GetResult()` in a test) fixed by promoting to `async Task` + `await`.
 
+### Wave 7b-1 — `EtwProcessMonitor` + `NetworkInterfaceDetector` (2026-05-18)
+
+**Status**: PASS — Gates 1+2+4 all green.
+
+**Production changes** (minimal surgical extraction for testability):
+
+- `VPNRouter.Core/Services/EtwProcessMonitor.cs` (+27/-10):
+  Extracted `internal static TranslateProcessEvent(int, string?, int)` helper.
+  Both `ProcessStart` and `ProcessStop` lambdas in `RunSession` now route
+  through it. Adds defensive null-coalesce on `imageFileName` (kernel can
+  emit null for early process slots) — tiny defensive upgrade.
+
+- `VPNRouter.Core/Services/NetworkInterfaceDetector.cs` (+18/-6):
+  - Split `IsWireGuardInterface(NetworkInterface)` into a thin wrapper +
+    new `internal static IsWireGuardName(string?, string?)` so the
+    keyword filter is testable without instantiating `NetworkInterface`.
+  - Widened `CalculateSubnet` + `CountBits` from `private` to `internal`
+    so IP arithmetic + prefix-length math can be pinned directly.
+
+- `VPNRouter.Tests/VPNRouter.Tests.csproj` (+10):
+  Mirror Core's `PLATFORM_WINDOWS` define on Windows hosts so the
+  Windows-only `EtwProcessMonitorTests` `#if` gates can reference the
+  Microsoft.Diagnostics.Tracing-bound `EtwProcessMonitor` type.
+
+**Tests added**:
+
+- `EtwProcessMonitorTests.cs` (256 LOC, 12 cases): 6 `TranslateProcessEvent`
+  shape tests including the sing-box case-sensitivity invariant (CLAUDE.md
+  GR #7); 5 lifecycle tests (ctor seam, double-Dispose, Stop-before-Start);
+  1 platform-portable smoke test.
+- `NetworkInterfaceDetectorTests.cs` (278 LOC, 14 methods → 30 xUnit runs
+  via Theory): keyword filter + case-insensitivity + null-safety +
+  dual-field matching; subnet arithmetic /24 + /16 + /32 widening to /24
+  (the CRITICAL WG-coexistence invariant) + /31 widening + IPv6 null;
+  CountBits Theory across 7 mask shapes; DetectWireGuardSubnets smoke.
+
+**Test delta**: +42 in scoped suite (875 → 917). Over-met because Theory
+rows × test methods.
+
+**Verification gates**:
+- [x] EtwProcessMonitorTests: 12 (target 6-8)
+- [x] NetworkInterfaceDetectorTests: 14 methods / 30 runs (target 4-6)
+- [x] Gate 1 build 0 errors
+- [x] Gate 2 scoped suite +42 tests, all pass
+- [x] Gate 4 simplify: each test file <300 LOC (256 + 278)
+
+**Surprises**:
+1. Test csproj didn't define `PLATFORM_WINDOWS` (only Core did) so initially
+   all `EtwProcessMonitorTests` `#if`-gated bodies were silently stripped
+   — only the platform-portable smoke compiled. Fixed by mirroring the
+   symbol in the test csproj on Windows hosts. Alternative (runtime
+   `OperatingSystem.IsWindows()`) wouldn't compile on Linux at all
+   because the Core type itself is `#if`-gated.
+2. `DetectWireGuardSubnets` already gracefully handles zero-WG-adapter
+   hosts (returns empty list) — no scaffolding needed.
+3. ETW PID 0 / -1 are pass-through in `TranslateProcessEvent`, not
+   filtered — filter belongs in the consumer (HealthMonitor / ProcessScanner).
+
 ## Follow-up
 
 - Phase 3D may consolidate `HostsManager` + `WindowsDnsHardening` under a unified `ISystemStateMutator` if their test shapes match.

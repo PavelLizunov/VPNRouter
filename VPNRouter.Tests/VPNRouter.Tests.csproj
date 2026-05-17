@@ -14,6 +14,16 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
+  <!-- v3.0 Phase 2G (sub-wave 7b-1, 2026-05-18): mirror Core's PLATFORM_WINDOWS
+       symbol so test files can `#if PLATFORM_WINDOWS` to gate references to
+       Windows-only types (EtwProcessMonitor lives behind that fence and the
+       Microsoft.Diagnostics.Tracing package is Windows-only too). Without
+       this, EtwProcessMonitorTests would fail to compile on non-Windows CI
+       even though it's gated correctly. -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <DefineConstants>$(DefineConstants);PLATFORM_WINDOWS</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
