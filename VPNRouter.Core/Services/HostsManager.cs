@@ -1,3 +1,4 @@
+#nullable enable
 using System.Net.Http;
 using Serilog;
 
@@ -8,8 +9,14 @@ namespace VPNRouter.Core.Services;
 /// Discord voice servers (finland*.discord.media) may be blocked by IP;
 /// redirecting them to a working Cloudflare IP fixes voice connectivity.
 /// Source: Flowseal/zapret-discord-youtube .service/hosts
+///
+/// <para>
+/// Phase 2D (v3.0) refactored to take <see cref="IFileSystem"/> via ctor
+/// for testability while keeping the existing static call sites
+/// untouched via the <see cref="DefaultInstance"/> singleton.
+/// </para>
 /// </summary>
-public static class HostsManager
+public sealed class HostsManager
 {
     private const string HostsPath = @"C:\Windows\System32\drivers\etc\hosts";
     private const string MarkerStart = "# === VPNRouter Discord hosts START ===";
@@ -25,15 +32,35 @@ public static class HostsManager
 
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
+    private readonly IFileSystem _fs;
+    private readonly string _hostsPath;
+
     /// <summary>
-    /// Check if Discord hosts entries are currently installed.
+    /// Default singleton wired to <see cref="RealFileSystem"/> and the
+    /// production hosts path. Used by the static facade methods so that
+    /// existing call sites continue to work without modification.
     /// </summary>
-    public static bool IsInstalled()
+    private static readonly HostsManager DefaultInstance = new(new RealFileSystem(), HostsPath);
+
+    /// <summary>
+    /// Construct a <see cref="HostsManager"/> backed by the supplied
+    /// <see cref="IFileSystem"/>. Tests use this with
+    /// <c>InMemoryFileSystem</c>; production code typically uses the
+    /// static facade methods which dispatch to <see cref="DefaultInstance"/>.
+    /// </summary>
+    public HostsManager(IFileSystem? fileSystem = null, string? hostsPath = null)
+    {
+        _fs = fileSystem ?? new RealFileSystem();
+        _hostsPath = hostsPath ?? HostsPath;
+    }
+
+    /// <summary>Instance variant of <see cref="IsInstalled"/>.</summary>
+    public bool IsInstalledInstance()
     {
         try
         {
-            if (!File.Exists(HostsPath)) return false;
-            var content = File.ReadAllText(HostsPath);
+            if (!_fs.FileExists(_hostsPath)) return false;
+            var content = _fs.ReadAllText(_hostsPath);
             return content.Contains(MarkerStart);
         }
         catch
@@ -42,16 +69,12 @@ public static class HostsManager
         }
     }
 
-    /// <summary>
-    /// Add Discord voice server entries to the hosts file.
-    /// Maps finland10000-10199.discord.media to Cloudflare IP.
-    /// Requires administrator privileges.
-    /// </summary>
-    public static (bool success, string message) Install(ILogger? logger = null)
+    /// <summary>Instance variant of <see cref="Install"/>.</summary>
+    public (bool success, string message) InstallInstance(ILogger? logger = null)
     {
         try
         {
-            if (IsInstalled())
+            if (IsInstalledInstance())
             {
                 logger?.Information("[Hosts] Discord entries already installed");
                 return (true, "Already installed");
@@ -69,7 +92,7 @@ public static class HostsManager
             }
             lines.Add(MarkerEnd);
 
-            File.AppendAllLines(HostsPath, lines);
+            _fs.AppendAllLines(_hostsPath, lines);
             FlushDns(logger);
 
             logger?.Information("[Hosts] Installed {Count} Discord voice entries", FinlandEnd - FinlandStart + 1);
@@ -87,45 +110,21 @@ public static class HostsManager
         }
     }
 
-    /// <summary>
-    /// Remove Discord voice server entries from the hosts file.
-    /// Removes everything between the VPNRouter markers.
-    /// </summary>
-    public static (bool success, string message) Uninstall(ILogger? logger = null)
+    /// <summary>Instance variant of <see cref="Uninstall"/>.</summary>
+    public (bool success, string message) UninstallInstance(ILogger? logger = null)
     {
         try
         {
-            if (!IsInstalled())
+            if (!IsInstalledInstance())
             {
                 logger?.Information("[Hosts] Discord entries not found, nothing to remove");
                 return (true, "Not installed");
             }
 
-            var allLines = File.ReadAllLines(HostsPath).ToList();
-            var newLines = new List<string>();
-            bool skipping = false;
+            var allLines = _fs.ReadAllLines(_hostsPath).ToList();
+            var newLines = StripBlock(allLines, MarkerStart, MarkerEnd);
 
-            foreach (var line in allLines)
-            {
-                if (line.TrimEnd() == MarkerStart)
-                {
-                    skipping = true;
-                    continue;
-                }
-                if (line.TrimEnd() == MarkerEnd)
-                {
-                    skipping = false;
-                    continue;
-                }
-                if (!skipping)
-                    newLines.Add(line);
-            }
-
-            // Remove trailing empty lines left by our block
-            while (newLines.Count > 0 && string.IsNullOrWhiteSpace(newLines[^1]))
-                newLines.RemoveAt(newLines.Count - 1);
-
-            File.WriteAllLines(HostsPath, newLines);
+            _fs.WriteAllLines(_hostsPath, newLines);
             FlushDns(logger);
 
             logger?.Information("[Hosts] Removed Discord voice entries");
@@ -143,23 +142,23 @@ public static class HostsManager
         }
     }
 
-    // ── Flowseal hosts (from zapret-discord-youtube .service/hosts) ──
-
-    public static bool IsFlowsealInstalled()
+    /// <summary>Instance variant of <see cref="IsFlowsealInstalled"/>.</summary>
+    public bool IsFlowsealInstalledInstance()
     {
         try
         {
-            if (!File.Exists(HostsPath)) return false;
-            return File.ReadAllText(HostsPath).Contains(FlowsealMarkerStart);
+            if (!_fs.FileExists(_hostsPath)) return false;
+            return _fs.ReadAllText(_hostsPath).Contains(FlowsealMarkerStart);
         }
         catch { return false; }
     }
 
-    public static async Task<(bool success, string message)> InstallFlowsealAsync(ILogger? logger = null)
+    /// <summary>Instance variant of <see cref="InstallFlowsealAsync"/>.</summary>
+    public async Task<(bool success, string message)> InstallFlowsealInstanceAsync(ILogger? logger = null)
     {
         try
         {
-            if (IsFlowsealInstalled())
+            if (IsFlowsealInstalledInstance())
                 return (true, "Already installed");
 
             var raw = await _http.GetStringAsync(FlowsealHostsUrl);
@@ -176,7 +175,7 @@ public static class HostsManager
             block.AddRange(hostLines);
             block.Add(FlowsealMarkerEnd);
 
-            File.AppendAllLines(HostsPath, block);
+            _fs.AppendAllLines(_hostsPath, block);
             FlushDns(logger);
             logger?.Information("[Hosts] Installed {Count} Flowseal entries", hostLines.Count);
             return (true, $"Added {hostLines.Count} Flowseal entries");
@@ -192,27 +191,18 @@ public static class HostsManager
         }
     }
 
-    public static (bool success, string message) UninstallFlowseal(ILogger? logger = null)
+    /// <summary>Instance variant of <see cref="UninstallFlowseal"/>.</summary>
+    public (bool success, string message) UninstallFlowsealInstance(ILogger? logger = null)
     {
         try
         {
-            if (!IsFlowsealInstalled())
+            if (!IsFlowsealInstalledInstance())
                 return (true, "Not installed");
 
-            var allLines = File.ReadAllLines(HostsPath).ToList();
-            var newLines = new List<string>();
-            bool skipping = false;
+            var allLines = _fs.ReadAllLines(_hostsPath).ToList();
+            var newLines = StripBlock(allLines, FlowsealMarkerStart, FlowsealMarkerEnd);
 
-            foreach (var line in allLines)
-            {
-                if (line.TrimEnd() == FlowsealMarkerStart) { skipping = true; continue; }
-                if (line.TrimEnd() == FlowsealMarkerEnd) { skipping = false; continue; }
-                if (!skipping) newLines.Add(line);
-            }
-            while (newLines.Count > 0 && string.IsNullOrWhiteSpace(newLines[^1]))
-                newLines.RemoveAt(newLines.Count - 1);
-
-            File.WriteAllLines(HostsPath, newLines);
+            _fs.WriteAllLines(_hostsPath, newLines);
             FlushDns(logger);
             logger?.Information("[Hosts] Removed Flowseal entries");
             return (true, "Removed Flowseal entries");
@@ -226,6 +216,40 @@ public static class HostsManager
             logger?.Error(ex, "[Hosts] UninstallFlowseal failed");
             return (false, $"Error: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Remove every line between <paramref name="markerStart"/> and
+    /// <paramref name="markerEnd"/> (inclusive), plus trailing whitespace
+    /// left by the removed block. Public-instance helper extracted from
+    /// the duplicate Discord/Flowseal uninstall paths.
+    /// </summary>
+    internal static List<string> StripBlock(List<string> allLines, string markerStart, string markerEnd)
+    {
+        var newLines = new List<string>();
+        bool skipping = false;
+
+        foreach (var line in allLines)
+        {
+            if (line.TrimEnd() == markerStart)
+            {
+                skipping = true;
+                continue;
+            }
+            if (line.TrimEnd() == markerEnd)
+            {
+                skipping = false;
+                continue;
+            }
+            if (!skipping)
+                newLines.Add(line);
+        }
+
+        // Remove trailing empty lines left by our block
+        while (newLines.Count > 0 && string.IsNullOrWhiteSpace(newLines[^1]))
+            newLines.RemoveAt(newLines.Count - 1);
+
+        return newLines;
     }
 
     private static void FlushDns(ILogger? logger)
@@ -253,4 +277,34 @@ public static class HostsManager
             logger?.Warning(ex, "[Hosts] Failed to flush DNS");
         }
     }
+
+    // ── Static facade (backwards compatibility) ──
+
+    /// <summary>
+    /// Check if Discord hosts entries are currently installed.
+    /// </summary>
+    public static bool IsInstalled() => DefaultInstance.IsInstalledInstance();
+
+    /// <summary>
+    /// Add Discord voice server entries to the hosts file.
+    /// Maps finland10000-10199.discord.media to Cloudflare IP.
+    /// Requires administrator privileges.
+    /// </summary>
+    public static (bool success, string message) Install(ILogger? logger = null)
+        => DefaultInstance.InstallInstance(logger);
+
+    /// <summary>
+    /// Remove Discord voice server entries from the hosts file.
+    /// Removes everything between the VPNRouter markers.
+    /// </summary>
+    public static (bool success, string message) Uninstall(ILogger? logger = null)
+        => DefaultInstance.UninstallInstance(logger);
+
+    public static bool IsFlowsealInstalled() => DefaultInstance.IsFlowsealInstalledInstance();
+
+    public static Task<(bool success, string message)> InstallFlowsealAsync(ILogger? logger = null)
+        => DefaultInstance.InstallFlowsealInstanceAsync(logger);
+
+    public static (bool success, string message) UninstallFlowseal(ILogger? logger = null)
+        => DefaultInstance.UninstallFlowsealInstance(logger);
 }
