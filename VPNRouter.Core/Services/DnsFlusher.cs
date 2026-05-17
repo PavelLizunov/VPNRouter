@@ -1,3 +1,4 @@
+#nullable enable
 using System.Diagnostics;
 using Serilog;
 
@@ -15,75 +16,116 @@ namespace VPNRouter.Core.Services;
 ///   - Windows: ipconfig /flushdns
 ///   - macOS:   sudo dscacheutil -flushcache &amp;&amp; sudo killall -HUP mDNSResponder
 ///   - Linux:   not implemented (varies by resolver)
+///
+/// <para>
+/// v3.0 Phase 2G refactor: extracted into an instance class taking an
+/// <see cref="IProcessRunner"/> via ctor for testability. Static
+/// <see cref="Flush"/> facade preserved so existing call sites
+/// (<c>VpnEngine</c>) continue to work without modification. Tests
+/// construct <see cref="DnsFlusher"/> with <c>FakeProcessRunner</c>.
+/// </para>
 /// </summary>
-public static class DnsFlusher
+public sealed class DnsFlusher
 {
-    public static void Flush(ILogger? logger = null)
+    /// <summary>How long to wait for a single shell-out before giving up.</summary>
+    private static readonly TimeSpan FlushTimeout = TimeSpan.FromMilliseconds(5000);
+
+    private readonly IProcessRunner _runner;
+
+    /// <summary>
+    /// Default singleton wired to <see cref="ProcessRunner"/>. Used by the
+    /// static facade so existing call sites do not need to change.
+    /// </summary>
+    private static readonly DnsFlusher DefaultInstance = new(new ProcessRunner());
+
+    /// <summary>
+    /// Construct a <see cref="DnsFlusher"/> backed by the supplied
+    /// <see cref="IProcessRunner"/>. Tests inject <c>FakeProcessRunner</c>;
+    /// production code typically uses the static <see cref="Flush"/>
+    /// facade which dispatches to <see cref="DefaultInstance"/>.
+    /// </summary>
+    public DnsFlusher(IProcessRunner? runner = null)
+    {
+        _runner = runner ?? new ProcessRunner();
+    }
+
+    /// <summary>
+    /// Instance variant of the platform-dispatching DNS flush. Returns
+    /// true if the OS-appropriate flush completed with exit code 0,
+    /// false otherwise. Never throws — failure mode is silent stale
+    /// cache, not crash.
+    /// </summary>
+    public bool FlushInstance(ILogger? logger = null)
     {
         var log = logger ?? Log.Logger;
 
         try
         {
             if (OperatingSystem.IsWindows())
-                FlushWindows(log);
-            else if (OperatingSystem.IsMacOS())
-                FlushMac(log);
-            else
-                log.Debug("[DnsFlusher] Platform not supported — skipping DNS flush");
+                return FlushWindows(log);
+            if (OperatingSystem.IsMacOS())
+                return FlushMac(log);
+
+            log.Debug("[DnsFlusher] Platform not supported — skipping DNS flush");
+            return false;
         }
         catch (Exception ex)
         {
             log.Warning(ex, "[DnsFlusher] DNS flush failed (non-critical)");
+            return false;
         }
     }
 
-    private static void FlushWindows(ILogger log)
+    private bool FlushWindows(ILogger log)
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = "ipconfig.exe",
-            Arguments = "/flushdns",
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
+        var request = new ProcessRequest(
+            ExecutablePath: "ipconfig.exe",
+            Arguments: new[] { "/flushdns" },
+            Timeout: FlushTimeout);
 
-        using var proc = Process.Start(psi);
-        if (proc == null)
+        try
         {
-            log.Warning("[DnsFlusher] Failed to start ipconfig.exe");
-            return;
+            // .GetAwaiter().GetResult() is safe here: VPN start path is
+            // single-threaded and the timeout caps the wait at 5s.
+            var result = _runner.RunAsync(request).GetAwaiter().GetResult();
+
+            if (result.TimedOut)
+            {
+                log.Warning("[DnsFlusher] ipconfig /flushdns timed out after {Timeout}", FlushTimeout);
+                return false;
+            }
+            if (result.ExitCode == 0)
+            {
+                log.Information("[DnsFlusher] Windows DNS cache flushed");
+                return true;
+            }
+            log.Warning("[DnsFlusher] ipconfig /flushdns returned exit code {Code}", result.ExitCode);
+            return false;
         }
-
-        proc.WaitForExit(5000);
-
-        if (proc.ExitCode == 0)
-            log.Information("[DnsFlusher] Windows DNS cache flushed");
-        else
-            log.Warning("[DnsFlusher] ipconfig /flushdns returned exit code {Code}", proc.ExitCode);
+        catch (Exception ex)
+        {
+            log.Warning(ex, "[DnsFlusher] ipconfig.exe failed");
+            return false;
+        }
     }
 
-    private static void FlushMac(ILogger log)
+    private bool FlushMac(ILogger log)
     {
         // Both commands needed: dscacheutil for system cache, killall for mDNSResponder cache
         // sudo with NOPASSWD requires sudoers entries — but flushing DNS doesn't need root.
         // dscacheutil -flushcache works without sudo.
         // killall -HUP mDNSResponder DOES need sudo, but if it fails we still flushed dscacheutil.
 
+        var anyOk = false;
+
         // dscacheutil (no sudo needed)
         try
         {
-            using var p1 = Process.Start(new ProcessStartInfo
-            {
-                FileName = "/usr/bin/dscacheutil",
-                Arguments = "-flushcache",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            });
-            p1?.WaitForExit(5000);
+            var r1 = _runner.RunAsync(new ProcessRequest(
+                ExecutablePath: "/usr/bin/dscacheutil",
+                Arguments: new[] { "-flushcache" },
+                Timeout: FlushTimeout)).GetAwaiter().GetResult();
+            if (r1.ExitCode == 0 && !r1.TimedOut) anyOk = true;
         }
         catch (Exception ex)
         {
@@ -93,16 +135,10 @@ public static class DnsFlusher
         // mDNSResponder restart — needs sudo, may silently fail
         try
         {
-            using var p2 = Process.Start(new ProcessStartInfo
-            {
-                FileName = "/usr/bin/sudo",
-                Arguments = "-n killall -HUP mDNSResponder",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            });
-            p2?.WaitForExit(5000);
+            _ = _runner.RunAsync(new ProcessRequest(
+                ExecutablePath: "/usr/bin/sudo",
+                Arguments: new[] { "-n", "killall", "-HUP", "mDNSResponder" },
+                Timeout: FlushTimeout)).GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
@@ -110,5 +146,15 @@ public static class DnsFlusher
         }
 
         log.Information("[DnsFlusher] macOS DNS cache flush attempted");
+        return anyOk;
     }
+
+    // ── Static facade (backwards compatibility) ──
+
+    /// <summary>
+    /// Static entry-point preserved for existing call sites (VpnEngine).
+    /// Dispatches to <see cref="DefaultInstance"/> which is wired to the
+    /// real <see cref="ProcessRunner"/>.
+    /// </summary>
+    public static void Flush(ILogger? logger = null) => DefaultInstance.FlushInstance(logger);
 }

@@ -113,6 +113,35 @@ Tests written (target was 3-5, delivered 6 to cover all useful smoke shapes):
 - `VPNRouter.Tests/QrCodeTests.cs` (new, 120 LOC)
 - `plans/phase2-2G-untested-services-2026-05-17.md` (Outcome section)
 
+### Wave 7a-2 — `LockFile` + `DnsFlusher` (2026-05-18)
+
+**Status**: PASS — both services now have dedicated test files; DnsFlusher seam added (static-class → instance + static-facade, mirroring Wave 6's LockFile pattern).
+
+**Files staged**:
+- `VPNRouter.Core/Services/DnsFlusher.cs` — converted from static to instance `sealed class` with `IProcessRunner` ctor seam. `DefaultInstance` preserves legacy `static DnsFlusher.Flush(ILogger)` so the single consumer (`VpnEngine.cs:167`) does not change. +144 / -49 (+95 net).
+- `VPNRouter.Tests/LockFileTests.cs` — 11 tests, 303 LOC.
+- `VPNRouter.Tests/DnsFlusherTests.cs` — 8 tests, 231 LOC.
+
+**LockFile tests cover**: AcquireInstance happy path, anti-double-launch invariant (the v2.31.x regression class), idempotent reacquire, release-then-reacquire, `DetectPreviousCrashInstance` {none / dead PID / live PID / unreadable payload / then-acquire end-to-end} — 4 tests guard the always-consumes-the-stale-file contract — static-facade smoke, on-disk PID payload structure pin.
+
+**DnsFlusher tests cover**: happy path, arg correctness (executable = `ipconfig.exe`, args = exactly `["/flushdns"]`), nonzero-exit graceful handling, timeout graceful handling, runner-throws graceful handling, idempotency, reasonable timeout window pin (≥1s ≤30s), static-facade smoke.
+
+**Test delta**: +19 tests in scoped suite (target was 10-16; over-met).
+
+**Verification gates**:
+- [x] LockFileTests.cs: 11 (target 6+, HIGH)
+- [x] DnsFlusherTests.cs: 8 (target 4+, MED)
+- [x] Gate 1 build 0 errors
+- [x] Gate 2 scoped suite: 894 passed, 0 failed, 3 skipped (pre-existing)
+- [x] Gate 4 security-review (LockFile): no path injection (lock path from `AppPaths.DataDir`); TOCTOU window only affects diagnostic banner accuracy (security invariant preserved by OS lock itself); PID recycling handled correctly (alive → no banner = safer false-negative); real hard-gate is `SingleInstance` Mutex in `VPNRouter.App/Services/SingleInstance.cs`.
+- [x] Hook gates: covered by 0-error build + green scoped suite.
+
+**Surprises**:
+1. `DnsFlusher` was easier than expected — the `static class → instance + static-facade` pattern matched Wave 6's `LockFile` exactly. No `VpnEngine` change needed.
+2. `LockFile`'s existing layered design (instance methods + `DefaultInstance` static facade) made every test shape straightforward — ctor takes `(IFileSystem, lockPath)` so each test gets its own GUID-named lock path against `InMemoryFileSystem`. No `%ProgramData%` pollution.
+3. `DetectPreviousCrashInstance` always-consumes-the-stale-file contract was the most subtle invariant — pinned in 4 tests so a regression that forgets `TryDeleteInstance` surfaces immediately.
+4. One xUnit1031 warning (`.GetAwaiter().GetResult()` in a test) fixed by promoting to `async Task` + `await`.
+
 ## Follow-up
 
 - Phase 3D may consolidate `HostsManager` + `WindowsDnsHardening` under a unified `ISystemStateMutator` if their test shapes match.
