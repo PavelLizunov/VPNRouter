@@ -7,11 +7,20 @@ namespace VPNRouter.Core.Services;
 
 public class UpdateChecker
 {
-    private static readonly HttpClient _http = new()
+    // v3.0 Phase 2D-3 (2026-05-18): release-list + .sha256 fetches go
+    // through IHttpClient (PolicyHttpClient) so tests can stub them.
+    // The large-binary download (DownloadAndStageAsync line ~156) still
+    // uses _legacyHttp directly because it streams via
+    // HttpCompletionOption.ResponseHeadersRead + chunked progress
+    // callbacks — Phase 2G will widen IHttpClient with a Stream variant
+    // before migrating that path. Brief:
+    // plans/phase2-2D-ihttpclient-2026-05-17.md.
+    private static readonly HttpClient _legacyHttp = new()
     {
         Timeout = TimeSpan.FromSeconds(30)
     };
 
+    private readonly IHttpClient _http;
     private readonly UpdateSettings _settings;
     private readonly string _currentVersion;
     private readonly string _stagingDir;
@@ -31,13 +40,26 @@ public class UpdateChecker
 
     static UpdateChecker()
     {
-        _http.DefaultRequestHeaders.Add("User-Agent", "VPNRouter");
+        _legacyHttp.DefaultRequestHeaders.Add("User-Agent", "VPNRouter");
     }
 
+    /// <summary>
+    /// Production ctor — uses the process-shared <see cref="PolicyHttpClient"/>.
+    /// </summary>
     public UpdateChecker(UpdateSettings settings, string currentVersion)
+        : this(settings, currentVersion, PolicyHttpClient.Shared)
+    {
+    }
+
+    /// <summary>
+    /// Test / DI ctor — caller supplies a custom <see cref="IHttpClient"/>
+    /// (typically <c>FakeHttpClient</c> in tests).
+    /// </summary>
+    public UpdateChecker(UpdateSettings settings, string currentVersion, IHttpClient http)
     {
         _settings = settings;
         _currentVersion = currentVersion;
+        _http = http ?? throw new ArgumentNullException(nameof(http));
         _stagingDir = Path.Combine(AppPaths.DataDir, "update-staging");
     }
 
@@ -54,7 +76,12 @@ public class UpdateChecker
             return null;
 
         var url = $"https://api.github.com/repos/{_settings.GitHubRepo}/releases?per_page=30";
-        var json = await _http.GetStringAsync(url, ct);
+        var listResponse = await _http.SendAsync(
+            new HttpRequest(HttpMethod.Get, new Uri(url)),
+            ct);
+        if (!listResponse.IsSuccess())
+            return null;
+        var json = listResponse.AsString();
 
         var releases = JsonConvert.DeserializeAnonymousType(json, new[]
         {
@@ -153,7 +180,11 @@ public class UpdateChecker
             : ".zip";
         var zipPath = Path.Combine(_stagingDir, $"VPNRouter-v{info.LatestVersion}{downloadExt}");
 
-        using var response = await _http.GetAsync(downloadUrl,
+        // v3.0 Phase 2D-3: streaming download stays on the legacy
+        // HttpClient because IHttpClient currently buffers the full body
+        // (byte[]). Phase 2G will introduce a streaming variant before
+        // migrating this call site.
+        using var response = await _legacyHttp.GetAsync(downloadUrl,
             HttpCompletionOption.ResponseHeadersRead, ct);
         response.EnsureSuccessStatusCode();
 
@@ -186,7 +217,13 @@ public class UpdateChecker
         if (!string.IsNullOrEmpty(checksumUrl))
         {
             StatusChanged?.Invoke("Verifying checksum...");
-            var expectedSha = (await _http.GetStringAsync(checksumUrl, ct)).Trim().ToLowerInvariant();
+            var shaResponse = await _http.SendAsync(
+                new HttpRequest(HttpMethod.Get, new Uri(checksumUrl)),
+                ct);
+            if (!shaResponse.IsSuccess())
+                throw new InvalidOperationException(
+                    $"Checksum download failed: HTTP {shaResponse.StatusCode} from {checksumUrl}");
+            var expectedSha = shaResponse.AsString().Trim().ToLowerInvariant();
 
             // Strip any trailing filename portion if the .sha256 file used "HASH  filename" format
             if (expectedSha.Contains(' '))
