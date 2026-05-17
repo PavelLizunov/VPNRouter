@@ -82,7 +82,36 @@ For each service:
 - [ ] **Hook gates** pass
 
 ## Outcome
-*(filled by agent)*
+
+### Wave 7c-2 — `QrCode` (2026-05-18)
+
+**Agent**: sub-wave 7c-2 (LOW priority, fast wrap-up).
+**File added**: `VPNRouter.Tests/QrCodeTests.cs` (~120 LOC, 6 tests, all <50ms).
+**Service touched**: `VPNRouter.Core/Services/QrCode.cs` — NONE (pure additive tests, no production change).
+
+Tests written (target was 3-5, delivered 6 to cover all useful smoke shapes):
+
+1. `EncodeText_VlessUri_ProducesNonEmptyMatrix` — happy path with a real-shaped Reality URI; asserts `Size = version*4+17` invariant, `Mask in [0,7]`, `ToMatrix` returns the right dimensions, and the result contains both dark + light modules (cheap "rendering actually ran" check).
+2. `EncodeText_Null_ThrowsArgumentNullException` — null-input contract.
+3. `EncodeText_EmptyString_ProducesSmallestVersion` — empty UTF-8 payload still encodes to v1/21x21 cleanly; also pins `GetModule(x,y) == ToMatrix()[y,x]` for every cell (catches axis-flip regressions).
+4. `EncodeText_LongSubscriptionUrl_FitsWithoutCrash` — 2000-char payload encodes without throwing and selects a high version (>=15), guarding against silent truncation if the version-selection loop is broken.
+5. `EncodeText_GetModule_OutOfBoundsReturnsFalse` — defensive contract for quiet-zone probing by the rendering layer (no throw on negative / past-Size coords).
+6. `EncodeText_HigherEcc_PicksLargerOrEqualVersion` — pins the version-selection loop's monotonicity and the "ECC may auto-upgrade but never downgrade" guarantee.
+
+**Verification gate**:
+- [x] Gate 1 build 0 errors (Release): pre-existing warnings unchanged, no new ones.
+- [x] Gate 2 scoped suite: 881 passed / 3 pre-existing skips / 0 failed (was 875 before, +6 new).
+- [x] Test file is 120 LOC (well under 300-LOC split threshold).
+- [x] `#nullable enable` + `sealed` fixture.
+- [x] All tests <50ms (full QrCode subset runs in 45ms total).
+
+**Surprises / notes**:
+- The encoder has no public decode path — `QrCodeDecoder.cs` lives Android-side and uses ZXing, so round-trip testing isn't available from `VPNRouter.Tests`. Compensated by asserting structural invariants (size formula, mask range, dark+light presence, version monotonicity).
+- The encoder auto-upgrades ECC level for free when capacity permits — test 6 asserts only the "never downgrades" weaker contract to avoid being brittle to the upgrade heuristic.
+
+**Files staged (not committed — integrator commits)**:
+- `VPNRouter.Tests/QrCodeTests.cs` (new, 120 LOC)
+- `plans/phase2-2G-untested-services-2026-05-17.md` (Outcome section)
 
 ## Follow-up
 
