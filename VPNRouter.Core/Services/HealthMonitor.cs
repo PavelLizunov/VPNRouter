@@ -19,6 +19,19 @@ public class HealthMonitor : IDisposable
     private readonly MonitoringSettings _settings;
     private readonly ILogger _logger;
 
+    // Phase 2D-4 (2026-05-17): Clash API talking concern split out of
+    // SingBoxManager so HealthMonitor can be tested without spawning a
+    // real sing-box process. See ISingBoxApi.cs. The default
+    // ClashSingBoxApi points at SingBoxSettings.ClashApi
+    // (127.0.0.1:9090 by convention).
+    private readonly ISingBoxApi _api;
+
+    // Owned ClashSingBoxApi (when ctor created a default). Disposed in
+    // Stop()/Dispose() so the HttpClient leak doesn't survive teardown.
+    // Null when the ctor was passed an externally-supplied ISingBoxApi
+    // (test fakes, future DI wiring) — disposal is the caller's job.
+    private readonly IDisposable? _ownedApi;
+
     private System.Threading.Timer? _healthTimer;
     private System.Threading.Timer? _debounceTimer;
 
@@ -102,18 +115,56 @@ public class HealthMonitor : IDisposable
     public event EventHandler? VpnStopped;
     public event EventHandler<int>? RestartAttempted; // arg = attempt number
 
+    /// <summary>
+    /// Construct the health monitor.
+    /// </summary>
+    /// <param name="singBox">SingBox process lifecycle manager (start /
+    /// stop / kill / Restart).</param>
+    /// <param name="scanner">Process scanner used in debounced rescans.</param>
+    /// <param name="firewall">Firewall manager for block_on_vpn_fail leak
+    /// protection on crash.</param>
+    /// <param name="settings">MonitoringSettings (health-check interval,
+    /// max restart attempts, etc.).</param>
+    /// <param name="logger">Optional Serilog logger; defaults to
+    /// <see cref="Log.Logger"/>.</param>
+    /// <param name="api">Optional <see cref="ISingBoxApi"/> override
+    /// for Clash-API-talking. When null, a default
+    /// <see cref="ClashSingBoxApi"/> is constructed pointing at
+    /// <c>http://127.0.0.1:9090</c> — same target the inline pre-2D-4
+    /// code used. Pass a <see cref="VPNRouter.Tests.Fakes.FakeSingBoxApi"/>
+    /// in tests to avoid spawning sing-box. (Note: when wave 6 sibling
+    /// task 2D-3 lands its <c>IHttpClient</c> / <c>PolicyHttpClient</c>
+    /// abstractions, refactor the default-construction path to wire
+    /// those through — for now we use a plain HttpClient.)</param>
     public HealthMonitor(
         SingBoxManager singBox,
         IProcessScanner scanner,
         IFirewallManager firewall,
         MonitoringSettings settings,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        ISingBoxApi? api = null)
     {
         _singBox = singBox;
         _scanner = scanner;
         _firewall = firewall;
         _settings = settings;
         _logger = logger ?? Log.Logger;
+
+        // Resolve the Clash API client. Default to a ClashSingBoxApi
+        // wired against the same target SingBoxManager.TryHotReload used
+        // pre-2D-4 (the Clash API listens on localhost:9090 by
+        // convention; the YAML default matches).
+        if (api is not null)
+        {
+            _api = api;
+            _ownedApi = null;
+        }
+        else
+        {
+            var concrete = new ClashSingBoxApi(logger: _logger);
+            _api = concrete;
+            _ownedApi = concrete;
+        }
 
         _singBox.Crashed += OnSingBoxCrashed;
     }
@@ -397,7 +448,17 @@ public class HealthMonitor : IDisposable
                 // Re-scan and regenerate config before restart
                 var scan = _scanner.ScanForProfile(_activeProfile);
                 var configJson = GenerateConfigJson(scan.ProcessNames);
-                _singBox.ReloadConfigJson(configJson);
+
+                // Phase 2D-4 (2026-05-17): try hot-reload via the
+                // ISingBoxApi split first; fall back to a full restart
+                // if it didn't take. Pre-2D-4 this was a single
+                // _singBox.ReloadConfigJson(configJson) call that
+                // bundled write+hot-reload+restart-fallback inline.
+                if (!TryHotReloadViaApi(configJson))
+                {
+                    _logger.Warning("[HealthMonitor] Hot-reload unavailable on restart attempt — performing full restart");
+                    _singBox.Restart();
+                }
                 _lastScan = scan;
                 _lastFullRestart = DateTime.UtcNow;
 
@@ -416,6 +477,50 @@ public class HealthMonitor : IDisposable
                 _logger.Error(ex, "[HealthMonitor] Restart attempt {N} failed", _restartAttempts);
             }
         }, CancellationToken.None); // ContinueWith always runs, checks ct inside
+    }
+
+    /// <summary>
+    /// Phase 2D-4 (2026-05-17): write <paramref name="configJson"/> to
+    /// disk and ask the Clash API to hot-reload via
+    /// <see cref="ISingBoxApi.ReloadConfigAsync"/>. Returns whether the
+    /// hot-reload was accepted. Callers decide how to handle failure —
+    /// the AttemptRestart path escalates to a full
+    /// <see cref="SingBoxManager.Restart"/>, while the OnDebounceElapsed
+    /// path applies its own cooldown policy first.
+    ///
+    /// <para>Pre-2D-4 the equivalent code was bundled inside
+    /// <see cref="SingBoxManager.ReloadConfigJson"/> /
+    /// <see cref="SingBoxManager.TryReloadConfigJson"/>. The split here
+    /// makes the Clash-API-talking step substitutable with
+    /// <c>FakeSingBoxApi</c> in tests so we can drive crash-recovery +
+    /// auto-failover paths without spawning real sing-box.</para>
+    ///
+    /// <para>This wraps an async call with a synchronous
+    /// <c>.GetAwaiter().GetResult()</c> because the existing call sites
+    /// (Task.Delay continuation in AttemptRestart, Timer callback in
+    /// OnDebounceElapsed) are already sync-callback shaped. Future
+    /// work: propagate async up to HealthMonitor's public surface so we
+    /// can drop the sync-over-async. The ClashSingBoxApi enforces its
+    /// own 3s deadline internally so a hung Clash API cannot stall
+    /// this thread indefinitely.</para>
+    /// </summary>
+    /// <returns><c>true</c> if hot-reload was accepted; <c>false</c>
+    /// otherwise (caller picks the fallback policy).</returns>
+    private bool TryHotReloadViaApi(string configJson)
+    {
+        var path = _singBox.WriteConfigToDisk(configJson);
+        try
+        {
+            return _api.ReloadConfigAsync(path).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            // ISingBoxApi.ReloadConfigAsync contract says return false on
+            // failure, never throw — but a buggy / mocked impl could
+            // surface an exception. Treat it as "hot-reload didn't work".
+            _logger.Debug(ex, "[HealthMonitor] ISingBoxApi.ReloadConfigAsync threw — returning false");
+            return false;
+        }
     }
 
     // ─── Private: Debounced process rescan ───────────────────────────────────
@@ -454,7 +559,13 @@ public class HealthMonitor : IDisposable
 
             // Try hot-reload first (no restart fallback) to avoid TUN restart storms.
             // If hot-reload fails, only do a full restart if cooldown has elapsed.
-            if (_singBox.TryReloadConfigJson(configJson))
+            //
+            // Phase 2D-4 (2026-05-17): hot-reload goes through ISingBoxApi
+            // split (write to disk via SingBoxManager.WriteConfigToDisk;
+            // PUT /configs via ClashSingBoxApi). Pre-2D-4 this was a
+            // single _singBox.TryReloadConfigJson(configJson) call. Same
+            // behaviour, but the Clash API talking is now substitutable.
+            if (TryHotReloadViaApi(configJson))
             {
                 _lastScan = newScan;
                 _restartAttempts = 0;
@@ -567,5 +678,10 @@ public class HealthMonitor : IDisposable
         if (_disposed) return;
         _disposed = true;
         Stop();
+
+        // Phase 2D-4: tear down the owned ClashSingBoxApi (and its
+        // HttpClient) if the ctor created one. External fakes are the
+        // caller's responsibility.
+        _ownedApi?.Dispose();
     }
 }

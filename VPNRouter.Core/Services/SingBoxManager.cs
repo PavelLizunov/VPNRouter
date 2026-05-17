@@ -340,6 +340,32 @@ public class SingBoxManager : IDisposable
         return TryHotReload();
     }
 
+    /// <summary>
+    /// Phase 2D-4 (2026-05-17): public seam for the
+    /// <see cref="ISingBoxApi"/> hot-reload path. Writes
+    /// <paramref name="configJson"/> to disk (rotating the current path)
+    /// and returns the absolute path. The caller is then expected to
+    /// invoke <see cref="ISingBoxApi.ReloadConfigAsync"/> with the
+    /// returned path — splitting the "write JSON" concern from the
+    /// "talk to Clash API" concern that pre-2D-4 lived together inside
+    /// <see cref="TryReloadConfigJson"/>.
+    ///
+    /// <para>Used by <see cref="HealthMonitor"/>. <see cref="VpnEngine"/>
+    /// still uses the thicker <see cref="TryReloadConfigJson"/> /
+    /// <see cref="ReloadConfigJson"/> entry points because its
+    /// callsites depend on the bundled write+reload+restart-fallback
+    /// behaviour and aren't part of the 2D-4 POC scope.</para>
+    /// </summary>
+    /// <param name="configJson">Generated sing-box JSON.</param>
+    /// <returns>Absolute path the JSON was written to (currently always
+    /// <c>%ProgramData%\VPNRouter\config\current.json</c> — same path
+    /// every existing reload path writes to).</returns>
+    public string WriteConfigToDisk(string configJson)
+    {
+        _currentConfigPath = WriteJsonToDisk(configJson);
+        return _currentConfigPath;
+    }
+
     public bool IsRunning()
     {
         // v2.21.5: on Unix (macOS + Linux) the Clash API is the authoritative
