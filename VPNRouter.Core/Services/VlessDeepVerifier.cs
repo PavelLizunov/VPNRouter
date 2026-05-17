@@ -48,6 +48,19 @@ public sealed class VlessDeepVerifier
         _singBoxPath = AppPaths.SingBoxExePath;
     }
 
+    /// <summary>
+    /// Test-only ctor (v3.0 Phase 2G-7c-1): lets unit tests inject an
+    /// alternate sing-box binary path so the "binary missing" branch can
+    /// be exercised deterministically (production resolves to
+    /// <see cref="AppPaths.SingBoxExePath"/>). Marked <c>internal</c> +
+    /// visible to <c>VPNRouter.Tests</c> via <c>InternalsVisibleTo</c>.
+    /// </summary>
+    internal VlessDeepVerifier(ILogger logger, string singBoxPath)
+    {
+        _logger = logger;
+        _singBoxPath = singBoxPath;
+    }
+
     public bool IsAvailable => File.Exists(_singBoxPath);
 
     /// <summary>Verify a batch of VLESS servers in parallel.</summary>
@@ -112,6 +125,24 @@ public sealed class VlessDeepVerifier
         _logger.Debug(
             "[VlessDeepVerifier] start: name={Name} host={Host} port={Port} protocol={Protocol} measureBw={MeasureBw}",
             label, entry.Server, entry.Port, protocol, measureBandwidth);
+
+        // v2.32.3 (v3.0 Phase 2G): placeholder-credential gate. A subscription
+        // / paste that smuggled stas-class fingerprints (DnT9... pubkey,
+        // 195.135.255.216 server, etc.) past the upstream input gates would
+        // otherwise reach sing-box and either (a) silently fail to connect,
+        // or worse (b) report "verified" if the host happens to be reachable
+        // on TCP/443 but the Reality handshake never completes. Reject up
+        // front so the verdict surface is honest. Same fingerprint list the
+        // settings migrator + resolver scope guard use — single source of
+        // truth at <see cref="PlaceholderGuard"/>.
+        var placeholderField = PlaceholderGuard.Inspect(entry);
+        if (placeholderField != null)
+        {
+            _logger.Warning(
+                "[VlessDeepVerifier] {Name}: placeholder credential detected ({Field}) — refusing to probe",
+                label, placeholderField);
+            return DeepVerifyResult.Failed($"placeholder credential: {placeholderField}");
+        }
 
         if (!IsAvailable)
         {
@@ -231,7 +262,7 @@ public sealed class VlessDeepVerifier
     /// in parallel with <see cref="ConfigGenerator.BuildVlessOutbound"/>'s
     /// dispatch pattern (see ConfigGenerator.cs:858–869).
     /// </summary>
-    private static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int clashPort)
+    internal static string BuildSingleOutboundConfig(VlessServerEntry s, int socksPort, int clashPort)
     {
         var protocol = (s.Protocol ?? "vless").Trim().ToLowerInvariant();
         var outbound = protocol switch
@@ -293,7 +324,7 @@ public sealed class VlessDeepVerifier
         return root.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
     }
 
-    private static int FindFreePort()
+    internal static int FindFreePort()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
@@ -421,7 +452,7 @@ public sealed class VlessDeepVerifier
         return (false, 0, "all bandwidth URLs failed");
     }
 
-    private static bool IsPrivateOrLoopback(IPAddress ip)
+    internal static bool IsPrivateOrLoopback(IPAddress ip)
     {
         if (IPAddress.IsLoopback(ip)) return true;
         var bytes = ip.GetAddressBytes();
@@ -433,7 +464,7 @@ public sealed class VlessDeepVerifier
         return false;
     }
 
-    private static string TrimSnippet(string s, int max)
+    internal static string TrimSnippet(string s, int max)
     {
         s = s.Replace('\n', ' ').Replace('\r', ' ').Trim();
         return s.Length > max ? s[..max] + "…" : s;
@@ -447,7 +478,7 @@ public sealed class VlessDeepVerifier
     // VlessDeepVerifier style (rest of BuildSingleOutboundConfig uses JsonNode).
 
     /// <summary>VLESS outbound (Reality / TLS / plain). Pre-r16 logic, extracted into a builder.</summary>
-    private static JsonObject BuildVlessOutbound(VlessServerEntry s)
+    internal static JsonObject BuildVlessOutbound(VlessServerEntry s)
     {
         var outbound = new JsonObject
         {
@@ -515,7 +546,7 @@ public sealed class VlessDeepVerifier
     /// spec. Optional Salamander obfs from <see cref="VlessServerEntry.ObfsType"/>.
     /// Mirrors <c>ConfigGenerator.BuildHysteria2Outbound</c>.
     /// </summary>
-    private static JsonObject BuildHysteria2Outbound(VlessServerEntry s)
+    internal static JsonObject BuildHysteria2Outbound(VlessServerEntry s)
     {
         var outbound = new JsonObject
         {
@@ -549,7 +580,7 @@ public sealed class VlessDeepVerifier
     /// TUIC v5 outbound (UDP+QUIC). ALPN ["h3"] default, BBR congestion
     /// control default. Mirrors <c>ConfigGenerator.BuildTuicOutbound</c>.
     /// </summary>
-    private static JsonObject BuildTuicOutbound(VlessServerEntry s)
+    internal static JsonObject BuildTuicOutbound(VlessServerEntry s)
     {
         var alpn = new JsonArray();
         if (!string.IsNullOrWhiteSpace(s.Tls?.Alpn))
@@ -584,7 +615,7 @@ public sealed class VlessDeepVerifier
     /// Supports SS 2022 ciphers natively via <see cref="VlessServerEntry.Method"/>.
     /// Mirrors <c>ConfigGenerator.BuildShadowsocksOutbound</c>.
     /// </summary>
-    private static JsonObject BuildShadowsocksOutbound(VlessServerEntry s)
+    internal static JsonObject BuildShadowsocksOutbound(VlessServerEntry s)
     {
         var outbound = new JsonObject
         {

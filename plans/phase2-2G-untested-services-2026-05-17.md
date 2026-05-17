@@ -265,6 +265,67 @@ its security notes).
    builder lives in `ZapretManager.Start`. Extracted to ZapretManager's
    logical zone (still DPI-bypass).
 
+### Wave 7c-1 — `VlessDeepVerifier` + v2.32.3 placeholder hardening (2026-05-18)
+
+**Status**: PASS — 4 gates green. Includes a user-visible production
+behaviour upgrade: placeholder credentials now fail-fast in `VerifyAsync`
+instead of running through the full 12-second sing-box spin-up timeout.
+This strengthens the v2.32.3 5-layer placeholder-credential defense by
+adding a 6th gate at the FreeConfigs deep-verify entry point.
+
+**Production changes**:
+- `VlessDeepVerifier.cs` (+39/-8):
+  - **Placeholder gate at top of `VerifyAsync`** — calls
+    `PlaceholderGuard.Inspect` on pubkey + short_id + server. Returns
+    `Failed("placeholder credential: <field>")` immediately, before
+    any sing-box config is built. v2.32.3 defense-in-depth.
+  - Test-only `internal` ctor accepting explicit `singBoxPath` for
+    deterministic "binary missing" branch coverage.
+  - 7 helpers `private static` → `internal static` (BuildSingleOutboundConfig,
+    BuildVlessOutbound, BuildHysteria2Outbound, BuildTuicOutbound,
+    BuildShadowsocksOutbound, FindFreePort, IsPrivateOrLoopback,
+    TrimSnippet) so tests exercise them without spawning a real
+    sing-box.
+
+**Tests** — split into 2 files to honor <300-LOC simplify gate:
+
+- `VlessDeepVerifierTests.cs` (288 LOC, 8 method / 17 effective tests):
+  - Layer 1 config builder: VLESS / Hy2 / TUIC / SS protocol dispatch;
+    Reality credentials surface correctly; transport-WS field wiring;
+    port allocation
+  - Layer 4 helpers: FindFreePort smoke, IsPrivateOrLoopback Theory
+    across 10 IPs (RFC1918 + CGN + loopback + IPv6 link-local + public
+    IPs), TrimSnippet long+short
+
+- `VlessDeepVerifierBehaviourTests.cs` (215 LOC, 8 methods):
+  - Layer 2 placeholder gate: pubkey rejection / short_id rejection /
+    server-IP rejection / gate-before-binary-check ordering
+  - Layer 3 fallback: single-path binary-missing → Failed,
+    batch-path binary-missing → all entries Failed, cancellation
+    surface
+
+**Test delta**: +26 in scoped suite (875 → 901). HIGH target (6-10)
+exceeded substantially because the agent broke coverage into 4
+distinct layers + Theory expansion.
+
+**Out-of-scope (Phase 3D deferred)**: full e2e seam migration
+(routing `ProbeViaSocksAsync` through `IHttpClient`) — `IHttpClient`
+doesn't natively support SOCKS5 proxy, would require interface
+extension. Brief explicitly said "DO NOT modify VlessDeepVerifier's
+probe semantics beyond minimal seam wiring."
+
+**Verification gates**:
+- [x] VlessDeepVerifierTests.cs: 8 / 17 (target 6-10)
+- [x] VlessDeepVerifierBehaviourTests.cs: 8
+- [x] Placeholder credential rejection test included (v2.32.3 regression)
+- [x] Gate 1 build 0 errors
+- [x] Gate 2 scoped suite +26, all pass
+- [x] Gate 4 simplify: 288 + 215 LOC (both <300)
+- [x] Gate 4 security-review: placeholder rejection strengthens
+  v2.32.3 5-layer defense; test-only ctor scoped via InternalsVisibleTo;
+  no new attack surface; tri-field fingerprint delegated to
+  PlaceholderGuard single-source-of-truth.
+
 ## Follow-up
 
 - Phase 3D may consolidate `HostsManager` + `WindowsDnsHardening` under a unified `ISystemStateMutator` if their test shapes match.
