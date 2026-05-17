@@ -17,6 +17,13 @@ public class EtwProcessMonitor : IProcessMonitor
     private const string SessionName = "VPNRouterETW";
 
     private readonly ILogger _logger;
+    // v3.0 Phase 2D (2026-05-17): IProcessRunner injection prepared for
+    // Phase 2G migration of any future Process-based diagnostics paths
+    // (e.g. tasklist / wmic spot-checks) we might add to this class.
+    // Today EtwProcessMonitor doesn't shell out, but holding the seam
+    // here means future test-coverage doesn't require a second ctor
+    // breaking change. See plans/phase2-2D-iprocessrunner-2026-05-17.md.
+    private readonly IProcessRunner _processRunner;
     private TraceEventSession? _session;
     private Thread? _sessionThread;
     private bool _disposed;
@@ -33,9 +40,12 @@ public class EtwProcessMonitor : IProcessMonitor
     public event EventHandler<ProcessEventArgs>? ProcessStarted;
     public event EventHandler<ProcessEventArgs>? ProcessStopped;
 
-    public EtwProcessMonitor(ILogger? logger = null)
+    public EtwProcessMonitor(ILogger? logger = null, IProcessRunner? processRunner = null)
     {
         _logger = logger ?? Log.Logger;
+        // v3.0 Phase 2D: default to real ProcessRunner so existing call
+        // sites (`new EtwProcessMonitor(logger)`) keep working without DI.
+        _processRunner = processRunner ?? new ProcessRunner();
     }
 
     public void Start()

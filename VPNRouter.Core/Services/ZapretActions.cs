@@ -13,6 +13,28 @@ public static class ZapretActions
 {
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
+    // v3.0 Phase 2D (2026-05-17): IProcessRunner seam for sc/netsh shells.
+    // Default = real ProcessRunner; tests assign FakeProcessRunner to drive
+    // canned exit codes / stdout / stderr without invoking real `sc`.
+    // Refactored call sites: RunSc (POC). Remaining call sites
+    // (IsServiceRunning, IsAnyServiceMatching, RunNetsh, ServiceExists)
+    // are Phase 2G work — see plans/phase2-2D-iprocessrunner-2026-05-17.md.
+    private static IProcessRunner _processRunner = new ProcessRunner();
+
+    /// <summary>Test-only seam: swap in a fake. Production paths use the
+    /// default <see cref="ProcessRunner"/>; never call this outside tests.</summary>
+    internal static IProcessRunner ProcessRunner
+    {
+        get => _processRunner;
+        set => _processRunner = value ?? new ProcessRunner();
+    }
+
+    /// <summary>
+    /// How long to wait for `sc stop/delete` to return before considering
+    /// the call hung. Matches the legacy 2-3s WaitForExit timings.
+    /// </summary>
+    private static readonly TimeSpan ScCommandTimeout = TimeSpan.FromSeconds(5);
+
     // ── Discord cache ──
 
     public static async IAsyncEnumerable<string> ClearDiscordCacheAsync(
@@ -473,15 +495,21 @@ public static class ZapretActions
         catch { return false; }
     }
 
+    // v3.0 Phase 2D refactor: route `sc` invocations through IProcessRunner
+    // so tests can intercept the call without spawning the real binary.
+    // Argument-splitting: legacy `args` came as a single shell-style string
+    // like "stop zapret"; we tokenise on whitespace because none of the
+    // service names we pass contain spaces (callers: StopDeleteServiceLineAsync
+    // only — pure verb + svc-name). If that changes, switch callers to pass
+    // IReadOnlyList<string> directly instead of relying on Split.
     private static async Task RunSc(string args)
     {
-        var psi = new ProcessStartInfo("sc", args)
-        {
-            UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardOutput = true, RedirectStandardError = true
-        };
-        using var p = Process.Start(psi);
-        if (p != null) await p.WaitForExitAsync();
+        var argList = args.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        await _processRunner.RunAsync(
+            new ProcessRequest(
+                ExecutablePath: "sc",
+                Arguments: argList,
+                Timeout: ScCommandTimeout));
     }
 
     // ── Launch Flowseal service menu ──
