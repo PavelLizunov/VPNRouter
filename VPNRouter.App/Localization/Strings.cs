@@ -5,7 +5,14 @@ namespace VPNRouter.App.Localization;
 /// </summary>
 public static class Strings
 {
-    public static string Lang { get; set; } = "en";
+    // Settable Lang shim — keeps legacy "Strings.Lang = ..." call sites
+    // working while delegating to Core's single source of truth. Reads + writes
+    // pass through, so any VM that flips this also flips the shared Core copy.
+    public static string Lang
+    {
+        get => global::VPNRouter.Core.Localization.Strings.Lang;
+        set => global::VPNRouter.Core.Localization.Strings.Lang = value;
+    }
     private static bool Ru => Lang.Equals("ru", StringComparison.OrdinalIgnoreCase);
 
     // v2.29.0: dynamic OS name shown in user-facing autostart copy. Mac
@@ -14,74 +21,68 @@ public static class Strings
     // detect runtime platform and substitute "macOS" / "Linux" / "Windows"
     // into RU+EN templates. Does NOT change Windows-Service-tech labels
     // (those reference an actual Windows-only API surface).
-    public static string OsDisplayName =>
-        OperatingSystem.IsWindows() ? "Windows" :
-        OperatingSystem.IsMacOS() ? "macOS" : "Linux";
+    public static string OsDisplayName => global::VPNRouter.Core.Localization.Strings.OsDisplayName;
 
     // ── Tabs ──
-    public static string TabServers => Ru ? "Серверы" : "Servers";
-    public static string TabApps => Ru ? "Приложения" : "Applications";
-    public static string TabNetwork => Ru ? "Сеть" : "Network";
-    public static string TabSettings => Ru ? "Настройки" : "Settings";
-    public static string TabZapret => "Zapret";
+    public static string TabServers => global::VPNRouter.Core.Localization.Strings.TabServers;
+    public static string TabApps => global::VPNRouter.Core.Localization.Strings.TabApps;
+    public static string TabNetwork => global::VPNRouter.Core.Localization.Strings.TabNetwork;
+    public static string TabSettings => global::VPNRouter.Core.Localization.Strings.TabSettings;
+    public static string TabZapret => global::VPNRouter.Core.Localization.Strings.TabZapret;
     // v2.30.6-r1 (UX-46 fix): sub-tab + every reference elsewhere in app
     // ("Telegram-прокси" in Simple-mode hints, ServiceMasterSubtitle,
     // AutostartBootSectionSub, etc.) used the user-friendly name. Sub-tab
     // and all VM labels (LblTabTelegram / LblToolTgProxy) read from this.
-    public static string TabTgWsProxy => Ru ? "Telegram-прокси" : "Telegram proxy";
+    public static string TabTgWsProxy => global::VPNRouter.Core.Localization.Strings.TabTgWsProxy;
 
     // ── Config mode ──
     // v2.30.1-r3: was "VLESS Серверы" / "VLESS Servers". Renamed to plain
     // "Серверы" / "Servers" — the sub-tab is no longer VLESS-specific
     // conceptually; future protocol support (Hysteria2, TUIC, SS2022)
     // would also live here, so the VLESS prefix would be misleading.
-    public static string VlessServers => Ru ? "Серверы" : "Servers";
-    public static string CustomConfigJson => Ru ? "Свой конфиг (JSON)" : "Custom Config (JSON)";
-    public static string ModeManual => Ru ? "Ручной" : "Manual";
-    public static string ModeSubscribe => Ru ? "Подписка" : "Subscribe";
-    public static string ModeCustomConfig => Ru ? "Свой конфиг" : "Custom Config";
-    public static string SubscribeMode => Ru ? "Подписка" : "Subscribe";
+    public static string VlessServers => global::VPNRouter.Core.Localization.Strings.VlessServers;
+    public static string CustomConfigJson => global::VPNRouter.Core.Localization.Strings.CustomConfigJson;
+    public static string ModeManual => global::VPNRouter.Core.Localization.Strings.ModeManual;
+    public static string ModeSubscribe => global::VPNRouter.Core.Localization.Strings.ModeSubscribe;
+    public static string ModeCustomConfig => global::VPNRouter.Core.Localization.Strings.ModeCustomConfig;
+    public static string SubscribeMode => global::VPNRouter.Core.Localization.Strings.SubscribeMode;
     // v2.30.5-r1 (UX-34 fix): drop the EN duplicate inside RU placeholder.
     // Pre-r1 was "URL подписки (subscription link)" — same translation
     // shown twice. Now just "URL подписки".
-    public static string SubscriptionUrlHint => Ru ? "URL подписки" : "Subscription URL";
-    public static string SyncButton => Ru ? "Обновить" : "Sync";
-    public static string Syncing => Ru ? "Синхронизация..." : "Syncing...";
-    public static string SyncComplete(int count) => Ru ? $"Получено {count} серверов" : $"Fetched {count} servers";
-    public static string SyncFailed(string err) => Ru ? $"Ошибка синхронизации: {err}" : $"Sync failed: {err}";
-    public static string SyncEmpty => Ru ? "Подписка вернула 0 серверов" : "Subscription returned 0 servers";
-    public static string PasteVlessUri => Ru ? "Вставьте VLESS URI:" : "Paste VLESS URI(s):";
+    public static string SubscriptionUrlHint => global::VPNRouter.Core.Localization.Strings.SubscriptionUrlHint;
+    public static string SyncButton => global::VPNRouter.Core.Localization.Strings.SyncButton;
+    public static string Syncing => global::VPNRouter.Core.Localization.Strings.Syncing;
+    public static string SyncComplete(int count) => global::VPNRouter.Core.Localization.Strings.SyncComplete(count);
+    public static string SyncFailed(string err) => global::VPNRouter.Core.Localization.Strings.SyncFailed(err);
+    public static string SyncEmpty => global::VPNRouter.Core.Localization.Strings.SyncEmpty;
+    public static string PasteVlessUri => global::VPNRouter.Core.Localization.Strings.PasteVlessUri;
 
     // ── Buttons ──
-    public static string StartVPN => Ru ? "\u25b6  Запустить VPN" : "\u25b6  Start VPN";
-    public static string StopVPN => Ru ? "\u2b1b  Остановить VPN" : "\u2b1b  Stop VPN";
-    public static string AddServers => Ru ? "Добавить сервер(ы)" : "Add Server(s)";
-    public static string Remove => Ru ? "Удалить" : "Remove";
-    public static string AddConfig => Ru ? "Добавить конфиг..." : "Add Config...";
-    public static string Apply => Ru ? "\u21bb  Применить" : "\u21bb  Apply";
-    public static string BtnAdd => Ru ? "Добавить" : "Add";
-    public static string RemoveChecked => Ru ? "Удалить выбранные" : "Remove checked";
+    public static string StartVPN => global::VPNRouter.Core.Localization.Strings.StartVPN;
+    public static string StopVPN => global::VPNRouter.Core.Localization.Strings.StopVPN;
+    public static string AddServers => global::VPNRouter.Core.Localization.Strings.AddServers;
+    public static string Remove => global::VPNRouter.Core.Localization.Strings.Remove;
+    public static string AddConfig => global::VPNRouter.Core.Localization.Strings.AddConfig;
+    public static string Apply => global::VPNRouter.Core.Localization.Strings.Apply;
+    public static string BtnAdd => global::VPNRouter.Core.Localization.Strings.BtnAdd;
+    public static string RemoveChecked => global::VPNRouter.Core.Localization.Strings.RemoveChecked;
 
     // ── Apps tab ──
-    public static string SplitTunnel => Ru ? "Split Tunnel (выбранные приложения)" : "Split Tunnel (selected apps)";
-    public static string FullTunnel => Ru ? "Full Tunnel (весь трафик)" : "Full Tunnel (all traffic)";
-    public static string AppsHint => Ru
-        ? "Выберите группы для маршрутизации через VPN:"
-        : "Check groups to route through VPN:";
-    public static string CustomAppLabel => Ru
-        ? "Добавить приложение (имя процесса):"
-        : "Add custom app (process name):";
+    public static string SplitTunnel => global::VPNRouter.Core.Localization.Strings.SplitTunnel;
+    public static string FullTunnel => global::VPNRouter.Core.Localization.Strings.FullTunnel;
+    public static string AppsHint => global::VPNRouter.Core.Localization.Strings.AppsHint;
+    public static string CustomAppLabel => global::VPNRouter.Core.Localization.Strings.CustomAppLabel;
     // v2.30.6-r1 (UX-41 fix): bilingual button label for the Apps tab
     // "+ Add" button. Pre-r1 was hardcoded EN string in
     // ApplicationsPage.axaml (D1 rule violation).
-    public static string AddCustomAppBtn => Ru ? "+ Добавить" : "+ Add";
+    public static string AddCustomAppBtn => global::VPNRouter.Core.Localization.Strings.AddCustomAppBtn;
 
     // ── Header ──
-    public static string ThemeDark => Ru ? "\u25cf Тёмная" : "\u25cf Dark";
-    public static string ThemeLight => Ru ? "\u25cb Светлая" : "\u25cb Light";
+    public static string ThemeDark => global::VPNRouter.Core.Localization.Strings.ThemeDark;
+    public static string ThemeLight => global::VPNRouter.Core.Localization.Strings.ThemeLight;
 
     // ── Status ──
-    public static string NotConnected => Ru ? "Не подключено" : "Not connected";
+    public static string NotConnected => global::VPNRouter.Core.Localization.Strings.NotConnected;
     public static string Connected(string mode, string? serverName, string? serverIp)
     {
         var prefix = Ru ? $"Подключено [{mode}]" : $"Connected [{mode}]";
@@ -93,87 +94,66 @@ public static class Strings
     }
 
     // ── Action states ──
-    public static string Starting => Ru ? "Запуск..." : "Starting...";
-    public static string Stopping => Ru ? "Остановка..." : "Stopping...";
+    public static string Starting => global::VPNRouter.Core.Localization.Strings.Starting;
+    public static string Stopping => global::VPNRouter.Core.Localization.Strings.Stopping;
 
     // ── Server list columns ──
-    public static string ColName => Ru ? "Имя" : "Name";
-    public static string ColServer => Ru ? "Сервер" : "Server";
-    public static string ColPort => Ru ? "Порт" : "Port";
-    public static string ColSecurity => Ru ? "Защита" : "Security";
+    public static string ColName => global::VPNRouter.Core.Localization.Strings.ColName;
+    public static string ColServer => global::VPNRouter.Core.Localization.Strings.ColServer;
+    public static string ColPort => global::VPNRouter.Core.Localization.Strings.ColPort;
+    public static string ColSecurity => global::VPNRouter.Core.Localization.Strings.ColSecurity;
     // v2.25.3 — extra column labels for the redesigned Servers / Subscribe rows
-    public static string ColIp => "IP";
+    public static string ColIp => global::VPNRouter.Core.Localization.Strings.ColIp;
+    // app-only: Core has bilingual "Пинг"/"Ping" (Bug-AND-016 fix), App stayed
+    // EN-only. Classified as TEXT-DRIFT to avoid silent behaviour change in
+    // this dedup pass. Follow-up: switch to pass-through (Core's bilingual
+    // version is strictly better) once we verify no Windows-test snapshot pins
+    // the EN-only string.
     public static string ColPing => "Ping";
     // v2.30.6-r1 (UX-23/32 fix): tooltip on Ping column header — explains
     // the "—" placeholder users see before any test has been run.
-    public static string ColPingTooltip => Ru
-        ? "Задержка в мс. «—» означает «не запускалось» — нажмите «Проверить все»."
-        : "Latency in ms. \"—\" means not measured — click \"Check all\".";
+    public static string ColPingTooltip => global::VPNRouter.Core.Localization.Strings.ColPingTooltip;
 
     // v2.25.4 — Settings/Routing radio-card descriptions (Phase 4 redesign).
     // Each tunnel mode gets a one-line subtitle under the title so the user
     // understands the choice without hovering for a tooltip.
-    public static string RoutingDescription => Ru
-        ? "Определяет, какой трафик пойдёт через VPN."
-        : "Determines which traffic goes through the VPN.";
+    public static string RoutingDescription => global::VPNRouter.Core.Localization.Strings.RoutingDescription;
     // v2.30.3-r1 (UX-9 D1 rule): localize tunnel mode titles. Previous
     // pre-r1 used hardcoded English in both locales which violated the
     // "no English in RU UI" project rule.
-    public static string SplitTunnelTitle => Ru ? "Раздельный туннель" : "Split Tunnel";
-    public static string SplitTunnelSubtitle => Ru
-        ? "Только выбранные приложения. Остальное идёт напрямую."
-        : "Only selected apps. Everything else goes direct.";
-    public static string FullTunnelTitle => Ru ? "Полный туннель" : "Full Tunnel";
-    public static string FullTunnelSubtitle => Ru
-        ? "Весь трафик ОС через VPN, включая игры и банки."
-        : "All OS traffic through VPN — games and banks included.";
+    public static string SplitTunnelTitle => global::VPNRouter.Core.Localization.Strings.SplitTunnelTitle;
+    public static string SplitTunnelSubtitle => global::VPNRouter.Core.Localization.Strings.SplitTunnelSubtitle;
+    public static string FullTunnelTitle => global::VPNRouter.Core.Localization.Strings.FullTunnelTitle;
+    public static string FullTunnelSubtitle => global::VPNRouter.Core.Localization.Strings.FullTunnelSubtitle;
 
     // Service actions in Settings → Autostart (moved here from the footer
     // when MainWindow compacted its footer in v2.25.0).
-    public static string ServiceStatusLabel => Ru ? "Служба VPN" : "VPN Service";
-    public static string ServiceRunningText => Ru ? "Работает" : "Running";
-    public static string ServiceStoppedText => Ru ? "Не запущена" : "Not running";
-    public static string ServiceInstalledText => Ru ? "Установлена" : "Installed";
-    public static string ServiceNotInstalledText => Ru ? "Не установлена" : "Not installed";
+    public static string ServiceStatusLabel => global::VPNRouter.Core.Localization.Strings.ServiceStatusLabel;
+    public static string ServiceRunningText => global::VPNRouter.Core.Localization.Strings.ServiceRunningText;
+    public static string ServiceStoppedText => global::VPNRouter.Core.Localization.Strings.ServiceStoppedText;
+    public static string ServiceInstalledText => global::VPNRouter.Core.Localization.Strings.ServiceInstalledText;
+    public static string ServiceNotInstalledText => global::VPNRouter.Core.Localization.Strings.ServiceNotInstalledText;
 
     // v2.26.0 — master service toggle + grouping labels for the refactored
     // Autostart panel (single source of truth for the install state +
     // clearly-named sub-groups for the two categories of autostart).
-    public static string ServiceMasterTitle => Ru
-        ? "Фоновая служба Windows"
-        : "Windows background service";
-    public static string ServiceMasterSubtitle => Ru
-        ? "Запускает VPN / Zapret / Telegram-прокси при загрузке ОС до входа в систему. Требует прав администратора."
-        : "Starts VPN / Zapret / Telegram proxy at OS boot before you log in. Requires administrator privileges.";
-    public static string ServiceEnableLabel => Ru
-        ? "Включить фоновую службу"
-        : "Enable background service";
-    public static string ServiceInstalling => Ru ? "Установка..." : "Installing...";
-    public static string ServiceRemoving => Ru ? "Удаление..." : "Removing...";
-    public static string ServiceComponentsHeader => Ru
-        ? "Запускать при старте службы"
-        : "Start automatically with the service";
-    public static string ServiceComponentsDisabledHint => Ru
-        ? "Флаги применятся после включения службы выше."
-        : "Flags take effect once the service above is enabled.";
-    public static string AutostartUiSessionHeader => Ru
-        ? "Пользовательский сеанс"
-        : "User session";
+    public static string ServiceMasterTitle => global::VPNRouter.Core.Localization.Strings.ServiceMasterTitle;
+    public static string ServiceMasterSubtitle => global::VPNRouter.Core.Localization.Strings.ServiceMasterSubtitle;
+    public static string ServiceEnableLabel => global::VPNRouter.Core.Localization.Strings.ServiceEnableLabel;
+    public static string ServiceInstalling => global::VPNRouter.Core.Localization.Strings.ServiceInstalling;
+    public static string ServiceRemoving => global::VPNRouter.Core.Localization.Strings.ServiceRemoving;
+    public static string ServiceComponentsHeader => global::VPNRouter.Core.Localization.Strings.ServiceComponentsHeader;
+    public static string ServiceComponentsDisabledHint => global::VPNRouter.Core.Localization.Strings.ServiceComponentsDisabledHint;
+    public static string AutostartUiSessionHeader => global::VPNRouter.Core.Localization.Strings.AutostartUiSessionHeader;
 
     // v2.27 Bug C — two-section layout for the Autostart panel, grouping
     // controls by WHEN the autostart happens rather than by which Windows
     // mechanism it's wired to. Makes "I want VPN on boot" actionable via a
     // single checkbox instead of forcing users to understand service vs.
     // Run-key vs. yaml flag.
-    public static string AutostartBootSectionTitle => Ru
-        ? "На старте Windows (до логина)"
-        : "At Windows startup (before sign-in)";
-    public static string AutostartBootSectionSub => Ru
-        ? "Нужна служба Windows для запуска VPN, Zapret или Telegram-прокси до входа пользователя"
-        : "Needs the Windows service to start VPN, Zapret or Telegram proxy before a user signs in";
-    public static string AutostartComponentsInfoHint => Ru
-        ? "Эти флаги читает служба при boot. Требуется установленная служба."
-        : "These flags are read by the service at boot. Requires the service to be installed.";
+    public static string AutostartBootSectionTitle => global::VPNRouter.Core.Localization.Strings.AutostartBootSectionTitle;
+    public static string AutostartBootSectionSub => global::VPNRouter.Core.Localization.Strings.AutostartBootSectionSub;
+    public static string AutostartComponentsInfoHint => global::VPNRouter.Core.Localization.Strings.AutostartComponentsInfoHint;
     // v2.31.10 (autostart UX clarity): per-component status badge text shown
     // below each VPN/Zapret/TgProxy autostart CheckBox. User report — "Auto-
     // start with Windows for tgproxy doesn't work". Without a status indicator
@@ -187,43 +167,26 @@ public static class Strings
     //     when the user logs into the App, not at OS boot
     //   • Red ⛔: no service AND no App-side bootstrap → the toggle does
     //     literally nothing; show the strongest hint to install the service
-    public static string AutostartStatusBoot => Ru
-        ? "✓ Через службу Windows (на старте ОС)"
-        : "✓ Via Windows Service (at boot)";
-    public static string AutostartStatusLoginFallback => Ru
-        ? "⚠ Служба не установлена — сработает после входа в приложение"
-        : "⚠ Service not installed — will fire after App login";
-    public static string AutostartStatusNoBoot => Ru
-        ? "⛔ Не сработает без службы Windows"
-        : "⛔ Will not fire without the Windows service";
+    public static string AutostartStatusBoot => global::VPNRouter.Core.Localization.Strings.AutostartStatusBoot;
+    public static string AutostartStatusLoginFallback => global::VPNRouter.Core.Localization.Strings.AutostartStatusLoginFallback;
+    public static string AutostartStatusNoBoot => global::VPNRouter.Core.Localization.Strings.AutostartStatusNoBoot;
     // v2.31.1-r1 (F-4 / UX-6): inline CTA below the warning hint when the
     // service isn't installed — pre-fix the only way to install was scrolling
     // up to the master toggle, which wasn't obvious.
-    public static string BtnInstallServiceInlineCta => Ru
-        ? "Установить службу"
-        : "Install service";
-    public static string TipInstallServiceInlineCta => Ru
-        ? "Установит службу VPNRouter и активирует мастер-тумблер автозапуска выше."
-        : "Installs the VPNRouter Windows service and turns on the master autostart toggle above.";
+    public static string BtnInstallServiceInlineCta => global::VPNRouter.Core.Localization.Strings.BtnInstallServiceInlineCta;
+    public static string TipInstallServiceInlineCta => global::VPNRouter.Core.Localization.Strings.TipInstallServiceInlineCta;
     // v2.31.1-r1 (F-6 / UX-33): tooltip explaining the subscription card
     // metadata format `URL · Ns · refreshed-time`. Pre-fix users wondered
     // what "7s · –" meant — the "s" plural marker on server count read as
     // a time unit and the "–" was opaque.
-    public static string TipSubscriptionMetadata => Ru
-        ? "URL · число серверов в последнем обновлении · когда был последний рефреш. «—» если ни разу не обновлялась."
-        : "URL · server count from last refresh · time since last refresh. \"—\" means it has never been refreshed.";
-    public static string AutostartLoginSectionTitle => Ru
-        ? "При входе пользователя"
-        : "At user sign-in";
+    public static string TipSubscriptionMetadata => global::VPNRouter.Core.Localization.Strings.TipSubscriptionMetadata;
+    public static string AutostartLoginSectionTitle => global::VPNRouter.Core.Localization.Strings.AutostartLoginSectionTitle;
     // v2.29.0: section A "At system startup (before sign-in)" only renders
     // on Windows (Service-based, no Mac/Linux equivalent yet); section B
     // description should not reference it on Mac/Linux. Pre-r2 EN+RU
     // pointed at "above" assuming Section A was visible, which broke on
     // Mac. Now branches by OS.
-    public static string AutostartLoginAppDescription =>
-        OperatingSystem.IsWindows()
-            ? AutostartLoginAppDescriptionWindows
-            : AutostartLoginAppDescriptionUnix;
+    public static string AutostartLoginAppDescription => global::VPNRouter.Core.Localization.Strings.AutostartLoginAppDescription;
 
     private static string AutostartLoginAppDescriptionUnix => Ru
         ? "Запускает приложение VPNRouter в трей после входа в систему. VPN придётся стартануть вручную."
@@ -235,158 +198,108 @@ public static class Strings
 
     /// <summary>Prominent running-state line with PID, e.g. "● Running — PID 1234".
     /// Replaces the tiny pill that was easy to miss in v2.26.x.</summary>
-    public static string ServiceRunningLine(int pid) => Ru
-        ? $"\u25CF Запущена \u2014 PID {pid}"
-        : $"\u25CF Running \u2014 PID {pid}";
-    public static string ServiceStoppedLine => Ru
-        ? "\u25CB Остановлена"
-        : "\u25CB Stopped";
+    public static string ServiceRunningLine(int pid) => global::VPNRouter.Core.Localization.Strings.ServiceRunningLine(pid);
+    public static string ServiceStoppedLine => global::VPNRouter.Core.Localization.Strings.ServiceStoppedLine;
 
     // v2.27.0-r2 — Simple-mode autostart link-card. Replaces the old
     // SmpAutostartChecked checkbox whose computed-state UX caused the
     // "how do I disable it?" confusion in r1 testing. The card now just
     // navigates into Advanced → Network → Autostart where the full flow
     // (install / configure / uninstall) lives.
-    public static string SmpAutostartCardTitle => Ru
-        ? "Автозапуск"
-        : "Autostart";
-    public static string SmpAutostartCardOn => Ru
-        ? "Служба установлена и запущена"
-        : "Service installed and running";
-    public static string SmpAutostartCardOff => Ru
-        ? $"Настроить автозапуск VPN при старте {OsDisplayName}"
-        : $"Configure VPN autostart at {OsDisplayName} boot";
+    public static string SmpAutostartCardTitle => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardTitle;
+    public static string SmpAutostartCardOn => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardOn;
+    public static string SmpAutostartCardOff => global::VPNRouter.Core.Localization.Strings.SmpAutostartCardOff;
 
     // ── Dialogs ──
-    public static string FailedStartVpn => Ru ? "Не удалось запустить VPN:" : "Failed to start VPN:";
-    public static string AddServerFirst => Ru
-        ? "Сначала добавьте хотя бы один VLESS сервер."
-        : "Add at least one VLESS server first.";
-    public static string SelectSingBoxConfig => Ru ? "Выберите sing-box JSON конфиг" : "Select sing-box JSON config";
-    public static string InvalidConfig => Ru ? "Некорректный конфиг:" : "Invalid config:";
-    public static string ConfigExists(string name) => Ru
-        ? $"Конфиг '{name}' уже существует."
-        : $"Config '{name}' already exists.";
+    public static string FailedStartVpn => global::VPNRouter.Core.Localization.Strings.FailedStartVpn;
+    public static string AddServerFirst => global::VPNRouter.Core.Localization.Strings.AddServerFirst;
+    public static string SelectSingBoxConfig => global::VPNRouter.Core.Localization.Strings.SelectSingBoxConfig;
+    public static string InvalidConfig => global::VPNRouter.Core.Localization.Strings.InvalidConfig;
+    public static string ConfigExists(string name) => global::VPNRouter.Core.Localization.Strings.ConfigExists(name);
 
     // ── Tray ──
-    public static string TrayStart => Ru ? "\u25b6 Запустить VPN" : "\u25b6 Start VPN";
-    public static string TrayStop => Ru ? "\u2b1b Остановить VPN" : "\u2b1b Stop VPN";
-    public static string TraySettings => Ru ? "Настройки..." : "Settings...";
-    public static string TrayExit => Ru ? "Выход" : "Exit";
+    public static string TrayStart => global::VPNRouter.Core.Localization.Strings.TrayStart;
+    public static string TrayStop => global::VPNRouter.Core.Localization.Strings.TrayStop;
+    public static string TraySettings => global::VPNRouter.Core.Localization.Strings.TraySettings;
+    public static string TrayExit => global::VPNRouter.Core.Localization.Strings.TrayExit;
 
     // ── Server detail editor ──
-    public static string FieldName => Ru ? "Имя:" : "Name:";
-    public static string FieldServer => Ru ? "Сервер:" : "Server:";
-    public static string FieldPort => Ru ? "Порт:" : "Port:";
-    public static string FieldUuid => "UUID:";
-    public static string FieldPublicKey => Ru ? "Public Key:" : "Public Key:";
-    public static string FieldShortId => Ru ? "Short ID:" : "Short ID:";
+    public static string FieldName => global::VPNRouter.Core.Localization.Strings.FieldName;
+    public static string FieldServer => global::VPNRouter.Core.Localization.Strings.FieldServer;
+    public static string FieldPort => global::VPNRouter.Core.Localization.Strings.FieldPort;
+    public static string FieldUuid => global::VPNRouter.Core.Localization.Strings.FieldUuid;
+    public static string FieldPublicKey => global::VPNRouter.Core.Localization.Strings.FieldPublicKey;
+    public static string FieldShortId => global::VPNRouter.Core.Localization.Strings.FieldShortId;
 
     // ── Hints ──
-    public static string DoubleClickEditServer => Ru
-        ? "Двойной клик — редактировать сервер. Вставьте VLESS URI выше."
-        : "Double-click to edit server. Paste VLESS URI(s) above.";
-    public static string DoubleClickActiveConfig => Ru
-        ? "Двойной клик — сделать активным. Поддерживается любой протокол."
-        : "Double-click to set active config. Any protocol supported.";
-    public static string AddCustomAppHint => Ru
-        ? "Добавить приложение (имя процесса, например Discord, Chrome):"
-        : "Add custom app (process name, e.g. Discord, Chrome):";
+    public static string DoubleClickEditServer => global::VPNRouter.Core.Localization.Strings.DoubleClickEditServer;
+    public static string DoubleClickActiveConfig => global::VPNRouter.Core.Localization.Strings.DoubleClickActiveConfig;
+    public static string AddCustomAppHint => global::VPNRouter.Core.Localization.Strings.AddCustomAppHint;
     // v2.30.6-r1 (UX-25 fix): drop EN "Custom Config" + "outbound" inside
     // the otherwise-Russian hint. Use natural RU "своим конфигом" +
     // "исходящим" so the sentence reads cleanly in both languages.
-    public static string TcpUdpHint => Ru
-        ? "VLESS+Reality маршрутизирует TCP. Для UDP (игры, QUIC) используйте свой конфиг с TUIC- или Hysteria2-исходящим."
-        : "VLESS+Reality routes TCP only. For UDP (games, QUIC) use a custom config with a TUIC or Hysteria2 outbound.";
+    public static string TcpUdpHint => global::VPNRouter.Core.Localization.Strings.TcpUdpHint;
 
     // ── Bypass / Strict ──
-    public static string BypassRussianTrafficLabel => Ru
-        ? "Российский трафик через реальный IP"
-        : "Russian traffic via real IP";
-    public static string BypassRussianTrafficHint => Ru
-        ? "Сайты и приложения с российскими доменами/IP идут напрямую, минуя VPN. Защищает VPN-сервер от блокировок российскими сервисами."
-        : "Russian domains and IPs go directly, bypassing VPN. Protects the VPN server from being blocked by Russian services.";
-    public static string CheckLeaks => Ru ? "Проверить утечки" : "Check leaks";
-    public static string ShowLogs => Ru ? "Логи" : "Logs";
+    public static string BypassRussianTrafficLabel => global::VPNRouter.Core.Localization.Strings.BypassRussianTrafficLabel;
+    public static string BypassRussianTrafficHint => global::VPNRouter.Core.Localization.Strings.BypassRussianTrafficHint;
+    public static string CheckLeaks => global::VPNRouter.Core.Localization.Strings.CheckLeaks;
+    public static string ShowLogs => global::VPNRouter.Core.Localization.Strings.ShowLogs;
 
-    public static string StrictModeLabel => Ru
-        ? "Строгий режим (быстрая реакция на сбои)"
-        : "Strict mode (faster crash detection)";
-    public static string StrictModeHint => Ru
-        ? "Health check каждые 5 секунд вместо 30. Уменьшает окно потенциальной утечки трафика при крахе sing-box."
-        : "Health check every 5 seconds instead of 30. Reduces the leak window if sing-box silently hangs.";
-    public static string ForceIpv4Label => Ru
-        // v2.30.5-r1 (UX-19 fix): drop the EN-RU mix "IPv6 leak" inside
-        // a Russian sentence. Use natural RU "IPv6-утечек".
-        ? "Только IPv4 (защита от IPv6-утечек)"
-        : "Force IPv4 only (IPv6 leak protection)";
-    public static string FlushDnsLabel => Ru
-        ? "Очищать DNS кэш при подключении"
-        : "Flush DNS cache on connect";
+    public static string StrictModeLabel => global::VPNRouter.Core.Localization.Strings.StrictModeLabel;
+    public static string StrictModeHint => global::VPNRouter.Core.Localization.Strings.StrictModeHint;
+    public static string ForceIpv4Label => global::VPNRouter.Core.Localization.Strings.ForceIpv4Label;
+    public static string FlushDnsLabel => global::VPNRouter.Core.Localization.Strings.FlushDnsLabel;
     // v2.31.6-r18: hint expanded — user feedback iter#7 audit asked
     // why ISP DNS sometimes appears in browserleaks.com / ipleak.net.
     // Default split-tunnel sends non-routed apps' DNS through Cloudflare
     // DoH on the real NIC (not ISP, but leak-tests interpret "Cloudflare
     // DoH client = real IP" as a leak). Strict DNS forces all DNS through
     // the VPN tunnel for that perfect-on-tests outcome.
-    public static string StrictDnsLabel => Ru
-        ? "Строгий DNS (весь DNS через VPN — рекомендуется при leak-тестах)"
-        : "Strict DNS (all DNS via VPN — recommended for leak tests)";
+    public static string StrictDnsLabel => global::VPNRouter.Core.Localization.Strings.StrictDnsLabel;
 
     // ── Updates ──
-    public static string CheckForUpdates => Ru ? "Проверить обновления" : "Check for updates";
-    public static string Checking => Ru ? "Проверка..." : "Checking...";
-    public static string UpToDate => Ru ? "Актуальная версия" : "Up to date";
-    public static string CheckFailed => Ru ? "Ошибка проверки" : "Check failed";
-    public static string UpdateAvailableShort => Ru ? "Обновление доступно" : "Update available";
-    public static string UpdateAvailableMessage => Ru
-        ? "Доступно обновление v{0} ({1:F1} МБ)"
-        : "Update available: v{0} ({1:F1} MB)";
-    public static string UpdateButton => Ru ? "Обновить" : "Update";
-    public static string UpdateDownloading => Ru ? "Загрузка обновления..." : "Downloading update...";
-    public static string UpdateApplying => Ru ? "Применение обновления..." : "Applying update...";
-    public static string UpdateRestarting => Ru ? "Перезапуск..." : "Restarting...";
-    public static string UpdateFailed => Ru ? "Ошибка обновления: {0}" : "Update failed: {0}";
+    public static string CheckForUpdates => global::VPNRouter.Core.Localization.Strings.CheckForUpdates;
+    public static string Checking => global::VPNRouter.Core.Localization.Strings.Checking;
+    public static string UpToDate => global::VPNRouter.Core.Localization.Strings.UpToDate;
+    public static string CheckFailed => global::VPNRouter.Core.Localization.Strings.CheckFailed;
+    public static string UpdateAvailableShort => global::VPNRouter.Core.Localization.Strings.UpdateAvailableShort;
+    public static string UpdateAvailableMessage => global::VPNRouter.Core.Localization.Strings.UpdateAvailableMessage;
+    public static string UpdateButton => global::VPNRouter.Core.Localization.Strings.UpdateButton;
+    public static string UpdateDownloading => global::VPNRouter.Core.Localization.Strings.UpdateDownloading;
+    public static string UpdateApplying => global::VPNRouter.Core.Localization.Strings.UpdateApplying;
+    public static string UpdateRestarting => global::VPNRouter.Core.Localization.Strings.UpdateRestarting;
+    public static string UpdateFailed => global::VPNRouter.Core.Localization.Strings.UpdateFailed;
 
     // ── Channel ──
     // v2.30.3-r1 (BUG-7 fix): footer text shortened so it fits next to
     // the Apply button at narrow window widths (510 px) without
     // overlapping. Pre-r1 the auto-save hint was 44 chars + 38-char
     // button = visible truncation behind the button background.
-    public static string SettingsAutosaved => Ru
-        ? "Авто-сохранение"
-        : "Auto-saved";
-    public static string ApplyNowReloadVpn => Ru
-        ? "↻ Применить"
-        : "↻ Apply";
-    public static string ApplyNowHint => Ru
-        ? "Переприменить настройки к работающему VPN без переподключения (hot-reload через Clash API)"
-        : "Re-apply settings to the running VPN without a reconnect (hot-reload via Clash API)";
+    public static string SettingsAutosaved => global::VPNRouter.Core.Localization.Strings.SettingsAutosaved;
+    public static string ApplyNowReloadVpn => global::VPNRouter.Core.Localization.Strings.ApplyNowReloadVpn;
+    public static string ApplyNowHint => global::VPNRouter.Core.Localization.Strings.ApplyNowHint;
 
-    public static string ChannelStable => Ru ? "● Стабильная" : "● Stable";
-    public static string ChannelExperimental => Ru ? "⚠ Эксперимент." : "⚠ Experimental";
+    public static string ChannelStable => global::VPNRouter.Core.Localization.Strings.ChannelStable;
+    public static string ChannelExperimental => global::VPNRouter.Core.Localization.Strings.ChannelExperimental;
 
     // ── Telegram Proxy ──
-    public static string TabTelegram => "Telegram";
-    public static string TgProxyDescription => Ru
-        ? "MTProto прокси для обхода блокировки Telegram. Работает локально, трафик идёт напрямую к серверам Telegram через WebSocket."
-        : "MTProto proxy to bypass Telegram blocking. Runs locally, traffic goes directly to Telegram servers via WebSocket.";
-    public static string TgProxySetupHint => Ru
-        ? "Настройка: Telegram \u2192 Настройки \u2192 Продвинутые \u2192 Тип соединения \u2192 MTProto Proxy"
-        : "Setup: Telegram \u2192 Settings \u2192 Advanced \u2192 Connection type \u2192 MTProto Proxy";
-    public static string TgProxyPort => Ru ? "Порт:" : "Port:";
-    public static string TgProxySecret => Ru ? "Secret:" : "Secret:";
-    public static string TgProxyLink => Ru ? "Ссылка для подключения:" : "Proxy link:";
-    public static string TgProxyCopy => Ru ? "Копировать" : "Copy";
-    public static string TgProxyCopied => Ru ? "Скопировано!" : "Copied!";
-    public static string TgProxyRegenerate => Ru ? "Новый" : "New";
+    public static string TabTelegram => global::VPNRouter.Core.Localization.Strings.TabTelegram;
+    public static string TgProxyDescription => global::VPNRouter.Core.Localization.Strings.TgProxyDescription;
+    public static string TgProxySetupHint => global::VPNRouter.Core.Localization.Strings.TgProxySetupHint;
+    public static string TgProxyPort => global::VPNRouter.Core.Localization.Strings.TgProxyPort;
+    public static string TgProxySecret => global::VPNRouter.Core.Localization.Strings.TgProxySecret;
+    public static string TgProxyLink => global::VPNRouter.Core.Localization.Strings.TgProxyLink;
+    public static string TgProxyCopy => global::VPNRouter.Core.Localization.Strings.TgProxyCopy;
+    public static string TgProxyCopied => global::VPNRouter.Core.Localization.Strings.TgProxyCopied;
+    public static string TgProxyRegenerate => global::VPNRouter.Core.Localization.Strings.TgProxyRegenerate;
     // v2.30.7-r4 — F-16 fix: was "Запустить Telegram Proxy" / "Остановить Telegram Proxy"
     // — mixed-case "Telegram Proxy" inside RU sentence (D1 violation) +
     // inconsistent with the sub-tab name "Telegram-прокси" (with hyphen, lowercase).
     // Aligned both labels with the canonical sub-tab name.
-    public static string TgProxyStart => Ru ? "Запустить Telegram-прокси" : "Start Telegram proxy";
-    public static string TgProxyStop  => Ru ? "Остановить Telegram-прокси" : "Stop Telegram proxy";
-    public static string TgProxyOpenInTelegram => Ru ? "Открыть в Telegram" : "Open in Telegram";
+    public static string TgProxyStart => global::VPNRouter.Core.Localization.Strings.TgProxyStart;
+    public static string TgProxyStop => global::VPNRouter.Core.Localization.Strings.TgProxyStop;
+    public static string TgProxyOpenInTelegram => global::VPNRouter.Core.Localization.Strings.TgProxyOpenInTelegram;
 
     // v2.31.6-r5 (TG-2) — unified footer action label per user feedback
     // 2026-05-03 night: «запуск прокси и открыть телеграм нужно объединить,
@@ -395,13 +308,8 @@ public static class Strings
     // longer plays "click body button + click footer button" two-step.
     // The body button demotes to a secondary "re-pair" fallback for
     // sessions where Telegram client lost the proxy entry.
-    public static string TgProxyStartAndOpen => Ru
-        ? "Запустить и открыть Telegram"
-        : "Start & open Telegram";
-    public static string TgProxySetupOnce => Ru
-        // v2.30.5-r1 (UX-55 fix): EN "Start/Stop" inside RU sentence.
-        ? "Нажмите 'Открыть в Telegram' один раз для настройки прокси. После этого просто Запуск/Остановка."
-        : "Click 'Open in Telegram' once to set up the proxy. After that just Start/Stop.";
+    public static string TgProxyStartAndOpen => global::VPNRouter.Core.Localization.Strings.TgProxyStartAndOpen;
+    public static string TgProxySetupOnce => global::VPNRouter.Core.Localization.Strings.TgProxySetupOnce;
 
     // v2.31.6-r9 — purged 5 unused TgProxySetup* + TgProxyClientAutoHint
     // + TgProxyAdvanced strings that were added in v2.31.6-r1's two-state
@@ -410,9 +318,7 @@ public static class Strings
     // r3+ pages no longer bind them. Iter#4 audit confirmed zero XAML hits.
     // TgProxyReopenInTelegram below is the only string from that batch
     // still in use (TelegramPage body button label).
-    public static string TgProxyReopenInTelegram => Ru
-        ? "Открыть в Telegram повторно"
-        : "Reopen in Telegram";
+    public static string TgProxyReopenInTelegram => global::VPNRouter.Core.Localization.Strings.TgProxyReopenInTelegram;
 
     // v2.31.6-r9 — A11y: full-sentence announcements for short
     // button labels («Copy» / «New») that screen readers can't
@@ -421,46 +327,38 @@ public static class Strings
     // buttons in TelegramPage. Visible button text stays short
     // («Copy» / «New») per the design — only Narrator/VoiceOver
     // hears the longer phrase.
-    public static string TgProxyCopySecretA11y => Ru
-        ? "Скопировать MTProto secret в буфер обмена"
-        : "Copy MTProto secret to clipboard";
-    public static string TgProxyRegenerateSecretA11y => Ru
-        ? "Сгенерировать новый MTProto secret"
-        : "Generate new MTProto secret";
+    public static string TgProxyCopySecretA11y => global::VPNRouter.Core.Localization.Strings.TgProxyCopySecretA11y;
+    public static string TgProxyRegenerateSecretA11y => global::VPNRouter.Core.Localization.Strings.TgProxyRegenerateSecretA11y;
 
-    public static string OpenFolder => Ru ? "Открыть папку" : "Open folder";
-    public static string OpenGitHub => "GitHub";
+    public static string OpenFolder => global::VPNRouter.Core.Localization.Strings.OpenFolder;
+    public static string OpenGitHub => global::VPNRouter.Core.Localization.Strings.OpenGitHub;
 
     // ── Autostart ──
     // ── Subscriptions (multi) ──
-    public static string SubscriptionsSection => Ru ? "Подписки" : "Subscriptions";
-    public static string SubscriptionNameHint => Ru ? "Имя" : "Name";
-    public static string AddSubscription => Ru ? "+ Добавить" : "+ Add";
-    public static string RefreshAll => Ru ? "Обновить все" : "Refresh all";
-    public static string NeverRefreshed => Ru ? "никогда" : "never";
-    public static string SubUpdatedAt => Ru ? "Обновлено" : "Updated";
+    public static string SubscriptionsSection => global::VPNRouter.Core.Localization.Strings.SubscriptionsSection;
+    public static string SubscriptionNameHint => global::VPNRouter.Core.Localization.Strings.SubscriptionNameHint;
+    public static string AddSubscription => global::VPNRouter.Core.Localization.Strings.AddSubscription;
+    public static string RefreshAll => global::VPNRouter.Core.Localization.Strings.RefreshAll;
+    public static string NeverRefreshed => global::VPNRouter.Core.Localization.Strings.NeverRefreshed;
+    public static string SubUpdatedAt => global::VPNRouter.Core.Localization.Strings.SubUpdatedAt;
 
     // ── Zapret tools ──
-    public static string ToolsSection => Ru ? "Инструменты" : "Tools";
-    public static string RunDiagnostics => Ru ? "Запустить диагностику" : "Run diagnostics";
-    public static string ClearDiscordCache => Ru ? "Очистить кэш Discord" : "Clear Discord cache";
-    public static string UpdateHostsFile => Ru ? "Обновить hosts (Flowseal)" : "Update hosts (Flowseal)";
-    public static string OpenServiceMenu => Ru
-        ? "Открыть меню service.bat"
-        : "Open service.bat menu";
+    public static string ToolsSection => global::VPNRouter.Core.Localization.Strings.ToolsSection;
+    public static string RunDiagnostics => global::VPNRouter.Core.Localization.Strings.RunDiagnostics;
+    public static string ClearDiscordCache => global::VPNRouter.Core.Localization.Strings.ClearDiscordCache;
+    public static string UpdateHostsFile => global::VPNRouter.Core.Localization.Strings.UpdateHostsFile;
+    public static string OpenServiceMenu => global::VPNRouter.Core.Localization.Strings.OpenServiceMenu;
     // v2.31.0-r4 (F-15): tooltip on the service.bat menu button.
-    public static string TipOpenServiceMenu => Ru
-        ? "Открыть служебное меню Zapret (winws.exe service.bat) — установка/удаление службы и переключение стратегии."
-        : "Open the Zapret service menu (winws.exe service.bat) — install/remove service and switch strategy.";
+    public static string TipOpenServiceMenu => global::VPNRouter.Core.Localization.Strings.TipOpenServiceMenu;
 
     // ── Zapret sections (master-detail) ──
-    public static string ZapretSecStatus       => Ru ? "Статус" : "Status";
-    public static string ZapretSecStrategy     => Ru ? "Стратегия" : "Strategy";
-    public static string ZapretSecHosts        => "Hosts";
-    public static string ZapretSecFilters      => Ru ? "Фильтры" : "Filters";
-    public static string ZapretSecUpdates      => Ru ? "Обновления" : "Updates";
-    public static string ZapretSecDiagnostics  => Ru ? "Диагностика" : "Diagnostics";
-    public static string ZapretSecAdvanced     => Ru ? "Дополнительно" : "Advanced";
+    public static string ZapretSecStatus => global::VPNRouter.Core.Localization.Strings.ZapretSecStatus;
+    public static string ZapretSecStrategy => global::VPNRouter.Core.Localization.Strings.ZapretSecStrategy;
+    public static string ZapretSecHosts => global::VPNRouter.Core.Localization.Strings.ZapretSecHosts;
+    public static string ZapretSecFilters => global::VPNRouter.Core.Localization.Strings.ZapretSecFilters;
+    public static string ZapretSecUpdates => global::VPNRouter.Core.Localization.Strings.ZapretSecUpdates;
+    public static string ZapretSecDiagnostics => global::VPNRouter.Core.Localization.Strings.ZapretSecDiagnostics;
+    public static string ZapretSecAdvanced => global::VPNRouter.Core.Localization.Strings.ZapretSecAdvanced;
 
     // v2.31.6-r7 — section descriptions for the Zapret master-detail.
     // Iter#3 audit (2026-05-04) flagged the page as «возможно слишком
@@ -470,99 +368,67 @@ public static class Strings
     // each section's purpose at a glance and can ignore power-user
     // sections without feeling they're missing something. Status keeps
     // its existing LblDpiDescription which already serves this role.
-    public static string ZapretSecStrategyDesc => Ru
-        ? "Технология обхода DPI. Если одна не работает — попробуйте другую."
-        : "DPI bypass technique. If one doesn't work — try another.";
-    public static string ZapretSecHostsDesc => Ru
-        ? "Правки файла hosts: Discord voice + Flowseal-список."
-        : "Hosts-file overrides: Discord voice + Flowseal list.";
-    public static string ZapretSecFiltersDesc => Ru
-        ? "Какой трафик пропускать через обход DPI."
-        : "Which traffic to route through DPI bypass.";
-    public static string ZapretSecAdvancedDesc => Ru
-        ? "Диагностика и управление службой. Большинству не нужно."
-        : "Diagnostics and service controls. Not needed for most users.";
+    public static string ZapretSecStrategyDesc => global::VPNRouter.Core.Localization.Strings.ZapretSecStrategyDesc;
+    public static string ZapretSecHostsDesc => global::VPNRouter.Core.Localization.Strings.ZapretSecHostsDesc;
+    public static string ZapretSecFiltersDesc => global::VPNRouter.Core.Localization.Strings.ZapretSecFiltersDesc;
+    public static string ZapretSecAdvancedDesc => global::VPNRouter.Core.Localization.Strings.ZapretSecAdvancedDesc;
 
     // Filters
-    public static string GameFilter => Ru ? "Игровой фильтр (диапазон 1024-65535)" : "Game filter (port range 1024-65535)";
-    public static string GameFilterOff => Ru ? "Выкл" : "Off";
-    public static string GameFilterAll => Ru ? "TCP + UDP" : "TCP + UDP";
-    public static string GameFilterTcp => "TCP";
-    public static string GameFilterUdp => "UDP";
+    public static string GameFilter => global::VPNRouter.Core.Localization.Strings.GameFilter;
+    public static string GameFilterOff => global::VPNRouter.Core.Localization.Strings.GameFilterOff;
+    public static string GameFilterAll => global::VPNRouter.Core.Localization.Strings.GameFilterAll;
+    public static string GameFilterTcp => global::VPNRouter.Core.Localization.Strings.GameFilterTcp;
+    public static string GameFilterUdp => global::VPNRouter.Core.Localization.Strings.GameFilterUdp;
 
-    public static string IpSetFilter => Ru ? "IPSet фильтр" : "IPSet filter";
+    public static string IpSetFilter => global::VPNRouter.Core.Localization.Strings.IpSetFilter;
     // v2.30.7-r4 — F-13 fix: "Any" / "Loaded" were left as English in the
     // RU dropdown, mixing inside an otherwise-Russian sub-section
     // (D1 violation). Localized while keeping the parenthetical
     // explainers intact.
-    public static string IpSetAny => Ru ? "Все (весь трафик)" : "Any (all traffic)";
-    public static string IpSetLoaded => Ru ? "Из файла (список загружен)" : "Loaded (from list file)";
+    public static string IpSetAny => global::VPNRouter.Core.Localization.Strings.IpSetAny;
+    public static string IpSetLoaded => global::VPNRouter.Core.Localization.Strings.IpSetLoaded;
     // v2.30.4-r1 (UX-51 fix): align off-state copy with GameFilterOff
     // ("Выкл" / "Off"). Pre-r1 had "None (отключено)" inconsistent with
     // the dropdown sibling.
-    public static string IpSetNone => Ru ? "Выкл" : "Off";
+    public static string IpSetNone => global::VPNRouter.Core.Localization.Strings.IpSetNone;
 
     // Updates
-    public static string UpdateIpSet => Ru ? "Обновить IPSet список" : "Update IPSet list";
+    public static string UpdateIpSet => global::VPNRouter.Core.Localization.Strings.UpdateIpSet;
     // v2.30.4-r1 (UX-52 fix): align case with the sub-tab name "Zapret"
     // (capitalized). Pre-r1 had "zapret" lowercase here while everywhere
     // else it's "Zapret" — inconsistent.
-    public static string AutoUpdateCheckLabel => Ru
-        ? "Авто-проверка обновлений Zapret"
-        : "Auto-check Zapret updates";
+    public static string AutoUpdateCheckLabel => global::VPNRouter.Core.Localization.Strings.AutoUpdateCheckLabel;
 
     // Advanced
-    public static string RunTestsLabel => Ru ? "Запустить тесты сети" : "Run network tests";
-    public static string RemoveServiceLabel => Ru ? "Удалить службу Zapret" : "Remove Zapret service";
+    public static string RunTestsLabel => global::VPNRouter.Core.Localization.Strings.RunTestsLabel;
+    public static string RemoveServiceLabel => global::VPNRouter.Core.Localization.Strings.RemoveServiceLabel;
 
-    public static string ApplyChanges => Ru ? "↻  Применить изменения" : "↻  Apply changes";
-    public static string ChangesApplied => Ru ? "Изменения применены" : "Changes applied";
-    public static string ApplyFailed => Ru ? "Не удалось применить" : "Apply failed";
+    public static string ApplyChanges => global::VPNRouter.Core.Localization.Strings.ApplyChanges;
+    public static string ChangesApplied => global::VPNRouter.Core.Localization.Strings.ChangesApplied;
+    public static string ApplyFailed => global::VPNRouter.Core.Localization.Strings.ApplyFailed;
 
-    public static string AddCategory => Ru ? "+ Новая категория" : "+ New category";
-    public static string EnableWholeGroup => Ru ? "Включить всю группу" : "Enable whole group";
-    public static string CategoryNamePrompt => Ru ? "Имя категории:" : "Category name:";
-    public static string AddAppHint => Ru ? "имя процесса (например Discord)" : "process name (e.g. Discord)";
+    public static string AddCategory => global::VPNRouter.Core.Localization.Strings.AddCategory;
+    public static string EnableWholeGroup => global::VPNRouter.Core.Localization.Strings.EnableWholeGroup;
+    public static string CategoryNamePrompt => global::VPNRouter.Core.Localization.Strings.CategoryNamePrompt;
+    public static string AddAppHint => global::VPNRouter.Core.Localization.Strings.AddAppHint;
 
     // ── App group display names ──
     // v2.30.4-r1 (UX-37/38 fix): all profile keys now have user-facing
     // display names. Pre-r1 only 5 of 9 categories were translated;
     // others leaked snake_case JSON keys ("AI_Tools", "Privacy_Shell",
     // "Messengers") into the UI.
-    public static string GroupDisplayName(string internalName) => internalName switch
-    {
-        "Discord_Privacy" => "Discord",
-        "Messengers"      => Ru ? "Мессенджеры" : "Messengers",
-        "AI_Tools"        => Ru ? "AI-инструменты" : "AI tools",
-        "Browsers"        => Ru ? "Браузеры" : "Browsers",
-        "Work_Suite"      => Ru ? "Работа" : "Work",
-        "Streaming"       => Ru ? "Стриминг" : "Streaming",
-        "Gaming"          => Ru ? "Игры" : "Gaming",
-        "Virtualization"  => Ru ? "Виртуализация" : "Virtualization",
-        "Privacy_Shell"   => Ru ? "Приватность" : "Privacy",
-        "Terminal"        => Ru ? "Терминал" : "Terminal",
-        "Custom Apps"     => Ru ? "Свои" : "Custom",
-        _                 => internalName
-    };
+    public static string GroupDisplayName(string internalName) => global::VPNRouter.Core.Localization.Strings.GroupDisplayName(internalName);
 
-    public static string SectionRouting => Ru ? "Маршрутизация" : "Routing";
-    public static string SectionRules => Ru ? "Правила" : "Rules";
-    public static string SectionLeakProtection => Ru ? "Защита от утечек" : "Leak Protection";
-    public static string SectionContent => Ru ? "Контент" : "Content";
-    public static string SectionUpdates => Ru ? "Обновления" : "Updates";
-    public static string AutostartSection => Ru ? "Автозапуск" : "Autostart";
-    public static string AutostartVpn => Ru
-        ? "Запускать VPN при старте системы"
-        : "Start VPN on system boot";
-    public static string AutostartZapret => Ru
-        ? "Запускать Zapret при старте системы"
-        : "Start Zapret on system boot";
-    public static string AutostartTgProxy => Ru
-        ? "Запускать TgProxy при старте системы"
-        : "Start TgProxy on system boot";
-    public static string AutostartUi => Ru
-        ? $"Запускать интерфейс при входе в {OsDisplayName}"
-        : $"Start UI on {OsDisplayName} logon";
+    public static string SectionRouting => global::VPNRouter.Core.Localization.Strings.SectionRouting;
+    public static string SectionRules => global::VPNRouter.Core.Localization.Strings.SectionRules;
+    public static string SectionLeakProtection => global::VPNRouter.Core.Localization.Strings.SectionLeakProtection;
+    public static string SectionContent => global::VPNRouter.Core.Localization.Strings.SectionContent;
+    public static string SectionUpdates => global::VPNRouter.Core.Localization.Strings.SectionUpdates;
+    public static string AutostartSection => global::VPNRouter.Core.Localization.Strings.AutostartSection;
+    public static string AutostartVpn => global::VPNRouter.Core.Localization.Strings.AutostartVpn;
+    public static string AutostartZapret => global::VPNRouter.Core.Localization.Strings.AutostartZapret;
+    public static string AutostartTgProxy => global::VPNRouter.Core.Localization.Strings.AutostartTgProxy;
+    public static string AutostartUi => global::VPNRouter.Core.Localization.Strings.AutostartUi;
 
     // ── Free Configs ──
     // v2.30.7-r2 — "Свободные" / "Free" was deemed unclear (user
@@ -570,307 +436,188 @@ public static class Strings
     // source (public free pools from 14 sources, server-side
     // pre-aggregated via GH Actions) without sounding like
     // "free trial" or "no-cost product". Fits narrow tab strip.
-    public static string TabFreeConfigs => Ru ? "Публичные" : "Public";
-    public static string FcDashboardTotal     => Ru ? "Всего"         : "Total";
-    public static string FcDashboardWorking   => Ru ? "Работают"      : "Working";
-    public static string FcDashboardTimeout   => Ru ? "Timeout"       : "Timeout";
-    public static string FcDashboardUnreach   => Ru ? "Недоступны"    : "Unreachable";
-    public static string FcDashboardTlsFail   => Ru ? "TLS провал"    : "TLS failed";
-    public static string FcDashboardVerified  => Ru ? "Проверено"     : "Verified";
-    public static string FcDashboardFake      => Ru ? "Подозр."       : "Fake";
-    public static string FcDeepVerify         => Ru ? "✓✓ Найти рабочие конфиги" : "✓✓ Find working configs";
-    public static string FcStatusNoDeepCandidates => Ru
-        ? "Нет кандидатов для глубокой проверки — сначала «Обновить список»."
-        : "No candidates to deep-verify — click 'Refresh list' first.";
-    public static string FcStatusDeepVerifyStart(int target) => Ru
-        ? $"Ищу {target} реально рабочих конфигов..."
-        : $"Hunting for {target} truly working configs...";
-    public static string FcStatusDeepVerifyProbe(int found, int target, int tested, string host) => Ru
-        ? $"Найдено {found}/{target} · проверяю {host}..."
-        : $"Found {found}/{target} · probing {host}...";
-    public static string FcStatusDeepVerifyProgress(int found, int target, int tested, int totalQueue) => Ru
-        ? $"Найдено {found}/{target} · проверено {tested}/{totalQueue}"
-        : $"Found {found}/{target} · tested {tested}/{totalQueue}";
-    public static string FcStatusDeepVerifyDone(int verified) => Ru
-        ? $"Готово: найдено {verified} реально рабочих (✓✓)"
-        : $"Done: {verified} truly working found (✓✓)";
-    public static string FcStatusDeepVerifyExhausted(int verified, int tested) => Ru
-        ? $"Список исчерпан — протестировано {tested}, найдено {verified} рабочих"
-        : $"Queue exhausted — tested {tested}, found {verified} working";
+    public static string TabFreeConfigs => global::VPNRouter.Core.Localization.Strings.TabFreeConfigs;
+    public static string FcDashboardTotal => global::VPNRouter.Core.Localization.Strings.FcDashboardTotal;
+    public static string FcDashboardWorking => global::VPNRouter.Core.Localization.Strings.FcDashboardWorking;
+    public static string FcDashboardTimeout => global::VPNRouter.Core.Localization.Strings.FcDashboardTimeout;
+    public static string FcDashboardUnreach => global::VPNRouter.Core.Localization.Strings.FcDashboardUnreach;
+    public static string FcDashboardTlsFail => global::VPNRouter.Core.Localization.Strings.FcDashboardTlsFail;
+    public static string FcDashboardVerified => global::VPNRouter.Core.Localization.Strings.FcDashboardVerified;
+    public static string FcDashboardFake => global::VPNRouter.Core.Localization.Strings.FcDashboardFake;
+    public static string FcDeepVerify => global::VPNRouter.Core.Localization.Strings.FcDeepVerify;
+    public static string FcStatusNoDeepCandidates => global::VPNRouter.Core.Localization.Strings.FcStatusNoDeepCandidates;
+    public static string FcStatusDeepVerifyStart(int target) => global::VPNRouter.Core.Localization.Strings.FcStatusDeepVerifyStart(target);
+    public static string FcStatusDeepVerifyProbe(int found, int target, int tested, string host) => global::VPNRouter.Core.Localization.Strings.FcStatusDeepVerifyProbe(found, target, tested, host);
+    public static string FcStatusDeepVerifyProgress(int found, int target, int tested, int totalQueue) => global::VPNRouter.Core.Localization.Strings.FcStatusDeepVerifyProgress(found, target, tested, totalQueue);
+    public static string FcStatusDeepVerifyDone(int verified) => global::VPNRouter.Core.Localization.Strings.FcStatusDeepVerifyDone(verified);
+    public static string FcStatusDeepVerifyExhausted(int verified, int tested) => global::VPNRouter.Core.Localization.Strings.FcStatusDeepVerifyExhausted(verified, tested);
 
     // v2.28.5-r2/r4: batched fetch+test+verify status messages
-    public static string FcStatusBatchedSearchStart(int target, int poolSize) => Ru
-        ? $"Поиск {target} рабочих конфигов из пула {poolSize}..."
-        : $"Searching {target} working configs from pool of {poolSize}...";
-    public static string FcStatusBatchedTcpTls(int found, int target, int batchNum, int totalBatches) => Ru
-        ? $"Найдено {found}/{target} · батч {batchNum}/{totalBatches} (TCP+TLS)..."
-        : $"Found {found}/{target} · batch {batchNum}/{totalBatches} (TCP+TLS)...";
-    public static string FcStatusBatchedTcpTlsProgress(int found, int target, int batchNum, int totalBatches, int done, int total) => Ru
-        ? $"Найдено {found}/{target} · батч {batchNum}/{totalBatches} · проверено {done}/{total}"
-        : $"Found {found}/{target} · batch {batchNum}/{totalBatches} · tested {done}/{total}";
-    public static string FcStatusBatchedDeepVerify(int found, int target, int batchNum, int totalBatches, int candidates) => Ru
-        ? $"Найдено {found}/{target} · батч {batchNum}/{totalBatches} · глубокая проверка {candidates} кандидатов..."
-        : $"Found {found}/{target} · batch {batchNum}/{totalBatches} · deep-verifying {candidates} candidates...";
-    public static string FcStatusBatchedFound(int found, int target) => Ru
-        ? $"Найдено {found}/{target} рабочих конфигов..."
-        : $"Found {found}/{target} working configs...";
+    public static string FcStatusBatchedSearchStart(int target, int poolSize) => global::VPNRouter.Core.Localization.Strings.FcStatusBatchedSearchStart(target, poolSize);
+    public static string FcStatusBatchedTcpTls(int found, int target, int batchNum, int totalBatches) => global::VPNRouter.Core.Localization.Strings.FcStatusBatchedTcpTls(found, target, batchNum, totalBatches);
+    public static string FcStatusBatchedTcpTlsProgress(int found, int target, int batchNum, int totalBatches, int done, int total) => global::VPNRouter.Core.Localization.Strings.FcStatusBatchedTcpTlsProgress(found, target, batchNum, totalBatches, done, total);
+    public static string FcStatusBatchedDeepVerify(int found, int target, int batchNum, int totalBatches, int candidates) => global::VPNRouter.Core.Localization.Strings.FcStatusBatchedDeepVerify(found, target, batchNum, totalBatches, candidates);
+    public static string FcStatusBatchedFound(int found, int target) => global::VPNRouter.Core.Localization.Strings.FcStatusBatchedFound(found, target);
     /// <summary>v2.28.5-r6: per-probe status update so the UI doesn't appear
     /// frozen during the deep-verify phase. Each probe takes 3-5s, 5 in
     /// parallel → status flips every ~600 ms.</summary>
-    public static string FcStatusBatchedProbing(int found, int target, string host, int port, string cc) => Ru
-        ? $"Найдено {found}/{target} · проверяю {host}:{port} [{cc}]..."
-        : $"Found {found}/{target} · probing {host}:{port} [{cc}]...";
+    public static string FcStatusBatchedProbing(int found, int target, string host, int port, string cc) => global::VPNRouter.Core.Localization.Strings.FcStatusBatchedProbing(found, target, host, port, cc);
 
-    public static string FcDeepTargetLabel => Ru ? "Цель:" : "Target:";
-    public static string FcDeepExcludeRu   => Ru ? "Пропускать RU" : "Skip RU servers";
+    public static string FcDeepTargetLabel => global::VPNRouter.Core.Localization.Strings.FcDeepTargetLabel;
+    public static string FcDeepExcludeRu => global::VPNRouter.Core.Localization.Strings.FcDeepExcludeRu;
     // v2.30.4-r1 (UX-66 fix): replaced literal "N" placeholder with
     // copy that doesn't pretend to know an exact count. Pre-r1 said
     // "Найдёт N рабочих" leaking the parameter symbol into the UI.
-    public static string FcDeepHint        => Ru
-        ? "Скачает публичные VLESS-конфиги и проверит каждый реальной попыткой подключения. Остановится когда наберётся достаточно рабочих с пингом ниже порога."
-        : "Downloads public VLESS configs and tries each one with a real connection. Stops once enough working ones meet your ping threshold.";
-    public static string FcStatusMainVpnActive => Ru
-        ? "⚠ Основной VPN активен — результаты проверки могут быть недостоверны. Отключите VPN перед глубокой проверкой."
-        : "⚠ Main VPN is active — verification results may be unreliable. Disconnect VPN first.";
-    public static string FcOpenLogs         => Ru ? "📁 Логи"                : "📁 Logs";
-    public static string FcClearFailed      => Ru ? "🧹 Убрать мусор"        : "🧹 Clear dead";
-    public static string FcKeepVerified     => Ru ? "⭐ Только ✓✓"           : "⭐ Keep ✓✓ only";
-    public static string FcKeepVerifiedOnly => FcKeepVerified;
-    public static string FcClearAll         => Ru ? "💥 Очистить всё"        : "💥 Clear all";
-    public static string FcCleanupHint      => Ru
-        ? "Очистка: убери мусорные записи, чтобы поиск работал быстрее. При следующем обновлении всё перезагрузится из источников."
-        : "Cleanup: remove dead entries to speed up Refresh. Next Refresh re-fetches from sources.";
-    public static string FcStatusCleared(int removed, int kept) => Ru
-        ? $"Удалено {removed} · осталось {kept}"
-        : $"Removed {removed} · kept {kept}";
-    public static string FcCountryFilter      => Ru ? "Страна:"       : "Country:";
-    public static string FcRefreshSources     => Ru ? "↻ Обновить список"    : "↻ Refresh list";
-    public static string FcRetestAll          => Ru ? "▶ Перепроверить"      : "▶ Retest all";
-    public static string FcConnectHint        => Ru ? "Выберите строку ↑ и нажмите «Подключить» (или двойной клик)"
-                                                    : "Select a row ↑ and click Connect (or double-click)";
-    public static string FcTipVpnActive       => Ru
-        ? "⚠ VPN активен — результаты пинга проходят через туннель и могут быть недостоверны. Для точного теста отключите VPN."
-        : "⚠ VPN is active — ping results go through the tunnel and may be inaccurate. Disconnect VPN for accurate tests.";
-    public static string FcCancel             => Ru ? "Отмена"        : "Cancel";
-    public static string FcApplySelected      => Ru ? "Подключить"    : "Connect";
-    public static string FcCountryAll         => Ru ? "Все страны"    : "All countries";
-    public static string FcColCountry         => Ru ? "Страна"        : "Country";
-    public static string FcColEndpoint        => Ru ? "Адрес"         : "Endpoint";
-    public static string FcColLatency         => Ru ? "Пинг"          : "Latency";
-    public static string FcColBandwidth       => Ru ? "Скорость"      : "Speed";
+    public static string FcDeepHint => global::VPNRouter.Core.Localization.Strings.FcDeepHint;
+    public static string FcStatusMainVpnActive => global::VPNRouter.Core.Localization.Strings.FcStatusMainVpnActive;
+    public static string FcOpenLogs => global::VPNRouter.Core.Localization.Strings.FcOpenLogs;
+    public static string FcClearFailed => global::VPNRouter.Core.Localization.Strings.FcClearFailed;
+    public static string FcKeepVerified => global::VPNRouter.Core.Localization.Strings.FcKeepVerified;
+    public static string FcKeepVerifiedOnly => global::VPNRouter.Core.Localization.Strings.FcKeepVerifiedOnly;
+    public static string FcClearAll => global::VPNRouter.Core.Localization.Strings.FcClearAll;
+    public static string FcCleanupHint => global::VPNRouter.Core.Localization.Strings.FcCleanupHint;
+    public static string FcStatusCleared(int removed, int kept) => global::VPNRouter.Core.Localization.Strings.FcStatusCleared(removed, kept);
+    public static string FcCountryFilter => global::VPNRouter.Core.Localization.Strings.FcCountryFilter;
+    public static string FcRefreshSources => global::VPNRouter.Core.Localization.Strings.FcRefreshSources;
+    public static string FcRetestAll => global::VPNRouter.Core.Localization.Strings.FcRetestAll;
+    public static string FcConnectHint => global::VPNRouter.Core.Localization.Strings.FcConnectHint;
+    public static string FcTipVpnActive => global::VPNRouter.Core.Localization.Strings.FcTipVpnActive;
+    public static string FcCancel => global::VPNRouter.Core.Localization.Strings.FcCancel;
+    public static string FcApplySelected => global::VPNRouter.Core.Localization.Strings.FcApplySelected;
+    public static string FcCountryAll => global::VPNRouter.Core.Localization.Strings.FcCountryAll;
+    public static string FcColCountry => global::VPNRouter.Core.Localization.Strings.FcColCountry;
+    public static string FcColEndpoint => global::VPNRouter.Core.Localization.Strings.FcColEndpoint;
+    public static string FcColLatency => global::VPNRouter.Core.Localization.Strings.FcColLatency;
+    public static string FcColBandwidth => global::VPNRouter.Core.Localization.Strings.FcColBandwidth;
     // v2.31.0-r4 (F-24 / UX-63): tooltip explaining "—" rows.
-    public static string FcSpeedColumnTooltip => Ru
-        ? "Скорость измеряется во время Глубокой проверки. «—» означает, что замер не запускался — нажмите ↻ или «Глубоко проверить» чтобы получить значение."
-        : "Speed is measured during Deep verify. \"—\" means it wasn't measured — click ↻ or 'Deep verify' to get a number.";
+    public static string FcSpeedColumnTooltip => global::VPNRouter.Core.Localization.Strings.FcSpeedColumnTooltip;
     // v2.31.0-r4 (F-26): inline confirmation toast after RunHealthCheck.
-    public static string HealthCheckSavedToast => Ru
-        ? "Отчёт сохранён и открыт в Блокноте"
-        : "Report saved and opened in Notepad";
-    public static string FcColSni             => "SNI";
-    public static string FcColTransport       => Ru ? "Транспорт"     : "Transport";
-    public static string FcEmptyHint          => Ru
-        ? "Нажмите «Обновить источники», чтобы загрузить список публичных VLESS-конфигов."
-        : "Click 'Refresh sources' to load the list of public VLESS configs.";
-    public static string FcEmptyCtaTitle      => Ru
-        ? "Нет загруженных конфигов"
-        : "No configs loaded yet";
-    public static string FcEmptyCtaSubtitle   => Ru
-        ? "Скачайте публичные VLESS-конфиги и узнайте какие из них работают прямо сейчас."
-        : "Download public VLESS configs and see which ones are working right now.";
-    public static string FcEmptyCtaButton     => Ru
-        ? "⚡ Загрузить список конфигов"
-        : "⚡ Load configs list";
-    public static string FcFilteredEmpty      => Ru
-        ? "Ничего не найдено по фильтру. Снимите «Только рабочие», увеличьте порог пинга или выберите «Все страны»."
-        : "No results for current filter. Uncheck 'Only working', raise the ping threshold, or choose 'All countries'.";
-    public static string FcRefreshHint        => Ru
-        ? "Первый запуск ≈1 мин. Тестируется до 500 серверов за раз — повторяйте для более полных данных."
-        : "First run ≈1 min. Tests up to 500 servers at a time — repeat for fuller coverage.";
+    public static string HealthCheckSavedToast => global::VPNRouter.Core.Localization.Strings.HealthCheckSavedToast;
+    public static string FcColSni => global::VPNRouter.Core.Localization.Strings.FcColSni;
+    public static string FcColTransport => global::VPNRouter.Core.Localization.Strings.FcColTransport;
+    public static string FcEmptyHint => global::VPNRouter.Core.Localization.Strings.FcEmptyHint;
+    public static string FcEmptyCtaTitle => global::VPNRouter.Core.Localization.Strings.FcEmptyCtaTitle;
+    public static string FcEmptyCtaSubtitle => global::VPNRouter.Core.Localization.Strings.FcEmptyCtaSubtitle;
+    public static string FcEmptyCtaButton => global::VPNRouter.Core.Localization.Strings.FcEmptyCtaButton;
+    public static string FcFilteredEmpty => global::VPNRouter.Core.Localization.Strings.FcFilteredEmpty;
+    public static string FcRefreshHint => global::VPNRouter.Core.Localization.Strings.FcRefreshHint;
 
     // v2.13.17 — Smart Refresh (latency goal)
-    public static string FcSmartRefreshLabel => Ru ? "🎯 Smart Refresh (стоп при достижении цели)" : "🎯 Smart Refresh (stop when goal reached)";
-    public static string FcTargetNLabel      => Ru ? "Найти:" : "Find:";
-    public static string FcConfigsWord       => Ru ? "конфигов" : "configs";
-    public static string FcWithPingUnder     => Ru ? "с пингом <" : "with ping <";
-    public static string FcMsUnit            => "ms";
-    public static string FcSmartRefreshHint  => Ru
-        ? "Ускоряет Refresh: остановка как только накопится N конфигов с низким пингом. Отключите для полного сканирования."
-        : "Speeds up Refresh: stops once N low-ping configs are found. Uncheck for full scan.";
+    public static string FcSmartRefreshLabel => global::VPNRouter.Core.Localization.Strings.FcSmartRefreshLabel;
+    public static string FcTargetNLabel => global::VPNRouter.Core.Localization.Strings.FcTargetNLabel;
+    public static string FcConfigsWord => global::VPNRouter.Core.Localization.Strings.FcConfigsWord;
+    public static string FcWithPingUnder => global::VPNRouter.Core.Localization.Strings.FcWithPingUnder;
+    public static string FcMsUnit => global::VPNRouter.Core.Localization.Strings.FcMsUnit;
+    public static string FcSmartRefreshHint => global::VPNRouter.Core.Localization.Strings.FcSmartRefreshHint;
 
     // v2.28.4-r2: Quickstart banner removed (single-button flow makes the 3-step lecture obsolete).
 
     // v2.14.7 — collapsible More Options
-    public static string FcMoreOptions => Ru ? "⚙ Больше опций (фильтры, очистка, свои источники)" : "⚙ More options (filters, cleanup, user sources)";
+    public static string FcMoreOptions => global::VPNRouter.Core.Localization.Strings.FcMoreOptions;
 
     // v2.28.4-r1: 6-section nav removed (FreeConfigs is now single Simple page).
-    public static string FcListHeader    => Ru ? "📋 Конфиги"       : "📋 Configs";
-    public static string FcListShown     => Ru ? "показано"         : "shown";
+    public static string FcListHeader => global::VPNRouter.Core.Localization.Strings.FcListHeader;
+    public static string FcListShown => global::VPNRouter.Core.Localization.Strings.FcListShown;
 
     // Stop button in the Free Configs search card
-    public static string FcDeepStop        => Ru ? "⏹ Остановить поиск" : "⏹ Stop search";
-    public static string FcDeepStopTooltip => Ru
-        ? "Прекратить текущий поиск. Найденные до отмены конфиги сохранены в кэше."
-        : "Abort the current search. Configs found before cancel are preserved in cache.";
+    public static string FcDeepStop => global::VPNRouter.Core.Localization.Strings.FcDeepStop;
+    public static string FcDeepStopTooltip => global::VPNRouter.Core.Localization.Strings.FcDeepStopTooltip;
 
     // v2.28.4-r4 — Advanced settings expander label inside the green search card
-    public static string FcAdvancedSettings => Ru ? "▾ Настройки" : "▾ Settings";
+    public static string FcAdvancedSettings => global::VPNRouter.Core.Localization.Strings.FcAdvancedSettings;
 
     // ── v2.28.6 — Free Configs tab strip (Search / Saved) + Saved-tab UI ──
-    public static string FcTabSearch                 => Ru ? "▶ Поиск"     : "▶ Search";
-    public static string FcTabSaved                  => Ru ? "★ Сохранённые" : "★ Saved";
-    public static string FcTabSavedWithCount(int n)  => Ru ? $"★ Сохранённые ({n})" : $"★ Saved ({n})";
-    public static string FcSavedTabHint              => Ru
-        ? "Конфиги, найденные в прошлых поисках. Они могут перестать работать со временем — нажмите ↻ чтобы перепроверить."
-        : "Configs you've found in past searches. They may stop working over time — click ↻ to recheck.";
-    public static string FcSavedRecheckStaleBtn(int n) => Ru
-        ? $"↻ Перепроверить ({n})"
-        : $"↻ Recheck ({n})";
-    public static string FcSavedRecheckAllBtn        => Ru ? "↻ Перепроверить всё" : "↻ Recheck all";
-    public static string FcSavedClearAllBtn          => Ru ? "✕ Удалить всё"     : "✕ Clear all";
-    public static string FcSavedColStatus            => Ru ? "Статус"            : "Status";
-    public static string FcSavedEmpty                => Ru
-        ? "Здесь появятся ваши рабочие конфиги. Нажмите «Поиск» чтобы найти первые."
-        : "Your working configs will appear here. Click \"Search\" to find your first ones.";
-    public static string FcSavedRecheckOneTooltip    => Ru
-        ? "Перепроверить этот конфиг (полная глубокая проверка)"
-        : "Recheck this config (full deep verify)";
-    public static string FcSavedRemoveOneTooltip     => Ru
-        ? "Удалить из сохранённых"
-        : "Remove from saved";
-    public static string FcFreshnessFresh            => Ru ? "свежий"           : "fresh";
-    public static string FcFreshnessAgeingDays(int d) => Ru ? $"{d}д назад" : $"{d}d ago";
-    public static string FcFreshnessStale            => Ru ? "устарел"          : "stale";
-    public static string FcFreshnessFailed           => Ru ? "не работает"      : "failed";
-    public static string FcStatusRecheckOne(string host, int port, string cc) => Ru
-        ? $"Перепроверка {host}:{port} [{cc}]..."
-        : $"Rechecking {host}:{port} [{cc}]...";
-    public static string FcStatusRecheckAllStart(int total) => Ru
-        ? $"Перепроверка {total} конфигов..."
-        : $"Rechecking {total} configs...";
-    public static string FcStatusRecheckAllProgress(int done, int total) => Ru
-        ? $"Перепроверка {done}/{total}..."
-        : $"Rechecking {done}/{total}...";
-    public static string FcStatusRecheckAllDone(int verified, int failed) => Ru
-        ? $"Перепроверено · {verified} работают, {failed} не работают"
-        : $"Rechecked · {verified} working, {failed} failed";
+    public static string FcTabSearch => global::VPNRouter.Core.Localization.Strings.FcTabSearch;
+    public static string FcTabSaved => global::VPNRouter.Core.Localization.Strings.FcTabSaved;
+    public static string FcTabSavedWithCount(int n) => global::VPNRouter.Core.Localization.Strings.FcTabSavedWithCount(n);
+    public static string FcSavedTabHint => global::VPNRouter.Core.Localization.Strings.FcSavedTabHint;
+    public static string FcSavedRecheckStaleBtn(int n) => global::VPNRouter.Core.Localization.Strings.FcSavedRecheckStaleBtn(n);
+    public static string FcSavedRecheckAllBtn => global::VPNRouter.Core.Localization.Strings.FcSavedRecheckAllBtn;
+    public static string FcSavedClearAllBtn => global::VPNRouter.Core.Localization.Strings.FcSavedClearAllBtn;
+    public static string FcSavedColStatus => global::VPNRouter.Core.Localization.Strings.FcSavedColStatus;
+    public static string FcSavedEmpty => global::VPNRouter.Core.Localization.Strings.FcSavedEmpty;
+    public static string FcSavedRecheckOneTooltip => global::VPNRouter.Core.Localization.Strings.FcSavedRecheckOneTooltip;
+    public static string FcSavedRemoveOneTooltip => global::VPNRouter.Core.Localization.Strings.FcSavedRemoveOneTooltip;
+    public static string FcFreshnessFresh => global::VPNRouter.Core.Localization.Strings.FcFreshnessFresh;
+    public static string FcFreshnessAgeingDays(int d) => global::VPNRouter.Core.Localization.Strings.FcFreshnessAgeingDays(d);
+    public static string FcFreshnessStale => global::VPNRouter.Core.Localization.Strings.FcFreshnessStale;
+    public static string FcFreshnessFailed => global::VPNRouter.Core.Localization.Strings.FcFreshnessFailed;
+    public static string FcStatusRecheckOne(string host, int port, string cc) => global::VPNRouter.Core.Localization.Strings.FcStatusRecheckOne(host, port, cc);
+    public static string FcStatusRecheckAllStart(int total) => global::VPNRouter.Core.Localization.Strings.FcStatusRecheckAllStart(total);
+    public static string FcStatusRecheckAllProgress(int done, int total) => global::VPNRouter.Core.Localization.Strings.FcStatusRecheckAllProgress(done, total);
+    public static string FcStatusRecheckAllDone(int verified, int failed) => global::VPNRouter.Core.Localization.Strings.FcStatusRecheckAllDone(verified, failed);
 
     /// <summary>v2.28.6-r3: thin hint shown inside the empty search-tab
     /// list area. Replaces the v2.28.6-r1/r2 "no configs loaded" CTA card —
     /// the green search card right above the list IS the call-to-action,
     /// a second button below was redundant and broke the visual style of
     /// other pages (ServersPage / ToolsPage have no big empty-state CTA).</summary>
-    public static string FcSearchListEmptyHint => Ru
-        ? "Нажмите кнопку выше, чтобы найти конфиги."
-        : "Click the button above to find configs.";
+    public static string FcSearchListEmptyHint => global::VPNRouter.Core.Localization.Strings.FcSearchListEmptyHint;
 
     // v2.13.18 — Fast scan toggle
-    public static string FcFastScanLabel => Ru ? "⚡ Fast scan (только TCP, без TLS)" : "⚡ Fast scan (TCP only, no TLS)";
-    public static string FcFastScanHint  => Ru
-        ? "В 3 раза быстрее, но помечает как 'рабочие' даже honeypot-ы (открытый порт ≠ VLESS). Используйте только если Deep Verify отфильтрует дальше."
-        : "3× faster but marks as 'working' even honeypots (open port ≠ VLESS). Use only if Deep Verify filters further.";
+    public static string FcFastScanLabel => global::VPNRouter.Core.Localization.Strings.FcFastScanLabel;
+    public static string FcFastScanHint => global::VPNRouter.Core.Localization.Strings.FcFastScanHint;
 
     // v2.14.3 — Deep Verify presets
-    public static string FcPresetLabel    => Ru ? "Пресет:" : "Preset:";
-    public static string FcPresetGaming   => Ru ? "⚡ Gaming (пинг<60ms, bw>2 Mbps)" : "⚡ Gaming (ping<60ms, bw>2 Mbps)";
-    public static string FcPresetStream   => Ru ? "📺 Streaming (пинг<250ms, bw>10 Mbps)" : "📺 Streaming (ping<250ms, bw>10 Mbps)";
-    public static string FcPresetChat     => Ru ? "💬 Chat/web (пинг<300ms, bw>1 Mbps)" : "💬 Chat/web (ping<300ms, bw>1 Mbps)";
-    public static string FcPresetBest     => Ru ? "🚀 Best effort (любой рабочий)" : "🚀 Best effort (any verified)";
-    public static string FcPresetCustom   => Ru ? "⚙ Custom" : "⚙ Custom";
-    public static string FcCustomPing     => Ru ? "Макс пинг:" : "Max ping:";
-    public static string FcCustomBw       => Ru ? "Мин bw:" : "Min bw:";
-    public static string FcMbpsUnit       => "Mbps";
-    public static string FcBandwidthHint  => Ru
-        ? "Замер bandwidth скачивает ~5 MB через прокси (~150 MB для 30 кандидатов). OK на wifi, осторожно на мобильном."
-        : "Bandwidth test downloads ~5 MB per config via proxy (~150 MB for 30 candidates). OK on wifi, mind mobile data.";
+    public static string FcPresetLabel => global::VPNRouter.Core.Localization.Strings.FcPresetLabel;
+    public static string FcPresetGaming => global::VPNRouter.Core.Localization.Strings.FcPresetGaming;
+    public static string FcPresetStream => global::VPNRouter.Core.Localization.Strings.FcPresetStream;
+    public static string FcPresetChat => global::VPNRouter.Core.Localization.Strings.FcPresetChat;
+    public static string FcPresetBest => global::VPNRouter.Core.Localization.Strings.FcPresetBest;
+    public static string FcPresetCustom => global::VPNRouter.Core.Localization.Strings.FcPresetCustom;
+    public static string FcCustomPing => global::VPNRouter.Core.Localization.Strings.FcCustomPing;
+    public static string FcCustomBw => global::VPNRouter.Core.Localization.Strings.FcCustomBw;
+    public static string FcMbpsUnit => global::VPNRouter.Core.Localization.Strings.FcMbpsUnit;
+    public static string FcBandwidthHint => global::VPNRouter.Core.Localization.Strings.FcBandwidthHint;
 
     // v2.14.4 — User sources
-    public static string FcUserSrcSection      => Ru ? "👤 Мои источники" : "👤 My sources";
-    public static string FcUserSrcNamePlaceholder => Ru ? "Имя (опционально)" : "Name (optional)";
-    public static string FcUserSrcUrlPlaceholder  => Ru ? "URL подписки (https://...)" : "Subscription URL (https://...)";
-    public static string FcUserSrcAdd          => Ru ? "+ Добавить" : "+ Add";
-    public static string FcUserSrcHint         => Ru
-        ? "Ваши собственные VLESS-подписки (raw или base64). Объединяются с 14 встроенными источниками при Refresh."
-        : "Your own VLESS subscription URLs (raw or base64). Merged with the 14 built-in sources during Refresh.";
-    public static string FcUserSrcEmpty        => Ru ? "Пусто. Добавьте URL выше." : "Empty. Add a URL above.";
-    public static string FcUserSrcAdded        => Ru ? "Источник добавлен" : "Source added";
-    public static string FcUserSrcRemoved      => Ru ? "Источник удалён" : "Source removed";
-    public static string FcUserSrcDuplicate    => Ru ? "Этот URL уже добавлен" : "URL already in list";
-    public static string FcUserSrcInvalidUrl   => Ru ? "Невалидный URL" : "Invalid URL";
-    public static string FcUserSrcEmptyUrl     => Ru ? "Введите URL" : "Enter a URL";
+    public static string FcUserSrcSection => global::VPNRouter.Core.Localization.Strings.FcUserSrcSection;
+    public static string FcUserSrcNamePlaceholder => global::VPNRouter.Core.Localization.Strings.FcUserSrcNamePlaceholder;
+    public static string FcUserSrcUrlPlaceholder => global::VPNRouter.Core.Localization.Strings.FcUserSrcUrlPlaceholder;
+    public static string FcUserSrcAdd => global::VPNRouter.Core.Localization.Strings.FcUserSrcAdd;
+    public static string FcUserSrcHint => global::VPNRouter.Core.Localization.Strings.FcUserSrcHint;
+    public static string FcUserSrcEmpty => global::VPNRouter.Core.Localization.Strings.FcUserSrcEmpty;
+    public static string FcUserSrcAdded => global::VPNRouter.Core.Localization.Strings.FcUserSrcAdded;
+    public static string FcUserSrcRemoved => global::VPNRouter.Core.Localization.Strings.FcUserSrcRemoved;
+    public static string FcUserSrcDuplicate => global::VPNRouter.Core.Localization.Strings.FcUserSrcDuplicate;
+    public static string FcUserSrcInvalidUrl => global::VPNRouter.Core.Localization.Strings.FcUserSrcInvalidUrl;
+    public static string FcUserSrcEmptyUrl => global::VPNRouter.Core.Localization.Strings.FcUserSrcEmptyUrl;
 
     // v2.14.5 — Tooltips
-    public static string FcRefreshTooltip => Ru
-        ? "Загрузить конфиги из всех источников (или pool.json с сервера), проверить TCP+TLS. ~2-15 мин в зависимости от настроек."
-        : "Fetch configs from all sources (or server-side pool.json), test TCP+TLS. ~2-15 min depending on settings.";
-    public static string FcRetestTooltip => Ru
-        ? "Перепроверить все ранее найденные конфиги (игнорирует skip-recent). ~15 мин для 25k."
-        : "Re-test every cached config (ignores skip-recent filter). ~15 min for 25k.";
-    public static string FcDeepVerifyTooltip => Ru
-        ? "Скачивает свежие VLESS-конфиги из 14 источников и проверяет каждый реальным HTTPS-запросом через временный sing-box. Останавливается когда наберётся достаточно рабочих с пингом ниже порога. ~1-3 минуты."
-        : "Fetches fresh VLESS configs from 14 sources and tests each with a real HTTPS request via a temporary sing-box. Stops once enough working configs match the ping threshold. ~1-3 minutes.";
+    public static string FcRefreshTooltip => global::VPNRouter.Core.Localization.Strings.FcRefreshTooltip;
+    public static string FcRetestTooltip => global::VPNRouter.Core.Localization.Strings.FcRetestTooltip;
+    public static string FcDeepVerifyTooltip => global::VPNRouter.Core.Localization.Strings.FcDeepVerifyTooltip;
 
     // v2.13.19 — Privacy warning on first Connect from Free Configs
-    public static string FcSecWarnTitle => Ru
-        ? "Публичный прокси — предупреждение"
-        : "Public proxy — privacy warning";
-    public static string FcSecWarnHeader => Ru
-        ? "Вы подключаетесь к публичному прокси-серверу"
-        : "You're connecting to a public proxy operator";
-    public static string FcSecWarnBody => Ru
-        ? "Оператор этого конфига может видеть метаданные вашего трафика — к каким сайтам вы обращаетесь, когда, как часто. Содержимое HTTPS-сайтов (логины, пароли, сообщения) защищено TLS и недоступно оператору."
-        : "The operator of this config can see your traffic metadata — which sites you visit, when, how often. HTTPS content (logins, passwords, messages) is protected by TLS and invisible to the operator.";
-    public static string FcSecWarnDontUseList => Ru
-        ? "🚫 НЕ используйте для:\n  • банковских приложений / онлайн-банков\n  • входа в почту (Gmail, Яндекс.Почта, Mail.ru)\n  • Госуслуги, налоговая, банки\n  • 2FA / SMS-коды / криптокошельки\n  • любых паролей, которые вы цените"
-        : "🚫 DO NOT use for:\n  • banking apps / online banking\n  • email logins (Gmail, Outlook, etc.)\n  • government services, tax sites\n  • 2FA / SMS codes / crypto wallets\n  • any passwords you care about";
-    public static string FcSecWarnGoodFor => Ru
-        ? "✅ Подходит для: YouTube, новостей, Wikipedia, Discord, Telegram, публичного веба"
-        : "✅ Good for: YouTube, news, Wikipedia, Discord, Telegram, public web browsing";
-    public static string FcSecWarnProceed => Ru ? "Понял, подключить" : "Understood, connect";
-    public static string FcSecWarnCancel  => Ru ? "Отмена" : "Cancel";
-    public static string FcPageDescription    => Ru
-        ? "Публичные VLESS-конфиги. Проверка: TCP + TLS handshake с валидацией сертификата. ✓ = сервер живой и TLS-валидный."
-        : "Public VLESS configs. Tests: TCP + TLS handshake with cert validation. ✓ = server alive and TLS-valid.";
-    public static string FcStatusEmpty        => Ru ? "Кэш пуст — нажмите «Обновить»" : "Cache is empty — click 'Refresh'";
-    public static string FcStatusCancelled    => Ru ? "Отменено" : "Cancelled";
-    public static string FcStatusApplyFailed  => Ru ? "Не удалось подключиться" : "Apply failed";
-    public static string FcStatusCacheAge(string age) => Ru
-        ? $"Обновлено {age}"
-        : $"Updated {age}";
-    public static string FcStatusRefreshed(int n) => Ru
-        ? $"Загружено {n} конфигов"
-        : $"Loaded {n} configs";
-    public static string FcStatusTested(int n) => Ru
-        ? $"Протестировано {n} конфигов"
-        : $"Tested {n} configs";
-    public static string FcStatusFailed(string err) => Ru
-        ? $"Ошибка: {err}"
-        : $"Error: {err}";
-    public static string FcStatusApplying(string ep) => Ru
-        ? $"Подключение к {ep}..."
-        : $"Connecting to {ep}...";
-    public static string FcStatusApplied(string ep) => Ru
-        ? $"Подключено: {ep}"
-        : $"Connected: {ep}";
+    public static string FcSecWarnTitle => global::VPNRouter.Core.Localization.Strings.FcSecWarnTitle;
+    public static string FcSecWarnHeader => global::VPNRouter.Core.Localization.Strings.FcSecWarnHeader;
+    public static string FcSecWarnBody => global::VPNRouter.Core.Localization.Strings.FcSecWarnBody;
+    public static string FcSecWarnDontUseList => global::VPNRouter.Core.Localization.Strings.FcSecWarnDontUseList;
+    public static string FcSecWarnGoodFor => global::VPNRouter.Core.Localization.Strings.FcSecWarnGoodFor;
+    public static string FcSecWarnProceed => global::VPNRouter.Core.Localization.Strings.FcSecWarnProceed;
+    public static string FcSecWarnCancel => global::VPNRouter.Core.Localization.Strings.FcSecWarnCancel;
+    public static string FcPageDescription => global::VPNRouter.Core.Localization.Strings.FcPageDescription;
+    public static string FcStatusEmpty => global::VPNRouter.Core.Localization.Strings.FcStatusEmpty;
+    public static string FcStatusCancelled => global::VPNRouter.Core.Localization.Strings.FcStatusCancelled;
+    public static string FcStatusApplyFailed => global::VPNRouter.Core.Localization.Strings.FcStatusApplyFailed;
+    public static string FcStatusCacheAge(string age) => global::VPNRouter.Core.Localization.Strings.FcStatusCacheAge(age);
+    public static string FcStatusRefreshed(int n) => global::VPNRouter.Core.Localization.Strings.FcStatusRefreshed(n);
+    public static string FcStatusTested(int n) => global::VPNRouter.Core.Localization.Strings.FcStatusTested(n);
+    public static string FcStatusFailed(string err) => global::VPNRouter.Core.Localization.Strings.FcStatusFailed(err);
+    public static string FcStatusApplying(string ep) => global::VPNRouter.Core.Localization.Strings.FcStatusApplying(ep);
+    public static string FcStatusApplied(string ep) => global::VPNRouter.Core.Localization.Strings.FcStatusApplied(ep);
 
     // ── Service (Windows-only) ──
-    public static string AutostartWithWindows => Ru
-        ? $"Автозапуск с {OsDisplayName}"
-        : $"Autostart with {OsDisplayName}";
-    public static string RestartService => Ru ? "Перезапустить службу" : "Restart Service";
-    public static string ReinstallService => Ru ? "Переустановить" : "Reinstall";
-    public static string InstallingService => Ru ? "Установка службы..." : "Installing service...";
-    public static string RemovingService => Ru ? "Удаление службы..." : "Removing service...";
+    public static string AutostartWithWindows => global::VPNRouter.Core.Localization.Strings.AutostartWithWindows;
+    public static string RestartService => global::VPNRouter.Core.Localization.Strings.RestartService;
+    public static string ReinstallService => global::VPNRouter.Core.Localization.Strings.ReinstallService;
+    public static string InstallingService => global::VPNRouter.Core.Localization.Strings.InstallingService;
+    public static string RemovingService => global::VPNRouter.Core.Localization.Strings.RemovingService;
 
     // ── v2.15.4 UI polish: hint texts + tooltips ──
-    public static string ServerListHint => Ru
-        ? "Левый клик — выбрать активный. Правый клик — редактировать."
-        : "Left click = select active. Right click = edit details.";
-    public static string ZapretHostsHint => Ru
-        ? "Записи Flowseal в hosts для доступа к YouTube/Discord и т.п."
-        : "Flowseal entries in the hosts file for YouTube/Discord/etc.";
-    public static string AppsGroupEmpty => Ru
-        ? "В этой группе пока нет приложений."
-        : "No apps in this group yet.";
+    public static string ServerListHint => global::VPNRouter.Core.Localization.Strings.ServerListHint;
+    public static string ZapretHostsHint => global::VPNRouter.Core.Localization.Strings.ZapretHostsHint;
+    public static string AppsGroupEmpty => global::VPNRouter.Core.Localization.Strings.AppsGroupEmpty;
 
     // v2.29.0 — full-tunnel mode banner on the Apps page. Mac feedback
     // 2026-04-29: при RoutingMode=full весь content disabled без объяс-
@@ -878,17 +625,15 @@ public static class Strings
     // на banner с объяснением + кнопка "Switch to split tunnel".
     // v2.30.3-r1: tunnel name localized to match SplitTunnelTitle/
     // FullTunnelTitle (Раздельный/Полный туннель).
-    public static string AppsFullTunnelBanner => Ru
-        ? "Активен Полный туннель — выбор приложений игнорируется, весь трафик идёт через VPN."
-        : "Full-tunnel mode is active. App selection is ignored — all traffic goes through VPN.";
-    public static string AppsFullTunnelBannerAction => Ru
-        ? "Переключить на Раздельный туннель"
-        : "Switch to split tunnel";
+    public static string AppsFullTunnelBanner => global::VPNRouter.Core.Localization.Strings.AppsFullTunnelBanner;
+    public static string AppsFullTunnelBannerAction => global::VPNRouter.Core.Localization.Strings.AppsFullTunnelBannerAction;
 
+    // ── app-only: not in Core/Localization/Strings.cs ──
     // v2.32 — Apps Include/Exclude 2-mode segmented toggle.
     // User feedback: "сделам 2 модм exclude и include". Default mode
     // (Include) = behaviour unchanged (selected apps → VPN, rest direct).
     // Exclude = inverse: selected apps → direct, rest → VPN.
+    // Follow-up: lift to Core once Android exposes the same toggle.
     public static string AppsModeSectionTitle => Ru
         ? "Режим маршрутизации"
         : "Routing mode";
@@ -905,16 +650,20 @@ public static class Strings
         ? "Отмеченные приложения идут напрямую (мимо VPN), остальной трафик идёт через VPN."
         : "Checked apps bypass VPN (direct); everything else goes through VPN.";
 
+    // ── app-only: not in Core/Localization/Strings.cs ──
     // v2.32 — ServersPage marker for orphan vless.servers entries that
     // aren't in any active subscription. After F-A/B fixes the migrator
     // strips these on load, but for diagnostic clarity we still flag
     // any survivors in the UI.
+    // Follow-up: lift to Core (Android may want the same diagnostic).
     public static string ServersOrphanBadge => Ru ? "Не из подписки" : "Not in subscription";
     public static string ServersOrphanTooltip => Ru
         ? "Этот сервер не входит в активные подписки — старая ручная запись. Если он вам не нужен, удалите его."
         : "This server isn't part of any active subscription — it's a legacy manual entry. If you don't need it, remove it.";
 
+    // ── app-only: not in Core/Localization/Strings.cs ──
     // v2.32 — F-E auto-failover surfacing.
+    // Follow-up: lift to Core (Android failover engine reuses the same flow).
     public static string AutoFailoverProbing => Ru
         ? "Проверяем подключение..."
         : "Probing connection...";
@@ -934,173 +683,115 @@ public static class Strings
     // прописывать direct правила».
     // v2.30.0 — full custom rules engine (direct/proxy/block actions).
     // Replaces v2.29.0-r4 CustomDirectRules* strings.
-    public static string CustomRulesTitle => Ru
-        ? "Свои правила маршрутизации (расширенно)"
-        : "Custom routing rules (advanced)";
-    public static string CustomRulesDescription => Ru
-        ? "Свои правила для определённых доменов / IP / портов / процессов. Действия: direct (мимо VPN), proxy (через VPN), block (блокировать). ⓘ Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» имеют ВЫСШИЙ приоритет — если они включены, их правила сработают раньше ваших. Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически."
-        : "Custom rules for specific domains / IPs / ports / processes. Actions: direct (bypass VPN), proxy (force through VPN), block (drop). ⓘ The toggles «Russian traffic via real IP» and «Block ads» have HIGHEST priority — if enabled, their rules fire before yours. Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.";
+    public static string CustomRulesTitle => global::VPNRouter.Core.Localization.Strings.CustomRulesTitle;
+    public static string CustomRulesDescription => global::VPNRouter.Core.Localization.Strings.CustomRulesDescription;
     // v2.30.3-r1 (BUG-15 fix): broke long lines so the example template
     // is readable at default ~510 px window width without horizontal
     // scrolling. The pre-r1 placeholder had a 132-char Types comment
     // line that was always cut off — users couldn't see the type list.
     // Now wrapped across 3 short lines.
-    public static string CustomRulesPlaceholder => Ru
-        ? "# Одно правило на строку.\n# Формат: <action> <type> <value> [# комментарий]\n# Actions: direct / proxy / block\n# Types: domain · domain_suffix · domain_keyword\n#        ip_cidr · port · port_range · network\n#        process_name · geosite · geoip\n# Несколько значений через запятую.\n# Отключить — '!' в начале строки.\n\ndirect ip_cidr 10.0.0.0/8, 192.168.0.0/16  # LAN\nproxy domain_suffix .corp.example          # через VPN\nblock geosite ads                          # реклама\n!block port 53                             # отключено"
-        : "# One rule per line.\n# Format: <action> <type> <value> [# comment]\n# Actions: direct / proxy / block\n# Types: domain · domain_suffix · domain_keyword\n#        ip_cidr · port · port_range · network\n#        process_name · geosite · geoip\n# Multi-value: comma-separated.\n# Disable: prefix '!'.\n\ndirect ip_cidr 10.0.0.0/8, 192.168.0.0/16  # LAN\nproxy domain_suffix .corp.example          # via VPN\nblock geosite ads                          # ads\n!block port 53                             # disabled";
-    public static string CustomRulesErrorHeader => Ru
-        ? "Ошибки парсинга:"
-        : "Parse errors:";
-    public static string CustomRulesConflictHeader => Ru
-        ? "Предупреждения о конфликтах:"
-        : "Conflict warnings:";
+    public static string CustomRulesPlaceholder => global::VPNRouter.Core.Localization.Strings.CustomRulesPlaceholder;
+    public static string CustomRulesErrorHeader => global::VPNRouter.Core.Localization.Strings.CustomRulesErrorHeader;
+    public static string CustomRulesConflictHeader => global::VPNRouter.Core.Localization.Strings.CustomRulesConflictHeader;
 
     // v2.30.0-r2: structured row-table editor strings (Network → Rules section).
-    public static string CustomRulesPageDescription => Ru
-        ? "Свои правила маршрутизации для определённых доменов / IP / портов / процессов. ⓘ Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» имеют ВЫСШИЙ приоритет — если включены, их правила сработают раньше ваших. Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически."
-        : "Custom routing rules for specific domains / IPs / ports / processes. ⓘ The toggles «Russian traffic via real IP» and «Block ads» have HIGHEST priority — if enabled, their rules fire before yours. Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.";
+    public static string CustomRulesPageDescription => global::VPNRouter.Core.Localization.Strings.CustomRulesPageDescription;
 
-    public static string CustomRulesEmpty => Ru
-        ? "Нет правил. Добавьте через форму ниже или раскройте «Расширенный режим» для редактирования через текст."
-        : "No rules yet. Add via the form below or expand «Advanced mode» for text editing.";
+    public static string CustomRulesEmpty => global::VPNRouter.Core.Localization.Strings.CustomRulesEmpty;
 
-    public static string CustomRulesAddTitle => Ru ? "Добавить правило:" : "Add rule:";
-    public static string CustomRulesAddBtn => Ru ? "+ Добавить" : "+ Add";
-    public static string CustomRulesActionLabel => Ru ? "Действие" : "Action";
-    public static string CustomRulesTypeLabel => Ru ? "Тип" : "Type";
-    public static string CustomRulesValueLabel => Ru ? "Значение" : "Value";
-    public static string CustomRulesCommentLabel => Ru ? "Комментарий" : "Comment";
+    public static string CustomRulesAddTitle => global::VPNRouter.Core.Localization.Strings.CustomRulesAddTitle;
+    public static string CustomRulesAddBtn => global::VPNRouter.Core.Localization.Strings.CustomRulesAddBtn;
+    public static string CustomRulesActionLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesActionLabel;
+    public static string CustomRulesTypeLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesTypeLabel;
+    public static string CustomRulesValueLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesValueLabel;
+    public static string CustomRulesCommentLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesCommentLabel;
 
-    public static string CustomRulesActionDirect => "direct";
-    public static string CustomRulesActionProxy => "proxy";
-    public static string CustomRulesActionBlock => "block";
+    public static string CustomRulesActionDirect => global::VPNRouter.Core.Localization.Strings.CustomRulesActionDirect;
+    public static string CustomRulesActionProxy => global::VPNRouter.Core.Localization.Strings.CustomRulesActionProxy;
+    public static string CustomRulesActionBlock => global::VPNRouter.Core.Localization.Strings.CustomRulesActionBlock;
 
-    public static string CustomRulesValuePlaceholder => Ru
-        ? "напр. 10.0.0.0/8 или .corp.example"
-        : "e.g. 10.0.0.0/8 or .corp.example";
+    public static string CustomRulesValuePlaceholder => global::VPNRouter.Core.Localization.Strings.CustomRulesValuePlaceholder;
 
-    public static string CustomRulesAdvancedMode => Ru
-        ? "Расширенный режим (текстовый формат)"
-        : "Advanced mode (text format)";
+    public static string CustomRulesAdvancedMode => global::VPNRouter.Core.Localization.Strings.CustomRulesAdvancedMode;
 
-    public static string CustomRulesValidationFailed => Ru
-        ? "Ошибка валидации:"
-        : "Validation failed:";
+    public static string CustomRulesValidationFailed => global::VPNRouter.Core.Localization.Strings.CustomRulesValidationFailed;
 
-    public static string CustomRulesActionDirectLabel => Ru
-        ? "direct (мимо VPN)"
-        : "direct (bypass VPN)";
-    public static string CustomRulesActionProxyLabel => Ru
-        ? "proxy (через VPN)"
-        : "proxy (force through VPN)";
-    public static string CustomRulesActionBlockLabel => Ru
-        ? "block (заблокировать)"
-        : "block (drop)";
+    public static string CustomRulesActionDirectLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesActionDirectLabel;
+    public static string CustomRulesActionProxyLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesActionProxyLabel;
+    public static string CustomRulesActionBlockLabel => global::VPNRouter.Core.Localization.Strings.CustomRulesActionBlockLabel;
 
-    public static string CustomRulesDelete => Ru ? "Удалить" : "Delete";
-    public static string CustomRulesEdit => Ru ? "Редактировать" : "Edit";
-    public static string CustomRulesMoveUp => Ru ? "Выше" : "Move up";
-    public static string CustomRulesMoveDown => Ru ? "Ниже" : "Move down";
+    public static string CustomRulesDelete => global::VPNRouter.Core.Localization.Strings.CustomRulesDelete;
+    public static string CustomRulesEdit => global::VPNRouter.Core.Localization.Strings.CustomRulesEdit;
+    public static string CustomRulesMoveUp => global::VPNRouter.Core.Localization.Strings.CustomRulesMoveUp;
+    public static string CustomRulesMoveDown => global::VPNRouter.Core.Localization.Strings.CustomRulesMoveDown;
 
     // v2.30.0-r3 — Import/Export 3 formats.
-    public static string CustomRulesImport => Ru ? "Импорт..." : "Import...";
-    public static string CustomRulesExport => Ru ? "Экспорт..." : "Export...";
-    public static string CustomRulesImportTooltip => Ru
-        ? "Импорт из CSV / JSON / sing-box JSON (NekoBox, Hiddify)"
-        : "Import from CSV / JSON / sing-box JSON (NekoBox, Hiddify)";
-    public static string CustomRulesExportTooltip => Ru
-        ? "Экспорт в CSV / JSON / sing-box JSON"
-        : "Export to CSV / JSON / sing-box JSON";
+    public static string CustomRulesImport => global::VPNRouter.Core.Localization.Strings.CustomRulesImport;
+    public static string CustomRulesExport => global::VPNRouter.Core.Localization.Strings.CustomRulesExport;
+    public static string CustomRulesImportTooltip => global::VPNRouter.Core.Localization.Strings.CustomRulesImportTooltip;
+    public static string CustomRulesExportTooltip => global::VPNRouter.Core.Localization.Strings.CustomRulesExportTooltip;
 
     // v2.30.0-r4 — search filter + bulk actions for large rule lists.
-    public static string CustomRulesSearchPlaceholder => Ru
-        ? "Поиск по action / type / value / комментарию..."
-        : "Search across action / type / value / comment...";
-    public static string CustomRulesClearAll => Ru ? "Очистить всё" : "Clear all";
-    public static string CustomRulesEnableAll => Ru ? "Вкл. все" : "Enable all";
-    public static string CustomRulesDisableAll => Ru ? "Выкл. все" : "Disable all";
-    public static string CustomRulesClearAllTooltip => Ru
-        ? "Удалить все правила (нажмите дважды для подтверждения)"
-        : "Delete all rules (click twice to confirm)";
-    public static string CustomRulesEnableAllTooltip => Ru
-        ? "Включить все правила"
-        : "Enable all rules";
-    public static string CustomRulesDisableAllTooltip => Ru
-        ? "Выключить все правила (без удаления)"
-        : "Disable all rules (without deleting)";
-    public static string CustomRulesNoMatchHint => Ru
-        ? "По запросу ничего не найдено."
-        : "No rules match the search.";
+    public static string CustomRulesSearchPlaceholder => global::VPNRouter.Core.Localization.Strings.CustomRulesSearchPlaceholder;
+    public static string CustomRulesClearAll => global::VPNRouter.Core.Localization.Strings.CustomRulesClearAll;
+    public static string CustomRulesEnableAll => global::VPNRouter.Core.Localization.Strings.CustomRulesEnableAll;
+    public static string CustomRulesDisableAll => global::VPNRouter.Core.Localization.Strings.CustomRulesDisableAll;
+    public static string CustomRulesClearAllTooltip => global::VPNRouter.Core.Localization.Strings.CustomRulesClearAllTooltip;
+    public static string CustomRulesEnableAllTooltip => global::VPNRouter.Core.Localization.Strings.CustomRulesEnableAllTooltip;
+    public static string CustomRulesDisableAllTooltip => global::VPNRouter.Core.Localization.Strings.CustomRulesDisableAllTooltip;
+    public static string CustomRulesNoMatchHint => global::VPNRouter.Core.Localization.Strings.CustomRulesNoMatchHint;
 
-    public static string CustomRulesExistingHeader => Ru
-        ? "Существующие правила"
-        : "Existing rules";
+    public static string CustomRulesExistingHeader => global::VPNRouter.Core.Localization.Strings.CustomRulesExistingHeader;
 
     // ── v2.30.0-r7 — Cards / Edit view-mode toggle (RulesExplorations.html) ──
     // Power-user editable text mode replaces the old "Advanced" expander.
     // Cards view is the structured row-table editor (default, friendly).
     // Edit view is a full textarea with line-numbered gutter, per-line
     // errors, and explicit Apply / Revert (no auto-save while typing).
-    public static string RulesViewCards => Ru ? "Карточки" : "Cards";
-    public static string RulesViewRead => Ru ? "Список" : "Read";
-    public static string RulesViewEdit => Ru ? "Текст" : "Edit";
-    public static string RulesViewCardsTooltip => Ru
-        ? "Структурированный список правил с цветными чипами, тумблерами и инлайн-удалением"
-        : "Structured rule list with colored chips, toggles, and inline delete";
-    public static string RulesViewReadTooltip => Ru
-        ? "Сгруппированный read-only вид (моноспейс): direct / proxy / block по секциям"
-        : "Grouped read-only view (monospace): direct / proxy / block sections";
-    public static string RulesViewEditTooltip => Ru
-        ? "Полностью редактируемый текстовый режим: одно правило на строку"
-        : "Fully editable text mode: one rule per line";
+    public static string RulesViewCards => global::VPNRouter.Core.Localization.Strings.RulesViewCards;
+    public static string RulesViewRead => global::VPNRouter.Core.Localization.Strings.RulesViewRead;
+    public static string RulesViewEdit => global::VPNRouter.Core.Localization.Strings.RulesViewEdit;
+    public static string RulesViewCardsTooltip => global::VPNRouter.Core.Localization.Strings.RulesViewCardsTooltip;
+    public static string RulesViewReadTooltip => global::VPNRouter.Core.Localization.Strings.RulesViewReadTooltip;
+    public static string RulesViewEditTooltip => global::VPNRouter.Core.Localization.Strings.RulesViewEditTooltip;
 
-    public static string RulesEditorApply => Ru ? "Применить" : "Apply";
-    public static string RulesEditorRevert => Ru ? "Откатить" : "Revert";
-    public static string RulesEditorDirty => Ru
-        ? "● несохранённые изменения"
-        : "● unsaved changes";
+    public static string RulesEditorApply => global::VPNRouter.Core.Localization.Strings.RulesEditorApply;
+    public static string RulesEditorRevert => global::VPNRouter.Core.Localization.Strings.RulesEditorRevert;
+    public static string RulesEditorDirty => global::VPNRouter.Core.Localization.Strings.RulesEditorDirty;
     // v2.30.3-r1 (UX-16 fix): the parser uses '!' as the disable
     // prefix (CustomRulesParser line 85: StartsWith("!")), not "# off"
     // which was a misleading documentation. Brought hint in line with
     // the actual parser + the example placeholder ('!block port 53').
-    public static string RulesEditorFormatHint => Ru
-        ? "Формат: action  type  value  # comment.   Выключить правило: '!' в начале строки.   Пустые строки игнорируются."
-        : "Format: action  type  value  # comment.   Disable a rule: '!' at start of line.   Empty lines are ignored.";
+    public static string RulesEditorFormatHint => global::VPNRouter.Core.Localization.Strings.RulesEditorFormatHint;
 
     // Help banner — replaces the dense single-paragraph description.
     // Bullet points highlight the toggle precedence + LAN auto-direct +
     // order-doesn't-matter facts. Dismissable via X button.
     // v2.30.0-r11 — Filter chips + bulk-actions menu.
-    public static string RulesFilterAll => Ru ? "Все" : "All";
-    public static string RulesBulkActions => Ru ? "Массовые действия" : "Bulk actions";
+    public static string RulesFilterAll => global::VPNRouter.Core.Localization.Strings.RulesFilterAll;
+    public static string RulesBulkActions => global::VPNRouter.Core.Localization.Strings.RulesBulkActions;
 
     // v2.30.0-r14 — Sort-by-type bulk action (per design `.bulk-pop`).
-    public static string RulesSortByType => Ru ? "Сортировать по типу" : "Sort by type";
+    public static string RulesSortByType => global::VPNRouter.Core.Localization.Strings.RulesSortByType;
 
     // v2.30.0-r18 — Clear All inline confirm bar (replaces broken
     // two-click-in-popover pattern). Also adds a generic Cancel string.
-    public static string RulesClearAllHint => Ru
-        ? "Это действие нельзя отменить."
-        : "This action cannot be undone.";
-    public static string RulesClearAllConfirm => Ru ? "Удалить" : "Delete";
-    public static string CommonCancel => Ru ? "Отмена" : "Cancel";
+    public static string RulesClearAllHint => global::VPNRouter.Core.Localization.Strings.RulesClearAllHint;
+    public static string RulesClearAllConfirm => global::VPNRouter.Core.Localization.Strings.RulesClearAllConfirm;
+    public static string CommonCancel => global::VPNRouter.Core.Localization.Strings.CommonCancel;
 
     // v2.30.0-r17 — Custom-rules-priority CheckBox label + tooltip.
-    public static string RulesCustomAboveToggles => Ru
-        ? "Свои правила важнее тумблеров"
-        : "Custom rules above toggles";
-    public static string RulesCustomAboveTogglesHint => Ru
-        ? "По умолчанию «Российский трафик» и «Блокировать рекламу» срабатывают раньше ваших правил. Включите чтобы ваши правила побеждали."
-        : "By default «Russian traffic» and «Block ads» fire before your rules. Enable to make your rules win.";
+    public static string RulesCustomAboveToggles => global::VPNRouter.Core.Localization.Strings.RulesCustomAboveToggles;
+    public static string RulesCustomAboveTogglesHint => global::VPNRouter.Core.Localization.Strings.RulesCustomAboveTogglesHint;
 
     // v2.30.0-r14 — Add-form mini-labels (uppercase, per design `.field .ftitle`).
     // Localized so the UI is single-language end-to-end (matches user's
     // "не использовать микс" rule).
-    public static string RulesAddLabelAction  => Ru ? "ДЕЙСТВИЕ"    : "ACTION";
-    public static string RulesAddLabelType    => Ru ? "ТИП"         : "TYPE";
-    public static string RulesAddLabelValue   => Ru ? "ЗНАЧЕНИЕ"    : "VALUE";
-    public static string RulesAddLabelComment => Ru ? "КОММЕНТАРИЙ" : "COMMENT";
-    public static string RulesAddLabelOpt     => Ru ? "(опц.)"      : "(opt.)";
+    public static string RulesAddLabelAction => global::VPNRouter.Core.Localization.Strings.RulesAddLabelAction;
+    public static string RulesAddLabelType => global::VPNRouter.Core.Localization.Strings.RulesAddLabelType;
+    public static string RulesAddLabelValue => global::VPNRouter.Core.Localization.Strings.RulesAddLabelValue;
+    public static string RulesAddLabelComment => global::VPNRouter.Core.Localization.Strings.RulesAddLabelComment;
+    public static string RulesAddLabelOpt => global::VPNRouter.Core.Localization.Strings.RulesAddLabelOpt;
 
     // v2.30.0-r12 — Help banner restructured per design RulesPage.html
     // `.help` block: bold heading + 3 bullets with <code>-styled values
@@ -1108,87 +799,53 @@ public static class Strings
     // split into prefix / emphasized-name / mid / emphasized-name / suffix
     // pieces so the XAML can apply per-Run styling (FontWeight=SemiBold for
     // names, FontFamily=mono for code values) without a markup parser.
-    public static string RulesHelpHeader => Ru
-        ? "Как работают правила."
-        : "How rules work.";
+    public static string RulesHelpHeader => global::VPNRouter.Core.Localization.Strings.RulesHelpHeader;
 
     // Bullet 1: «toggle1» and «toggle2» fire BEFORE your rules.
-    public static string RulesHelpB1Pre  => Ru ? "Тумблеры " : "The toggles ";
-    public static string RulesHelpB1T1   => Ru
-        ? "«Российский трафик через реальный IP»"
-        : "«Russian traffic via real IP»";
-    public static string RulesHelpB1Mid  => Ru ? " и " : " and ";
-    public static string RulesHelpB1T2   => Ru ? "«Блокировать рекламу»" : "«Block ads»";
-    public static string RulesHelpB1Suf  => Ru
-        ? " срабатывают раньше ваших правил."
-        : " fire before your rules.";
+    public static string RulesHelpB1Pre => global::VPNRouter.Core.Localization.Strings.RulesHelpB1Pre;
+    public static string RulesHelpB1T1 => global::VPNRouter.Core.Localization.Strings.RulesHelpB1T1;
+    public static string RulesHelpB1Mid => global::VPNRouter.Core.Localization.Strings.RulesHelpB1Mid;
+    public static string RulesHelpB1T2 => global::VPNRouter.Core.Localization.Strings.RulesHelpB1T2;
+    public static string RulesHelpB1Suf => global::VPNRouter.Core.Localization.Strings.RulesHelpB1Suf;
 
     // Bullet 2: Private nets (10.0.0.0/8, ...) already go direct automatically.
-    public static string RulesHelpB2Pre  => Ru ? "Локальные сети (" : "Private networks (";
-    public static string RulesHelpB2Mid  => Ru ? ") уже идут " : ") already go ";
-    public static string RulesHelpB2Suf  => Ru ? " автоматически." : " automatically.";
+    public static string RulesHelpB2Pre => global::VPNRouter.Core.Localization.Strings.RulesHelpB2Pre;
+    public static string RulesHelpB2Mid => global::VPNRouter.Core.Localization.Strings.RulesHelpB2Mid;
+    public static string RulesHelpB2Suf => global::VPNRouter.Core.Localization.Strings.RulesHelpB2Suf;
 
     // Bullet 3: Rule order DOES NOT matter — first match wins per address.
-    public static string RulesHelpB3Pre  => Ru ? "Порядок правил " : "Rule order ";
-    public static string RulesHelpB3Bold => Ru ? "не важен" : "does not matter";
-    public static string RulesHelpB3Suf  => Ru
-        ? " — для каждого адреса выбирается первое совпавшее."
-        : " — first match wins per address.";
+    public static string RulesHelpB3Pre => global::VPNRouter.Core.Localization.Strings.RulesHelpB3Pre;
+    public static string RulesHelpB3Bold => global::VPNRouter.Core.Localization.Strings.RulesHelpB3Bold;
+    public static string RulesHelpB3Suf => global::VPNRouter.Core.Localization.Strings.RulesHelpB3Suf;
 
     // Legacy single-string accessor (kept for any cached XAML still binding
     // to the pre-r12 RulesHelpBanner). New XAML uses the structured
     // RulesHelpHeader + RulesHelpB1..B3* set instead.
-    public static string RulesHelpBanner => Ru
-        ? "Тумблеры «Российский трафик через реальный IP» и «Блокировать рекламу» срабатывают РАНЬШЕ ваших правил.   Локальные сети (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) уже идут direct автоматически.   Порядок правил не важен — для каждого адреса выбирается первое совпавшее."
-        : "The toggles «Russian traffic via real IP» and «Block ads» fire BEFORE your rules.   Private network ranges (10.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12) already go direct automatically.   Rule order does not matter — first match wins per address.";
+    public static string RulesHelpBanner => global::VPNRouter.Core.Localization.Strings.RulesHelpBanner;
 
     // ── Legacy v2.29.0-r4 names (kept for back-compat with cached XAML) ──
-    public static string CustomDirectRulesTitle => CustomRulesTitle;
-    public static string CustomDirectRulesDescription => CustomRulesDescription;
-    public static string CustomDirectRulesPlaceholder => CustomRulesPlaceholder;
-    public static string CustomDirectRulesErrorHeader => CustomRulesErrorHeader;
-    public static string SelectCategoryHint => Ru
-        ? "← Выберите категорию"
-        : "← Select a category";
+    public static string CustomDirectRulesTitle => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesTitle;
+    public static string CustomDirectRulesDescription => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesDescription;
+    public static string CustomDirectRulesPlaceholder => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesPlaceholder;
+    public static string CustomDirectRulesErrorHeader => global::VPNRouter.Core.Localization.Strings.CustomDirectRulesErrorHeader;
+    public static string SelectCategoryHint => global::VPNRouter.Core.Localization.Strings.SelectCategoryHint;
 
     // Tooltips — Network tab
-    public static string TipBypassRu => Ru
-        ? "RU-диапазоны обходят VPN и идут напрямую через ISP"
-        : "RU IP ranges bypass the VPN and go direct via ISP";
-    public static string TipLeakBlockOnFail => Ru
-        ? "Если VPN упал — firewall блокирует выбранные приложения, чтобы трафик не утёк мимо туннеля"
-        : "If VPN drops, firewall blocks selected apps so traffic can't leak outside the tunnel";
-    public static string TipLeakStrictMode => Ru
-        ? "Жёсткий режим — нет fallback на direct при проблемах VPN"
-        : "Strict mode — no direct fallback when VPN has issues";
-    public static string TipLeakForceIpv4 => Ru
-        ? "Отключить IPv6 на маршруте VPN (избегает DNS-утечек через IPv6)"
-        : "Disable IPv6 on the VPN route (avoids DNS leaks via IPv6)";
-    public static string TipLeakStrictDns => Ru
-        ? "Включи если на browserleaks.com / ipleak.net видишь свой ISP DNS или DNS-сервер не из VPN. По умолчанию приложения вне списка маршрутизации идут через Cloudflare DoH на реальном NIC — leak-тесты могут это засчитать как утечку. Strict DNS отправляет ВЕСЬ DNS-трафик через туннель."
-        : "Enable if browserleaks.com / ipleak.net shows your ISP DNS or a non-VPN resolver. By default, apps not in the routing list use Cloudflare DoH on the real NIC — leak tests may flag this as a leak. Strict DNS routes ALL DNS through the tunnel.";
-    public static string TipLeakFlushDns => Ru
-        ? "Очищать кэш DNS при старте VPN"
-        : "Flush DNS cache when VPN starts";
-    public static string TipBlockAds => Ru
-        ? "Блокировать известные рекламные/трекинг домены на уровне VPN DNS"
-        : "Block known ad/tracker domains at the VPN DNS layer";
+    public static string TipBypassRu => global::VPNRouter.Core.Localization.Strings.TipBypassRu;
+    public static string TipLeakBlockOnFail => global::VPNRouter.Core.Localization.Strings.TipLeakBlockOnFail;
+    public static string TipLeakStrictMode => global::VPNRouter.Core.Localization.Strings.TipLeakStrictMode;
+    public static string TipLeakForceIpv4 => global::VPNRouter.Core.Localization.Strings.TipLeakForceIpv4;
+    public static string TipLeakStrictDns => global::VPNRouter.Core.Localization.Strings.TipLeakStrictDns;
+    public static string TipLeakFlushDns => global::VPNRouter.Core.Localization.Strings.TipLeakFlushDns;
+    public static string TipBlockAds => global::VPNRouter.Core.Localization.Strings.TipBlockAds;
 
     // Tooltips — Zapret / DPI
-    public static string TipZapretAutoUpdate => Ru
-        ? "Каждые 24 часа проверять обновление Zapret"
-        : "Check for zapret updates from Flowseal every 24 hours";
+    public static string TipZapretAutoUpdate => global::VPNRouter.Core.Localization.Strings.TipZapretAutoUpdate;
 
     // Tooltips — Free Configs controls
-    public static string TipFcFastScan => Ru
-        ? "Только TCP-проверка (без TLS) — быстрее, но больше ложных «Ok»"
-        : "TCP-only probe (skips TLS) — faster but more false 'Ok' hits";
-    public static string TipFcSmartRefresh => Ru
-        ? "Остановить скан, как только найдётся нужное число «быстрых» конфигов"
-        : "Stop scan as soon as enough 'fast' configs are found";
-    public static string TipFcSkipRu => Ru
-        ? "Пропускать сервера в RU при deep verify"
-        : "Skip servers located in RU during deep verify";
+    public static string TipFcFastScan => global::VPNRouter.Core.Localization.Strings.TipFcFastScan;
+    public static string TipFcSmartRefresh => global::VPNRouter.Core.Localization.Strings.TipFcSmartRefresh;
+    public static string TipFcSkipRu => global::VPNRouter.Core.Localization.Strings.TipFcSkipRu;
     // ── Simple mode (v2.17+) ──
 
     // v2.30.7 — both toggles were hardcoded English in both languages.
@@ -1196,110 +853,83 @@ public static class Strings
     // UI. Now: localized with the full word ("Расширенный/Простой"
     // matches the UI mode names everywhere else).
     /// <summary>Header toggle button: Simple → Advanced.</summary>
-    public static string SmpToggleToAdvanced => Ru ? "Расширенный ▸" : "Advanced ▸";
+    public static string SmpToggleToAdvanced => global::VPNRouter.Core.Localization.Strings.SmpToggleToAdvanced;
     /// <summary>Header toggle button: Advanced → Simple.</summary>
-    public static string SmpToggleToSimple   => Ru ? "◂ Простой"     : "◂ Simple";
+    public static string SmpToggleToSimple => global::VPNRouter.Core.Localization.Strings.SmpToggleToSimple;
     /// <summary>Tooltip for the header toggle button.</summary>
-    public static string SmpToggleTooltip => Ru
-        ? "Переключить между упрощённым и полным интерфейсом"
-        : "Switch between Simple and Advanced UI";
+    public static string SmpToggleTooltip => global::VPNRouter.Core.Localization.Strings.SmpToggleTooltip;
 
     // v2.17.0 placeholder copy — replaced by the real skeleton in v2.17.1.
-    public static string SmpPlaceholderTitle => Ru
-        ? "Упрощённый интерфейс скоро появится"
-        : "Simple mode is on the way";
-    public static string SmpPlaceholderBody => Ru
-        ? "В v2.17 будет одностраничный онбординг: вставил конфиг или ссылку, нажал Start — готово. А пока переключайся в полный интерфейс."
-        : "v2.17 will bring a one-page onboarding: paste a config or subscription URL, hit Start, done. Switch to the full Advanced UI for now.";
-    public static string SmpPlaceholderSwitchToAdvanced => Ru
-        ? "Переключить на Advanced"
-        : "Switch to Advanced";
+    public static string SmpPlaceholderTitle => global::VPNRouter.Core.Localization.Strings.SmpPlaceholderTitle;
+    public static string SmpPlaceholderBody => global::VPNRouter.Core.Localization.Strings.SmpPlaceholderBody;
+    public static string SmpPlaceholderSwitchToAdvanced => global::VPNRouter.Core.Localization.Strings.SmpPlaceholderSwitchToAdvanced;
 
     // v2.17.1 skeleton — section labels + control captions
-    public static string SmpInputLabel => Ru ? "Конфиг VPN" : "VPN config";
-    public static string SmpInputWatermark => Ru
-        ? "vless://... или https://..."
-        : "vless://... or https://...";
-    public static string SmpInputHint => Ru
-        ? "Приму vless://-ссылку или URL подписки (http/https)."
-        : "Accepts a vless:// link or a subscription URL (http/https).";
-    public static string SmpTunnelModeLabel => Ru ? "Что идёт через VPN" : "Route through VPN";
-    public static string SmpSplitOption => Ru
-        ? "Выбранные приложения"
-        : "Selected apps";
+    public static string SmpInputLabel => global::VPNRouter.Core.Localization.Strings.SmpInputLabel;
+    public static string SmpInputWatermark => global::VPNRouter.Core.Localization.Strings.SmpInputWatermark;
+    public static string SmpInputHint => global::VPNRouter.Core.Localization.Strings.SmpInputHint;
+    public static string SmpTunnelModeLabel => global::VPNRouter.Core.Localization.Strings.SmpTunnelModeLabel;
+    public static string SmpSplitOption => global::VPNRouter.Core.Localization.Strings.SmpSplitOption;
     // v2.30.6-r1 (UX-3 fix): old subtitle hardcoded specific apps ("Discord,
     // браузеры, мессенджеры, рабочие") which doesn't always match actual
     // selected profiles. Generic descriptor avoids the mismatch and lets
     // the Apps tab list be the source of truth.
-    public static string SmpSplitHint => Ru
-        ? "По списку выбранных приложений"
-        : "Based on your selected apps";
-    public static string SmpFullOption => Ru ? "Весь трафик" : "All traffic";
-    public static string SmpFullHint => Ru
-        ? "Включая игры и банки"
-        : "Includes games and banking";
-    public static string SmpAdvancedLink => Ru ? "Расширенные настройки ▸" : "Advanced settings ▸";
+    public static string SmpSplitHint => global::VPNRouter.Core.Localization.Strings.SmpSplitHint;
+    public static string SmpFullOption => global::VPNRouter.Core.Localization.Strings.SmpFullOption;
+    public static string SmpFullHint => global::VPNRouter.Core.Localization.Strings.SmpFullHint;
+    public static string SmpAdvancedLink => global::VPNRouter.Core.Localization.Strings.SmpAdvancedLink;
     // v2.30.7-r4 — F-1 fix: was "Free Configs" in BOTH languages
     // (D1 violation in RU + inconsistent with the new "Публичные"
     // tab name shipped in r2). Aligned with the renamed tab.
-    public static string SmpAdvancedHint => Ru
-        ? "Все вкладки: серверы, подписки, Zapret, Telegram-прокси, публичные конфиги и пр."
-        : "All tabs: servers, subscriptions, Zapret, Telegram proxy, public configs and more.";
-    public static string SmpChangeConfig => Ru ? "Сменить конфиг или режим ▾" : "Change config or mode ▾";
-    public static string SmpConnectedTitle => Ru ? "VPN работает" : "VPN is running";
-    public static string SmpDisconnectedTitle => Ru ? "VPN не запущен" : "VPN is off";
-    public static string SmpTipSplit => Ru
-        ? "Chrome, Firefox, Edge, Brave, Discord, Telegram, Slack, Zoom, VS Code и Cursor идут через VPN. Игры, Steam, банк — мимо."
-        : "Chrome, Firefox, Edge, Brave, Discord, Telegram, Slack, Zoom, VS Code and Cursor go through the VPN. Games, Steam, banking — direct.";
-    public static string SmpTipFull => Ru
-        ? "Весь трафик компьютера идёт через VPN. Включая игры и банки."
-        : "All traffic on this computer goes through the VPN — including games and banking.";
-    public static string SmpAutostartLabel => Ru
-        ? $"Запускать вместе с {OsDisplayName}"
-        : $"Start with {OsDisplayName}";
-    public static string SmpTipAutostart => Ru
-        ? "Установит VPNRouter как службу Windows — VPN поднимется при старте системы, до входа пользователя."
-        : "Installs VPNRouter as a Windows Service so the VPN comes up at boot, before you log in.";
-    public static string SmpStartVpn => Ru ? "▶  Запустить VPN" : "▶  Start VPN";
-    public static string SmpStopVpn => Ru ? "⏹  Остановить VPN" : "⏹  Stop VPN";
-    public static string SmpActiveThrough => Ru ? "Через:" : "Through:";
+    public static string SmpAdvancedHint => global::VPNRouter.Core.Localization.Strings.SmpAdvancedHint;
+    public static string SmpChangeConfig => global::VPNRouter.Core.Localization.Strings.SmpChangeConfig;
+    public static string SmpConnectedTitle => global::VPNRouter.Core.Localization.Strings.SmpConnectedTitle;
+    public static string SmpDisconnectedTitle => global::VPNRouter.Core.Localization.Strings.SmpDisconnectedTitle;
+    public static string SmpTipSplit => global::VPNRouter.Core.Localization.Strings.SmpTipSplit;
+    public static string SmpTipFull => global::VPNRouter.Core.Localization.Strings.SmpTipFull;
+    public static string SmpAutostartLabel => global::VPNRouter.Core.Localization.Strings.SmpAutostartLabel;
+    public static string SmpTipAutostart => global::VPNRouter.Core.Localization.Strings.SmpTipAutostart;
+    public static string SmpStartVpn => global::VPNRouter.Core.Localization.Strings.SmpStartVpn;
+    public static string SmpStopVpn => global::VPNRouter.Core.Localization.Strings.SmpStopVpn;
+    public static string SmpActiveThrough => global::VPNRouter.Core.Localization.Strings.SmpActiveThrough;
 
     // ── v2.18.0 compact Simple-mode redesign (Variant A · Calm) ──
     // Status card titles (one word when possible).
     // v2.18.3: "Protected" → "Connected" — RU audience uses VPN for access
     // (bypassing blocks), not for security posture, so "Защищено" implied
     // the wrong mental model.
-    public static string SmpStatusProtected    => Ru ? "Подключено"     : "Connected";
-    public static string SmpStatusConnecting   => Ru ? "Подключение…"   : "Connecting…";
-    public static string SmpStatusNotConnected => Ru ? "Не подключено"  : "Not connected";
+    public static string SmpStatusProtected => global::VPNRouter.Core.Localization.Strings.SmpStatusProtected;
+    public static string SmpStatusConnecting => global::VPNRouter.Core.Localization.Strings.SmpStatusConnecting;
+    public static string SmpStatusNotConnected => global::VPNRouter.Core.Localization.Strings.SmpStatusNotConnected;
 
     // Status card descriptions. v2.18.3: shortened the "via" prefix so the
     // full line reads "Connected" (title) + "via de-01 · 104.194.156.93"
     // (desc) instead of repeating "Connected" twice.
-    public static string SmpStatusConnectedVia      => Ru ? "через" : "via";
-    public static string SmpStatusConnectedNoDetails=> Ru ? "Туннель активен." : "Tunnel is active.";
-    public static string SmpStatusConnectingHint    => Ru
-        ? "Рукопожатие с сервером — пара секунд."
-        : "Handshaking with the server — a moment.";
-    public static string SmpStatusDisconnectedHint  => Ru
-        ? "Трафик идёт напрямую — выбери конфиг и запусти туннель."
-        : "Traffic goes straight — pick a config and start the tunnel.";
+    public static string SmpStatusConnectedVia => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectedVia;
+    public static string SmpStatusConnectedNoDetails => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectedNoDetails;
+    public static string SmpStatusConnectingHint => global::VPNRouter.Core.Localization.Strings.SmpStatusConnectingHint;
+    public static string SmpStatusDisconnectedHint => global::VPNRouter.Core.Localization.Strings.SmpStatusDisconnectedHint;
 
     // Config row — "Config · Mode" label + value parts ("subscribe · split")
-    public static string SmpConfigRowLabel => Ru ? "Конфиг · Режим" : "Config · Mode";
-    public static string SmpCfgSubscribe   => Ru ? "подписка"       : "subscribe";
-    public static string SmpCfgManual      => Ru ? "вручную"        : "manual";
-    public static string SmpCfgCustom      => Ru ? "custom"         : "custom";
-    public static string SmpCfgSplit       => Ru ? "сплит"          : "split";
-    public static string SmpCfgFull        => Ru ? "полный"         : "full";
+    public static string SmpConfigRowLabel => global::VPNRouter.Core.Localization.Strings.SmpConfigRowLabel;
+    public static string SmpCfgSubscribe => global::VPNRouter.Core.Localization.Strings.SmpCfgSubscribe;
+    public static string SmpCfgManual => global::VPNRouter.Core.Localization.Strings.SmpCfgManual;
+    public static string SmpCfgCustom => global::VPNRouter.Core.Localization.Strings.SmpCfgCustom;
+    public static string SmpCfgSplit => global::VPNRouter.Core.Localization.Strings.SmpCfgSplit;
+    public static string SmpCfgFull => global::VPNRouter.Core.Localization.Strings.SmpCfgFull;
 
     // CTA captions — Connect / Disconnect / Cancel (not destructive; accent-solid, not red)
-    public static string SmpCtaConnect    => Ru ? "Подключить"   : "Connect";
-    public static string SmpCtaDisconnect => Ru ? "Отключить"    : "Disconnect";
-    public static string SmpCtaCancel     => Ru ? "Отменить"     : "Cancel";
+    public static string SmpCtaConnect => global::VPNRouter.Core.Localization.Strings.SmpCtaConnect;
+    public static string SmpCtaDisconnect => global::VPNRouter.Core.Localization.Strings.SmpCtaDisconnect;
+    public static string SmpCtaCancel => global::VPNRouter.Core.Localization.Strings.SmpCtaCancel;
 
     // Advanced card — new wording listing the feature surface
-    public static string SmpAdvCardTitle    => Ru ? "Расширенные настройки" : "Advanced settings";
+    public static string SmpAdvCardTitle => global::VPNRouter.Core.Localization.Strings.SmpAdvCardTitle;
+    // app-only: Core's SmpAdvCardSubtitle branches on OperatingSystem.IsAndroid()
+    // (mobile lists Settings·Applications, desktop lists Zapret·Telegram proxy).
+    // On Windows the two paths produce byte-identical output, but classified
+    // as TEXT-DRIFT here (different IL) — preserve until we verify the
+    // OS-branch helper can move to Core without breaking the desktop string.
     // v2.30.7-r4 — F-1 fix: align Simple-card subtitle with the new
     // "Публичные" tab name (was "Free Configs" hardcoded EN in both
     // languages, D1 + inconsistency).
@@ -1308,152 +938,120 @@ public static class Strings
         : "Servers · Subscriptions · Zapret · Telegram proxy · Public";
 
     // Mini-header menu items (⋯ flyout)
-    public static string SmpMenuTheme         => Ru ? "Тема"                   : "Theme";
-    public static string SmpMenuLanguage      => Ru ? "Язык"                   : "Language";
-    public static string SmpMenuOpenLogs      => Ru ? "Открыть логи"           : "Open logs";
-    public static string SmpMenuCheckLeaks    => Ru ? "Проверить утечку IP"    : "Check IP leak";
-    public static string SmpMenuCheckUpdates  => Ru ? "Проверить обновления"   : "Check for updates";
-    public static string SmpMenuSwitchToAdv   => Ru ? "Перейти в Advanced"     : "Switch to Advanced";
+    public static string SmpMenuTheme => global::VPNRouter.Core.Localization.Strings.SmpMenuTheme;
+    public static string SmpMenuLanguage => global::VPNRouter.Core.Localization.Strings.SmpMenuLanguage;
+    public static string SmpMenuOpenLogs => global::VPNRouter.Core.Localization.Strings.SmpMenuOpenLogs;
+    public static string SmpMenuCheckLeaks => global::VPNRouter.Core.Localization.Strings.SmpMenuCheckLeaks;
+    public static string SmpMenuCheckUpdates => global::VPNRouter.Core.Localization.Strings.SmpMenuCheckUpdates;
+    public static string SmpMenuSwitchToAdv => global::VPNRouter.Core.Localization.Strings.SmpMenuSwitchToAdv;
     // v2.24.4 troubleshooting items (Level 2/3 self-healing)
-    public static string SmpMenuHealthCheck   => Ru ? "Проверить состояние"    : "Run Health Check";
+    public static string SmpMenuHealthCheck => global::VPNRouter.Core.Localization.Strings.SmpMenuHealthCheck;
     // v2.30.5-r1 (UX-68 fix): localize "Safe Mode" in Russian.
-    public static string SmpMenuSafeMode      => Ru ? "Перезапустить в безопасном режиме" : "Restart in Safe Mode";
-    public static string SmpMenuResetConfig   => Ru ? "Сбросить настройки"     : "Reset config to defaults";
-    public static string SmpMenuResetConfirm  => Ru ? "Нажмите ещё раз для сброса" : "Click again to confirm reset";
-    public static string TipSmpMenuHealthCheck => Ru
-        ? "Запустить диагностику и сохранить отчёт в текстовый файл."
-        : "Run diagnostic checks, save results to a text file and open it. Safe to run at any time.";
-    public static string TipSmpMenuSafeMode => Ru
-        ? "Перезапустить без пользовательских настроек. Force Full tunnel, bundled каталог."
-        : "Restart ignoring user config overrides. Forces Full tunnel, uses bundled catalogue only.";
-    public static string TipSmpMenuResetConfig => Ru
-        ? "Сохранить резервную копию конфига и перезапустить с заводскими настройками. Нажмите дважды для подтверждения."
-        : "Backup current config and restart with factory defaults. Click twice to confirm.";
+    public static string SmpMenuSafeMode => global::VPNRouter.Core.Localization.Strings.SmpMenuSafeMode;
+    public static string SmpMenuResetConfig => global::VPNRouter.Core.Localization.Strings.SmpMenuResetConfig;
+    public static string SmpMenuResetConfirm => global::VPNRouter.Core.Localization.Strings.SmpMenuResetConfirm;
+    public static string TipSmpMenuHealthCheck => global::VPNRouter.Core.Localization.Strings.TipSmpMenuHealthCheck;
+    public static string TipSmpMenuSafeMode => global::VPNRouter.Core.Localization.Strings.TipSmpMenuSafeMode;
+    public static string TipSmpMenuResetConfig => global::VPNRouter.Core.Localization.Strings.TipSmpMenuResetConfig;
 
     // v2.25.0-r2 — Autostart is Windows-only (service + registry Run key).
     // On Linux/macOS this whole section is non-functional; replace the four
     // checkboxes with a notice so users don't flip disabled toggles.
-    public static string AutostartPlatformNotice => Ru
-        ? "Автозапуск пока поддерживается только на Windows. Поддержка Linux (systemd) и macOS (launchd) появится в будущих версиях."
-        : "Autostart is currently available on Windows only. Linux (systemd) and macOS (launchd) support is planned for future releases.";
+    public static string AutostartPlatformNotice => global::VPNRouter.Core.Localization.Strings.AutostartPlatformNotice;
 
     // v2.25.2 — section labels inside the redesigned ⋯ popover menu.
     // Matches the Claude-Design handoff AdvancedMode.html section 1 layout.
-    public static string SmpMenuViewSection           => Ru ? "Вид"                : "View";
-    public static string SmpMenuDiagnosticsSection    => Ru ? "Диагностика"        : "Diagnostics";
-    public static string SmpMenuTroubleshootingSection => Ru ? "Устранение неполадок" : "Troubleshooting";
-    public static string SmpSegLight                  => Ru ? "Светлая"            : "Light";
-    public static string SmpSegDark                   => Ru ? "Тёмная"             : "Dark";
-    public static string SmpSegRu                     => "RU";
-    public static string SmpSegEn                     => "EN";
+    public static string SmpMenuViewSection => global::VPNRouter.Core.Localization.Strings.SmpMenuViewSection;
+    public static string SmpMenuDiagnosticsSection => global::VPNRouter.Core.Localization.Strings.SmpMenuDiagnosticsSection;
+    public static string SmpMenuTroubleshootingSection => global::VPNRouter.Core.Localization.Strings.SmpMenuTroubleshootingSection;
+    public static string SmpSegLight => global::VPNRouter.Core.Localization.Strings.SmpSegLight;
+    public static string SmpSegDark => global::VPNRouter.Core.Localization.Strings.SmpSegDark;
+    public static string SmpSegRu => global::VPNRouter.Core.Localization.Strings.SmpSegRu;
+    public static string SmpSegEn => global::VPNRouter.Core.Localization.Strings.SmpSegEn;
 
     // v2.25.11 — shown briefly in the footer while the window rebuild
     // triggered by a language toggle is in flight, so the user can see
     // that their click was received (without this the flyout closes and
     // then the UI freezes for ~200-500 ms with no visible acknowledgement).
-    public static string LanguageSwitching            => Ru
-        ? "Переключение языка…"
-        : "Switching language…";
+    public static string LanguageSwitching => global::VPNRouter.Core.Localization.Strings.LanguageSwitching;
 
     // v2.25.0 — "About" dialog (version / build info moved out of header).
-    public static string SmpMenuAbout        => Ru ? "О приложении"              : "About";
-    public static string TipSmpMenuAbout     => Ru
-        ? "Информация о версии, билде и авторе."
-        : "Version, build, and author information.";
-    public static string AboutTitle          => Ru ? "О приложении"              : "About";
-    public static string AboutBrandName      => "Virtual Penguin Network";
-    public static string AboutTagline        => Ru
-        ? "Процесс-VPN роутер с поддержкой обхода DPI."
-        : "Process-based VPN router with DPI bypass support.";
-    public static string AboutVersionLabel   => Ru ? "Версия"                    : "Version";
-    public static string AboutSingBoxLabel   => Ru ? "sing-box"                  : "sing-box";
-    public static string AboutCreatorLabel   => Ru ? "Автор"                     : "Author";
-    public static string AboutRepoLabel      => Ru ? "Репозиторий"               : "Repository";
-    public static string AboutCloseBtn       => Ru ? "Закрыть"                   : "Close";
+    public static string SmpMenuAbout => global::VPNRouter.Core.Localization.Strings.SmpMenuAbout;
+    public static string TipSmpMenuAbout => global::VPNRouter.Core.Localization.Strings.TipSmpMenuAbout;
+    public static string AboutTitle => global::VPNRouter.Core.Localization.Strings.AboutTitle;
+    public static string AboutBrandName => global::VPNRouter.Core.Localization.Strings.AboutBrandName;
+    public static string AboutTagline => global::VPNRouter.Core.Localization.Strings.AboutTagline;
+    public static string AboutVersionLabel => global::VPNRouter.Core.Localization.Strings.AboutVersionLabel;
+    public static string AboutSingBoxLabel => global::VPNRouter.Core.Localization.Strings.AboutSingBoxLabel;
+    public static string AboutCreatorLabel => global::VPNRouter.Core.Localization.Strings.AboutCreatorLabel;
+    public static string AboutRepoLabel => global::VPNRouter.Core.Localization.Strings.AboutRepoLabel;
+    public static string AboutCloseBtn => global::VPNRouter.Core.Localization.Strings.AboutCloseBtn;
 
     // ── v2.15.5 Localization pass: remaining hardcoded strings ──
 
     // Tooltips — MainWindow header buttons
-    public static string TipOpenLogs => Ru ? "Открыть папку логов" : "Open logs folder";
-    public static string TipIpLeak   => Ru ? "ipleak.net — проверка утечки" : "ipleak.net — leak test";
+    public static string TipOpenLogs => global::VPNRouter.Core.Localization.Strings.TipOpenLogs;
+    public static string TipIpLeak => global::VPNRouter.Core.Localization.Strings.TipIpLeak;
 
     // Tooltips — Applications page
-    public static string TipRemoveCategory => Ru ? "Удалить категорию" : "Remove category";
-    public static string TipRemoveApp      => Ru ? "Удалить приложение" : "Remove app";
+    public static string TipRemoveCategory => global::VPNRouter.Core.Localization.Strings.TipRemoveCategory;
+    public static string TipRemoveApp => global::VPNRouter.Core.Localization.Strings.TipRemoveApp;
 
     // Tooltips — Free Configs cleanup
-    public static string TipOpenFreeConfigLogs => Ru
-        ? "Открыть папку логов VPNRouter"
-        : "Open VPNRouter logs folder";
-    public static string TipClearFailed => Ru
-        ? "Удалить записи Timeout/Unreachable/TlsFailed/Implausible"
-        : "Remove Timeout / Unreachable / TlsFailed / Implausible entries";
-    public static string TipKeepVerifiedOnly => Ru
-        ? "Оставить только Verified, всё остальное удалить"
-        : "Drop everything except Verified entries";
-    public static string TipClearAllCache => Ru
-        ? "Стереть весь кэш Free Configs"
-        : "Wipe the entire Free Configs cache";
+    public static string TipOpenFreeConfigLogs => global::VPNRouter.Core.Localization.Strings.TipOpenFreeConfigLogs;
+    public static string TipClearFailed => global::VPNRouter.Core.Localization.Strings.TipClearFailed;
+    public static string TipKeepVerifiedOnly => global::VPNRouter.Core.Localization.Strings.TipKeepVerifiedOnly;
+    public static string TipClearAllCache => global::VPNRouter.Core.Localization.Strings.TipClearAllCache;
 
     // Tooltips — Servers / Subscriptions testing
-    public static string TipTcpTlsPing       => Ru ? "Пинг через TCP + TLS" : "TCP + TLS ping";
-    public static string TipTestTcpTls       => Ru ? "Проверить TCP + TLS" : "Test TCP + TLS";
-    public static string TipCloseServerDetail => Ru ? "Закрыть" : "Close";
-    public static string TipDeleteServer     => Ru ? "Удалить сервер" : "Delete server";
-    public static string TipTestAllServers   => Ru
-        ? "TCP + TLS проверка всех серверов"
-        : "TCP + TLS probe to all servers";
-    public static string TipDeepVerifyServers => Ru
-        ? "Spawn sing-box + HTTP trace + 5MB download"
-        : "Spawn sing-box + HTTP trace + 5MB download";
-    public static string TipRefreshSubscription => Ru ? "Обновить подписку" : "Refresh subscription";
-    public static string TipRemoveSubscription  => Ru ? "Удалить подписку" : "Remove subscription";
+    public static string TipTcpTlsPing => global::VPNRouter.Core.Localization.Strings.TipTcpTlsPing;
+    public static string TipTestTcpTls => global::VPNRouter.Core.Localization.Strings.TipTestTcpTls;
+    public static string TipCloseServerDetail => global::VPNRouter.Core.Localization.Strings.TipCloseServerDetail;
+    public static string TipDeleteServer => global::VPNRouter.Core.Localization.Strings.TipDeleteServer;
+    public static string TipTestAllServers => global::VPNRouter.Core.Localization.Strings.TipTestAllServers;
+    public static string TipDeepVerifyServers => global::VPNRouter.Core.Localization.Strings.TipDeepVerifyServers;
+    public static string TipRefreshSubscription => global::VPNRouter.Core.Localization.Strings.TipRefreshSubscription;
+    public static string TipRemoveSubscription => global::VPNRouter.Core.Localization.Strings.TipRemoveSubscription;
 
     // Form field labels (Server detail editor)
-    public static string LblName      => Ru ? "Имя:"     : "Name:";
-    public static string LblServer    => Ru ? "Сервер:"  : "Server:";
-    public static string LblPort      => Ru ? "Порт:"    : "Port:";
-    public static string LblUuid      => Ru ? "UUID:"    : "UUID:";
-    public static string LblPublicKey => Ru ? "Pub Key:" : "Pub Key:";
-    public static string LblShortId   => Ru ? "Short ID:" : "Short ID:";
+    public static string LblName => global::VPNRouter.Core.Localization.Strings.LblName;
+    public static string LblServer => global::VPNRouter.Core.Localization.Strings.LblServer;
+    public static string LblPort => global::VPNRouter.Core.Localization.Strings.LblPort;
+    public static string LblUuid => global::VPNRouter.Core.Localization.Strings.LblUuid;
+    public static string LblPublicKey => global::VPNRouter.Core.Localization.Strings.LblPublicKey;
+    public static string LblShortId => global::VPNRouter.Core.Localization.Strings.LblShortId;
 
     // Descriptive labels
-    public static string LblRoutingMode          => Ru ? "Режим маршрутизации" : "Routing mode";
-    public static string LblNoServers            => Ru ? "Серверов нет" : "No servers";
-    public static string LblAddSubscriptionHint  => Ru
-        ? "Добавьте подписку ниже"
-        : "Add a subscription below";
+    public static string LblRoutingMode => global::VPNRouter.Core.Localization.Strings.LblRoutingMode;
+    public static string LblNoServers => global::VPNRouter.Core.Localization.Strings.LblNoServers;
+    public static string LblAddSubscriptionHint => global::VPNRouter.Core.Localization.Strings.LblAddSubscriptionHint;
 
     // Badge
-    public static string LblCustomBadge => Ru ? "custom" : "custom";
+    public static string LblCustomBadge => global::VPNRouter.Core.Localization.Strings.LblCustomBadge;
 
     // Watermarks
-    public static string WmZapretCustomArgs => "--wf-tcp=443 --dpi-desync=…";
+    public static string WmZapretCustomArgs => global::VPNRouter.Core.Localization.Strings.WmZapretCustomArgs;
     // v2.30.4-r1 (UX-26 fix): expand placeholder to advertise multi-protocol
     // support shipped in v2.30.1 (vless/hysteria2/tuic/shadowsocks). Pre-r1
     // users had no way to discover from the UI that hy2://, tuic:// or ss://
     // are accepted in the same input.
-    public static string WmVlessUri         => "vless:// / hy2:// / tuic:// / ss://...#name";
-    public static string WmTgProxyPort      => "1443";
-    public static string WmTgProxySecret    => Ru ? "автоген" : "auto-generated";
+    public static string WmVlessUri => global::VPNRouter.Core.Localization.Strings.WmVlessUri;
+    public static string WmTgProxyPort => global::VPNRouter.Core.Localization.Strings.WmTgProxyPort;
+    public static string WmTgProxySecret => global::VPNRouter.Core.Localization.Strings.WmTgProxySecret;
 
     // Status init values
-    public static string StatusStopped => Ru ? "Остановлен" : "Stopped";
-    public static string StatusRunning => Ru ? "Работает"   : "Running";
+    public static string StatusStopped => global::VPNRouter.Core.Localization.Strings.StatusStopped;
+    public static string StatusRunning => global::VPNRouter.Core.Localization.Strings.StatusRunning;
 
     // v2.30.4-r1 (SUGGEST-22 fix): manual update check inside Settings →
     // Обновления tab.
-    public static string CurrentVersion => Ru ? "Текущая версия" : "Current version";
+    public static string CurrentVersion => global::VPNRouter.Core.Localization.Strings.CurrentVersion;
 
     // v2.30.5-r1 (UX-29 fix): empty-state hero for the Custom Config
     // (JSON) sub-tab. Pre-r1 was blank + a "Нажмите на конфиг для
     // активации" hint with nothing to click; now explains the feature.
-    public static string CustomConfigsEmptyTitle => Ru
-        ? "У тебя пока нет своих конфигов"
-        : "No custom configs yet";
-    public static string CustomConfigsEmptyHint => Ru
-        ? "Свой конфиг — это готовый JSON-файл sing-box для нестандартных протоколов (TUIC, Hysteria2, Reality+gRPC и др.). Нажми «Добавить конфиг…» внизу чтобы импортировать."
-        : "A custom config is a ready sing-box JSON file for non-standard protocols (TUIC, Hysteria2, Reality+gRPC, etc.). Click «Add config…» below to import.";
+    public static string CustomConfigsEmptyTitle => global::VPNRouter.Core.Localization.Strings.CustomConfigsEmptyTitle;
+    public static string CustomConfigsEmptyHint => global::VPNRouter.Core.Localization.Strings.CustomConfigsEmptyHint;
 
     // v2.32.0 — recovery banner shown after SettingsValidator rejected a
     // structurally-valid but semantically-broken config.yaml (typoed
@@ -1461,26 +1059,16 @@ public static class Strings
     // and the loader rewrote defaults. The backup path comes from
     // SettingsLoader.LastRecoveryNotice and is appended verbatim by the
     // VM, so the localized string is the prefix only.
-    public static string SettingsRecoveredFromBadConfig(string backupPath) => Ru
-        ? string.IsNullOrEmpty(backupPath)
-            ? "Config был повреждён, восстановлен default."
-            : $"Config был повреждён, восстановлен default. Backup: {backupPath}"
-        : string.IsNullOrEmpty(backupPath)
-            ? "Config was invalid; defaults restored."
-            : $"Config was invalid; defaults restored. Backup: {backupPath}";
+    public static string SettingsRecoveredFromBadConfig(string backupPath) => global::VPNRouter.Core.Localization.Strings.SettingsRecoveredFromBadConfig(backupPath);
 
     // v2.32.3 (2026-05-17, Z:\kanareik incident) — placeholder-prune banner.
     // Shown once when SettingsMigrator.PruneKnownPlaceholders strips placeholder
     // Reality credentials from a user's config. {0} is the count of removed
     // entries. The "AllGone" branch fires when nothing healthy is left and the
     // user must add a real server to continue.
-    public static string PlaceholderPruneBanner => Ru
-        ? "Обновление v2.32.3: убрано {0} небезопасных серверов из конфига (шаблонные ключи Reality, с которыми VPN не работает)."
-        : "v2.32.3 upgrade: removed {0} unsafe servers from your config (placeholder Reality keys — VPN couldn't work with them).";
+    public static string PlaceholderPruneBanner => global::VPNRouter.Core.Localization.Strings.PlaceholderPruneBanner;
 
-    public static string PlaceholderPruneBannerAllGone => Ru
-        ? "Обновление v2.32.3: все сохранённые серверы оказались шаблонными. Добавь настоящий vless:// или подписку, чтобы продолжить."
-        : "v2.32.3 upgrade: all saved servers were placeholders. Add a real vless:// or a subscription to continue.";
+    public static string PlaceholderPruneBannerAllGone => global::VPNRouter.Core.Localization.Strings.PlaceholderPruneBannerAllGone;
 
     // ── Bug-r9-E (2026-05-11) — third-party VPN conflict banner ──
     // Shown in the MainWindow header banner when StartAsync throws
@@ -1490,18 +1078,16 @@ public static class Strings
     // process-named hint instead of the cryptic "Cannot create a file
     // when that file already exists" wintun error.
 
-    public static string ConflictOtherVpnDetectedTitle => Ru
-        ? "Обнаружен другой VPN-клиент"
-        : "Another VPN client detected";
+    public static string ConflictOtherVpnDetectedTitle => global::VPNRouter.Core.Localization.Strings.ConflictOtherVpnDetectedTitle;
 
-    public static string ConflictOtherVpnDetectedMessage(string processName, int pid) => Ru
-        ? $"Обнаружен другой VPN-клиент: {processName} (PID {pid}). " +
-          $"Один VPN держит TUN-адаптер за раз. Остановите {processName} перед запуском VPNRouter."
-        : $"Another VPN client detected: {processName} (PID {pid}). " +
-          $"Only one VPN can hold the TUN adapter at a time. Stop {processName} before launching VPNRouter.";
+    public static string ConflictOtherVpnDetectedMessage(string processName, int pid) => global::VPNRouter.Core.Localization.Strings.ConflictOtherVpnDetectedMessage(processName, pid);
 
-    public static string ConflictRefreshButton => Ru ? "Проверить ещё раз" : "Refresh";
+    public static string ConflictRefreshButton => global::VPNRouter.Core.Localization.Strings.ConflictRefreshButton;
 
+    // ── app-only: Conflict Kill/Ignore strings live here (not in Core) ──
+    // Desktop-specific UX — Android relies on system VpnService and doesn't
+    // ship a Conflict banner. Follow-up: keep here unless Android grows the
+    // same banner.
     // ── v2.32.1-r4 (Bug-r10-A) — Kill conflicting VPN button ──
     // User report 2026-05-11: на основной Win машине app требовал убить
     // AmneziaVPN, но кнопки kill не было — пришлось через Task Manager.
@@ -1541,14 +1127,14 @@ public static class Strings
     // or third-party AV termination). The VM subscribes and shows the
     // toast on the Tools / DPI Bypass page.
 
-    public static string ZapretAvBlockToast => Ru
-        ? "Zapret (winws.exe) был остановлен сразу после запуска. Возможно его блокирует антивирус. " +
-          @"Добавьте в исключения: C:\ProgramData\VPNRouter\zapret\ (вся папка)."
-        : "Zapret (winws.exe) exited immediately after launch. Likely an antivirus is blocking it. " +
-          @"Whitelist: C:\ProgramData\VPNRouter\zapret\ (whole folder).";
+    public static string ZapretAvBlockToast => global::VPNRouter.Core.Localization.Strings.ZapretAvBlockToast;
 
-    public static string ZapretAvBlockCopyPath => Ru ? "Скопировать путь" : "Copy path";
+    public static string ZapretAvBlockCopyPath => global::VPNRouter.Core.Localization.Strings.ZapretAvBlockCopyPath;
 
+    // ── app-only: Emergency Channel (wgturn) — not in Core/Strings.cs ──
+    // Desktop-only feature currently. Follow-up: lift the whole block
+    // to Core when Android grows the same card (wgturn-cli is bundled
+    // in installer Phase 1 — Phase 2 will add Android surface).
     // ── v2.32.2 (W-4) — Emergency Channel (wgturn) card on Tools tab ──
     // Backup VPN that runs over VK Calls TURN servers. Surfaces a third
     // card on the Tools tab alongside Zapret and Telegram Proxy. Has
