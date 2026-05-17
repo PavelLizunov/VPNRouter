@@ -1,0 +1,79 @@
+name: dotnet test
+
+# Phase 1 Q8 — primary regression gate for VPNRouter.Tests.
+#
+# Why this workflow exists:
+#   765 tests live in VPNRouter.Tests but until now only ran locally. Any
+#   commit could break the suite undetected until a developer happened to
+#   run `dotnet test` on their machine. Phase 2 god-file splits cannot
+#   begin safely without this CI gate. See plans/ci-audit-2026-05-17.md
+#   "Key findings: NO test workflow" and plans/v3.0-refactor-roadmap.md
+#   Phase 1 #8.
+#
+# Triggers: every push to main / v3.0-prep and every PR targeting either.
+# Deliberately NO `paths:` filter — every push must verify the full suite,
+# echoing the lesson from test-windows-update.yml whose hardcoded paths
+# silently skipped during refactor work.
+#
+# Job id `test` is the contract: Wave 4 integrator will PATCH the GitHub
+# branch-protection required-checks list to add `test` after this workflow
+# has one green run on main. Do NOT rename the job without coordinating
+# the protection update.
+#
+# Caching: not added here. Q9 owns the NuGet cache contract via
+# actions/cache; this workflow stays restore-from-scratch until then so
+# Q9 can introduce caching as a single atomic change.
+
+on:
+  push:
+    branches: [main, v3.0-prep]
+  pull_request:
+    branches: [main, v3.0-prep]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # Floating @v4 for now; Q11 will pin to a full commit SHA across
+      # every workflow in one sweep.
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore VPNRouter.Tests/VPNRouter.Tests.csproj
+
+      - name: Build
+        run: dotnet build VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-restore
+
+      # Excluded suites (TODO: re-enable once xvfb wrapper / display
+      # bootstrap is in place):
+      #   - HeadlessGuiTests, PageScreenshotTests, VisualDiffTests
+      #     use Avalonia.Headless + Skia. Even with UseHeadlessDrawing=false
+      #     and UseSkia(), they pull display-adjacent code paths that
+      #     have not been validated on a bare ubuntu-latest runner. Run
+      #     them locally on Windows for now; the Q-series follow-up will
+      #     add `xvfb-run` (or equivalent) and lift this filter.
+      #   - Filter uses xUnit's `FullyQualifiedName!~` operator, which
+      #     matches any test whose FQN contains the substring — covers
+      #     [Theory] cases too.
+      - name: Test
+        run: dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build --filter "FullyQualifiedName!~Headless&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff" --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal"
+
+      # `if: always()` so failed test runs still upload the .trx — that's
+      # the diagnostic artifact the developer needs to triage. 30-day
+      # retention matches build-linux.yml's convention.
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: test-results-${{ github.sha }}
+          path: VPNRouter.Tests/TestResults/*.trx
+          retention-days: 30

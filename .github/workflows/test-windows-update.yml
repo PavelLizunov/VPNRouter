@@ -60,15 +60,36 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
       - name: Setup .NET 8 SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
         with:
           dotnet-version: "8.0.x"
 
+      # Phase 1 Q9 — NuGet package cache. build.ps1 publishes three projects
+      # self-contained (App + CLI + Service) which restores hundreds of MB of
+      # packages on cold runs. Keyed on the union hash of every .csproj so a
+      # package bump invalidates cleanly. Q11 will pin actions/cache to a SHA.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # Phase 1 Q9 — sing-box upstream tarball cache. build.ps1 caches the
+      # downloaded ZIP under tools\singbox-cache\ and skips the download
+      # when the cached file is already present. Key pins SingBoxVersion
+      # (1.13.10 at the time of writing) so cache invalidates automatically
+      # when build.ps1 bumps the upstream. Q11 will pin actions/cache to SHA.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: tools/singbox-cache/
+          key: singbox-1.13.10-${{ runner.os }}
+
       - name: Setup Go (for VPNRouter.GUI stub)
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version: "1.21"
 
@@ -307,7 +328,7 @@ jobs:
 
       - name: Capture logs as artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: test-update-logs-${{ github.run_id }}
           path: |

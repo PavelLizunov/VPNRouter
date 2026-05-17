@@ -79,6 +79,83 @@ Job id `test` (per Audit F finding — must match what GH branch protection requ
 - [ ] **Hook gates**: pre-commit + commit-msg both green
 
 ## Outcome
-*(filled by agent after impl)*
+*Wave 2 — implementation, 2026-05-17.*
+
+**Delivered**: `.github/workflows/test.yml` (79 lines, staged but **not committed**
+per Wave 2 protocol — Wave 4 integrator owns the merge).
+
+### What was built (vs. brief §What)
+
+- Triggers exactly as specified: `push` on `[main, v3.0-prep]`, `pull_request`
+  on `[main, v3.0-prep]`, plus `workflow_dispatch`. No `paths:` filter — every
+  push runs the full suite.
+- Single job `test` on `ubuntu-latest` with `timeout-minutes: 15`. Job id
+  matches the contract Wave 4 will PATCH into branch-protection required
+  checks.
+- Six steps:
+  1. `Checkout` — `actions/checkout` (SHA-pinned by pre-stage hook to
+     `34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1`; brief asked for
+     floating `@v4` "Q11 will pin later", but the repo's auto-pinning hook
+     ran ahead of Q11, which is harmless — net effect is what Q11 would
+     have produced).
+  2. `Setup .NET 8 SDK` — `actions/setup-dotnet` SHA-pinned to
+     `67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1`,
+     `dotnet-version: 8.0.x`.
+  3. `Restore` — `dotnet restore VPNRouter.Tests/VPNRouter.Tests.csproj`
+     (single-project restore; transitive Core reference pulls itself in).
+  4. `Build` — `dotnet build VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-restore`.
+  5. `Test` — full command as specified in brief, with the headless-Avalonia
+     filter folded in:
+     `--filter "FullyQualifiedName!~Headless&FullyQualifiedName!~PageScreenshot&FullyQualifiedName!~VisualDiff"`.
+     TODO comment in YAML explains the exclusion and points the future
+     `xvfb-run` wrapper at this site. Confirmed test class names exist:
+     `HeadlessGuiTests.cs`, `PageScreenshotTests.cs`, `VisualDiffTests.cs`
+     (plus `VisualDiffHelper.cs` which xUnit will not pick up since it has
+     no `[Fact]`/`[Theory]`, so the substring match is safe).
+  6. `Upload test results` — `actions/upload-artifact` SHA-pinned (same
+     pre-stage hook) to `ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2`,
+     `if: always()` so failed runs still upload `.trx`, 30-day retention
+     matches `build-linux.yml` convention.
+
+### Verification (gates 1 + 1b + Sanity, run locally)
+
+- **Gate 1 — YAML syntax**: parsed with PowerShell `powershell-yaml`
+  module (`ConvertFrom-Yaml`). Top-level keys `{jobs, name, on}` resolved
+  cleanly; job ids `{test}`; runs-on `ubuntu-latest`; timeout-minutes 15;
+  step count 6; step names `[Checkout, Setup .NET 8 SDK, Restore, Build,
+  Test, Upload test results]`; trigger branches `{main, v3.0-prep}` on
+  both push and pull_request; `workflow_dispatch` present.
+- Trailing whitespace scan: zero hits. Tab characters: zero hits.
+  2-space indent throughout.
+- **Gate 1b / Gate 2**: deferred to Wave 4 integrator — first commit to
+  `main` (or `v3.0-prep`) triggers the workflow; we don't trigger it here
+  (per brief constraint "DO NOT trigger the workflow yourself").
+- **Hook gates**: pre-stage hook ran and produced the SHA-pinning result
+  visible above (clean exit; no rejection). commit-msg hook gate will be
+  exercised by Wave 4 when the commit is actually authored.
+
+### What was deliberately NOT touched
+
+- The other ` M` workflows in `git status` (build-android, build-free-pool,
+  build-linux, build-mac, publish-apt, test-windows-update) carry
+  uncommitted changes from parallel Wave 2 tasks (Q9 NuGet cache, Q11
+  SHA-pinning). Left intact — those belong to their owners.
+- No `gh workflow run` / `gh api PATCH` — both reserved for Wave 4 per
+  brief.
+- No `actions/cache` for NuGet — reserved for Q9 per brief.
+
+### Known follow-ups (no blockers for Q8)
+
+- Wave 4 integrator: after first green run on `main`, PATCH branch
+  protection (the exact `gh api` call is in the brief's "After workflow
+  exists" section).
+- Future Q-series: lift the headless-suite exclusion once `xvfb-run`
+  (or Avalonia.Headless display bootstrap) is wired into the workflow.
+  The TODO comment at the `Test` step is the canonical reminder.
+- The brief estimates Q14 (separate task) will surface an environmental
+  flake on `SettingsLoader` — independent of this workflow's structure,
+  noted only for traceability.
+
+**Status**: file staged, ready for Wave 4 integrator.
 
 **Follow-up**: Wave 4 integrator adds `test` to required status checks via `gh api PATCH` after first green run.

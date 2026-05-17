@@ -28,12 +28,23 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
       - name: Setup .NET 8 SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
         with:
           dotnet-version: "8.0.x"
+
+      # Phase 1 Q9 — NuGet package cache. `dotnet publish` restores packages
+      # from nuget.org on cold runs (~30–60 s). Caching ~/.nuget/packages
+      # keyed on the union hash of every .csproj keeps the cache fresh
+      # without manual invalidation. Q11 will pin actions/cache to a SHA.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
       - name: Resolve version from tag or input
         id: version
@@ -267,7 +278,7 @@ jobs:
           done
 
       - name: Upload as workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: linux-build-v${{ steps.version.outputs.version }}
           path: |

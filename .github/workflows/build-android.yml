@@ -33,18 +33,40 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
       - name: Setup .NET 8 SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
         with:
           dotnet-version: "8.0.x"
+
+      # Phase 1 Q9 — NuGet package cache. `dotnet publish` for the Android
+      # head restores hundreds of MB of packages on cold runs. Keyed on the
+      # union hash of every .csproj so any package version bump invalidates
+      # cleanly. Q11 will pin actions/cache to a commit SHA.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # Phase 1 Q9 — .NET Android workload cache. `dotnet workload install
+      # android` below takes 3–4 min on a cold runner (large SDK download).
+      # Caching ~/.dotnet/workloads keyed on global.json (where SDK + workload
+      # versions are pinned) avoids repeating that download on warm runs.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: ~/.dotnet/workloads
+          key: dotnet-workloads-${{ runner.os }}-${{ hashFiles('**/global.json') }}
+          restore-keys: |
+            dotnet-workloads-${{ runner.os }}-
 
       # JDK 17 is the minimum for current AndroidX + .NET Android 8 build
       # tools. Temurin matches the developer-VM toolchain documented in
       # plans/vpnrouter-android-handbook.md §3.5.
       - name: Setup JDK 17 (Temurin)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9  # v4.8.0
         with:
           distribution: temurin
           java-version: "17"
@@ -54,7 +76,7 @@ jobs:
       # The .NET Android workload picks up these env vars automatically;
       # no extra -p:AndroidSdkDirectory flag needed.
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407  # v3.2.2
 
       # The Android workload is not bundled with setup-dotnet; it has to
       # be installed explicitly. ~3-4 min on a cold runner.
@@ -164,7 +186,7 @@ jobs:
 
       - name: Upload as workflow artifacts
         if: steps.keystore_decode.outputs.skip != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: android-build-v${{ steps.version.outputs.version }}
           path: |
