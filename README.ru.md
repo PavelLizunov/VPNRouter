@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">VPNRouter</h1>
-<p align="center"><b>Virtual Penguin Network</b> — процессный split-tunnel VPN-роутер для Windows, macOS и Linux.</p>
+<p align="center"><b>Virtual Penguin Network</b> — процессный split-tunnel VPN-роутер для Windows, macOS, Linux и Android.</p>
 
 <p align="center">
   <a href="README.md">English</a> · <a href="README.ru.md"><b>Русский</b></a>
@@ -20,7 +20,9 @@
     <img src="https://img.shields.io/github/license/PavelLizunov/VPNRouter?color=2563EB" alt="Лицензия"/>
   </a>
   <img src="https://img.shields.io/badge/.NET-8.0-512BD4" alt=".NET 8"/>
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Платформы"/>
+  <img src="https://img.shields.io/badge/platform-Win%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-lightgrey" alt="Платформы"/>
+  <img src="https://img.shields.io/badge/LOC-94k-blue" alt="94k LOC"/>
+  <img src="https://img.shields.io/badge/тестов-765-success" alt="765 тестов"/>
 </p>
 
 ---
@@ -58,6 +60,16 @@ iwr -useb https://vpn.ninitux.com/install.ps1 | iex
 Windows 10/11 x64. Авто-поднимается через UAC. Регистрирует Start Menu + Add/Remove Programs. Обновление: запустить ту же команду повторно. Удалить: Settings → Приложения → VPNRouter.
 </td>
 </tr>
+<tr>
+<td align="center">🤖<br><b>Android</b></td>
+<td>
+
+```
+Скачайте VPNRouter-v{version}-android.apk со страницы Releases
+```
+Android 6.0+ (API 23). Side-load через APK (Play Store пока нет). Live-preview QR сканер, magic 1-step paste подписки, минимум permissions (`CAMERA` + `INTERNET` + `VPN_SERVICE`). Авто-обновление через in-app banner.
+</td>
+</tr>
 </table>
 
 Предпочитаете установку вручную? См. [**Ручная установка**](#ручная-установка) ниже для ZIP / DMG / AppImage / deb / tar.gz.
@@ -89,6 +101,26 @@ Windows 10/11 x64. Авто-поднимается через UAC. Регист�
 
 - **DPI-обход (Zapret)** — интеграция [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube). Скачивается по запросу из вкладки Tools. Полезно, когда провайдер блокирует сайт через DPI, а полный прокси не нужен.
 - **Telegram-прокси** — встроенный MTProto-прокси ([Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy)) для обхода конкретно Telegram.
+
+## Каталог фич
+
+**53 фичи** в 11 категориях. Полный справочник с flow-диаграммами + рейтингом сложности + service chains лежит в [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md) (auto-generated audit). Сводка:
+
+| Категория | Фич | Сложность | Платформы |
+|---|---:|---|---|
+| **Core VPN** (Connect, hot-reload, multi-protocol, custom configs) | 10 | 4 HIGH · 4 MED · 2 LOW | Win · Mac · Linux · Android |
+| **Подписки** (Add, refresh, test, aggregated pool) | 6 | 2 MED · 4 LOW | Все |
+| **Free Configs** (агрегатор, deep verify, GeoIP) | 5 | 1 HIGH · 3 MED · 1 LOW | Все |
+| **DPI Bypass / Zapret** (Flowseal integration, strategies) | 5 | 2 HIGH · 2 MED · 1 LOW | Win only |
+| **Apps routing** (Include/Exclude, scan_patterns, child detection) | 4 | 1 MED · 3 LOW | Все |
+| **Профили** (GitHub > Local > Built-in, merge) | 3 | 1 MED · 2 LOW | Все |
+| **Custom rules** (IP/domain/regex, action priority) | 3 | 1 MED · 2 LOW | Все |
+| **Обновления** (UpdateChecker, channels, self-repair tiers) | 4 | 1 HIGH · 2 MED · 1 LOW | Все |
+| **UI/UX** (Simple/Advanced, theme, QR scan, paste-and-go) | 5 | 2 MED · 3 LOW | Все |
+| **Приватность + безопасность** (Leak protection, F-A..F-E placeholder defense) | 4 | 1 HIGH · 3 MED | Все |
+| **Platform infra** (Service install, ETW, Firewall, Homebrew/APT) | 4 | 1 HIGH · 1 MED · 2 LOW | platform-specific |
+
+**Распределение сложности**: 21 LOW (40%) · 22 MED (41%) · 10 HIGH (19%).
 
 ### Бонус: вкладка Free Configs
 
@@ -162,16 +194,34 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.32.0"
 ## Архитектура
 
 ```
-VPNRouter.sln
-├── VPNRouter.Core                  — сервисы, модели, интерфейсы (кроссплатформенно)
-├── VPNRouter.App                   — Avalonia UI (кроссплатформенный desktop)
-├── VPNRouter.CLI                   — CLI-утилита (Spectre.Console)
-├── VPNRouter.Service               — Windows Service wrapper
+VPNRouter.sln (~94k LOC C# в 233 файлах / 7 проектах)
+├── VPNRouter.Core                  — 32k LOC · 97 файлов — сервисы, модели, интерфейсы (zero UI deps)
+├── VPNRouter.App                   — 17k LOC · 42 файла  — Avalonia desktop UI
+├── VPNRouter.Android               — 21k LOC · 24 файла  — Mono.Android + Avalonia.Android
+├── VPNRouter.CLI                   —  1k LOC · 12 файлов — Spectre.Console TUI
+├── VPNRouter.Service               —  1k LOC · 3 файла   — Windows BackgroundService wrapper
 ├── VPNRouter.Tools/PoolAggregator  — CI-утилита, собирающая Free Configs pool.json
-└── VPNRouter.Tests                 — xUnit
+└── VPNRouter.Tests                 — 19k LOC · 55 файлов — 765 xUnit тестов + headless Avalonia
 ```
 
-Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine`, `SingBoxManager`, `HealthMonitor`, `ProcessScanner`, `ConfigGenerator`, `FirewallManager`, `EtwProcessMonitor`, `LeakProtection`, плюс подсистемы для Zapret, Telegram-прокси, подписок, free configs и т.д. См. [`CLAUDE.md`](CLAUDE.md) для глубокого погружения.
+### Layering
+
+- **`VPNRouter.Core`** — единственный источник истины. Нет ни одного `Avalonia.*`, `System.Windows.*`, `Mono.Android.*` reference. Платформенный код только через `#if PLATFORM_WINDOWS` / `#if PLATFORM_ANDROID`.
+- **Android** не `ProjectReference` Core — source-link через `<Compile Include="..\VPNRouter.Core\**\*.cs">` в csproj (обходит multi-target restore loop в .NET 8; пересмотрим в .NET 9).
+- **Free Configs `pool.json`** строится server-side каждые 6 часов через `VPNRouter.Tools/PoolAggregator` в GitHub Actions → выкладывается на rolling-release `free-pool-latest`. Клиенты подтягивают + кешируют.
+
+### Best-practice заметки
+
+- **Bilingual UI** — все строки в `VPNRouter.Core/Localization/Strings.cs` (`Ru ? "..." : "..."`). App/Android — pass-through wrapper'ы, никаких дублей.
+- **Async hygiene** — 0 `async void` в Core; UI-handler'ы стандартным `async void EventHandler` pattern; нет `.Result` blocking calls кроме `VpnEngine.cs:461` (на refactor).
+- **Cross-cutting**: каждый сервис принимает `ILogger?` (Serilog) для diagnostic-trace в `vpnrouter*.log`.
+- **Нет телеметрии**. Никакой аналитики, error reporter'ов, ping-home. UpdateChecker читает только публичный GitHub Releases API.
+
+### Ключевые сервисы
+
+Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine` (VPN lifecycle), `SingBoxManager` (sing-box process), `HealthMonitor` (auto-restart + debounce), `ProcessScanner` (process→name resolution), `ConfigGenerator` (sing-box 1.13 JSON), `FirewallManager` (Windows netsh), `EtwProcessMonitor` (real-time process events), `LeakProtection` (config invariant validator), `PlaceholderGuard` (v2.32.3 — фильтр known-bad credentials), плюс подсистемы для Zapret, Telegram proxy, подписок, free configs.
+
+См. [`CLAUDE.md`](CLAUDE.md) для глубокого тура, [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md) для полного feature-flow справочника, и [`plans/v3.0-refactor-roadmap.md`](plans/v3.0-refactor-roadmap.md) для v3.0 modernization плана.
 
 ## Как это работает (высокий уровень)
 

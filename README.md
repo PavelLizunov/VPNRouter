@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">VPNRouter</h1>
-<p align="center"><b>Virtual Penguin Network</b> — process-based split-tunnel VPN router for Windows, macOS and Linux.</p>
+<p align="center"><b>Virtual Penguin Network</b> — process-based split-tunnel VPN router for Windows, macOS, Linux and Android.</p>
 
 <p align="center">
   <a href="README.md"><b>English</b></a> · <a href="README.ru.md">Русский</a>
@@ -20,7 +20,9 @@
     <img src="https://img.shields.io/github/license/PavelLizunov/VPNRouter?color=2563EB" alt="License"/>
   </a>
   <img src="https://img.shields.io/badge/.NET-8.0-512BD4" alt=".NET 8"/>
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform"/>
+  <img src="https://img.shields.io/badge/platform-Win%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-lightgrey" alt="Platform"/>
+  <img src="https://img.shields.io/badge/LOC-94k-blue" alt="94k LOC"/>
+  <img src="https://img.shields.io/badge/tests-765-success" alt="765 tests"/>
 </p>
 
 ---
@@ -56,6 +58,16 @@ Apple Silicon. Auto-strips Gatekeeper quarantine. First launch prompts once for 
 iwr -useb https://vpn.ninitux.com/install.ps1 | iex
 ```
 Windows 10/11 x64. Auto-elevates via UAC. Registers Start Menu + Add/Remove Programs. Updates: re-run the same command. Uninstall: Settings → Apps → VPNRouter.
+</td>
+</tr>
+<tr>
+<td align="center">🤖<br><b>Android</b></td>
+<td>
+
+```
+Download VPNRouter-v{version}-android.apk from Releases
+```
+Android 6.0+ (API 23). Side-load via APK (no Play Store yet). Live-preview QR scanner, magic 1-step subscription paste, F-Droid-style permissions (only `CAMERA` + `INTERNET` + `VPN_SERVICE`). Self-update via in-app banner.
 </td>
 </tr>
 </table>
@@ -94,6 +106,26 @@ These are thin wrappers around upstream projects — they aren't part of the cor
 
 A public VLESS aggregator — ~25 000 configs from 14 open sources, pre-validated (TCP+TLS + GeoIP) server-side every 6 hours. Handy to try the app without your own VPN server; not a substitute for a paid or self-hosted endpoint.
 
+## Feature matrix
+
+**53 features** across 11 categories. Full reference with per-feature flow diagrams + complexity ratings + service chains lives in [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md) (auto-generated audit). Summary:
+
+| Category | Features | Complexity | Platforms |
+|---|---:|---|---|
+| **Core VPN** (Connect, hot-reload, multi-protocol, custom configs) | 10 | 4 HIGH · 4 MED · 2 LOW | Win · Mac · Linux · Android |
+| **Subscriptions** (Add, refresh, test, aggregated pool) | 6 | 2 MED · 4 LOW | All |
+| **Free Configs** (aggregator, deep verify, GeoIP) | 5 | 1 HIGH · 3 MED · 1 LOW | All |
+| **DPI Bypass / Zapret** (Flowseal integration, strategies) | 5 | 2 HIGH · 2 MED · 1 LOW | Win only |
+| **Apps routing** (Include/Exclude, scan_patterns, child detection) | 4 | 1 MED · 3 LOW | All |
+| **Profiles** (GitHub > Local > Built-in, merge) | 3 | 1 MED · 2 LOW | All |
+| **Custom rules** (IP/domain/regex, action priority) | 3 | 1 MED · 2 LOW | All |
+| **Update** (UpdateChecker, channels, self-repair tiers) | 4 | 1 HIGH · 2 MED · 1 LOW | All |
+| **UI/UX** (Simple/Advanced, theme, QR scan, paste-and-go) | 5 | 2 MED · 3 LOW | All |
+| **Privacy & security** (Leak protection, F-A..F-E placeholder defense) | 4 | 1 HIGH · 3 MED | All |
+| **Platform infra** (Service install, ETW, Firewall, Homebrew/APT) | 4 | 1 HIGH · 1 MED · 2 LOW | platform-specific |
+
+**Complexity split**: 21 LOW (40%) · 22 MED (41%) · 10 HIGH (19%).
+
 ## Screenshots
 
 *Main window — Manual / Subscribe / Network / Applications / Tools / Free tabs.*
@@ -114,6 +146,8 @@ For the one-liner install on all three platforms, see the [**Install**](#install
 | `VPNRouter-v{version}-linux-amd64.deb` | 🐧 Linux | Debian/Ubuntu package (systemd service + desktop entry). Install: `sudo dpkg -i <file>.deb` |
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Portable single-file build. `chmod +x`, run, no install needed |
 | `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Raw tarball (for manual install or packaging into other formats) |
+| `VPNRouter-v{version}-android.apk` | 🤖 Android | Signed APK (debug-signed for now), API 23+, supports arm64/arm/x64/x86 in one universal APK |
+| `*.sha256` companion files | All | SHA256 hash sidecars — auto-updater + CI integrity check verify before extracting |
 
 Also served automatically every 6 hours:
 
@@ -128,7 +162,8 @@ Run `VPNRouter.App.exe` as Administrator on Windows (required for TUN adapter + 
 - **Windows 10/11 x64** — Administrator rights (TUN, firewall, ETW)
 - **macOS 12+** — Apple Silicon (arm64). Intel is not currently packaged. First-run sudoers setup required (guided)
 - **Linux x86_64** — kernel 5.6+ (TUN/wireguard), `glibc` 2.31+. Tested on Ubuntu 22.04 / 24.04 and Debian 12. `iptables` or `nftables` for firewall rules.
-- [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) — bundled in the installer
+- **Android 6.0+** (API 23+) — arm64/arm/x64/x86 universal APK. Uses Android's `VpnService` API (no root required). Camera permission only requested when scanning a QR code.
+- [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) — bundled in the desktop installer
 - A VLESS+Reality server, or use the Free Configs tab for a public one
 
 ## Build from source
@@ -162,16 +197,34 @@ All three platforms (Win ZIP, Mac DMG, Linux .deb/.AppImage/.tar.gz) are built a
 ## Architecture
 
 ```
-VPNRouter.sln
-├── VPNRouter.Core                  — services, models, interfaces (cross-platform)
-├── VPNRouter.App                   — Avalonia UI (cross-platform desktop)
-├── VPNRouter.CLI                   — CLI tool (Spectre.Console)
-├── VPNRouter.Service               — Windows Service wrapper
-├── VPNRouter.Tools/PoolAggregator  — CI tool that builds the Free Configs pool.json
-└── VPNRouter.Tests                 — xUnit
+VPNRouter.sln (~94k LOC C# across 233 files in 7 projects)
+├── VPNRouter.Core                  — 32k LOC · 97 files — services, models, interfaces (cross-platform, zero UI deps)
+├── VPNRouter.App                   — 17k LOC · 42 files — Avalonia desktop UI
+├── VPNRouter.Android               — 21k LOC · 24 files — Mono.Android + Avalonia.Android
+├── VPNRouter.CLI                   —  1k LOC · 12 files — Spectre.Console TUI
+├── VPNRouter.Service               —  1k LOC · 3 files  — Windows BackgroundService wrapper
+├── VPNRouter.Tools/PoolAggregator  — CI tool building the Free Configs pool.json
+└── VPNRouter.Tests                 — 19k LOC · 55 files — 765 xUnit tests + headless Avalonia
 ```
 
-Core services live in `VPNRouter.Core/Services/` — `VpnEngine`, `SingBoxManager`, `HealthMonitor`, `ProcessScanner`, `ConfigGenerator`, `FirewallManager`, `EtwProcessMonitor`, `LeakProtection`, plus subsystems for Zapret, Telegram proxy, subscriptions, free configs, etc. See [`CLAUDE.md`](CLAUDE.md) for the deeper tour.
+### Layering
+
+- **`VPNRouter.Core`** is the single source of truth. Zero `Avalonia.*`, `System.Windows.*`, or `Mono.Android.*` references. Platform-specific code gated behind `#if PLATFORM_WINDOWS` / `#if PLATFORM_ANDROID`.
+- **Android** doesn't `ProjectReference` Core — it source-links via `<Compile Include="..\VPNRouter.Core\**\*.cs">` in the csproj (works around a multi-target restore loop; will revisit in .NET 9).
+- **Free Configs `pool.json`** is built server-side every 6 hours by `VPNRouter.Tools/PoolAggregator` running in GitHub Actions, then served from a rolling `free-pool-latest` Release. Clients fetch + cache.
+
+### Best-practice notes
+
+- **Bilingual UI** — all strings live in `VPNRouter.Core/Localization/Strings.cs` (`Ru ? "..." : "..."`). App/Android use pass-through wrappers; never duplicate keys.
+- **Async hygiene** — zero `async void` in Core; UI handlers use the standard `async void EventHandler` pattern; no `.Result` blocking calls outside `VpnEngine.cs:461` (tracked for refactor).
+- **Cross-cutting**: every service takes `ILogger?` (Serilog) for diagnostic-grade tracing into `vpnrouter*.log`.
+- **No telemetry**. No analytics, no error reporter, no ping-home. UpdateChecker only reads public GitHub Releases API.
+
+### Key services
+
+Core services live in `VPNRouter.Core/Services/` — `VpnEngine` (VPN lifecycle), `SingBoxManager` (sing-box process), `HealthMonitor` (auto-restart + debounce), `ProcessScanner` (process→name resolution), `ConfigGenerator` (sing-box 1.13 JSON), `FirewallManager` (Windows netsh), `EtwProcessMonitor` (real-time process events), `LeakProtection` (config invariant validator), `PlaceholderGuard` (v2.32.3 — known-bad credential filter), plus subsystems for Zapret, Telegram proxy, subscriptions, free configs.
+
+See [`CLAUDE.md`](CLAUDE.md) for the deeper tour, [`plans/feature-catalog-2026-05-17.md`](plans/feature-catalog-2026-05-17.md) for the full feature-flow reference, and [`plans/v3.0-refactor-roadmap.md`](plans/v3.0-refactor-roadmap.md) for the v3.0 modernization plan.
 
 ## How it works (high level)
 
