@@ -1,5 +1,6 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+#nullable enable
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -29,6 +30,14 @@ namespace VPNRouter.Core.Services;
 /// <c>VPNRouter.Core/Services/CustomRulesImportExport.cs</c> (rules-only
 /// pre-2.32). When desktop adopts whole-config share, this class is the
 /// single source of truth — no duplicate Document type.</para>
+///
+/// <para>Phase 4 (2026-05-18) — migrated from Newtonsoft.Json
+/// <c>[JsonProperty]</c> + <c>JObject.Parse</c> + <c>ToObject&lt;T&gt;</c> to
+/// System.Text.Json <c>[JsonPropertyName]</c> + <c>JsonDocument</c> +
+/// <c>JsonSerializer.Deserialize</c>. Wire format is preserved byte-for-byte
+/// because every property carries an explicit <c>[JsonPropertyName]</c>
+/// pinning the snake_case wire key the pre-migration Newtonsoft
+/// <c>[JsonProperty]</c> annotations produced.</para>
 /// </summary>
 public sealed class ConfigShareDocument
 {
@@ -38,47 +47,69 @@ public sealed class ConfigShareDocument
     /// <summary>Bump when an incompatible field shape is introduced.</summary>
     public const int CurrentVersion = 1;
 
-    [JsonProperty("schema")]
+    /// <summary>
+    /// STJ options for ConfigShareDocument serialization. WriteIndented
+    /// matches the pre-Phase-4 Newtonsoft Formatting.Indented output.
+    /// DefaultIgnoreCondition=WhenWritingNull mirrors the per-property
+    /// NullValueHandling.Ignore the prior Newtonsoft writer applied to
+    /// each optional field; the [JsonIgnore(Condition=WhenWritingNull)]
+    /// attributes below reinforce it at the property level so any future
+    /// caller passing custom JsonSerializerOptions still elides nulls.
+    /// PropertyNameCaseInsensitive=true preserves the Newtonsoft default
+    /// for tolerant deserialize of hand-edited / future-platform exports.
+    /// </summary>
+    internal static readonly JsonSerializerOptions DocumentOptions = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        PropertyNameCaseInsensitive = true,
+    };
+
+    [JsonPropertyName("schema")]
     public string Schema { get; set; } = SchemaMarker;
 
-    [JsonProperty("version")]
+    [JsonPropertyName("version")]
     public int Version { get; set; } = CurrentVersion;
 
-    [JsonProperty("exported_at")]
+    [JsonPropertyName("exported_at")]
     public DateTimeOffset ExportedAt { get; set; }
 
-    [JsonProperty("exported_from")]
+    [JsonPropertyName("exported_from")]
     public ExportedFromInfo ExportedFrom { get; set; } = new();
 
     /// <summary>"subscribe" | "manual" | "custom" — mirrors AppSettings.App.ConfigMode.</summary>
-    [JsonProperty("config_mode")]
+    [JsonPropertyName("config_mode")]
     public string ConfigMode { get; set; } = "subscribe";
 
     /// <summary>Always present — empty list if no subscriptions were configured.</summary>
-    [JsonProperty("subscriptions")]
+    [JsonPropertyName("subscriptions")]
     public List<SubscriptionEntry> Subscriptions { get; set; } = new();
 
     /// <summary>Single-URI mode payload. Null when ConfigMode != "manual".</summary>
-    [JsonProperty("manual_vless_uri", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("manual_vless_uri")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ManualVlessUri { get; set; }
 
     /// <summary>User-pasted full sing-box JSON. Null when ConfigMode != "custom".</summary>
-    [JsonProperty("custom_config", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("custom_config")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public CustomConfigPayload? CustomConfig { get; set; }
 
     /// <summary>Opt-in. Null when user did NOT check "include settings" at export.</summary>
-    [JsonProperty("settings", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("settings")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ExportedSettings? Settings { get; set; }
 
     /// <summary>Opt-in. Null when user did NOT check "include per-app filter".</summary>
-    [JsonProperty("per_app_filter", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("per_app_filter")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public PerAppFilterExport? PerAppFilter { get; set; }
 
     /// <summary>Serialise to indented JSON (human-friendly diff/inspect).</summary>
     public static string Serialize(ConfigShareDocument doc)
     {
         if (doc == null) throw new ArgumentNullException(nameof(doc));
-        return JsonConvert.SerializeObject(doc, Formatting.Indented);
+        return JsonSerializer.Serialize(doc, DocumentOptions);
     }
 
     /// <summary>
@@ -91,25 +122,47 @@ public sealed class ConfigShareDocument
         if (string.IsNullOrWhiteSpace(json))
             return ConfigShareDocumentParseResult.Failure("empty content");
 
-        JObject jobj;
+        // Phase 4 (2026-05-18) — STJ JsonDocument for the schema-marker +
+        // version probe (cheap inspect-then-deserialize-fully pattern,
+        // mirrors the prior JObject.Parse → ToObject<T> flow). Defensive
+        // catches mirror Newtonsoft's JsonReaderException + generic
+        // Exception surfaces.
+        JsonElement root;
+        JsonDocument? doc = null;
         try
         {
-            jobj = JObject.Parse(json);
+            doc = JsonDocument.Parse(json);
+            root = doc.RootElement.Clone();
         }
-        catch (JsonReaderException ex)
+        catch (JsonException ex)
         {
+            doc?.Dispose();
             return ConfigShareDocumentParseResult.Failure(
                 $"malformed JSON: {ex.Message}");
         }
+        finally
+        {
+            doc?.Dispose();
+        }
 
-        var schemaToken = jobj["schema"]?.Value<string>();
+        if (root.ValueKind != JsonValueKind.Object)
+            return ConfigShareDocumentParseResult.Failure(
+                $"document root is {root.ValueKind}, expected an Object");
+
+        string? schemaToken = null;
+        if (root.TryGetProperty("schema", out var schemaProp) && schemaProp.ValueKind == JsonValueKind.String)
+            schemaToken = schemaProp.GetString();
+
         if (!string.Equals(schemaToken, SchemaMarker, StringComparison.Ordinal))
         {
             return ConfigShareDocumentParseResult.Failure(
                 $"unsupported document — schema marker '{schemaToken ?? "<missing>"}' (expected '{SchemaMarker}')");
         }
 
-        var versionToken = jobj["version"]?.Value<int?>();
+        int? versionToken = null;
+        if (root.TryGetProperty("version", out var versionProp) && versionProp.ValueKind == JsonValueKind.Number)
+            versionToken = versionProp.GetInt32();
+
         if (versionToken is null)
         {
             return ConfigShareDocumentParseResult.Failure("missing 'version' field");
@@ -121,10 +174,10 @@ public sealed class ConfigShareDocument
                 $"document version {versionToken.Value} is newer than supported version {CurrentVersion} — please update VPNRouter");
         }
 
-        ConfigShareDocument? doc;
+        ConfigShareDocument? document;
         try
         {
-            doc = jobj.ToObject<ConfigShareDocument>();
+            document = JsonSerializer.Deserialize<ConfigShareDocument>(json, DocumentOptions);
         }
         catch (Exception ex)
         {
@@ -132,15 +185,15 @@ public sealed class ConfigShareDocument
                 $"document deserialise failed: {ex.GetType().Name}: {ex.Message}");
         }
 
-        if (doc is null)
+        if (document is null)
             return ConfigShareDocumentParseResult.Failure("deserialised to null");
 
         // Defensive: tolerate missing required containers from a future
-        // schema-1 producer that elided empty arrays. Newtonsoft already
-        // gives us Subscriptions=[] from default ctor, but explicit null
-        // would replace it.
-        doc.Subscriptions ??= new List<SubscriptionEntry>();
-        doc.ExportedFrom ??= new ExportedFromInfo();
+        // schema-1 producer that elided empty arrays. Default ctor
+        // populates Subscriptions=[]; the explicit null check ensures
+        // a future JSON "subscriptions": null doesn't crash us.
+        document.Subscriptions ??= new List<SubscriptionEntry>();
+        document.ExportedFrom ??= new ExportedFromInfo();
 
         // Validate ConfigMode value — refuse instead of letting a typo
         // slip past and confuse the routing engine downstream.
@@ -148,23 +201,23 @@ public sealed class ConfigShareDocument
         {
             "subscribe", "manual", "custom"
         };
-        if (!allowedModes.Contains(doc.ConfigMode ?? string.Empty))
+        if (!allowedModes.Contains(document.ConfigMode ?? string.Empty))
         {
             return ConfigShareDocumentParseResult.Failure(
-                $"unknown config_mode '{doc.ConfigMode}' (expected: subscribe / manual / custom)");
+                $"unknown config_mode '{document.ConfigMode}' (expected: subscribe / manual / custom)");
         }
 
         // Per-mode invariants — soft-warn rather than hard-fail because
         // a malformed export from a future / different platform might
         // still carry useful subset data.
-        if (string.Equals(doc.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase) &&
-            doc.CustomConfig is null)
+        if (string.Equals(document.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase) &&
+            document.CustomConfig is null)
         {
             return ConfigShareDocumentParseResult.Failure(
                 "config_mode='custom' but 'custom_config' payload is missing");
         }
 
-        return ConfigShareDocumentParseResult.Success(doc);
+        return ConfigShareDocumentParseResult.Success(document);
     }
 
     /// <summary>
@@ -228,57 +281,67 @@ public sealed class ConfigShareDocument
 /// <summary>"Where did this export come from" provenance block.</summary>
 public sealed class ExportedFromInfo
 {
-    [JsonProperty("platform")]
+    [JsonPropertyName("platform")]
     public string Platform { get; set; } = "unknown";
 
-    [JsonProperty("app_version")]
+    [JsonPropertyName("app_version")]
     public string AppVersion { get; set; } = string.Empty;
 
-    [JsonProperty("device_label")]
+    [JsonPropertyName("device_label")]
     public string DeviceLabel { get; set; } = string.Empty;
 }
 
 /// <summary>Custom sing-box JSON paste payload (used when ConfigMode=="custom").</summary>
 public sealed class CustomConfigPayload
 {
-    [JsonProperty("name")]
+    [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
-    [JsonProperty("sing_box_json")]
+    [JsonPropertyName("sing_box_json")]
     public string SingBoxJson { get; set; } = string.Empty;
 }
 
 /// <summary>Opt-in settings block. Field names mirror the Android SharedPreferences keys (and desktop AppSettings.App).</summary>
 public sealed class ExportedSettings
 {
-    [JsonProperty("theme", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("theme")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Theme { get; set; }
 
-    [JsonProperty("language", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("language")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Language { get; set; }
 
-    [JsonProperty("routing_mode", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("routing_mode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? RoutingMode { get; set; }
 
-    [JsonProperty("bypass_ru", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("bypass_ru")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? BypassRussianTraffic { get; set; }
 
-    [JsonProperty("block_on_vpn_fail", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("block_on_vpn_fail")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? BlockOnVpnFail { get; set; }
 
-    [JsonProperty("dns_strategy", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("dns_strategy")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DnsStrategy { get; set; }
 
-    [JsonProperty("update_channel", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("update_channel")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? UpdateChannel { get; set; }
 
-    [JsonProperty("autostart_vpn", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("autostart_vpn")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? AutostartVpn { get; set; }
 
-    [JsonProperty("autostart_zapret", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("autostart_zapret")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? AutostartZapret { get; set; }
 
-    [JsonProperty("autostart_tgproxy", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("autostart_tgproxy")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? AutostartTgProxy { get; set; }
 }
 
@@ -286,10 +349,10 @@ public sealed class ExportedSettings
 public sealed class PerAppFilterExport
 {
     /// <summary>"off" | "include" | "exclude" — see PerAppFilterMode.</summary>
-    [JsonProperty("mode")]
+    [JsonPropertyName("mode")]
     public string Mode { get; set; } = "off";
 
-    [JsonProperty("packages")]
+    [JsonPropertyName("packages")]
     public List<string> Packages { get; set; } = new();
 }
 

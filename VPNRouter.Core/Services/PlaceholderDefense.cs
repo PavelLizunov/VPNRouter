@@ -113,7 +113,7 @@
 
 #nullable enable
 
-using Newtonsoft.Json.Linq;
+using System.Text.Json.Nodes;
 using Serilog;
 using VPNRouter.Core.Models;
 
@@ -425,7 +425,13 @@ public static class PlaceholderDefense
     /// <para>Also reused by <see cref="CustomConfigInjector"/> so the
     /// custom-config path rejects placeholder JSON at Inject time using
     /// the same detection logic as the runtime safety net (single source
-    /// of truth for "look at a sing-box outbound JObject and check it").</para>
+    /// of truth for "look at a sing-box outbound JsonObject and check it").</para>
+    ///
+    /// <para>Phase 4 (2026-05-18) — migrated from Newtonsoft
+    /// <c>JObject</c>/<c>JArray</c> to System.Text.Json
+    /// <c>JsonObject</c>/<c>JsonArray</c>. Both representations expose the
+    /// same shape (dictionary + list of JsonNode); the migration is purely
+    /// the type name, no behavioural change.</para>
     /// </summary>
     internal static class LayerE_RuntimeSanity
     {
@@ -433,15 +439,16 @@ public static class PlaceholderDefense
         /// Locates the first proxy-typed outbound in a sing-box
         /// <c>outbounds</c> array (vless / hysteria2 / tuic / shadowsocks
         /// / trojan). Returns <c>null</c> when none is present. Shared
-        /// between <see cref="ConfigSanityCheck.CheckBeforeStart(JObject)"/>
+        /// between <see cref="ConfigSanityCheck.CheckBeforeStart(JsonObject)"/>
         /// and <see cref="CustomConfigInjector"/>'s placeholder gate so
         /// both layers pick the same outbound to inspect.
         /// </summary>
-        public static JObject? FindFirstProxyOutbound(JArray outbounds)
+        public static JsonObject? FindFirstProxyOutbound(JsonArray outbounds)
         {
-            foreach (var ob in outbounds.OfType<JObject>())
+            foreach (var node in outbounds)
             {
-                var type = ob["type"]?.Value<string>()?.ToLowerInvariant() ?? "";
+                if (node is not JsonObject ob) continue;
+                var type = StjNodeHelpers.AsString(ob["type"])?.ToLowerInvariant() ?? "";
                 if (type is "vless" or "hysteria2" or "tuic" or "shadowsocks" or "trojan")
                     return ob;
             }
@@ -449,21 +456,21 @@ public static class PlaceholderDefense
         }
 
         /// <summary>
-        /// Inspects a single sing-box proxy outbound JObject for placeholder
+        /// Inspects a single sing-box proxy outbound JsonObject for placeholder
         /// fingerprints (Reality public_key, Reality short_id, server IP).
         /// Returns the matching field name (<c>"reality.public_key"</c>,
         /// <c>"reality.short_id"</c>, <c>"server"</c>) or <c>null</c> when
         /// the outbound is clean. Matches the field-name convention used by
         /// <see cref="PlaceholderDefense.Inspect(string?, string?, string?)"/>.
         /// </summary>
-        public static string? InspectOutbound(JObject? proxy)
+        public static string? InspectOutbound(JsonObject? proxy)
         {
             if (proxy == null) return null;
 
-            var reality = proxy["tls"]?["reality"] as JObject;
-            var pubkey = reality?["public_key"]?.Value<string>();
-            var shortId = reality?["short_id"]?.Value<string>();
-            var server = proxy["server"]?.Value<string>();
+            var reality = proxy["tls"]?["reality"] as JsonObject;
+            var pubkey = StjNodeHelpers.AsString(reality?["public_key"]);
+            var shortId = StjNodeHelpers.AsString(reality?["short_id"]);
+            var server = StjNodeHelpers.AsString(proxy["server"]);
 
             return PlaceholderDefense.Inspect(pubkey, shortId, server);
         }

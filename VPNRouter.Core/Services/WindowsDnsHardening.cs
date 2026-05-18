@@ -1,5 +1,6 @@
 #if PLATFORM_WINDOWS
 using System.Diagnostics;
+using System.Text.Json;
 using Microsoft.Win32;
 using Serilog;
 
@@ -254,12 +255,25 @@ public static class WindowsDnsHardening
     /// </summary>
     internal static IProcessRunner? _runnerOverride;
 
+    // Phase 4 (2026-05-18) — STJ for the dns_hardening_state.json sidecar.
+    // Wire format is byte-identical: WriteIndented mirrors Newtonsoft's
+    // Formatting.Indented; PropertyNameCaseInsensitive tolerates any pre-
+    // Phase-4 file (HardeningState had no [JsonProperty] annotations so
+    // both writers produced PascalCase keys identically). The file is
+    // private to a single owner (the elevated VPN process), so there's
+    // no DoS-untrusted-input scenario — MaxDepth left at STJ default.
+    private static readonly JsonSerializerOptions HardeningStateOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true,
+    };
+
     private static void SaveState(HardeningState state)
     {
         try
         {
             Directory.CreateDirectory(AppPaths.DataDir);
-            var json = Newtonsoft.Json.JsonConvert.SerializeObject(state, Newtonsoft.Json.Formatting.Indented);
+            var json = JsonSerializer.Serialize(state, HardeningStateOptions);
             File.WriteAllText(StatePath, json);
         }
         catch { }
@@ -271,7 +285,7 @@ public static class WindowsDnsHardening
         {
             if (!File.Exists(StatePath)) return null;
             var json = File.ReadAllText(StatePath);
-            return Newtonsoft.Json.JsonConvert.DeserializeObject<HardeningState>(json);
+            return JsonSerializer.Deserialize<HardeningState>(json, HardeningStateOptions);
         }
         catch
         {

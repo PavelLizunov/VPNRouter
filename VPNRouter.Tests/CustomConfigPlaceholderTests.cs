@@ -1,4 +1,4 @@
-using Newtonsoft.Json.Linq;
+using System.Text.Json.Nodes;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
@@ -46,31 +46,31 @@ public class CustomConfigPlaceholderTests
         string shortId = CleanShortId,
         string server = CleanServer)
     {
-        var config = new JObject
+        var config = new JsonObject
         {
-            ["dns"] = new JObject
+            ["dns"] = new JsonObject
             {
-                ["servers"] = new JArray
+                ["servers"] = new JsonArray
                 {
-                    new JObject
+                    new JsonObject
                     {
                         ["tag"] = "remote",
                         ["type"] = "https",
                         ["server"] = "1.1.1.1",
                         ["detour"] = "proxy",
                     },
-                    new JObject
+                    new JsonObject
                     {
                         ["tag"] = "local",
                         ["type"] = "udp",
                         ["server"] = "1.0.0.1",
                     },
                 },
-                ["rules"] = new JArray(),
+                ["rules"] = new JsonArray(),
             },
-            ["outbounds"] = new JArray
+            ["outbounds"] = new JsonArray
             {
-                new JObject
+                new JsonObject
                 {
                     ["type"] = "vless",
                     ["tag"] = "proxy",
@@ -78,11 +78,11 @@ public class CustomConfigPlaceholderTests
                     ["server_port"] = 443,
                     ["uuid"] = "2d54442d-158f-49e2-b225-67ba1a5b77f4",
                     ["flow"] = "xtls-rprx-vision",
-                    ["tls"] = new JObject
+                    ["tls"] = new JsonObject
                     {
                         ["enabled"] = true,
                         ["server_name"] = "yahoo.com",
-                        ["reality"] = new JObject
+                        ["reality"] = new JsonObject
                         {
                             ["enabled"] = true,
                             ["public_key"] = pubkey,
@@ -90,15 +90,15 @@ public class CustomConfigPlaceholderTests
                         },
                     },
                 },
-                new JObject
+                new JsonObject
                 {
                     ["type"] = "direct",
                     ["tag"] = "direct",
                 },
             },
-            ["route"] = new JObject
+            ["route"] = new JsonObject
             {
-                ["rules"] = new JArray(),
+                ["rules"] = new JsonArray(),
                 ["final"] = "direct",
             },
         };
@@ -158,7 +158,7 @@ public class CustomConfigPlaceholderTests
         var result = CustomConfigInjector.Inject(json, new[] { "Discord.exe" }, CreateSettings());
 
         Assert.False(string.IsNullOrWhiteSpace(result));
-        var parsed = JObject.Parse(result);
+        var parsed = JsonObject.Parse(result);
         // Confirm injection happened — process_name rule should be present.
         Assert.Contains("\"Discord.exe\"", result);
         Assert.NotNull(parsed["route"]);
@@ -172,32 +172,32 @@ public class CustomConfigPlaceholderTests
         // Config with two outbounds: first is direct (skipped — not a proxy
         // type), second is vless with placeholder pubkey. The walker should
         // find the vless one (the first PROXY-typed outbound) and throw.
-        var config = new JObject
+        var config = new JsonObject
         {
-            ["dns"] = new JObject
+            ["dns"] = new JsonObject
             {
-                ["servers"] = new JArray
+                ["servers"] = new JsonArray
                 {
-                    new JObject { ["tag"] = "local", ["type"] = "udp", ["server"] = "1.0.0.1" },
+                    new JsonObject { ["tag"] = "local", ["type"] = "udp", ["server"] = "1.0.0.1" },
                 },
-                ["rules"] = new JArray(),
+                ["rules"] = new JsonArray(),
             },
-            ["outbounds"] = new JArray
+            ["outbounds"] = new JsonArray
             {
                 // Direct comes first — must be walked past.
-                new JObject
+                new JsonObject
                 {
                     ["type"] = "direct",
                     ["tag"] = "direct",
                 },
                 // Block also doesn't count as a proxy.
-                new JObject
+                new JsonObject
                 {
                     ["type"] = "block",
                     ["tag"] = "block",
                 },
                 // VLESS with placeholder pubkey — this is the one we must catch.
-                new JObject
+                new JsonObject
                 {
                     ["type"] = "vless",
                     ["tag"] = "proxy",
@@ -205,11 +205,11 @@ public class CustomConfigPlaceholderTests
                     ["server_port"] = 443,
                     ["uuid"] = "2d54442d-158f-49e2-b225-67ba1a5b77f4",
                     ["flow"] = "xtls-rprx-vision",
-                    ["tls"] = new JObject
+                    ["tls"] = new JsonObject
                     {
                         ["enabled"] = true,
                         ["server_name"] = "yahoo.com",
-                        ["reality"] = new JObject
+                        ["reality"] = new JsonObject
                         {
                             ["enabled"] = true,
                             ["public_key"] = PlaceholderPubkey,
@@ -218,9 +218,9 @@ public class CustomConfigPlaceholderTests
                     },
                 },
             },
-            ["route"] = new JObject
+            ["route"] = new JsonObject
             {
-                ["rules"] = new JArray(),
+                ["rules"] = new JsonArray(),
                 ["final"] = "direct",
             },
         };
@@ -239,24 +239,24 @@ public class CustomConfigPlaceholderTests
         // inspect). Note: Inject may still throw OTHER errors (missing
         // process routing target, etc.) — what matters here is that the
         // specific PlaceholderConfigException is NOT raised.
-        var config = new JObject
+        var config = new JsonObject
         {
-            ["dns"] = new JObject
+            ["dns"] = new JsonObject
             {
-                ["servers"] = new JArray
+                ["servers"] = new JsonArray
                 {
-                    new JObject { ["tag"] = "local", ["type"] = "udp", ["server"] = "1.0.0.1" },
+                    new JsonObject { ["tag"] = "local", ["type"] = "udp", ["server"] = "1.0.0.1" },
                 },
-                ["rules"] = new JArray(),
+                ["rules"] = new JsonArray(),
             },
-            ["outbounds"] = new JArray
+            ["outbounds"] = new JsonArray
             {
-                new JObject { ["type"] = "direct", ["tag"] = "direct" },
-                new JObject { ["type"] = "block", ["tag"] = "block" },
+                new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
+                new JsonObject { ["type"] = "block", ["tag"] = "block" },
             },
-            ["route"] = new JObject
+            ["route"] = new JsonObject
             {
-                ["rules"] = new JArray(),
+                ["rules"] = new JsonArray(),
                 ["final"] = "direct",
             },
         };
@@ -278,52 +278,52 @@ public class CustomConfigPlaceholderTests
         // PlaceholderGuard.Inspect for each placeholder field. This pins
         // the "single source of truth" promise: both layers agree on what
         // a placeholder looks like and what the field name is.
-        var pubkeyOutbound = new JObject
+        var pubkeyOutbound = new JsonObject
         {
             ["type"] = "vless",
             ["server"] = CleanServer,
-            ["tls"] = new JObject
+            ["tls"] = new JsonObject
             {
-                ["reality"] = new JObject
+                ["reality"] = new JsonObject
                 {
                     ["public_key"] = PlaceholderPubkey,
                     ["short_id"] = CleanShortId,
                 },
             },
         };
-        var shortIdOutbound = new JObject
+        var shortIdOutbound = new JsonObject
         {
             ["type"] = "vless",
             ["server"] = CleanServer,
-            ["tls"] = new JObject
+            ["tls"] = new JsonObject
             {
-                ["reality"] = new JObject
+                ["reality"] = new JsonObject
                 {
                     ["public_key"] = CleanPubkey,
                     ["short_id"] = PlaceholderShortId,
                 },
             },
         };
-        var serverOutbound = new JObject
+        var serverOutbound = new JsonObject
         {
             ["type"] = "vless",
             ["server"] = PlaceholderServer,
-            ["tls"] = new JObject
+            ["tls"] = new JsonObject
             {
-                ["reality"] = new JObject
+                ["reality"] = new JsonObject
                 {
                     ["public_key"] = CleanPubkey,
                     ["short_id"] = CleanShortId,
                 },
             },
         };
-        var cleanOutbound = new JObject
+        var cleanOutbound = new JsonObject
         {
             ["type"] = "vless",
             ["server"] = CleanServer,
-            ["tls"] = new JObject
+            ["tls"] = new JsonObject
             {
-                ["reality"] = new JObject
+                ["reality"] = new JsonObject
                 {
                     ["public_key"] = CleanPubkey,
                     ["short_id"] = CleanShortId,

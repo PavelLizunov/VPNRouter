@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Newtonsoft.Json;
+using System.Text.Json;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
@@ -23,10 +23,10 @@ public sealed class StorageBlobRecoveryTests
     [Fact]
     public void HappyPath_ValidJson_LoadsValueAndMarksSuccess()
     {
-        var blob = JsonConvert.SerializeObject(new List<string> { "a", "b" });
+        var blob = JsonSerializer.Serialize(new List<string> { "a", "b" });
 
         var r = StorageBlobRecovery.LoadOrRecover<List<string>>(
-            blob, j => JsonConvert.DeserializeObject<List<string>>(j));
+            blob, j => JsonSerializer.Deserialize<List<string>>(j));
 
         Assert.True(r.Loaded);
         Assert.Equal(StorageBlobReason.Success, r.Reason);
@@ -43,7 +43,7 @@ public sealed class StorageBlobRecoveryTests
     public void EmptyOrNullBlob_ReturnsNotFound(string? blob)
     {
         var r = StorageBlobRecovery.LoadOrRecover<List<string>>(
-            blob, j => JsonConvert.DeserializeObject<List<string>>(j));
+            blob, j => JsonSerializer.Deserialize<List<string>>(j));
 
         Assert.Equal(StorageBlobReason.NotFound, r.Reason);
         Assert.Null(r.Value);
@@ -59,7 +59,7 @@ public sealed class StorageBlobRecoveryTests
     public void MalformedJson_ReturnsJsonMalformed()
     {
         var r = StorageBlobRecovery.LoadOrRecover<List<string>>(
-            "{not actually json", j => JsonConvert.DeserializeObject<List<string>>(j));
+            "{not actually json", j => JsonSerializer.Deserialize<List<string>>(j));
 
         Assert.Equal(StorageBlobReason.JsonMalformed, r.Reason);
         Assert.Null(r.Value);
@@ -83,11 +83,11 @@ public sealed class StorageBlobRecoveryTests
     [Fact]
     public void StructuralCheckFails_QuarantinesAsStructurallyInvalid()
     {
-        var blob = JsonConvert.SerializeObject(new List<string>());
+        var blob = JsonSerializer.Serialize(new List<string>());
         // Predicate insists on at least 1 entry — empty list trips it.
         var r = StorageBlobRecovery.LoadOrRecover<List<string>>(
             blob,
-            j => JsonConvert.DeserializeObject<List<string>>(j),
+            j => JsonSerializer.Deserialize<List<string>>(j),
             v => v.Count >= 1);
 
         Assert.Equal(StorageBlobReason.StructurallyInvalid, r.Reason);

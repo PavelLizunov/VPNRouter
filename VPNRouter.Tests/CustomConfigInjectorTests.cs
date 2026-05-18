@@ -1,4 +1,5 @@
-﻿using VPNRouter.Core.Models;
+﻿using System.Text.Json.Nodes;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.EmergencyChannel;
 
@@ -158,8 +159,8 @@ public class CustomConfigInjectorTests
     public void Inject_LegacyConfig_ProcessRuleAfterSystemRules()
     {
         var result = CustomConfigInjector.Inject(LegacyConfig, new[] { "Discord.exe" }, CreateSettings());
-        var json = Newtonsoft.Json.Linq.JObject.Parse(result);
-        var rules = json.SelectToken("route.rules") as Newtonsoft.Json.Linq.JArray;
+        var json = (JsonNode.Parse(result) as JsonObject)!;
+        var rules = StjNodeHelpers.SelectToken(json, "route.rules") as JsonArray;
 
         Assert.NotNull(rules);
         // Process rule should be after dns/ip_is_private/clash_mode rules
@@ -183,12 +184,12 @@ public class CustomConfigInjectorTests
     public void Inject_InjectsDnsRuleForRemoteServer()
     {
         var result = CustomConfigInjector.Inject(LegacyConfig, new[] { "Discord.exe" }, CreateSettings());
-        var json = Newtonsoft.Json.Linq.JObject.Parse(result);
-        var dnsRules = json.SelectToken("dns.rules") as Newtonsoft.Json.Linq.JArray;
+        var json = (JsonNode.Parse(result) as JsonObject)!;
+        var dnsRules = StjNodeHelpers.SelectToken(json, "dns.rules") as JsonArray;
 
         Assert.NotNull(dnsRules);
         // First DNS rule should be our injected process rule
-        var firstRule = dnsRules![0] as Newtonsoft.Json.Linq.JObject;
+        var firstRule = dnsRules![0] as JsonObject;
         Assert.NotNull(firstRule!["process_name"]);
         Assert.Equal("remote", firstRule["server"]?.ToString());
     }
@@ -223,8 +224,8 @@ public class CustomConfigInjectorTests
     public void Inject_EmptyProcesses_NoProcessRulesAdded()
     {
         var result = CustomConfigInjector.Inject(LegacyConfig, Array.Empty<string>(), CreateSettings());
-        var json = Newtonsoft.Json.Linq.JObject.Parse(result);
-        var rules = json.SelectToken("route.rules") as Newtonsoft.Json.Linq.JArray;
+        var json = (JsonNode.Parse(result) as JsonObject)!;
+        var rules = StjNodeHelpers.SelectToken(json, "route.rules") as JsonArray;
 
         foreach (var rule in rules!)
         {
@@ -253,15 +254,17 @@ public class CustomConfigInjectorTests
         var first = CustomConfigInjector.Inject(ActionConfig, new[] { "Discord.exe" }, settings);
         var second = CustomConfigInjector.Inject(first, new[] { "Discord.exe", "Telegram.exe" }, settings);
 
-        var json = Newtonsoft.Json.Linq.JObject.Parse(second);
-        var rules = json.SelectToken("route.rules") as Newtonsoft.Json.Linq.JArray;
+        var json = (JsonNode.Parse(second) as JsonObject)!;
+        var rules = StjNodeHelpers.SelectToken(json, "route.rules") as JsonArray;
 
         // Should have exactly one process_name route rule (not two)
         var processRules = rules!.Where(r => r["process_name"] != null).ToList();
         Assert.Single(processRules);
 
         // Should contain both processes
-        var names = processRules[0]["process_name"]!.Select(t => t.ToString()).ToList();
+        var processNameArr = processRules[0]!["process_name"] as JsonArray;
+        Assert.NotNull(processNameArr);
+        var names = processNameArr!.Select(t => t!.ToString()).ToList();
         Assert.Contains("Discord.exe", names);
         Assert.Contains("Telegram.exe", names);
     }
@@ -273,10 +276,10 @@ public class CustomConfigInjectorTests
     {
         var json = """{"outbounds": [{"type": "vless", "tag": "proxy"}, {"type": "direct", "tag": "direct"}]}""";
         var result = CustomConfigInjector.Inject(json, new[] { "test.exe" }, CreateSettings());
-        var parsed = Newtonsoft.Json.Linq.JObject.Parse(result);
+        var parsed = (JsonNode.Parse(result) as JsonObject)!;
 
         Assert.NotNull(parsed["route"]);
-        Assert.NotNull(parsed.SelectToken("route.rules"));
+        Assert.NotNull(StjNodeHelpers.SelectToken(parsed, "route.rules"));
     }
 
     // ── Case preservation ──
@@ -336,43 +339,44 @@ public class CustomConfigInjectorTests
     public void Inject_RealWorldConfig_DnsOptimized()
     {
         var result = CustomConfigInjector.Inject(RealWorldConfig, new[] { "chrome.exe" }, CreateSettings());
-        var json = Newtonsoft.Json.Linq.JObject.Parse(result);
+        var json = (JsonNode.Parse(result) as JsonObject)!;
 
         // dns.strategy must be ipv4_only (was prefer_ipv4)
-        Assert.Equal("ipv4_only", json.SelectToken("dns.strategy")?.ToString());
+        Assert.Equal("ipv4_only", StjNodeHelpers.SelectToken(json, "dns.strategy")?.ToString());
 
         // dns.final must point to local DNS (was "remote")
-        var dnsFinal = json.SelectToken("dns.final")?.ToString();
+        var dnsFinal = StjNodeHelpers.SelectToken(json, "dns.final")?.ToString();
         Assert.NotEqual("remote", dnsFinal);
 
         // route.final must be "direct" (split tunnel)
-        Assert.Equal("direct", json.SelectToken("route.final")?.ToString());
+        Assert.Equal("direct", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
 
         // route.default_domain_resolver must be set to local DNS
-        var resolver = json.SelectToken("route.default_domain_resolver")?.ToString();
+        var resolver = StjNodeHelpers.SelectToken(json, "route.default_domain_resolver")?.ToString();
         Assert.NotNull(resolver);
         Assert.NotEqual("remote", resolver);
 
         // tun.strict_route must be false
-        var tun = json.SelectTokens("inbounds[*]").FirstOrDefault(t => t["type"]?.ToString() == "tun");
+        var inbounds = json["inbounds"] as JsonArray;
+        var tun = inbounds!.OfType<JsonObject>().FirstOrDefault(t => t["type"]?.ToString() == "tun");
         Assert.NotNull(tun);
-        Assert.Equal(false, (bool?)tun["strict_route"]);
+        Assert.Equal(false, StjNodeHelpers.AsBool(tun["strict_route"]));
         Assert.Equal("system", tun["stack"]?.ToString());
 
         // "block" and "dns" outbound types must be removed
-        var outbounds = json["outbounds"] as Newtonsoft.Json.Linq.JArray;
+        var outbounds = json["outbounds"] as JsonArray;
         Assert.DoesNotContain(outbounds!, o => o["type"]?.ToString() == "block");
         Assert.DoesNotContain(outbounds!, o => o["type"]?.ToString() == "dns");
 
         // Non-proxy DNS servers must have detour:"dns-direct" to bypass hijack-dns routing loop
-        var dnsServers = json.SelectToken("dns.servers") as Newtonsoft.Json.Linq.JArray;
+        var dnsServers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
         var localDnsServer = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "local");
         Assert.Equal("dns-direct", localDnsServer?["detour"]?.ToString());
         // Proxy DNS server must keep its proxy detour
         var remoteDnsServer = dnsServers!.FirstOrDefault(s => s["tag"]?.ToString() == "remote");
         Assert.Equal("proxy", remoteDnsServer?["detour"]?.ToString());
         // dns-direct outbound must exist
-        var allOutbounds = json["outbounds"] as Newtonsoft.Json.Linq.JArray;
+        var allOutbounds = json["outbounds"] as JsonArray;
         var dnsDirect = allOutbounds!.FirstOrDefault(o => o["tag"]?.ToString() == "dns-direct");
         Assert.NotNull(dnsDirect);
         Assert.Equal("direct", dnsDirect!["type"]?.ToString());
@@ -525,8 +529,8 @@ public class CustomConfigInjectorTests
         """;
 
         var result = CustomConfigInjector.Inject(json, new[] { "test.exe" }, CreateSettings());
-        var parsed = Newtonsoft.Json.Linq.JObject.Parse(result);
-        var outbounds = parsed["outbounds"] as Newtonsoft.Json.Linq.JArray;
+        var parsed = (JsonNode.Parse(result) as JsonObject)!;
+        var outbounds = parsed["outbounds"] as JsonArray;
         Assert.NotNull(outbounds);
 
         // The anonymous vless outbound must have been tagged "custom-proxy"
@@ -565,9 +569,9 @@ public class CustomConfigInjectorTests
         """;
 
         var result = CustomConfigInjector.Inject(json, new[] { "Discord.exe" }, CreateSettings());
-        var parsed = Newtonsoft.Json.Linq.JObject.Parse(result);
+        var parsed = (JsonNode.Parse(result) as JsonObject)!;
 
-        var routeRules = parsed.SelectToken("route.rules") as Newtonsoft.Json.Linq.JArray;
+        var routeRules = StjNodeHelpers.SelectToken(parsed, "route.rules") as JsonArray;
         Assert.NotNull(routeRules);
         var processRule = routeRules!.FirstOrDefault(r => r["process_name"] != null);
         Assert.NotNull(processRule);

@@ -1,5 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using VPNRouter.Core.Models;
-using Newtonsoft.Json;
 
 namespace VPNRouter.Core.Services;
 
@@ -750,13 +751,32 @@ public static class ConfigGenerator
         });
     }
 
+    /// <summary>
+    /// Phase 4 (2026-05-18) — migrated from Newtonsoft.Json
+    /// <c>JsonConvert.SerializeObject</c> to <c>System.Text.Json
+    /// JsonSerializer.Serialize</c>. Wire format is byte-identical:
+    /// <list type="bullet">
+    ///   <item><c>WriteIndented=true</c> mirrors Newtonsoft's
+    ///   <c>Formatting.Indented</c>.</item>
+    ///   <item><c>DefaultIgnoreCondition=WhenWritingNull</c> mirrors
+    ///   Newtonsoft's <c>NullValueHandling.Ignore</c>, and the per-property
+    ///   <c>[JsonIgnore(Condition=WhenWritingNull)]</c> attributes on
+    ///   <see cref="VPNConfig"/> reinforce it.</item>
+    ///   <item>Every wire key is pinned via <c>[JsonPropertyName]</c> on
+    ///   the model — no global naming policy could change this.</item>
+    /// </list>
+    /// The sing-box check integration tests run against the generated JSON
+    /// and trip if any key drifts.
+    /// </summary>
+    internal static readonly JsonSerializerOptions SingBoxOptions = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+
     public static string Serialize(SingBoxConfig config)
     {
-        return JsonConvert.SerializeObject(config, new JsonSerializerSettings
-        {
-            Formatting = Formatting.Indented,
-            NullValueHandling = NullValueHandling.Ignore
-        });
+        return JsonSerializer.Serialize(config, SingBoxOptions);
     }
 
     // ─── DNS (sing-box 1.12+ format) ──────────────────────────────────────────

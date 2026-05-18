@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.Versioning;
 using System.Text;
+using System.Text.Json;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -101,8 +102,11 @@ public static class HealthCheck
             try
             {
                 var json = File.ReadAllText(userCatalogue);
-                var collection = Newtonsoft.Json.JsonConvert
-                    .DeserializeObject<ProfileCollection>(json);
+                // Phase 4 (2026-05-18): STJ deserialize. ProfileManager's
+                // SafeJsonOptions pins case-insensitive + MaxDepth=32 — same
+                // DoS guard as the Newtonsoft predecessor.
+                var collection = JsonSerializer.Deserialize<ProfileCollection>(
+                    json, ProfileManager.SafeJsonOptions);
                 if (collection == null || collection.Profiles == null)
                 {
                     results.Add(new(Level.Err,
@@ -189,10 +193,23 @@ public static class HealthCheck
             try
             {
                 var json = File.ReadAllText(statePath);
-                var state = Newtonsoft.Json.Linq.JObject.Parse(json);
-                int pid = state["sing_box_pid"]?.ToObject<int>()
-                       ?? state["SingBoxPid"]?.ToObject<int>()
-                       ?? 0;
+                // Phase 4 (2026-05-18): STJ JsonDocument inspection. The
+                // state.json can carry either snake_case (post-v2.32.0
+                // schema_version-marked) OR PascalCase (pre-v2.32.0
+                // legacy default Newtonsoft output) PID keys — read both
+                // verbatim, matching the pre-migration JObject lookup.
+                using var state = JsonDocument.Parse(json);
+                int pid = 0;
+                if (state.RootElement.TryGetProperty("sing_box_pid", out var p1)
+                    && p1.ValueKind == JsonValueKind.Number)
+                {
+                    pid = p1.GetInt32();
+                }
+                else if (state.RootElement.TryGetProperty("SingBoxPid", out var p2)
+                    && p2.ValueKind == JsonValueKind.Number)
+                {
+                    pid = p2.GetInt32();
+                }
                 if (pid > 0)
                 {
                     try

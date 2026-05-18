@@ -1,27 +1,41 @@
-using Newtonsoft.Json;
+#nullable enable
+using System.Text.Json.Serialization;
 
 namespace VPNRouter.Core.Models;
 
 // ─── sing-box config root ───────────────────────────────────────────────────
 
+// Phase 4 (2026-05-18): migrated from Newtonsoft.Json [JsonProperty] to
+// System.Text.Json [JsonPropertyName]. Wire format is byte-identical because:
+//   • Every property pins its on-disk key via [JsonPropertyName(...)] so the
+//     sing-box JSON we emit has the exact snake_case keys that the binary
+//     parses (process_name, server_port, route_exclude_address, ...).
+//   • Nullable optional fields get [JsonIgnore(Condition=WhenWritingNull)]
+//     so STJ elides them on serialize — matches Newtonsoft's
+//     NullValueHandling.Ignore behaviour we relied on for "absent =/=
+//     default" semantics in sing-box.
+// The sing-box check integration tests run against the generated JSON and
+// will fail loudly if any key drifts.
+
 public class SingBoxConfig
 {
-    [JsonProperty("log")]
+    [JsonPropertyName("log")]
     public SingBoxLog Log { get; set; } = new();
 
-    [JsonProperty("dns")]
+    [JsonPropertyName("dns")]
     public SingBoxDns Dns { get; set; } = new();
 
-    [JsonProperty("inbounds")]
+    [JsonPropertyName("inbounds")]
     public List<SingBoxInbound> Inbounds { get; set; } = new();
 
-    [JsonProperty("outbounds")]
+    [JsonPropertyName("outbounds")]
     public List<SingBoxOutbound> Outbounds { get; set; } = new();
 
-    [JsonProperty("route")]
+    [JsonPropertyName("route")]
     public SingBoxRoute Route { get; set; } = new();
 
-    [JsonProperty("experimental")]
+    [JsonPropertyName("experimental")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public SingBoxExperimental? Experimental { get; set; }
 }
 
@@ -29,13 +43,13 @@ public class SingBoxConfig
 
 public class SingBoxLog
 {
-    [JsonProperty("level")]
+    [JsonPropertyName("level")]
     public string Level { get; set; } = "info";
 
-    [JsonProperty("timestamp")]
+    [JsonPropertyName("timestamp")]
     public bool Timestamp { get; set; } = true;
 
-    [JsonProperty("output")]
+    [JsonPropertyName("output")]
     public string Output { get; set; } = string.Empty;
 }
 
@@ -43,10 +57,10 @@ public class SingBoxLog
 
 public class SingBoxDns
 {
-    [JsonProperty("servers")]
+    [JsonPropertyName("servers")]
     public List<DnsServer> Servers { get; set; } = new();
 
-    [JsonProperty("rules")]
+    [JsonPropertyName("rules")]
     public List<DnsRule> Rules { get; set; } = new();
 
     /// <summary>
@@ -54,58 +68,67 @@ public class SingBoxDns
     /// Without this, sing-box uses the first server (vpn-dns through proxy),
     /// which means ALL apps lose DNS when the proxy goes down.
     /// </summary>
-    [JsonProperty("final", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("final")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Final { get; set; }
 
-    [JsonProperty("strategy", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("strategy")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Strategy { get; set; } = "ipv4_only";
 }
 
 /// <summary>sing-box 1.12+ new DNS server format</summary>
 public class DnsServer
 {
-    [JsonProperty("tag")]
+    [JsonPropertyName("tag")]
     public string Tag { get; set; } = string.Empty;
 
     /// <summary>
     /// sing-box 1.12+ typed DNS server format.
     /// Valid types: https, tls, udp, tcp, local, fakeip, dhcp, quic, h3, tailscale
     /// </summary>
-    [JsonProperty("type")]
+    [JsonPropertyName("type")]
     public string Type { get; set; } = "https";
 
     /// <summary>Used for type=https: DNS-over-HTTPS server hostname</summary>
-    [JsonProperty("server", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("server")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Server { get; set; }
 
     /// <summary>Used for type=https: port (default 443)</summary>
-    [JsonProperty("server_port", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("server_port")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ServerPort { get; set; }
 
     /// <summary>Used for type=https: URL path (e.g. /dns-query)</summary>
-    [JsonProperty("path", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("path")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Path { get; set; }
 
-    [JsonProperty("detour", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("detour")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Detour { get; set; }
 }
 
 /// <summary>sing-box 1.12+ new DNS rule format with action</summary>
 public class DnsRule
 {
-    [JsonProperty("process_name", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("process_name")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? ProcessName { get; set; }
 
     /// <summary>route | reject | pre-resolve — new action-based format in 1.12</summary>
-    [JsonProperty("action")]
+    [JsonPropertyName("action")]
     public string Action { get; set; } = "route";
 
     /// <summary>Tag of DNS server to use (for action=route)</summary>
-    [JsonProperty("server", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("server")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Server { get; set; }
 
     /// <summary>Match by rule set tags (geosite-ru, etc).</summary>
-    [JsonProperty("rule_set", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("rule_set")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? RuleSet { get; set; }
 
     // v2.30.0 — fields for custom block rules with domain-type match.
@@ -113,15 +136,18 @@ public class DnsRule
     // the lookup itself fails (no-traffic UX for "blocked = invisible").
 
     /// <summary>Match by exact FQDN(s) — used by custom block rules.</summary>
-    [JsonProperty("domain", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("domain")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? Domain { get; set; }
 
     /// <summary>Match by domain suffix(es) — used by custom block rules.</summary>
-    [JsonProperty("domain_suffix", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("domain_suffix")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? DomainSuffix { get; set; }
 
     /// <summary>Match by substring — used by custom block rules.</summary>
-    [JsonProperty("domain_keyword", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("domain_keyword")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? DomainKeyword { get; set; }
 }
 
@@ -129,39 +155,40 @@ public class DnsRule
 
 public class SingBoxInbound
 {
-    [JsonProperty("type")]
+    [JsonPropertyName("type")]
     public string Type { get; set; } = "tun";
 
-    [JsonProperty("tag")]
+    [JsonPropertyName("tag")]
     public string Tag { get; set; } = "tun-in";
 
-    [JsonProperty("interface_name")]
+    [JsonPropertyName("interface_name")]
     public string InterfaceName { get; set; } = "VPNRouter-TUN";
 
     /// <summary>sing-box 1.12+: address is an array (replaces inet4_address/inet6_address)</summary>
-    [JsonProperty("address")]
+    [JsonPropertyName("address")]
     public List<string> Address { get; set; } = new() { "172.19.0.1/30" };
 
-    [JsonProperty("mtu")]
+    [JsonPropertyName("mtu")]
     public int Mtu { get; set; } = 9000;
 
-    [JsonProperty("auto_route")]
+    [JsonPropertyName("auto_route")]
     public bool AutoRoute { get; set; } = true;
 
-    [JsonProperty("strict_route")]
+    [JsonPropertyName("strict_route")]
     public bool StrictRoute { get; set; } = false;
 
     /// <summary>
     /// Exclude specific address ranges from TUN routing.
     /// Traffic to these addresses bypasses TUN and uses the system routing table.
     /// </summary>
-    [JsonProperty("route_exclude_address", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("route_exclude_address")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? RouteExcludeAddress { get; set; }
 
-    [JsonProperty("endpoint_independent_nat")]
+    [JsonPropertyName("endpoint_independent_nat")]
     public bool EndpointIndependentNat { get; set; } = false;
 
-    [JsonProperty("stack")]
+    [JsonPropertyName("stack")]
     public string Stack { get; set; } = "system";
 }
 // Note: sniff + sniff_override_destination removed from inbound (deprecated since 1.11, removed in 1.13).
@@ -171,28 +198,34 @@ public class SingBoxInbound
 
 public class SingBoxOutbound
 {
-    [JsonProperty("type")]
+    [JsonPropertyName("type")]
     public string Type { get; set; } = string.Empty;
 
-    [JsonProperty("tag")]
+    [JsonPropertyName("tag")]
     public string Tag { get; set; } = string.Empty;
 
-    [JsonProperty("server", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("server")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Server { get; set; }
 
-    [JsonProperty("server_port", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("server_port")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ServerPort { get; set; }
 
-    [JsonProperty("uuid", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("uuid")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Uuid { get; set; }
 
-    [JsonProperty("flow", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("flow")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Flow { get; set; }
 
-    [JsonProperty("tls", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("tls")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public TlsConfig? Tls { get; set; }
 
-    [JsonProperty("transport", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("transport")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public TransportConfig? Transport { get; set; }
 
     /// <summary>
@@ -200,29 +233,35 @@ public class SingBoxOutbound
     /// Suppresses "missing domain_resolver in dial fields" deprecation warning.
     /// Must reference a tag from dns.servers.
     /// </summary>
-    [JsonProperty("domain_resolver", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("domain_resolver")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DomainResolver { get; set; }
 
     // ── URLTest outbound fields (for multi-server failover) ────────────────
 
     /// <summary>Tags of child outbounds (e.g. ["vless-0", "vless-1"]). Used when type=urltest.</summary>
-    [JsonProperty("outbounds", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("outbounds")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? Outbounds { get; set; }
 
     /// <summary>Health check URL. Default: http://www.gstatic.com/generate_204</summary>
-    [JsonProperty("url", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("url")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Url { get; set; }
 
     /// <summary>Health check interval (e.g. "3m", "30s")</summary>
-    [JsonProperty("interval", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("interval")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Interval { get; set; }
 
     /// <summary>Latency tolerance in ms before switching servers</summary>
-    [JsonProperty("tolerance", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("tolerance")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? Tolerance { get; set; }
 
     /// <summary>Whether to interrupt existing connections on server switch</summary>
-    [JsonProperty("interrupt_exist_connections", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("interrupt_exist_connections")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? InterruptExistConnections { get; set; }
 
     /// <summary>
@@ -230,71 +269,82 @@ public class SingBoxOutbound
     /// outbound "non-empty" so sing-box 1.13 accepts detour:"direct" pointing to it
     /// (otherwise FATAL: "detour to empty direct outbound makes no sense").
     /// </summary>
-    [JsonProperty("udp_fragment", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("udp_fragment")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? UdpFragment { get; set; }
 
     // ── Non-VLESS protocol fields (v2.30.1-r3 multi-protocol support) ──────
 
     /// <summary>Auth password — used by Hysteria2, TUIC, Shadowsocks outbounds.</summary>
-    [JsonProperty("password", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("password")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Password { get; set; }
 
     /// <summary>Shadowsocks cipher method (e.g. <c>2022-blake3-aes-256-gcm</c>).</summary>
-    [JsonProperty("method", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("method")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Method { get; set; }
 
     /// <summary>TUIC congestion-control (<c>bbr</c> | <c>cubic</c> | <c>new_reno</c>).</summary>
-    [JsonProperty("congestion_control", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("congestion_control")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? CongestionControl { get; set; }
 
     /// <summary>TUIC UDP relay mode (<c>native</c> | <c>quic</c>).</summary>
-    [JsonProperty("udp_relay_mode", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("udp_relay_mode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? UdpRelayMode { get; set; }
 
     /// <summary>Hysteria2 obfuscation block (Salamander).</summary>
-    [JsonProperty("obfs", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("obfs")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Hysteria2Obfs? Obfs { get; set; }
 
     /// <summary>Shadowsocks plugin name (e.g. <c>shadow-tls</c>).</summary>
-    [JsonProperty("plugin", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("plugin")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Plugin { get; set; }
 
     /// <summary>Shadowsocks plugin options (semicolon-delimited <c>key=value</c> pairs).</summary>
-    [JsonProperty("plugin_opts", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("plugin_opts")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? PluginOpts { get; set; }
 }
 
 /// <summary>Hysteria2 Salamander obfuscation block.</summary>
 public class Hysteria2Obfs
 {
-    [JsonProperty("type")]
+    [JsonPropertyName("type")]
     public string Type { get; set; } = "salamander";
 
-    [JsonProperty("password")]
+    [JsonPropertyName("password")]
     public string Password { get; set; } = string.Empty;
 }
 
 public class TlsConfig
 {
-    [JsonProperty("enabled")]
+    [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
-    [JsonProperty("server_name")]
+    [JsonPropertyName("server_name")]
     public string ServerName { get; set; } = string.Empty;
 
-    [JsonProperty("insecure")]
+    [JsonPropertyName("insecure")]
     public bool Insecure { get; set; } = false;
 
     /// <summary>Reality config — set when using VLESS Reality (replaces standard TLS)</summary>
-    [JsonProperty("reality", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("reality")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public RealityConfig? Reality { get; set; }
 
     /// <summary>TLS fingerprint for uTLS/Reality: firefox | chrome | safari | etc.</summary>
-    [JsonProperty("utls", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("utls")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public UtlsConfig? Utls { get; set; }
 
     /// <summary>ALPN negotiation protocols (e.g. ["http/1.1"] or ["h2", "http/1.1"])</summary>
-    [JsonProperty("alpn", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("alpn")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? Alpn { get; set; }
 
     /// <summary>
@@ -302,14 +352,16 @@ public class TlsConfig
     /// smaller TLS records. Bypasses DPI that inspects the first TLS record
     /// for SNI. Available since sing-box 1.12.0.
     /// </summary>
-    [JsonProperty("record_fragment", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("record_fragment")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? RecordFragment { get; set; }
 
     /// <summary>
     /// TCP-level ClientHello fragmentation — more aggressive than record_fragment.
     /// Splits the TCP segments carrying the TLS ClientHello.
     /// </summary>
-    [JsonProperty("fragment", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("fragment")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? Fragment { get; set; }
 
     /// <summary>
@@ -317,46 +369,50 @@ public class TlsConfig
     /// complete within this duration, sing-box retries without fragmentation.
     /// Default: 500ms.
     /// </summary>
-    [JsonProperty("fragment_fallback_delay", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("fragment_fallback_delay")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? FragmentFallbackDelay { get; set; }
 }
 
 public class RealityConfig
 {
-    [JsonProperty("enabled")]
+    [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
-    [JsonProperty("public_key")]
+    [JsonPropertyName("public_key")]
     public string PublicKey { get; set; } = string.Empty;
 
-    [JsonProperty("short_id")]
+    [JsonPropertyName("short_id")]
     public string ShortId { get; set; } = string.Empty;
 }
 
 public class UtlsConfig
 {
-    [JsonProperty("enabled")]
+    [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
     /// <summary>chrome | firefox | safari | ios | android | edge | 360 | qq | random | randomized</summary>
-    [JsonProperty("fingerprint")]
+    [JsonPropertyName("fingerprint")]
     public string Fingerprint { get; set; } = "firefox";
 }
 
 public class TransportConfig
 {
-    [JsonProperty("type")]
+    [JsonPropertyName("type")]
     public string Type { get; set; } = "ws";
 
     /// <summary>WebSocket path (e.g. /vless-ws). Only for type=ws.</summary>
-    [JsonProperty("path", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("path")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Path { get; set; }
 
     /// <summary>gRPC service name. Only for type=grpc.</summary>
-    [JsonProperty("service_name", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("service_name")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ServiceName { get; set; }
 
-    [JsonProperty("headers", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("headers")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Dictionary<string, string>? Headers { get; set; }
 }
 
@@ -364,13 +420,13 @@ public class TransportConfig
 
 public class SingBoxRoute
 {
-    [JsonProperty("rules")]
+    [JsonPropertyName("rules")]
     public List<RouteRule> Rules { get; set; } = new();
 
-    [JsonProperty("final")]
+    [JsonPropertyName("final")]
     public string Final { get; set; } = "direct";
 
-    [JsonProperty("auto_detect_interface")]
+    [JsonPropertyName("auto_detect_interface")]
     public bool AutoDetectInterface { get; set; } = true;
 
     /// <summary>
@@ -378,14 +434,16 @@ public class SingBoxRoute
     /// Must reference a tag from dns.servers.
     /// Will be required in sing-box 1.14.
     /// </summary>
-    [JsonProperty("default_domain_resolver", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("default_domain_resolver")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DefaultDomainResolver { get; set; }
 
     /// <summary>
     /// Rule sets — references to local .srs files (sing-box binary rule sets).
     /// Used for geo-based routing (geoip-ru, geosite-ru).
     /// </summary>
-    [JsonProperty("rule_set", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("rule_set")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<RuleSetEntry>? RuleSet { get; set; }
 }
 
@@ -394,22 +452,25 @@ public class SingBoxRoute
 /// </summary>
 public class RuleSetEntry
 {
-    [JsonProperty("type")]
+    [JsonPropertyName("type")]
     public string Type { get; set; } = "local";
 
-    [JsonProperty("tag")]
+    [JsonPropertyName("tag")]
     public string Tag { get; set; } = string.Empty;
 
-    [JsonProperty("format")]
+    [JsonPropertyName("format")]
     public string Format { get; set; } = "binary";
 
-    [JsonProperty("path", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("path")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Path { get; set; }
 
-    [JsonProperty("url", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("url")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Url { get; set; }
 
-    [JsonProperty("download_detour", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("download_detour")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DownloadDetour { get; set; }
 
     /// <summary>
@@ -419,7 +480,8 @@ public class RuleSetEntry
     /// bumping every one. Format per sing-box: Go duration string ("24h",
     /// "168h", "1h30m"). Ignored for local rule sets.
     /// </summary>
-    [JsonProperty("update_interval", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("update_interval")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? UpdateInterval { get; set; }
 }
 
@@ -427,61 +489,75 @@ public class RuleSetEntry
 public class RouteRule
 {
     /// <summary>Match by inbound tag (e.g. "tun-in"). Used for sniff rule.</summary>
-    [JsonProperty("inbound", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("inbound")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Inbound { get; set; }
 
-    [JsonProperty("protocol", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("protocol")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Protocol { get; set; }
 
-    [JsonProperty("process_name", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("process_name")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? ProcessName { get; set; }
 
     /// <summary>Match by network type: "tcp" | "udp". Null = match both.</summary>
-    [JsonProperty("network", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("network")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Network { get; set; }
 
-    [JsonProperty("ip_is_private", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("ip_is_private")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? IpIsPrivate { get; set; }
 
     /// <summary>
     /// New 1.12+ action-based format: "route" | "reject" | "hijack-dns" | "sniff" | "resolve"
     /// Use Action + Outbound together for route action.
     /// </summary>
-    [JsonProperty("action", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("action")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Action { get; set; }
 
     /// <summary>Outbound tag — used when Action = "route"</summary>
-    [JsonProperty("outbound", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("outbound")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Outbound { get; set; }
 
     /// <summary>Sniff timeout — used when Action = "sniff". Default "300ms".</summary>
-    [JsonProperty("timeout", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("timeout")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Timeout { get; set; }
 
     /// <summary>Match by rule set tags (geoip-ru, geosite-ru, etc).</summary>
-    [JsonProperty("rule_set", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("rule_set")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? RuleSet { get; set; }
 
     // v2.29.0 — fields for custom direct rules (CustomDirectRule).
 
     /// <summary>Match by exact FQDN(s) (e.g. ["example.com", "api.example.com"]).</summary>
-    [JsonProperty("domain", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("domain")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? Domain { get; set; }
 
     /// <summary>Match by domain suffix(es) (e.g. [".lan.local"] matches "printer.lan.local").</summary>
-    [JsonProperty("domain_suffix", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("domain_suffix")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? DomainSuffix { get; set; }
 
     /// <summary>Match by substring(s) anywhere in the FQDN.</summary>
-    [JsonProperty("domain_keyword", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("domain_keyword")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? DomainKeyword { get; set; }
 
     /// <summary>Match by IP CIDR(s) (e.g. ["10.0.0.0/8", "192.168.0.0/16"]).</summary>
-    [JsonProperty("ip_cidr", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("ip_cidr")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? IpCidr { get; set; }
 
     /// <summary>Match by destination port(s).</summary>
-    [JsonProperty("port", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("port")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<int>? Port { get; set; }
 }
 
@@ -489,12 +565,12 @@ public class RouteRule
 
 public class SingBoxExperimental
 {
-    [JsonProperty("clash_api")]
+    [JsonPropertyName("clash_api")]
     public ClashApi ClashApi { get; set; } = new();
 }
 
 public class ClashApi
 {
-    [JsonProperty("external_controller")]
+    [JsonPropertyName("external_controller")]
     public string ExternalController { get; set; } = "127.0.0.1:9090";
 }

@@ -1,5 +1,6 @@
 using System.Net.Http;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Serilog;
 
 namespace VPNRouter.Core.Services;
@@ -81,13 +82,19 @@ public sealed class ConfigSanityCheck
     /// Looks for placeholder fingerprints in the first VLESS-like outbound.
     /// Returns <c>IsDead=true</c> if a known placeholder is matched OR if
     /// the outbound is structurally malformed (missing server / port / uuid).
+    ///
+    /// <para>Phase 4 (2026-05-18) — migrated from Newtonsoft
+    /// <c>JObject</c>/<c>JArray</c> to System.Text.Json
+    /// <c>JsonObject</c>/<c>JsonArray</c>. The detection logic and field
+    /// extraction paths are byte-equivalent; the underlying tree
+    /// representation differs only in type name.</para>
     /// </summary>
-    public PreStartCheckResult CheckBeforeStart(JObject singboxConfig)
+    public PreStartCheckResult CheckBeforeStart(JsonObject singboxConfig)
     {
         if (singboxConfig == null)
             return new PreStartCheckResult(true, "sing-box config is null", null);
 
-        var outbounds = singboxConfig["outbounds"] as JArray;
+        var outbounds = singboxConfig["outbounds"] as JsonArray;
         if (outbounds == null || outbounds.Count == 0)
             return new PreStartCheckResult(true, "sing-box config has no outbounds", "outbounds");
 
@@ -108,13 +115,13 @@ public sealed class ConfigSanityCheck
         }
 
         // ── Structural checks ──
-        var server = proxy["server"]?.Value<string>();
+        var server = StjNodeHelpers.AsString(proxy["server"]);
         if (string.IsNullOrWhiteSpace(server))
             return new PreStartCheckResult(true,
                 "proxy outbound has empty 'server' field — config never reachable",
                 "outbound.server");
 
-        var serverPort = proxy["server_port"]?.Value<int?>() ?? 0;
+        var serverPort = StjNodeHelpers.AsInt(proxy["server_port"]) ?? 0;
         if (serverPort <= 0)
             return new PreStartCheckResult(true,
                 "proxy outbound has invalid 'server_port' (must be 1-65535)",
@@ -123,10 +130,10 @@ public sealed class ConfigSanityCheck
         // VLESS-specific: uuid is mandatory. Other protocols use password
         // (Hysteria2 / TUIC / Shadowsocks / Trojan) so the field is
         // protocol-conditional.
-        var proxyType = proxy["type"]?.Value<string>()?.ToLowerInvariant() ?? "";
+        var proxyType = StjNodeHelpers.AsString(proxy["type"])?.ToLowerInvariant() ?? "";
         if (proxyType == "vless")
         {
-            var uuid = proxy["uuid"]?.Value<string>();
+            var uuid = StjNodeHelpers.AsString(proxy["uuid"]);
             if (string.IsNullOrWhiteSpace(uuid))
                 return new PreStartCheckResult(true,
                     "VLESS proxy outbound has empty 'uuid' — handshake would fail",
@@ -142,12 +149,12 @@ public sealed class ConfigSanityCheck
         var offendingField = InspectOutbound(proxy);
         if (offendingField != null)
         {
-            var reality = proxy["tls"]?["reality"] as JObject;
+            var reality = proxy["tls"]?["reality"] as JsonObject;
             switch (offendingField)
             {
                 case "reality.public_key":
                 {
-                    var pubkey = reality?["public_key"]?.Value<string>();
+                    var pubkey = StjNodeHelpers.AsString(reality?["public_key"]);
                     _logger?.Warning(
                         "[ConfigSanityCheck] Placeholder Reality public_key detected: {Key}",
                         pubkey);
@@ -157,7 +164,7 @@ public sealed class ConfigSanityCheck
                 }
                 case "reality.short_id":
                 {
-                    var shortId = reality?["short_id"]?.Value<string>();
+                    var shortId = StjNodeHelpers.AsString(reality?["short_id"]);
                     _logger?.Warning(
                         "[ConfigSanityCheck] Placeholder Reality short_id detected: {ShortId}",
                         shortId);
@@ -190,18 +197,18 @@ public sealed class ConfigSanityCheck
     /// placeholder gate share a single source of truth for "find the
     /// outbound to inspect".
     /// </summary>
-    internal static JObject? FindFirstProxyOutbound(JArray outbounds) =>
+    internal static JsonObject? FindFirstProxyOutbound(JsonArray outbounds) =>
         PlaceholderDefense.LayerE_RuntimeSanity.FindFirstProxyOutbound(outbounds);
 
     /// <summary>
     /// Back-compat forwarder — inspects a single sing-box proxy outbound
-    /// JObject for placeholder fingerprints (Reality public_key, Reality
+    /// JsonObject for placeholder fingerprints (Reality public_key, Reality
     /// short_id, server IP). v3.0 Phase 3D delegates to
     /// <see cref="PlaceholderDefense.LayerE_RuntimeSanity.InspectOutbound"/>.
     /// Field-name convention matches
     /// <see cref="PlaceholderDefense.Inspect(string?, string?, string?)"/>.
     /// </summary>
-    public static string? InspectOutbound(JObject? proxy) =>
+    public static string? InspectOutbound(JsonObject? proxy) =>
         PlaceholderDefense.LayerE_RuntimeSanity.InspectOutbound(proxy);
 
     /// <summary>
@@ -216,7 +223,11 @@ public sealed class ConfigSanityCheck
 
         try
         {
-            var jo = JObject.Parse(singboxConfigJson);
+            // Phase 4 (2026-05-18) — STJ JsonNode.Parse mirrors Newtonsoft's
+            // JObject.Parse. JsonException is the STJ equivalent of
+            // JsonReaderException; both classes hit the same generic catch.
+            var jo = JsonNode.Parse(singboxConfigJson) as JsonObject
+                ?? throw new JsonException("sing-box config root is not an object");
             return CheckBeforeStart(jo);
         }
         catch (Exception ex)
@@ -262,8 +273,8 @@ public sealed class ConfigSanityCheck
                     // Negative or zero delay means timeout/unreachable.
                     try
                     {
-                        var jo = JObject.Parse(body);
-                        var delay = jo["delay"]?.Value<int>() ?? 0;
+                        var jo = JsonNode.Parse(body) as JsonObject;
+                        var delay = StjNodeHelpers.AsInt(jo?["delay"]) ?? 0;
                         lastDelay = delay;
                         if (delay > 0)
                         {

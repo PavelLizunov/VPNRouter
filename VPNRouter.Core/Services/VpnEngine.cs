@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
@@ -709,8 +710,11 @@ public class VpnEngine : IDisposable
             try
             {
                 var json = File.ReadAllText(userPath);
-                var collection = Newtonsoft.Json.JsonConvert
-                    .DeserializeObject<ProfileCollection>(json);
+                // Phase 4 (2026-05-18): STJ deserialize via ProfileManager's
+                // shared SafeJsonOptions (MaxDepth=32, case-insensitive)
+                // — same DoS-guard semantics as the prior Newtonsoft call.
+                var collection = JsonSerializer.Deserialize<ProfileCollection>(
+                    json, ProfileManager.SafeJsonOptions);
                 if (collection == null || collection.Profiles == null || collection.Profiles.Count == 0)
                 {
                     shouldQuarantine = true;

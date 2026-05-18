@@ -1,4 +1,4 @@
-using Newtonsoft.Json.Linq;
+using System.Text.Json.Nodes;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
@@ -97,17 +97,18 @@ public sealed class ConfigPipelineTests
         // pipeline returns a non-empty, parseable JSON with a proxy
         // outbound (the exact class of bug v2.28.2 produced silently).
         Assert.False(string.IsNullOrWhiteSpace(json));
-        var jo = JObject.Parse(json);
-        var outbounds = jo["outbounds"] as JArray;
+        var jo = JsonNode.Parse(json) as JsonObject;
+        Assert.NotNull(jo);
+        var outbounds = jo!["outbounds"] as JsonArray;
         Assert.NotNull(outbounds);
         Assert.True(outbounds!.Count > 0,
             "Generated config must have at least one outbound");
 
         var proxyOutbound = outbounds
-            .OfType<JObject>()
-            .FirstOrDefault(o => o["type"]?.Value<string>() == "vless");
+            .OfType<JsonObject>()
+            .FirstOrDefault(o => o["type"]?.GetValue<string>() == "vless");
         Assert.NotNull(proxyOutbound);
-        Assert.Equal("104.194.156.93", proxyOutbound!["server"]?.Value<string>());
+        Assert.Equal("104.194.156.93", proxyOutbound!["server"]?.GetValue<string>());
 
         // Pipeline side-effect: settings.Vless.Servers mutated in place by
         // resolver (same contract pre-2F).
@@ -212,18 +213,19 @@ public sealed class ConfigPipelineTests
             settings,
             ConfigPipeline.ValidationMode.Strict);
 
-        var jo = JObject.Parse(json);
-        var outbounds = jo["outbounds"] as JArray;
+        var jo = JsonNode.Parse(json) as JsonObject;
+        Assert.NotNull(jo);
+        var outbounds = jo!["outbounds"] as JsonArray;
         Assert.NotNull(outbounds);
 
         var proxyOutbound = outbounds!
-            .OfType<JObject>()
-            .FirstOrDefault(o => o["type"]?.Value<string>() == "vless");
+            .OfType<JsonObject>()
+            .FirstOrDefault(o => o["type"]?.GetValue<string>() == "vless");
         Assert.NotNull(proxyOutbound);
 
         // Critical pin: the placeholder IP must NOT appear as the outbound
         // server — subscription's de-01 takes over.
-        var server = proxyOutbound!["server"]?.Value<string>();
+        var server = proxyOutbound!["server"]?.GetValue<string>();
         Assert.NotEqual(placeholderServer, server);
         Assert.Equal("104.194.156.93", server);
 
@@ -281,14 +283,15 @@ public sealed class ConfigPipelineTests
 
         // Generated JSON: proxy outbound exists and points at the active
         // subscription server (alpha → 10.0.0.1).
-        var jo = JObject.Parse(json);
-        var outbounds = jo["outbounds"] as JArray;
+        var jo = JsonNode.Parse(json) as JsonObject;
+        Assert.NotNull(jo);
+        var outbounds = jo!["outbounds"] as JsonArray;
         Assert.NotNull(outbounds);
         var proxyOutbound = outbounds!
-            .OfType<JObject>()
-            .FirstOrDefault(o => o["type"]?.Value<string>() == "vless");
+            .OfType<JsonObject>()
+            .FirstOrDefault(o => o["type"]?.GetValue<string>() == "vless");
         Assert.NotNull(proxyOutbound);
-        Assert.Equal("10.0.0.1", proxyOutbound!["server"]?.Value<string>());
+        Assert.Equal("10.0.0.1", proxyOutbound!["server"]?.GetValue<string>());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -322,14 +325,15 @@ public sealed class ConfigPipelineTests
         Assert.Equal(2, settings.Vless.Servers.Count);
         Assert.Equal("legacy-A", settings.Vless.ActiveServer);
 
-        var jo = JObject.Parse(json);
-        var outbounds = jo["outbounds"] as JArray;
+        var jo = JsonNode.Parse(json) as JsonObject;
+        Assert.NotNull(jo);
+        var outbounds = jo!["outbounds"] as JsonArray;
         Assert.NotNull(outbounds);
         var proxyOutbound = outbounds!
-            .OfType<JObject>()
-            .FirstOrDefault(o => o["type"]?.Value<string>() == "vless");
+            .OfType<JsonObject>()
+            .FirstOrDefault(o => o["type"]?.GetValue<string>() == "vless");
         Assert.NotNull(proxyOutbound);
         // Active server picked → 203.0.113.10
-        Assert.Equal("203.0.113.10", proxyOutbound!["server"]?.Value<string>());
+        Assert.Equal("203.0.113.10", proxyOutbound!["server"]?.GetValue<string>());
     }
 }

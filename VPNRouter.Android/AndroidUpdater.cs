@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
@@ -14,6 +14,7 @@ using Android.Provider;
 using AndroidX.Core.Content;
 using VPNRouter.Core;
 using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.UpdateSources;
 
 namespace VPNRouter.Android;
 
@@ -130,28 +131,29 @@ internal static class AndroidUpdater
             return null;
         }
 
-        var releases = JsonConvert.DeserializeAnonymousType(json, new[]
+        // Phase 4 (2026-05-18) — share the GitHubRelease/GitHubAsset
+        // DTOs from VPNRouter.Core.Services.UpdateSources (Android consumes
+        // Core via source-link, so the same types are in-assembly).
+        GitHubRelease[]? releases;
+        try
         {
-            new
-            {
-                tag_name = "",
-                body = "",
-                html_url = "",
-                draft = false,
-                prerelease = false,
-                assets = new[] { new { browser_download_url = "", size = 0L, name = "" } }
-            }
-        });
+            releases = JsonSerializer.Deserialize<GitHubRelease[]>(
+                json, GitHubReleaseSource.GitHubReleaseJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
         if (releases == null || releases.Length == 0)
             return null;
 
         var newer = releases
-            .Where(r => !r.draft && (includePrerelease || !r.prerelease))
+            .Where(r => !r.Draft && (includePrerelease || !r.Prerelease))
             .Select(r => new
             {
                 Release = r,
-                Tag = r.tag_name.TrimStart('v'),
-                Parsed = UpdateChecker.TryParseSemVer(r.tag_name.TrimStart('v'), out var v) ? v : (UpdateChecker.SemVer?)null
+                Tag = (r.TagName ?? string.Empty).TrimStart('v'),
+                Parsed = UpdateChecker.TryParseSemVer((r.TagName ?? string.Empty).TrimStart('v'), out var v) ? v : (UpdateChecker.SemVer?)null
             })
             .Where(r => r.Parsed != null && r.Parsed.Value.CompareTo(current) > 0)
             .OrderByDescending(r => r.Parsed!.Value)
@@ -161,7 +163,7 @@ internal static class AndroidUpdater
             return null;
 
         var latest = newer[0];
-        var apk = FindApkAsset(latest.Release.assets);
+        var apk = FindApkAsset(latest.Release.Assets);
         if (apk == null)
             return null;
 
@@ -169,18 +171,18 @@ internal static class AndroidUpdater
         // newer than the running version — same as desktop, so the user
         // sees the cumulative change list when they skip several rN's.
         var notes = newer
-            .Where(r => !string.IsNullOrWhiteSpace(r.Release.body))
-            .Select(r => r.Release.body!.Trim())
+            .Where(r => !string.IsNullOrWhiteSpace(r.Release.Body))
+            .Select(r => r.Release.Body!.Trim())
             .ToList();
 
         return new AndroidUpdateInfo
         {
             CurrentVersion = AppVersion.Version,
             LatestVersion = latest.Tag,
-            DownloadUrl = apk.browser_download_url ?? string.Empty,
-            SizeBytes = apk.size,
+            DownloadUrl = apk.BrowserDownloadUrl ?? string.Empty,
+            SizeBytes = apk.Size,
             ReleaseNotes = string.Join("\n\n", notes),
-            HtmlUrl = latest.Release.html_url ?? string.Empty,
+            HtmlUrl = latest.Release.HtmlUrl ?? string.Empty,
         };
     }
 
@@ -190,23 +192,21 @@ internal static class AndroidUpdater
     /// other platforms) → fallback any <c>com.ninitux.vpnrouter*.apk</c>
     /// (default .NET Android output). Returns null if neither exists.
     /// </summary>
-    private static dynamic? FindApkAsset(dynamic[]? assets)
+    private static GitHubAsset? FindApkAsset(GitHubAsset[]? assets)
     {
         if (assets == null) return null;
 
-        var enumerable = (IEnumerable<dynamic>)assets;
-
-        var canonical = enumerable.FirstOrDefault(a =>
+        var canonical = assets.FirstOrDefault(a =>
         {
-            string name = a.name;
+            var name = a.Name ?? string.Empty;
             return name.StartsWith("VPNRouter-v", StringComparison.OrdinalIgnoreCase) &&
                    name.EndsWith("-android.apk", StringComparison.OrdinalIgnoreCase);
         });
         if (canonical != null) return canonical;
 
-        return enumerable.FirstOrDefault(a =>
+        return assets.FirstOrDefault(a =>
         {
-            string name = a.name;
+            var name = a.Name ?? string.Empty;
             return name.StartsWith("com.ninitux.vpnrouter", StringComparison.OrdinalIgnoreCase) &&
                    name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase);
         });

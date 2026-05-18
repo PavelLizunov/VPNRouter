@@ -17,9 +17,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services.UpdateSources;
@@ -96,28 +97,33 @@ public sealed class GitHubReleaseSource : IUpdateSource
         if (!listResponse.IsSuccess())
             return null;
 
-        var releases = JsonConvert.DeserializeAnonymousType(listResponse.AsString(), new[]
+        // Phase 4 (2026-05-18) — explicit DTOs replace Newtonsoft's
+        // DeserializeAnonymousType. snake_case wire keys pinned via
+        // [JsonPropertyName] match the GitHub Releases API contract
+        // (tag_name / browser_download_url / etc.) exactly — round-trip
+        // tests in Phase3StjJsonRoundTripTests.GitHubRelease_* pin this.
+        // PropertyNameCaseInsensitive=true on GitHubReleaseJsonOptions
+        // tolerates any GitHub variant casing without breaking parse.
+        GitHubRelease[]? releases;
+        try
         {
-            new
-            {
-                tag_name = "",
-                body = "",
-                html_url = "",
-                draft = false,
-                prerelease = false,
-                assets = new[] { new { browser_download_url = "", size = 0L, name = "" } }
-            }
-        });
+            releases = JsonSerializer.Deserialize<GitHubRelease[]>(
+                listResponse.AsString(), GitHubReleaseJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
         if (releases == null || releases.Length == 0)
             return null;
 
         var newer = releases
-            .Where(r => !r.draft && (_settings.IsExperimental || !r.prerelease))
+            .Where(r => !r.Draft && (_settings.IsExperimental || !r.Prerelease))
             .Select(r => new
             {
                 Release = r,
-                Tag = r.tag_name.TrimStart('v'),
-                Parsed = UpdateChecker.TryParseSemVer(r.tag_name.TrimStart('v'), out var v) ? v : (UpdateChecker.SemVer?)null
+                Tag = (r.TagName ?? string.Empty).TrimStart('v'),
+                Parsed = UpdateChecker.TryParseSemVer((r.TagName ?? string.Empty).TrimStart('v'), out var v) ? v : (UpdateChecker.SemVer?)null
             })
             .Where(r => r.Parsed != null && r.Parsed.Value.CompareTo(current) > 0)
             .OrderByDescending(r => r.Parsed!.Value)
@@ -127,18 +133,18 @@ public sealed class GitHubReleaseSource : IUpdateSource
             return null;
 
         var latest = newer[0];
-        var asset = FindFullAsset(latest.Release.assets);
+        var asset = FindFullAsset(latest.Release.Assets);
         if (asset == null)
             return null;
 
         // Companion .sha256 fetch — best-effort. Asset name is
         // "{asset}.sha256" by build.ps1 convention.
         string? sha = null;
-        var shaAsset = FindChecksumAsset(latest.Release.assets, asset);
+        var shaAsset = FindChecksumAsset(latest.Release.Assets, asset);
         if (shaAsset != null)
         {
             var shaResp = await _http.SendAsync(
-                new HttpRequest(System.Net.Http.HttpMethod.Get, new Uri((string)shaAsset.browser_download_url)),
+                new HttpRequest(System.Net.Http.HttpMethod.Get, new Uri(shaAsset.BrowserDownloadUrl)),
                 ct).ConfigureAwait(false);
             if (shaResp.IsSuccess())
             {
@@ -152,17 +158,17 @@ public sealed class GitHubReleaseSource : IUpdateSource
         }
 
         var notes = newer
-            .Where(r => !string.IsNullOrWhiteSpace(r.Release.body))
-            .Select(r => r.Release.body!.Trim());
+            .Where(r => !string.IsNullOrWhiteSpace(r.Release.Body))
+            .Select(r => r.Release.Body!.Trim());
 
         return new UpdateSourceInfo(
             Version: latest.Tag,
-            ReleaseUrl: latest.Release.html_url ?? string.Empty,
-            AssetName: (string)asset.name,
-            DownloadUrl: (string)asset.browser_download_url,
-            AssetSize: (long)asset.size,
+            ReleaseUrl: latest.Release.HtmlUrl ?? string.Empty,
+            AssetName: asset.Name,
+            DownloadUrl: asset.BrowserDownloadUrl,
+            AssetSize: asset.Size,
             AssetSha256: sha,
-            IsPrerelease: latest.Release.prerelease,
+            IsPrerelease: latest.Release.Prerelease,
             ReleaseNotes: string.Join("\n\n", notes));
     }
 
@@ -195,15 +201,14 @@ public sealed class GitHubReleaseSource : IUpdateSource
     /// Mirrors <see cref="UpdateChecker"/>'s legacy private
     /// <c>FindFullAsset</c> — single source of truth lives here now.
     /// </summary>
-    private static dynamic? FindFullAsset(dynamic[]? assets)
+    private static GitHubAsset? FindFullAsset(GitHubAsset[]? assets)
     {
         if (assets == null) return null;
-        var enumerable = (IEnumerable<dynamic>)assets;
 
         // New naming: VPNRouter-v*-{platform}{ext} (not containing "update")
-        var newFormat = enumerable.FirstOrDefault(a =>
+        var newFormat = assets.FirstOrDefault(a =>
         {
-            string name = a.name;
+            var name = a.Name ?? string.Empty;
             return name.StartsWith("VPNRouter-v", StringComparison.OrdinalIgnoreCase) &&
                    name.EndsWith($"{PlatformSuffix}{AssetExtension}", StringComparison.OrdinalIgnoreCase) &&
                    !name.Contains("update", StringComparison.OrdinalIgnoreCase);
@@ -213,9 +218,9 @@ public sealed class GitHubReleaseSource : IUpdateSource
         // Legacy (Windows only): VPNRouter-install-v*.zip
         if (OperatingSystem.IsWindows())
         {
-            return enumerable.FirstOrDefault(a =>
+            return assets.FirstOrDefault(a =>
             {
-                string name = a.name;
+                var name = a.Name ?? string.Empty;
                 return name.StartsWith("VPNRouter-install-v", StringComparison.OrdinalIgnoreCase) &&
                        name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
             });
@@ -225,14 +230,67 @@ public sealed class GitHubReleaseSource : IUpdateSource
 
     /// <summary>Find the .sha256 companion asset for a given install
     /// asset (naming: <c>{name}.sha256</c>).</summary>
-    private static dynamic? FindChecksumAsset(dynamic[]? assets, dynamic? zipAsset)
+    private static GitHubAsset? FindChecksumAsset(GitHubAsset[]? assets, GitHubAsset? zipAsset)
     {
         if (assets == null || zipAsset == null) return null;
-        string zipName = zipAsset.name;
-        var target = $"{zipName}.sha256";
-        return ((IEnumerable<dynamic>)assets).FirstOrDefault(a =>
-            string.Equals((string)a.name, target, StringComparison.OrdinalIgnoreCase));
+        var target = $"{zipAsset.Name}.sha256";
+        return assets.FirstOrDefault(a =>
+            string.Equals(a.Name, target, StringComparison.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// Phase 4 (2026-05-18) — STJ options shared by every GitHub Releases
+    /// API parse in this assembly. Case-insensitive so any GitHub API
+    /// quirk (extremely unlikely but harmless to allow) doesn't break
+    /// parse; <c>JsonNumberHandling.AllowReadingFromString</c> covers
+    /// any future field GitHub starts emitting as a string instead of a
+    /// number.
+    /// </summary>
+    internal static readonly JsonSerializerOptions GitHubReleaseJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString,
+    };
+}
+
+/// <summary>
+/// Phase 4 (2026-05-18) — explicit DTO mirroring the subset of the GitHub
+/// Releases API response we consume. Pre-Phase-4 the code used
+/// <see cref="System.Object"/>-typed anonymous templates via Newtonsoft's
+/// <c>DeserializeAnonymousType</c>; this typed shape is the STJ equivalent
+/// and is pinned by Phase3StjJsonRoundTripTests.
+/// </summary>
+internal sealed class GitHubRelease
+{
+    [JsonPropertyName("tag_name")]
+    public string? TagName { get; set; }
+
+    [JsonPropertyName("body")]
+    public string? Body { get; set; }
+
+    [JsonPropertyName("html_url")]
+    public string? HtmlUrl { get; set; }
+
+    [JsonPropertyName("draft")]
+    public bool Draft { get; set; }
+
+    [JsonPropertyName("prerelease")]
+    public bool Prerelease { get; set; }
+
+    [JsonPropertyName("assets")]
+    public GitHubAsset[]? Assets { get; set; }
+}
+
+internal sealed class GitHubAsset
+{
+    [JsonPropertyName("browser_download_url")]
+    public string BrowserDownloadUrl { get; set; } = string.Empty;
+
+    [JsonPropertyName("size")]
+    public long Size { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
 }
 
 /// <summary>

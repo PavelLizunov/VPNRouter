@@ -25,9 +25,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services.UpdateSources;
@@ -95,28 +95,30 @@ public sealed class SideloadSource : IUpdateSource
         if (!listResponse.IsSuccess())
             return null;
 
-        var releases = JsonConvert.DeserializeAnonymousType(listResponse.AsString(), new[]
+        // Phase 4 (2026-05-18) — share the same GitHubRelease/GitHubAsset
+        // DTOs as GitHubReleaseSource (single source of truth for the
+        // wire shape). Round-trip tests pin the wire keys in
+        // Phase3StjJsonRoundTripTests.GitHubRelease_*.
+        GitHubRelease[]? releases;
+        try
         {
-            new
-            {
-                tag_name = "",
-                body = "",
-                html_url = "",
-                draft = false,
-                prerelease = false,
-                assets = new[] { new { browser_download_url = "", size = 0L, name = "" } }
-            }
-        });
+            releases = JsonSerializer.Deserialize<GitHubRelease[]>(
+                listResponse.AsString(), GitHubReleaseSource.GitHubReleaseJsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
         if (releases == null || releases.Length == 0)
             return null;
 
         var newer = releases
-            .Where(r => !r.draft && (_settings.IsExperimental || !r.prerelease))
+            .Where(r => !r.Draft && (_settings.IsExperimental || !r.Prerelease))
             .Select(r => new
             {
                 Release = r,
-                Tag = r.tag_name.TrimStart('v'),
-                Parsed = UpdateChecker.TryParseSemVer(r.tag_name.TrimStart('v'), out var v) ? v : (UpdateChecker.SemVer?)null
+                Tag = (r.TagName ?? string.Empty).TrimStart('v'),
+                Parsed = UpdateChecker.TryParseSemVer((r.TagName ?? string.Empty).TrimStart('v'), out var v) ? v : (UpdateChecker.SemVer?)null
             })
             .Where(r => r.Parsed != null && r.Parsed.Value.CompareTo(current) > 0)
             .OrderByDescending(r => r.Parsed!.Value)
@@ -126,17 +128,17 @@ public sealed class SideloadSource : IUpdateSource
             return null;
 
         var latest = newer[0];
-        var apk = FindApkAsset(latest.Release.assets);
+        var apk = FindApkAsset(latest.Release.Assets);
         if (apk == null)
             return null;
 
         // Companion .sha256 fetch — best-effort.
         string? sha = null;
-        var shaAsset = FindChecksumAsset(latest.Release.assets, apk);
+        var shaAsset = FindChecksumAsset(latest.Release.Assets, apk);
         if (shaAsset != null)
         {
             var shaResp = await _http.SendAsync(
-                new HttpRequest(System.Net.Http.HttpMethod.Get, new Uri((string)shaAsset.browser_download_url)),
+                new HttpRequest(System.Net.Http.HttpMethod.Get, new Uri(shaAsset.BrowserDownloadUrl)),
                 ct).ConfigureAwait(false);
             if (shaResp.IsSuccess())
             {
@@ -149,17 +151,17 @@ public sealed class SideloadSource : IUpdateSource
         }
 
         var notes = newer
-            .Where(r => !string.IsNullOrWhiteSpace(r.Release.body))
-            .Select(r => r.Release.body!.Trim());
+            .Where(r => !string.IsNullOrWhiteSpace(r.Release.Body))
+            .Select(r => r.Release.Body!.Trim());
 
         return new UpdateSourceInfo(
             Version: latest.Tag,
-            ReleaseUrl: latest.Release.html_url ?? string.Empty,
-            AssetName: (string)apk.name,
-            DownloadUrl: (string)apk.browser_download_url,
-            AssetSize: (long)apk.size,
+            ReleaseUrl: latest.Release.HtmlUrl ?? string.Empty,
+            AssetName: apk.Name,
+            DownloadUrl: apk.BrowserDownloadUrl,
+            AssetSize: apk.Size,
             AssetSha256: sha,
-            IsPrerelease: latest.Release.prerelease,
+            IsPrerelease: latest.Release.Prerelease,
             ReleaseNotes: string.Join("\n\n", notes));
     }
 
@@ -233,22 +235,21 @@ public sealed class SideloadSource : IUpdateSource
     /// <c>com.ninitux.vpnrouter*.apk</c> (default .NET Android emit).
     /// Mirrors the legacy AndroidUpdater.FindApkAsset.
     /// </summary>
-    private static dynamic? FindApkAsset(dynamic[]? assets)
+    private static GitHubAsset? FindApkAsset(GitHubAsset[]? assets)
     {
         if (assets == null) return null;
-        var enumerable = (IEnumerable<dynamic>)assets;
 
-        var canonical = enumerable.FirstOrDefault(a =>
+        var canonical = assets.FirstOrDefault(a =>
         {
-            string name = a.name;
+            var name = a.Name ?? string.Empty;
             return name.StartsWith("VPNRouter-v", StringComparison.OrdinalIgnoreCase) &&
                    name.EndsWith("-android.apk", StringComparison.OrdinalIgnoreCase);
         });
         if (canonical != null) return canonical;
 
-        return enumerable.FirstOrDefault(a =>
+        return assets.FirstOrDefault(a =>
         {
-            string name = a.name;
+            var name = a.Name ?? string.Empty;
             return name.StartsWith("com.ninitux.vpnrouter", StringComparison.OrdinalIgnoreCase) &&
                    name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase);
         });
@@ -256,13 +257,12 @@ public sealed class SideloadSource : IUpdateSource
 
     /// <summary>Find the .sha256 companion asset for a given APK
     /// asset.</summary>
-    private static dynamic? FindChecksumAsset(dynamic[]? assets, dynamic? apkAsset)
+    private static GitHubAsset? FindChecksumAsset(GitHubAsset[]? assets, GitHubAsset? apkAsset)
     {
         if (assets == null || apkAsset == null) return null;
-        string apkName = apkAsset.name;
-        var target = $"{apkName}.sha256";
-        return ((IEnumerable<dynamic>)assets).FirstOrDefault(a =>
-            string.Equals((string)a.name, target, StringComparison.OrdinalIgnoreCase));
+        var target = $"{apkAsset.Name}.sha256";
+        return assets.FirstOrDefault(a =>
+            string.Equals(a.Name, target, StringComparison.OrdinalIgnoreCase));
     }
 }
 

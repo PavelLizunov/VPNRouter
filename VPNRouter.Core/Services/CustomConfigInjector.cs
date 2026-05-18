@@ -1,5 +1,6 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -11,9 +12,31 @@ namespace VPNRouter.Core.Services;
 ///
 /// Supports both legacy (outbound-based) and 1.12+ (action-based) config formats.
 /// Auto-detects format from existing route rules.
+///
+/// <para>Phase 4 (2026-05-18) — migrated from Newtonsoft
+/// <c>JObject</c>/<c>JArray</c>/<c>JToken</c> to System.Text.Json
+/// <c>JsonObject</c>/<c>JsonArray</c>/<c>JsonNode</c>. The injector
+/// behaviour is byte-equivalent — same routing-rule shape, same
+/// idempotency, same StripUnsupportedFeatures migration steps. The
+/// emitted JSON uses <see cref="InjectorOutputOptions"/> with
+/// <c>WriteIndented=true</c> to match the pre-migration
+/// <c>Formatting.Indented</c> output exactly. sing-box check
+/// integration tests pin the output shape.</para>
 /// </summary>
 public static class CustomConfigInjector
 {
+    /// <summary>
+    /// STJ serialization options for the injector's output. Mirrors the
+    /// pre-Phase-4 <c>Formatting.Indented</c> Newtonsoft behaviour
+    /// byte-for-byte (2-space indent, LF newlines on Unix / CRLF
+    /// preserved on Windows by the file-write layer). Nulls are
+    /// preserved verbatim — the injector pulls/pushes user-authored
+    /// fields that may legitimately carry null shapes.
+    /// </summary>
+    internal static readonly JsonSerializerOptions InjectorOutputOptions = new()
+    {
+        WriteIndented = true,
+    };
     /// <summary>
     /// Inject process routing into a raw sing-box JSON config.
     /// Returns the modified JSON string ready for sing-box.
@@ -29,14 +52,15 @@ public static class CustomConfigInjector
     /// </summary>
     public static string Inject(string rawJson, IEnumerable<string> processNames, AppSettings settings)
     {
-        var config = JObject.Parse(rawJson);
+        var config = JsonNode.Parse(rawJson) as JsonObject
+            ?? throw new JsonException("Custom sing-box config root is not an object");
 
         // ── Phase 2c placeholder gate (v2.32.3-r1) ────────────────────────
         // Inspect the FIRST proxy-typed outbound (same heuristic
         // ConfigSanityCheck uses at runtime). The shared helper lives in
         // ConfigSanityCheck so the two layers stay in sync — single source
         // of truth on a parsed sing-box outbound.
-        var outboundsForGate = config["outbounds"] as JArray;
+        var outboundsForGate = config["outbounds"] as JsonArray;
         if (outboundsForGate != null && outboundsForGate.Count > 0)
         {
             var proxyForGate = ConfigSanityCheck.FindFirstProxyOutbound(outboundsForGate);
@@ -45,12 +69,12 @@ public static class CustomConfigInjector
                 var offendingField = ConfigSanityCheck.InspectOutbound(proxyForGate);
                 if (offendingField != null)
                 {
-                    var reality = proxyForGate["tls"]?["reality"] as JObject;
+                    var reality = proxyForGate["tls"]?["reality"] as JsonObject;
                     var offendingValue = offendingField switch
                     {
-                        "reality.public_key" => reality?["public_key"]?.Value<string>() ?? "",
-                        "reality.short_id" => reality?["short_id"]?.Value<string>() ?? "",
-                        "server" => proxyForGate["server"]?.Value<string>() ?? "",
+                        "reality.public_key" => StjNodeHelpers.AsString(reality?["public_key"]) ?? "",
+                        "reality.short_id" => StjNodeHelpers.AsString(reality?["short_id"]) ?? "",
+                        "server" => StjNodeHelpers.AsString(proxyForGate["server"]) ?? "",
                         _ => "",
                     };
                     throw new PlaceholderConfigException(offendingField, offendingValue);
@@ -97,7 +121,7 @@ public static class CustomConfigInjector
         {
             // Split tunnel: only matched processes go through VPN, everything else direct.
             // User config may have "final":"proxy" (full tunnel) — override to "direct".
-            var route = config["route"] as JObject;
+            var route = config["route"] as JsonObject;
             if (route != null)
                 route["final"] = "direct";
         }
@@ -106,7 +130,7 @@ public static class CustomConfigInjector
         EnsureClashApi(config, settings.SingBox.ClashApi);
         EnsureUrltest(config);
 
-        return config.ToString(Formatting.Indented);
+        return config.ToJsonString(InjectorOutputOptions);
     }
 
     /// <summary>
@@ -114,40 +138,44 @@ public static class CustomConfigInjector
     /// Without urltest, selector doesn't pre-establish connections → 12s cold start on first request.
     /// Adds a urltest only if one doesn't already exist.
     /// </summary>
-    private static void EnsureUrltest(JObject config)
+    private static void EnsureUrltest(JsonObject config)
     {
-        var outbounds = config["outbounds"] as JArray;
+        var outbounds = config["outbounds"] as JsonArray;
         if (outbounds == null) return;
 
         // Find the selector
-        JObject? selector = null;
+        JsonObject? selector = null;
         foreach (var ob in outbounds)
         {
-            if (ob["type"]?.ToString() == "selector")
+            if (ob is JsonObject obObj && StjNodeHelpers.AsString(obObj["type"]) == "selector")
             {
-                selector = ob as JObject;
+                selector = obObj;
                 break;
             }
         }
         if (selector == null) return;
 
-        var children = selector["outbounds"] as JArray;
+        var children = selector["outbounds"] as JsonArray;
         if (children == null || children.Count == 0) return;
 
         // Check if any child is already a urltest
         foreach (var ob in outbounds)
         {
-            if (ob["type"]?.ToString() == "urltest")
+            if (ob is JsonObject obObj && StjNodeHelpers.AsString(obObj["type"]) == "urltest")
                 return; // already has urltest, don't add another
         }
 
         // Create urltest from selector's children
-        var childTags = children.Select(c => c.ToString()).ToList();
-        var urltest = new JObject
+        var childTagsArray = new JsonArray();
+        foreach (var c in children)
+        {
+            childTagsArray.Add(StjNodeHelpers.AsString(c) ?? "");
+        }
+        var urltest = new JsonObject
         {
             ["type"] = "urltest",
             ["tag"] = "auto",
-            ["outbounds"] = new JArray(childTags.ToArray()),
+            ["outbounds"] = childTagsArray,
             ["url"] = "https://www.gstatic.com/generate_204",
             ["interval"] = "5m"
         };
@@ -168,10 +196,15 @@ public static class CustomConfigInjector
     {
         var errors = new List<string>();
 
-        JObject config;
+        JsonObject? config;
         try
         {
-            config = JObject.Parse(rawJson);
+            config = JsonNode.Parse(rawJson) as JsonObject;
+            if (config == null)
+            {
+                errors.Add("Invalid JSON: root must be a JSON object");
+                return (false, errors);
+            }
         }
         catch (JsonException ex)
         {
@@ -180,7 +213,7 @@ public static class CustomConfigInjector
         }
 
         // Must have outbounds
-        var outbounds = config["outbounds"] as JArray;
+        var outbounds = config["outbounds"] as JsonArray;
         if (outbounds == null || outbounds.Count == 0)
         {
             errors.Add("No 'outbounds' array in config");
@@ -190,7 +223,7 @@ public static class CustomConfigInjector
         // Must have at least one proxy-like outbound (not just direct/block/dns)
         var hasProxy = outbounds.Any(o =>
         {
-            var type = o["type"]?.ToString();
+            var type = StjNodeHelpers.AsString(o?["type"]);
             return type != "direct" && type != "block" && type != "dns";
         });
         if (!hasProxy)
@@ -233,8 +266,9 @@ public static class CustomConfigInjector
     {
         try
         {
-            var config = JObject.Parse(rawJson);
-            var outbounds = config["outbounds"] as JArray;
+            var config = JsonNode.Parse(rawJson) as JsonObject;
+            if (config == null) return ("?", "?");
+            var outbounds = config["outbounds"] as JsonArray;
             if (outbounds == null) return ("?", "?");
 
             var protocols = new HashSet<string>();
@@ -242,7 +276,8 @@ public static class CustomConfigInjector
 
             foreach (var ob in outbounds)
             {
-                var type = ob["type"]?.ToString();
+                if (ob is not JsonObject obObj) continue;
+                var type = StjNodeHelpers.AsString(obObj["type"]);
                 if (type == "direct" || type == "block" || type == "dns" || type == "selector" || type == "urltest")
                     continue;
 
@@ -250,7 +285,7 @@ public static class CustomConfigInjector
                     protocols.Add(type.ToUpperInvariant());
 
                 if (server == null)
-                    server = ob["server"]?.ToString();
+                    server = StjNodeHelpers.AsString(obObj["server"]);
             }
 
             return (
@@ -280,31 +315,32 @@ public static class CustomConfigInjector
     /// containing a stale / placeholder server. See plans/
     /// vpnrouter-android-r9-user-bug-batch.md (stas log analysis).</para>
     /// </summary>
-    private static string FindProxyOutboundTag(JObject config)
+    private static string FindProxyOutboundTag(JsonObject config)
     {
-        var outbounds = config["outbounds"] as JArray;
+        var outbounds = config["outbounds"] as JsonArray;
         if (outbounds == null) return "custom-proxy";
 
         // 1. Selector (user-switchable)
         foreach (var ob in outbounds)
         {
-            if (ob["type"]?.ToString() == "selector")
-                return ResolveOrAssignProxyTag(ob);
+            if (ob is JsonObject obObj && StjNodeHelpers.AsString(obObj["type"]) == "selector")
+                return ResolveOrAssignProxyTag(obObj);
         }
 
         // 2. URLTest (auto-failover)
         foreach (var ob in outbounds)
         {
-            if (ob["type"]?.ToString() == "urltest")
-                return ResolveOrAssignProxyTag(ob);
+            if (ob is JsonObject obObj && StjNodeHelpers.AsString(obObj["type"]) == "urltest")
+                return ResolveOrAssignProxyTag(obObj);
         }
 
         // 3. First proxy-like outbound
         foreach (var ob in outbounds)
         {
-            var type = ob["type"]?.ToString();
+            if (ob is not JsonObject obObj) continue;
+            var type = StjNodeHelpers.AsString(obObj["type"]);
             if (type != "direct" && type != "block" && type != "dns")
-                return ResolveOrAssignProxyTag(ob);
+                return ResolveOrAssignProxyTag(obObj);
         }
 
         return "custom-proxy";
@@ -317,14 +353,13 @@ public static class CustomConfigInjector
     /// injected route rules actually exists in the sing-box config — otherwise
     /// sing-box rejects the rule at startup or silently falls through.
     /// </summary>
-    private static string ResolveOrAssignProxyTag(JToken outbound)
+    private static string ResolveOrAssignProxyTag(JsonObject outbound)
     {
-        var tag = outbound["tag"]?.ToString();
+        var tag = StjNodeHelpers.AsString(outbound["tag"]);
         if (!string.IsNullOrEmpty(tag))
             return tag;
 
-        if (outbound is JObject ob)
-            ob["tag"] = "custom-proxy";
+        outbound["tag"] = "custom-proxy";
 
         Serilog.Log.Logger.Warning(
             "Custom Config Mode: outbound without tag - using 'custom-proxy'");
@@ -338,14 +373,14 @@ public static class CustomConfigInjector
     /// Detects whether the config uses 1.12+ action-based format or legacy outbound-based.
     /// If any route rule has an "action" field → action-based.
     /// </summary>
-    private static bool DetectActionFormat(JObject config)
+    private static bool DetectActionFormat(JsonObject config)
     {
-        var rules = config.SelectToken("route.rules") as JArray;
+        var rules = StjNodeHelpers.SelectToken(config, "route.rules") as JsonArray;
         if (rules == null) return true; // no rules yet → default to modern format
 
         foreach (var rule in rules)
         {
-            if (rule["action"] != null)
+            if (rule is JsonObject rj && rj["action"] != null)
                 return true;
         }
 
@@ -360,19 +395,19 @@ public static class CustomConfigInjector
     /// VLESS (with flow/xtls) is optimal for TCP, QUIC protocols for UDP.
     /// Returns (tcpTag, udpTag) — both equal proxyTag if no split detected.
     /// </summary>
-    private static (string tcpTag, string udpTag) DetectTcpUdpSplit(JObject config, string proxyTag)
+    private static (string tcpTag, string udpTag) DetectTcpUdpSplit(JsonObject config, string proxyTag)
     {
-        var outbounds = config["outbounds"] as JArray;
+        var outbounds = config["outbounds"] as JsonArray;
         if (outbounds == null) return (proxyTag, proxyTag);
 
         // Find the proxy outbound (selector/urltest)
-        var proxyOutbound = outbounds.FirstOrDefault(o => o["tag"]?.ToString() == proxyTag);
+        var proxyOutbound = outbounds.FirstOrDefault(o => StjNodeHelpers.AsString(o?["tag"]) == proxyTag);
         if (proxyOutbound == null) return (proxyTag, proxyTag);
 
-        var proxyType = proxyOutbound["type"]?.ToString();
+        var proxyType = StjNodeHelpers.AsString(proxyOutbound["type"]);
         if (proxyType != "selector" && proxyType != "urltest") return (proxyTag, proxyTag);
 
-        var childTags = proxyOutbound["outbounds"] as JArray;
+        var childTags = proxyOutbound["outbounds"] as JsonArray;
         if (childTags == null || childTags.Count < 2) return (proxyTag, proxyTag);
 
         // Categorize children by protocol
@@ -381,11 +416,12 @@ public static class CustomConfigInjector
 
         foreach (var childTagToken in childTags)
         {
-            var childTag = childTagToken.ToString();
-            var child = outbounds.FirstOrDefault(o => o["tag"]?.ToString() == childTag);
+            var childTag = StjNodeHelpers.AsString(childTagToken);
+            if (childTag == null) continue;
+            var child = outbounds.FirstOrDefault(o => StjNodeHelpers.AsString(o?["tag"]) == childTag);
             if (child == null) continue;
 
-            var childType = child["type"]?.ToString();
+            var childType = StjNodeHelpers.AsString(child["type"]);
             if (childType == "vless" && vlessTag == null)
                 vlessTag = childTag;
             else if ((childType == "tuic" || childType == "hysteria2" || childType == "hysteria")
@@ -402,42 +438,44 @@ public static class CustomConfigInjector
 
     // ─── Private: Inject route rules ─────────────────────────────────────────
 
-    private static void InjectRouteRules(JObject config, List<string> processes,
+    private static void InjectRouteRules(JsonObject config, List<string> processes,
         string tcpTag, string? udpTag, bool isActionBased)
     {
-        var route = config["route"] as JObject;
+        var route = config["route"] as JsonObject;
         if (route == null)
         {
-            route = new JObject { ["rules"] = new JArray(), ["final"] = "direct" };
+            route = new JsonObject { ["rules"] = new JsonArray(), ["final"] = "direct" };
             config["route"] = route;
         }
 
-        var rules = route["rules"] as JArray;
+        var rules = route["rules"] as JsonArray;
         if (rules == null)
         {
-            rules = new JArray();
+            rules = new JsonArray();
             route["rules"] = rules;
         }
 
         // Remove any previously injected process_name rules (idempotent re-injection)
         RemoveInjectedProcessRules(rules);
 
-        var processArray = new JArray(processes.Cast<object>().ToArray());
         var insertIndex = FindRouteInsertIndex(rules, isActionBased);
         bool hasSplit = udpTag != null && udpTag != tcpTag;
 
         if (hasSplit)
         {
-            // TCP/UDP split: UDP → QUIC protocol (tuic/hysteria2), TCP → VLESS
-            var udpRule = new JObject
+            // TCP/UDP split: UDP → QUIC protocol (tuic/hysteria2), TCP → VLESS.
+            // NOTE: STJ JsonNode disallows the same node being attached to two
+            // parents (Newtonsoft tolerated it; STJ throws InvalidOperationException
+            // "node already has parent"). Build a fresh JsonArray per rule.
+            var udpRule = new JsonObject
             {
-                ["process_name"] = processArray.DeepClone(),
+                ["process_name"] = BuildProcessNameArray(processes),
                 ["network"] = "udp",
                 ["outbound"] = udpTag
             };
-            var tcpRule = new JObject
+            var tcpRule = new JsonObject
             {
-                ["process_name"] = processArray.DeepClone(),
+                ["process_name"] = BuildProcessNameArray(processes),
                 ["network"] = "tcp",
                 ["outbound"] = tcpTag
             };
@@ -453,9 +491,9 @@ public static class CustomConfigInjector
         else
         {
             // Single outbound — all traffic through proxy
-            var processRule = new JObject
+            var processRule = new JsonObject
             {
-                ["process_name"] = processArray,
+                ["process_name"] = BuildProcessNameArray(processes),
                 ["outbound"] = tcpTag
             };
             if (isActionBased)
@@ -466,21 +504,37 @@ public static class CustomConfigInjector
     }
 
     /// <summary>
+    /// Build a fresh JsonArray of process_name strings. STJ JsonNode
+    /// requires a distinct array per use site (a single JsonArray
+    /// cannot be a child of two parents — InvalidOperationException
+    /// at attach time). Newtonsoft's DeepClone is the legacy idiom this
+    /// helper replaces; building from the input list is cleaner and
+    /// avoids a clone-then-reattach pattern.
+    /// </summary>
+    private static JsonArray BuildProcessNameArray(IEnumerable<string> processes)
+    {
+        var array = new JsonArray();
+        foreach (var p in processes)
+            array.Add(p);
+        return array;
+    }
+
+    /// <summary>
     /// Finds the position to insert process rules: after sniff/dns/private-ip rules,
     /// before geo/domain/catch-all rules.
     /// </summary>
-    private static int FindRouteInsertIndex(JArray rules, bool isActionBased)
+    private static int FindRouteInsertIndex(JsonArray rules, bool isActionBased)
     {
         int index = 0;
 
         for (int i = 0; i < rules.Count; i++)
         {
-            var rule = rules[i] as JObject;
+            var rule = rules[i] as JsonObject;
             if (rule == null) continue;
 
             if (isActionBased)
             {
-                var action = rule["action"]?.ToString();
+                var action = StjNodeHelpers.AsString(rule["action"]);
                 if (action == "sniff" || action == "hijack-dns")
                 {
                     index = i + 1;
@@ -490,7 +544,7 @@ public static class CustomConfigInjector
             else
             {
                 // Legacy: dns-out rule
-                if (rule["protocol"]?.ToString() == "dns")
+                if (StjNodeHelpers.AsString(rule["protocol"]) == "dns")
                 {
                     index = i + 1;
                     continue;
@@ -498,7 +552,7 @@ public static class CustomConfigInjector
             }
 
             // ip_is_private always before process rules
-            if (rule["ip_is_private"]?.Value<bool>() == true)
+            if (StjNodeHelpers.AsBool(rule["ip_is_private"]) == true)
             {
                 index = i + 1;
                 continue;
@@ -519,64 +573,63 @@ public static class CustomConfigInjector
 
     // ─── Private: Inject DNS rules ───────────────────────────────────────────
 
-    private static void InjectDnsRules(JObject config, List<string> processes, bool isActionBased)
+    private static void InjectDnsRules(JsonObject config, List<string> processes, bool isActionBased)
     {
-        var dns = config["dns"] as JObject;
+        var dns = config["dns"] as JsonObject;
         if (dns == null) return; // no DNS config → user handles DNS externally
 
-        var servers = dns["servers"] as JArray;
+        var servers = dns["servers"] as JsonArray;
         if (servers == null || servers.Count == 0) return;
 
         // Find the remote DNS server tag: first server with a proxy detour
         string? remoteTag = null;
         foreach (var server in servers)
         {
-            var detour = server["detour"]?.ToString();
+            if (server is not JsonObject sObj) continue;
+            var detour = StjNodeHelpers.AsString(sObj["detour"]);
             if (!string.IsNullOrEmpty(detour) && detour != "direct")
             {
-                remoteTag = server["tag"]?.ToString();
+                remoteTag = StjNodeHelpers.AsString(sObj["tag"]);
                 break;
             }
         }
 
         // Fallback: first server
         if (string.IsNullOrEmpty(remoteTag))
-            remoteTag = servers[0]["tag"]?.ToString();
+            remoteTag = StjNodeHelpers.AsString((servers[0] as JsonObject)?["tag"]);
 
         if (string.IsNullOrEmpty(remoteTag)) return;
 
-        var rules = dns["rules"] as JArray;
+        var rules = dns["rules"] as JsonArray;
         if (rules == null)
         {
-            rules = new JArray();
+            rules = new JsonArray();
             dns["rules"] = rules;
         }
 
         // Remove any previously injected process_name DNS rules
         for (int i = rules.Count - 1; i >= 0; i--)
         {
-            if (rules[i]["process_name"] != null)
+            if (rules[i] is JsonObject rj && rj["process_name"] != null)
                 rules.RemoveAt(i);
         }
 
         // Inject process DNS rule (high priority — at beginning)
-        var processArray = new JArray(processes.Cast<object>().ToArray());
-
-        JObject dnsRule;
+        JsonObject dnsRule;
         if (isActionBased)
         {
-            dnsRule = new JObject
+            dnsRule = new JsonObject
             {
-                ["process_name"] = processArray,
+                ["process_name"] = BuildProcessNameArray(processes),
                 ["action"] = "route",
                 ["server"] = remoteTag
             };
         }
         else
         {
-            dnsRule = new JObject
+            dnsRule = new JsonObject
             {
-                ["process_name"] = processArray,
+                ["process_name"] = BuildProcessNameArray(processes),
                 ["server"] = remoteTag
             };
         }
@@ -604,7 +657,7 @@ public static class CustomConfigInjector
     ///
     /// Idempotent: removes previously injected rules before adding new ones.
     /// </summary>
-    private static void InjectGeoBypassRules(JObject config, bool isActionBased)
+    private static void InjectGeoBypassRules(JsonObject config, bool isActionBased)
     {
         InjectGeoRuleSets(config);
         InjectGeoDnsServer(config);
@@ -612,26 +665,26 @@ public static class CustomConfigInjector
         InjectGeoRouteRules(config, isActionBased);
     }
 
-    private static void InjectGeoRuleSets(JObject config)
+    private static void InjectGeoRuleSets(JsonObject config)
     {
-        var route = config["route"] as JObject;
+        var route = config["route"] as JsonObject;
         if (route == null)
         {
-            route = new JObject { ["rules"] = new JArray(), ["final"] = "direct" };
+            route = new JsonObject { ["rules"] = new JsonArray(), ["final"] = "direct" };
             config["route"] = route;
         }
 
-        var ruleSet = route["rule_set"] as JArray;
+        var ruleSet = route["rule_set"] as JsonArray;
         if (ruleSet == null)
         {
-            ruleSet = new JArray();
+            ruleSet = new JsonArray();
             route["rule_set"] = ruleSet;
         }
 
         // Remove any previously injected rule sets (idempotent)
         for (int i = ruleSet.Count - 1; i >= 0; i--)
         {
-            var tag = ruleSet[i]?["tag"]?.ToString();
+            var tag = StjNodeHelpers.AsString((ruleSet[i] as JsonObject)?["tag"]);
             if (tag == GeoIpRuleSetTag || tag == GeoSiteRuleSetTag)
                 ruleSet.RemoveAt(i);
         }
@@ -640,7 +693,7 @@ public static class CustomConfigInjector
         var geoIpPath = AppPaths.GeoIpRuPath.Replace('\\', '/');
         var geoSitePath = AppPaths.GeoSiteRuPath.Replace('\\', '/');
 
-        ruleSet.Add(new JObject
+        ruleSet.Add(new JsonObject
         {
             ["type"] = "local",
             ["tag"] = GeoIpRuleSetTag,
@@ -648,7 +701,7 @@ public static class CustomConfigInjector
             ["path"] = geoIpPath
         });
 
-        ruleSet.Add(new JObject
+        ruleSet.Add(new JsonObject
         {
             ["type"] = "local",
             ["tag"] = GeoSiteRuleSetTag,
@@ -657,27 +710,27 @@ public static class CustomConfigInjector
         });
     }
 
-    private static void InjectGeoDnsServer(JObject config)
+    private static void InjectGeoDnsServer(JsonObject config)
     {
-        var dns = config["dns"] as JObject;
+        var dns = config["dns"] as JsonObject;
         if (dns == null) return;
 
-        var servers = dns["servers"] as JArray;
+        var servers = dns["servers"] as JsonArray;
         if (servers == null)
         {
-            servers = new JArray();
+            servers = new JsonArray();
             dns["servers"] = servers;
         }
 
         // Remove previously injected RU DNS server (idempotent)
         for (int i = servers.Count - 1; i >= 0; i--)
         {
-            if (servers[i]?["tag"]?.ToString() == DirectDnsRuTag)
+            if (StjNodeHelpers.AsString((servers[i] as JsonObject)?["tag"]) == DirectDnsRuTag)
                 servers.RemoveAt(i);
         }
 
         // Yandex DNS via dns-direct outbound (real NIC, no proxy, no loop)
-        servers.Add(new JObject
+        servers.Add(new JsonObject
         {
             ["type"] = "udp",
             ["tag"] = DirectDnsRuTag,
@@ -686,33 +739,33 @@ public static class CustomConfigInjector
         });
     }
 
-    private static void InjectGeoDnsRule(JObject config, bool isActionBased)
+    private static void InjectGeoDnsRule(JsonObject config, bool isActionBased)
     {
-        var dns = config["dns"] as JObject;
+        var dns = config["dns"] as JsonObject;
         if (dns == null) return;
 
-        var rules = dns["rules"] as JArray;
+        var rules = dns["rules"] as JsonArray;
         if (rules == null)
         {
-            rules = new JArray();
+            rules = new JsonArray();
             dns["rules"] = rules;
         }
 
         // Remove previously injected geo DNS rule (idempotent)
         for (int i = rules.Count - 1; i >= 0; i--)
         {
-            var rule = rules[i] as JObject;
+            var rule = rules[i] as JsonObject;
             if (rule == null) continue;
-            var server = rule["server"]?.ToString();
+            var server = StjNodeHelpers.AsString(rule["server"]);
             if (server == DirectDnsRuTag)
                 rules.RemoveAt(i);
         }
 
         // RU domains → Russian DNS resolver (direct, not via VPN)
         // Insert after process_name rules but before any catch-all
-        var dnsRule = new JObject
+        var dnsRule = new JsonObject
         {
-            ["rule_set"] = new JArray(GeoSiteRuleSetTag),
+            ["rule_set"] = new JsonArray { GeoSiteRuleSetTag },
             ["server"] = DirectDnsRuTag
         };
         if (isActionBased)
@@ -722,7 +775,7 @@ public static class CustomConfigInjector
         int insertAt = 0;
         for (int i = 0; i < rules.Count; i++)
         {
-            if (rules[i]?["process_name"] != null)
+            if (rules[i] is JsonObject rj && rj["process_name"] != null)
                 insertAt = i + 1;
             else
                 break;
@@ -730,30 +783,30 @@ public static class CustomConfigInjector
         rules.Insert(insertAt, dnsRule);
     }
 
-    private static void InjectGeoRouteRules(JObject config, bool isActionBased)
+    private static void InjectGeoRouteRules(JsonObject config, bool isActionBased)
     {
-        var route = config["route"] as JObject;
+        var route = config["route"] as JsonObject;
         if (route == null) return;
 
-        var rules = route["rules"] as JArray;
+        var rules = route["rules"] as JsonArray;
         if (rules == null)
         {
-            rules = new JArray();
+            rules = new JsonArray();
             route["rules"] = rules;
         }
 
         // Remove previously injected geo route rules (idempotent)
         for (int i = rules.Count - 1; i >= 0; i--)
         {
-            var rule = rules[i] as JObject;
+            var rule = rules[i] as JsonObject;
             if (rule == null) continue;
 
-            var ruleSet = rule["rule_set"] as JArray;
+            var ruleSet = rule["rule_set"] as JsonArray;
             if (ruleSet == null) continue;
 
             bool isOurs = ruleSet.Any(rs =>
             {
-                var s = rs?.ToString();
+                var s = StjNodeHelpers.AsString(rs);
                 return s == GeoIpRuleSetTag || s == GeoSiteRuleSetTag;
             });
 
@@ -767,9 +820,9 @@ public static class CustomConfigInjector
         int insertAt = FindGeoInsertIndex(rules, isActionBased);
 
         // Single rule with both rule_sets — sing-box matches if ANY in the array matches
-        var geoRule = new JObject
+        var geoRule = new JsonObject
         {
-            ["rule_set"] = new JArray(GeoSiteRuleSetTag, GeoIpRuleSetTag),
+            ["rule_set"] = new JsonArray { GeoSiteRuleSetTag, GeoIpRuleSetTag },
             ["outbound"] = "direct"
         };
         if (isActionBased)
@@ -782,18 +835,18 @@ public static class CustomConfigInjector
     /// Finds the position to insert geo rules: after sniff/dns/private-ip,
     /// BEFORE process_name rules (geo wins over process routing).
     /// </summary>
-    private static int FindGeoInsertIndex(JArray rules, bool isActionBased)
+    private static int FindGeoInsertIndex(JsonArray rules, bool isActionBased)
     {
         int index = 0;
         for (int i = 0; i < rules.Count; i++)
         {
-            var rule = rules[i] as JObject;
+            var rule = rules[i] as JsonObject;
             if (rule == null) continue;
 
             // Skip sniff/hijack-dns/dns-out rules
             if (isActionBased)
             {
-                var action = rule["action"]?.ToString();
+                var action = StjNodeHelpers.AsString(rule["action"]);
                 if (action == "sniff" || action == "hijack-dns")
                 {
                     index = i + 1;
@@ -802,7 +855,7 @@ public static class CustomConfigInjector
             }
             else
             {
-                if (rule["protocol"]?.ToString() == "dns")
+                if (StjNodeHelpers.AsString(rule["protocol"]) == "dns")
                 {
                     index = i + 1;
                     continue;
@@ -810,7 +863,7 @@ public static class CustomConfigInjector
             }
 
             // Skip ip_is_private
-            if (rule["ip_is_private"]?.Value<bool>() == true)
+            if (StjNodeHelpers.AsBool(rule["ip_is_private"]) == true)
             {
                 index = i + 1;
                 continue;
@@ -835,31 +888,32 @@ public static class CustomConfigInjector
     /// Ensures route.default_domain_resolver is set (required in sing-box 1.13+).
     /// Uses the first DNS server with a "direct" detour, or the first server.
     /// </summary>
-    private static void EnsureDefaultDomainResolver(JObject config)
+    private static void EnsureDefaultDomainResolver(JsonObject config)
     {
-        var route = config["route"] as JObject;
+        var route = config["route"] as JsonObject;
         if (route == null) return;
 
         // Find a local DNS server tag (no proxy detour)
-        var servers = config.SelectToken("dns.servers") as JArray;
+        var servers = StjNodeHelpers.SelectToken(config, "dns.servers") as JsonArray;
         if (servers == null || servers.Count == 0) return;
 
         string? localTag = null;
         foreach (var server in servers)
         {
-            var detour = server["detour"]?.ToString();
-            var type = server["type"]?.ToString();
+            if (server is not JsonObject sObj) continue;
+            var detour = StjNodeHelpers.AsString(sObj["detour"]);
+            var type = StjNodeHelpers.AsString(sObj["type"]);
             if (detour == "direct" || detour == "dns-direct" ||
                 string.IsNullOrEmpty(detour) && (type == "local" || type == "udp" || type == "dhcp"))
             {
-                localTag = server["tag"]?.ToString();
+                localTag = StjNodeHelpers.AsString(sObj["tag"]);
                 break;
             }
         }
 
         // Fallback: first server
         if (string.IsNullOrEmpty(localTag))
-            localTag = servers[0]["tag"]?.ToString();
+            localTag = StjNodeHelpers.AsString((servers[0] as JsonObject)?["tag"]);
 
         // Always set to local tag — using proxy DNS as domain resolver adds latency
         if (!string.IsNullOrEmpty(localTag))
@@ -868,19 +922,19 @@ public static class CustomConfigInjector
 
     // ─── Private: Ensure Clash API ───────────────────────────────────────────
 
-    private static void EnsureClashApi(JObject config, string clashApiAddr)
+    private static void EnsureClashApi(JsonObject config, string clashApiAddr)
     {
-        var experimental = config["experimental"] as JObject;
+        var experimental = config["experimental"] as JsonObject;
         if (experimental == null)
         {
-            experimental = new JObject();
+            experimental = new JsonObject();
             config["experimental"] = experimental;
         }
 
-        var clashApi = experimental["clash_api"] as JObject;
+        var clashApi = experimental["clash_api"] as JsonObject;
         if (clashApi == null)
         {
-            clashApi = new JObject();
+            clashApi = new JsonObject();
             experimental["clash_api"] = clashApi;
         }
 
@@ -899,24 +953,24 @@ public static class CustomConfigInjector
     /// 4. "block"/"dns" outbound types → removed + route rules converted to actions
     /// 5. Legacy inbound sniff fields → removed (moved to route actions)
     /// </summary>
-    private static void StripUnsupportedFeatures(JObject config, List<string>? excludeAddresses = null, bool forceIpv4Only = true, bool strictDns = false)
+    private static void StripUnsupportedFeatures(JsonObject config, List<string>? excludeAddresses = null, bool forceIpv4Only = true, bool strictDns = false)
     {
         // 1. Convert legacy DNS server format to type-based
-        var dnsServers = config.SelectToken("dns.servers") as JArray;
+        var dnsServers = StjNodeHelpers.SelectToken(config, "dns.servers") as JsonArray;
         if (dnsServers != null)
         {
             foreach (var server in dnsServers)
             {
-                var obj = server as JObject;
+                var obj = server as JsonObject;
                 if (obj == null) continue;
 
-                var address = obj["address"]?.ToString();
+                var address = StjNodeHelpers.AsString(obj["address"]);
                 if (address == null || obj["type"] != null) continue; // already new format
 
                 obj.Remove("address");
 
                 // Convert "address_resolver" → "domain_resolver"
-                var addrResolver = obj["address_resolver"]?.ToString();
+                var addrResolver = StjNodeHelpers.AsString(obj["address_resolver"]);
                 if (addrResolver != null)
                 {
                     obj.Remove("address_resolver");
@@ -982,9 +1036,9 @@ public static class CustomConfigInjector
         {
             foreach (var server in dnsServers)
             {
-                var obj = server as JObject;
+                var obj = server as JsonObject;
                 if (obj == null) continue;
-                var type = obj["type"]?.ToString();
+                var type = StjNodeHelpers.AsString(obj["type"]);
                 if (type == "local" || type == "dhcp")
                 {
                     obj["type"] = "https";
@@ -1008,9 +1062,9 @@ public static class CustomConfigInjector
             bool needsDnsDirect = false;
             foreach (var server in dnsServers)
             {
-                var obj = server as JObject;
+                var obj = server as JsonObject;
                 if (obj == null) continue;
-                var detour = obj["detour"]?.ToString();
+                var detour = StjNodeHelpers.AsString(obj["detour"]);
                 if (string.IsNullOrEmpty(detour) || detour == "direct")
                 {
                     obj["detour"] = "dns-direct";
@@ -1021,10 +1075,10 @@ public static class CustomConfigInjector
             // Add the dns-direct outbound if any DNS server needs it
             if (needsDnsDirect)
             {
-                var dnsOutbounds = config["outbounds"] as JArray;
-                if (dnsOutbounds != null && !dnsOutbounds.Any(o => o["tag"]?.ToString() == "dns-direct"))
+                var dnsOutbounds = config["outbounds"] as JsonArray;
+                if (dnsOutbounds != null && !dnsOutbounds.Any(o => StjNodeHelpers.AsString(o?["tag"]) == "dns-direct"))
                 {
-                    dnsOutbounds.Add(new JObject
+                    dnsOutbounds.Add(new JsonObject
                     {
                         ["type"] = "direct",
                         ["tag"] = "dns-direct",
@@ -1035,7 +1089,7 @@ public static class CustomConfigInjector
         }
 
         // 1d. Optimize DNS — prevent IPv6 delays, ensure local DNS final
-        var dns = config["dns"] as JObject;
+        var dns = config["dns"] as JsonObject;
         if (dns != null)
         {
             // Force ipv4_only when ForceIpv4Only is enabled (default).
@@ -1043,7 +1097,7 @@ public static class CustomConfigInjector
             // IPv6 traffic can leak past TUN if the OS has v6 connectivity.
             if (forceIpv4Only)
             {
-                var strategy = dns["strategy"]?.ToString();
+                var strategy = StjNodeHelpers.AsString(dns["strategy"]);
                 if (strategy != "ipv4_only")
                     dns["strategy"] = "ipv4_only";
             }
@@ -1056,14 +1110,15 @@ public static class CustomConfigInjector
             {
                 foreach (var s in dnsServers)
                 {
-                    var d = s["detour"]?.ToString();
+                    if (s is not JsonObject sObj) continue;
+                    var d = StjNodeHelpers.AsString(sObj["detour"]);
                     if ((d == "dns-direct" || d == "direct") && localTag == null)
                     {
-                        localTag = s["tag"]?.ToString();
+                        localTag = StjNodeHelpers.AsString(sObj["tag"]);
                     }
                     else if (!string.IsNullOrEmpty(d) && d != "dns-direct" && d != "direct" && proxyTag == null)
                     {
-                        proxyTag = s["tag"]?.ToString();
+                        proxyTag = StjNodeHelpers.AsString(sObj["tag"]);
                     }
                 }
             }
@@ -1072,25 +1127,25 @@ public static class CustomConfigInjector
             // Default: force final → local DNS server (faster, but only routed processes use VPN DNS)
             if (strictDns && proxyTag != null)
             {
-                var finalTag = dns["final"]?.ToString();
+                var finalTag = StjNodeHelpers.AsString(dns["final"]);
                 if (finalTag != proxyTag)
                     dns["final"] = proxyTag;
             }
             else if (localTag != null)
             {
-                var finalTag = dns["final"]?.ToString();
+                var finalTag = StjNodeHelpers.AsString(dns["final"]);
                 if (finalTag != localTag)
                     dns["final"] = localTag;
             }
         }
 
         // 2. Remove deprecated DNS rules ("outbound" field is FATAL in 1.13.3, geosite/geoip need .db)
-        var dnsRules = config.SelectToken("dns.rules") as JArray;
+        var dnsRules = StjNodeHelpers.SelectToken(config, "dns.rules") as JsonArray;
         if (dnsRules != null)
         {
             for (int i = dnsRules.Count - 1; i >= 0; i--)
             {
-                var rule = dnsRules[i] as JObject;
+                var rule = dnsRules[i] as JsonObject;
                 if (rule == null) continue;
 
                 if (rule["geosite"] != null || rule["geoip"] != null ||
@@ -1100,28 +1155,29 @@ public static class CustomConfigInjector
         }
 
         // 3. Remove "block" and "dns" outbound types (removed in sing-box 1.13)
-        var outbounds = config["outbounds"] as JArray;
+        var outbounds = config["outbounds"] as JsonArray;
         var removedTags = new HashSet<string>();
         if (outbounds != null)
         {
             for (int i = outbounds.Count - 1; i >= 0; i--)
             {
-                var type = outbounds[i]["type"]?.ToString();
+                if (outbounds[i] is not JsonObject obItem) continue;
+                var type = StjNodeHelpers.AsString(obItem["type"]);
                 if (type == "block" || type == "dns")
                 {
-                    removedTags.Add(outbounds[i]["tag"]?.ToString() ?? "");
+                    removedTags.Add(StjNodeHelpers.AsString(obItem["tag"]) ?? "");
                     outbounds.RemoveAt(i);
                 }
             }
         }
 
         // 4. Convert route rules that reference removed outbounds + remove geosite/geoip
-        var routeRules = config.SelectToken("route.rules") as JArray;
+        var routeRules = StjNodeHelpers.SelectToken(config, "route.rules") as JsonArray;
         if (routeRules != null)
         {
             for (int i = routeRules.Count - 1; i >= 0; i--)
             {
-                var rule = routeRules[i] as JObject;
+                var rule = routeRules[i] as JsonObject;
                 if (rule == null) continue;
 
                 // Remove geosite/geoip rules (no databases)
@@ -1132,12 +1188,12 @@ public static class CustomConfigInjector
                 }
 
                 // Convert rules pointing to removed outbounds
-                var outbound = rule["outbound"]?.ToString();
+                var outbound = StjNodeHelpers.AsString(rule["outbound"]);
                 if (outbound != null && removedTags.Contains(outbound))
                 {
                     rule.Remove("outbound");
                     // "dns-out" → hijack-dns, "block" → reject
-                    rule["action"] = rule["protocol"]?.ToString() == "dns"
+                    rule["action"] = StjNodeHelpers.AsString(rule["protocol"]) == "dns"
                         ? "hijack-dns"
                         : "reject";
                 }
@@ -1146,12 +1202,12 @@ public static class CustomConfigInjector
 
         // 5. Normalize inbounds: remove deprecated fields, fix TUN settings
         bool hadInboundSniff = false;
-        var inbounds = config["inbounds"] as JArray;
+        var inbounds = config["inbounds"] as JsonArray;
         if (inbounds != null)
         {
             foreach (var inbound in inbounds)
             {
-                var obj = inbound as JObject;
+                var obj = inbound as JsonObject;
                 if (obj == null) continue;
 
                 // Remove deprecated sniff fields (moved to route actions in 1.12+)
@@ -1163,20 +1219,22 @@ public static class CustomConfigInjector
                 obj.Remove("domain_strategy");
 
                 // TUN-specific fixes
-                if (obj["type"]?.ToString() == "tun")
+                if (StjNodeHelpers.AsString(obj["type"]) == "tun")
                 {
                     // Convert legacy inet4_address/inet6_address → address array (removed in 1.12)
                     if (obj["address"] == null)
                     {
-                        var addrs = new JArray();
-                        if (obj["inet4_address"] != null)
+                        var addrs = new JsonArray();
+                        var inet4 = StjNodeHelpers.AsString(obj["inet4_address"]);
+                        if (inet4 != null)
                         {
-                            addrs.Add(obj["inet4_address"]!.ToString());
+                            addrs.Add(inet4);
                             obj.Remove("inet4_address");
                         }
-                        if (obj["inet6_address"] != null)
+                        var inet6 = StjNodeHelpers.AsString(obj["inet6_address"]);
+                        if (inet6 != null)
                         {
-                            addrs.Add(obj["inet6_address"]!.ToString());
+                            addrs.Add(inet6);
                             obj.Remove("inet6_address");
                         }
                         if (addrs.Count > 0)
@@ -1194,13 +1252,21 @@ public static class CustomConfigInjector
                     // not into the custom config's TUN inbound.
                     if (excludeAddresses != null && excludeAddresses.Count > 0)
                     {
-                        var existing = obj["route_exclude_address"] as JArray ?? new JArray();
-                        var merged = new HashSet<string>(
-                            existing.Select(t => t.ToString()),
-                            StringComparer.OrdinalIgnoreCase);
+                        var existing = obj["route_exclude_address"] as JsonArray;
+                        var merged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        if (existing != null)
+                        {
+                            foreach (var t in existing)
+                            {
+                                var s = StjNodeHelpers.AsString(t);
+                                if (s != null) merged.Add(s);
+                            }
+                        }
                         foreach (var addr in excludeAddresses)
                             merged.Add(addr);
-                        obj["route_exclude_address"] = new JArray(merged.ToArray());
+                        var mergedArray = new JsonArray();
+                        foreach (var s in merged) mergedArray.Add(s);
+                        obj["route_exclude_address"] = mergedArray;
                     }
                 }
             }
@@ -1210,13 +1276,13 @@ public static class CustomConfigInjector
         // Without sniffing, sing-box can't detect TLS SNI for domain-based routing.
         if (hadInboundSniff)
         {
-            var sniffRules = config.SelectToken("route.rules") as JArray;
+            var sniffRules = StjNodeHelpers.SelectToken(config, "route.rules") as JsonArray;
             if (sniffRules != null)
             {
-                bool hasSniffRule = sniffRules.Any(r => r["action"]?.ToString() == "sniff");
+                bool hasSniffRule = sniffRules.Any(r => StjNodeHelpers.AsString(r?["action"]) == "sniff");
                 if (!hasSniffRule)
                 {
-                    sniffRules.Insert(0, new JObject
+                    sniffRules.Insert(0, new JsonObject
                     {
                         ["action"] = "sniff",
                         ["timeout"] = "300ms"
@@ -1226,10 +1292,10 @@ public static class CustomConfigInjector
         }
 
         // 7. Ensure log output goes to our log file (so we can debug startup failures)
-        var log = config["log"] as JObject;
+        var log = config["log"] as JsonObject;
         if (log == null)
         {
-            log = new JObject();
+            log = new JsonObject();
             config["log"] = log;
         }
         var logPath = AppPaths.SingBoxLogPath;
@@ -1243,11 +1309,11 @@ public static class CustomConfigInjector
     /// Removes any route rules that have process_name (our injected rules).
     /// This makes re-injection idempotent — safe to call multiple times.
     /// </summary>
-    private static void RemoveInjectedProcessRules(JArray rules)
+    private static void RemoveInjectedProcessRules(JsonArray rules)
     {
         for (int i = rules.Count - 1; i >= 0; i--)
         {
-            if (rules[i]["process_name"] != null)
+            if (rules[i] is JsonObject rj && rj["process_name"] != null)
                 rules.RemoveAt(i);
         }
     }

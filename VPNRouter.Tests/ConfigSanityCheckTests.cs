@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Http;
-using Newtonsoft.Json.Linq;
+using System.Text.Json.Nodes;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.Tests;
@@ -25,17 +25,17 @@ public class ConfigSanityCheckTests
     // ─── Helpers ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Build a sing-box outbound JObject matching stas-evidence-current.json.
+    /// Build a sing-box outbound JsonObject matching stas-evidence-current.json.
     /// Caller can null-out / override fields to exercise individual checks.
     /// </summary>
-    private static JObject BuildValidOutbound(
+    private static JsonObject BuildValidOutbound(
         string? pubkey = null,
         string? shortId = null,
         string? server = null,
         int? port = null,
         string? uuid = null)
     {
-        return new JObject
+        return new JsonObject
         {
             ["type"] = "vless",
             ["tag"] = "proxy",
@@ -43,11 +43,11 @@ public class ConfigSanityCheckTests
             ["server_port"] = port ?? 443,
             ["uuid"] = uuid ?? "2d54442d-158f-49e2-b225-67ba1a5b77f4",
             ["flow"] = "xtls-rprx-vision",
-            ["tls"] = new JObject
+            ["tls"] = new JsonObject
             {
                 ["enabled"] = true,
                 ["server_name"] = "yahoo.com",
-                ["reality"] = new JObject
+                ["reality"] = new JsonObject
                 {
                     ["enabled"] = true,
                     ["public_key"] = pubkey ?? "RealGoodPubKeyFromValidSub_abc123",
@@ -57,11 +57,11 @@ public class ConfigSanityCheckTests
         };
     }
 
-    private static JObject BuildConfigWithOutbound(JObject outbound)
+    private static JsonObject BuildConfigWithOutbound(JsonObject outbound)
     {
-        return new JObject
+        return new JsonObject
         {
-            ["outbounds"] = new JArray { outbound, new JObject { ["type"] = "direct", ["tag"] = "direct" } },
+            ["outbounds"] = new JsonArray { outbound, new JsonObject { ["type"] = "direct", ["tag"] = "direct" } },
         };
     }
 
@@ -158,9 +158,9 @@ public class ConfigSanityCheckTests
     public void DetectsNoProxyOutbound()
     {
         // Only a direct outbound — no proxy/vless/hy2 type at all.
-        var config = new JObject
+        var config = new JsonObject
         {
-            ["outbounds"] = new JArray { new JObject { ["type"] = "direct", ["tag"] = "direct" } },
+            ["outbounds"] = new JsonArray { new JsonObject { ["type"] = "direct", ["tag"] = "direct" } },
         };
 
         var check = new ConfigSanityCheck();
@@ -190,7 +190,7 @@ public class ConfigSanityCheckTests
     public void PassesValidHysteria2Config()
     {
         // Non-VLESS protocol — uuid not required, only password.
-        var outbound = new JObject
+        var outbound = new JsonObject
         {
             ["type"] = "hysteria2",
             ["tag"] = "proxy",

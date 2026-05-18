@@ -82,9 +82,10 @@
   <!-- Cross-platform packages that VPNRouter.Core depends on. Mirror
        what's declared in VPNRouter.Core.csproj because we're consuming
        Core's source files directly above (no ProjectReference to pull
-       its package graph). -->
+       its package graph).
+       Phase 4 (2026-05-18): Newtonsoft.Json dropped — AndroidUpdater
+       migrated to STJ; Core no longer references Newtonsoft. -->
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Serilog" Version="3.1.1" />
     <PackageReference Include="Serilog.Sinks.Console" Version="5.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />

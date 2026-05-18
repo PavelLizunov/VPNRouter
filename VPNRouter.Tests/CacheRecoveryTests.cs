@@ -4,11 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Newtonsoft.Json;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 using VPNRouter.Core.Services.FreeConfigs;
-using NewtonsoftJson = Newtonsoft.Json.JsonConvert;
 using StjJson = System.Text.Json.JsonSerializer;
 
 namespace VPNRouter.Tests;
@@ -478,7 +476,7 @@ public sealed class CacheRecoveryTests
         var result = CacheRecovery.LoadOrRecover<RunStateLike>(
             path,
             expectedSchemaVersion: 1,
-            deserialize: j => NewtonsoftJson.DeserializeObject<RunStateLike>(j));
+            deserialize: j => StjJson.Deserialize<RunStateLike>(j, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }));
 
         Assert.Equal(RecoveryReason.SchemaMissing, result.Reason);
         Assert.True(result.ShouldRebuild);
@@ -498,7 +496,7 @@ public sealed class CacheRecoveryTests
         var result = CacheRecovery.LoadOrRecover<RunStateLike>(
             path,
             expectedSchemaVersion: 1,
-            deserialize: j => NewtonsoftJson.DeserializeObject<RunStateLike>(j));
+            deserialize: j => StjJson.Deserialize<RunStateLike>(j, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }));
 
         Assert.True(result.Loaded);
         Assert.Equal(1234, result.Value!.SingBoxPid);
@@ -516,7 +514,7 @@ public sealed class CacheRecoveryTests
         var result = CacheRecovery.LoadOrRecover<RunStateLike>(
             path,
             expectedSchemaVersion: 1,
-            deserialize: j => NewtonsoftJson.DeserializeObject<RunStateLike>(j));
+            deserialize: j => StjJson.Deserialize<RunStateLike>(j, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }));
 
         Assert.Equal(RecoveryReason.JsonMalformed, result.Reason);
         Assert.False(File.Exists(path));
@@ -551,10 +549,17 @@ public sealed class CacheRecoveryTests
         public List<string>? Items { get; set; } = new();
     }
 
-    /// <summary>Newtonsoft-shaped mirror of <c>RunState</c>.</summary>
+    /// <summary>
+    /// STJ-shaped mirror of <c>RunState</c>. Phase 4 (2026-05-18) — migrated
+    /// from Newtonsoft <c>[JsonProperty]</c> to System.Text.Json
+    /// <c>[JsonPropertyName]</c>. The wire field <c>schema_version</c> stays
+    /// snake_case (CacheRecovery's probe is unchanged); the other un-attributed
+    /// fields keep their PascalCase wire keys (matches the pre-Phase-4
+    /// Newtonsoft default).
+    /// </summary>
     private sealed class RunStateLike
     {
-        [JsonProperty("schema_version")]
+        [JsonPropertyName("schema_version")]
         public int SchemaVersion { get; set; }
 
         public string ActiveProfile { get; set; } = string.Empty;
