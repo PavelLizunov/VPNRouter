@@ -1,0 +1,1117 @@
+#nullable enable
+using System.IO;
+using System.Runtime.Versioning;
+using Serilog;
+using VPNRouter.Core.Interfaces;
+using VPNRouter.Core.Models;
+
+namespace VPNRouter.Core.Services;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Phase 3C (2026-05-18) — StartupPipeline
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Canonical VPN startup orchestrator. Single source of truth for the 8 phases
+// that have to run in lock-step for a connect to be safe:
+//
+//   1. ResolveProfile        — Custom-mode dispatch / VLESS pre-gen invariant /
+//                              Resolve subscription servers / Load profiles /
+//                              Merge customisation / Resolve active profile /
+//                              Custom-apps inject / Excluded-apps remove.
+//   2. ResolveServers        — VlessServersResolver (already inside Step 1 for
+//                              generated mode, exposed as a discrete phase
+//                              boundary for test coverage of the empty-servers
+//                              hard guard).
+//   3. ScanProcesses         — IProcessScanner.ScanForProfile (with 30s timeout)
+//                              + NetworkInterfaceDetector subnet auto-exclude.
+//   4. GenerateConfig        — ConfigPipeline.Generate (Phase 2F) for generated
+//                              mode, CustomConfigInjector.Inject for custom.
+//   5. PreStartChecks        — ConfigSanityCheck.CheckBeforeStart + Auto-
+//                              FailoverEngine wiring. Skipped for custom mode
+//                              (user's JSON is their responsibility).
+//   6. DeployAndSetupFirewall— Ensure sing-box binary deployed + Windows
+//                              Firewall block-on-vpn-fail rules created in
+//                              disabled state + pre-start TUN cleanup.
+//   7. StartSingBox          — SingBoxManager.StartWithJson + warmup + post-
+//                              start probe wiring.
+//   8. StartMonitors         — ETW + HealthMonitor + WindowsDnsHardening
+//                              (Windows only).
+//
+// ── Why this exists ──────────────────────────────────────────────────────
+// Pre-3C VpnEngine.StartAsync was 880 LOC, touched 16 services inline, and
+// had a sibling 200-LOC implementation in VpnEngine.ApplyAsync (the hot-
+// reload path that re-runs phases 1-4 + a hot-reload-aware variant of 7).
+// Phase 2F already extracted ConfigPipeline.Generate from the GenerateConfig
+// step; this finishes the job by lifting the surrounding orchestration into
+// its own file with named phases. Closes the v2.28.2 silent-leak bug class
+// definitively — any new pre-start step propagates to every caller for free.
+//
+// ── What's NOT extracted ─────────────────────────────────────────────────
+// • VpnEngine still owns lifecycle state (_singBox, _healthMonitor, _etw,
+//   _firewall, _sanityCheck, _failover, _probeCts) + Dispose ordering +
+//   public properties (IsRunning, ActiveServerAddress, etc.). Pipeline mutates
+//   these via the supplied IStartupHost callbacks — keeps state ownership
+//   single-rooted and avoids leaking SingBoxManager handles into a static
+//   helper.
+// • Stop semantics (graceful tear-down, WindowsDnsHardening.Restore, firewall
+//   delete) stay in VpnEngine.Stop — the pipeline is start-only.
+// • Custom-mode-only flows that don't fit the 8-phase ladder (custom config
+//   path resolution, validation of user JSON) are private statics on VpnEngine
+//   and called inline from phases 1 and 4 below.
+//
+// ── Contract ─────────────────────────────────────────────────────────────
+// Idempotent at the orchestrator level: calling ExecuteAsync twice in a row
+// with the same StartupContext produces the same StartupResult (modulo wall-
+// clock time fields). The pipeline does NOT itself stop/restart sing-box on
+// re-entry; callers signal intent via StartupMode.
+//
+// Failure semantics: each phase that throws bubbles a typed exception out
+// (InvalidOperationException for invariant failures, FileNotFoundException
+// for sing-box-binary-missing, ConflictingVpnException for AmneziaVPN/etc.
+// pre-flight). The pipeline does NOT swallow phase failures — callers
+// catch + surface as user-facing errors. F-E failover (phase 5) IS caught
+// inside the pipeline because its outcome is "swap settings and re-enter"
+// rather than "abort".
+
+/// <summary>
+/// Carries inputs into <see cref="StartupPipeline.ExecuteAsync"/>.
+/// </summary>
+/// <param name="Settings">Mutable app settings. Phase 2 mutates
+/// <c>settings.Vless.Servers</c> in-place via <see cref="VlessServersResolver"/>;
+/// callers MUST NOT persist this object after a successful start without
+/// re-reading from disk (same constraint VpnEngine had pre-3C).</param>
+/// <param name="Mode">Distinguishes between initial connect, hot-reload (apply
+/// path), and auto-failover re-entry. Drives skip-decisions on phases like
+/// PreStartChecks (which we deliberately skip on hot-reload so a transient
+/// probe blip doesn't tear down a working session).</param>
+/// <param name="SkipVpnConflictCheck">v2.32.1-r5 (Bug-r10-B) opt-out for the
+/// pre-flight ConflictingVpnDetector probe. UI sets this when the user
+/// explicitly clicks "Ignore" on the conflict banner.</param>
+public sealed record StartupContext(
+    AppSettings Settings,
+    StartupMode Mode,
+    bool SkipVpnConflictCheck = false);
+
+/// <summary>
+/// Outcome of <see cref="StartupPipeline.ExecuteAsync"/>.
+/// </summary>
+/// <param name="Success">True on a clean cold start; true on hot-reload
+/// success; false when the pipeline returned early because of F-E
+/// re-entry (the inner StartAsync has already finished — outer should
+/// NOT continue).</param>
+/// <param name="EarlyReturn">True when the pipeline short-circuited after
+/// AutoFailover took over (phase 5 re-entered StartAsync via the supplied
+/// restart delegate and the outer flow MUST NOT continue launching sing-
+/// box). Distinct from <see cref="Success"/> = false (which is a genuine
+/// failure surfaced via thrown exception).</param>
+/// <param name="ProcessId">PID of the launched sing-box process, or null
+/// if the pipeline aborted before phase 7.</param>
+/// <param name="Duration">Wall-clock duration of the pipeline run, useful
+/// for diagnostics + telemetry aggregation in Phase 4.</param>
+/// <param name="ConfigJson">Generated sing-box JSON. Populated for
+/// <see cref="StartupMode.HotReload"/> so the caller (VpnEngine.ApplyAsync)
+/// can feed it into <c>SingBoxManager.ReloadConfigJson</c>. Null for
+/// non-HotReload modes (the pipeline already started sing-box itself).</param>
+/// <param name="Profile">Resolved active profile. Populated for HotReload
+/// callers so they can compare against the pre-reload profile (used by
+/// structural-change detection in ApplyAsync).</param>
+public sealed record StartupResult(
+    bool Success,
+    bool EarlyReturn,
+    int? ProcessId,
+    TimeSpan Duration,
+    string? ConfigJson = null,
+    Profile? Profile = null);
+
+/// <summary>
+/// Mode tag passed via <see cref="StartupContext.Mode"/>. Each value drives a
+/// different phase mask + side-effect set inside <see cref="StartupPipeline"/>.
+/// </summary>
+public enum StartupMode
+{
+    /// <summary>
+    /// Initial connect (user clicked Start, autostart kicked in, service
+    /// transitioned to Running). All 8 phases execute. PreStartChecks
+    /// (F-E) is armed.
+    /// </summary>
+    ColdStart,
+
+    /// <summary>
+    /// Hot-reload (user changed settings on a running engine). Phases 1-4
+    /// re-run to regenerate config + emit it via Clash API PUT. Phases
+    /// 5-8 are SKIPPED — sing-box, firewall, ETW, and HealthMonitor are
+    /// already up + carrying state. Falls back to full restart inside
+    /// SingBoxManager.ReloadConfigJson if Clash API refuses the new config.
+    /// </summary>
+    HotReload,
+
+    /// <summary>
+    /// Re-entry after <see cref="AutoFailoverEngine"/> swapped the active
+    /// server in response to a dead-config probe. Behaves like ColdStart
+    /// but skips the F-E PreStartChecks branch (the outer caller already
+    /// drove failover; running it again would recurse).
+    /// </summary>
+    AutoFailover,
+}
+
+/// <summary>
+/// VpnEngine-side callback surface the pipeline uses to mutate engine state
+/// + raise events. Single chokepoint so the pipeline never reaches into
+/// VpnEngine fields directly.
+///
+/// <para>Implemented inline by VpnEngine; not a public abstraction. If we
+/// ever need a unit test that drives StartupPipeline standalone, a test
+/// fake can implement this interface and assert which callbacks fire.</para>
+/// </summary>
+internal interface IStartupHost
+{
+    /// <summary>Logger threaded through every phase.</summary>
+    ILogger? Logger { get; }
+
+    /// <summary>Process scanner (injected via VpnEngine ctor).</summary>
+    IProcessScanner Scanner { get; }
+
+    /// <summary>Firewall factory (injected via VpnEngine ctor).</summary>
+    Func<IFirewallManager> FirewallFactory { get; }
+
+    /// <summary>Process monitor (ETW) factory (injected via VpnEngine ctor).</summary>
+    Func<IProcessMonitor> MonitorFactory { get; }
+
+    /// <summary>Raise the engine's StatusChanged event.</summary>
+    void OnStatus(string message);
+
+    /// <summary>Raise the engine's Warning event.</summary>
+    void OnWarning(string message);
+
+    /// <summary>Forward the per-launch sing-box PID notification.</summary>
+    void OnSingBoxStarted(int pid);
+
+    /// <summary>Forward HealthMonitor restart-attempt notifications.</summary>
+    void OnRestartAttempted(int attempt, int max);
+
+    /// <summary>Forward an F-E failover user-facing message.</summary>
+    void OnAutoFailoverTriggered(string message);
+
+    /// <summary>Forward an ETW-detected targeted process to listeners.</summary>
+    void OnProcessDetected(string name, int pid);
+
+    /// <summary>Store the active server's address for status display.</summary>
+    void SetActiveServerAddress(string address);
+
+    /// <summary>Store ActiveConfigMode + ActiveRoutingMode + TunFingerprint.</summary>
+    void SetActiveModes(string configMode, string routingMode, string tunFingerprint);
+
+    /// <summary>Store the resolved profile for later use (Apply, Stop).</summary>
+    void SetActiveProfile(Profile profile);
+
+    /// <summary>Store the latest ScanResult.</summary>
+    void SetScanResult(ScanResult result);
+
+    /// <summary>Store the lifecycle-owned SingBoxManager (Stop() disposes it).</summary>
+    void SetSingBoxManager(SingBoxManager manager);
+
+    /// <summary>Store the lifecycle-owned firewall manager.</summary>
+    void SetFirewallManager(IFirewallManager firewall);
+
+    /// <summary>Store the lifecycle-owned ETW monitor.</summary>
+    void SetProcessMonitor(IProcessMonitor etw);
+
+    /// <summary>Store the lifecycle-owned HealthMonitor.</summary>
+    void SetHealthMonitor(HealthMonitor monitor);
+
+    /// <summary>
+    /// Reset the ConfigSanityCheck / AutoFailoverEngine pair on cold start
+    /// so cycle state (tried-server list) survives back-to-back failovers
+    /// but resets after the user successfully connects to something.
+    /// Implementation: clear cached instances; phase 5 lazily re-creates.
+    /// Also captures the active <paramref name="settings"/> reference so the
+    /// failover restart delegate (constructed lazily by WireFailover) can
+    /// re-call StartAsync with the same settings the user kicked off with.
+    /// </summary>
+    void EnsureSanityCheckScaffolding(AppSettings settings, out ConfigSanityCheck sanityCheck);
+
+    /// <summary>
+    /// Wire the F-E AutoFailoverEngine with a restart delegate that re-
+    /// enters StartAsync. Used by phase 5 (pre-start) AND by the post-
+    /// start probe scheduled in phase 7. The host owns the delegate
+    /// because it has to capture VpnEngine.StartAsync, which is non-
+    /// static (closures over `this`).
+    /// </summary>
+    AutoFailoverEngine WireFailover(ConfigSanityCheck sanityCheck);
+
+    /// <summary>
+    /// Wire the F-E AutoFailoverEngine with a Stop()+StartAsync delegate
+    /// — separate from <see cref="WireFailover"/> because the post-start
+    /// probe needs to tear down the live sing-box before re-launching,
+    /// whereas the pre-start phase 5 hasn't started one yet.
+    /// </summary>
+    AutoFailoverEngine WireFailoverWithStop(ConfigSanityCheck sanityCheck);
+
+    /// <summary>
+    /// Schedule the post-start Clash API probe (fire-and-forget). The
+    /// host owns the CancellationTokenSource so Stop() can cancel a
+    /// queued probe (avoiding "ghost failover after disconnect").
+    /// </summary>
+    void SchedulePostStartProbe(
+        AppSettings settings,
+        ConfigSanityCheck sanityCheck,
+        CancellationToken ct);
+}
+
+/// <summary>
+/// Phase 3C orchestrator. Walks the 8 startup phases listed in the
+/// file-header comment, mutating <see cref="IStartupHost"/> state along the
+/// way and returning a <see cref="StartupResult"/>.
+/// </summary>
+internal sealed class StartupPipeline
+{
+    private readonly IStartupHost _host;
+
+    public StartupPipeline(IStartupHost host)
+    {
+        _host = host ?? throw new ArgumentNullException(nameof(host));
+    }
+
+    /// <summary>
+    /// Walk all 8 phases in order. On <see cref="StartupMode.HotReload"/>,
+    /// the orchestrator returns the regenerated JSON string instead of
+    /// launching sing-box — the hot-reload caller (VpnEngine.ApplyAsync)
+    /// feeds that into SingBoxManager.ReloadConfigJson itself, so it can
+    /// drive structural-change detection + Clash API failover logic.
+    /// </summary>
+    public async Task<StartupResult> ExecuteAsync(
+        StartupContext context,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var settings = context.Settings;
+
+        // Phase 0 — preflight (only ColdStart / AutoFailover; HotReload skips
+        // this because sing-box is already running and we don't want a
+        // conflicting-VPN probe to tear down a working session).
+        if (context.Mode != StartupMode.HotReload)
+        {
+            PreflightConflictAndDns(settings, context.SkipVpnConflictCheck);
+            await PreflightGeoDataAsync(settings, ct);
+        }
+
+        // Phase 1+2 — ResolveProfile + ResolveServers
+        var (profile, isCustomConfig, customConfigJson) =
+            await ResolveProfileAndServersAsync(settings, context.Mode, ct);
+
+        // Phase 3 — ScanProcesses
+        var scanResult = ScanProcessesPhase(profile, settings, ct);
+
+        // Phase 4 — GenerateConfig
+        var configJson = GenerateConfigPhase(
+            profile,
+            scanResult,
+            settings,
+            isCustomConfig,
+            customConfigJson,
+            context.Mode);
+
+        ct.ThrowIfCancellationRequested();
+
+        // HotReload returns immediately — the caller drives ReloadConfigJson
+        // with the freshly-generated JSON. Phases 5-8 are SKIPPED because
+        // sing-box / ETW / HealthMonitor are already running. ApplyAsync
+        // owns the structural-change detection (RoutingMode mismatch,
+        // TunFingerprint mismatch, process-list change) that the pipeline
+        // can't make in the absence of ApplyAsync's "pre-reload baseline"
+        // context.
+        if (context.Mode == StartupMode.HotReload)
+        {
+            return new StartupResult(
+                Success: true,
+                EarlyReturn: false,
+                ProcessId: null,
+                Duration: sw.Elapsed,
+                ConfigJson: configJson,
+                Profile: profile);
+        }
+
+        // Phase 5 — PreStartChecks (F-E). AutoFailover mode skips because the
+        // outer caller already triggered failover; running it again would
+        // recurse.
+        if (context.Mode == StartupMode.ColdStart && !isCustomConfig)
+        {
+            var earlyReturn = await PreStartChecksPhaseAsync(
+                settings, configJson, ct);
+            if (earlyReturn)
+            {
+                // F-E re-entered StartAsync via the host's restart delegate.
+                // Outer caller must NOT proceed with the dead config.
+                return new StartupResult(
+                    Success: true,
+                    EarlyReturn: true,
+                    ProcessId: null,
+                    Duration: sw.Elapsed);
+            }
+        }
+
+        // Phase 6 — Deploy sing-box binary + firewall setup + pre-start TUN
+        // cleanup.
+        await DeployAndSetupFirewallPhaseAsync(
+            settings, profile, scanResult, ct);
+
+        ct.ThrowIfCancellationRequested();
+
+        // Phase 7 — StartSingBox + warmup + post-start probe.
+        var pid = await StartSingBoxPhaseAsync(
+            settings, configJson, isCustomConfig, ct);
+
+        ct.ThrowIfCancellationRequested();
+
+        // Phase 8 — StartMonitors.
+        StartMonitorsPhase(settings, profile, scanResult);
+
+        _host.OnStatus("VPN Router is running");
+
+        return new StartupResult(
+            Success: true,
+            EarlyReturn: false,
+            ProcessId: pid,
+            Duration: sw.Elapsed);
+    }
+
+    // ─── Phase 0a: Preflight conflicting-VPN + DNS flush ───────────────────
+
+    /// <summary>
+    /// Pre-flight detect competing VPN clients holding wintun. Throws
+    /// <see cref="ConflictingVpnException"/> if a peer is found and
+    /// <paramref name="skipVpnConflictCheck"/> is false. Also flushes DNS
+    /// cache so pre-VPN-resolved entries don't survive into the tunnel.
+    /// </summary>
+    private void PreflightConflictAndDns(AppSettings settings, bool skipVpnConflictCheck)
+    {
+        AppPaths.EnsureDirectories();
+
+        if (!skipVpnConflictCheck)
+        {
+            var conflicts = ConflictingVpnDetector.DetectConflictingVpnProcesses(_host.Logger);
+            if (conflicts.Count > 0)
+            {
+                var first = conflicts[0];
+                throw new ConflictingVpnException(
+                    conflicts,
+                    $"Another VPN client is running: {first.ProcessName} (PID {first.Pid}). " +
+                    $"Only one VPN can hold the TUN adapter at a time. " +
+                    $"Stop {first.ProcessName} before launching VPNRouter.");
+            }
+        }
+        else
+        {
+            _host.Logger?.Information(
+                "[StartupPipeline] Skipping conflicting-VPN pre-flight check (user opt-in)");
+        }
+
+        if (settings.App.FlushDnsOnStart)
+            DnsFlusher.Flush(_host.Logger);
+    }
+
+    /// <summary>
+    /// If RU bypass is enabled and geo data isn't on disk yet, download it
+    /// before phases 4 / 7. Failure is non-fatal — RU bypass just gets
+    /// disabled for this session.
+    /// </summary>
+    private async Task PreflightGeoDataAsync(AppSettings settings, CancellationToken ct)
+    {
+        if (settings.App.BypassRussianTraffic && !GeoDataDownloader.AreGeoFilesAvailable())
+        {
+            _host.OnStatus("Downloading geo data...");
+            try
+            {
+                var downloader = new GeoDataDownloader(_host.Logger);
+                var ok = await downloader.EnsureGeoFilesAsync(ct);
+                if (!ok)
+                    _host.Logger?.Warning(
+                        "[StartupPipeline] Geo data download failed — RU bypass will be disabled for this session");
+            }
+            catch (Exception ex)
+            {
+                _host.Logger?.Warning(ex,
+                    "[StartupPipeline] Geo data download error — RU bypass will be disabled");
+            }
+        }
+    }
+
+    // ─── Phase 1+2: ResolveProfile + ResolveServers ────────────────────────
+
+    /// <summary>
+    /// Combined Phase 1 (resolve / validate the profile) + Phase 2 (resolve
+    /// servers via <see cref="VlessServersResolver"/>). The two are stitched
+    /// together because the active-server address must be set before the
+    /// config-generation phase, and the profile resolve also drives the
+    /// custom-vs-generated dispatch that decides which Phase 4 branch runs.
+    /// </summary>
+    /// <returns>
+    /// Tuple of (resolved profile, isCustomConfig flag, raw custom JSON or null).
+    /// The raw custom JSON is read here once and passed forward to Phase 4
+    /// so a racing edit between phases doesn't slip through the validation
+    /// gate.
+    /// </returns>
+    private async Task<(Profile profile, bool isCustom, string? rawCustomJson)>
+        ResolveProfileAndServersAsync(
+            AppSettings settings,
+            StartupMode mode,
+            CancellationToken ct)
+    {
+        var isCustomConfig = (settings.App.ConfigMode ?? "generated")
+            .Equals("custom", StringComparison.OrdinalIgnoreCase);
+        var activeConfigMode = isCustomConfig ? "custom" : "generated";
+        var activeRoutingMode = (settings.App.RoutingMode ?? "split")
+            .Equals("full", StringComparison.OrdinalIgnoreCase) ? "full" : "split";
+        var tunFingerprint = VpnEngine.ComputeTunFingerprint(settings.Tun);
+
+        _host.SetActiveModes(activeConfigMode, activeRoutingMode, tunFingerprint);
+
+        string? rawCustomJson = null;
+
+        if (isCustomConfig)
+        {
+            var customPath = VpnEngine.ResolveCustomConfigPath(settings);
+            if (string.IsNullOrEmpty(customPath) || !File.Exists(customPath))
+                throw new InvalidOperationException(
+                    $"Custom config not found: {customPath}. Add a config in the Servers tab.");
+
+            rawCustomJson = File.ReadAllText(customPath);
+            var (isValid, errors) = CustomConfigInjector.Validate(rawCustomJson);
+            if (!isValid)
+                throw new InvalidOperationException(
+                    $"Custom config validation failed: {string.Join("; ", errors)}");
+
+            try
+            {
+                var (_, srv) = CustomConfigInjector.ParseConfigInfo(rawCustomJson);
+                _host.SetActiveServerAddress(srv);
+            }
+            catch { _host.SetActiveServerAddress(""); }
+        }
+        else
+        {
+            // F-12 (parity audit P0) — defense-in-depth backstop for silent
+            // ConfigMode flips. If the AppSettings model is inconsistent,
+            // throw here BEFORE the resolver mutates anything in-place.
+            var pregenValidation = LeakProtection.ValidateAppSettings(settings);
+            if (!pregenValidation.IsValid)
+            {
+                var msg = string.Join(" ", pregenValidation.Errors);
+                _host.Logger?.Error(
+                    "[StartupPipeline] AppSettings invariant violation pre-generation: {Errors}",
+                    msg);
+                throw new InvalidOperationException(msg);
+            }
+
+            // v2.28.2: single source of truth for subscription→VLESS aggregation.
+            // Resolver mutates settings.Vless.Servers in place; same code path
+            // as ConfigPipeline + HealthMonitor.GenerateConfigJson.
+            var allServers = VlessServersResolver.Resolve(settings, _host.Logger);
+            if (allServers.Count == 0)
+            {
+                var why = VlessServersResolver.DescribeEmptyReason(settings)
+                          ?? "VLESS server not configured.";
+                throw new InvalidOperationException(why);
+            }
+
+            // Show the ACTIVE server (what will actually run), not Vless[0].
+            var activeServers = settings.Vless.GetActiveServers();
+            _host.SetActiveServerAddress(
+                activeServers.Count > 0
+                    ? activeServers[0].Server
+                    : allServers[0].Server);
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        _host.OnStatus("Loading profiles...");
+        VpnEngine.QuarantineStaleUserCatalogue(_host.Logger);
+
+        var sources = SafeMode.Enabled
+            ? VpnEngine.BuildBundledOnlyProfileSources()
+            : VpnEngine.BuildProfileSources(settings);
+        if (SafeMode.Enabled)
+            _host.Logger?.Warning(
+                "[StartupPipeline] Safe mode — using bundled profiles only, ignoring user overrides");
+
+        var manager = new ProfileManager(sources, _host.Logger);
+        var collection = await manager.LoadAsync(ct);
+
+        if (SafeMode.Enabled)
+            _host.Logger?.Warning(
+                "[StartupPipeline] Safe mode — skipping custom apps / categories / group-apps merge");
+        if (!SafeMode.Enabled)
+            VpnEngine.MergeUserCustomization(collection, settings);
+
+        _host.Logger?.Information(
+            "[StartupPipeline] Loaded profile catalogue ({Count}): {Names}",
+            collection.Profiles.Count,
+            string.Join(", ", collection.Profiles.Select(p => p.Name)));
+
+        ct.ThrowIfCancellationRequested();
+
+        var isFullTunnel = (settings.App.RoutingMode ?? "split")
+            .Equals("full", StringComparison.OrdinalIgnoreCase);
+        var profileName = settings.ActiveProfile;
+
+        if (string.IsNullOrEmpty(profileName) && !isFullTunnel && !isCustomConfig)
+            throw new InvalidOperationException("No active profile specified in config.");
+
+        if (SafeMode.Enabled)
+        {
+            _host.Logger?.Warning("[StartupPipeline] Safe mode — forcing full-tunnel routing");
+            isFullTunnel = true;
+        }
+
+        Profile activeProfile;
+        if (isFullTunnel)
+        {
+            _host.Logger?.Information(
+                "[StartupPipeline] Full-tunnel mode — ignoring ActiveProfile '{Profile}' and skipping process scan",
+                profileName ?? "(empty)");
+            activeProfile = new Profile { Name = "FullTunnel", DnsMode = "vpn_only" };
+        }
+        else if (!string.IsNullOrEmpty(profileName))
+        {
+            var names = profileName.Split(',',
+                StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            var merged = manager.MergeProfilesTolerant(names, out var missing);
+            if (merged == null)
+                throw new InvalidOperationException(
+                    $"None of the requested profiles exist: {string.Join(", ", names)}. " +
+                    $"Available: {string.Join(", ", collection.Profiles.Select(p => p.Name))}");
+
+            activeProfile = merged;
+
+            if (missing.Count > 0)
+            {
+                _host.OnWarning($"Skipped unknown profile(s): {string.Join(", ", missing)}");
+                // Self-heal: rewrite settings.ActiveProfile to drop missing
+                // names so this won't fire on next launch. ColdStart only —
+                // ApplyAsync historically does NOT persist this back to disk
+                // (preserving pre-3C asymmetry; the hot-reload caller leaves
+                // settings.ActiveProfile alone so a transient catalogue blip
+                // doesn't permanently sanitize the user's selection).
+                if (mode == StartupMode.ColdStart || mode == StartupMode.AutoFailover)
+                    PersistSanitizedActiveProfile(settings, names, missing, profileName);
+            }
+        }
+        else if (isCustomConfig)
+        {
+            activeProfile = new Profile { Name = "CustomConfig", DnsMode = "vpn_only" };
+        }
+        else
+        {
+            activeProfile = new Profile { Name = "FullTunnel", DnsMode = "vpn_only" };
+        }
+
+        // Inject custom apps from GUI (top-level CustomApps list — separate
+        // from CustomGroupApps which already merged into bundled profiles
+        // via MergeUserCustomization above).
+        if (settings.CustomApps?.Count > 0)
+        {
+            foreach (var app in settings.CustomApps)
+            {
+                if (!string.IsNullOrEmpty(app) &&
+                    !activeProfile.Processes.Any(p =>
+                        p.Name.Equals(app, StringComparison.OrdinalIgnoreCase)))
+                {
+                    activeProfile.Processes.Add(new ProcessRule
+                    {
+                        Name = app,
+                        IncludeChildren = true,
+                        ScanPatterns = new[] { app }
+                    });
+                }
+            }
+        }
+
+        // Apply per-app exclusions LAST so they override everything above.
+        // SafeMode gate kept here — pre-3C had it inside StartAsync only.
+        if (!SafeMode.Enabled)
+            VpnEngine.RemoveExcludedApps(activeProfile, settings.ExcludedApps);
+
+        _host.OnStatus($"Profile: {activeProfile.Name} ({activeProfile.Processes.Count} rules)");
+        _host.SetActiveProfile(activeProfile);
+
+        ct.ThrowIfCancellationRequested();
+
+        return (activeProfile, isCustomConfig, rawCustomJson);
+    }
+
+    /// <summary>
+    /// When the tolerant profile resolver dropped names, rewrite the
+    /// settings.ActiveProfile so this self-heals on next launch. We re-load
+    /// settings from disk before saving so the in-place VlessServersResolver
+    /// mutation from Phase 2 doesn't leak into yaml — see v2.30.0-r8 comment.
+    /// </summary>
+    private void PersistSanitizedActiveProfile(
+        AppSettings settings,
+        string[] names,
+        IReadOnlyCollection<string> missing,
+        string originalProfileName)
+    {
+        var sanitized = string.Join(",",
+            names.Where(n => !missing.Contains(n, StringComparer.OrdinalIgnoreCase)));
+        if (string.Equals(sanitized, originalProfileName, StringComparison.Ordinal))
+            return;
+
+        settings.ActiveProfile = sanitized;
+        try
+        {
+            // CRITICAL — v2.30.0-r8 invariant: do NOT persist `settings`
+            // directly here. VlessServersResolver has already mutated
+            // settings.Vless.Servers in-place with the aggregated
+            // subscription list (subscribe mode). Saving this object writes
+            // that aggregate into vless.servers in YAML and on next launch
+            // it resurfaces as fake "manual VLESS servers" in the VLESS tab.
+            var fresh = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+            fresh.ActiveProfile = sanitized;
+            SettingsLoader.Save(fresh);
+            _host.Logger?.Information(
+                "[StartupPipeline] ActiveProfile migrated: '{Old}' → '{New}'",
+                originalProfileName, sanitized);
+        }
+        catch (Exception saveEx)
+        {
+            _host.Logger?.Warning(saveEx,
+                "[StartupPipeline] Failed to persist ActiveProfile migration");
+        }
+    }
+
+    // ─── Phase 3: ScanProcesses ────────────────────────────────────────────
+
+    /// <summary>
+    /// Run IProcessScanner.ScanForProfile with a 30s timeout (v2.22.4 self-
+    /// heal: WMI child-lookup on a corrupt catalogue used to hang forever).
+    /// Also auto-detect WireGuard/AmneziaWG subnets and merge into
+    /// settings.Tun.RouteExcludeAddress.
+    /// </summary>
+    private ScanResult ScanProcessesPhase(
+        Profile profile,
+        AppSettings settings,
+        CancellationToken ct)
+    {
+        _host.OnStatus("Scanning processes...");
+        ScanResult? scanResult = null;
+        try
+        {
+            var scanTask = Task.Run(() => _host.Scanner.ScanForProfile(profile), ct);
+            if (scanTask.Wait(TimeSpan.FromSeconds(30), ct))
+            {
+                scanResult = scanTask.Result;
+            }
+            else
+            {
+                _host.Logger?.Warning(
+                    "[StartupPipeline] Process scan timed out after 30s — continuing with empty list. " +
+                    "Check %ProgramData%\\VPNRouter\\profiles\\ for corrupt entries, or switch to Full tunnel mode.");
+                _host.OnWarning(
+                    "Process scan timed out — split mode may not route correctly. " +
+                    "Switch to Full mode or reset your catalogue.");
+            }
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            _host.Logger?.Error(ex,
+                "[StartupPipeline] Process scan failed — continuing with empty list");
+            _host.OnWarning($"Process scan error: {ex.Message}");
+        }
+        scanResult ??= new ScanResult
+        {
+            ProcessNames = new List<string>(),
+            ScannedAt = DateTime.Now
+        };
+        _host.Logger?.Information(
+            "[StartupPipeline] Resolved {Count} process names",
+            scanResult.ProcessNames.Count);
+
+        _host.SetScanResult(scanResult);
+
+        ct.ThrowIfCancellationRequested();
+
+        // 4.5 — auto-detect WG/AWG subnets that should bypass the TUN.
+        var detectedSubnets = NetworkInterfaceDetector.DetectWireGuardSubnets(
+            settings.Tun.InterfaceName, _host.Logger);
+        if (detectedSubnets.Count > 0)
+        {
+            var merged = new HashSet<string>(
+                settings.Tun.RouteExcludeAddress, StringComparer.OrdinalIgnoreCase);
+            foreach (var subnet in detectedSubnets)
+                merged.Add(subnet);
+            settings.Tun.RouteExcludeAddress = merged.ToList();
+            _host.Logger?.Information(
+                "[StartupPipeline] Auto-excluded WG/AWG subnets: {Subnets}",
+                string.Join(", ", detectedSubnets));
+        }
+
+        return scanResult;
+    }
+
+    // ─── Phase 4: GenerateConfig ───────────────────────────────────────────
+
+    /// <summary>
+    /// Generate the sing-box JSON. Custom-mode runs through
+    /// <see cref="CustomConfigInjector"/>; generated mode routes through
+    /// <see cref="ConfigPipeline.Generate"/> (the Phase 2F canonical helper).
+    /// </summary>
+    private string GenerateConfigPhase(
+        Profile profile,
+        ScanResult scanResult,
+        AppSettings settings,
+        bool isCustomConfig,
+        string? rawCustomJson,
+        StartupMode mode)
+    {
+        if (isCustomConfig)
+        {
+            var customPath = VpnEngine.ResolveCustomConfigPath(settings);
+            var activeEntry = settings.App.CustomConfigs
+                .FirstOrDefault(c => c.Name == settings.App.ActiveCustomConfig);
+            var configName = activeEntry?.Name ?? "custom";
+            var localCopy = CustomConfigInjector.GetProgramDataPath(configName);
+
+            if (!File.Exists(localCopy) && File.Exists(customPath))
+            {
+                localCopy = CustomConfigInjector.CopyToProgramData(customPath, configName);
+                _host.Logger?.Information(
+                    "[StartupPipeline] Custom config copied to {Path}", localCopy);
+            }
+
+            // Prefer the JSON we read in Phase 1 (already validated) if the
+            // path didn't change. Otherwise re-read so the local copy's
+            // ProgramData content wins. Either way, validation already ran.
+            var injectSource = (rawCustomJson != null && File.Exists(customPath))
+                ? rawCustomJson
+                : File.ReadAllText(localCopy);
+            var configJson = CustomConfigInjector.Inject(
+                injectSource, scanResult.ProcessNames, settings);
+            _host.OnStatus($"Custom config '{configName}' injected with process routing");
+            return configJson;
+        }
+
+        // Generated mode — ConfigPipeline.Generate (Phase 2F) handles
+        // Resolve→Generate→Validate→Serialize as a single sequence.
+        // HotReload also uses Strict mode (same as ColdStart) — Apply
+        // previously did this inline; closure of Phase 2F-A.
+        var json = ConfigPipeline.Generate(
+            profile,
+            scanResult.ProcessNames,
+            settings,
+            ConfigPipeline.ValidationMode.Strict,
+            warningSink: msg => _host.OnWarning(msg),
+            logger: _host.Logger);
+        return json;
+    }
+
+    // ─── Phase 5: PreStartChecks (F-E sanity check + AutoFailover) ─────────
+
+    /// <summary>
+    /// Static dead-config detection. Pattern-matches the proxy outbound
+    /// against known-placeholder fingerprints; if it matches, trigger
+    /// AutoFailoverEngine which swaps active server + re-enters StartAsync
+    /// via the host's restart delegate.
+    /// </summary>
+    /// <returns>True when AutoFailover took over (caller MUST stop).
+    /// False on the happy path (caller proceeds with phase 6).</returns>
+    private async Task<bool> PreStartChecksPhaseAsync(
+        AppSettings settings,
+        string configJson,
+        CancellationToken ct)
+    {
+        _host.EnsureSanityCheckScaffolding(settings, out var sanityCheck);
+
+        var preCheck = sanityCheck.CheckBeforeStart(configJson);
+        if (!preCheck.IsDead) return false;
+
+        _host.Logger?.Warning(
+            "[StartupPipeline] F-E pre-start dead config: {Reason} (field: {Field})",
+            preCheck.Reason, preCheck.OffendingField);
+
+        var failover = _host.WireFailover(sanityCheck);
+        var outcome = await failover.HandleDeadConfigAsync(
+            preCheck.Reason ?? "dead config", ct);
+
+        if (outcome.UserFacingMessage != null)
+            _host.OnAutoFailoverTriggered(outcome.UserFacingMessage);
+
+        if (outcome.Switched)
+        {
+            _host.Logger?.Information(
+                "[StartupPipeline] F-E switched to {New} — abort outer StartAsync flow",
+                outcome.NewActiveServer);
+            return true;
+        }
+
+        // Failover refused — surface the message and throw so the caller's
+        // try/catch sees the same exception type as the empty-servers path.
+        _host.OnWarning(outcome.UserFacingMessage ?? preCheck.Reason ?? "Dead config");
+        throw new InvalidOperationException(
+            outcome.UserFacingMessage ?? preCheck.Reason ?? "Dead VPN config");
+    }
+
+    // ─── Phase 6: Deploy sing-box + Firewall + TUN cleanup ─────────────────
+
+    /// <summary>
+    /// Ensure the sing-box binary is deployed (bundle → ProgramData), create
+    /// firewall block rules in disabled state, and pre-start sweep for stale
+    /// wintun adapters left by a previous crash.
+    /// </summary>
+    private async Task DeployAndSetupFirewallPhaseAsync(
+        AppSettings settings,
+        Profile profile,
+        ScanResult scanResult,
+        CancellationToken ct)
+    {
+        DeploySingBoxBinary(settings);
+
+        ct.ThrowIfCancellationRequested();
+
+        // Firewall — created in disabled state. HealthMonitor enables on
+        // crash, disables on successful restart.
+        var firewall = _host.FirewallFactory();
+        _host.SetFirewallManager(firewall);
+        if (profile.BlockOnVpnFail)
+        {
+            firewall.CreateBlockRules(scanResult.ProcessNames);
+            _host.OnStatus("Firewall block rules created (disabled)");
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        // Pre-start wintun sweep (Windows only).
+        await PreStartTunCleanupAsync(ct);
+    }
+
+    /// <summary>
+    /// Deploy sing-box binary if the bundled copy differs in size from the
+    /// installed copy (heuristic for "upgrade happened, redeploy").
+    /// </summary>
+    private void DeploySingBoxBinary(AppSettings settings)
+    {
+        var exePath = OperatingSystem.IsWindows()
+            ? Environment.ExpandEnvironmentVariables(settings.SingBox.ExecutablePath)
+            : AppPaths.SingBoxExePath;
+        var bundledPath = Path.Combine(AppContext.BaseDirectory,
+            OperatingSystem.IsWindows() ? "sing-box.exe" : "sing-box");
+
+        if (File.Exists(bundledPath))
+        {
+            bool needDeploy = !File.Exists(exePath);
+            if (!needDeploy)
+            {
+                var installedSize = new FileInfo(exePath).Length;
+                var bundledSize = new FileInfo(bundledPath).Length;
+                needDeploy = installedSize != bundledSize;
+            }
+            if (needDeploy)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(exePath)!);
+                File.Copy(bundledPath, exePath, overwrite: true);
+                _host.Logger?.Information(
+                    "[StartupPipeline] Deployed sing-box from bundle to {Path}", exePath);
+            }
+        }
+        else if (!File.Exists(exePath))
+        {
+            throw new FileNotFoundException($"sing-box not found at: {exePath}");
+        }
+    }
+
+    /// <summary>
+    /// v2.32.x Bug-r9-H pre-start sweep for stale wintun adapters. No-op on
+    /// macOS/Linux. Settles 500ms after a removal so Windows network stack
+    /// finishes tearing down before sing-box re-creates.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private async Task PreStartTunCleanupWindowsAsync(CancellationToken ct)
+    {
+        int removedAdapterCount = 0;
+        try
+        {
+            removedAdapterCount = await TunAdapterDiagnostics
+                .PreStartCleanupAsync(_host.Logger, "StartupPipeline");
+        }
+        catch (Exception ex)
+        {
+            _host.Logger?.Warning(ex,
+                "[StartupPipeline] Pre-start TUN cleanup threw (non-fatal)");
+        }
+        if (removedAdapterCount > 0)
+            await Task.Delay(500, ct);
+    }
+
+    private async Task PreStartTunCleanupAsync(CancellationToken ct)
+    {
+        if (OperatingSystem.IsWindows())
+            await PreStartTunCleanupWindowsAsync(ct);
+    }
+
+    // ─── Phase 7: StartSingBox + warmup + post-start probe ─────────────────
+
+    /// <summary>
+    /// Launch sing-box, wait up to 5s for IsRunning, fire warmup probe
+    /// (fire-and-forget), wire post-start Clash API probe (also fire-and-
+    /// forget). Throws if sing-box doesn't come up within 5s.
+    /// </summary>
+    private async Task<int> StartSingBoxPhaseAsync(
+        AppSettings settings,
+        string configJson,
+        bool isCustomConfig,
+        CancellationToken ct)
+    {
+        _host.OnStatus("Starting sing-box...");
+
+        var singBox = new SingBoxManager(settings.SingBox, _host.Logger);
+        singBox.Started += pid => _host.OnSingBoxStarted(pid);
+        _host.SetSingBoxManager(singBox);
+        singBox.StartWithJson(configJson);
+
+        // Wait up to 5s for startup.
+        for (int i = 0; i < 10; i++)
+        {
+            await Task.Delay(500, ct);
+            if (singBox.IsRunning()) break;
+        }
+
+        if (!singBox.IsRunning())
+        {
+            // SingBoxManager already logged; we surface a fatal-ish message
+            // and let the caller's catch tear down firewall + state.
+            throw new Exception("sing-box failed to start within 5 seconds. Check logs.");
+        }
+
+        var pid = singBox.Pid ?? -1;
+        _host.Logger?.Information("[StartupPipeline] sing-box started (PID {Pid})", pid);
+        _host.OnStatus($"sing-box started (PID {pid})");
+
+        // Fire-and-forget warmup probe — give TUN routing tables time to settle.
+        ScheduleWarmupProbe(pid, ct);
+
+        // Phase 8.5 — F-E post-start probe via Clash API. The host wires
+        // this with a Stop()+Restart delegate so a failure tears the live
+        // sing-box down before re-launching.
+        if (!isCustomConfig)
+        {
+            _host.EnsureSanityCheckScaffolding(settings, out var sanityCheck);
+            _host.SchedulePostStartProbe(settings, sanityCheck, ct);
+        }
+
+        return pid;
+    }
+
+    /// <summary>
+    /// Schedule the TUN warmup probe (15 attempts × 1s) on a background task.
+    /// Captures the PID snapshot to avoid NRE if Stop() races between this
+    /// scheduling call and the lambda body running.
+    /// </summary>
+    private void ScheduleWarmupProbe(int pidSnapshot, CancellationToken ct)
+    {
+        _host.OnStatus("Warming up network...");
+        _ = Task.Run(async () =>
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            for (int attempt = 1; attempt <= 15; attempt++)
+            {
+                try
+                {
+                    await Task.Delay(1000, ct);
+                    await http.GetStringAsync("https://www.gstatic.com/generate_204", ct);
+                    _host.Logger?.Information(
+                        "[StartupPipeline] TUN ready after {Ms}ms (attempt {Attempt})",
+                        sw.ElapsedMilliseconds, attempt);
+                    _host.OnStatus($"Connected (PID {pidSnapshot})");
+                    return;
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    _host.Logger?.Debug(
+                        "[StartupPipeline] Warm-up attempt {Attempt}: {Error}",
+                        attempt, ex.GetType().Name);
+                }
+            }
+            _host.Logger?.Warning(
+                "[StartupPipeline] TUN warm-up failed after {Ms}ms", sw.ElapsedMilliseconds);
+            _host.OnStatus($"Connected (PID {pidSnapshot})");
+        }, ct);
+    }
+
+    // ─── Phase 8: StartMonitors (ETW + HealthMonitor + Windows DNS) ────────
+
+    /// <summary>
+    /// Wire up the ETW process monitor + HealthMonitor + apply Windows DNS
+    /// hardening (Windows only — SMHNR off, TUN metric, etc.).
+    /// </summary>
+    private void StartMonitorsPhase(
+        AppSettings settings,
+        Profile activeProfile,
+        ScanResult scanResult)
+    {
+        var profile = activeProfile;
+        // ETW + HealthMonitor are owned by VpnEngine via Set* callbacks so
+        // Stop()/Dispose() can dispose them.
+        var etw = _host.MonitorFactory();
+        _host.SetProcessMonitor(etw);
+
+        // The SingBoxManager + IFirewallManager have already been wired to
+        // the host in phases 6+7. Pull them back via a lightweight
+        // accessor — but we don't expose those getters; instead the host's
+        // SetHealthMonitor / SetProcessMonitor takes responsibility for
+        // disposal. The HealthMonitor needs SingBoxManager + scanner +
+        // firewall; we construct it here and hand it over.
+        var singBox = ((StartupHostInternal)_host).SingBox
+            ?? throw new InvalidOperationException(
+                "StartupPipeline phase 8: SingBoxManager missing (phase 7 didn't set it).");
+        var firewall = ((StartupHostInternal)_host).Firewall
+            ?? throw new InvalidOperationException(
+                "StartupPipeline phase 8: IFirewallManager missing (phase 6 didn't set it).");
+
+        var healthMonitor = new HealthMonitor(
+            singBox, _host.Scanner, firewall,
+            settings.Monitoring, _host.Logger);
+
+        etw.ProcessStarted += (_, e) =>
+        {
+            var isTargeted = profile.Processes
+                .Any(r => r.ScanPatterns
+                    .Any(p => ProcessScanner.MatchesPattern(e.ProcessName + ".exe", p)));
+
+            if (isTargeted)
+            {
+                _host.OnProcessDetected(e.ProcessName, e.ProcessId);
+                healthMonitor.OnNewProcessDetected(e.ProcessName);
+            }
+        };
+
+        healthMonitor.RestartAttempted += (_, attempt) =>
+            _host.OnRestartAttempted(attempt, settings.Monitoring.MaxRestartAttempts);
+
+        etw.Start();
+        healthMonitor.Start(profile, settings, scanResult);
+
+        _host.SetHealthMonitor(healthMonitor);
+
+        if (profile.BlockOnVpnFail)
+            _host.OnStatus("Firewall leak protection ready (armed for VPN failure)");
+
+#if PLATFORM_WINDOWS
+        WindowsDnsHardening.Apply(_host.Logger);
+#endif
+    }
+}
+
+/// <summary>
+/// Internal contract used by phase 8 to retrieve previously-set lifecycle
+/// objects without exposing public getters on IStartupHost. VpnEngine
+/// implements both interfaces; phase 8 casts to this one. Tests that drive
+/// the pipeline standalone implement both — see StartupPipelineTests'
+/// fake host class for the pattern.
+/// </summary>
+internal interface StartupHostInternal : IStartupHost
+{
+    SingBoxManager? SingBox { get; }
+    IFirewallManager? Firewall { get; }
+}
