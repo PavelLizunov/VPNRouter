@@ -98,6 +98,27 @@ public class VpnEngine : IDisposable
     /// user understands why the active server changed mid-connect.</summary>
     public event Action<string>? AutoFailoverTriggered;
 
+    /// <summary>
+    /// Construct a <see cref="VpnEngine"/> with explicit dependencies.
+    ///
+    /// <para><b>3G-4 (v3.0 refactor):</b> direct construction is deprecated —
+    /// use <see cref="VPNRouter.Core.Platform.PlatformServices.CreateVpnEngine"/>
+    /// instead so the platform-specific scanner/firewall/monitor wiring
+    /// stays in one place. The attribute is warning-only
+    /// (<c>error: false</c>) so existing call sites (CLI's StartCommand,
+    /// Service's VPNRouterService — both predating the factory introduction)
+    /// keep compiling while we migrate them in Phase 4. New code MUST
+    /// use the factory; tests that need to inject a fake scanner / firewall
+    /// can suppress the warning with <c>#pragma warning disable CS0618</c>
+    /// or via the factory's overloads (Phase 4 will add a test-friendly
+    /// builder).</para>
+    /// </summary>
+    [Obsolete(
+        "Use PlatformServices.CreateVpnEngine — direct construction bypasses " +
+        "the platform-specific scanner / firewall / monitor wiring. This " +
+        "warning is non-fatal during Phase 3; will become an error in " +
+        "Phase 4 once all call sites are migrated.",
+        error: false)]
     public VpnEngine(
         IProcessScanner scanner,
         Func<IFirewallManager> firewallFactory,

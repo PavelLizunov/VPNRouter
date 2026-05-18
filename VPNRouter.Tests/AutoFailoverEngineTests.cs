@@ -1,5 +1,6 @@
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
 
 namespace VPNRouter.Tests;
 
@@ -11,26 +12,19 @@ namespace VPNRouter.Tests;
 /// names skipped), the 3-attempt cap, custom-mode bypass, and that
 /// the optional restart delegate is invoked exactly once per call.</para>
 ///
-/// <para>The class flips <see cref="SafeMode"/>.Enabled true for the
-/// duration of each test so <see cref="SettingsLoader.Save"/> no-ops —
-/// otherwise the engine would write to <c>%ProgramData%\VPNRouter\config.yaml</c>
-/// on the test machine. <see cref="IDisposable"/> on the test class
-/// restores the flag.</para>
+/// <para><b>3G-1 (v3.0 refactor):</b> migrated from the SafeMode-flipping
+/// pattern to <see cref="InMemorySettingsStore"/>. The pre-3G class set
+/// <c>SafeMode.Enabled = true</c> for the test lifetime so the engine's
+/// <c>SettingsLoader.Save</c> calls no-op'd, but that global flip leaked
+/// into parallel test classes — running SettingsLoaderRobustnessTests
+/// concurrently with this class would see Load() take the SafeMode early-
+/// return path and hand out defaults instead of parsing the test fixture,
+/// flaking ~14 cases. <c>InMemorySettingsStore</c> kills the race by
+/// giving each test an isolated in-memory store; SafeMode stays untouched.</para>
 /// </summary>
-public class AutoFailoverEngineTests : IDisposable
+public class AutoFailoverEngineTests
 {
-    private readonly bool _wasSafeMode;
-
-    public AutoFailoverEngineTests()
-    {
-        _wasSafeMode = SafeMode.Enabled;
-        SafeMode.Enabled = true;
-    }
-
-    public void Dispose()
-    {
-        SafeMode.Enabled = _wasSafeMode;
-    }
+    private readonly InMemorySettingsStore _store = new();
 
     // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -75,7 +69,7 @@ public class AutoFailoverEngineTests : IDisposable
             ("srv-3", "1.2.3.3"));
 
         var sanity = new ConfigSanityCheck();
-        var engine = new AutoFailoverEngine(settings, sanity);
+        var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
         var outcome = await engine.HandleDeadConfigAsync("test dead reason");
 
@@ -96,7 +90,7 @@ public class AutoFailoverEngineTests : IDisposable
             ("srv-3", "1.2.3.3"));
 
         var sanity = new ConfigSanityCheck();
-        var engine = new AutoFailoverEngine(settings, sanity);
+        var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
         var outcome = await engine.HandleDeadConfigAsync("test");
 
@@ -117,7 +111,7 @@ public class AutoFailoverEngineTests : IDisposable
             ("srv-5", "1.2.3.5"));
 
         var sanity = new ConfigSanityCheck();
-        var engine = new AutoFailoverEngine(settings, sanity);
+        var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
         // Burn through 3 attempts.
         for (int i = 0; i < AutoFailoverEngine.MaxAttempts; i++)
@@ -143,7 +137,7 @@ public class AutoFailoverEngineTests : IDisposable
         settings.App.ConfigMode = "custom";
 
         var sanity = new ConfigSanityCheck();
-        var engine = new AutoFailoverEngine(settings, sanity);
+        var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
         var outcome = await engine.HandleDeadConfigAsync("test");
 
@@ -165,7 +159,7 @@ public class AutoFailoverEngineTests : IDisposable
             ("srv-3", "1.2.3.3"));
 
         var sanity = new ConfigSanityCheck();
-        var engine = new AutoFailoverEngine(settings, sanity);
+        var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
         var first = await engine.HandleDeadConfigAsync("first dead");
         Assert.Equal("srv-2", first.NewActiveServer);
@@ -189,7 +183,7 @@ public class AutoFailoverEngineTests : IDisposable
         };
 
         var sanity = new ConfigSanityCheck();
-        var engine = new AutoFailoverEngine(settings, sanity);
+        var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
         var outcome = await engine.HandleDeadConfigAsync("dead");
 
@@ -206,7 +200,7 @@ public class AutoFailoverEngineTests : IDisposable
             ("srv-only", "1.2.3.4"));
 
         var sanity = new ConfigSanityCheck();
-        var engine = new AutoFailoverEngine(settings, sanity);
+        var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
         var outcome = await engine.HandleDeadConfigAsync("dead");
 
@@ -230,7 +224,8 @@ public class AutoFailoverEngineTests : IDisposable
             {
                 Interlocked.Increment(ref restartCalls);
                 return Task.FromResult(true);
-            });
+            },
+            store: _store);
 
         var outcome = await engine.HandleDeadConfigAsync("dead");
 
@@ -247,7 +242,7 @@ public class AutoFailoverEngineTests : IDisposable
             ("srv-2", "1.2.3.2"));
 
         var sanity = new ConfigSanityCheck();
-        var engine = new AutoFailoverEngine(settings, sanity);
+        var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
         // Run one failover so TriedServers populates.
         _ = await engine.HandleDeadConfigAsync("dead");
@@ -314,7 +309,8 @@ public class AutoFailoverEngineTests : IDisposable
         var sanity = new ConfigSanityCheck();
         var engine = new AutoFailoverEngine(
             settings, sanity,
-            restart: _ => { Interlocked.Increment(ref restartCalls); return Task.FromResult(true); });
+            restart: _ => { Interlocked.Increment(ref restartCalls); return Task.FromResult(true); },
+            store: _store);
 
         var outcome = await engine.HandleDeadConfigAsync("Clash API HTTP 504");
 
@@ -345,7 +341,7 @@ public class AutoFailoverEngineTests : IDisposable
         settings.Vless.ActiveServer = "manual-1";
 
         var sanity = new ConfigSanityCheck();
-        var engine = new AutoFailoverEngine(settings, sanity);
+        var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
         var outcome = await engine.HandleDeadConfigAsync("dead");
 

@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Serilog;
@@ -297,16 +298,20 @@ public class GitHubProfileSource : IProfileSource
 
     private readonly string _url;
     private readonly string _cacheDir;
-    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    // 3G-2 (v3.0 refactor): per-class static HttpClient replaced with the
+    // shared IHttpClient seam (PolicyHttpClient.Shared). Consolidated retry
+    // policy + DNS-refresh pool + test injectability.
+    private readonly IHttpClient _http;
 
     public int Priority { get; }
     public string SourceName => $"GitHub({_url})";
 
-    public GitHubProfileSource(string url, int priority = 10)
+    public GitHubProfileSource(string url, int priority = 10, IHttpClient? http = null)
     {
         _url = url;
         Priority = priority;
         _cacheDir = AppPaths.CacheDir;
+        _http = http ?? PolicyHttpClient.Shared;
     }
 
     public bool IsAvailable()
@@ -321,7 +326,12 @@ public class GitHubProfileSource : IProfileSource
 
         try
         {
-            var json = await _http.GetStringAsync(_url, ct);
+            var httpResponse = await _http.SendAsync(
+                new HttpRequest(HttpMethod.Get, new Uri(_url), Timeout: TimeSpan.FromSeconds(10)),
+                ct);
+            if (!httpResponse.IsSuccess())
+                throw new HttpRequestException($"GitHub profile fetch returned HTTP {httpResponse.StatusCode}");
+            var json = httpResponse.AsString();
             // v2.31.0-r1 (CO-4): MaxDepth-capped deserialization on the GitHub
             // profile URL — the channel is HTTPS but a compromised tap or
             // typosquatted URL could feed adversarial JSON. ProfileCollection

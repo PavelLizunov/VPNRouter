@@ -48,14 +48,25 @@ public static class PlatformServices
 
     /// <summary>
     /// Convenience: create a fully wired VpnEngine with platform services.
+    ///
+    /// <para>3G-4 (v3.0 refactor): this factory is the SOLE blessed way to
+    /// construct a <see cref="VpnEngine"/>. Direct construction is marked
+    /// <c>[Obsolete(error: false)]</c> to surface warnings on the two
+    /// legacy call sites (CLI <c>StartCommand</c>, <c>VPNRouterService</c>)
+    /// that predate this factory. Migrate those to call this method.
+    /// The <c>#pragma warning disable</c> below is the one approved
+    /// suppression site for the deprecation — kept here so the factory
+    /// itself doesn't trip the same warning it's enforcing.</para>
     /// </summary>
     public static VpnEngine CreateVpnEngine(ILogger? logger = null)
     {
+#pragma warning disable CS0618 // VpnEngine ctor is [Obsolete] for callers outside this factory.
         return new VpnEngine(
             CreateProcessScanner(logger),
             CreateFirewallFactory(logger),
             CreateMonitorFactory(logger),
             logger);
+#pragma warning restore CS0618
     }
 
     /// <summary>

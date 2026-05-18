@@ -4,6 +4,7 @@ using Serilog;
 
 namespace VPNRouter.Core.Services;
 
+
 /// <summary>
 /// Manages Windows hosts file entries for Discord voice servers.
 /// Discord voice servers (finland*.discord.media) may be blocked by IP;
@@ -30,10 +31,12 @@ public sealed class HostsManager
     private const string FlowsealMarkerEnd = "# === VPNRouter Flowseal hosts END ===";
     private const string FlowsealHostsUrl = "https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/refs/heads/main/.service/hosts";
 
-    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
-
+    // 3G-2 (v3.0 refactor): replaced the per-class `static readonly HttpClient`
+    // with the shared IHttpClient seam — consolidated retry policy, shared
+    // DNS-refresh pool (PolicyHttpClient.Shared), test-injectable.
     private readonly IFileSystem _fs;
     private readonly string _hostsPath;
+    private readonly IHttpClient _http;
 
     /// <summary>
     /// Default singleton wired to <see cref="RealFileSystem"/> and the
@@ -48,10 +51,13 @@ public sealed class HostsManager
     /// <c>InMemoryFileSystem</c>; production code typically uses the
     /// static facade methods which dispatch to <see cref="DefaultInstance"/>.
     /// </summary>
-    public HostsManager(IFileSystem? fileSystem = null, string? hostsPath = null)
+    /// <param name="http">3G-2: HTTP seam. Defaults to <see cref="PolicyHttpClient.Shared"/>;
+    /// tests inject <c>FakeHttpClient</c> to stub the Flowseal fetch.</param>
+    public HostsManager(IFileSystem? fileSystem = null, string? hostsPath = null, IHttpClient? http = null)
     {
         _fs = fileSystem ?? new RealFileSystem();
         _hostsPath = hostsPath ?? HostsPath;
+        _http = http ?? PolicyHttpClient.Shared;
     }
 
     /// <summary>Instance variant of <see cref="IsInstalled"/>.</summary>
@@ -161,7 +167,11 @@ public sealed class HostsManager
             if (IsFlowsealInstalledInstance())
                 return (true, "Already installed");
 
-            var raw = await _http.GetStringAsync(FlowsealHostsUrl);
+            var rawResponse = await _http.SendAsync(
+                new HttpRequest(HttpMethod.Get, new Uri(FlowsealHostsUrl)));
+            if (!rawResponse.IsSuccess())
+                return (false, $"Failed to fetch Flowseal hosts: HTTP {rawResponse.StatusCode}");
+            var raw = rawResponse.AsString();
             if (string.IsNullOrWhiteSpace(raw))
                 return (false, "Empty response from Flowseal hosts URL");
 

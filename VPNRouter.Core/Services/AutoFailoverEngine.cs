@@ -36,6 +36,7 @@ public sealed class AutoFailoverEngine
     private readonly ConfigSanityCheck _sanity;
     private readonly ILogger? _logger;
     private readonly Func<CancellationToken, Task<bool>>? _restart;
+    private readonly ISettingsStore _store;
 
     // Tracks the active-server names we've already cycled THROUGH. The
     // entry being switched FROM is added before the switch, so a failed
@@ -49,16 +50,23 @@ public sealed class AutoFailoverEngine
     /// (typically <c>vpnEngine.StartAsync</c>). Returns true if the new
     /// start succeeded.
     /// </summary>
+    /// <param name="store">3G-1 (v3.0 refactor): persistence seam. Defaults
+    /// to <see cref="RealSettingsStore.Instance"/> for back-compat with the
+    /// pre-3G callers that constructed <see cref="AutoFailoverEngine"/>
+    /// without a store parameter. Tests inject <c>InMemorySettingsStore</c>
+    /// to avoid writing to <c>%ProgramData%\VPNRouter\config.yaml</c>.</param>
     public AutoFailoverEngine(
         AppSettings settings,
         ConfigSanityCheck sanity,
         Func<CancellationToken, Task<bool>>? restart = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        ISettingsStore? store = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _sanity = sanity ?? throw new ArgumentNullException(nameof(sanity));
         _restart = restart;
         _logger = logger;
+        _store = store ?? RealSettingsStore.Instance;
     }
 
     /// <summary>
@@ -175,14 +183,14 @@ public sealed class AutoFailoverEngine
         _settings.Vless.ActiveServer = newName;
         _settings.App.ActiveSubscriptionServer = newName;
 
-        // 6. Persist. SettingsLoader.Save is best-effort — if it throws we
+        // 6. Persist. ISettingsStore.Save is best-effort — if it throws we
         // still proceed with the in-memory swap so the user gets the
         // failover for THIS session. Next launch will re-pick the dead
         // server unless persistence succeeded, but the user will at least
         // see the symptom (not a silent leak).
         try
         {
-            SettingsLoader.Save(_settings);
+            _store.Save(_settings);
             _logger?.Information(
                 "[AutoFailover] Switched ActiveServer '{Old}' → '{New}' and persisted",
                 oldActive, newName);

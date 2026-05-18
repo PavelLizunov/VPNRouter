@@ -101,11 +101,13 @@ public class StartCommand : AsyncCommand<StartSettings>
         }
 
         // 5. Start VPN via engine
-        using var engine = new VpnEngine(
-            new ProcessScanner(Serilog.Log.Logger),
-            () => new FirewallManager(Serilog.Log.Logger),
-            () => new EtwProcessMonitor(Serilog.Log.Logger),
-            Serilog.Log.Logger);
+        // 3G-4 (v3.0 refactor): use the PlatformServices factory instead of
+        // direct construction — keeps the platform-specific scanner /
+        // firewall / monitor wiring in one place. On Windows the produced
+        // services are identical to the prior hand-wired set (ProcessScanner,
+        // FirewallManager, EtwProcessMonitor).
+        using var engine = VPNRouter.Core.Platform.PlatformServices
+            .CreateVpnEngine(Serilog.Log.Logger);
 
         engine.StatusChanged += msg =>
             AnsiConsole.MarkupLine($"[green]✓[/] {Markup.Escape(msg)}");

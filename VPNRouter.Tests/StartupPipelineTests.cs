@@ -2,6 +2,8 @@ using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
+using Xunit;
 
 namespace VPNRouter.Tests;
 
@@ -35,15 +37,27 @@ namespace VPNRouter.Tests;
 ///   <item><c>StartupResult_RecordShape</c> — record + enum shape pin.</item>
 /// </list>
 /// </summary>
+[Collection(SafeModeStateCollection.Name)]
 public sealed class StartupPipelineTests : IDisposable
 {
+    // 3G-1 (v3.0 refactor): InMemorySettingsStore handles the persistence
+    // seam (replaces what used to be SafeMode-driven Save no-op). SafeMode
+    // still flips on for OTHER reasons in this test class (forces full-
+    // tunnel routing for tests that don't want the full profile-catalogue
+    // load path) — those are documented inline at each test, and the flag
+    // is restored in Dispose so parallel test classes are not affected.
+    private readonly InMemorySettingsStore _store = new();
     private readonly bool _wasSafeMode;
 
     public StartupPipelineTests()
     {
-        // SettingsLoader.Save no-ops in safe mode; flip on so PersistSanitized
-        // doesn't write to %ProgramData%\VPNRouter\config.yaml on the test
-        // machine. Mirrors AutoFailoverEngineTests' pattern.
+        // Required for tests that exercise the FullTunnel path via
+        // SafeMode short-circuit (the pipeline forces FullTunnel when
+        // SafeMode.Enabled, sidestepping the bundled-profile catalogue
+        // load that test fixtures don't seed). Without it, tests that
+        // declare ActiveProfile="TestProfile" trip the "None of the
+        // requested profiles exist" gate because the bundled catalogue
+        // doesn't include "TestProfile".
         _wasSafeMode = SafeMode.Enabled;
         SafeMode.Enabled = true;
     }
@@ -105,7 +119,7 @@ public sealed class StartupPipelineTests : IDisposable
         settings.App.RoutingMode = "split";
 
         var host = new TestStartupHost();
-        var pipeline = new StartupPipeline(host);
+        var pipeline = new StartupPipeline(host, _store);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await pipeline.ExecuteAsync(
@@ -130,7 +144,7 @@ public sealed class StartupPipelineTests : IDisposable
         settings.ActiveProfile = "TestProfile";
 
         var host = new TestStartupHost();
-        var pipeline = new StartupPipeline(host);
+        var pipeline = new StartupPipeline(host, _store);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await pipeline.ExecuteAsync(
@@ -197,7 +211,7 @@ public sealed class StartupPipelineTests : IDisposable
         settings.Vless.ActiveServer = "khunrath_ln";
 
         var host = new TestStartupHost();
-        var pipeline = new StartupPipeline(host);
+        var pipeline = new StartupPipeline(host, _store);
 
         // HotReload mode is the only mode we can drive standalone (ColdStart
         // calls ConflictingVpnDetector / sing-box deploy). HotReload exits
@@ -234,7 +248,7 @@ public sealed class StartupPipelineTests : IDisposable
         settings.ActiveProfile = "TestProfile";
 
         var host = new TestStartupHost();
-        var pipeline = new StartupPipeline(host);
+        var pipeline = new StartupPipeline(host, _store);
 
         var result = await pipeline.ExecuteAsync(
             new StartupContext(settings, StartupMode.HotReload),
@@ -281,7 +295,7 @@ public sealed class StartupPipelineTests : IDisposable
         settings.App.RoutingMode = "split";
 
         var host = new TestStartupHost();
-        var pipeline = new StartupPipeline(host);
+        var pipeline = new StartupPipeline(host, _store);
 
         var result = await pipeline.ExecuteAsync(
             new StartupContext(settings, StartupMode.HotReload),
@@ -311,7 +325,7 @@ public sealed class StartupPipelineTests : IDisposable
         settings.Vless.ActiveServer = "main";
 
         var host = new TestStartupHost();
-        var pipeline = new StartupPipeline(host);
+        var pipeline = new StartupPipeline(host, _store);
 
         var result = await pipeline.ExecuteAsync(
             new StartupContext(settings, StartupMode.HotReload),
@@ -339,7 +353,7 @@ public sealed class StartupPipelineTests : IDisposable
         settings.Vless.ActiveServer = "main";
 
         var host = new TestStartupHost();
-        var pipeline = new StartupPipeline(host);
+        var pipeline = new StartupPipeline(host, _store);
 
         var result = await pipeline.ExecuteAsync(
             new StartupContext(settings, StartupMode.HotReload),

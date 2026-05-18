@@ -266,10 +266,18 @@ internal interface IStartupHost
 internal sealed class StartupPipeline
 {
     private readonly IStartupHost _host;
+    private readonly ISettingsStore _store;
 
-    public StartupPipeline(IStartupHost host)
+    /// <param name="store">3G-1 (v3.0 refactor): persistence seam used by
+    /// the ActiveProfile sanitisation step. Defaults to
+    /// <see cref="RealSettingsStore.Instance"/> for back-compat — pre-3G
+    /// the code called <c>SettingsLoader.Load/Save</c> statically. Tests
+    /// inject <c>InMemorySettingsStore</c> to keep the pipeline isolated
+    /// from the on-disk config.</param>
+    public StartupPipeline(IStartupHost host, ISettingsStore? store = null)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
+        _store = store ?? RealSettingsStore.Instance;
     }
 
     /// <summary>
@@ -301,7 +309,7 @@ internal sealed class StartupPipeline
             await ResolveProfileAndServersAsync(settings, context.Mode, ct);
 
         // Phase 3 — ScanProcesses
-        var scanResult = ScanProcessesPhase(profile, settings, ct);
+        var scanResult = await ScanProcessesPhaseAsync(profile, settings, ct).ConfigureAwait(false);
 
         // Phase 4 — GenerateConfig
         var configJson = GenerateConfigPhase(
@@ -666,9 +674,9 @@ internal sealed class StartupPipeline
             // subscription list (subscribe mode). Saving this object writes
             // that aggregate into vless.servers in YAML and on next launch
             // it resurfaces as fake "manual VLESS servers" in the VLESS tab.
-            var fresh = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+            var fresh = _store.Load(AppPaths.ConfigYamlPath);
             fresh.ActiveProfile = sanitized;
-            SettingsLoader.Save(fresh);
+            _store.Save(fresh);
             _host.Logger?.Information(
                 "[StartupPipeline] ActiveProfile migrated: '{Old}' → '{New}'",
                 originalProfileName, sanitized);
@@ -687,8 +695,16 @@ internal sealed class StartupPipeline
     /// heal: WMI child-lookup on a corrupt catalogue used to hang forever).
     /// Also auto-detect WireGuard/AmneziaWG subnets and merge into
     /// settings.Tun.RouteExcludeAddress.
+    ///
+    /// <para>3G-3 (v3.0 refactor): converted from <c>Task.Run(...).Wait(timeout)</c>
+    /// + <c>.Result</c> to a fully-async <c>Task.WhenAny</c> + <c>await</c>
+    /// pattern. The pre-3G blocking-on-Wait pinned a thread-pool worker
+    /// for up to 30s under load (one of the audit-D smells) and risked
+    /// deadlock when the caller's <see cref="SynchronizationContext"/>
+    /// was captured (which doesn't happen on Service today, but would
+    /// the moment any Avalonia UI path called into this directly).</para>
     /// </summary>
-    private ScanResult ScanProcessesPhase(
+    private async Task<ScanResult> ScanProcessesPhaseAsync(
         Profile profile,
         AppSettings settings,
         CancellationToken ct)
@@ -698,9 +714,14 @@ internal sealed class StartupPipeline
         try
         {
             var scanTask = Task.Run(() => _host.Scanner.ScanForProfile(profile), ct);
-            if (scanTask.Wait(TimeSpan.FromSeconds(30), ct))
+            // 30s budget — same as pre-3G. Task.WhenAny + a delay task is
+            // the idiomatic async equivalent of Task.Wait(timeout). The
+            // ct here also cancels the delay if the caller bails first.
+            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(30), ct);
+            var winner = await Task.WhenAny(scanTask, timeoutTask).ConfigureAwait(false);
+            if (winner == scanTask)
             {
-                scanResult = scanTask.Result;
+                scanResult = await scanTask.ConfigureAwait(false);
             }
             else
             {
@@ -710,6 +731,14 @@ internal sealed class StartupPipeline
                 _host.OnWarning(
                     "Process scan timed out — split mode may not route correctly. " +
                     "Switch to Full mode or reset your catalogue.");
+                // Best-effort: observe the still-running scan so its
+                // exception (if any) doesn't surface as an unobserved
+                // task exception on finalisation. We don't propagate the
+                // result because we've already committed to the empty-
+                // list fallback below.
+                _ = scanTask.ContinueWith(
+                    t => { _ = t.Exception; },
+                    TaskScheduler.Default);
             }
         }
         catch (OperationCanceledException) { throw; }

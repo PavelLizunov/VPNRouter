@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
 using Xunit;
 
 namespace VPNRouter.Tests;
@@ -25,8 +26,17 @@ namespace VPNRouter.Tests;
 ///
 /// <para>Tests use unique temp paths per case so they can run in parallel
 /// without colliding on the shared default config path.</para>
+///
+/// <para><b>3G-1 (v3.0 refactor):</b> joined <see cref="SafeModeStateCollection"/>
+/// so the loader's <c>if (SafeMode.Enabled) return defaults</c> short-circuit
+/// at the top of <see cref="SettingsLoader.Load"/> can't fire while a
+/// SafeMode-flipping test (StartupPipelineTests) is mid-flight in a parallel
+/// thread. This was the documented flake — when AutoFailoverEngineTests +
+/// StartupPipelineTests flipped SafeMode for unrelated reasons, ~14 cases in
+/// this suite tripped because Load returned defaults instead of parsing
+/// the fixture.</para>
 /// </summary>
-[Collection("FilesystemTests")]
+[Collection(SafeModeStateCollection.Name)]
 public class SettingsLoaderRobustnessTests : IDisposable
 {
     private readonly string _tempDir;

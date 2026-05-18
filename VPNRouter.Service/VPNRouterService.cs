@@ -26,6 +26,7 @@ namespace VPNRouter.Service;
 public class VPNRouterService : BackgroundService
 {
     private readonly ILogger<VPNRouterService> _logger;
+    private readonly ISettingsStore _store;
     private VpnEngine? _engine;
     private ZapretManager? _zapret;
     private TgProxyManager? _tgProxy;
@@ -42,9 +43,14 @@ public class VPNRouterService : BackgroundService
     private const string EventSourceName = "VPNRouter";
     private const string EventLogName = "Application";
 
-    public VPNRouterService(ILogger<VPNRouterService> logger)
+    public VPNRouterService(ILogger<VPNRouterService> logger, ISettingsStore? store = null)
     {
         _logger = logger;
+        // 3G-1 (v3.0 refactor): ISettingsStore seam. Service host doesn't
+        // register one with DI today, so the default RealSettingsStore is
+        // the back-compat path. Tests that drive this class through the
+        // ServiceAppCoexistenceTests harness can inject InMemorySettingsStore.
+        _store = store ?? RealSettingsStore.Instance;
         EnsureEventSource();
     }
 
@@ -54,7 +60,7 @@ public class VPNRouterService : BackgroundService
 
         try
         {
-            _currentSettings = SettingsLoader.Load();
+            _currentSettings = _store.Load();
             var settings = _currentSettings;
             _logger.LogInformation("[Service] Config loaded, mode: {Mode}", settings.App.ConfigMode);
 
@@ -63,7 +69,7 @@ public class VPNRouterService : BackgroundService
             // is the only operator-visible signal that a bad config was
             // rewritten with defaults at boot. Consumed (cleared) so a
             // subsequent in-process reload doesn't re-emit the same line.
-            var recovery = SettingsLoader.ConsumeRecoveryNotice();
+            var recovery = _store.ConsumeRecoveryNotice();
             if (!string.IsNullOrWhiteSpace(recovery))
             {
                 _logger.LogWarning("[Service] {Notice}", recovery);
@@ -76,7 +82,7 @@ public class VPNRouterService : BackgroundService
             // changed routing_mode / subscription / apps in the UI but
             // the service's cached settings stayed stale, so any
             // subsequent crash-restart used outdated values.
-            SettingsLoader.StartWatching(onReload: OnConfigChanged);
+            _store.StartWatching(onReload: OnConfigChanged);
 
             // ── Step 0: Self-migrate pre-v2.14.12 installs (add boot dependencies) ──
             TryMigrateDependencies();
@@ -186,11 +192,13 @@ public class VPNRouterService : BackgroundService
     /// <summary>Start VPN connection with subscription refresh + UI deference.</summary>
     private async Task AutostartVpnAsync(AppSettings settings, CancellationToken ct)
     {
-        _engine = new VpnEngine(
-            new ProcessScanner(Serilog.Log.Logger),
-            () => new FirewallManager(Serilog.Log.Logger),
-            () => new EtwProcessMonitor(Serilog.Log.Logger),
-            Serilog.Log.Logger);
+        // 3G-4 (v3.0 refactor): use the PlatformServices factory instead of
+        // direct construction. On Windows the produced wiring is identical
+        // to the prior hand-wired one (ProcessScanner, FirewallManager,
+        // EtwProcessMonitor) — but kept in a single place so future
+        // platform additions (Mac, Linux) don't drift between caller sites.
+        _engine = VPNRouter.Core.Platform.PlatformServices
+            .CreateVpnEngine(Serilog.Log.Logger);
 
         _engine.StatusChanged += msg =>
             _logger.LogInformation("[Service] {Status}", msg);
@@ -470,7 +478,7 @@ public class VPNRouterService : BackgroundService
         // v2.26.0 — release the FileSystemWatcher before tearing everything
         // else down, so a last-second config.yaml write during shutdown
         // doesn't queue an ApplyAsync against a disposed _engine.
-        try { SettingsLoader.StopWatching(); } catch { }
+        try { _store.StopWatching(); } catch { }
 
         try
         {

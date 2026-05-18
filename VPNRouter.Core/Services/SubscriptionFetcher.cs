@@ -17,15 +17,17 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public static class SubscriptionFetcher
 {
-    private static readonly HttpClient _http = new()
-    {
-        Timeout = TimeSpan.FromSeconds(15)
-    };
-
-    static SubscriptionFetcher()
-    {
-        _http.DefaultRequestHeaders.Add("User-Agent", "VPNRouter");
-    }
+    // 3G-2 (v3.0 refactor): replaced per-class `static readonly HttpClient`
+    // with the shared IHttpClient seam. Static-class workaround for ctor
+    // injection: settable property defaulting to PolicyHttpClient.Shared.
+    // Tests assign FakeHttpClient before calling FetchAsync; production
+    // leaves it at the default (User-Agent + 5min DNS-refresh + retry
+    // policy all come from PolicyHttpClient).
+    /// <summary>
+    /// HTTP seam — tests may override to inject <c>FakeHttpClient</c>.
+    /// Defaults to <see cref="PolicyHttpClient.Shared"/>.
+    /// </summary>
+    public static IHttpClient Http { get; set; } = PolicyHttpClient.Shared;
 
     /// <summary>
     /// Fetch and parse subscription URL into a list of VLESS server entries.
@@ -58,7 +60,18 @@ public static class SubscriptionFetcher
         {
             logger?.Information("[Subscription] Fetching {Url}", url);
 
-            var response = await _http.GetStringAsync(url, ct);
+            // 3G-2: bundled User-Agent + retry come from PolicyHttpClient
+            // policy; per-request 15s timeout preserved for back-compat.
+            var httpResp = await Http.SendAsync(
+                new HttpRequest(HttpMethod.Get, new Uri(url),
+                    Timeout: TimeSpan.FromSeconds(15)),
+                ct);
+            if (!httpResp.IsSuccess())
+            {
+                logger?.Warning("[Subscription] HTTP {Status} from {Url}", httpResp.StatusCode, url);
+                return (result, 0);
+            }
+            var response = httpResp.AsString();
             if (string.IsNullOrWhiteSpace(response))
             {
                 logger?.Warning("[Subscription] Empty response from {Url}", url);

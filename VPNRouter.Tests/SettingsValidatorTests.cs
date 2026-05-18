@@ -1,6 +1,8 @@
 using System.IO;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
+using Xunit;
 
 namespace VPNRouter.Tests;
 
@@ -11,8 +13,13 @@ namespace VPNRouter.Tests;
 /// routes invalid yaml through backup → defaults → recovery notice.
 ///
 /// Plan: <c>plans/v2.32.0-settings-validator.md</c>.
+///
+/// <para><b>3G-1 (v3.0 refactor):</b> joined <see cref="SafeModeStateCollection"/>
+/// — the Load-routes-invalid-config test reads the global static
+/// LastRecoveryNotice + drives the real SettingsLoader, so it can't run
+/// concurrently with the SafeMode-flipping classes without flake.</para>
 /// </summary>
-[Collection("FilesystemTests")]
+[Collection(SafeModeStateCollection.Name)]
 public class SettingsValidatorTests
 {
     // ── Happy path ──────────────────────────────────────────────────

@@ -11,7 +11,12 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public static class ZapretActions
 {
-    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    // 3G-2 (v3.0 refactor): replaced per-class `static readonly HttpClient`
+    // with the shared IHttpClient seam. Static-class workaround: settable
+    // property defaulting to PolicyHttpClient.Shared.
+    /// <summary>HTTP seam — tests may override to inject <c>FakeHttpClient</c>.
+    /// Defaults to <see cref="PolicyHttpClient.Shared"/>.</summary>
+    public static IHttpClient Http { get; set; } = PolicyHttpClient.Shared;
 
     // v3.0 Phase 2D (2026-05-17): IProcessRunner seam for sc/netsh shells.
     // Default = real ProcessRunner; tests assign FakeProcessRunner to drive
@@ -233,7 +238,13 @@ public static class ZapretActions
     {
         try
         {
-            var content = await _http.GetStringAsync(url, ct);
+            var resp = await Http.SendAsync(
+                new HttpRequest(HttpMethod.Get, new Uri(url),
+                    Timeout: TimeSpan.FromSeconds(15)),
+                ct);
+            if (!resp.IsSuccess())
+                return (false, $"HTTP {resp.StatusCode}");
+            var content = resp.AsString();
             await File.WriteAllTextAsync(tempPath, content, ct);
             return (true, content);
         }
@@ -407,7 +418,16 @@ public static class ZapretActions
 
     private static async Task<(bool ok, string content)> DownloadIpSetAsync(string url, CancellationToken ct)
     {
-        try { return (true, await _http.GetStringAsync(url, ct)); }
+        try
+        {
+            var resp = await Http.SendAsync(
+                new HttpRequest(HttpMethod.Get, new Uri(url),
+                    Timeout: TimeSpan.FromSeconds(15)),
+                ct);
+            if (!resp.IsSuccess())
+                return (false, $"HTTP {resp.StatusCode}");
+            return (true, resp.AsString());
+        }
         catch (Exception ex) { return (false, ex.Message); }
     }
 
