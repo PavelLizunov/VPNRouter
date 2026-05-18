@@ -215,7 +215,7 @@
         <!-- New category input -->
         <TextBox Grid.Row="1" x:Name="NewCategoryInput"
                  Text="{Binding NewCategoryName}"
-                 Watermark="{Binding L_CategoryNamePrompt}"
+                 PlaceholderText="{Binding L_CategoryNamePrompt}"
                  FontSize="10" Padding="6,4" Margin="4,4,4,2"/>
         <Button Grid.Row="2"
                 Content="{Binding L_AddCategory}"
@@ -327,7 +327,7 @@
                   Padding="0,6" CornerRadius="{StaticResource RadiusSm}"/>
           <Grid ColumnDefinitions="*,Auto">
             <TextBox Grid.Column="0" x:Name="CustomAppInput"
-                     Watermark="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddAppHint}"
+                     PlaceholderText="{Binding $parent[UserControl].((vm:MainWindowViewModel)DataContext).L_AddAppHint}"
                      FontSize="11" Padding="6,4"/>
             <!-- v2.30.6-r1 (UX-41 fix): hardcoded "+ Add" → bilingual binding. -->
             <Button Grid.Column="1"

@@ -342,12 +342,12 @@
       <Grid ColumnDefinitions="100,*,Auto" ColumnSpacing="4">
         <TextBox Grid.Column="0"
                  Text="{Binding NewSubName}"
-                 Watermark="{Binding L_SubscriptionNameHint}"
+                 PlaceholderText="{Binding L_SubscriptionNameHint}"
                  FontSize="10" Padding="6,4"
                  AutomationProperties.Name="{Binding L_SubscriptionNameHint}"/>
         <TextBox Grid.Column="1"
                  Text="{Binding NewSubUrl}"
-                 Watermark="{Binding LblSubscriptionUrlHint}"
+                 PlaceholderText="{Binding LblSubscriptionUrlHint}"
                  FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
                  FontSize="10" Padding="6,4"
                  AutomationProperties.Name="{Binding LblSubscriptionUrlHint}"/>

@@ -180,11 +180,11 @@
                                     <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
                                         <TextBox Grid.Column="0"
                                                  Text="{Binding NewWgturnConfigName}"
-                                                 Watermark="{Binding L_EmergencyChannelAddConfigNameWatermark}"
+                                                 PlaceholderText="{Binding L_EmergencyChannelAddConfigNameWatermark}"
                                                  FontSize="10" Padding="6,3"/>
                                         <TextBox Grid.Column="1"
                                                  Text="{Binding NewWgturnConfigUrl}"
-                                                 Watermark="{Binding L_EmergencyChannelAddConfigUrlWatermark}"
+                                                 PlaceholderText="{Binding L_EmergencyChannelAddConfigUrlWatermark}"
                                                  FontSize="10" Padding="6,3"
                                                  FontFamily="Consolas,Courier New,monospace"/>
                                     </Grid>
@@ -209,7 +209,7 @@
                                            Foreground="{DynamicResource TextSecondaryBrush}"/>
                                 <TextBox Grid.Column="1"
                                          Text="{Binding WgturnVkLink}"
-                                         Watermark="{Binding L_EmergencyChannelVkLinkWatermark}"
+                                         PlaceholderText="{Binding L_EmergencyChannelVkLinkWatermark}"
                                          FontSize="11" Padding="6,4"
                                          AutomationProperties.Name="{Binding L_EmergencyChannelVkLinkLabel}"/>
                             </Grid>

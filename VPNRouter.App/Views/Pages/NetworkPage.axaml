@@ -600,7 +600,7 @@
                              FontWeight="SemiBold"
                              Foreground="{DynamicResource TextMutedBrush}"/>
                   <TextBox Text="{Binding NewRuleValue}"
-                           Watermark="{Binding NewRuleValuePlaceholder}"
+                           PlaceholderText="{Binding NewRuleValuePlaceholder}"
                            FontSize="11" Padding="6,3" MinHeight="0"
                            FontFamily="Consolas, 'SF Mono', monospace"
                            BorderBrush="{Binding NewRuleValueBorderColor,
@@ -625,7 +625,7 @@
                          FontWeight="Normal"/>
                   </TextBlock>
                   <TextBox Text="{Binding NewRuleComment}"
-                           Watermark="{Binding L_CustomRulesCommentLabel}"
+                           PlaceholderText="{Binding L_CustomRulesCommentLabel}"
                            FontSize="11" Padding="6,3" MinHeight="0"/>
                   <TextBlock Text=" " FontSize="9" MinHeight="11"/>
                 </StackPanel>
@@ -698,7 +698,7 @@
               </Grid>
               <!-- Row 2: value (full width with live-validation) -->
               <TextBox Text="{Binding NewRuleValue}"
-                       Watermark="{Binding NewRuleValuePlaceholder}"
+                       PlaceholderText="{Binding NewRuleValuePlaceholder}"
                        FontSize="11" Padding="6,3" MinHeight="0"
                        FontFamily="Consolas, 'SF Mono', monospace"
                        BorderBrush="{Binding NewRuleValueBorderColor,
@@ -713,7 +713,7 @@
                                       ConverterParameter=SuccessFgBrush|DangerFgBrush}"/>
               <!-- Row 3: comment (full width) -->
               <TextBox Text="{Binding NewRuleComment}"
-                       Watermark="{Binding L_CustomRulesCommentLabel}"
+                       PlaceholderText="{Binding L_CustomRulesCommentLabel}"
                        FontSize="11" Padding="6,3" MinHeight="0"/>
               <!-- Row 4: + Add (full width) -->
               <Button Content="{Binding L_CustomRulesAddBtn}"
@@ -773,7 +773,7 @@
             <!-- Search input -->
             <TextBox Grid.Column="0"
                      Text="{Binding CustomRulesSearchText}"
-                     Watermark="{Binding L_CustomRulesSearchPlaceholder}"
+                     PlaceholderText="{Binding L_CustomRulesSearchPlaceholder}"
                      FontSize="11" Padding="6,3" MinHeight="0"/>
             <!-- Filter chips (segment control with counts).
                  Same `view-seg` pattern as the Cards/Text toggle but
@@ -979,7 +979,7 @@
                StackPanel) so the row never overflows. -->
           <StackPanel IsVisible="{Binding IsRulesNarrow}" Spacing="6">
             <TextBox Text="{Binding CustomRulesSearchText}"
-                     Watermark="{Binding L_CustomRulesSearchPlaceholder}"
+                     PlaceholderText="{Binding L_CustomRulesSearchPlaceholder}"
                      FontSize="11" Padding="6,3" MinHeight="0"/>
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
               <Border Grid.Column="0"
@@ -1678,7 +1678,7 @@
                      Apply commits to the canonical CustomRulesText. -->
                 <TextBox Grid.Column="1"
                          Text="{Binding EditedCustomRulesText}"
-                         Watermark="{Binding L_CustomRulesPlaceholder}"
+                         PlaceholderText="{Binding L_CustomRulesPlaceholder}"
                          AcceptsReturn="True"
                          TextWrapping="NoWrap"
                          FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"

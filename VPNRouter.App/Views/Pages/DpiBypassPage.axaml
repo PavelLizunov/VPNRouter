@@ -229,7 +229,7 @@
                     </StackPanel>
                     <TextBox Text="{Binding ZapretCustomArgs}"
                              IsVisible="{Binding IsCustomStrategy}"
-                             Watermark="{Binding L_WmZapretCustomArgs}"
+                             PlaceholderText="{Binding L_WmZapretCustomArgs}"
                              FontSize="10" Padding="6,4"
                              AcceptsReturn="True" MinHeight="50" MaxHeight="80"/>
 

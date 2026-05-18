@@ -78,7 +78,7 @@
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        LetterSpacing="0.5"/>
                             <TextBox Text="{Binding TgProxyPort}"
-                                     Watermark="{Binding L_WmTgProxyPort}"
+                                     PlaceholderText="{Binding L_WmTgProxyPort}"
                                      FontSize="11" Padding="6,4"
                                      HorizontalContentAlignment="Center"
                                      AutomationProperties.Name="{Binding L_TgProxyPort}"/>
@@ -100,7 +100,7 @@
                                      that the visible caption above shows. -->
                                 <TextBox Grid.Column="0"
                                          Text="{Binding TgProxySecret}"
-                                         Watermark="{Binding L_WmTgProxySecret}"
+                                         PlaceholderText="{Binding L_WmTgProxySecret}"
                                          FontSize="10" Padding="6,4"
                                          FontFamily="Consolas,Courier New,monospace"
                                          IsReadOnly="True"

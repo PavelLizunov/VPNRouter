@@ -431,7 +431,7 @@
                watermark text disappears once user starts typing, leaving
                screen readers without context. -->
           <TextBox Text="{Binding VlessUri}"
-                   Watermark="{Binding L_WmVlessUri}"
+                   PlaceholderText="{Binding L_WmVlessUri}"
                    FontFamily="Consolas, 'SF Mono', 'Cascadia Code', 'Ubuntu Mono', monospace"
                    FontSize="10" Padding="6,4"
                    AcceptsReturn="False"

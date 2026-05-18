@@ -160,7 +160,7 @@
                                        FontSize="11" FontWeight="SemiBold"
                                        Foreground="{DynamicResource TextPrimaryBrush}"/>
                             <TextBox Text="{Binding SmpInput}"
-                                     Watermark="{Binding L_SmpInputWatermark}"
+                                     PlaceholderText="{Binding L_SmpInputWatermark}"
                                      FontSize="11" Padding="10,7"
                                      AcceptsReturn="False"
                                      CornerRadius="{StaticResource RadiusXs}"/>
