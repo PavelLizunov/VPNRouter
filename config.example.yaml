@@ -1,6 +1,13 @@
 # VPN Process Router — Example Configuration
 # Copy to: %ProgramData%\VPNRouter\config.yaml
 # Required fields: vless.server, vless.uuid, vless.reality.public_key, vless.reality.short_id
+#
+# IMPORTANT: replace REPLACE_ME_* tokens before using.
+# Every value tagged REPLACE_ME_* is a placeholder — copying this file
+# verbatim into your config.yaml will be rejected by VPNRouter's placeholder
+# defense (PlaceholderDefense.cs), the runtime sanity check, and the leak
+# protection scope guard. Fill in the values from your real VLESS subscription
+# or server details before starting the service.
 
 app:
   log_level: info   # debug | info | warning | error
@@ -38,9 +45,9 @@ active_profile: Gaming_Full
 # security: reality  — uses XTLS Reality (recommended, harder to detect)
 # security: tls      — uses standard TLS (fill tls section instead)
 vless:
-  server: "194.87.222.111"
+  server: "REPLACE_ME_SERVER_HOST"        # e.g. "your.vpn.example.com" or IP
   port: 443
-  uuid: "2d54442d-158f-49e2-b225-67ba1a5b77f4"
+  uuid: "REPLACE_ME_UUID"                  # e.g. UUIDv4 from your VLESS subscription
   flow: "xtls-rprx-vision"   # required for Reality + XTLS
   security: reality           # reality | tls
 
@@ -49,8 +56,8 @@ vless:
     enabled: true
     server_name: "yahoo.com"          # SNI to mimic — must be a real TLS 1.3 site
     fingerprint: "firefox"            # chrome | firefox | safari | ios | android | edge
-    public_key: "DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU"
-    short_id: "78ca7952"
+    public_key: "REPLACE_ME_REALITY_PUBLIC_KEY"
+    short_id: "REPLACE_ME_SHORT_ID"
 
   # Transport: tcp for Reality+XTLS, ws for WebSocket, grpc for gRPC
   transport:

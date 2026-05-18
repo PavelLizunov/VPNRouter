@@ -27,12 +27,14 @@ name: grep placeholder fingerprints
 #   - plans/*.{md,yaml,yml,json} — roadmap docs, post-mortems, and the
 #     stas-evidence-* forensic captures (verbatim user-supplied evidence;
 #     redacting them would defeat their purpose).
-#   - config.example.yaml — root-level documentation example that ships
-#     with the source tree. Pre-dates Phase 3D; flagged for a separate
-#     follow-up to swap the literal pubkey for a `REPLACE_ME` token,
-#     tracked in the phase3-3D Follow-up section.
 #   - .github/workflows/*.yml — this workflow itself, which encodes the
 #     fingerprint patterns in its checker.
+#
+# Note: `config.example.yaml` previously carried a carve-out here because
+# it shipped with the literal pubkey/short_id/server. Wave 25 (Phase 5
+# AOT-1, 2026-05-18) swapped them for REPLACE_ME_* tokens so the file no
+# longer contains any placeholder fingerprint and the allow-list shrank
+# by one entry. See plans/phase5-config-example-aot-prep-2026-05-18.md.
 #
 # Triggers: every push/PR to main + v3.0-prep, matching the same surface
 # as `test.yml`. Workflow_dispatch added so an operator can re-run after
@@ -70,7 +72,7 @@ jobs:
           # header comment above so future agents understand the carve-out
           # justification. Drift between allow-list and rationale is the
           # exact class of bug Phase 3D was meant to kill.
-          ALLOWED='VPNRouter\.Core/Services/PlaceholderDefense\.cs|VPNRouter\.Tests/.+\.cs|plans/.+\.(md|yaml|yml|json)|config\.example\.yaml|\.github/workflows/.+\.yml'
+          ALLOWED='VPNRouter\.Core/Services/PlaceholderDefense\.cs|VPNRouter\.Tests/.+\.cs|plans/.+\.(md|yaml|yml|json)|\.github/workflows/.+\.yml'
 
           # Three fingerprint constants from the v2.32.3 stas-class
           # incident — see PlaceholderDefense.cs KnownFingerprints[0]

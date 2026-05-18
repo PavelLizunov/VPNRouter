@@ -1,8 +1,10 @@
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Serilog;
 using VPNRouter.Core.Interfaces;
+using VPNRouter.Core.Json;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -39,6 +41,18 @@ public class ProfileManager
         MaxDepth = 32,
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
+        // Phase 5 — Wave 25 AOT-2 (2026-05-18): compose the source-gen
+        // context with the reflective fallback. Profile / ProcessRule /
+        // ProfileCollection / ProfileCacheFile are registered in
+        // AppJsonContext so deserialize routes through generated
+        // JsonTypeInfo (AOT-safe, no reflection); any future ad-hoc DTO
+        // shape under this options instance falls through to
+        // DefaultJsonTypeInfoResolver. Phase 6 enables PublishAot which
+        // requires every reachable type to be context-registered — until
+        // then the chain composition keeps existing behaviour intact.
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AppJsonContext.Default,
+            new DefaultJsonTypeInfoResolver()),
     };
 
     private readonly List<IProfileSource> _sources;

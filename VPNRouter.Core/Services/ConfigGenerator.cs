@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+using VPNRouter.Core.Json;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -772,6 +774,15 @@ public static class ConfigGenerator
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        // Phase 5 — Wave 25 AOT-2 (2026-05-18): SingBoxConfig is registered
+        // in AppJsonContext so the generated sing-box JSON serialise/
+        // deserialise routes through compiled JsonTypeInfo (AOT-safe).
+        // The compose-with-fallback chain keeps Phase4StjRoundTripTests
+        // green for the sing-box-check integration path (which also uses
+        // these options to round-trip via JsonSerializer.Deserialize).
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AppJsonContext.Default,
+            new DefaultJsonTypeInfoResolver()),
     };
 
     public static string Serialize(SingBoxConfig config)

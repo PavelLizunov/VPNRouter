@@ -19,8 +19,10 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
+using VPNRouter.Core.Json;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services.UpdateSources;
@@ -250,6 +252,16 @@ public sealed class GitHubReleaseSource : IUpdateSource
     {
         PropertyNameCaseInsensitive = true,
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
+        // Phase 5 — Wave 25 AOT-2 (2026-05-18): GitHubRelease + GitHubAsset +
+        // GitHubRelease[] are registered in AppJsonContext so the GitHub
+        // Releases API parse routes through generated JsonTypeInfo on AOT
+        // builds. Compose with DefaultJsonTypeInfoResolver so callers
+        // passing this options instance for any other DTO (none today)
+        // still work via reflection. Phase 6 retires the reflective
+        // fallback once PublishAot lands.
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AppJsonContext.Default,
+            new DefaultJsonTypeInfoResolver()),
     };
 }
 

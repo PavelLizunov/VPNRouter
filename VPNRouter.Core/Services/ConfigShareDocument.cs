@@ -1,6 +1,8 @@
 #nullable enable
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+using VPNRouter.Core.Json;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -63,6 +65,17 @@ public sealed class ConfigShareDocument
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         PropertyNameCaseInsensitive = true,
+        // Phase 5 — Wave 25 AOT-2 (2026-05-18): ConfigShareDocument is
+        // registered in AppJsonContext (alongside its SubscriptionEntry /
+        // VlessServerEntry sub-trees). Round-trip via source-gen on AOT
+        // builds; reflective fallback handles the ExportedFromInfo /
+        // ExportedSettings / PerAppFilterExport / SubscriptionEntry inner
+        // types in this version (they're reachable through
+        // ConfigShareDocument's compiled JsonTypeInfo so they'll move to
+        // generator-emitted resolvers in the next AOT pass automatically).
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AppJsonContext.Default,
+            new DefaultJsonTypeInfoResolver()),
     };
 
     [JsonPropertyName("schema")]

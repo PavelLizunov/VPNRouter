@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+using VPNRouter.Core.Json;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
@@ -61,6 +63,21 @@ public static class AndroidStorage
     {
         PropertyNameCaseInsensitive = true,
         WriteIndented = false,
+        // Phase 5 — Wave 25 AOT-2 (2026-05-18): SubscriptionEntry +
+        // VlessServerEntry + their List<T> wrappers are registered in
+        // AppJsonContext so the SharedPreferences read/write paths
+        // (GetSubscriptions / SetSubscriptions / GetServers / SetServers)
+        // route through generated JsonTypeInfo on AOT builds. The
+        // AndroidStorage.ServerTestResultDto + CustomCategory shapes are
+        // NOT registered in Core (they live in Android-only code or, in
+        // CustomCategory's case, would pull a too-wide dependency without
+        // a clear win) so the reflective fallback handles them today.
+        // Phase 6 candidate: add a sibling Android-side AndroidJsonContext
+        // partial to register the Android-only ServerTestResultDto, then
+        // wire that resolver into this same chain.
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AppJsonContext.Default,
+            new DefaultJsonTypeInfoResolver()),
     };
 
     // Phase 1.F
