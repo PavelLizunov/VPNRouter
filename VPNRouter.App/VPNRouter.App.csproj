@@ -28,15 +28,34 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
-    <!-- v2.20.5: direct SkiaSharp reference (it's already pulled transitively
-         via Avalonia.Skia 2.88.9) so we can call SKGraphics.SetFontCacheLimit
-         and SKGraphics.PurgeAllCaches from MainWindowViewModel. -->
-    <PackageReference Include="SkiaSharp" Version="2.88.9" />
-    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.12">
+    <!-- Wave 12 Phase 3 (2026-05-18) — Avalonia 11.3.12 -> 12.0.3 bump.
+         12.x targets SkiaSharp 3.0 transitively (dropped 2.88 support) and
+         the text shaper is now decoupled from the renderer (UseSkia no
+         longer implies HarfBuzz). For our case UsePlatformDetect() is used
+         in Program.BuildAvaloniaApp so HarfBuzz wiring happens automatically
+         on real launches; we add Avalonia.HarfBuzz explicitly so the
+         transitive graph is deterministic and TestAppBuilder's explicit
+         UseSkia chain composes the same way. -->
+    <PackageReference Include="Avalonia" Version="12.0.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.0.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.3" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.3" />
+    <PackageReference Include="Avalonia.HarfBuzz" Version="12.0.3" />
+    <!-- v2.20.5: direct SkiaSharp reference so we can call
+         SKGraphics.SetFontCacheLimit/SetFontCacheCountLimit from
+         App.axaml.cs. Bumped 2.88.9 -> 3.119.4-preview.1.1 to match Avalonia
+         12.0.3's transitive Avalonia.Skia 12 -> SkiaSharp 3 graph (Avalonia
+         12.0.3 pins SkiaSharp >= 3.119.4-preview.1.1 specifically; a lower
+         stable version trips NU1605 downgrade-detected). API surface used
+         (SKGraphics statics) is unchanged across the 2 -> 3 jump. -->
+    <PackageReference Include="SkiaSharp" Version="3.119.4-preview.1.1" />
+    <!-- Avalonia 12 renamed the diagnostics package to
+         AvaloniaUI.DiagnosticsSupport (separate side-cart on its own version
+         track — 2.x). The attach helper changed from AttachDevTools to
+         AttachDeveloperTools. We don't actually call it in App.axaml.cs
+         (Avalonia auto-attaches in Debug when the package is referenced),
+         so the rename is package-only here. -->
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.1">
       <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>

@@ -1,11 +1,17 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.Views;
+// Wave 12 Phase 3 (2026-05-18) — Avalonia 12 made the data annotations
+// validation plugin disabled-by-default and Avalonia.Data.Core.Plugins
+// internal. The pre-12 code below used to remove the plugin from
+// BindingPlugins.DataValidators to avoid double-error messages from
+// CommunityToolkit.Mvvm + DataAnnotations. With 12 the plugin is off
+// out of the box so we drop the entire BindingPlugins block. No
+// behavioural change because the plugin isn't running in either world.
 
 namespace VPNRouter.App;
 
@@ -38,11 +44,13 @@ public partial class App : Application
             }
             catch { /* SkiaSharp native load failures aren't fatal; UI still renders */ }
 
-            // Remove Avalonia data annotation validation
-            var toRemove = BindingPlugins.DataValidators
-                .OfType<DataAnnotationsValidationPlugin>().ToArray();
-            foreach (var plugin in toRemove)
-                BindingPlugins.DataValidators.Remove(plugin);
+            // Wave 12 Phase 3 (2026-05-18): the pre-12 BindingPlugins.DataValidators
+            // de-registration of DataAnnotationsValidationPlugin lived here; in
+            // Avalonia 12 the plugin is disabled by default and the plugins
+            // collection is internal (CommunityToolkit.Mvvm + Avalonia 12 use
+            // INotifyDataErrorInfo directly, no double-error problem). See
+            // https://docs.avaloniaui.net/docs/avalonia12-breaking-changes for
+            // the data-validation overhaul.
 
             // v2.22.0-r1: detect "update attempted but didn't land".
             // Logs a warning to the app log + (v2.29.0-r7+) hands it to

@@ -1,5 +1,7 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Styling;
 using VPNRouter.App.ViewModels;
 using VPNRouter.App.Views.Pages;
 
@@ -85,6 +87,20 @@ public class VisualDiffTests
         }
 
         page.DataContext = GetVm();
+
+        // Wave 12 Phase 3 (2026-05-18) — Avalonia 12 changed
+        // RequestedThemeVariant="Default" semantics: pre-12 the headless
+        // platform fell back to Light when no OS theme was readable; in 12
+        // the platform actually queries the host OS theme (which on this
+        // VM happens to be Dark). The baselines were captured in Light, so
+        // we force the variant before each diff to keep them stable. Real
+        // launches still respect user setting via MainWindowViewModel
+        // .ApplyTheme(); this only affects deterministic-fixture diffing.
+        if (Application.Current is { } app)
+        {
+            app.RequestedThemeVariant = ThemeVariant.Light;
+        }
+
         var actualPath = ScreenshotHelper.CapturePage(page, name, width, height);
 
         var diff = VisualDiffHelper.Compare(baselinePath, actualPath);

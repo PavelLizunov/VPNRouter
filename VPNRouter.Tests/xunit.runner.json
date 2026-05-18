@@ -1,0 +1,6 @@
+{
+  "$schema": "https://xunit.net/schema/v3/xunit.runner.schema.json",
+  "_comment_": "Wave 12 Phase 3 (2026-05-18): pre-xUnit-v3 the test suite ran with class-level parallelism by default; v3 enables finer-grained collection parallelism that breaks tests sharing %ProgramData%\\VPNRouter\\config.yaml (SettingsLoaderRobustnessTests, MainWindowViewModelAppsModeTests, etc.). Disabling parallelization keeps the harness behavior aligned with the pre-bump suite — same as our headless tests already needed sequential dispatcher-thread access.",
+  "parallelizeAssembly": false,
+  "parallelizeTestCollections": false
+}

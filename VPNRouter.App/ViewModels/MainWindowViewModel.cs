@@ -3,6 +3,11 @@ using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+// Wave 12 Phase 3 (2026-05-18) — Avalonia 12 moved IClipboard.SetTextAsync /
+// TryGetTextAsync into the ClipboardExtensions static class in
+// Avalonia.Input.Platform. The legacy direct methods on IClipboard are gone;
+// add this using so the extension-method dispatch resolves.
+using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;

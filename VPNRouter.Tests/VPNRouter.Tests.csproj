@@ -12,6 +12,14 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+
+    <!-- Wave 12 Phase 3 (2026-05-18) — xUnit v3 migration (Avalonia 12.x
+         requires Avalonia.Headless.XUnit -> xunit.v3.extensibility.core).
+         xUnit v3 turns test projects into standalone executables rather
+         than libraries that depend on an external test runner. The runner
+         is embedded into the assembly itself; `dotnet test` still works
+         (VSTest adapter ships in xunit.runner.visualstudio 3.x). -->
+    <OutputType>Exe</OutputType>
   </PropertyGroup>
 
   <!-- v3.0 Phase 2G (sub-wave 7b-1, 2026-05-18): mirror Core's PLATFORM_WINDOWS
@@ -25,20 +33,37 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="6.0.0" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
-    <PackageReference Include="xunit" Version="2.5.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <!-- Wave 12 Phase 3 (2026-05-18) — xUnit v2.5.3 -> xUnit.v3 3.2.x.
+         Required by Avalonia.Headless.XUnit 12 which depends on
+         xunit.v3.extensibility.core (>= 3.2.2). The v3 package is
+         xunit.v3 (a metapackage) rather than xunit; assertion + attribute
+         shape stays mostly the same ([Fact]/[Theory]/Assert.* etc.) but
+         the project becomes an Exe (see OutputType above). -->
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
 
     <!-- Avalonia headless testing: lets us instantiate Window/ViewModel and
          drive them from xUnit without a display. Required for dev-loop GUI
-         testing on CI and in the VM shell. Pinned to the same 11.3.12 as App. -->
-    <PackageReference Include="Avalonia.Headless" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Headless.XUnit" Version="11.3.12" />
+         testing on CI and in the VM shell. Bumped to 12.0.3 in lockstep
+         with App + Android. -->
+    <PackageReference Include="Avalonia.Headless" Version="12.0.3" />
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.0.3" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!-- Wave 12 Phase 3 (2026-05-18) — xUnit v3 needs xunit.runner.json copied
+       into the test bin so its parallelization settings are picked up at
+       runtime. The pre-v3 suite ran with default class-level parallelism and
+       passed; v3 changed default scoping which now races over shared
+       %ProgramData%\VPNRouter\config.yaml. Disabling parallelization here
+       keeps test behavior aligned with the pre-bump baseline. -->
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

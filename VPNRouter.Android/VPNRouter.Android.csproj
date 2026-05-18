@@ -92,9 +92,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Avalonia for Android. Same version as desktop App. Note:
-         Avalonia.Android pulls in System.Net.WebSockets, System.IO.Pipelines,
-         and the Mono Android runtime by transitive dependency. -->
+    <!-- Wave 12 Phase 3 (2026-05-18) — Android stays on Avalonia 11.3.12
+         while desktop (App + Tests) moves to 12.0.3.
+         RATIONALE: Avalonia.Android 12.0.3 only ships net10.0-android36.0;
+         this project targets net8.0-android34.0. Bumping to .NET 10 is a
+         separate v3.0 Phase 4 task because it pulls in NDK r27+ + SDK 36
+         + Android Gradle Plugin 8.7 + a full Mono Android workload bump.
+         Source-linked VPNRouter.Core compiles fine against both Avalonia
+         majors (no Avalonia surface change in the linked Core branches).
+         See plans/phase3-3A-avalonia-12-2026-05-18.md "Follow-up" for the
+         deferral note. Tracked as Phase 4 task: ph4-android-net10. -->
     <PackageReference Include="Avalonia" Version="11.3.12" />
     <PackageReference Include="Avalonia.Android" Version="11.3.12" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />

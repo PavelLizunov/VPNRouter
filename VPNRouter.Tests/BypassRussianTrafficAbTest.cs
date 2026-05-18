@@ -2,7 +2,9 @@ using System.Collections.Generic;
 using System.Linq;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
-using Xunit.Abstractions;
+// Wave 12 Phase 3 (2026-05-18): xUnit v3 moved ITestOutputHelper from
+// Xunit.Abstractions (now internal) into the main Xunit namespace.
+using Xunit;
 
 namespace VPNRouter.Tests;
 
