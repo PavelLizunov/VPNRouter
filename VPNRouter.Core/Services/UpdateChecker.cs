@@ -68,6 +68,26 @@ public class UpdateChecker : IDesktopInstaller
         _stagingDir = Path.Combine(AppPaths.DataDir, "update-staging");
     }
 
+    /// <summary>
+    /// Legacy update-check entry point that returns a <see cref="UpdateInfo"/>
+    /// (lite-update aware) shape. Phase 4 (Wave 18, 2026-05-18) migrated all
+    /// three callers — <see cref="UpdateNotificationViewModel"/> desktop toast,
+    /// <c>TestUpdateCommand</c> CI smoke, <c>VPNRouter.Android.AndroidUpdater</c>
+    /// sideload — onto <see cref="IUpdateSource.CheckAsync"/> which returns
+    /// the platform-neutral <see cref="UpdateSourceInfo"/>. This method
+    /// stays alive solely because <see cref="GitHubReleaseSource"/> /
+    /// <c>SideloadSource</c> still need the legacy SHA + lite-asset
+    /// fallback path under the hood, and the <see cref="UpdateChecker"/>
+    /// itself implements <see cref="IDesktopInstaller"/> + lite-update
+    /// detection logic. Sole approved suppression: inside
+    /// <see cref="UpdateChecker"/> itself when adapting between the two
+    /// info shapes. Phase 5 retires this surface after the obsolete
+    /// warning period passes + no external callers remain.
+    /// </summary>
+    [Obsolete(
+        "Use IUpdateSource.CheckAsync via PlatformServices.CreateUpdateSource. " +
+        "UpdateChecker stays as the IDesktopInstaller adapter until Phase 5 retirement.",
+        error: false)]
     public async Task<UpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_settings.GitHubRepo))

@@ -287,7 +287,13 @@ public partial class AndroidApp : Avalonia.Application
     private TextBlock? _updateBannerSubtitle;
     private Avalonia.Controls.Button? _updateBannerAction;
     private Avalonia.Controls.Button? _updateBannerDismiss;
-    private AndroidUpdateInfo? _pendingUpdate;
+    // Phase 4 (Wave 18, 2026-05-18) — pending-update snapshot is now the
+    // platform-neutral UpdateSourceInfo record (returned by
+    // IUpdateSource.CheckAsync) instead of the Android-only legacy
+    // AndroidUpdateInfo. AndroidUpdater still lives but only as a host
+    // for permission-gate static helpers + the APK download primitives
+    // that AndroidInstallerAdapter wraps.
+    private global::VPNRouter.Core.Services.UpdateSources.UpdateSourceInfo? _pendingUpdate;
     private string? _downloadedApkPath;
     private bool _updateInFlight; // guard against double-tap during async ops
 

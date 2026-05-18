@@ -4,7 +4,9 @@ using Spectre.Console.Cli;
 using System.ComponentModel;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.UpdateSources;
 
 namespace VPNRouter.CLI.Commands;
 
@@ -18,6 +20,12 @@ namespace VPNRouter.CLI.Commands;
 // no automated test exercised the helper.cmd cmd.exe path — unit tests
 // only see the C# string template, not the runtime parser. This command
 // is the entry point for integration tests that drive the real helper.
+//
+// Phase 4 (Wave 18, 2026-05-18): migrated from UpdateChecker.CheckForUpdateAsync
+// to IUpdateSource.CheckAsync — same GitHub API + asset pick + version
+// compare flow underneath, but routed through the platform-neutral
+// IUpdateSource contract that the rest of v3.0 uses. UpdateChecker still
+// owns the staging + helper.cmd dispatch via IDesktopInstaller.
 
 public class TestUpdateSettings : CommandSettings
 {
@@ -73,7 +81,16 @@ public class TestUpdateCommand : AsyncCommand<TestUpdateSettings>
             Channel = "experimental",
         };
 
+        // Phase 4 migration — UpdateChecker stays as the IDesktopInstaller
+        // adapter (staging + helper.cmd dispatch) and supplies the legacy
+        // event stream we log here. The new entry point is IUpdateSource;
+        // it shares the same UpdateChecker instance under the hood.
         var checker = new UpdateChecker(updateSettings, AppVersion.Version);
+        var source = PlatformServices.CreateUpdateSource(
+            updateSettings,
+            AppVersion.Version,
+            PolicyHttpClient.Shared,
+            desktopInstaller: checker);
         checker.StatusChanged += s => Log.Information("[update] {Status}", s);
         var lastLoggedPercent = -1;
         checker.DownloadProgress += p =>
@@ -87,6 +104,7 @@ public class TestUpdateCommand : AsyncCommand<TestUpdateSettings>
         };
 
         string extractedDir;
+        UpdateSourceInfo? info = null;
 
         if (!string.IsNullOrEmpty(settings.StagedDir))
         {
@@ -100,14 +118,13 @@ public class TestUpdateCommand : AsyncCommand<TestUpdateSettings>
         }
         else
         {
-            UpdateInfo? info;
             try
             {
-                info = await checker.CheckForUpdateAsync();
+                info = await source.CheckAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "CheckForUpdateAsync threw");
+                Log.Error(ex, "IUpdateSource.CheckAsync threw");
                 return 4;
             }
 
@@ -122,46 +139,60 @@ public class TestUpdateCommand : AsyncCommand<TestUpdateSettings>
                 return 5;
             }
 
-            Log.Information("Update found: {Latest} ({Mb} MB, lite={Lite})",
-                info.LatestVersion,
-                info.SizeBytes / 1024 / 1024,
-                info.HasLiteUpdate);
+            Log.Information("Update found: {Latest} ({Mb} MB, source={Src})",
+                info.Version,
+                info.AssetSize / 1024 / 1024,
+                source.SourceId);
 
-            if (!string.Equals(info.LatestVersion, settings.TargetVersion, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(info.Version, settings.TargetVersion, StringComparison.OrdinalIgnoreCase))
             {
                 Log.Error(
                     "Latest published version {Latest} != requested target {Target}. " +
                     "Either the workflow polled prematurely, or the wrong release was tagged.",
-                    info.LatestVersion, settings.TargetVersion);
+                    info.Version, settings.TargetVersion);
                 return 6;
             }
 
             try
             {
-                extractedDir = await checker.DownloadAndStageAsync(info);
+                extractedDir = await source.DownloadAsync(info).ConfigureAwait(false);
                 Log.Information("Downloaded + extracted to: {Dir}", extractedDir);
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "DownloadAndStageAsync failed");
+                Log.Error(ex, "IUpdateSource.DownloadAsync failed");
                 return 7;
             }
         }
 
         try
         {
-            // ApplyUpdate writes helper.cmd to %TEMP%, launches it detached,
+            // ApplyAsync writes helper.cmd to %TEMP%, launches it detached,
             // and returns immediately. The helper waits for THIS process
             // (the CLI) to exit before doing the file copy. So we exit
             // promptly — the CI workflow then polls update.log for completion.
-            checker.ApplyUpdate(extractedDir);
-            Log.Information("ApplyUpdate dispatched. helper.cmd will run after this process exits.");
+            //
+            // When --staged-dir was supplied we don't have a real
+            // UpdateSourceInfo; synthesize a minimal one with the target
+            // version so the installer logs receipt with the correct
+            // version stamp.
+            info ??= new UpdateSourceInfo(
+                Version: settings.TargetVersion,
+                ReleaseUrl: string.Empty,
+                AssetName: $"VPNRouter-v{settings.TargetVersion}-win.zip",
+                DownloadUrl: string.Empty,
+                AssetSize: 0,
+                AssetSha256: null,
+                IsPrerelease: false,
+                ReleaseNotes: string.Empty);
+            await source.ApplyAsync(info, extractedDir).ConfigureAwait(false);
+            Log.Information("ApplyAsync dispatched. helper.cmd will run after this process exits.");
             Log.Information("CI workflow should now poll {Log} for 'helper done' or fail patterns.",
                 Path.Combine(AppPaths.LogsDir, "update.log"));
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "ApplyUpdate threw");
+            Log.Error(ex, "IUpdateSource.ApplyAsync threw");
             return 8;
         }
 

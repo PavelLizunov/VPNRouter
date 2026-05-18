@@ -1,3 +1,11 @@
+// Phase 4 (Wave 18, 2026-05-18) — Android auto-update plumbing now drives
+// IUpdateSource (SideloadSource concrete) instead of calling static
+// AndroidUpdater methods. AndroidUpdater stays alive for the
+// platform-specific permission gates (CanRequestInstall /
+// RequestInstallPermission) + low-level APK download helpers that the
+// AndroidInstallerAdapter wraps onto IAndroidInstaller. Brief:
+// plans/phase4-iupdatesource-callers-2026-05-18.md.
+
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -7,6 +15,11 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Orientation = Avalonia.Layout.Orientation;
+using VPNRouter.Core;
+using VPNRouter.Core.Models;
+using VPNRouter.Core.Platform;
+using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.UpdateSources;
 
 namespace VPNRouter.Android;
 
@@ -16,21 +29,30 @@ namespace VPNRouter.Android;
 /// it drives. Sits in a partial class so the (already huge) main
 /// <c>AndroidApp.axaml.cs</c> doesn't grow further.
 ///
+/// <para>Phase 4 (Wave 18, 2026-05-18): migrated from static
+/// <see cref="AndroidUpdater"/> calls to <see cref="IUpdateSource"/>
+/// (concrete <see cref="SideloadSource"/>). The Android permission
+/// gates (<c>CanRequestInstall</c> / <c>RequestInstallPermission</c>)
+/// stay as static helpers on <see cref="AndroidUpdater"/> — those are
+/// platform-only and don't belong on the cross-platform contract.</para>
+///
 /// <para>Flow:</para>
 /// <list type="number">
 ///   <item>User taps kebab > Diagnostics > "Check for updates" or
 ///   Settings > Updates > "Check for updates" → both call
 ///   <see cref="RunUpdateCheckAsync"/>.</item>
-///   <item><see cref="AndroidUpdater.CheckAsync"/> hits GitHub, returns
-///   <c>AndroidUpdateInfo?</c>.</item>
+///   <item><see cref="IUpdateSource.CheckAsync"/> hits GitHub, returns
+///   <see cref="UpdateSourceInfo"/>?.</item>
 ///   <item>Result null → "you're up to date" toast via the kebab
 ///   feedback banner. Result non-null → <see cref="PromptUpdateAvailable"/>
 ///   surfaces the persistent update banner above the config row.</item>
 ///   <item>User taps "Download" → <see cref="DownloadAndInstallAsync"/>
-///   streams the APK with progress, then calls
-///   <see cref="AndroidUpdater.BeginInstall"/>. If the system blocks
-///   for missing <c>REQUEST_INSTALL_PACKAGES</c>, banner flips to
-///   "Allow" → opens Settings deep-link.</item>
+///   streams the APK with progress via
+///   <see cref="IUpdateSource.DownloadAsync"/> (SHA256-verified inside
+///   the source before return), then calls
+///   <see cref="IUpdateSource.ApplyAsync"/>. If the system blocks for
+///   missing <c>REQUEST_INSTALL_PACKAGES</c>, banner flips to "Allow"
+///   → opens Settings deep-link via <see cref="AndroidUpdater.RequestInstallPermission"/>.</item>
 ///   <item>User grants → returns to app → on next manual tap of
 ///   "Install" the system PackageInstaller dialog opens, user
 ///   confirms, OS swaps the APK, app restarts on the new version.</item>
@@ -38,6 +60,44 @@ namespace VPNRouter.Android;
 /// </summary>
 public partial class AndroidApp
 {
+    /// <summary>
+    /// Lazily-built sideload <see cref="IUpdateSource"/> reflecting the
+    /// current persisted update channel. Rebuilt when the channel flips
+    /// (stable ↔ experimental) so the prerelease gate stays in sync.
+    /// </summary>
+    private IUpdateSource? _updateSource;
+
+    /// <summary>Channel snapshot used to build <see cref="_updateSource"/>.
+    /// Tracked so we know when to discard + rebuild.</summary>
+    private string? _updateSourceChannel;
+
+    /// <summary>
+    /// Build (or rebuild) <see cref="_updateSource"/> from the current
+    /// persisted channel. Returns the live instance.
+    /// </summary>
+    private IUpdateSource GetOrBuildUpdateSource()
+    {
+        var channel = AndroidStorage.GetUpdateChannel();
+        if (_updateSource is not null &&
+            string.Equals(_updateSourceChannel, channel, StringComparison.Ordinal))
+        {
+            return _updateSource;
+        }
+
+        var settings = new UpdateSettings
+        {
+            GitHubRepo = "PavelLizunov/VPNRouter",
+            Channel = channel,
+        };
+        _updateSource = PlatformServices.CreateUpdateSource(
+            settings,
+            AppVersion.Version,
+            PolicyHttpClient.Shared,
+            androidInstaller: new AndroidInstallerAdapter());
+        _updateSourceChannel = channel;
+        return _updateSource;
+    }
+
     /// <summary>
     /// Build the always-present-but-hidden update-banner Border + its
     /// children. Inserted into the inner stack at app-init time and
@@ -119,7 +179,7 @@ public partial class AndroidApp
     }
 
     /// <summary>
-    /// Hit GitHub via <see cref="AndroidUpdater.CheckAsync"/> using the
+    /// Hit GitHub via <see cref="IUpdateSource.CheckAsync"/> using the
     /// channel pulled from <see cref="AndroidStorage.GetUpdateChannel"/>.
     /// Surfaces "checking…" / "up to date" / error in the kebab feedback
     /// banner; if a newer release exists, calls
@@ -137,8 +197,8 @@ public partial class AndroidApp
 
         try
         {
-            var channel = AndroidStorage.GetUpdateChannel();
-            var info = await AndroidUpdater.CheckAsync(channel).ConfigureAwait(false);
+            var source = GetOrBuildUpdateSource();
+            var info = await source.CheckAsync().ConfigureAwait(false);
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 if (info is null)
@@ -165,17 +225,17 @@ public partial class AndroidApp
     /// <summary>
     /// Surface the persistent banner with version + size + Download
     /// button. Caches <paramref name="info"/> so the subsequent action
-    /// click can pass it to <see cref="AndroidUpdater.DownloadApkAsync"/>.
+    /// click can pass it to <see cref="IUpdateSource.DownloadAsync"/>.
     /// </summary>
-    private void PromptUpdateAvailable(AndroidUpdateInfo info)
+    private void PromptUpdateAvailable(UpdateSourceInfo info)
     {
         _pendingUpdate = info;
         _downloadedApkPath = null;
         if (_updateBannerTitle is not null)
         {
-            var sizeMb = info.SizeBytes / 1024.0 / 1024.0;
+            var sizeMb = info.AssetSize / 1024.0 / 1024.0;
             _updateBannerTitle.Text = string.Format(Localization.UpdateBannerTitle,
-                info.LatestVersion, sizeMb);
+                info.Version, sizeMb);
         }
         if (_updateBannerSubtitle is not null)
         {
@@ -260,13 +320,17 @@ public partial class AndroidApp
             if (_updateBannerAction is not null) _updateBannerAction.IsEnabled = false;
             if (_updateBannerSubtitle is not null) _updateBannerSubtitle.IsVisible = false;
 
-            var progress = new Progress<int>(p =>
+            var progress = new Progress<DownloadProgress>(p =>
             {
                 if (_updateBannerTitle is not null)
-                    _updateBannerTitle.Text = string.Format(Localization.UpdateDownloading, p);
+                {
+                    var pct = p.Percent ?? 0;
+                    _updateBannerTitle.Text = string.Format(Localization.UpdateDownloading, pct);
+                }
             });
 
-            var apkPath = await AndroidUpdater.DownloadApkAsync(info, progress).ConfigureAwait(false);
+            var source = GetOrBuildUpdateSource();
+            var apkPath = await source.DownloadAsync(info, progress).ConfigureAwait(false);
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -329,15 +393,50 @@ public partial class AndroidApp
             return;
         }
 
-        if (!AndroidUpdater.BeginInstall(_downloadedApkPath))
+        var info = _pendingUpdate;
+        if (info is null)
+            return;
+
+        _ = LaunchInstallAsync(info, _downloadedApkPath);
+    }
+
+    /// <summary>
+    /// Fire-and-forget wrapper around <see cref="IUpdateSource.ApplyAsync"/>
+    /// — we don't await the result inline because the banner stays
+    /// visible while the system PackageInstaller dialog drives the
+    /// rest of the flow asynchronously. If the dispatch fails (rare —
+    /// missing permission usually surfaces via CanRequestInstall above)
+    /// we flip the banner to Retry state.
+    /// </summary>
+    private async Task LaunchInstallAsync(UpdateSourceInfo info, string apkPath)
+    {
+        try
         {
-            if (_updateBannerTitle is not null)
-                _updateBannerTitle.Text = Localization.UpdateInstallLaunchFailed;
-            if (_updateBannerAction is not null)
-                _updateBannerAction.Content = Localization.UpdateButtonRetry;
+            var source = GetOrBuildUpdateSource();
+            var dispatched = await source.ApplyAsync(info, apkPath).ConfigureAwait(false);
+            if (!dispatched)
+            {
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    if (_updateBannerTitle is not null)
+                        _updateBannerTitle.Text = Localization.UpdateInstallLaunchFailed;
+                    if (_updateBannerAction is not null)
+                        _updateBannerAction.Content = Localization.UpdateButtonRetry;
+                }).GetTask().ConfigureAwait(false);
+            }
+            // BeginInstall succeeded → system installer dialog is up. Leave
+            // the banner alone; if user cancels the install they can re-tap.
         }
-        // BeginInstall succeeded → system installer dialog is up. Leave
-        // the banner alone; if user cancels the install they can re-tap.
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (_updateBannerTitle is not null)
+                    _updateBannerTitle.Text = string.Format(Localization.UpdateDownloadFailed, ex.Message);
+                if (_updateBannerAction is not null)
+                    _updateBannerAction.Content = Localization.UpdateButtonRetry;
+            }).GetTask().ConfigureAwait(false);
+        }
     }
 
     private void OnUpdateBannerDismissClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

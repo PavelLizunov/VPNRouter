@@ -1,3 +1,13 @@
+// Phase 4 (Wave 18, 2026-05-18) — UpdateNotificationViewModel now drives
+// IUpdateSource.CheckAsync / DownloadAsync / ApplyAsync directly instead
+// of the legacy UpdateChecker.CheckForUpdateAsync flow. The underlying
+// UpdateChecker stays alive as the IDesktopInstaller adapter (download
+// staging + helper.cmd dispatch + StatusChanged / DownloadProgress
+// events) — only the entry-point surface migrates. Brief:
+// plans/phase4-iupdatesource-callers-2026-05-18.md.
+
+#nullable enable
+
 using System;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -6,21 +16,30 @@ using CommunityToolkit.Mvvm.Input;
 using Serilog;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.UpdateSources;
 using VPNRouter.App.Localization;
 
 namespace VPNRouter.App.ViewModels;
 
 /// <summary>
 /// Manages auto-update UI: background check on startup, manual check link,
-/// download progress, and apply-and-restart flow. Cross-platform — wraps
-/// VPNRouter.Core.Services.UpdateChecker which handles win/mac asset selection.
+/// download progress, and apply-and-restart flow. Cross-platform — drives
+/// the platform-appropriate <see cref="IUpdateSource"/> built by
+/// <see cref="PlatformServices.CreateUpdateSource"/>. The desktop
+/// <see cref="UpdateChecker"/> still owns the staging + helper.cmd / ditto
+/// / pkexec dispatch under <see cref="IDesktopInstaller"/>; this VM just
+/// listens to its <see cref="UpdateChecker.StatusChanged"/> /
+/// <see cref="UpdateChecker.DownloadProgress"/> event surface for UI
+/// feedback while the source drives the lifecycle.
 /// </summary>
 public partial class UpdateNotificationViewModel : ObservableObject
 {
     private readonly UpdateSettings _settings;
     private readonly ILogger _logger;
     private readonly UpdateChecker _updateChecker;
+    private readonly IUpdateSource _updateSource;
 
     [ObservableProperty] private bool _isVisible;
     [ObservableProperty] private string _message = string.Empty;
@@ -56,7 +75,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
 
     [ObservableProperty] private bool _isChecking;
 
-    private UpdateInfo? _pendingUpdate;
+    private UpdateSourceInfo? _pendingUpdate;
 
     // v2.22.2-r2: race guard. StatusChanged posts to the UI thread async;
     // if the download throws mid-flight, the catch-block's "Update failed"
@@ -66,14 +85,45 @@ public partial class UpdateNotificationViewModel : ObservableObject
     // error message makes the status handler drop late-arriving posts.
     private volatile bool _errorLocked;
 
+    /// <summary>
+    /// Production ctor — builds the platform-appropriate
+    /// <see cref="IUpdateSource"/> via
+    /// <see cref="PlatformServices.CreateUpdateSource"/> with the desktop
+    /// <see cref="UpdateChecker"/> wired in as the
+    /// <see cref="IDesktopInstaller"/> adapter.
+    /// </summary>
     public UpdateNotificationViewModel(UpdateSettings settings, ILogger logger)
+        : this(settings, logger, updateSource: null)
+    {
+    }
+
+    /// <summary>
+    /// Test / DI ctor — caller supplies a custom
+    /// <see cref="IUpdateSource"/> (typically <c>FakeUpdateSource</c> in
+    /// tests). When <paramref name="updateSource"/> is null, the
+    /// production wiring path is used.
+    /// </summary>
+    public UpdateNotificationViewModel(UpdateSettings settings, ILogger logger, IUpdateSource? updateSource)
     {
         _settings = settings;
         _logger = logger;
         _updateChecker = new UpdateChecker(settings, AppVersion.Version);
+        _updateSource = updateSource ?? PlatformServices.CreateUpdateSource(
+            settings,
+            AppVersion.Version,
+            PolicyHttpClient.Shared,
+            desktopInstaller: _updateChecker);
+
         // v2.30.7-r3 — _checkLinkText init removed; CheckLinkText is now
         // a computed property that derives from CheckState + current Strings.
 
+        // UpdateChecker still raises these events while wired in as the
+        // IDesktopInstaller adapter (GitHubReleaseSource.DownloadAsync
+        // delegates to UpdateChecker.DownloadAndStageAsync under the hood,
+        // which fires StatusChanged/DownloadProgress mid-flight). The VM
+        // listens here so the UI banner stays in lock-step with byte-level
+        // progress + status transitions without the source contract
+        // needing its own event surface.
         _updateChecker.DownloadProgress += progress =>
             Dispatcher.UIThread.Post(() => { if (!_errorLocked) DownloadProgress = progress; });
 
@@ -90,7 +140,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
         try
         {
             _updateChecker.CleanupStagingDir();
-            var info = await _updateChecker.CheckForUpdateAsync();
+            var info = await _updateSource.CheckAsync().ConfigureAwait(false);
             if (info != null)
             {
                 _pendingUpdate = info;
@@ -113,7 +163,7 @@ public partial class UpdateNotificationViewModel : ObservableObject
         CheckState = UpdateCheckState.Checking;
         try
         {
-            var info = await _updateChecker.CheckForUpdateAsync();
+            var info = await _updateSource.CheckAsync().ConfigureAwait(false);
             if (info != null)
             {
                 _pendingUpdate = info;
@@ -142,8 +192,12 @@ public partial class UpdateNotificationViewModel : ObservableObject
     private void ShowUpdateNotification()
     {
         if (_pendingUpdate == null) return;
-        var sizeMb = (_pendingUpdate.HasLiteUpdate ? _pendingUpdate.LiteSizeBytes : _pendingUpdate.SizeBytes) / 1024.0 / 1024.0;
-        Message = string.Format(Strings.UpdateAvailableMessage, _pendingUpdate.LatestVersion, sizeMb);
+        // Phase 4 migration: UpdateSourceInfo carries only the full asset
+        // size (no lite-update fork). Lite-update is a legacy desktop
+        // optimization that lives behind the IDesktopInstaller adapter;
+        // the user-facing banner just reports the published asset size.
+        var sizeMb = _pendingUpdate.AssetSize / 1024.0 / 1024.0;
+        Message = string.Format(Strings.UpdateAvailableMessage, _pendingUpdate.Version, sizeMb);
         IsVisible = true;
     }
 
@@ -159,7 +213,12 @@ public partial class UpdateNotificationViewModel : ObservableObject
 
         try
         {
-            var extractedDir = await _updateChecker.DownloadAndStageAsync(_pendingUpdate);
+            // IUpdateSource exposes byte-percent progress via IProgress<DownloadProgress>;
+            // the existing UpdateChecker.DownloadProgress event already gives us
+            // throttled int-percent updates so we don't need a second sink. Keeping
+            // the null progress arg lets GitHubReleaseSource.DownloadAsync skip the
+            // extra delegate hop and rely on the legacy event stream.
+            var extractedDir = await _updateSource.DownloadAsync(_pendingUpdate, progress: null).ConfigureAwait(false);
 
             Message = Strings.UpdateApplying;
 
@@ -177,11 +236,11 @@ public partial class UpdateNotificationViewModel : ObservableObject
             try { OrphanCleanup.KillOrphans(logger: null, respectTunLock: false); } catch { }
 
             // Apply (replaces files, may rename locked exe to .bak)
-            _updateChecker.ApplyUpdate(extractedDir);
+            await _updateSource.ApplyAsync(_pendingUpdate, extractedDir).ConfigureAwait(false);
 
             Message = Strings.UpdateRestarting;
 
-            // ApplyUpdate already launched the new exe — just exit gracefully
+            // ApplyAsync already launched the new exe — just exit gracefully
             Environment.Exit(0);
         }
         catch (Exception ex)

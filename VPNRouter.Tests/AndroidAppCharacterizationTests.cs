@@ -49,16 +49,25 @@ namespace VPNRouter.Tests;
 public class AndroidAppCharacterizationTests
 {
     /// <summary>
-    /// Source-derived member-set hash, captured 2026-05-18 against the
-    /// pre-Phase-2C 7,177-LOC monolith (single <c>AndroidApp.axaml.cs</c>
-    /// file holding all god-class members + 9 sibling partials).
-    /// Wave 9 must preserve this hash across all 4 partial-class
-    /// extractions: <c>AndroidApp.Notifications.cs</c>,
-    /// <c>AndroidApp.Permissions.cs</c>, <c>AndroidApp.VpnLifecycle.cs</c>,
-    /// <c>AndroidApp.UiBindings.cs</c>.
+    /// Source-derived member-set hash. Re-pinned 2026-05-18 for Phase 4
+    /// (Wave 18) <c>IUpdateSource</c> caller migration, which intentionally
+    /// reshaped <c>AndroidApp.AutoUpdate.cs</c>:
+    /// <list type="bullet">
+    ///   <item><c>_pendingUpdate</c> field type changed from
+    ///   <c>AndroidUpdateInfo?</c> to
+    ///   <c>UpdateSourceInfo?</c> (platform-neutral record).</item>
+    ///   <item>Added <c>_updateSource</c> + <c>_updateSourceChannel</c>
+    ///   private fields caching the channel-keyed
+    ///   <c>IUpdateSource</c>.</item>
+    ///   <item>Added <c>GetOrBuildUpdateSource</c> + <c>LaunchInstallAsync</c>
+    ///   private methods; <c>PromptUpdateAvailable</c> signature changed
+    ///   to take <c>UpdateSourceInfo</c>.</item>
+    /// </list>
+    /// Pre-Phase 4 (Wave 9) hash was
+    /// <c>98061071858cefdc384be4f69e109f0f4b3d31aaa4c0158d0386fd22a6bb219f</c>.
     /// </summary>
     private const string PinnedHash =
-        "98061071858cefdc384be4f69e109f0f4b3d31aaa4c0158d0386fd22a6bb219f";
+        "a9a2a0a88c577f6933276702657a8ce755c60285e5c8ac29acd0f9b3fea32e03";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()
