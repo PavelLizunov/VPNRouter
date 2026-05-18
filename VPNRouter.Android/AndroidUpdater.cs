@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Android.App;
@@ -19,42 +18,39 @@ using VPNRouter.Core.Services.UpdateSources;
 namespace VPNRouter.Android;
 
 /// <summary>
-/// v2.32.0 (2026-05-07) — auto-update for Android, parity with desktop's
-/// <see cref="UpdateChecker"/>. Mirrors the desktop flow:
+/// v2.32.0 (2026-05-07) — sideload support for the Android port. Hosts
+/// the platform-specific helpers that the cross-platform
+/// <see cref="SideloadSource"/> + <c>AndroidInstallerAdapter</c> can't
+/// own themselves (Android.App / Intent.ActionView / FileProvider /
+/// PackageManager APIs are Mono-Android-only).
 ///
-/// <list type="number">
-///   <item>Hit GitHub releases API, filter by channel
-///         (stable / experimental), find the newest tag strictly newer
-///         than <see cref="AppVersion.Version"/>.</item>
-///   <item>Pick the Android APK asset off that release.</item>
-///   <item>Download into <c>getCacheDir()/update.apk</c>, expose via
-///         FileProvider, hand off to the system PackageInstaller via
-///         <c>Intent.ActionView</c> with the standard <c>application/vnd.android.package-archive</c>
-///         MIME type.</item>
+/// <para><b>What's here today:</b></para>
+/// <list type="bullet">
+///   <item><see cref="DownloadApkAsync"/> — streams a single APK into
+///         <c>getCacheDir()/update.apk</c> with progress reporting.</item>
+///   <item><see cref="BeginInstall"/> — hands the APK to the system
+///         PackageInstaller via <see cref="Intent.ActionView"/>.</item>
+///   <item><see cref="CanRequestInstall"/> /
+///         <see cref="RequestInstallPermission"/> — the per-app
+///         <c>REQUEST_INSTALL_PACKAGES</c> permission gate that API 26+
+///         applies before the install intent will resolve.</item>
 /// </list>
 ///
-/// <para><b>Why a separate class instead of reusing <see cref="UpdateChecker"/>?</b>
-/// <see cref="UpdateChecker"/> is desktop-only by design — its
-/// platform branches (<c>OperatingSystem.IsLinux/IsMacOS/IsWindows</c>)
-/// don't have an Android arm, and on Android <c>OperatingSystem.IsLinux()</c>
-/// returns true (Android <i>is</i> Linux), so it would happily try to
-/// download a tar.gz, untar it, and run a Linux pkexec helper that
-/// doesn't exist. Rather than bolt platform branches onto Core's
-/// updater (and pull in <c>android.app.PackageInstaller</c> dependencies
-/// that wouldn't compile on Windows), this class re-implements the
-/// thin GitHub-API + asset-pick + version-compare flow using the
-/// internal <see cref="UpdateChecker.TryParseSemVer"/> helper for
-/// version compare so the rolling-rN semantics stay identical.</para>
+/// <para><b>Phase 5 (Wave 24, 2026-05-18):</b> the legacy
+/// <c>CheckAsync(channel)</c> entry point was deleted — Wave 18
+/// migrated <c>AndroidApp.AutoUpdate</c> onto
+/// <see cref="IUpdateSource.CheckAsync"/> via
+/// <see cref="SideloadSource"/>, leaving zero callers. The
+/// platform-only permission + install helpers below stayed because
+/// they sit underneath the cross-platform <see cref="IAndroidInstaller"/>
+/// adapter.</para>
 ///
-/// <para><b>Asset naming convention.</b> The Android APK asset on a
-/// GitHub release is expected to be
-/// <c>VPNRouter-v{version}-android.apk</c> — mirrors the existing
-/// <c>-win.zip / -linux.tar.gz / -mac.zip</c> naming. As a fallback
-/// (for releases that haven't migrated yet), we also accept any asset
-/// whose name starts with <c>com.ninitux.vpnrouter</c> and ends in
-/// <c>.apk</c> — that's the default name the .NET Android SDK emits.
-/// The plan doc at <c>plans/v2.32.0-android-autoupdate.md</c> tracks
-/// publishing the canonical asset.</para>
+/// <para><b>Asset naming convention.</b> Canonical:
+/// <c>VPNRouter-v{version}-android.apk</c>. Legacy fallback (any asset
+/// starting with <c>com.ninitux.vpnrouter</c> + ending in <c>.apk</c>)
+/// — both shapes are now matched inside
+/// <see cref="SideloadSource"/>.<c>FindApkAsset</c>; this file no
+/// longer needs to know.</para>
 ///
 /// <para><b>Permission gate.</b> Sideload installs need
 /// <c>REQUEST_INSTALL_PACKAGES</c> on API 26+. Pre-check via
@@ -71,20 +67,12 @@ internal static class AndroidUpdater
     private const string FileProviderAuthoritySuffix = ".fileprovider";
     private const string ApkMimeType = "application/vnd.android.package-archive";
 
-    /// <summary>HTTP client used for the lightweight GitHub releases
-    /// JSON probe. Tight 30 s timeout — matches Core's
-    /// <see cref="UpdateChecker"/>.</summary>
-    private static readonly HttpClient _httpCheck = new()
-    {
-        Timeout = TimeSpan.FromSeconds(30),
-    };
-
-    /// <summary>Separate client for the APK stream with a relaxed
-    /// timeout (10 min). On slow mobile networks a 41 MB APK can take
-    /// 1–3 min to land; the 30 s probe-tier timeout would have killed
-    /// the read mid-flight (live test on KYOCERA / 4 G surfaced
-    /// "Download failed: net_http_request_timedout, 30"). The download
-    /// path also reports byte-percent progress through
+    /// <summary>HTTP client used for the APK stream. Relaxed
+    /// 10-minute timeout: on slow mobile networks a 41 MB APK can take
+    /// 1–3 min to land; the GitHub-probe HttpClient (now owned by
+    /// <see cref="SideloadSource"/>) uses a tighter 30 s timeout for
+    /// the JSON probe, but the download path needs more headroom. The
+    /// download path also reports byte-percent progress through
     /// <see cref="IProgress{T}"/>, so a stalled stream is still
     /// observable via the UI freezing — the timeout is a hard upper
     /// bound, not a stall detector.</summary>
@@ -95,121 +83,7 @@ internal static class AndroidUpdater
 
     static AndroidUpdater()
     {
-        _httpCheck.DefaultRequestHeaders.Add("User-Agent", "VPNRouter-Android");
         _httpDownload.DefaultRequestHeaders.Add("User-Agent", "VPNRouter-Android");
-    }
-
-    private const string GitHubRepo = "PavelLizunov/VPNRouter";
-
-    /// <summary>
-    /// Hit the GitHub releases API, return the highest release strictly
-    /// newer than the running version, taking <paramref name="channel"/>
-    /// into account ("stable" skips prereleases, "experimental" includes
-    /// them). Returns null if no newer release is found, the API is
-    /// unreachable, or the release has no Android APK asset.
-    /// </summary>
-    public static async Task<AndroidUpdateInfo?> CheckAsync(
-        string channel,
-        CancellationToken ct = default)
-    {
-        var includePrerelease = string.Equals(channel, "experimental", StringComparison.OrdinalIgnoreCase);
-
-        // Reuse the desktop SemVer parser (rolling-rN aware) so the
-        // version-ladder semantics stay consistent. Both sides understand
-        // 2.32.0-r1 < 2.32.0-r2 < 2.32.0 stable.
-        if (!UpdateChecker.TryParseSemVer(AppVersion.Version, out var current))
-            return null;
-
-        var url = $"https://api.github.com/repos/{GitHubRepo}/releases?per_page=30";
-        string json;
-        try
-        {
-            json = await _httpCheck.GetStringAsync(url, ct).ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-
-        // Phase 4 (2026-05-18) — share the GitHubRelease/GitHubAsset
-        // DTOs from VPNRouter.Core.Services.UpdateSources (Android consumes
-        // Core via source-link, so the same types are in-assembly).
-        GitHubRelease[]? releases;
-        try
-        {
-            releases = JsonSerializer.Deserialize<GitHubRelease[]>(
-                json, GitHubReleaseSource.GitHubReleaseJsonOptions);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-        if (releases == null || releases.Length == 0)
-            return null;
-
-        var newer = releases
-            .Where(r => !r.Draft && (includePrerelease || !r.Prerelease))
-            .Select(r => new
-            {
-                Release = r,
-                Tag = (r.TagName ?? string.Empty).TrimStart('v'),
-                Parsed = UpdateChecker.TryParseSemVer((r.TagName ?? string.Empty).TrimStart('v'), out var v) ? v : (UpdateChecker.SemVer?)null
-            })
-            .Where(r => r.Parsed != null && r.Parsed.Value.CompareTo(current) > 0)
-            .OrderByDescending(r => r.Parsed!.Value)
-            .ToList();
-
-        if (newer.Count == 0)
-            return null;
-
-        var latest = newer[0];
-        var apk = FindApkAsset(latest.Release.Assets);
-        if (apk == null)
-            return null;
-
-        // Concatenate release notes from every release that's strictly
-        // newer than the running version — same as desktop, so the user
-        // sees the cumulative change list when they skip several rN's.
-        var notes = newer
-            .Where(r => !string.IsNullOrWhiteSpace(r.Release.Body))
-            .Select(r => r.Release.Body!.Trim())
-            .ToList();
-
-        return new AndroidUpdateInfo
-        {
-            CurrentVersion = AppVersion.Version,
-            LatestVersion = latest.Tag,
-            DownloadUrl = apk.BrowserDownloadUrl ?? string.Empty,
-            SizeBytes = apk.Size,
-            ReleaseNotes = string.Join("\n\n", notes),
-            HtmlUrl = latest.Release.HtmlUrl ?? string.Empty,
-        };
-    }
-
-    /// <summary>
-    /// Locate the Android APK on a release's asset list. Preference
-    /// order: <c>VPNRouter-v{ver}-android.apk</c> (canonical, mirrors
-    /// other platforms) → fallback any <c>com.ninitux.vpnrouter*.apk</c>
-    /// (default .NET Android output). Returns null if neither exists.
-    /// </summary>
-    private static GitHubAsset? FindApkAsset(GitHubAsset[]? assets)
-    {
-        if (assets == null) return null;
-
-        var canonical = assets.FirstOrDefault(a =>
-        {
-            var name = a.Name ?? string.Empty;
-            return name.StartsWith("VPNRouter-v", StringComparison.OrdinalIgnoreCase) &&
-                   name.EndsWith("-android.apk", StringComparison.OrdinalIgnoreCase);
-        });
-        if (canonical != null) return canonical;
-
-        return assets.FirstOrDefault(a =>
-        {
-            var name = a.Name ?? string.Empty;
-            return name.StartsWith("com.ninitux.vpnrouter", StringComparison.OrdinalIgnoreCase) &&
-                   name.EndsWith(".apk", StringComparison.OrdinalIgnoreCase);
-        });
     }
 
     /// <summary>

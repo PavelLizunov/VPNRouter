@@ -10,6 +10,10 @@ using Xunit;
 // LastRecoveryNotice). Routing through ISettingsStore would bypass the
 // crash-recovery code path that's the load-bearing thing under test.
 // See sister suite SettingsLoaderRobustnessTests for the rationale.
+// Phase 5 Wave 24 re-verified zero external callers and kept the
+// obsolete marker at error: false (CS0619 obsolete-as-error is not
+// pragma-suppressible, which would break the four documented
+// suppression sites including this one).
 #pragma warning disable CS0618
 
 namespace VPNRouter.Tests;

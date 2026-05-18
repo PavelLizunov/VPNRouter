@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Net.Http;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services.UpdateSources;
 
@@ -12,14 +10,21 @@ namespace VPNRouter.Core.Services;
 /// v3.0 Phase 3F (2026-05-18): also implements <see cref="IDesktopInstaller"/>
 /// so <see cref="GitHubReleaseSource"/> can delegate download + apply
 /// back here without duplicating the helper.cmd / ditto / pkexec dance.
-/// The legacy public surface (<see cref="CheckForUpdateAsync"/> /
-/// <see cref="DownloadAndStageAsync"/> / <see cref="ApplyUpdate"/> /
-/// events) stays identical for back-compat with existing callers
-/// (UpdateNotificationViewModel desktop, TestUpdateCommand CI). New
-/// callers should prefer <see cref="CheckAsync"/> which returns the
-/// platform-neutral <see cref="UpdateSourceInfo"/>. Phase 4 will fold
-/// the platform-specific apply paths into the source impls and retire
-/// this dual surface. Brief: plans/phase3-3F-android-updatesource-2026-05-18.md.
+///
+/// <para>v3.0 Phase 5 (Wave 24, 2026-05-18): the legacy
+/// <c>CheckForUpdateAsync</c> entry point + its private
+/// <c>GitHubRelease</c>/<c>GitHubAsset</c> DTOs + asset discovery
+/// helpers (<c>FindFullAsset</c>, <c>FindLiteAsset</c>,
+/// <c>FindChecksumAsset</c>, <c>IsSharedRuntimeInstall</c>) were
+/// deleted after Wave 18 migrated all three callers
+/// (UpdateNotificationViewModel desktop toast, TestUpdateCommand CI
+/// smoke, AndroidUpdater sideload) onto
+/// <see cref="IUpdateSource.CheckAsync"/>. The lite-update + SHA
+/// + asset-matching logic now lives entirely in
+/// <see cref="GitHubReleaseSource"/>; the remaining public surface
+/// here is just the <see cref="IDesktopInstaller"/> impl
+/// (download+stage+apply on Win/Mac/Linux) that
+/// <see cref="GitHubReleaseSource"/> delegates back to.</para>
 /// </remarks>
 public class UpdateChecker : IDesktopInstaller
 {
@@ -35,18 +40,13 @@ public class UpdateChecker : IDesktopInstaller
     private readonly string _currentVersion;
     private readonly string _stagingDir;
 
-    public event Action<UpdateInfo>? UpdateAvailable;
+    // v3.0 Phase 5 (Wave 24, 2026-05-18): the `UpdateAvailable` event
+    // was deleted alongside `CheckForUpdateAsync` — it was only
+    // invoked from inside that legacy entry point, and no external
+    // caller subscribed to it after Wave 18 migrated UpdateNotificationViewModel
+    // / TestUpdateCommand / AndroidUpdater onto IUpdateSource.
     public event Action<int>? DownloadProgress;        // 0-100
     public event Action<string>? StatusChanged;
-
-    // ── Platform-specific asset naming ──
-    // v2.0+: VPNRouter-v2.0.0-win.zip / VPNRouter-v2.0.0-mac.zip
-    // v2.21.0+: VPNRouter-v2.21.0-linux.tar.gz (Linux build added)
-    // Legacy: VPNRouter-install-v1.24.6.zip (old Windows naming, still supported)
-    private static readonly string PlatformSuffix =
-        OperatingSystem.IsMacOS()   ? "-mac"
-        : OperatingSystem.IsLinux() ? "-linux"
-        :                              "-win";
 
     /// <summary>
     /// Production ctor — uses the process-shared <see cref="PolicyHttpClient"/>.
@@ -68,184 +68,15 @@ public class UpdateChecker : IDesktopInstaller
         _stagingDir = Path.Combine(AppPaths.DataDir, "update-staging");
     }
 
-    /// <summary>
-    /// Legacy update-check entry point that returns a <see cref="UpdateInfo"/>
-    /// (lite-update aware) shape. Phase 4 (Wave 18, 2026-05-18) migrated all
-    /// three callers — <see cref="UpdateNotificationViewModel"/> desktop toast,
-    /// <c>TestUpdateCommand</c> CI smoke, <c>VPNRouter.Android.AndroidUpdater</c>
-    /// sideload — onto <see cref="IUpdateSource.CheckAsync"/> which returns
-    /// the platform-neutral <see cref="UpdateSourceInfo"/>. This method
-    /// stays alive solely because <see cref="GitHubReleaseSource"/> /
-    /// <c>SideloadSource</c> still need the legacy SHA + lite-asset
-    /// fallback path under the hood, and the <see cref="UpdateChecker"/>
-    /// itself implements <see cref="IDesktopInstaller"/> + lite-update
-    /// detection logic. Sole approved suppression: inside
-    /// <see cref="UpdateChecker"/> itself when adapting between the two
-    /// info shapes. Phase 5 retires this surface after the obsolete
-    /// warning period passes + no external callers remain.
-    /// </summary>
-    [Obsolete(
-        "Use IUpdateSource.CheckAsync via PlatformServices.CreateUpdateSource. " +
-        "UpdateChecker stays as the IDesktopInstaller adapter until Phase 5 retirement.",
-        error: false)]
-    public async Task<UpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(_settings.GitHubRepo))
-            return null;
-
-        // v2.21.10: parser now also understands rolling `-rN` candidate
-        // suffixes (e.g. "2.22.0-r1") per the strategy in
-        // plans/vpnrouter-release-strategy.md. Tags with suffixes that
-        // aren't -rN (e.g. "v1.0.0-mac") still return null and are skipped.
-        if (!TryParseSemVer(_currentVersion, out var current))
-            return null;
-
-        var url = $"https://api.github.com/repos/{_settings.GitHubRepo}/releases?per_page=30";
-        var listResponse = await _http.SendAsync(
-            new HttpRequest(HttpMethod.Get, new Uri(url)),
-            ct);
-        if (!listResponse.IsSuccess())
-            return null;
-        var json = listResponse.AsString();
-
-        // Phase 3B (2026-05-18): migrated from Newtonsoft.JsonConvert
-        // .DeserializeAnonymousType to System.Text.Json with explicit DTOs.
-        // STJ does not support anonymous-type inference at deserialize time
-        // (intentional — anonymous types have no [JsonPropertyName] map);
-        // the GitHubRelease/GitHubAsset DTOs at the bottom of this class
-        // hold the exact same fields (tag_name, body, html_url, draft,
-        // prerelease, assets[]) so the GitHub Releases API response shape
-        // round-trips identically. PropertyNameCaseInsensitive=true matches
-        // Newtonsoft's default lookup behaviour for any field name drift.
-        GitHubRelease[]? releases;
-        try
-        {
-            releases = JsonSerializer.Deserialize<GitHubRelease[]>(json, GitHubApiJsonOptions);
-        }
-        catch (JsonException)
-        {
-            // Malformed response from upstream — treat as "no update".
-            // Same fail-closed behaviour as the pre-migration path (any
-            // Newtonsoft exception bubbled up through CheckForUpdateAsync
-            // and was caught by the outer try/catch in MainWindowViewModel).
-            return null;
-        }
-
-        if (releases == null || releases.Length == 0)
-            return null;
-
-        var newerReleases = releases
-            .Where(r => !r.Draft && (_settings.IsExperimental || !r.Prerelease))
-            .Select(r => new
-            {
-                Release = r,
-                Tag = (r.TagName ?? string.Empty).TrimStart('v'),
-                Parsed = TryParseSemVer((r.TagName ?? string.Empty).TrimStart('v'), out var v) ? v : (SemVer?)null
-            })
-            .Where(r => r.Parsed != null && r.Parsed.Value.CompareTo(current) > 0)
-            .OrderByDescending(r => r.Parsed!.Value)
-            .ToList();
-
-        if (newerReleases.Count == 0)
-            return null;
-
-        var latestRelease = newerReleases[0];
-
-        // ── Find platform-specific assets ──
-        var fullAsset = FindFullAsset(latestRelease.Release.Assets);
-        var liteAsset = FindLiteAsset(latestRelease.Release.Assets);
-        var fullSha   = FindChecksumAsset(latestRelease.Release.Assets, fullAsset);
-        var liteSha   = FindChecksumAsset(latestRelease.Release.Assets, liteAsset);
-
-        bool canUseLite = liteAsset != null && IsSharedRuntimeInstall();
-
-        if (fullAsset == null && !canUseLite)
-            return null;
-
-        var allNotes = newerReleases
-            .Where(r => !string.IsNullOrWhiteSpace(r.Release.Body))
-            .Select(r => r.Release.Body!.Trim())
-            .ToList();
-
-        var info = new UpdateInfo
-        {
-            CurrentVersion = _currentVersion,
-            LatestVersion = latestRelease.Tag,
-            DownloadUrl = fullAsset?.BrowserDownloadUrl
-                          ?? liteAsset?.BrowserDownloadUrl ?? string.Empty,
-            ReleaseNotes = string.Join("\n\n", allNotes),
-            HtmlUrl = latestRelease.Release.HtmlUrl ?? string.Empty,
-            SizeBytes = fullAsset?.Size ?? liteAsset?.Size ?? 0,
-            IsNewer = true,
-            LiteDownloadUrl = liteAsset?.BrowserDownloadUrl,
-            LiteSizeBytes = liteAsset?.Size ?? 0,
-            HasLiteUpdate = canUseLite,
-            FullChecksumUrl = fullSha?.BrowserDownloadUrl,
-            LiteChecksumUrl = liteSha?.BrowserDownloadUrl,
-        };
-
-        UpdateAvailable?.Invoke(info);
-        return info;
-    }
-
-    // Phase 3B (2026-05-18) — System.Text.Json options for parsing the
-    // GitHub Releases API response. PropertyNameCaseInsensitive=true keeps
-    // backward-compat with any field-name casing drift; matches Newtonsoft's
-    // default lookup. snake_case mapping is via [JsonPropertyName] on the
-    // DTOs below — STJ has no built-in snake-case naming policy, the
-    // explicit attribute is the wire contract.
-    private static readonly JsonSerializerOptions GitHubApiJsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-    };
-
-    // GitHub Releases API DTOs. Shape pinned by the API; we read the four
-    // fields we need (tag/body/html_url/draft/prerelease/assets) and ignore
-    // everything else (author, target_commitish, created_at, etc.) — STJ
-    // skips unknown fields by default so additional API surface stays
-    // forward-compat.
-    private sealed class GitHubRelease
-    {
-        [JsonPropertyName("tag_name")]
-        public string? TagName { get; set; }
-
-        [JsonPropertyName("body")]
-        public string? Body { get; set; }
-
-        [JsonPropertyName("html_url")]
-        public string? HtmlUrl { get; set; }
-
-        [JsonPropertyName("draft")]
-        public bool Draft { get; set; }
-
-        [JsonPropertyName("prerelease")]
-        public bool Prerelease { get; set; }
-
-        [JsonPropertyName("assets")]
-        public GitHubAsset[] Assets { get; set; } = Array.Empty<GitHubAsset>();
-    }
-
-    private sealed class GitHubAsset
-    {
-        [JsonPropertyName("browser_download_url")]
-        public string BrowserDownloadUrl { get; set; } = string.Empty;
-
-        [JsonPropertyName("size")]
-        public long Size { get; set; }
-
-        [JsonPropertyName("name")]
-        public string Name { get; set; } = string.Empty;
-    }
-
     // ─── v3.0 Phase 3F — IUpdateSource delegating surface ─────────────────
 
     /// <summary>
     /// v3.0 Phase 3F (2026-05-18): platform-neutral check via
     /// <see cref="GitHubReleaseSource"/>. Returns the new
-    /// <see cref="UpdateSourceInfo"/> shape instead of the legacy
-    /// <see cref="UpdateInfo"/>. Does NOT cover the lite-update path
-    /// (only the full asset); lite-update support stays on the legacy
-    /// <see cref="CheckForUpdateAsync"/> until Phase 4 folds it in.
+    /// <see cref="UpdateSourceInfo"/> shape (full asset only — lite-update
+    /// detection lives inside <see cref="GitHubReleaseSource"/> now that
+    /// Phase 5 (Wave 24) deleted the legacy <c>CheckForUpdateAsync</c>
+    /// entry point).
     /// </summary>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Source info, or <c>null</c> when up to date / source
@@ -1393,91 +1224,12 @@ public class UpdateChecker : IDesktopInstaller
     // Windows still uses an inline per-file File.Copy loop above; it's
     // fine on NTFS where execute permissions don't apply.
 
-    // ─── Asset matching ──────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Find the full install asset for the current platform.
-    /// v2.0+: VPNRouter-v2.0.0-win.zip / VPNRouter-v2.0.0-mac.zip
-    /// v2.21.0+: VPNRouter-v2.21.0-linux.tar.gz (Linux uses a tarball, not a zip)
-    /// Legacy: VPNRouter-install-v*.zip (Windows only, no platform suffix)
-    ///
-    /// <para>Phase 3B (2026-05-18) — signature changed from <c>dynamic[]?</c>
-    /// to strong-typed <see cref="GitHubAsset"/> array. STJ's typed
-    /// deserialization replaces Newtonsoft's anonymous-type inference;
-    /// the asset name/url/size fields are now static-resolved instead of
-    /// going through DLR <c>dynamic</c> dispatch (faster + AOT-friendly).
-    /// </para>
-    /// </summary>
-    private static GitHubAsset? FindFullAsset(GitHubAsset[]? assets)
-    {
-        if (assets == null) return null;
-
-        // v2.21.0: Linux ships as .tar.gz instead of .zip to preserve Unix
-        // execute bits on extract and avoid chmod +x dance in ApplyUpdate.
-        var extension = OperatingSystem.IsLinux() ? ".tar.gz" : ".zip";
-
-        // New naming: VPNRouter-v*-{platform}{ext} (not containing "update")
-        var newFormat = assets.FirstOrDefault(a =>
-        {
-            var name = a.Name;
-            return name.StartsWith("VPNRouter-v", StringComparison.OrdinalIgnoreCase) &&
-                   name.EndsWith($"{PlatformSuffix}{extension}", StringComparison.OrdinalIgnoreCase) &&
-                   !name.Contains("update", StringComparison.OrdinalIgnoreCase);
-        });
-        if (newFormat != null) return newFormat;
-
-        // Legacy (Windows only): VPNRouter-install-v*.zip
-        if (OperatingSystem.IsWindows())
-        {
-            return assets.FirstOrDefault(a =>
-            {
-                var name = a.Name;
-                return name.StartsWith("VPNRouter-install-v", StringComparison.OrdinalIgnoreCase) &&
-                       name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
-            });
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Find the lite update asset (Windows only).
-    /// v2.0+: VPNRouter-update-v2.0.0-win.zip
-    /// Legacy: VPNRouter-update-v*.zip
-    /// </summary>
-    private static GitHubAsset? FindLiteAsset(GitHubAsset[]? assets)
-    {
-        if (assets == null || !OperatingSystem.IsWindows()) return null;
-
-        var newFormat = assets.FirstOrDefault(a =>
-        {
-            var name = a.Name;
-            return name.StartsWith("VPNRouter-update-v", StringComparison.OrdinalIgnoreCase) &&
-                   name.EndsWith($"{PlatformSuffix}.zip", StringComparison.OrdinalIgnoreCase);
-        });
-        if (newFormat != null) return newFormat;
-
-        return assets.FirstOrDefault(a =>
-        {
-            var name = a.Name;
-            return name.StartsWith("VPNRouter-update-v", StringComparison.OrdinalIgnoreCase) &&
-                   name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
-        });
-    }
-
-    /// <summary>
-    /// Find the .sha256 companion file for a given ZIP asset. Naming convention
-    /// (set by build.ps1 in v2.15.8+): "{zipName}.sha256". Returns null if the
-    /// companion is missing — in that case we fall back to size-only validation.
-    /// </summary>
-    private static GitHubAsset? FindChecksumAsset(GitHubAsset[]? assets, GitHubAsset? zipAsset)
-    {
-        if (assets == null || zipAsset == null) return null;
-        var zipName = zipAsset.Name;
-        var target = $"{zipName}.sha256";
-        return assets.FirstOrDefault(a =>
-            string.Equals(a.Name, target, StringComparison.OrdinalIgnoreCase));
-    }
+    // v3.0 Phase 5 (Wave 24, 2026-05-18): asset discovery helpers
+    // (FindFullAsset / FindLiteAsset / FindChecksumAsset) deleted alongside
+    // CheckForUpdateAsync. GitHubReleaseSource owns the same logic now —
+    // FindFullAsset / FindChecksumAsset are private statics over there.
+    // SideloadSource owns the APK-asset variant. The PlatformSuffix field
+    // (only referenced by these helpers) was removed in the same pass.
 
     /// <summary>
     /// Validate extracted content based on platform.
@@ -1529,16 +1281,6 @@ public class UpdateChecker : IDesktopInstaller
             !File.Exists(Path.Combine(checkDir, "VPNRouter.GUI.dll")))
             throw new InvalidOperationException(
                 "Invalid update package: VPNRouter.GUI.exe/dll not found.");
-    }
-
-    /// <summary>
-    /// Shared runtime detection. Only meaningful on Windows — macOS has no lite update.
-    /// </summary>
-    private static bool IsSharedRuntimeInstall()
-    {
-        if (OperatingSystem.IsMacOS()) return false;
-        var appDir = AppContext.BaseDirectory;
-        return File.Exists(Path.Combine(appDir, "hostfxr.dll"));
     }
 
     // ─── Versioning helpers ──────────────────────────────────────────────────

@@ -63,10 +63,33 @@ public static class SettingsLoader
     /// inside this file. Tests that pin the static API (e.g.
     /// <c>SettingsLoaderRobustnessTests</c>) suppress via
     /// <c>#pragma warning disable CS0618</c>.</para>
+    ///
+    /// <para><b>Phase 5 — Wave 24 (v3.0 refactor):</b> re-verified zero
+    /// external callers remain (Wave 19 grep proof + Wave 24 re-verify
+    /// via grep + full-solution build). Kept at <c>error: false</c>
+    /// because the CS0619 "obsolete-as-error" diagnostic is NOT
+    /// suppressible via <c>#pragma warning disable</c> — escalating
+    /// would force a different mechanism (delete + reintroduce as
+    /// internal-only helpers) which is out of scope for this wave.
+    /// The four legitimate suppression sites that keep delegating:
+    /// <list type="bullet">
+    ///   <item><see cref="RealSettingsStore.Load"/> — the back-compat
+    ///   delegation that makes <see cref="ISettingsStore"/> work
+    ///   without duplicating the load pipeline.</item>
+    ///   <item>In-file internal callers (Parse-after-migration save,
+    ///   write-example, watcher reload, ResetToDefaults).</item>
+    ///   <item><c>SettingsLoaderRobustnessTests</c> +
+    ///   <c>SettingsValidatorTests</c> — pin the crash-recovery
+    ///   semantics that the interface intentionally abstracts away.</item>
+    /// </list>
+    /// New production callers outside this allow-list will surface the
+    /// CS0618 warning at build time; Phase 6 may revisit if the
+    /// singleton can be retired entirely.</para>
     /// </summary>
     [Obsolete("Use ISettingsStore.Load via DI — Phase 3G-1/Phase 4 Wave 19 migrated callers. " +
-              "RealSettingsStore.Instance delegates here for back-compat; this static API will be " +
-              "retired in Phase 5.", error: false)]
+              "RealSettingsStore.Instance delegates here for back-compat. " +
+              "Phase 5 (Wave 24) re-verified zero external callers; warning-only stays " +
+              "because CS0619 obsolete-as-error is not pragma-suppressible.", error: false)]
     public static AppSettings Load(string? path = null)
     {
         try
@@ -434,10 +457,16 @@ public static class SettingsLoader
     /// <see cref="ObsoleteAttribute"/> (warning-only). Production callers
     /// migrated to <see cref="ISettingsStore.Save"/> via ctor injection.
     /// Same retirement timeline as <see cref="Load"/>.</para>
+    ///
+    /// <para><b>Phase 5 — Wave 24 (v3.0 refactor):</b> kept at
+    /// <c>error: false</c>. See <see cref="Load"/> for the
+    /// suppression-site allow-list + rationale (CS0619 not
+    /// pragma-suppressible).</para>
     /// </summary>
     [Obsolete("Use ISettingsStore.Save via DI — Phase 3G-1/Phase 4 Wave 19 migrated callers. " +
-              "RealSettingsStore.Instance delegates here for back-compat; this static API will be " +
-              "retired in Phase 5.", error: false)]
+              "RealSettingsStore.Instance delegates here for back-compat. " +
+              "Phase 5 (Wave 24) re-verified zero external callers; warning-only stays " +
+              "because CS0619 obsolete-as-error is not pragma-suppressible.", error: false)]
     public static void Save(AppSettings settings, string? path = null)
     {
         // v2.24.2 HOTFIX: Safe Mode must be strictly read-only. Previously

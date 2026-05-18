@@ -16,7 +16,9 @@ using Xunit;
 // static-loader semantics that the interface intentionally abstracts
 // away. Suppress CS0618 at file scope so the obsolete-marker doesn't
 // flag the load-bearing pin calls. Production callers go through
-// ISettingsStore via DI; this test file is the documented exception.
+// ISettingsStore via DI; this test file is one of the four documented
+// suppression sites (Phase 5 Wave 24 kept the marker at error: false
+// because CS0619 is not pragma-suppressible).
 #pragma warning disable CS0618
 
 namespace VPNRouter.Tests;
