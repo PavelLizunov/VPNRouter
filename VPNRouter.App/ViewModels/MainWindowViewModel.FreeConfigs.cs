@@ -112,7 +112,7 @@ public partial class MainWindowViewModel
             SelectedServerModeIndex = 0;
 
             SaveSettings();
-            _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+            _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
             // Stop current VPN if running.
             if (IsConnected)

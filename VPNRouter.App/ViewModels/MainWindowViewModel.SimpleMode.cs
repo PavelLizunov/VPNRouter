@@ -433,7 +433,7 @@ public partial class MainWindowViewModel
             _settings.ActiveProfile = SimpleSplitProfile;
 
         SaveSettings();
-        _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+        _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
         // Subscription mode needs a fresh fetch BEFORE connect so we have
         // servers to hand to the engine.

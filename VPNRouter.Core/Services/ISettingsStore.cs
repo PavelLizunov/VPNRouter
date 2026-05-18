@@ -102,6 +102,13 @@ public interface ISettingsStore
 /// recovery-notice state and file-watcher are themselves singletons so
 /// instantiating multiple <see cref="RealSettingsStore"/> instances would
 /// just hand out aliases to the same underlying state.
+///
+/// <para><b>Phase 4 — Wave 19 (v3.0 refactor):</b> sole approved suppression
+/// site for the <see cref="ObsoleteAttribute"/>-marked
+/// <see cref="SettingsLoader.Load"/> / <see cref="SettingsLoader.Save"/>
+/// static methods. All other callers route through <see cref="ISettingsStore"/>;
+/// this delegation is what makes <see cref="Instance"/> a working back-compat
+/// shim until Phase 5 retires the static API entirely.</para>
 /// </summary>
 public sealed class RealSettingsStore : ISettingsStore
 {
@@ -110,12 +117,19 @@ public sealed class RealSettingsStore : ISettingsStore
 
     private RealSettingsStore() { }
 
+    // Phase 4 Wave 19 — RealSettingsStore is the sole approved suppression
+    // site for the Obsolete-marked static SettingsLoader.Load/Save. Every
+    // ctor-injected ISettingsStore caller hits this delegation transparently.
+#pragma warning disable CS0618
+
     /// <inheritdoc />
     public AppSettings Load(string? path = null) => SettingsLoader.Load(path);
 
     /// <inheritdoc />
     public void Save(AppSettings settings, string? path = null) =>
         SettingsLoader.Save(settings, path);
+
+#pragma warning restore CS0618
 
     /// <inheritdoc />
     public string? ResetToDefaults(string? path = null) =>

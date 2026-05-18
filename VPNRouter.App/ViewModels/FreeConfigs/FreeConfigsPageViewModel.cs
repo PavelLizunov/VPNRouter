@@ -20,6 +20,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     private readonly ILogger _logger;
     private readonly Func<FreeConfigEntry, Task<bool>> _applyAsync;
     private readonly Func<VPNRouter.Core.Models.AppSettings>? _getSettings;
+    // Phase 4 Wave 19 (v3.0 refactor): settings-persistence seam for the
+    // Add/RemoveUserSource commands. Defaults to
+    // <see cref="VPNRouter.Core.Services.RealSettingsStore.Instance"/> for
+    // back-compat with the pre-3G-1 static-loader path; tests can pass
+    // <c>InMemorySettingsStore</c>.
+    private readonly VPNRouter.Core.Services.ISettingsStore _settingsStore;
 
     private List<FreeConfigEntry> _allConfigs = new();
 
@@ -54,11 +60,16 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     public FreeConfigsPageViewModel(
         ILogger logger,
         Func<FreeConfigEntry, Task<bool>> applyAsync,
-        Func<VPNRouter.Core.Models.AppSettings>? getSettings = null)
+        Func<VPNRouter.Core.Models.AppSettings>? getSettings = null,
+        VPNRouter.Core.Services.ISettingsStore? settingsStore = null)
     {
         _logger = logger;
         _applyAsync = applyAsync;
         _getSettings = getSettings;
+        // Phase 4 Wave 19: default to the real store; tests can pass an
+        // <c>InMemorySettingsStore</c> to keep AddUserSource / RemoveUserSource
+        // isolated from <c>%ProgramData%\VPNRouter\config.yaml</c>.
+        _settingsStore = settingsStore ?? VPNRouter.Core.Services.RealSettingsStore.Instance;
         _aggregator = new FreeConfigAggregator(logger);
         _aggregator.OnStageChanged += OnAggregatorStage;
         _aggregator.OnTestProgress  += OnAggregatorProgress;
@@ -1483,8 +1494,11 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             AddedAt = DateTime.UtcNow,
         });
 
-        // Persist via the settings accessor (which points to MainWindowViewModel._settings)
-        VPNRouter.Core.Services.SettingsLoader.Save(settings, VPNRouter.Core.AppPaths.ConfigYamlPath);
+        // Persist via the injected store (Phase 4 Wave 19). Default
+        // RealSettingsStore.Instance routes to SettingsLoader.Save, preserving
+        // the pre-3G-1 behaviour. The settings accessor still points to
+        // MainWindowViewModel._settings — only the persistence boundary changed.
+        _settingsStore.Save(settings, VPNRouter.Core.AppPaths.ConfigYamlPath);
 
         ReloadUserSources();
         NewUserSourceName = string.Empty;
@@ -1502,7 +1516,8 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         settings.App.UserFreeSources.RemoveAll(s =>
             string.Equals(s.Url, src.Url, StringComparison.OrdinalIgnoreCase));
 
-        VPNRouter.Core.Services.SettingsLoader.Save(settings, VPNRouter.Core.AppPaths.ConfigYamlPath);
+        // Phase 4 Wave 19: persist via injected store (see AddUserSourceAsync above).
+        _settingsStore.Save(settings, VPNRouter.Core.AppPaths.ConfigYamlPath);
         ReloadUserSources();
         StatusText = Strings.FcUserSrcRemoved;
     }

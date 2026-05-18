@@ -9,9 +9,20 @@ namespace VPNRouter.CLI.Commands;
 
 public class ProfilesListCommand : AsyncCommand
 {
+    // Phase 4 Wave 19 (v3.0 refactor): ISettingsStore ctor injection. Default
+    // <see cref="RealSettingsStore.Instance"/> preserves pre-3G-1 behaviour.
+    private readonly ISettingsStore _settingsStore;
+
+    public ProfilesListCommand() : this(null) { }
+
+    public ProfilesListCommand(ISettingsStore? settingsStore)
+    {
+        _settingsStore = settingsStore ?? RealSettingsStore.Instance;
+    }
+
     public override async Task<int> ExecuteAsync(CommandContext context)
     {
-        var appSettings = SettingsLoader.Load();
+        var appSettings = _settingsStore.Load();
         var sources = ProfileSourceFactory.Create(appSettings);
         var manager = new ProfileManager(sources);
 
@@ -70,9 +81,19 @@ public class ProfilesShowSettings : CommandSettings
 
 public class ProfilesShowCommand : AsyncCommand<ProfilesShowSettings>
 {
+    // Phase 4 Wave 19 (v3.0 refactor): ISettingsStore ctor injection.
+    private readonly ISettingsStore _settingsStore;
+
+    public ProfilesShowCommand() : this(null) { }
+
+    public ProfilesShowCommand(ISettingsStore? settingsStore)
+    {
+        _settingsStore = settingsStore ?? RealSettingsStore.Instance;
+    }
+
     public override async Task<int> ExecuteAsync(CommandContext context, ProfilesShowSettings settings)
     {
-        var appSettings = SettingsLoader.Load();
+        var appSettings = _settingsStore.Load();
         var sources = ProfileSourceFactory.Create(appSettings);
         var manager = new ProfileManager(sources);
         await manager.LoadAsync();
@@ -113,9 +134,19 @@ public class ProfilesShowCommand : AsyncCommand<ProfilesShowSettings>
 
 public class ProfilesUpdateCommand : AsyncCommand
 {
+    // Phase 4 Wave 19 (v3.0 refactor): ISettingsStore ctor injection.
+    private readonly ISettingsStore _settingsStore;
+
+    public ProfilesUpdateCommand() : this(null) { }
+
+    public ProfilesUpdateCommand(ISettingsStore? settingsStore)
+    {
+        _settingsStore = settingsStore ?? RealSettingsStore.Instance;
+    }
+
     public override async Task<int> ExecuteAsync(CommandContext context)
     {
-        var appSettings = SettingsLoader.Load();
+        var appSettings = _settingsStore.Load();
         var githubSources = appSettings.ProfileSources
             .Where(s => s.Type == "github" && !string.IsNullOrEmpty(s.Url))
             .ToList();

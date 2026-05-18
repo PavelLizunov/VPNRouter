@@ -42,9 +42,16 @@ public class MainWindowViewModelCharacterizationTests
     /// Windows hash, captured 2026-05-18 against the pre-Phase-2B 6,753-LOC
     /// monolith state. Wave 8 preserved this hash across all 4 partial-class
     /// extractions (verified locally on Windows).
+    ///
+    /// <para><b>Phase 4 Wave 19 (2026-05-18 evening):</b> hash bumped to
+    /// account for the new <c>public MainWindowViewModel(ISettingsStore?)</c>
+    /// ctor overload added by the v3.0 refactor (Phase 3G-1 ISettingsStore
+    /// rollout). The parameterless ctor is unchanged and still chains to
+    /// the overload with <c>RealSettingsStore.Instance</c> default —
+    /// production callers see zero behaviour change.</para>
     /// </summary>
     private const string PinnedHashWindows =
-        "5f190a6078303a3c6a8759d9ebaf70917faa804af18c505eec8789f9a0924e66";
+        "3196656766a521ac6b41b392629bd0102e884f6186a0a6d840abaaee9c18fca1";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
@@ -53,6 +60,14 @@ public class MainWindowViewModelCharacterizationTests
     /// across partials, so the conditional-stripped surface stays identical).
     /// If Wave 8 ever DOES touch a #if-gated member, this pin will go red
     /// on the next CI run — update it then with the actual Linux hash.
+    ///
+    /// <para><b>Phase 4 Wave 19 (2026-05-18 evening):</b> the new
+    /// <c>MainWindowViewModel(ISettingsStore?)</c> ctor is non-
+    /// <c>#if PLATFORM_WINDOWS</c>-gated, so the Linux surface drifts too.
+    /// The actual Linux hash will surface on the next ubuntu-latest CI run
+    /// as the test failure's "Actual:" line — update this constant then.
+    /// Until that update, expect this test to fail on Linux with the new
+    /// hash visible in the assertion message.</para>
     /// </summary>
     private const string PinnedHashLinux =
         "46602c4d7f74bf13ff5f2155f964a6a6b27b88f8e6b53cccc3f45e4b8e3d176f";

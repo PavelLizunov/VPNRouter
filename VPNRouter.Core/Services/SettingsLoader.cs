@@ -52,7 +52,21 @@ public static class SettingsLoader
     /// (<see cref="SettingsValidator.Validate"/>) on top of the
     /// structurally-safe object — populates <see cref="LastRecoveryNotice"/>
     /// so callers can surface the recovery once.</para>
+    ///
+    /// <para><b>Phase 4 — Wave 19 (v3.0 refactor):</b> marked
+    /// <see cref="ObsoleteAttribute"/> (warning-only). Production callers
+    /// migrated to <see cref="ISettingsStore.Load"/> via ctor injection
+    /// (default <see cref="RealSettingsStore.Instance"/> delegates here
+    /// for back-compat). The static API stays as the back-compat surface
+    /// until Phase 5 retires it. Sole approved suppression sites:
+    /// <see cref="RealSettingsStore.Load"/> (delegation) + internal callers
+    /// inside this file. Tests that pin the static API (e.g.
+    /// <c>SettingsLoaderRobustnessTests</c>) suppress via
+    /// <c>#pragma warning disable CS0618</c>.</para>
     /// </summary>
+    [Obsolete("Use ISettingsStore.Load via DI — Phase 3G-1/Phase 4 Wave 19 migrated callers. " +
+              "RealSettingsStore.Instance delegates here for back-compat; this static API will be " +
+              "retired in Phase 5.", error: false)]
     public static AppSettings Load(string? path = null)
     {
         try
@@ -205,8 +219,13 @@ public static class SettingsLoader
             }
 
             var defaults = CreateDefaults();
+            // Phase 4 Wave 19: internal call site — the static Save is the
+            // back-compat surface this loader still owns. Obsolete warning
+            // is for outside callers (migrated to ISettingsStore.Save).
+#pragma warning disable CS0618
             try { Save(defaults, configPath); }
             catch { /* save failure is non-fatal — caller still gets the in-memory defaults */ }
+#pragma warning restore CS0618
 
             var noticeLine = backup != null
                 ? $"[SettingsValidation] config.yaml rejected: {reasonsJoined}; backup at {backup}; reset to defaults"
@@ -353,8 +372,11 @@ public static class SettingsLoader
                 from: settings.SchemaVersion,
                 to: AppSettings.CurrentSchemaVersion);
             // Persist upgraded form side-effectfully so we only migrate once.
+            // Phase 4 Wave 19: internal call to back-compat surface — see Load() doc.
+#pragma warning disable CS0618
             try { Save(settings); }
             catch { /* migration itself succeeded; re-save failure is non-fatal */ }
+#pragma warning restore CS0618
         }
 
         // v2.32.3 (2026-05-17): aggressive one-shot wipe of known-bad
@@ -375,8 +397,11 @@ public static class SettingsLoader
             // see the pruned entries on next restart. Mirror the schema-
             // migrator save pattern above — best-effort, non-fatal on
             // write failure (the in-memory tree is still clean).
+            // Phase 4 Wave 19: internal call to back-compat surface.
+#pragma warning disable CS0618
             try { Save(settings); }
             catch { /* re-save failure is non-fatal — in-memory clean wins this session */ }
+#pragma warning restore CS0618
         }
 
         return settings;
@@ -401,6 +426,18 @@ public static class SettingsLoader
         return (count, at);
     }
 
+    /// <summary>
+    /// Persist <paramref name="settings"/> to <paramref name="path"/> as
+    /// YAML. <see cref="SafeMode"/> bypasses the actual write entirely.
+    ///
+    /// <para><b>Phase 4 — Wave 19 (v3.0 refactor):</b> marked
+    /// <see cref="ObsoleteAttribute"/> (warning-only). Production callers
+    /// migrated to <see cref="ISettingsStore.Save"/> via ctor injection.
+    /// Same retirement timeline as <see cref="Load"/>.</para>
+    /// </summary>
+    [Obsolete("Use ISettingsStore.Save via DI — Phase 3G-1/Phase 4 Wave 19 migrated callers. " +
+              "RealSettingsStore.Instance delegates here for back-compat; this static API will be " +
+              "retired in Phase 5.", error: false)]
     public static void Save(AppSettings settings, string? path = null)
     {
         // v2.24.2 HOTFIX: Safe Mode must be strictly read-only. Previously
@@ -509,7 +546,10 @@ public static class SettingsLoader
                 // Read-lock workaround: if the writer still holds an
                 // exclusive handle when we try to parse, give up — the
                 // next Changed event will re-schedule us.
+                // Phase 4 Wave 19: internal call to back-compat surface.
+#pragma warning disable CS0618
                 var settings = Load(configPath);
+#pragma warning restore CS0618
                 _reloadCallback?.Invoke(settings);
             }
             catch { /* non-fatal: next change will retry */ }
@@ -537,7 +577,13 @@ public static class SettingsLoader
             File.Copy(configPath, backup, overwrite: false);
         }
 
+        // Phase 4 Wave 19: internal call to back-compat surface (Save is
+        // ISettingsStore-only for outside callers, but ResetToDefaults
+        // legitimately needs the static Save semantics — same SafeMode
+        // guard, same path normalisation).
+#pragma warning disable CS0618
         Save(CreateDefaults(), configPath);
+#pragma warning restore CS0618
         return backup;
     }
 
@@ -636,6 +682,9 @@ public static class SettingsLoader
     private static void WriteExample(string path, AppSettings settings)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        // Phase 4 Wave 19: internal call to back-compat surface.
+#pragma warning disable CS0618
         Save(settings, path);
+#pragma warning restore CS0618
     }
 }

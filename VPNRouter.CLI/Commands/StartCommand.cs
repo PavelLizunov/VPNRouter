@@ -24,6 +24,18 @@ public class StartSettings : CommandSettings
 
 public class StartCommand : AsyncCommand<StartSettings>
 {
+    // Phase 4 Wave 19 (v3.0 refactor): ISettingsStore ctor injection for
+    // testability. Default <see cref="RealSettingsStore.Instance"/> preserves
+    // the pre-3G-1 static-loader behaviour; tests can pass InMemorySettingsStore.
+    private readonly ISettingsStore _settingsStore;
+
+    public StartCommand() : this(null) { }
+
+    public StartCommand(ISettingsStore? settingsStore)
+    {
+        _settingsStore = settingsStore ?? RealSettingsStore.Instance;
+    }
+
     public override async Task<int> ExecuteAsync(CommandContext context, StartSettings settings)
     {
         AnsiConsole.Write(new FigletText("VPNRouter").Color(Color.Cyan1));
@@ -32,7 +44,7 @@ public class StartCommand : AsyncCommand<StartSettings>
         AppSettings appSettings;
         try
         {
-            appSettings = SettingsLoader.Load(settings.ConfigPath);
+            appSettings = _settingsStore.Load(settings.ConfigPath);
         }
         catch (Exception ex)
         {

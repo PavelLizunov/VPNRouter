@@ -50,6 +50,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private TgProxyManager? _tgProxy;
 #endif
     private readonly ILogger _logger;
+    // Phase 4 Wave 19 (v3.0 refactor): ISettingsStore seam for Load / Save /
+    // ConsumeRecoveryNotice / ConsumePlaceholderPruneNotice. Defaults to
+    // <see cref="RealSettingsStore.Instance"/> in the parameterless ctor —
+    // production paths see no behaviour change. Tests that want filesystem
+    // isolation can pass an <c>InMemorySettingsStore</c> via the chained
+    // overload below.
+    private readonly ISettingsStore _settingsStore;
     private AppSettings _settings;
     private bool _isLoadingUI;
     private bool _appsLoaded;
@@ -409,7 +416,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// </summary>
     private void ConsumeSettingsRecoveryNotice()
     {
-        var recovery = SettingsLoader.ConsumeRecoveryNotice();
+        // Phase 4 Wave 19: route through the injected store so tests can
+        // seed a notice via InMemorySettingsStore.SeedRecoveryNotice instead
+        // of mutating SettingsLoader.LastRecoveryNotice statically.
+        var recovery = _settingsStore.ConsumeRecoveryNotice();
         if (string.IsNullOrWhiteSpace(recovery)) return;
 
         // Loader-supplied recovery line already includes the backup
@@ -432,7 +442,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// </summary>
     private void ConsumePlaceholderPruneNotice()
     {
-        var consumed = SettingsLoader.ConsumePlaceholderPruneNotice(_settings);
+        // Phase 4 Wave 19: route through the injected store. Real semantics
+        // are the same (mutates _settings.App.PlaceholderPruneCount in place);
+        // the indirection matters only to test injection.
+        var consumed = _settingsStore.ConsumePlaceholderPruneNotice(_settings);
         if (consumed.Count == 0) return;
 
         var hasAnyServerLeft =
@@ -2383,8 +2396,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public ServiceViewModel ServiceVm { get; }
     public FreeConfigsPageViewModel FreeConfigsVm { get; private set; } = null!;
 
-    public MainWindowViewModel()
+    public MainWindowViewModel() : this(null) { }
+
+    /// <summary>
+    /// Phase 4 Wave 19 (v3.0 refactor) — ctor overload with explicit
+    /// <see cref="ISettingsStore"/> injection. Pass <c>null</c> (or use
+    /// the parameterless ctor) to fall back to
+    /// <see cref="RealSettingsStore.Instance"/>; tests pass
+    /// <c>InMemorySettingsStore</c> to keep the VM isolated from the
+    /// on-disk <c>config.yaml</c>.
+    /// </summary>
+    public MainWindowViewModel(ISettingsStore? settingsStore)
     {
+        _settingsStore = settingsStore ?? RealSettingsStore.Instance;
+
         _logger = new LoggerConfiguration()
             .WriteTo.File(
                 Path.Combine(AppPaths.LogsDir, "vpnrouter.log"),
@@ -2416,7 +2441,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _engine = PlatformServices.CreateVpnEngine(_logger);
         _engine.StatusChanged += OnEngineStatus;
 
-        _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+        _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
         // r10 r9 (Bug-r10-H): wire Servers.CollectionChanged → MarkOrphanServers
         // so the "Не из подписки" badge stays consistent across all entry-add
@@ -2654,7 +2679,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var osLang = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
             storedLang = string.Equals(osLang, "ru", StringComparison.OrdinalIgnoreCase) ? "ru" : "en";
             _settings.App.Language = storedLang;
-            try { VPNRouter.Core.Services.SettingsLoader.Save(_settings); } catch { }
+            try { _settingsStore.Save(_settings); } catch { }
         }
         IsRussian = storedLang.Equals("ru", StringComparison.OrdinalIgnoreCase);
         Strings.Lang = IsRussian ? "ru" : "en";
@@ -2956,7 +2981,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         try
         {
             SaveSettings();
-            _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+            _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
             if (IsServiceManagedVpn)
             {
@@ -3492,14 +3517,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
         }
 
-        SettingsLoader.Save(_settings, AppPaths.ConfigYamlPath);
+        _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
     }
 
     partial void OnReceivePrereleasesChanged(bool value)
     {
         if (_isLoadingUI) return;
         _settings.Update.Channel = value ? "experimental" : "stable";
-        SettingsLoader.Save(_settings, AppPaths.ConfigYamlPath);
+        _settingsStore.Save(_settings, AppPaths.ConfigYamlPath);
     }
 
     // ── Engine events ──
@@ -3673,7 +3698,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             });
 
             SaveSettings();
-            _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+            _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
             // Subscribe mode: aggregate enabled subscriptions → feed into VLESS engine path
             var aggregatedServers = _settings.App.Subscriptions
@@ -5017,7 +5042,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             // Save + reload settings with the new active config
             SaveSettings();
-            _settings = SettingsLoader.Load(AppPaths.ConfigYamlPath);
+            _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
             // v2.30.2-r1 diag: log effective settings after Save+Reload
             // so the engine-side decision is auditable from the VM log.

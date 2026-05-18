@@ -4,6 +4,14 @@ using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
 using Xunit;
 
+// Phase 4 Wave 19 (v3.0 refactor): suppress CS0618 at file scope. The
+// integration test below specifically pins SettingsLoader.Load static
+// behaviour (rename invalid yaml → write defaults → populate
+// LastRecoveryNotice). Routing through ISettingsStore would bypass the
+// crash-recovery code path that's the load-bearing thing under test.
+// See sister suite SettingsLoaderRobustnessTests for the rationale.
+#pragma warning disable CS0618
+
 namespace VPNRouter.Tests;
 
 /// <summary>
