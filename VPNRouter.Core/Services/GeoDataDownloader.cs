@@ -1,3 +1,4 @@
+using System.Net.Http;
 using Serilog;
 
 namespace VPNRouter.Core.Services;
@@ -44,20 +45,29 @@ public class GeoDataDownloader
     /// </summary>
     private static readonly TimeSpan RefreshAfter = TimeSpan.FromDays(7);
 
-    private static readonly HttpClient _http = new()
-    {
-        Timeout = TimeSpan.FromSeconds(60)
-    };
-
+    // v3.0 Phase 4 (2026-05-18): IHttpClient streaming seam replaces the
+    // static `_http` field below. Production callers continue to use the
+    // process-shared PolicyHttpClient via the parameterless overload;
+    // tests inject a FakeHttpClient with `SetupStream(...)` so the
+    // download path can be exercised without real network.
+    private readonly IHttpClient _http;
     private readonly ILogger _logger;
 
-    static GeoDataDownloader()
+    /// <summary>
+    /// Production ctor — uses the process-shared <see cref="PolicyHttpClient"/>.
+    /// </summary>
+    public GeoDataDownloader(ILogger? logger = null)
+        : this(PolicyHttpClient.Shared, logger)
     {
-        _http.DefaultRequestHeaders.Add("User-Agent", "VPNRouter");
     }
 
-    public GeoDataDownloader(ILogger? logger = null)
+    /// <summary>
+    /// Test / DI ctor — caller supplies a custom <see cref="IHttpClient"/>
+    /// (typically <c>FakeHttpClient</c> in tests).
+    /// </summary>
+    public GeoDataDownloader(IHttpClient http, ILogger? logger = null)
     {
+        _http = http ?? throw new ArgumentNullException(nameof(http));
         _logger = logger ?? Log.Logger;
     }
 
@@ -136,13 +146,21 @@ public class GeoDataDownloader
             var tmpPath = destPath + ".tmp";
             try
             {
-                using (var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct))
+                // v3.0 Phase 4: IHttpClient.SendStreamingAsync replaces the
+                // legacy `_http.GetAsync(..., ResponseHeadersRead)` call. The
+                // wrapper's await-using disposes the response + body stream
+                // even if CopyToAsync below throws mid-transfer, so the
+                // socket is freed without a half-read connection leak.
+                await using (var response = await _http.SendStreamingAsync(
+                    new HttpRequest(HttpMethod.Get, new Uri(url)),
+                    ct).ConfigureAwait(false))
                 {
-                    response.EnsureSuccessStatusCode();
+                    if (!response.IsSuccess())
+                        throw new HttpRequestException(
+                            $"HTTP {response.StatusCode} downloading {label}");
 
                     await using var fs = new FileStream(tmpPath, FileMode.Create, FileAccess.Write, FileShare.None);
-                    using var src = await response.Content.ReadAsStreamAsync(ct);
-                    await src.CopyToAsync(fs, ct);
+                    await response.Body.CopyToAsync(fs, ct);
                 }
 
                 var size = new FileInfo(tmpPath).Length;

@@ -24,6 +24,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -155,6 +156,153 @@ public sealed class PolicyHttpClient : IHttpClient, IDisposable
             {
                 httpResponse?.Dispose();
             }
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Phase 4 (v3.0 refactor): streaming primitive for large-file
+    /// downloads. Uses <see cref="HttpCompletionOption.ResponseHeadersRead"/>
+    /// so the body is truly progressive — the wire is not read past the
+    /// status line + headers before this method returns. The body
+    /// <see cref="Stream"/> reads on demand; disposing the wrapper closes
+    /// the stream + response message and frees the underlying socket.
+    ///
+    /// <para>The retry policy is intentionally NOT applied here: a stream
+    /// half-consumed cannot be silently re-issued from byte 0 without
+    /// corrupting the caller's <c>FileStream</c> sink. Callers that need
+    /// retry (e.g. <see cref="ZapretUpdater"/>) wrap this call in their
+    /// own loop with file-on-disk cleanup between attempts.</para>
+    /// </remarks>
+    public async Task<IHttpStreamingResponse> SendStreamingAsync(HttpRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ct.ThrowIfCancellationRequested();
+
+        var httpRequest = BuildHttpRequestMessage(request);
+
+        // Per-request timeout is implemented via a linked CTS that lives
+        // for the lifetime of the streaming response. Disposing the
+        // response cancels + disposes this CTS so the timer is not leaked.
+        var perRequestCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        if (request.Timeout is { } perRequestTimeout)
+            perRequestCts.CancelAfter(perRequestTimeout);
+
+        HttpResponseMessage? response = null;
+        try
+        {
+            response = await _client.SendAsync(
+                httpRequest,
+                HttpCompletionOption.ResponseHeadersRead,
+                perRequestCts.Token).ConfigureAwait(false);
+
+            // Read the body stream once headers are in. Disposal of the
+            // wrapper closes this stream which aborts the connection if
+            // not fully drained — exactly what we want under cancellation.
+            var bodyStream = await response.Content
+                .ReadAsStreamAsync(perRequestCts.Token)
+                .ConfigureAwait(false);
+
+            var headers = CollectHeaders(response);
+            var contentLength = response.Content.Headers.ContentLength;
+            var statusCode = (int)response.StatusCode;
+
+            // Transfer ownership of response + cts + httpRequest into the
+            // wrapper; on success path the catch block below is skipped.
+            var owned = new PolicyStreamingResponse(
+                statusCode,
+                headers,
+                contentLength,
+                bodyStream,
+                response,
+                httpRequest,
+                perRequestCts);
+            response = null; // Owned by wrapper from here.
+            httpRequest = null!;
+            perRequestCts = null!;
+            return owned;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Caller cancelled before headers arrived. Propagate as-is so
+            // tests can disambiguate from timeout.
+            throw;
+        }
+        catch (OperationCanceledException) when (request.Timeout is not null)
+        {
+            // Per-request timeout fired during the headers phase. Surface
+            // as TimeoutException so callers can branch on it.
+            throw new TimeoutException(
+                $"HTTP streaming request to {request.Uri} timed out after {request.Timeout.Value.TotalMilliseconds:F0} ms.");
+        }
+        finally
+        {
+            // If we threw before transferring ownership to the wrapper,
+            // dispose everything inline so no socket/CTS leaks.
+            if (response is not null)
+                response.Dispose();
+            httpRequest?.Dispose();
+            perRequestCts?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Concrete <see cref="IHttpStreamingResponse"/>. Owns the
+    /// <see cref="HttpResponseMessage"/> + body <see cref="Stream"/> +
+    /// per-request <see cref="CancellationTokenSource"/> and disposes
+    /// them in a single chain on <see cref="DisposeAsync"/>.
+    /// </summary>
+    /// <remarks>
+    /// Disposal order matters: the body stream is closed FIRST so an
+    /// in-flight network read is aborted at the socket layer; the
+    /// response message is closed SECOND so any kestrel-style content
+    /// state is released; the per-request CTS is disposed LAST so the
+    /// linked timeout timer is removed only after the socket is freed
+    /// (avoids a "CancelAfter fired on disposed CTS" benign exception
+    /// surfacing as an unhandled task fault).
+    /// </remarks>
+    private sealed class PolicyStreamingResponse : IHttpStreamingResponse
+    {
+        private readonly HttpResponseMessage _response;
+        private readonly HttpRequestMessage _request;
+        private readonly CancellationTokenSource _perRequestCts;
+        private int _disposed;
+
+        public PolicyStreamingResponse(
+            int statusCode,
+            IReadOnlyDictionary<string, string> headers,
+            long? contentLength,
+            Stream body,
+            HttpResponseMessage response,
+            HttpRequestMessage request,
+            CancellationTokenSource perRequestCts)
+        {
+            StatusCode = statusCode;
+            Headers = headers;
+            ContentLength = contentLength;
+            Body = body;
+            _response = response;
+            _request = request;
+            _perRequestCts = perRequestCts;
+        }
+
+        public int StatusCode { get; }
+        public IReadOnlyDictionary<string, string> Headers { get; }
+        public long? ContentLength { get; }
+        public Stream Body { get; }
+
+        public async ValueTask DisposeAsync()
+        {
+            // Idempotent: a caller that calls Dispose twice (manual +
+            // await-using compiler-generated cleanup) does not double-fault.
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+            try { await Body.DisposeAsync().ConfigureAwait(false); }
+            catch { /* Body might already be at EOF or aborted — swallow. */ }
+
+            try { _response.Dispose(); } catch { }
+            try { _request.Dispose(); } catch { }
+            try { _perRequestCts.Dispose(); } catch { }
         }
     }
 

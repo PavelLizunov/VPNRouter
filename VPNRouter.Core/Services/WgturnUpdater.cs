@@ -37,19 +37,46 @@ public class WgturnUpdater
     /// <summary>Prevents concurrent downloads — double-click / rebind races.</summary>
     private static readonly SemaphoreSlim _downloadLock = new(1, 1);
 
-    private static readonly HttpClient _http = new()
-    {
-        DefaultRequestHeaders =
+    // v3.0 Phase 4 (2026-05-18): IHttpClient seam. The GitHub release-info
+    // call (small JSON) uses `SendAsync`; the binary download (~5-15 MB
+    // for slim, ~150 MB for embedded) uses `SendStreamingAsync` so the
+    // body is not buffered to a byte[] before File.Create accepts it.
+    private readonly IHttpClient _http;
+
+    /// <summary>
+    /// Headers GitHub's REST API expects. Set on every outbound request
+    /// via the envelope; the policy client doesn't need to know.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> GitHubApiHeaders =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            { "User-Agent", "VPNRouter" },
-            { "Accept", "application/vnd.github.v3+json" }
-        },
-        Timeout = TimeSpan.FromMinutes(5)
-    };
+            ["Accept"] = "application/vnd.github.v3+json",
+        };
+
+    // Default per-request timeout for the binary download. Mirrors the
+    // legacy static HttpClient's 5-min wall-clock budget so embedded
+    // builds (~150 MB) on slow links still complete.
+    private static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromMinutes(5);
 
     private readonly ILogger _logger;
 
-    public WgturnUpdater(ILogger logger) => _logger = logger;
+    /// <summary>
+    /// Production ctor — uses the process-shared <see cref="PolicyHttpClient"/>.
+    /// </summary>
+    public WgturnUpdater(ILogger logger)
+        : this(logger, PolicyHttpClient.Shared)
+    {
+    }
+
+    /// <summary>
+    /// Test / DI ctor — caller supplies a custom <see cref="IHttpClient"/>
+    /// (typically <c>FakeHttpClient</c> in tests).
+    /// </summary>
+    public WgturnUpdater(ILogger logger, IHttpClient http)
+    {
+        _logger = logger;
+        _http = http ?? throw new ArgumentNullException(nameof(http));
+    }
 
     public event Action<string>? StatusChanged;
 
@@ -228,7 +255,7 @@ public class WgturnUpdater
             try
             {
                 resp = await RetryAsync(
-                    () => _http.GetStringAsync(apiUrl, ct),
+                    () => FetchGitHubJsonAsync(apiUrl, ct),
                     attempts: 3,
                     baseDelayMs: 2000,
                     onRetry: (i, ex) =>
@@ -315,10 +342,27 @@ public class WgturnUpdater
                     {
                         try { if (File.Exists(tempBin)) File.Delete(tempBin); } catch { }
 
-                        using (var stream = await _http.GetStreamAsync(assetUrl, ct).ConfigureAwait(false))
-                        using (var file = File.Create(tempBin))
+                        // v3.0 Phase 4: SendStreamingAsync replaces
+                        // GetStreamAsync. await-using on the response means
+                        // a mid-copy exception (disk full, network drop)
+                        // aborts the socket before the outer retry path
+                        // re-issues the request.
+                        await using (var response = await _http.SendStreamingAsync(
+                            new HttpRequest(
+                                HttpMethod.Get,
+                                new Uri(assetUrl),
+                                Headers: GitHubApiHeaders,
+                                Timeout: DefaultDownloadTimeout),
+                            ct).ConfigureAwait(false))
                         {
-                            await stream.CopyToAsync(file, ct).ConfigureAwait(false);
+                            if (!response.IsSuccess())
+                                throw new HttpRequestException(
+                                    $"HTTP {response.StatusCode} downloading wgturn-cli binary",
+                                    inner: null,
+                                    statusCode: (System.Net.HttpStatusCode)response.StatusCode);
+
+                            using (var file = File.Create(tempBin))
+                                await response.Body.CopyToAsync(file, ct).ConfigureAwait(false);
                         }
 
                         if (expectedSize.HasValue)
@@ -443,6 +487,31 @@ public class WgturnUpdater
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Wrap <see cref="IHttpClient.SendAsync"/> for GitHub REST endpoints
+    /// and surface a string body. Maps non-2xx to
+    /// <see cref="HttpRequestException"/> (matching the legacy
+    /// <c>HttpClient.GetStringAsync</c> contract) so the existing catch
+    /// blocks for rate-limit / 5xx still trigger.
+    /// </summary>
+    private async Task<string> FetchGitHubJsonAsync(string url, CancellationToken ct)
+    {
+        var apiResp = await _http.SendAsync(
+            new HttpRequest(
+                HttpMethod.Get,
+                new Uri(url),
+                Headers: GitHubApiHeaders),
+            ct).ConfigureAwait(false);
+        if (!apiResp.IsSuccess())
+        {
+            throw new HttpRequestException(
+                $"GitHub API HTTP {apiResp.StatusCode}",
+                inner: null,
+                statusCode: (System.Net.HttpStatusCode)apiResp.StatusCode);
+        }
+        return apiResp.AsString();
+    }
 
     /// <summary>
     /// Exponential-backoff retry helper. Only retries on transient errors

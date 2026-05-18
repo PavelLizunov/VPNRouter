@@ -14,6 +14,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
@@ -46,7 +47,9 @@ public sealed class FakeHttpClient : IHttpClient
 {
     private readonly object _lock = new();
     private readonly List<RouteRule> _routes = new();
+    private readonly List<StreamRouteRule> _streamRoutes = new();
     private readonly List<HttpRequest> _sentRequests = new();
+    private readonly List<HttpRequest> _sentStreamingRequests = new();
     private TimeSpan _defaultDuration = TimeSpan.FromMilliseconds(1);
 
     /// <summary>Snapshot of all requests the SUT issued, in call order.</summary>
@@ -55,6 +58,20 @@ public sealed class FakeHttpClient : IHttpClient
         get
         {
             lock (_lock) return _sentRequests.ToArray();
+        }
+    }
+
+    /// <summary>
+    /// Snapshot of all <see cref="IHttpClient.SendStreamingAsync"/> requests
+    /// the SUT issued, in call order. Tracked separately from
+    /// <see cref="SentRequests"/> so tests can assert which seam was used
+    /// (buffered vs streaming) for a given URL.
+    /// </summary>
+    public IReadOnlyList<HttpRequest> SentStreamingRequests
+    {
+        get
+        {
+            lock (_lock) return _sentStreamingRequests.ToArray();
         }
     }
 
@@ -129,6 +146,89 @@ public sealed class FakeHttpClient : IHttpClient
         return this;
     }
 
+    /// <summary>
+    /// Register a canned streaming response: a request whose URI string
+    /// contains <paramref name="urlPattern"/> will receive an
+    /// <see cref="IHttpStreamingResponse"/> whose
+    /// <see cref="IHttpStreamingResponse.Body"/> reads from a
+    /// <see cref="MemoryStream"/> over <paramref name="body"/>.
+    ///
+    /// <para>Use this for ZIP / binary download paths
+    /// (<c>ZapretUpdater</c>, <c>WgturnUpdater</c>, etc.). Tests can pass
+    /// a 5 MB byte array to exercise the OOM-safety path without ever
+    /// hitting a real network.</para>
+    /// </summary>
+    public FakeHttpClient SetupStream(
+        string urlPattern,
+        byte[] body,
+        int statusCode = 200,
+        IReadOnlyDictionary<string, string>? headers = null)
+    {
+        if (string.IsNullOrEmpty(urlPattern))
+            throw new ArgumentException("URL pattern must be non-empty.", nameof(urlPattern));
+        ArgumentNullException.ThrowIfNull(body);
+
+        lock (_lock)
+            _streamRoutes.Add(new StreamRouteRule(
+                urlPattern,
+                body,
+                statusCode,
+                headers ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                Exception: null));
+        return this;
+    }
+
+    /// <summary>
+    /// Register a fault on the streaming seam: matching requests throw
+    /// <paramref name="exception"/> from
+    /// <see cref="IHttpClient.SendStreamingAsync"/> before any body is
+    /// delivered.
+    /// </summary>
+    public FakeHttpClient ThrowOnStream(string urlPattern, Exception exception)
+    {
+        if (string.IsNullOrEmpty(urlPattern))
+            throw new ArgumentException("URL pattern must be non-empty.", nameof(urlPattern));
+        ArgumentNullException.ThrowIfNull(exception);
+
+        lock (_lock)
+            _streamRoutes.Add(new StreamRouteRule(
+                urlPattern,
+                Body: null,
+                StatusCode: 0,
+                Headers: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                exception));
+        return this;
+    }
+
+    /// <inheritdoc />
+    public Task<IHttpStreamingResponse> SendStreamingAsync(HttpRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ct.ThrowIfCancellationRequested();
+
+        StreamRouteRule? match;
+        lock (_lock)
+        {
+            _sentStreamingRequests.Add(request);
+            match = _streamRoutes.LastOrDefault(r =>
+                request.Uri.ToString().Contains(r.Pattern, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (match is null)
+            throw new InvalidOperationException(
+                $"FakeHttpClient: no streaming route registered for {request.Method} {request.Uri}. " +
+                "Call SetupStream(...) before exercising the SUT.");
+
+        if (match.Exception is not null)
+            return Task.FromException<IHttpStreamingResponse>(match.Exception);
+
+        IHttpStreamingResponse resp = new FakeStreamingResponse(
+            match.StatusCode,
+            match.Headers,
+            match.Body!);
+        return Task.FromResult(resp);
+    }
+
     /// <inheritdoc />
     public Task<HttpResponse> SendAsync(HttpRequest request, CancellationToken ct = default)
     {
@@ -179,4 +279,48 @@ public sealed class FakeHttpClient : IHttpClient
         HttpResponse? Response,
         Exception? Exception,
         Queue<object>? Sequence);
+
+    private sealed record StreamRouteRule(
+        string Pattern,
+        byte[]? Body,
+        int StatusCode,
+        IReadOnlyDictionary<string, string> Headers,
+        Exception? Exception);
+
+    /// <summary>
+    /// In-memory <see cref="IHttpStreamingResponse"/> backed by a
+    /// <see cref="MemoryStream"/>. Disposal closes the stream so tests
+    /// for the "abort mid-read" path see <see cref="ObjectDisposedException"/>
+    /// on subsequent reads, matching the real <see cref="PolicyHttpClient"/>
+    /// behaviour.
+    /// </summary>
+    private sealed class FakeStreamingResponse : IHttpStreamingResponse
+    {
+        private readonly MemoryStream _body;
+        private int _disposed;
+
+        public FakeStreamingResponse(
+            int statusCode,
+            IReadOnlyDictionary<string, string> headers,
+            byte[] body)
+        {
+            StatusCode = statusCode;
+            Headers = headers;
+            ContentLength = body.LongLength;
+            _body = new MemoryStream(body, writable: false);
+        }
+
+        public int StatusCode { get; }
+        public IReadOnlyDictionary<string, string> Headers { get; }
+        public long? ContentLength { get; }
+        public Stream Body => _body;
+
+        public ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                return ValueTask.CompletedTask;
+            _body.Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
 }

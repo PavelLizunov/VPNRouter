@@ -55,15 +55,20 @@ public class ZapretUpdater
         "VPNRouter");
 
     private readonly ILogger _logger;
-    private static readonly HttpClient _http = new()
-    {
-        DefaultRequestHeaders =
-        {
-            { "User-Agent", "VPNRouter" },
-            { "Accept", "application/vnd.github.v3+json" }
-        },
-        Timeout = TimeSpan.FromMinutes(5)
-    };
+
+    // v3.0 Phase 4 (2026-05-18): IHttpClient seam. The release-list call
+    // (small JSON) goes through `SendAsync` (buffered); the ZIP download
+    // (~3.5 MB) goes through `SendStreamingAsync` so the body is not
+    // buffered into a byte[] before the file write — keeps memory flat
+    // even on slow filesystems where the kernel can't drain the socket
+    // as fast as Github can send.
+    private readonly IHttpClient _http;
+
+    // Default per-request timeout for ZIP downloads. The legacy static
+    // HttpClient used a 5-min "wall clock" timeout; here we keep the
+    // same behaviour by setting it on the HttpRequest envelope so the
+    // shared client's 30-s default doesn't choke a large download.
+    private static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromMinutes(5);
 
     public static string ZapretDir => Path.Combine(_dataDir, "zapret");
     public static string BinDir => Path.Combine(ZapretDir, "bin");
@@ -73,7 +78,33 @@ public class ZapretUpdater
 
     public event Action<string>? StatusChanged;
 
-    public ZapretUpdater(ILogger logger) => _logger = logger;
+    /// <summary>
+    /// Production ctor — uses the process-shared <see cref="PolicyHttpClient"/>.
+    /// </summary>
+    public ZapretUpdater(ILogger logger)
+        : this(logger, PolicyHttpClient.Shared)
+    {
+    }
+
+    /// <summary>
+    /// Test / DI ctor — caller supplies a custom <see cref="IHttpClient"/>
+    /// (typically <c>FakeHttpClient</c> in tests).
+    /// </summary>
+    public ZapretUpdater(ILogger logger, IHttpClient http)
+    {
+        _logger = logger;
+        _http = http ?? throw new ArgumentNullException(nameof(http));
+    }
+
+    /// <summary>
+    /// Headers GitHub's REST API expects on every request. Applied to the
+    /// envelope so the policy client doesn't have to know about them.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> GitHubApiHeaders =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Accept"] = "application/vnd.github.v3+json",
+        };
 
     /// <summary>Check if Flowseal zapret is installed (winws.exe exists).</summary>
     public static bool IsInstalled() => File.Exists(WinwsExePath);
@@ -134,7 +165,7 @@ public class ZapretUpdater
             try
             {
                 resp = await RetryAsync(
-                    () => _http.GetStringAsync(apiUrl, ct),
+                    () => FetchGitHubJsonAsync(apiUrl, ct),
                     attempts: 3,
                     baseDelayMs: 2000,
                     onRetry: (i, ex) =>
@@ -217,10 +248,26 @@ public class ZapretUpdater
                         // Clean prior attempt's partial file
                         try { if (File.Exists(tempZip)) File.Delete(tempZip); } catch { }
 
-                        using (var stream = await _http.GetStreamAsync(zipUrl, ct).ConfigureAwait(false))
-                        using (var file = File.Create(tempZip))
+                        // v3.0 Phase 4: SendStreamingAsync replaces
+                        // GetStreamAsync. The await-using on the response
+                        // closes the socket cleanly even if the file write
+                        // throws mid-copy — no half-read kernel buffer leak.
+                        await using (var response = await _http.SendStreamingAsync(
+                            new HttpRequest(
+                                HttpMethod.Get,
+                                new Uri(zipUrl),
+                                Headers: GitHubApiHeaders,
+                                Timeout: DefaultDownloadTimeout),
+                            ct).ConfigureAwait(false))
                         {
-                            await stream.CopyToAsync(file, ct).ConfigureAwait(false);
+                            if (!response.IsSuccess())
+                                throw new HttpRequestException(
+                                    $"HTTP {response.StatusCode} downloading ZIP",
+                                    inner: null,
+                                    statusCode: (System.Net.HttpStatusCode)response.StatusCode);
+
+                            using (var file = File.Create(tempZip))
+                                await response.Body.CopyToAsync(file, ct).ConfigureAwait(false);
                         }
 
                         // Verify size if GitHub told us what to expect (named assets do,
@@ -356,6 +403,31 @@ public class ZapretUpdater
         {
             _downloadLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Wrap <see cref="IHttpClient.SendAsync"/> for GitHub REST endpoints
+    /// and surface a string body. Maps non-2xx to
+    /// <see cref="HttpRequestException"/> (matching the legacy
+    /// <c>HttpClient.GetStringAsync</c> contract) so the existing catch
+    /// blocks for rate-limit / 5xx still trigger.
+    /// </summary>
+    private async Task<string> FetchGitHubJsonAsync(string url, CancellationToken ct)
+    {
+        var apiResp = await _http.SendAsync(
+            new HttpRequest(
+                HttpMethod.Get,
+                new Uri(url),
+                Headers: GitHubApiHeaders),
+            ct).ConfigureAwait(false);
+        if (!apiResp.IsSuccess())
+        {
+            throw new HttpRequestException(
+                $"GitHub API HTTP {apiResp.StatusCode}",
+                inner: null,
+                statusCode: (System.Net.HttpStatusCode)apiResp.StatusCode);
+        }
+        return apiResp.AsString();
     }
 
     /// <summary>

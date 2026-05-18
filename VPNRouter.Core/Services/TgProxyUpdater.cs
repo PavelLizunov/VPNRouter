@@ -21,15 +21,28 @@ public class TgProxyUpdater
         "VPNRouter");
 
     private readonly ILogger _logger;
-    private static readonly HttpClient _http = new()
-    {
-        DefaultRequestHeaders =
+
+    // v3.0 Phase 4 (2026-05-18): IHttpClient seam. All HTTP traffic
+    // (GitHub API for release info, python.org for the embeddable ZIP,
+    // pypi.org for cryptography/cffi/pycparser wheels, GitHub for the
+    // proxy source zipball) routes through the shared client so retry
+    // policy + connection pool are uniform.
+    private readonly IHttpClient _http;
+
+    // Wheels can be 10+ MB and python.org can be slow — extend the
+    // per-request timeout for download paths via the envelope.
+    private static readonly TimeSpan DefaultDownloadTimeout = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// Headers GitHub's REST API expects. Sent on every release-list
+    /// fetch; python.org / pypi.org don't need them but the policy
+    /// client tolerates extras.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> GitHubApiHeaders =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            { "User-Agent", "VPNRouter" },
-            { "Accept", "application/vnd.github.v3+json" }
-        },
-        Timeout = TimeSpan.FromMinutes(10)
-    };
+            ["Accept"] = "application/vnd.github.v3+json",
+        };
 
     public static string TgProxyDir => Path.Combine(_dataDir, "tg-proxy");
     public static string PythonDir => Path.Combine(TgProxyDir, "python");
@@ -39,7 +52,23 @@ public class TgProxyUpdater
 
     public event Action<string>? StatusChanged;
 
-    public TgProxyUpdater(ILogger logger) => _logger = logger;
+    /// <summary>
+    /// Production ctor — uses the process-shared <see cref="PolicyHttpClient"/>.
+    /// </summary>
+    public TgProxyUpdater(ILogger logger)
+        : this(logger, PolicyHttpClient.Shared)
+    {
+    }
+
+    /// <summary>
+    /// Test / DI ctor — caller supplies a custom <see cref="IHttpClient"/>
+    /// (typically <c>FakeHttpClient</c> in tests).
+    /// </summary>
+    public TgProxyUpdater(ILogger logger, IHttpClient http)
+    {
+        _logger = logger;
+        _http = http ?? throw new ArgumentNullException(nameof(http));
+    }
 
     /// <summary>Check if both Python and proxy source are installed.</summary>
     public static bool IsInstalled() => IsInstalledAt(TgProxyDir, logger: null);
@@ -120,9 +149,24 @@ public class TgProxyUpdater
         var tempZip = Path.GetTempFileName() + ".zip";
         try
         {
-            using (var stream = await _http.GetStreamAsync(PythonZipUrl, ct))
-            using (var file = File.Create(tempZip))
-                await stream.CopyToAsync(file, ct);
+            // v3.0 Phase 4: SendStreamingAsync replaces GetStreamAsync.
+            // Disposal of the wrapper aborts the socket if `file.WriteAsync`
+            // throws mid-copy — kernel buffer is freed before we hit the
+            // outer cleanup `finally`.
+            await using (var response = await _http.SendStreamingAsync(
+                new HttpRequest(
+                    HttpMethod.Get,
+                    new Uri(PythonZipUrl),
+                    Timeout: DefaultDownloadTimeout),
+                ct).ConfigureAwait(false))
+            {
+                if (!response.IsSuccess())
+                    throw new HttpRequestException(
+                        $"HTTP {response.StatusCode} downloading Python embeddable");
+
+                using var file = File.Create(tempZip);
+                await response.Body.CopyToAsync(file, ct).ConfigureAwait(false);
+            }
 
             StatusChanged?.Invoke("Extracting Python...");
             if (Directory.Exists(PythonDir))
@@ -168,9 +212,9 @@ public class TgProxyUpdater
     /// <summary>Download Python wheels from PyPI and extract to Lib/.</summary>
     private async Task DownloadDependenciesAsync(CancellationToken ct)
     {
-        using var pypiHttp = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-        pypiHttp.DefaultRequestHeaders.Add("User-Agent", "VPNRouter");
-
+        // v3.0 Phase 4: route through the shared IHttpClient. PyPI is a
+        // public CDN; no special headers (the GitHub Accept header is
+        // harmless on pypi.org and lets us share one envelope).
         var libDir = Path.Combine(PythonDir, "Lib");
         Directory.CreateDirectory(libDir);
 
@@ -188,8 +232,13 @@ public class TgProxyUpdater
             _logger.Information("[TgProxy] Downloading {Package}...", pkgName);
 
             var pypiUrl = $"https://pypi.org/pypi/{pkgName}/json";
-            var resp = await pypiHttp.GetStringAsync(pypiUrl, ct);
-            using var doc = JsonDocument.Parse(resp);
+            var pypiResp = await _http.SendAsync(
+                new HttpRequest(HttpMethod.Get, new Uri(pypiUrl)),
+                ct).ConfigureAwait(false);
+            if (!pypiResp.IsSuccess())
+                throw new HttpRequestException(
+                    $"HTTP {pypiResp.StatusCode} fetching PyPI metadata for {pkgName}");
+            using var doc = JsonDocument.Parse(pypiResp.AsString());
 
             // Find matching wheel
             string? wheelUrl = null;
@@ -226,13 +275,26 @@ public class TgProxyUpdater
             if (wheelUrl == null)
                 throw new Exception($"Could not find wheel for {pkgName}");
 
-            // Download and extract (wheel = ZIP)
+            // Download and extract (wheel = ZIP). v3.0 Phase 4: streaming
+            // download so a 10+ MB wheel doesn't sit in a managed buffer
+            // before File.Create accepts it.
             var tempWhl = Path.GetTempFileName() + ".whl";
             try
             {
-                using (var stream = await pypiHttp.GetStreamAsync(wheelUrl, ct))
-                using (var file = File.Create(tempWhl))
-                    await stream.CopyToAsync(file, ct);
+                await using (var response = await _http.SendStreamingAsync(
+                    new HttpRequest(
+                        HttpMethod.Get,
+                        new Uri(wheelUrl),
+                        Timeout: DefaultDownloadTimeout),
+                    ct).ConfigureAwait(false))
+                {
+                    if (!response.IsSuccess())
+                        throw new HttpRequestException(
+                            $"HTTP {response.StatusCode} downloading {pkgName} wheel");
+
+                    using var file = File.Create(tempWhl);
+                    await response.Body.CopyToAsync(file, ct).ConfigureAwait(false);
+                }
 
                 ZipFile.ExtractToDirectory(tempWhl, libDir, overwriteFiles: true);
                 _logger.Information("[TgProxy] {Package} installed", pkgName);
@@ -251,8 +313,13 @@ public class TgProxyUpdater
 
         // Get latest release tag
         var url = $"{GitHubApiBase}/{ProxyRepo}/releases/latest";
-        var resp = await _http.GetStringAsync(url, ct);
-        using var doc = JsonDocument.Parse(resp);
+        var apiResp = await _http.SendAsync(
+            new HttpRequest(HttpMethod.Get, new Uri(url), Headers: GitHubApiHeaders),
+            ct).ConfigureAwait(false);
+        if (!apiResp.IsSuccess())
+            throw new HttpRequestException(
+                $"HTTP {apiResp.StatusCode} fetching GitHub release info for {ProxyRepo}");
+        using var doc = JsonDocument.Parse(apiResp.AsString());
         var tagName = doc.RootElement.GetProperty("tag_name").GetString() ?? "unknown";
 
         _logger.Information("[TgProxy] Latest release: {Tag}", tagName);
@@ -265,9 +332,22 @@ public class TgProxyUpdater
         var tempZip = Path.GetTempFileName() + ".zip";
         try
         {
-            using (var stream = await _http.GetStreamAsync(zipballUrl, ct))
-            using (var file = File.Create(tempZip))
-                await stream.CopyToAsync(file, ct);
+            // v3.0 Phase 4: streaming download — zipball can be several MB.
+            await using (var response = await _http.SendStreamingAsync(
+                new HttpRequest(
+                    HttpMethod.Get,
+                    new Uri(zipballUrl),
+                    Headers: GitHubApiHeaders,
+                    Timeout: DefaultDownloadTimeout),
+                ct).ConfigureAwait(false))
+            {
+                if (!response.IsSuccess())
+                    throw new HttpRequestException(
+                        $"HTTP {response.StatusCode} downloading proxy source zipball");
+
+                using var file = File.Create(tempZip);
+                await response.Body.CopyToAsync(file, ct).ConfigureAwait(false);
+            }
 
             StatusChanged?.Invoke("Extracting proxy source...");
 

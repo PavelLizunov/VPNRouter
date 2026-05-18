@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using VPNRouter.Core.Models;
@@ -22,19 +23,13 @@ namespace VPNRouter.Core.Services;
 /// </remarks>
 public class UpdateChecker : IDesktopInstaller
 {
-    // v3.0 Phase 2D-3 (2026-05-18): release-list + .sha256 fetches go
-    // through IHttpClient (PolicyHttpClient) so tests can stub them.
-    // The large-binary download (DownloadAndStageAsync line ~156) still
-    // uses _legacyHttp directly because it streams via
-    // HttpCompletionOption.ResponseHeadersRead + chunked progress
-    // callbacks — Phase 2G will widen IHttpClient with a Stream variant
-    // before migrating that path. Brief:
-    // plans/phase2-2D-ihttpclient-2026-05-17.md.
-    private static readonly HttpClient _legacyHttp = new()
-    {
-        Timeout = TimeSpan.FromSeconds(30)
-    };
-
+    // v3.0 Phase 4 (2026-05-18): all HTTP traffic now routes through
+    // IHttpClient. Release-list + .sha256 use SendAsync (buffered); the
+    // binary update download uses SendStreamingAsync so the multi-MB
+    // body is not buffered into a byte[] before File.Create accepts it.
+    // The previous `_legacyHttp` field (raw HttpClient retained for the
+    // streaming path) was retired here — its only remaining caller, the
+    // binary download in DownloadAndStageAsync, migrated to the new seam.
     private readonly IHttpClient _http;
     private readonly UpdateSettings _settings;
     private readonly string _currentVersion;
@@ -52,11 +47,6 @@ public class UpdateChecker : IDesktopInstaller
         OperatingSystem.IsMacOS()   ? "-mac"
         : OperatingSystem.IsLinux() ? "-linux"
         :                              "-win";
-
-    static UpdateChecker()
-    {
-        _legacyHttp.DefaultRequestHeaders.Add("User-Agent", "VPNRouter");
-    }
 
     /// <summary>
     /// Production ctor — uses the process-shared <see cref="PolicyHttpClient"/>.
@@ -351,33 +341,39 @@ public class UpdateChecker : IDesktopInstaller
             : ".zip";
         var zipPath = Path.Combine(_stagingDir, $"VPNRouter-v{info.LatestVersion}{downloadExt}");
 
-        // v3.0 Phase 2D-3: streaming download stays on the legacy
-        // HttpClient because IHttpClient currently buffers the full body
-        // (byte[]). Phase 2G will introduce a streaming variant before
-        // migrating this call site.
-        using var response = await _legacyHttp.GetAsync(downloadUrl,
-            HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
-
-        var totalBytes = response.Content.Headers.ContentLength ?? expectedSize;
-
-        using var contentStream = await response.Content.ReadAsStreamAsync(ct);
-        using var fileStream = new FileStream(zipPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920);
-
-        var buffer = new byte[81920];
-        long totalRead = 0;
-        int bytesRead;
-
-        while ((bytesRead = await contentStream.ReadAsync(buffer, ct)) > 0)
+        // v3.0 Phase 4 (2026-05-18): SendStreamingAsync replaces the
+        // legacy `_legacyHttp.GetAsync(..., ResponseHeadersRead)` call.
+        // The await-using disposes the response + body stream + per-request
+        // CTS atomically; if the file write throws mid-download the socket
+        // is freed before this scope exits, no half-read buffer leaks.
+        long totalBytes;
+        await using (var response = await _http.SendStreamingAsync(
+            new HttpRequest(HttpMethod.Get, new Uri(downloadUrl)),
+            ct).ConfigureAwait(false))
         {
-            await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
-            totalRead += bytesRead;
+            if (!response.IsSuccess())
+                throw new HttpRequestException(
+                    $"HTTP {response.StatusCode} downloading update from {downloadUrl}");
 
-            if (totalBytes > 0)
-                DownloadProgress?.Invoke((int)(totalRead * 100 / totalBytes));
+            totalBytes = response.ContentLength ?? expectedSize;
+
+            using var fileStream = new FileStream(zipPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920);
+
+            var buffer = new byte[81920];
+            long totalRead = 0;
+            int bytesRead;
+
+            while ((bytesRead = await response.Body.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+            {
+                await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
+                totalRead += bytesRead;
+
+                if (totalBytes > 0)
+                    DownloadProgress?.Invoke((int)(totalRead * 100 / totalBytes));
+            }
+
+            fileStream.Close();
         }
-
-        fileStream.Close();
 
         var downloadedSize = new FileInfo(zipPath).Length;
         if (expectedSize > 0 && downloadedSize < expectedSize * 0.9)
