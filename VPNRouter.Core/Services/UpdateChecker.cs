@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Compression;
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -83,29 +84,39 @@ public class UpdateChecker
             return null;
         var json = listResponse.AsString();
 
-        var releases = JsonConvert.DeserializeAnonymousType(json, new[]
+        // Phase 3B (2026-05-18): migrated from Newtonsoft.JsonConvert
+        // .DeserializeAnonymousType to System.Text.Json with explicit DTOs.
+        // STJ does not support anonymous-type inference at deserialize time
+        // (intentional — anonymous types have no [JsonPropertyName] map);
+        // the GitHubRelease/GitHubAsset DTOs at the bottom of this class
+        // hold the exact same fields (tag_name, body, html_url, draft,
+        // prerelease, assets[]) so the GitHub Releases API response shape
+        // round-trips identically. PropertyNameCaseInsensitive=true matches
+        // Newtonsoft's default lookup behaviour for any field name drift.
+        GitHubRelease[]? releases;
+        try
         {
-            new
-            {
-                tag_name = "",
-                body = "",
-                html_url = "",
-                draft = false,
-                prerelease = false,
-                assets = new[] { new { browser_download_url = "", size = 0L, name = "" } }
-            }
-        });
+            releases = JsonSerializer.Deserialize<GitHubRelease[]>(json, GitHubApiJsonOptions);
+        }
+        catch (JsonException)
+        {
+            // Malformed response from upstream — treat as "no update".
+            // Same fail-closed behaviour as the pre-migration path (any
+            // Newtonsoft exception bubbled up through CheckForUpdateAsync
+            // and was caught by the outer try/catch in MainWindowViewModel).
+            return null;
+        }
 
         if (releases == null || releases.Length == 0)
             return null;
 
         var newerReleases = releases
-            .Where(r => !r.draft && (_settings.IsExperimental || !r.prerelease))
+            .Where(r => !r.Draft && (_settings.IsExperimental || !r.Prerelease))
             .Select(r => new
             {
                 Release = r,
-                Tag = r.tag_name.TrimStart('v'),
-                Parsed = TryParseSemVer(r.tag_name.TrimStart('v'), out var v) ? v : (SemVer?)null
+                Tag = (r.TagName ?? string.Empty).TrimStart('v'),
+                Parsed = TryParseSemVer((r.TagName ?? string.Empty).TrimStart('v'), out var v) ? v : (SemVer?)null
             })
             .Where(r => r.Parsed != null && r.Parsed.Value.CompareTo(current) > 0)
             .OrderByDescending(r => r.Parsed!.Value)
@@ -117,10 +128,10 @@ public class UpdateChecker
         var latestRelease = newerReleases[0];
 
         // ── Find platform-specific assets ──
-        var fullAsset = FindFullAsset(latestRelease.Release.assets);
-        var liteAsset = FindLiteAsset(latestRelease.Release.assets);
-        var fullSha   = FindChecksumAsset(latestRelease.Release.assets, fullAsset);
-        var liteSha   = FindChecksumAsset(latestRelease.Release.assets, liteAsset);
+        var fullAsset = FindFullAsset(latestRelease.Release.Assets);
+        var liteAsset = FindLiteAsset(latestRelease.Release.Assets);
+        var fullSha   = FindChecksumAsset(latestRelease.Release.Assets, fullAsset);
+        var liteSha   = FindChecksumAsset(latestRelease.Release.Assets, liteAsset);
 
         bool canUseLite = liteAsset != null && IsSharedRuntimeInstall();
 
@@ -128,29 +139,78 @@ public class UpdateChecker
             return null;
 
         var allNotes = newerReleases
-            .Where(r => !string.IsNullOrWhiteSpace(r.Release.body))
-            .Select(r => r.Release.body!.Trim())
+            .Where(r => !string.IsNullOrWhiteSpace(r.Release.Body))
+            .Select(r => r.Release.Body!.Trim())
             .ToList();
 
         var info = new UpdateInfo
         {
             CurrentVersion = _currentVersion,
             LatestVersion = latestRelease.Tag,
-            DownloadUrl = fullAsset?.browser_download_url
-                          ?? liteAsset?.browser_download_url ?? string.Empty,
+            DownloadUrl = fullAsset?.BrowserDownloadUrl
+                          ?? liteAsset?.BrowserDownloadUrl ?? string.Empty,
             ReleaseNotes = string.Join("\n\n", allNotes),
-            HtmlUrl = latestRelease.Release.html_url ?? string.Empty,
-            SizeBytes = fullAsset?.size ?? liteAsset?.size ?? 0,
+            HtmlUrl = latestRelease.Release.HtmlUrl ?? string.Empty,
+            SizeBytes = fullAsset?.Size ?? liteAsset?.Size ?? 0,
             IsNewer = true,
-            LiteDownloadUrl = liteAsset?.browser_download_url,
-            LiteSizeBytes = liteAsset?.size ?? 0,
+            LiteDownloadUrl = liteAsset?.BrowserDownloadUrl,
+            LiteSizeBytes = liteAsset?.Size ?? 0,
             HasLiteUpdate = canUseLite,
-            FullChecksumUrl = (string?)fullSha?.browser_download_url,
-            LiteChecksumUrl = (string?)liteSha?.browser_download_url,
+            FullChecksumUrl = fullSha?.BrowserDownloadUrl,
+            LiteChecksumUrl = liteSha?.BrowserDownloadUrl,
         };
 
         UpdateAvailable?.Invoke(info);
         return info;
+    }
+
+    // Phase 3B (2026-05-18) — System.Text.Json options for parsing the
+    // GitHub Releases API response. PropertyNameCaseInsensitive=true keeps
+    // backward-compat with any field-name casing drift; matches Newtonsoft's
+    // default lookup. snake_case mapping is via [JsonPropertyName] on the
+    // DTOs below — STJ has no built-in snake-case naming policy, the
+    // explicit attribute is the wire contract.
+    private static readonly JsonSerializerOptions GitHubApiJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
+    // GitHub Releases API DTOs. Shape pinned by the API; we read the four
+    // fields we need (tag/body/html_url/draft/prerelease/assets) and ignore
+    // everything else (author, target_commitish, created_at, etc.) — STJ
+    // skips unknown fields by default so additional API surface stays
+    // forward-compat.
+    private sealed class GitHubRelease
+    {
+        [JsonPropertyName("tag_name")]
+        public string? TagName { get; set; }
+
+        [JsonPropertyName("body")]
+        public string? Body { get; set; }
+
+        [JsonPropertyName("html_url")]
+        public string? HtmlUrl { get; set; }
+
+        [JsonPropertyName("draft")]
+        public bool Draft { get; set; }
+
+        [JsonPropertyName("prerelease")]
+        public bool Prerelease { get; set; }
+
+        [JsonPropertyName("assets")]
+        public GitHubAsset[] Assets { get; set; } = Array.Empty<GitHubAsset>();
+    }
+
+    private sealed class GitHubAsset
+    {
+        [JsonPropertyName("browser_download_url")]
+        public string BrowserDownloadUrl { get; set; } = string.Empty;
+
+        [JsonPropertyName("size")]
+        public long Size { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
     }
 
     public async Task<string> DownloadAndStageAsync(UpdateInfo info, CancellationToken ct = default)
@@ -1213,8 +1273,15 @@ public class UpdateChecker
     /// v2.0+: VPNRouter-v2.0.0-win.zip / VPNRouter-v2.0.0-mac.zip
     /// v2.21.0+: VPNRouter-v2.21.0-linux.tar.gz (Linux uses a tarball, not a zip)
     /// Legacy: VPNRouter-install-v*.zip (Windows only, no platform suffix)
+    ///
+    /// <para>Phase 3B (2026-05-18) — signature changed from <c>dynamic[]?</c>
+    /// to strong-typed <see cref="GitHubAsset"/> array. STJ's typed
+    /// deserialization replaces Newtonsoft's anonymous-type inference;
+    /// the asset name/url/size fields are now static-resolved instead of
+    /// going through DLR <c>dynamic</c> dispatch (faster + AOT-friendly).
+    /// </para>
     /// </summary>
-    private static dynamic? FindFullAsset(dynamic[]? assets)
+    private static GitHubAsset? FindFullAsset(GitHubAsset[]? assets)
     {
         if (assets == null) return null;
 
@@ -1223,9 +1290,9 @@ public class UpdateChecker
         var extension = OperatingSystem.IsLinux() ? ".tar.gz" : ".zip";
 
         // New naming: VPNRouter-v*-{platform}{ext} (not containing "update")
-        var newFormat = ((IEnumerable<dynamic>)assets).FirstOrDefault(a =>
+        var newFormat = assets.FirstOrDefault(a =>
         {
-            string name = a.name;
+            var name = a.Name;
             return name.StartsWith("VPNRouter-v", StringComparison.OrdinalIgnoreCase) &&
                    name.EndsWith($"{PlatformSuffix}{extension}", StringComparison.OrdinalIgnoreCase) &&
                    !name.Contains("update", StringComparison.OrdinalIgnoreCase);
@@ -1235,9 +1302,9 @@ public class UpdateChecker
         // Legacy (Windows only): VPNRouter-install-v*.zip
         if (OperatingSystem.IsWindows())
         {
-            return ((IEnumerable<dynamic>)assets).FirstOrDefault(a =>
+            return assets.FirstOrDefault(a =>
             {
-                string name = a.name;
+                var name = a.Name;
                 return name.StartsWith("VPNRouter-install-v", StringComparison.OrdinalIgnoreCase) &&
                        name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
             });
@@ -1251,21 +1318,21 @@ public class UpdateChecker
     /// v2.0+: VPNRouter-update-v2.0.0-win.zip
     /// Legacy: VPNRouter-update-v*.zip
     /// </summary>
-    private static dynamic? FindLiteAsset(dynamic[]? assets)
+    private static GitHubAsset? FindLiteAsset(GitHubAsset[]? assets)
     {
         if (assets == null || !OperatingSystem.IsWindows()) return null;
 
-        var newFormat = ((IEnumerable<dynamic>)assets).FirstOrDefault(a =>
+        var newFormat = assets.FirstOrDefault(a =>
         {
-            string name = a.name;
+            var name = a.Name;
             return name.StartsWith("VPNRouter-update-v", StringComparison.OrdinalIgnoreCase) &&
                    name.EndsWith($"{PlatformSuffix}.zip", StringComparison.OrdinalIgnoreCase);
         });
         if (newFormat != null) return newFormat;
 
-        return ((IEnumerable<dynamic>)assets).FirstOrDefault(a =>
+        return assets.FirstOrDefault(a =>
         {
-            string name = a.name;
+            var name = a.Name;
             return name.StartsWith("VPNRouter-update-v", StringComparison.OrdinalIgnoreCase) &&
                    name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
         });
@@ -1276,13 +1343,13 @@ public class UpdateChecker
     /// (set by build.ps1 in v2.15.8+): "{zipName}.sha256". Returns null if the
     /// companion is missing — in that case we fall back to size-only validation.
     /// </summary>
-    private static dynamic? FindChecksumAsset(dynamic[]? assets, dynamic? zipAsset)
+    private static GitHubAsset? FindChecksumAsset(GitHubAsset[]? assets, GitHubAsset? zipAsset)
     {
         if (assets == null || zipAsset == null) return null;
-        string zipName = zipAsset.name;
+        var zipName = zipAsset.Name;
         var target = $"{zipName}.sha256";
-        return ((IEnumerable<dynamic>)assets).FirstOrDefault(a =>
-            string.Equals((string)a.name, target, StringComparison.OrdinalIgnoreCase));
+        return assets.FirstOrDefault(a =>
+            string.Equals(a.Name, target, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

@@ -1,22 +1,35 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace VPNRouter.Core.Models;
 
+// Phase 3 — 3B (2026-05-18): migrated Profile/ProcessRule/ProfileCollection
+// attributes from Newtonsoft.Json [JsonProperty(...)] to System.Text.Json
+// [JsonPropertyName(...)]. All call sites (ProfileManager, App/ViewModels,
+// Tests/ProfileManagerJsonDosGuardTests) migrated in the same pass. STJ
+// is AOT-friendly + 2-5x faster + ships with the runtime — see brief
+// plans/phase3-3B-newtonsoft-to-stj-2026-05-18.md.
+//
+// Wire-compat: existing on-disk profiles.json (snake_case keys: "name",
+// "description", "processes", "dns_mode", "block_on_vpn_fail",
+// "android_packages") round-trip byte-identical when written by STJ
+// because we kept the exact same property names + use WriteIndented for
+// the GitHubProfileSource cache file.
+
 public class Profile
 {
-    [JsonProperty("name")]
+    [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
-    [JsonProperty("description")]
+    [JsonPropertyName("description")]
     public string Description { get; set; } = string.Empty;
 
-    [JsonProperty("processes")]
+    [JsonPropertyName("processes")]
     public List<ProcessRule> Processes { get; set; } = new();
 
-    [JsonProperty("dns_mode")]
+    [JsonPropertyName("dns_mode")]
     public string DnsMode { get; set; } = "vpn_only"; // vpn_only | smart | direct
 
-    [JsonProperty("block_on_vpn_fail")]
+    [JsonPropertyName("block_on_vpn_fail")]
     public bool BlockOnVpnFail { get; set; } = false;
 
     /// <summary>
@@ -36,13 +49,22 @@ public class Profile
     /// <para>Empty on non-Android profile catalogs. The Android catalog
     /// keeps <see cref="Processes"/> empty too — Android profiles only
     /// drive package-level routing.</para>
+    ///
+    /// <para>Phase 3B (2026-05-18) STJ migration: switched from
+    /// <c>[JsonProperty("android_packages", NullValueHandling.Ignore)]</c>
+    /// to <c>[JsonPropertyName("android_packages")]</c> +
+    /// <c>[JsonIgnore(Condition=WhenWritingNull)]</c>. Behaviour-preserving:
+    /// null lists are still elided on write; default empty-list assignment
+    /// in the auto-property means they never serialize as null anyway, but
+    /// the attribute stays for forward-compat with hand-crafted profiles.</para>
     /// </summary>
-    [JsonProperty("android_packages", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("android_packages")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string> AndroidPackages { get; set; } = new();
 }
 
 public class ProfileCollection
 {
-    [JsonProperty("profiles")]
+    [JsonPropertyName("profiles")]
     public List<Profile> Profiles { get; set; } = new();
 }

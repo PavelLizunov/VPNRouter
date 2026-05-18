@@ -3,7 +3,8 @@ using Android.Content;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
 
@@ -22,9 +23,21 @@ namespace VPNRouter.Android;
 ///
 /// Storage backend remains <c>SharedPreferences</c> for the same reasons as
 /// 1.F — Android sandboxed FilesDir, atomic commits, no <c>YamlDotNet</c>
-/// overhead. JSON for the server list because we already use Newtonsoft.Json
-/// across <see cref="VPNRouter.Core"/>; YAML would require a Yaml→Yaml round
-/// trip with Android's restricted reflection.
+/// overhead. JSON for the server list, originally via Newtonsoft.Json
+/// (used across <see cref="VPNRouter.Core"/>). Phase 3B (2026-05-18) migrated
+/// to <see cref="System.Text.Json.JsonSerializer"/> — AOT-friendly + 2-5×
+/// faster + ships with the runtime (a future AOT-build can drop a 600 KB
+/// dependency once every Newtonsoft call site is migrated).
+///
+/// <para>Wire-format compat: existing on-disk SharedPreferences JSON
+/// uses <see cref="VlessServerEntry"/> / <see cref="SubscriptionEntry"/> /
+/// <see cref="CustomCategory"/> serialized by Newtonsoft default conventions
+/// (PascalCase property names — Newtonsoft preserves C# property names
+/// when no <c>[JsonProperty]</c> is set). STJ default conventions are
+/// identical (it also uses C# property names verbatim by default).
+/// Combined with <c>PropertyNameCaseInsensitive=true</c> in
+/// <see cref="JsonOptions"/>, this gives lossless round-trip with all
+/// legacy SharedPreferences blobs written by pre-3B installs.</para>
 ///
 /// <para>Phase 2+: replace SharedPreferences entirely with <c>SettingsLoader</c>
 /// pointed at <c>Application.FilesDir/config.yaml</c>. Then desktop and
@@ -34,6 +47,21 @@ namespace VPNRouter.Android;
 public static class AndroidStorage
 {
     private const string PrefsName = "vpnrouter_settings";
+
+    /// <summary>
+    /// Phase 3B (2026-05-18) — STJ options used for every SharedPreferences
+    /// blob in this class. <c>PropertyNameCaseInsensitive=true</c> matches
+    /// Newtonsoft's default lookup behaviour so a JSON written by the
+    /// pre-3B build (Newtonsoft default conventions) round-trips back into
+    /// the same C# objects under the new serializer. <c>WriteIndented=false</c>
+    /// keeps SharedPreferences blobs compact (no human readability needed —
+    /// these are not on-disk diagnostic files).
+    /// </summary>
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        WriteIndented = false,
+    };
 
     // Phase 1.F
     private const string KeyVlessUri = "vless_uri";
@@ -158,9 +186,13 @@ public static class AndroidStorage
     public static List<SubscriptionEntry> GetSubscriptions()
     {
         var json = GetString(KeySubscriptions);
+        // Phase 3B (2026-05-18) — STJ migration. Same wire shape as the
+        // Newtonsoft predecessor (PascalCase C# property names by default
+        // on VlessServerEntry / SubscriptionEntry), case-insensitive
+        // lookup keeps legacy blobs readable.
         var result = StorageBlobRecovery.LoadOrRecover<List<SubscriptionEntry>>(
             json,
-            j => JsonConvert.DeserializeObject<List<SubscriptionEntry>>(j));
+            j => JsonSerializer.Deserialize<List<SubscriptionEntry>>(j, JsonOptions));
 
         if (result.Loaded)
             return result.Value!;
@@ -211,7 +243,7 @@ public static class AndroidStorage
         try
         {
             var list = subs is null ? new List<SubscriptionEntry>() : new List<SubscriptionEntry>(subs);
-            var json = JsonConvert.SerializeObject(list);
+            var json = JsonSerializer.Serialize(list, JsonOptions);
             return SetString(KeySubscriptions, json);
         }
         catch
@@ -258,7 +290,7 @@ public static class AndroidStorage
             List<SubscriptionEntry>? subs;
             try
             {
-                subs = JsonConvert.DeserializeObject<List<SubscriptionEntry>>(subsJson);
+                subs = JsonSerializer.Deserialize<List<SubscriptionEntry>>(subsJson, JsonOptions);
             }
             catch
             {
@@ -355,16 +387,17 @@ public static class AndroidStorage
             }
 
             // (b) Per-subscription Servers lists — KeySubscriptions[].Servers.
-            // Read directly via JsonConvert (mirror PruneSubServerDuplicatesOnce
-            // pattern) so we don't recurse into GetSubscriptions's legacy-
-            // migration / recovery wrapping during this early-boot pass.
+            // Read directly via JsonSerializer (Phase 3B switched from
+            // Newtonsoft's JsonConvert) so we don't recurse into
+            // GetSubscriptions's legacy-migration / recovery wrapping during
+            // this early-boot pass — same pattern as PruneSubServerDuplicatesOnce.
             var subsJson = GetString(KeySubscriptions);
             if (!string.IsNullOrWhiteSpace(subsJson))
             {
                 List<SubscriptionEntry>? subs = null;
                 try
                 {
-                    subs = JsonConvert.DeserializeObject<List<SubscriptionEntry>>(subsJson);
+                    subs = JsonSerializer.Deserialize<List<SubscriptionEntry>>(subsJson, JsonOptions);
                 }
                 catch
                 {
@@ -405,7 +438,7 @@ public static class AndroidStorage
                 {
                     try
                     {
-                        var freshSubs = JsonConvert.DeserializeObject<List<SubscriptionEntry>>(GetString(KeySubscriptions) ?? "[]");
+                        var freshSubs = JsonSerializer.Deserialize<List<SubscriptionEntry>>(GetString(KeySubscriptions) ?? "[]", JsonOptions);
                         stillExists = freshSubs?.Any(sub =>
                             sub?.Servers?.Any(srv =>
                                 string.Equals(srv?.Name, selectedName, System.StringComparison.OrdinalIgnoreCase)) == true) ?? false;
@@ -461,7 +494,7 @@ public static class AndroidStorage
         var json = GetString(KeyServersJson);
         var result = StorageBlobRecovery.LoadOrRecover<List<VlessServerEntry>>(
             json,
-            j => JsonConvert.DeserializeObject<List<VlessServerEntry>>(j));
+            j => JsonSerializer.Deserialize<List<VlessServerEntry>>(j, JsonOptions));
 
         if (result.Loaded)
             return result.Value!;
@@ -486,7 +519,7 @@ public static class AndroidStorage
             if (servers == null)
                 return SetString(KeyServersJson, null);
             var list = new List<VlessServerEntry>(servers);
-            var json = JsonConvert.SerializeObject(list);
+            var json = JsonSerializer.Serialize(list, JsonOptions);
             return SetString(KeyServersJson, json);
         }
         catch
@@ -616,7 +649,7 @@ public static class AndroidStorage
         if (string.IsNullOrWhiteSpace(json)) return new List<SubscriptionEntry>();
         try
         {
-            return JsonConvert.DeserializeObject<List<SubscriptionEntry>>(json) ?? new List<SubscriptionEntry>();
+            return JsonSerializer.Deserialize<List<SubscriptionEntry>>(json, JsonOptions) ?? new List<SubscriptionEntry>();
         }
         catch
         {
@@ -705,7 +738,7 @@ public static class AndroidStorage
         var json = GetString(KeyPerAppPackages);
         var result = StorageBlobRecovery.LoadOrRecover<List<string>>(
             json,
-            j => JsonConvert.DeserializeObject<List<string>>(j));
+            j => JsonSerializer.Deserialize<List<string>>(j, JsonOptions));
 
         if (result.Loaded)
             return result.Value!;
@@ -725,7 +758,7 @@ public static class AndroidStorage
         {
             if (packages is null) return SetString(KeyPerAppPackages, null);
             var list = new List<string>(packages);
-            var json = JsonConvert.SerializeObject(list);
+            var json = JsonSerializer.Serialize(list, JsonOptions);
             return SetString(KeyPerAppPackages, json);
         }
         catch
@@ -985,7 +1018,7 @@ public static class AndroidStorage
         var json = GetString(KeyCustomCategoriesJson);
         var result = StorageBlobRecovery.LoadOrRecover<List<CustomCategory>>(
             json,
-            j => JsonConvert.DeserializeObject<List<CustomCategory>>(j));
+            j => JsonSerializer.Deserialize<List<CustomCategory>>(j, JsonOptions));
 
         if (result.Loaded) return result.Value!;
 
@@ -1004,7 +1037,7 @@ public static class AndroidStorage
         {
             if (cats is null) return SetString(KeyCustomCategoriesJson, null);
             var list = new List<CustomCategory>(cats);
-            var json = JsonConvert.SerializeObject(list);
+            var json = JsonSerializer.Serialize(list, JsonOptions);
             return SetString(KeyCustomCategoriesJson, json);
         }
         catch
@@ -1033,13 +1066,19 @@ public static class AndroidStorage
     /// </summary>
     public sealed class ServerTestResultDto
     {
-        [JsonProperty("status")]
+        // Phase 3B (2026-05-18) — migrated to System.Text.Json
+        // [JsonPropertyName] attributes. Wire-format-compat with pre-3B
+        // blobs: the snake_case keys (status / latency_ms / last_tested_at /
+        // error) match exactly what the Newtonsoft [JsonProperty] writer
+        // produced, so existing SharedPreferences entries deserialize
+        // unchanged.
+        [JsonPropertyName("status")]
         public int Status { get; set; }
-        [JsonProperty("latency_ms")]
+        [JsonPropertyName("latency_ms")]
         public int LatencyMs { get; set; }
-        [JsonProperty("last_tested_at")]
+        [JsonPropertyName("last_tested_at")]
         public DateTimeOffset LastTestedAt { get; set; }
-        [JsonProperty("error")]
+        [JsonPropertyName("error")]
         public string? Error { get; set; }
     }
 
@@ -1067,7 +1106,7 @@ public static class AndroidStorage
         var json = GetString(KeyServerTestResults);
         var result = StorageBlobRecovery.LoadOrRecover<Dictionary<string, ServerTestResultDto>>(
             json,
-            j => JsonConvert.DeserializeObject<Dictionary<string, ServerTestResultDto>>(j));
+            j => JsonSerializer.Deserialize<Dictionary<string, ServerTestResultDto>>(j, JsonOptions));
 
         if (result.Loaded)
             return new Dictionary<string, ServerTestResultDto>(result.Value!, System.StringComparer.OrdinalIgnoreCase);
@@ -1097,7 +1136,7 @@ public static class AndroidStorage
                 if (kvp.Value.LastTestedAt < cutoff) continue;
                 pruned[kvp.Key] = kvp.Value;
             }
-            var json = JsonConvert.SerializeObject(pruned);
+            var json = JsonSerializer.Serialize(pruned, JsonOptions);
             return SetString(KeyServerTestResults, json);
         }
         catch

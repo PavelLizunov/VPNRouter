@@ -3,11 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Newtonsoft.Json;
 using VPNRouter.Core;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -145,7 +146,13 @@ public partial class MainWindowViewModel
             try
             {
                 var json = File.ReadAllText(profilePath);
-                var collection = Newtonsoft.Json.JsonConvert.DeserializeObject<ProfileCollection>(json);
+                // Phase 3B (2026-05-18): STJ migration — JsonSerializer with
+                // ProfileManager.SafeJsonOptions (MaxDepth=32 +
+                // PropertyNameCaseInsensitive=true) preserves the v2.31.0-r1
+                // DoS guard and reads existing snake_case profiles.json
+                // (the on-disk schema, mapped via [JsonPropertyName] on
+                // Profile/ProcessRule). See plans/phase3-3B-newtonsoft-to-stj-2026-05-18.md.
+                var collection = JsonSerializer.Deserialize<ProfileCollection>(json, ProfileManager.SafeJsonOptions);
                 if (collection?.Profiles != null)
                 {
                     foreach (var profile in collection.Profiles)
@@ -273,7 +280,9 @@ public partial class MainWindowViewModel
             try
             {
                 var json = File.ReadAllText(profilePath);
-                var collection = Newtonsoft.Json.JsonConvert.DeserializeObject<ProfileCollection>(json);
+                // Phase 3B (2026-05-18): STJ migration via
+                // ProfileManager.SafeJsonOptions for the AM-3 legacy seed path.
+                var collection = JsonSerializer.Deserialize<ProfileCollection>(json, ProfileManager.SafeJsonOptions);
                 if (collection?.Profiles != null)
                 {
                     foreach (var profile in collection.Profiles)

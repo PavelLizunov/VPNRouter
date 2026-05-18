@@ -363,9 +363,18 @@ public sealed class CacheRecoveryTests
         // ProfileCollection JSON — no schema_version, no wrapper. On
         // first read post-upgrade CacheRecovery must wipe it so we
         // never feed legacy-shape JSON into the typed wrapper deserialiser.
+        //
+        // Phase 3B (2026-05-18) — migrated from Newtonsoft to STJ via
+        // ProfileManager.SafeJsonOptions. The legacy on-disk format that
+        // GitHubProfileSource pre-v2.32 wrote was Newtonsoft default
+        // PascalCase; we emulate that here by serialising with a non-
+        // snake-case STJ option (no PropertyNameCaseInsensitive, no
+        // [JsonPropertyName] effect on the legacy-bytes side). The
+        // schema-missing branch still trips because the bytes have no
+        // "schema_version" key.
         using var dir = new DirectoryFixture();
         var path = dir.PathFor("profiles.json");
-        var legacy = NewtonsoftJson.SerializeObject(new ProfileCollection
+        var legacy = StjJson.Serialize(new ProfileCollection
         {
             Profiles = new List<Profile>
             {
@@ -377,7 +386,7 @@ public sealed class CacheRecoveryTests
         var result = CacheRecovery.LoadOrRecover<ProfileCacheFile>(
             path,
             expectedSchemaVersion: GitHubProfileSource.CurrentSchemaVersion,
-            deserialize: j => NewtonsoftJson.DeserializeObject<ProfileCacheFile>(j),
+            deserialize: j => StjJson.Deserialize<ProfileCacheFile>(j, ProfileManager.SafeJsonOptions),
             structuralCheck: w => w.Profiles is not null);
 
         Assert.Equal(RecoveryReason.SchemaMissing, result.Reason);
@@ -408,13 +417,17 @@ public sealed class CacheRecoveryTests
                 },
             },
         };
+        // Phase 3B (2026-05-18) — STJ serialization (matches the
+        // production GitHubProfileSource.LoadAsync write path which now
+        // also uses JsonSerializer.Serialize with WriteIndented=true on
+        // ProfileManager.SafeJsonOptions).
         File.WriteAllText(path,
-            NewtonsoftJson.SerializeObject(wrapper, Newtonsoft.Json.Formatting.Indented));
+            StjJson.Serialize(wrapper, ProfileManager.SafeJsonOptions));
 
         var result = CacheRecovery.LoadOrRecover<ProfileCacheFile>(
             path,
             expectedSchemaVersion: 1,
-            deserialize: j => NewtonsoftJson.DeserializeObject<ProfileCacheFile>(j),
+            deserialize: j => StjJson.Deserialize<ProfileCacheFile>(j, ProfileManager.SafeJsonOptions),
             structuralCheck: w => w.Profiles is not null);
 
         Assert.True(result.Loaded);
@@ -434,7 +447,8 @@ public sealed class CacheRecoveryTests
         var result = CacheRecovery.LoadOrRecover<ProfileCacheFile>(
             path,
             expectedSchemaVersion: 1,
-            deserialize: j => NewtonsoftJson.DeserializeObject<ProfileCacheFile>(j),
+            // Phase 3B (2026-05-18) — STJ deserialization.
+            deserialize: j => StjJson.Deserialize<ProfileCacheFile>(j, ProfileManager.SafeJsonOptions),
             structuralCheck: w => w.Profiles is not null);
 
         Assert.Equal(RecoveryReason.JsonMalformed, result.Reason);

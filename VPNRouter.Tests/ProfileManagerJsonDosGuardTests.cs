@@ -1,16 +1,25 @@
-﻿using VPNRouter.Core.Models;
+﻿using System.Text.Json;
+using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
-using VPNRouter.Core.Services.EmergencyChannel;
 
 namespace VPNRouter.Tests;
 // ═══════════════════════════════════════════════════════════════════════════════
 // v2.31.0-r1 Pillar 1 — Core stability fixes
+// Phase 3B (2026-05-18): migrated assertions from Newtonsoft.Json.JsonException to
+// System.Text.Json.JsonException. ProfileManager.SafeJsonOptions caps MaxDepth=32
+// just like the pre-migration SafeJsonSettings did — same fail-closed semantics.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// <summary>v2.31.0-r1 (CO-4 audit fix): JSON deserialization of profiles is
 /// MaxDepth-capped to neutralize DoS via deeply-nested arrays. Real ProfileCollection
 /// is shallow (~3 levels) so 32 leaves head-room. Test that adversarial input
-/// is rejected before triggering stack overflow / extreme allocation.</summary>
+/// is rejected before triggering stack overflow / extreme allocation.
+///
+/// <para>Phase 3B (2026-05-18) — STJ migration. <see cref="JsonSerializer.Deserialize"/>
+/// throws <see cref="JsonException"/> when <see cref="JsonSerializerOptions.MaxDepth"/>
+/// is exceeded, matching Newtonsoft's JsonReaderException behaviour. The guard is
+/// the contract; the exception type is implementation detail.</para>
+/// </summary>
 public class ProfileManagerJsonDosGuardTests
 {
     [Fact]
@@ -25,12 +34,12 @@ public class ProfileManagerJsonDosGuardTests
         sb.Append("]}");
         var json = sb.ToString();
 
-        // SafeJsonSettings caps MaxDepth — Newtonsoft throws JsonReaderException
-        // when limit is exceeded. We assert it throws (any kind) — the point
+        // SafeJsonOptions caps MaxDepth — STJ throws JsonException when the
+        // limit is exceeded. We assert it throws (any kind) — the point
         // is that we never let it run to stack-overflow / process crash.
-        Assert.ThrowsAny<Newtonsoft.Json.JsonException>(() =>
-            Newtonsoft.Json.JsonConvert.DeserializeObject<ProfileCollection>(
-                json, ProfileManager.SafeJsonSettings));
+        Assert.ThrowsAny<JsonException>(() =>
+            JsonSerializer.Deserialize<ProfileCollection>(
+                json, ProfileManager.SafeJsonOptions));
     }
 
     [Fact]
@@ -52,8 +61,8 @@ public class ProfileManagerJsonDosGuardTests
         }
         """;
 
-        var result = Newtonsoft.Json.JsonConvert.DeserializeObject<ProfileCollection>(
-            json, ProfileManager.SafeJsonSettings);
+        var result = JsonSerializer.Deserialize<ProfileCollection>(
+            json, ProfileManager.SafeJsonOptions);
 
         Assert.NotNull(result);
         Assert.NotNull(result.Profiles);

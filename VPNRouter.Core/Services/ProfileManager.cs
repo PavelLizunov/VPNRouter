@@ -1,4 +1,5 @@
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Serilog;
 using VPNRouter.Core.Interfaces;
 using VPNRouter.Core.Models;
@@ -16,10 +17,27 @@ public class ProfileManager
     /// to prevent stack-overflow / DoS via deeply-nested arrays. Profiles
     /// are flat objects with at most ~3 levels (collection→profile→
     /// processes[]→rule); 32 leaves enormous head-room while neutralizing
-    /// adversarial input. Per Newtonsoft Json.NET MaxDepth guidance.</summary>
-    internal static readonly JsonSerializerSettings SafeJsonSettings = new()
+    /// adversarial input.
+    ///
+    /// <para>Phase 3B (2026-05-18) — migrated from Newtonsoft
+    /// JsonSerializerSettings to System.Text.Json JsonSerializerOptions.
+    /// STJ's <see cref="JsonSerializerOptions.MaxDepth"/> default is 64;
+    /// we tighten to 32 for the same defence-in-depth rationale. Files
+    /// exceeding the cap throw <see cref="JsonException"/> (translates to
+    /// the same fail-closed behaviour Newtonsoft's JsonReaderException did,
+    /// pinned by <c>ProfileManagerJsonDosGuardTests</c>).</para>
+    ///
+    /// <para><c>PropertyNameCaseInsensitive=true</c> for backward-compat
+    /// with hand-edited profiles that may have used different casing
+    /// (Newtonsoft is case-insensitive by default). <c>WriteIndented=true</c>
+    /// matches the v2.32.0 GitHubProfileSource cache file format
+    /// (Newtonsoft's <c>Formatting.Indented</c>).</para>
+    /// </summary>
+    public static readonly JsonSerializerOptions SafeJsonOptions = new()
     {
         MaxDepth = 32,
+        PropertyNameCaseInsensitive = true,
+        WriteIndented = true,
     };
 
     private readonly List<IProfileSource> _sources;
@@ -226,7 +244,11 @@ public class LocalProfileSource : IProfileSource
         // v2.31.0-r1 (CO-4): MaxDepth-capped deserialization on local files
         // — user could place a malicious profiles.json that crashes the
         // app or causes stack overflow via nested arrays.
-        var result = JsonConvert.DeserializeObject<ProfileCollection>(json, ProfileManager.SafeJsonSettings);
+        // Phase 3B (2026-05-18): switched from JsonConvert.DeserializeObject
+        // to JsonSerializer.Deserialize. Same DoS guard semantics via
+        // MaxDepth=32 on SafeJsonOptions; case-insensitive matching kept
+        // for backward-compat with hand-edited profiles.
+        var result = JsonSerializer.Deserialize<ProfileCollection>(json, ProfileManager.SafeJsonOptions);
         return Task.FromResult(result);
     }
 }
@@ -244,16 +266,22 @@ public class LocalProfileSource : IProfileSource
 /// </summary>
 public sealed class ProfileCacheFile
 {
-    [JsonProperty("schema_version")]
+    // Phase 3B (2026-05-18) — migrated from [JsonProperty] (Newtonsoft) to
+    // [JsonPropertyName] (STJ). Same wire field names → backward-compat
+    // with the v2.32.0 on-disk cache wrapper written by GitHubProfileSource.
+    // CacheRecovery's schema_version probe is STJ-based, so the field's
+    // [JsonPropertyName] name has always been the authoritative wire key.
+
+    [JsonPropertyName("schema_version")]
     public int SchemaVersion { get; set; } = GitHubProfileSource.CurrentSchemaVersion;
 
-    [JsonProperty("cached_at")]
+    [JsonPropertyName("cached_at")]
     public DateTime CachedAt { get; set; } = DateTime.UtcNow;
 
-    [JsonProperty("upstream_url")]
+    [JsonPropertyName("upstream_url")]
     public string UpstreamUrl { get; set; } = string.Empty;
 
-    [JsonProperty("profiles")]
+    [JsonPropertyName("profiles")]
     public ProfileCollection Profiles { get; set; } = new();
 }
 
@@ -298,7 +326,9 @@ public class GitHubProfileSource : IProfileSource
             // profile URL — the channel is HTTPS but a compromised tap or
             // typosquatted URL could feed adversarial JSON. ProfileCollection
             // is shallow (~3 levels), 32 leaves enormous head-room.
-            var result = JsonConvert.DeserializeObject<ProfileCollection>(json, ProfileManager.SafeJsonSettings);
+            // Phase 3B (2026-05-18): JsonSerializer (STJ) with MaxDepth=32 on
+            // SafeJsonOptions preserves the DoS guard.
+            var result = JsonSerializer.Deserialize<ProfileCollection>(json, ProfileManager.SafeJsonOptions);
 
             // v2.32.0 — wrap raw upstream JSON in a schema-versioned envelope
             // before persisting. The cache is consulted on offline starts;
@@ -313,7 +343,11 @@ public class GitHubProfileSource : IProfileSource
                     UpstreamUrl = _url,
                     Profiles = result,
                 };
-                var wrapperJson = JsonConvert.SerializeObject(wrapper, Formatting.Indented);
+                // Phase 3B: STJ JsonSerializer.Serialize with WriteIndented=true
+                // (set on SafeJsonOptions) matches the pre-migration Newtonsoft
+                // Formatting.Indented output shape — same human-readable cache
+                // file on disk for diagnostics.
+                var wrapperJson = JsonSerializer.Serialize(wrapper, ProfileManager.SafeJsonOptions);
                 await File.WriteAllTextAsync(cacheFile, wrapperJson, ct);
             }
 
@@ -329,7 +363,7 @@ public class GitHubProfileSource : IProfileSource
             var loaded = CacheRecovery.LoadOrRecover<ProfileCacheFile>(
                 cacheFile,
                 CurrentSchemaVersion,
-                json => JsonConvert.DeserializeObject<ProfileCacheFile>(json, ProfileManager.SafeJsonSettings),
+                json => JsonSerializer.Deserialize<ProfileCacheFile>(json, ProfileManager.SafeJsonOptions),
                 wrap => wrap.Profiles is not null,
                 Log.Logger);
 
