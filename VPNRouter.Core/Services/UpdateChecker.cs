@@ -3,10 +3,24 @@ using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services.UpdateSources;
 
 namespace VPNRouter.Core.Services;
 
-public class UpdateChecker
+/// <remarks>
+/// v3.0 Phase 3F (2026-05-18): also implements <see cref="IDesktopInstaller"/>
+/// so <see cref="GitHubReleaseSource"/> can delegate download + apply
+/// back here without duplicating the helper.cmd / ditto / pkexec dance.
+/// The legacy public surface (<see cref="CheckForUpdateAsync"/> /
+/// <see cref="DownloadAndStageAsync"/> / <see cref="ApplyUpdate"/> /
+/// events) stays identical for back-compat with existing callers
+/// (UpdateNotificationViewModel desktop, TestUpdateCommand CI). New
+/// callers should prefer <see cref="CheckAsync"/> which returns the
+/// platform-neutral <see cref="UpdateSourceInfo"/>. Phase 4 will fold
+/// the platform-specific apply paths into the source impls and retire
+/// this dual surface. Brief: plans/phase3-3F-android-updatesource-2026-05-18.md.
+/// </remarks>
+public class UpdateChecker : IDesktopInstaller
 {
     // v3.0 Phase 2D-3 (2026-05-18): release-list + .sha256 fetches go
     // through IHttpClient (PolicyHttpClient) so tests can stub them.
@@ -211,6 +225,103 @@ public class UpdateChecker
 
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
+    }
+
+    // ─── v3.0 Phase 3F — IUpdateSource delegating surface ─────────────────
+
+    /// <summary>
+    /// v3.0 Phase 3F (2026-05-18): platform-neutral check via
+    /// <see cref="GitHubReleaseSource"/>. Returns the new
+    /// <see cref="UpdateSourceInfo"/> shape instead of the legacy
+    /// <see cref="UpdateInfo"/>. Does NOT cover the lite-update path
+    /// (only the full asset); lite-update support stays on the legacy
+    /// <see cref="CheckForUpdateAsync"/> until Phase 4 folds it in.
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Source info, or <c>null</c> when up to date / source
+    /// unreachable / no asset for this platform.</returns>
+    public Task<UpdateSourceInfo?> CheckAsync(CancellationToken ct = default)
+    {
+        var source = new GitHubReleaseSource(_settings, _currentVersion, _http, this);
+        return source.CheckAsync(ct);
+    }
+
+    /// <summary>
+    /// <see cref="IDesktopInstaller"/> impl — translates the new
+    /// <see cref="UpdateSourceInfo"/> shape into the legacy
+    /// <see cref="UpdateInfo"/> the existing
+    /// <see cref="DownloadAndStageAsync(UpdateInfo, CancellationToken)"/>
+    /// expects, then bridges the byte-level <see cref="DownloadProgress"/>
+    /// record onto the existing <see cref="DownloadProgress">int event</see>
+    /// percent callback.
+    /// </summary>
+    Task<string> IDesktopInstaller.DownloadAndStageAsync(
+        UpdateSourceInfo info,
+        IProgress<UpdateSources.DownloadProgress>? progress,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(info);
+
+        // Adapt: legacy DownloadAndStageAsync reads info.DownloadUrl /
+        // SizeBytes / FullChecksumUrl off the Models.UpdateInfo. We
+        // synthesize one from the new record.
+        var legacy = new UpdateInfo
+        {
+            CurrentVersion = _currentVersion,
+            LatestVersion = info.Version,
+            DownloadUrl = info.DownloadUrl,
+            SizeBytes = info.AssetSize,
+            ReleaseNotes = info.ReleaseNotes,
+            HtmlUrl = info.ReleaseUrl,
+            IsNewer = true,
+            HasLiteUpdate = false,
+            FullChecksumUrl = null, // SHA already inlined via info.AssetSha256; legacy path fetches by URL — Phase 4 unifies.
+        };
+
+        // Bridge the byte-level progress record onto the legacy
+        // int-percent event. We can't capture totals here (the legacy
+        // event only carries percent), so just rebroadcast.
+        Action<int>? handler = null;
+        if (progress != null)
+        {
+            handler = pct => progress.Report(new UpdateSources.DownloadProgress(
+                BytesReceived: info.AssetSize > 0 ? info.AssetSize * pct / 100 : 0,
+                TotalBytes: info.AssetSize > 0 ? info.AssetSize : null));
+            DownloadProgress += handler;
+        }
+        return Run();
+
+        async Task<string> Run()
+        {
+            try
+            {
+                return await DownloadAndStageAsync(legacy, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (handler != null)
+                    DownloadProgress -= handler;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <see cref="IDesktopInstaller"/> impl — wraps the synchronous
+    /// <see cref="ApplyUpdate(string)"/> in a completed task. The
+    /// underlying helper.cmd / ditto / pkexec dispatch is itself
+    /// fire-and-forget so this method's "true" return signals
+    /// successful dispatch, not successful install.
+    /// </summary>
+    Task<bool> IDesktopInstaller.ApplyStagedAsync(
+        UpdateSourceInfo info,
+        string stagedPath,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(info);
+        if (string.IsNullOrWhiteSpace(stagedPath))
+            throw new ArgumentException("Staged path must be non-empty.", nameof(stagedPath));
+        ApplyUpdate(stagedPath);
+        return Task.FromResult(true);
     }
 
     public async Task<string> DownloadAndStageAsync(UpdateInfo info, CancellationToken ct = default)
