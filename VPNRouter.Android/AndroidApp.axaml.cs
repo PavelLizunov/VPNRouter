@@ -4372,7 +4372,10 @@ public partial class AndroidApp : Avalonia.Application
         // ignore the gesture.
         if (isCustom)
         {
-            border.AddHandler(Gestures.HoldingEvent, (_, e) =>
+            // Wave 23 (2026-05-18) — Avalonia 12 made Gestures internal;
+            // hoist the same routed event off InputElement (it's the same
+            // RoutedEvent instance underneath, just publicly re-exposed).
+            border.AddHandler(InputElement.HoldingEvent, (_, e) =>
             {
                 if (e.HoldingState == HoldingState.Started)
                     PromptDeleteCustomCategory(id);

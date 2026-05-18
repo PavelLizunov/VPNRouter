@@ -458,7 +458,9 @@ public partial class AndroidApp
         // so the rare case where both fire from a single tap on a working
         // surface only does the work once. handledEventsToo:true so any
         // ancestor that marks the event Handled cannot suppress us.
-        _fcUseButton.AddHandler(Gestures.TappedEvent, OnFreeConfigsUseClicked,
+        // Wave 23 (2026-05-18) — Avalonia 12 made Gestures internal; same
+        // routed event reachable through InputElement (publicly re-exposed).
+        _fcUseButton.AddHandler(InputElement.TappedEvent, OnFreeConfigsUseClicked,
             RoutingStrategies.Bubble, handledEventsToo: true);
 
         var bottomStack = new StackPanel

@@ -325,9 +325,14 @@ public partial class AndroidApp
         _toolsZapretModeAggressive = MakeToolsZapretRadio(
             Localization.SettingsDpiBypassAggressive, currentMode == "aggressive", textP);
 
-        _toolsZapretModeOff.Checked        += OnToolsZapretModeChanged;
-        _toolsZapretModeStandard.Checked   += OnToolsZapretModeChanged;
-        _toolsZapretModeAggressive.Checked += OnToolsZapretModeChanged;
+        // Wave 23 (2026-05-18) — Avalonia 12 collapsed
+        // RadioButton.Checked / .Unchecked into a single
+        // ToggleButton.IsCheckedChanged event. The same handler runs once
+        // per state flip; OnToolsZapretModeChanged is already idempotent
+        // (reads .IsChecked off the sender) so semantics are preserved.
+        _toolsZapretModeOff.IsCheckedChanged        += OnToolsZapretModeChanged;
+        _toolsZapretModeStandard.IsCheckedChanged   += OnToolsZapretModeChanged;
+        _toolsZapretModeAggressive.IsCheckedChanged += OnToolsZapretModeChanged;
 
         var modePicker = new Border
         {

@@ -13,10 +13,11 @@ namespace VPNRouter.Android;
 /// <summary>
 /// v3.0 Android port — entry Activity.
 ///
-/// <para>Inherits from <see cref="AvaloniaMainActivity{TApp}"/> so the
-/// Avalonia framework spins up our XAML-driven UI inside this Activity's
-/// lifecycle. The <c>[Activity]</c> attribute is what .NET Android uses
-/// to auto-generate the corresponding <c>&lt;activity&gt;</c> entry inside
+/// <para>Inherits from <see cref="AvaloniaMainActivity"/> (non-generic
+/// in Avalonia 12 — see <see cref="MainApplication"/> for the Android
+/// Application class that hosts the AppBuilder now). The
+/// <c>[Activity]</c> attribute is what .NET Android uses to
+/// auto-generate the corresponding <c>&lt;activity&gt;</c> entry inside
 /// <c>AndroidManifest.xml</c>.</para>
 ///
 /// <para>Phase 1.D (current): the Connect / Disconnect actions are wired
@@ -62,7 +63,7 @@ namespace VPNRouter.Android;
         ConfigChanges.Navigation |
         ConfigChanges.Orientation |
         ConfigChanges.Density)]
-public class MainActivity : AvaloniaMainActivity<AndroidApp>
+public class MainActivity : AvaloniaMainActivity
 {
     private const int RequestVpnConsent = 0xBEEF;
 
@@ -182,11 +183,9 @@ public class MainActivity : AvaloniaMainActivity<AndroidApp>
     private static bool _intendedConnected;
     public static bool IntendedConnected => _intendedConnected;
 
-    protected override AppBuilder CustomizeAppBuilder(AppBuilder builder)
-    {
-        return base.CustomizeAppBuilder(builder)
-            .WithInterFont();
-    }
+    // Wave 23 (2026-05-18) — CustomizeAppBuilder moved to MainApplication.cs.
+    // Avalonia 12 hosts AppBuilder on AvaloniaAndroidApplication<TApp>, not the
+    // Activity. The .WithInterFont() chain lives there now.
 
     /// <summary>
     /// v2.32.0 SR-2 (Android port) — path of the launch-failure counter

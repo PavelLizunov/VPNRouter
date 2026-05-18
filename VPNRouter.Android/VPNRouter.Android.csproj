@@ -12,12 +12,15 @@
   -->
 
   <PropertyGroup>
-    <TargetFramework>net8.0-android</TargetFramework>
+    <!-- Wave 23 (Phase 5, 2026-05-18) — bumped to .NET 10 + Android 36 to
+         move off the Avalonia 11.3.12 pin. Avalonia.Android 12.0.3 requires
+         net10.0-android36.0; the desktop App is already on Avalonia 12.0.3
+         from Phase 3A. -->
+    <TargetFramework>net10.0-android36.0</TargetFramework>
     <!-- libbox.aar requires API 23+ (Android 6.0 Marshmallow). Practically
          universal at this point; KYOCERA A101BM Phase 1.A test runs Android
          12 (API 31). We bumped from 21 → 23 to satisfy libbox's minSdk. -->
     <SupportedOSPlatformVersion>23.0</SupportedOSPlatformVersion>
-    <TargetPlatformVersion>34</TargetPlatformVersion>
     <OutputType>Exe</OutputType>
     <ApplicationId>com.ninitux.vpnrouter</ApplicationId>
     <ApplicationVersion>1</ApplicationVersion>
@@ -93,20 +96,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Wave 12 Phase 3 (2026-05-18) — Android stays on Avalonia 11.3.12
-         while desktop (App + Tests) moves to 12.0.3.
-         RATIONALE: Avalonia.Android 12.0.3 only ships net10.0-android36.0;
-         this project targets net8.0-android34.0. Bumping to .NET 10 is a
-         separate v3.0 Phase 4 task because it pulls in NDK r27+ + SDK 36
-         + Android Gradle Plugin 8.7 + a full Mono Android workload bump.
-         Source-linked VPNRouter.Core compiles fine against both Avalonia
-         majors (no Avalonia surface change in the linked Core branches).
-         See plans/phase3-3A-avalonia-12-2026-05-18.md "Follow-up" for the
-         deferral note. Tracked as Phase 4 task: ph4-android-net10. -->
-    <PackageReference Include="Avalonia" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Android" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.12" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.12" />
+    <!-- Wave 23 (Phase 5, 2026-05-18) — Avalonia 12.0.3 bump on the
+         net10.0-android36.0 TFM. The Wave 12 11.3.12 pin block is removed
+         now that .NET 10 + Android 36 toolchain is available locally. -->
+    <PackageReference Include="Avalonia" Version="12.0.3" />
+    <PackageReference Include="Avalonia.Android" Version="12.0.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.0.3" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.0.3" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <!-- v2.32.0 (2026-05-07) — FileProvider for auto-update APK
          hand-off (Android 7+ requires content:// URIs in cross-app
@@ -114,7 +110,7 @@
          transitively, but Core.Content.FileProvider isn't in the
          transitive set, so we add it explicitly. ~50 KB on top of
          the existing AndroidX surface. -->
-    <PackageReference Include="Xamarin.AndroidX.Core" Version="1.13.1.5" />
+    <PackageReference Include="Xamarin.AndroidX.Core" Version="1.17.0.2" />
     <!-- lucid-pike (2026-05-09) — Simple-page QR scan. Pure-C# ZXing port;
          we pass a pixel int[] from Bitmap.GetPixels into RGBLuminanceSource
          + HybridBinarizer + MultiFormatReader. No JNI, no native lib — same
