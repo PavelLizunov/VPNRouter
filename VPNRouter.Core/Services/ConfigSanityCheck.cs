@@ -13,9 +13,11 @@ namespace VPNRouter.Core.Services;
 /// AND a working subscription is also configured. The
 /// <see cref="VlessServersResolver"/> picks up the placeholder before the
 /// subscription, and sing-box starts cleanly with an outbound that
-/// connects to 195.135.255.216 — a dead/hostile host with the same Reality
-/// public_key as Android's placeholder. F-A/B/D prevent the bad state
-/// from being created; F-E catches a user who's already in it.</para>
+/// connects to the placeholder host (see
+/// <see cref="PlaceholderDefense.KnownFingerprints"/> — a dead/hostile
+/// host with the same Reality public_key as Android's placeholder).
+/// F-A/B/D prevent the bad state from being created; F-E catches a user
+/// who's already in it.</para>
 ///
 /// <para>Two phases:</para>
 /// <list type="number">

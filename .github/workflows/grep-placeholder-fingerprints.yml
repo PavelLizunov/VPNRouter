@@ -1,0 +1,109 @@
+name: grep placeholder fingerprints
+
+# Phase 4 — Wave 17 single-agent task.
+#
+# Single-source-of-truth gate for the v2.32.3 stas-class placeholder
+# fingerprint trio. Phase 3D consolidated every placeholder-defense layer
+# into `VPNRouter.Core/Services/PlaceholderDefense.cs` (see
+# `plans/phase3-3D-placeholder-defense-consolidation-2026-05-18.md`); this
+# workflow makes the consolidation enforceable by failing any push/PR that
+# reintroduces the fingerprints into production code outside the single
+# declaration.
+#
+# Why this matters: in v2.32.3 a placeholder pubkey/short_id/server triple
+# survived in production code paths because the defence list had drifted
+# across 8 files. Phase 3D collapsed those into one
+# `PlaceholderDefense.KnownFingerprints` array. Without this gate, the
+# drift class can reappear on the next ship that hardcodes a sample
+# subscription somewhere — exactly what `config.example.yaml` did before
+# Phase 3D realised the risk.
+#
+# Allowed-paths regex matches:
+#   - VPNRouter.Core/Services/PlaceholderDefense.cs — the ONE production
+#     declaration (single source of truth, fingerprint records).
+#   - VPNRouter.Tests/*.cs — every regression test that pins fingerprints
+#     against accidental drift; the hardcoded constants here are the
+#     point of the test, see PlaceholderInputGateTests.cs class comment.
+#   - plans/*.{md,yaml,yml,json} — roadmap docs, post-mortems, and the
+#     stas-evidence-* forensic captures (verbatim user-supplied evidence;
+#     redacting them would defeat their purpose).
+#   - config.example.yaml — root-level documentation example that ships
+#     with the source tree. Pre-dates Phase 3D; flagged for a separate
+#     follow-up to swap the literal pubkey for a `REPLACE_ME` token,
+#     tracked in the phase3-3D Follow-up section.
+#   - .github/workflows/*.yml — this workflow itself, which encodes the
+#     fingerprint patterns in its checker.
+#
+# Triggers: every push/PR to main + v3.0-prep, matching the same surface
+# as `test.yml`. Workflow_dispatch added so an operator can re-run after
+# a one-off fixture cleanup without bumping main.
+#
+# Caching: not needed — pure git grep, no toolchain involved.
+# Runtime: <10s in practice (small repo, plain grep). 5-min timeout is a
+# safety net against pathological regex expansion.
+
+on:
+  push:
+    branches: [main, v3.0-prep]
+  pull_request:
+    branches: [main, v3.0-prep]
+  workflow_dispatch:
+
+jobs:
+  grep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Verify single-source-of-truth for placeholder fingerprints
+        run: |
+          set -e
+
+          # Allowed paths regex (extended-grep, anchored start..end via
+          # the wrapping grep -vE "^\./(...)$" below). Order is irrelevant
+          # but kept grouped by file class for readability.
+          #
+          # IMPORTANT: when adding a new allowed path, also update the
+          # header comment above so future agents understand the carve-out
+          # justification. Drift between allow-list and rationale is the
+          # exact class of bug Phase 3D was meant to kill.
+          ALLOWED='VPNRouter\.Core/Services/PlaceholderDefense\.cs|VPNRouter\.Tests/.+\.cs|plans/.+\.(md|yaml|yml|json)|config\.example\.yaml|\.github/workflows/.+\.yml'
+
+          # Three fingerprint constants from the v2.32.3 stas-class
+          # incident — see PlaceholderDefense.cs KnownFingerprints[0]
+          # for provenance. If a new fingerprint needs to be policed,
+          # add it to this array AND to KnownFingerprints simultaneously.
+          for FINGERPRINT in \
+            'DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU' \
+            '78ca7952' \
+            '195.135.255.216'; do
+            echo "=== Checking $FINGERPRINT ==="
+            HITS=$(grep -rln \
+              --include='*.cs' \
+              --include='*.axaml' \
+              --include='*.yaml' \
+              --include='*.yml' \
+              --include='*.md' \
+              --include='*.json' \
+              -- "$FINGERPRINT" . 2>/dev/null \
+              | grep -vE "^\./($ALLOWED)\$" \
+              || true)
+            if [ -n "$HITS" ]; then
+              echo "::error::Placeholder fingerprint '$FINGERPRINT' found in disallowed files:"
+              echo "$HITS"
+              echo ""
+              echo "Add this constant to PlaceholderDefense.KnownFingerprints"
+              echo "(VPNRouter.Core/Services/PlaceholderDefense.cs) and reference"
+              echo "it from there instead of hardcoding. See"
+              echo "plans/phase3-3D-placeholder-defense-consolidation-2026-05-18.md"
+              echo "for the consolidation rationale."
+              exit 1
+            fi
+            echo "OK — only in allowed paths."
+          done
+
+          echo ""
+          echo "All 3 placeholder fingerprints confined to single-source-of-truth."

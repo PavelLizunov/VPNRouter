@@ -127,8 +127,9 @@ public sealed class VlessDeepVerifier
             label, entry.Server, entry.Port, protocol, measureBandwidth);
 
         // v2.32.3 (v3.0 Phase 2G): placeholder-credential gate. A subscription
-        // / paste that smuggled stas-class fingerprints (DnT9... pubkey,
-        // 195.135.255.216 server, etc.) past the upstream input gates would
+        // / paste that smuggled stas-class fingerprints (see
+        // PlaceholderDefense.KnownFingerprints for the literal pubkey /
+        // short_id / server triple) past the upstream input gates would
         // otherwise reach sing-box and either (a) silently fail to connect,
         // or worse (b) report "verified" if the host happens to be reachable
         // on TCP/443 but the Reality handshake never completes. Reject up

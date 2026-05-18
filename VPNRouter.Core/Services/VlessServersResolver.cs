@@ -42,8 +42,9 @@ public static class VlessServersResolver
     /// after the user adds a subscription, and a stale
     /// <c>vless.active_server</c> pointing at one of them was silently
     /// shadow-overriding live subscription routing (stas's case:
-    /// placeholder <c>khunrath_ln 195.135.255.216</c> shadowed working
-    /// <c>de-01 443</c>).</para>
+    /// the legacy <c>khunrath_ln</c> placeholder entry — see
+    /// <see cref="PlaceholderDefense.KnownFingerprints"/> for the literal
+    /// host triple — shadowed working <c>de-01 443</c>).</para>
     ///
     /// <para>If <c>vless.active_server</c> points to a server NOT in the
     /// resulting scoped list, it is overwritten with the first scoped
