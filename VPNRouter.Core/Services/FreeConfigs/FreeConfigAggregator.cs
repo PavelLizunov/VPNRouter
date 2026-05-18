@@ -2,17 +2,26 @@ using System.Security.Cryptography;
 using System.Text;
 using Serilog;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Services.FreeConfigs.Stages;
 
 namespace VPNRouter.Core.Services.FreeConfigs;
 
 /// <summary>
-/// Orchestrates the full pipeline:
-/// 1. Fetch all enabled sources
-/// 2. Parse vless:// URIs into FreeConfigEntry
-/// 3. Deduplicate by (host:port:uuid)
-/// 4. Enrich with GeoIP (country code)
-/// 5. Test TCP connectivity + measure latency
-/// 6. Persist to cache
+/// Orchestrates the full Free Configs pipeline. Phase 3E (2026-05-18)
+/// refactored the inline 6-step pipeline into composable
+/// <see cref="IFreeConfigStage"/> instances under
+/// <see cref="Stages"/>; this class is now a thin orchestrator that runs
+/// the stage list under a per-stage <see cref="StageRetryPolicy"/>.
+///
+/// <para>Stage order (each stage's own file documents what it does):</para>
+/// <list type="number">
+///   <item><see cref="FetchStage"/> — pool.json short-circuit OR per-source fan-out</item>
+///   <item><see cref="ParseStage"/> — raw URIs → FreeConfigEntry (skipped via pool short-circuit)</item>
+///   <item><see cref="DedupeStage"/> — cross-source dedupe (skipped via pool short-circuit)</item>
+///   <item><see cref="GeoIpStage"/> — ip-api.com country codes (skipped via pool short-circuit)</item>
+///   <item><see cref="CacheMergeStage"/> — inherit + preserve from on-disk cache</item>
+///   <item><see cref="TestStage"/> — TCP+TLS probe + skip-recent gate + incremental save</item>
+/// </list>
 /// </summary>
 public sealed class FreeConfigAggregator
 {
@@ -22,8 +31,9 @@ public sealed class FreeConfigAggregator
     private readonly FreeConfigCache _cache;
     private readonly FreeConfigPoolFetcher _poolFetcher;
     private readonly ILogger _logger;
+    private readonly StageRetryPolicy _retryPolicy;
 
-    public FreeConfigAggregator(ILogger logger)
+    public FreeConfigAggregator(ILogger logger, StageRetryPolicy? retryPolicy = null)
     {
         _logger = logger;
         _fetcher = new FreeConfigFetcher(logger);
@@ -31,6 +41,7 @@ public sealed class FreeConfigAggregator
         _geoIp = new FreeConfigGeoIp(logger);
         _cache = new FreeConfigCache(logger);
         _poolFetcher = new FreeConfigPoolFetcher(logger);
+        _retryPolicy = retryPolicy ?? StageRetryPolicy.Default;
     }
 
     /// <summary>v2.14.1: whether to prefer server-side pool.json over direct source fetch.</summary>
@@ -66,8 +77,13 @@ public sealed class FreeConfigAggregator
     public event Action<int, int>? OnTestProgress; // (done, total)
 
     /// <summary>
-    /// Full refresh: fetch → parse → dedupe → geoip → test → persist.
+    /// Full refresh: fetch → parse → dedupe → geoip → cache-merge → test.
     /// Returns the fresh list of configs.
+    ///
+    /// <para>Phase 3E (2026-05-18): the inline 6-step pipeline was replaced
+    /// by a stage loop. Per-stage retry policy is configurable via the
+    /// constructor (defaults to <see cref="StageRetryPolicy.Default"/>),
+    /// so callers can tune fetch retries / test retries independently.</para>
     ///
     /// <paramref name="maxTestCount"/> caps how many configs are actually TCP-tested.
     /// Default = int.MaxValue (test everything). Set lower to limit first-run time.
@@ -83,299 +99,126 @@ public sealed class FreeConfigAggregator
     {
         sources ??= FreeConfigSources.Default;
 
-        // ── Stage 0 (v2.14.1): try server-side pool.json first ──
-        // If successful, skip fetching 14 sources + skip GeoIP entirely.
-        // Pool is refreshed by GitHub Actions every 6h — contains metadata + country codes.
-        var poolLoaded = false;
-        List<FreeConfigEntry>? poolEntries = null;
-        if (UseServerPool)
+        // ── Build the stage list ──
+        var fetchStage = new FetchStage(_fetcher, _poolFetcher, useServerPool: UseServerPool);
+        var parseStage = new ParseStage(fetchStage);
+        var dedupeStage = new DedupeStage();
+        var geoIpStage = new GeoIpStage(_geoIp);
+        var cacheMergeStage = new CacheMergeStage();
+        var testStage = new TestStage(_tester);
+
+        var stages = new IFreeConfigStage[]
         {
-            OnStageChanged?.Invoke("Fetching pool.json from GitHub Releases...");
-            try
-            {
-                poolEntries = await _poolFetcher.FetchPoolAsync(ct);
-                if (poolEntries != null && poolEntries.Count > 1000)
-                {
-                    poolLoaded = true;
-                    _logger.Information("Pool loaded: {n} entries — skipping per-source fetch + GeoIP", poolEntries.Count);
-                    OnStageChanged?.Invoke($"Pool loaded: {poolEntries.Count} configs (country codes included)");
-                }
-                else if (poolEntries != null)
-                {
-                    _logger.Warning("Pool has only {n} entries — falling back to per-source fetch", poolEntries.Count);
-                }
-            }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex)
-            {
-                _logger.Warning("Pool fetch failed: {err} — falling back to per-source fetch", ex.Message);
-            }
-        }
-
-        Dictionary<string, FreeConfigEntry> byId;
-
-        if (poolLoaded && poolEntries != null)
-        {
-            // Pool already contains parsed + deduped + GeoIP-enriched entries.
-            // Skip Stages 1-2 entirely, build byId directly.
-            byId = poolEntries.ToDictionary(e => e.Id, StringComparer.OrdinalIgnoreCase);
-            _logger.Information("FreeConfigAggregator: using {n} entries from pool.json (GeoIP pre-enriched)", byId.Count);
-        }
-        else
-        {
-            // ── Stage 1: fetch all sources in parallel, with per-source progress ──
-            var enabledSources = sources.Where(s => s.Enabled).ToList();
-            OnStageChanged?.Invoke($"Fetching sources (0/{enabledSources.Count})...");
-
-            var fetchedCount = 0;
-            var currentlyFetching = new System.Collections.Concurrent.ConcurrentBag<string>();
-
-            var fetchTasks = enabledSources.Select(async s =>
-            {
-                currentlyFetching.Add(s.Name);
-                try
-                {
-                    var raws = await _fetcher.FetchAsync(s, ct);
-                    var done = Interlocked.Increment(ref fetchedCount);
-                    var remaining = currentlyFetching.Where(n => n != s.Name).FirstOrDefault() ?? "";
-                    var label = done == enabledSources.Count
-                        ? $"Fetching sources ({done}/{enabledSources.Count}) — done"
-                        : remaining.Length > 0
-                            ? $"Fetching sources ({done}/{enabledSources.Count}): {remaining}..."
-                            : $"Fetching sources ({done}/{enabledSources.Count})...";
-                    OnStageChanged?.Invoke(label);
-                    return (s, raws);
-                }
-                finally { /* best-effort; ConcurrentBag doesn't support remove */ }
-            });
-            var fetched = await Task.WhenAll(fetchTasks);
-
-            // ── Stage 2: parse + dedupe ──
-            OnStageChanged?.Invoke("Parsing configs...");
-            byId = new Dictionary<string, FreeConfigEntry>(StringComparer.OrdinalIgnoreCase);
-            var parseErrors = 0;
-
-            foreach (var (src, raws) in fetched)
-            {
-                foreach (var raw in raws)
-                {
-                    try
-                    {
-                        var vless = VlessUriParser.Parse(raw);
-                        var id = BuildId(vless.Server, vless.Port, vless.Uuid);
-                        if (byId.ContainsKey(id)) continue;
-
-                        byId[id] = new FreeConfigEntry
-                        {
-                            Id         = id,
-                            SourceUrl  = src.Url,
-                            RawUri     = raw,
-                            Host       = vless.Server,
-                            Port       = vless.Port,
-                            Uuid       = vless.Uuid,
-                            Name       = vless.Name ?? "",
-                            Sni        = vless.Reality?.ServerName ?? vless.Tls?.ServerName ?? "",
-                            Transport  = vless.Transport?.Type ?? "tcp",
-                            Security   = vless.Security ?? "reality",
-                        };
-                    }
-                    catch { parseErrors++; }
-                }
-            }
-
-            _logger.Information("FreeConfigAggregator: parsed {ok} unique ({err} errors) from {src} sources",
-                byId.Count, parseErrors, fetched.Length);
-        }
-
-        var configs = byId.Values.ToList();
-
-        // Merge with existing cache to preserve latency/status history where possible.
-        var existing = _cache.Load();
-        var existingById = existing.Configs.ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
-        foreach (var cfg in configs)
-        {
-            if (existingById.TryGetValue(cfg.Id, out var prev))
-            {
-                cfg.FirstSeenAt = prev.FirstSeenAt;
-                cfg.CountryCode = prev.CountryCode;
-                cfg.ResolvedIp  = prev.ResolvedIp;
-                cfg.Status      = prev.Status;
-                cfg.LatencyMs   = prev.LatencyMs;
-                cfg.LastTestedAt = prev.LastTestedAt;
-            }
-        }
-
-        // v2.28.3-r5: ALSO preserve previously-validated entries that aren't in
-        // the freshly-fetched pool. See PreservePreviousValidation for the full
-        // rationale + test coverage.
-        var preservedFromCache = PreservePreviousValidation(
-            byId, configs, existing.Configs, DateTime.UtcNow);
-
-        if (preservedFromCache > 0)
-        {
-            _logger.Information(
-                "FreeConfigAggregator: preserved {n} previously-validated entries not in fresh pool",
-                preservedFromCache);
-        }
-
-        // ── Stage 3: enrich GeoIP (only for entries without CC) ──
-        var needGeo = configs.Where(c => string.IsNullOrEmpty(c.CountryCode)).ToList();
-        if (needGeo.Count > 0)
-        {
-            OnStageChanged?.Invoke($"Resolving country codes ({needGeo.Count} IPs)...");
-
-            // Forward GeoIP internal progress to UI so user sees what's happening.
-            _geoIp.Progress = new Progress<(string stage, int done, int total)>(p =>
-            {
-                var label = p.stage == "dns"
-                    ? $"Resolving DNS: {p.done}/{p.total}"
-                    : $"Resolving country (batch {p.done}/{p.total})";
-                OnStageChanged?.Invoke(label);
-            });
-
-            try
-            {
-                await _geoIp.EnrichAsync(needGeo, ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning("GeoIP enrich failed: {err}", ex.Message);
-            }
-            finally
-            {
-                _geoIp.Progress = null;
-            }
-        }
-
-        // ── Stage 4: test connectivity (with skip-recent logic) ──
-        // Skip:
-        //   1. Verified entries (gold — the weaker TCP+TLS test can only downgrade them)
-        //   2. Entries tested within the last `skipRecentHours` hours (default 6h):
-        //      their status is fresh enough, re-testing wastes user time. The Retest button
-        //      forces a full re-check regardless of age.
-        // Priority for the rest: Ok > Slow > Unknown > Implausible > TlsFailed > Timeout > Unreachable
-        var now = DateTime.UtcNow;
-        var skipCutoff = now - TimeSpan.FromHours(skipRecentHours);
-        var skippedRecent = 0;
-
-        var toTest = configs
-            .Where(c =>
-            {
-                if (c.Status == FreeConfigStatus.Verified) return false;
-                // Skip if tested recently AND had a definite status (Ok/Slow/TlsFailed/Timeout/Unreachable/Implausible).
-                // Unknown entries always get tested even if "LastTestedAt" was set (can happen with partial runs).
-                if (c.Status != FreeConfigStatus.Unknown &&
-                    c.LastTestedAt.HasValue && c.LastTestedAt.Value >= skipCutoff)
-                {
-                    Interlocked.Increment(ref skippedRecent);
-                    return false;
-                }
-                return true;
-            })
-            .OrderBy(c => c.Status switch
-            {
-                FreeConfigStatus.Ok          => 0,
-                FreeConfigStatus.Slow        => 1,
-                FreeConfigStatus.Unknown     => 2,
-                FreeConfigStatus.Implausible => 3,
-                FreeConfigStatus.TlsFailed   => 4,
-                FreeConfigStatus.Timeout     => 5,
-                FreeConfigStatus.Unreachable => 6,
-                _                            => 7,
-            })
-            .ThenBy(c => c.LatencyMs > 0 ? c.LatencyMs : int.MaxValue)
-            .Take(maxTestCount)
-            .ToList();
-
-        if (skippedRecent > 0)
-        {
-            _logger.Information("FreeConfigAggregator: skipped {n} recently-tested entries (< {h}h old)",
-                skippedRecent, skipRecentHours);
-        }
-
-        var cacheFile = new FreeConfigCache.CacheFile
-        {
-            LastAggregatedAt = DateTime.UtcNow,
-            Configs = configs,
+            fetchStage, parseStage, dedupeStage, geoIpStage, cacheMergeStage, testStage,
         };
-        _cache.Save(cacheFile); // initial save so partial results survive unexpected exit
 
-        // v2.13.17: goal-seeking mode — stop early once N entries match latency criterion.
-        var goalMode = goalTargetCount.HasValue && goalMaxLatencyMs.HasValue;
-        using var goalCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var ctx = new StageContext(
+            Input: Array.Empty<FreeConfigEntry>(),
+            Settings: new AppSettings(), // settings stub — Phase 4 lifts up to caller
+            Cache: _cache,
+            Sources: sources,
+            Logger: _logger,
+            StageNotice: OnStageChanged,
+            TestProgress: OnTestProgress != null
+                ? (done, total) => OnTestProgress?.Invoke(done, total)
+                : null,
+            MaxTestCount: maxTestCount,
+            SkipRecentHours: skipRecentHours,
+            GoalTargetCount: goalTargetCount,
+            GoalMaxLatencyMs: goalMaxLatencyMs);
 
-        var stageMsg = goalMode
-            ? $"Testing {toTest.Count} configs · goal: find {goalTargetCount} with ping < {goalMaxLatencyMs}ms"
-            : skippedRecent > 0
-                ? $"Testing {toTest.Count} configs (skipped {skippedRecent} recently-tested)..."
-                : $"Testing {toTest.Count} configs...";
-        OnStageChanged?.Invoke(stageMsg);
+        // ── Run stages in order, honouring short-circuit + retry policy ──
+        var skipStages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var lastSave = DateTime.UtcNow;
-        var foundMatching = 0;
-        var goalReached = false;
-
-        var progress = new Progress<(int done, int total)>(p =>
+        foreach (var stage in stages)
         {
-            OnTestProgress?.Invoke(p.done, p.total);
+            ct.ThrowIfCancellationRequested();
 
-            // Goal-seeking early stop: count how many entries pass the latency gate.
-            if (goalMode && !goalReached)
+            if (skipStages.Contains(stage.Name))
             {
-                var matching = toTest.Count(c =>
-                    c.Status == FreeConfigStatus.Ok &&
-                    c.LatencyMs > 0 &&
-                    c.LatencyMs <= goalMaxLatencyMs!.Value);
-
-                if (matching > foundMatching)
-                {
-                    foundMatching = matching;
-                    OnStageChanged?.Invoke(
-                        $"Testing ({p.done}/{p.total}) · found {foundMatching}/{goalTargetCount}");
-                }
-
-                if (matching >= goalTargetCount!.Value)
-                {
-                    goalReached = true;
-                    _logger.Information("Latency goal reached: {found}/{target} after {done}/{total} tests",
-                        matching, goalTargetCount, p.done, p.total);
-                    goalCts.Cancel(); // stop the tester early
-                }
+                _logger.Debug("FreeConfigAggregator: short-circuit skipping stage {name}", stage.Name);
+                continue;
             }
 
-            // Periodic incremental save every ~50 tests or every 5 seconds.
-            if (p.done % 50 == 0 || (DateTime.UtcNow - lastSave).TotalSeconds > 5)
+            var result = await RunWithRetryAsync(stage, ctx, _retryPolicy.For(stage.Name), ct);
+
+            if (!result.Success && !stage.Optional)
             {
-                lastSave = DateTime.UtcNow;
-                _cache.Save(cacheFile);
+                _logger.Warning(
+                    "FreeConfigAggregator: stage {name} failed (reason: {reason}) — aborting pipeline",
+                    stage.Name, result.FailureReason ?? "(unknown)");
+                break;
             }
-        });
 
-        try
-        {
-            await _tester.TestAllAsync(toTest, progress, goalCts.Token);
-        }
-        catch (OperationCanceledException) when (goalReached && !ct.IsCancellationRequested)
-        {
-            // Goal-reached early stop — NOT a user cancellation. Proceed to save + return normally.
-            _logger.Information("Goal-reached stop at {found}/{target} matching entries",
-                foundMatching, goalTargetCount);
-        }
-        catch (OperationCanceledException)
-        {
-            // User cancel — save partial progress, then re-throw so UI shows "Cancelled".
-            _cache.Save(cacheFile);
-            throw;
+            ctx = ctx with { Input = result.Output };
+
+            if (result.ShortCircuit && result.ShortCircuitStages != null)
+            {
+                foreach (var s in result.ShortCircuitStages)
+                    skipStages.Add(s);
+            }
         }
 
-        // ── Stage 5: persist final state ──
-        OnStageChanged?.Invoke(goalReached
-            ? $"Goal reached: {foundMatching} configs with ping < {goalMaxLatencyMs}ms"
-            : "Saving cache...");
-        _cache.Save(cacheFile);
+        // ── Final UI notice mirrors pre-3E "Done" / "Goal reached" message ──
+        OnStageChanged?.Invoke(testStage.GoalReached
+            ? $"Goal reached: {testStage.FoundMatching} configs with ping < {goalMaxLatencyMs}ms"
+            : "Done");
 
-        OnStageChanged?.Invoke("Done");
-        return configs;
+        // The final Output is whatever TestStage produced (or upstream
+        // stage if test was skipped on short-circuit). Materialise as
+        // List<T> for back-compat with the previous return type.
+        return ctx.Input.ToList();
+    }
+
+    /// <summary>
+    /// Per-stage retry wrapper. Runs the stage up to
+    /// <see cref="StageRetry.Count"/> times with exponential back-off,
+    /// returning the FIRST successful StageResult. <see cref="OperationCanceledException"/>
+    /// always propagates without retry (user cancel never retries).
+    /// </summary>
+    private async Task<StageResult> RunWithRetryAsync(
+        IFreeConfigStage stage,
+        StageContext ctx,
+        StageRetry retry,
+        CancellationToken ct)
+    {
+        StageResult? last = null;
+        for (var attempt = 1; attempt <= Math.Max(1, retry.Count); attempt++)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                last = await stage.RunAsync(ctx, ct);
+                if (last.Success) return last;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex,
+                    "FreeConfigAggregator: stage {name} threw on attempt {n}/{max}",
+                    stage.Name, attempt, retry.Count);
+                last = new StageResult(
+                    Success: false,
+                    Output: ctx.Input,
+                    FailureReason: ex.Message,
+                    Duration: TimeSpan.Zero);
+            }
+
+            if (attempt < retry.Count)
+            {
+                var delay = retry.BaseDelayMs * (int)Math.Pow(2, attempt - 1);
+                if (delay > 0)
+                    await Task.Delay(delay, ct);
+            }
+        }
+        return last ?? new StageResult(
+            Success: false,
+            Output: ctx.Input,
+            FailureReason: "stage produced no result",
+            Duration: TimeSpan.Zero);
     }
 
     /// <summary>
