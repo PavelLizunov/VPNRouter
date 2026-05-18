@@ -193,14 +193,14 @@ public static class SubscriptionFetcher
                 var entry = ServerUriParser.Parse(line);
 
                 // v2.32.3 placeholder filter: silently drop entries that
-                // match known placeholder bait (e.g. the
-                // DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU pubkey from
-                // pre-r10 Android smoke builds). Subscription providers
-                // sometimes scrape sample URLs from forums / Telegram and
-                // re-publish them — one bad entry shouldn't kill the whole
-                // import. The post-loop counter feeds a single aggregated
-                // warning at the caller so the user can find out via log
-                // why their server count dropped.
+                // match known placeholder bait (e.g. the PlaceholderVlessUri
+                // pubkey from pre-r10 Android smoke builds — see
+                // PlaceholderDefense.KnownFingerprints for the canonical list).
+                // Subscription providers sometimes scrape sample URLs from
+                // forums / Telegram and re-publish them — one bad entry
+                // shouldn't kill the whole import. The post-loop counter
+                // feeds a single aggregated warning at the caller so the
+                // user can find out via log why their server count dropped.
                 //
                 // Defence-in-depth: ServerUriParser / VlessUriParser already
                 // throws PlaceholderConfigException for known fingerprints

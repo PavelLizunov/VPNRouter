@@ -36,37 +36,31 @@ public sealed class ConfigSanityCheck
 {
     // ─── Known placeholder fingerprints ───────────────────────────────────
     //
-    // These are pulled from VPNRouter.Android's PlaceholderVlessUri smoke-
-    // test constant (removed in DEFCT-005 but still present in pre-r10
-    // user configs that hot-flipped to "vless mode" via the legacy
-    // ConfigMode=generated path). stas's evidence is the canonical case:
-    //   plans/stas-evidence-config.yaml   (active_server: khunrath_ln)
-    //   plans/stas-evidence-current.json  (outbound: 195.135.255.216 +
-    //                                      pubkey DnT9... + sid 78ca7952)
+    // v3.0 Phase 3D (2026-05-18) — fingerprint tables moved to the
+    // consolidated single-source-of-truth at
+    // <see cref="PlaceholderDefense.KnownFingerprints"/>. The three
+    // hash-set properties below are kept as back-compat forwarders so
+    // callers reaching in directly (AutoFailoverEngine,
+    // VlessServersResolver.IsPlaceholderEntry pre-consolidation) still
+    // compile. Layer-E logic itself (this file's
+    // <see cref="CheckBeforeStart(JObject)"/>) now delegates to
+    // <see cref="PlaceholderDefense.LayerE_RuntimeSanity.InspectOutbound"/>
+    // via the shared <see cref="InspectOutbound(JObject?)"/> entry point
+    // preserved below.
     //
-    // The lists are intentionally narrow — false-positive bans are worse
-    // than false negatives here, because a banned valid server kills VPN
-    // for the user. Add only fingerprints we've confirmed are placeholder
-    // bait. Cross-referenced with Android constants — see r10 plan §1.5
-    // step 5 "Unify placeholder lists".
+    // Pre-3D content (kept here as a historical note for grep
+    // discoverability):
+    //   plans/stas-evidence-config.yaml   (active_server: khunrath_ln)
+    //   plans/stas-evidence-current.json  (outbound: dead host pubkey/sid)
 
-    public static readonly IReadOnlySet<string> KnownPlaceholderPubkeys =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "DnT9hIvt5QEx07unHUeXbWxN4Qo1gnecN4p0s62nckU",
-        };
+    /// <summary>Back-compat forwarder for the consolidated pubkey set. See <see cref="PlaceholderDefense.KnownPubkeys"/>.</summary>
+    public static IReadOnlySet<string> KnownPlaceholderPubkeys => PlaceholderDefense.KnownPubkeys;
 
-    public static readonly IReadOnlySet<string> KnownPlaceholderShortIds =
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "78ca7952",
-        };
+    /// <summary>Back-compat forwarder for the consolidated short_id set. See <see cref="PlaceholderDefense.KnownShortIds"/>.</summary>
+    public static IReadOnlySet<string> KnownPlaceholderShortIds => PlaceholderDefense.KnownShortIds;
 
-    public static readonly IReadOnlySet<string> KnownPlaceholderServers =
-        new HashSet<string>
-        {
-            "195.135.255.216",
-        };
+    /// <summary>Back-compat forwarder for the consolidated server-IP set. See <see cref="PlaceholderDefense.KnownServers"/>.</summary>
+    public static IReadOnlySet<string> KnownPlaceholderServers => PlaceholderDefense.KnownServers;
 
     private readonly ILogger? _logger;
     private readonly HttpClient _http;
@@ -186,48 +180,27 @@ public sealed class ConfigSanityCheck
     }
 
     /// <summary>
-    /// Locates the first proxy-typed outbound in a sing-box <c>outbounds</c>
-    /// array (vless / hysteria2 / tuic / shadowsocks / trojan). Returns
-    /// <c>null</c> when none is present. Shared between
-    /// <see cref="CheckBeforeStart(JObject)"/> and
-    /// <see cref="CustomConfigInjector"/>'s placeholder gate so both layers
-    /// pick the same outbound to inspect.
+    /// Back-compat forwarder — locates the first proxy-typed outbound in a
+    /// sing-box <c>outbounds</c> array (vless / hysteria2 / tuic /
+    /// shadowsocks / trojan). v3.0 Phase 3D delegates to
+    /// <see cref="PlaceholderDefense.LayerE_RuntimeSanity.FindFirstProxyOutbound"/>
+    /// so both this F-E call site and <see cref="CustomConfigInjector"/>'s
+    /// placeholder gate share a single source of truth for "find the
+    /// outbound to inspect".
     /// </summary>
-    internal static JObject? FindFirstProxyOutbound(JArray outbounds)
-    {
-        foreach (var ob in outbounds.OfType<JObject>())
-        {
-            var type = ob["type"]?.Value<string>()?.ToLowerInvariant() ?? "";
-            if (type is "vless" or "hysteria2" or "tuic" or "shadowsocks" or "trojan")
-                return ob;
-        }
-        return null;
-    }
+    internal static JObject? FindFirstProxyOutbound(JArray outbounds) =>
+        PlaceholderDefense.LayerE_RuntimeSanity.FindFirstProxyOutbound(outbounds);
 
     /// <summary>
-    /// Inspects a single sing-box proxy outbound JObject for placeholder
-    /// fingerprints (Reality public_key, Reality short_id, server IP).
-    /// Returns the matching field name (<c>"reality.public_key"</c>,
-    /// <c>"reality.short_id"</c>, <c>"server"</c>) or <c>null</c> when the
-    /// outbound is clean. Matches the field-name convention used by
-    /// <see cref="PlaceholderGuard.Inspect(string?, string?, string?)"/>.
-    ///
-    /// <para>v2.32.3-r1 (2026-05-17): extracted from
-    /// <see cref="CheckBeforeStart(JObject)"/> so the custom-config injector
-    /// can reject placeholder credentials at Inject time using the same
-    /// detection logic as the runtime safety net.</para>
+    /// Back-compat forwarder — inspects a single sing-box proxy outbound
+    /// JObject for placeholder fingerprints (Reality public_key, Reality
+    /// short_id, server IP). v3.0 Phase 3D delegates to
+    /// <see cref="PlaceholderDefense.LayerE_RuntimeSanity.InspectOutbound"/>.
+    /// Field-name convention matches
+    /// <see cref="PlaceholderDefense.Inspect(string?, string?, string?)"/>.
     /// </summary>
-    public static string? InspectOutbound(JObject? proxy)
-    {
-        if (proxy == null) return null;
-
-        var reality = proxy["tls"]?["reality"] as JObject;
-        var pubkey = reality?["public_key"]?.Value<string>();
-        var shortId = reality?["short_id"]?.Value<string>();
-        var server = proxy["server"]?.Value<string>();
-
-        return PlaceholderGuard.Inspect(pubkey, shortId, server);
-    }
+    public static string? InspectOutbound(JObject? proxy) =>
+        PlaceholderDefense.LayerE_RuntimeSanity.InspectOutbound(proxy);
 
     /// <summary>
     /// Phase 1 — convenience overload that accepts the raw JSON text.

@@ -302,16 +302,11 @@ public sealed class AutoFailoverEngine
         if (entry.Port <= 0 || entry.Port > 65535) return false;
 
         // Drop placeholder fingerprints so we don't cycle into another
-        // confirmed-dead entry. Reality config lives under entry.Reality.
-        if (ConfigSanityCheck.KnownPlaceholderServers.Contains(entry.Server))
-            return false;
-        var pubkey = entry.Reality?.PublicKey;
-        if (!string.IsNullOrEmpty(pubkey)
-            && ConfigSanityCheck.KnownPlaceholderPubkeys.Contains(pubkey))
-            return false;
-        var shortId = entry.Reality?.ShortId;
-        if (!string.IsNullOrEmpty(shortId)
-            && ConfigSanityCheck.KnownPlaceholderShortIds.Contains(shortId))
+        // confirmed-dead entry. v3.0 Phase 3D (2026-05-18): single-call
+        // forward to PlaceholderDefense so adding a new fingerprint to the
+        // consolidated list automatically gates failover too — no parallel
+        // hash-set reach-in required.
+        if (PlaceholderDefense.Inspect(entry) is not null)
             return false;
 
         return true;

@@ -188,33 +188,18 @@ public static class VlessServersResolver
 
     /// <summary>
     /// r10 r7 (Bug-r10-E) — does this entry look like a stas-class
-    /// placeholder? Checks against <see cref="ConfigSanityCheck"/>'s
-    /// known-placeholder pattern lists (server IP, Reality public_key,
-    /// Reality short_id). Used by the scope guard to decide whether a
+    /// placeholder? Used by the scope guard to decide whether a
     /// generated-mode active server is a legacy orphan (placeholder →
     /// subscription wins) or a legitimate manual choice (real entry →
     /// manual respected).
+    ///
+    /// <para>v3.0 Phase 3D (2026-05-18): forwards to
+    /// <see cref="PlaceholderDefense.LayerA_ResolverScopeGuard.IsPlaceholderEntry"/>
+    /// so the F-A scope-guard logic shares a single source of truth with
+    /// the rest of the 6-layer defense.</para>
     /// </summary>
-    internal static bool IsPlaceholderEntry(VlessServerEntry entry)
-    {
-        if (entry == null) return false;
-
-        if (!string.IsNullOrEmpty(entry.Server)
-            && ConfigSanityCheck.KnownPlaceholderServers.Contains(entry.Server))
-            return true;
-
-        var pbk = entry.Reality?.PublicKey;
-        if (!string.IsNullOrEmpty(pbk)
-            && ConfigSanityCheck.KnownPlaceholderPubkeys.Contains(pbk))
-            return true;
-
-        var sid = entry.Reality?.ShortId;
-        if (!string.IsNullOrEmpty(sid)
-            && ConfigSanityCheck.KnownPlaceholderShortIds.Contains(sid))
-            return true;
-
-        return false;
-    }
+    internal static bool IsPlaceholderEntry(VlessServerEntry entry) =>
+        PlaceholderDefense.LayerA_ResolverScopeGuard.IsPlaceholderEntry(entry);
 
     /// <summary>
     /// Diagnostic helper for callers that need a clear "why is this empty"
