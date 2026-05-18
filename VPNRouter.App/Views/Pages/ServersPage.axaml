@@ -7,6 +7,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
              x:Class="VPNRouter.App.Views.Pages.ServersPage"
+             x:CompileBindings="True"
              x:DataType="vm:MainWindowViewModel">
   <UserControl.Resources>
     <conv:BoolToFontWeightConverter x:Key="ActiveFontConverter"/>

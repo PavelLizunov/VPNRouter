@@ -3,6 +3,7 @@
         xmlns:loc="using:VPNRouter.App.Localization"
         xmlns:vm="using:VPNRouter.App.ViewModels"
         x:Class="VPNRouter.App.Views.AboutWindow"
+        x:CompileBindings="True"
         x:DataType="vm:MainWindowViewModel"
         Title="{Binding L_AboutTitle}"
         Width="360" Height="420"

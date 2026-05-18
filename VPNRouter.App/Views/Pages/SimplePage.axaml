@@ -4,6 +4,7 @@
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:conv="using:VPNRouter.App"
              x:Class="VPNRouter.App.Views.Pages.SimplePage"
+             x:CompileBindings="True"
              x:DataType="vm:MainWindowViewModel">
 
     <!--
