@@ -26,6 +26,7 @@ namespace VPNRouter.Tests;
 /// <para>Tests use unique temp paths per case so they can run in parallel
 /// without colliding on the shared default config path.</para>
 /// </summary>
+[Collection("FilesystemTests")]
 public class SettingsLoaderRobustnessTests : IDisposable
 {
     private readonly string _tempDir;

@@ -12,6 +12,7 @@ namespace VPNRouter.Tests;
 ///
 /// Plan: <c>plans/v2.32.0-settings-validator.md</c>.
 /// </summary>
+[Collection("FilesystemTests")]
 public class SettingsValidatorTests
 {
     // ── Happy path ──────────────────────────────────────────────────
