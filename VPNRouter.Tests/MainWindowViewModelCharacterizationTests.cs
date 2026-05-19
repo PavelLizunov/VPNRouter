@@ -65,12 +65,17 @@ public class MainWindowViewModelCharacterizationTests
     /// <c>MainWindowViewModel(ISettingsStore?)</c> ctor is non-
     /// <c>#if PLATFORM_WINDOWS</c>-gated, so the Linux surface drifts too.
     /// The actual Linux hash will surface on the next ubuntu-latest CI run
-    /// as the test failure's "Actual:" line — update this constant then.
-    /// Until that update, expect this test to fail on Linux with the new
-    /// hash visible in the assertion message.</para>
+    /// as the test failure's "Actual:" line — update this constant then.</para>
+    ///
+    /// <para><b>Phase 6 Wave 32 (2026-05-19 night):</b> Linux hash now
+    /// captured from CI run 26087428554 and pinned below. Windows-side hash
+    /// from Wave 4-19 was applied locally but Linux was left as the pre-
+    /// Wave-19 value pending an actual CI surface; this commit closes that
+    /// loop. Same `MainWindowViewModel(ISettingsStore?)` ctor surface on
+    /// both platforms.</para>
     /// </summary>
     private const string PinnedHashLinux =
-        "46602c4d7f74bf13ff5f2155f964a6a6b27b88f8e6b53cccc3f45e4b8e3d176f";
+        "4868da739918ff7ed09f2d117b01ca900ec3aa2ac499c9086ce6a9e68acd0279";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()
