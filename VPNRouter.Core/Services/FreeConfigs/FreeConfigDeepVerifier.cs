@@ -455,7 +455,10 @@ public sealed class FreeConfigDeepVerifier
             };
         }
 
-        return root.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = false });
+        // Phase 6 — defaults are WriteIndented=false anyway; using the
+        // parameterless overload sidesteps the .NET 10 "options must
+        // specify a TypeInfoResolver" throw without any wire-format change.
+        return root.ToJsonString();
     }
 
     /// <summary>Find a random free TCP port on loopback.</summary>
