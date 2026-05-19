@@ -1,4 +1,5 @@
 using Avalonia;
+using Serilog;
 using System;
 using VPNRouter.Core.Platform;
 using VPNRouter.Core.Services;
@@ -135,6 +136,53 @@ sealed class Program
             return;
         }
 #endif
+
+        // BR-6b (audit 2026-05-20) — initialise the static Serilog
+        // `Log.Logger` early so every downstream caller that does
+        // `Serilog.Log.Logger?.Information(...)` actually writes to
+        // vpnrouter*.log. Pre-r10 the static was never assigned: the
+        // MainWindowViewModel ctor created an instance `_logger` for
+        // its own use but Log.Logger stayed at the SilentLogger
+        // default. That silently no-op'd:
+        //
+        //   * BR-3 (r7) SettingsLoader.LoadCore diagnostic mirror —
+        //     the whole point of r7 was to surface the post-load
+        //     {schema, subs, vless.servers} snapshot in user-shared
+        //     logs. With Log.Logger silent, the mirror wrote to
+        //     /dev/null on App.exe; brat's 23:29-23:33 logs confirmed
+        //     zero `[SettingsLoader] Loaded …` lines.
+        //
+        //   * SettingsMigrator.Migrate diagnostic lines (called via
+        //     SettingsLoader with a null logger that defaulted to
+        //     Log.Logger inside the migrator) — same silent-default
+        //     fate.
+        //
+        // Initialise it here, AFTER admin elevation but BEFORE
+        // SettingsLoader.Load can be triggered by any sub-system
+        // (LaunchFailureCounter doesn't load settings; service
+        // binPath heal doesn't load settings; the first
+        // SettingsLoader.Load is in MainWindowViewModel ctor far
+        // below). Writes to the same vpnrouter.log file that the
+        // VM-instance _logger writes to — Serilog's File sink handles
+        // concurrent writers from one process correctly.
+        try
+        {
+            VPNRouter.Core.AppPaths.EnsureDirectories();
+            Serilog.Log.Logger = new Serilog.LoggerConfiguration()
+                .WriteTo.File(
+                    System.IO.Path.Combine(VPNRouter.Core.AppPaths.LogsDir, "vpnrouter.log"),
+                    rollingInterval: Serilog.RollingInterval.Day,
+                    retainedFileCountLimit: 7)
+                .WriteTo.Console()
+                .CreateLogger();
+        }
+        catch (Exception ex)
+        {
+            // Logger init failure must NOT block app startup. Fall
+            // through with the SilentLogger default (same as pre-r10
+            // behaviour). Surface to stderr so a CLI run shows it.
+            try { Console.Error.WriteLine($"[serilog] init failed: {ex.Message}"); } catch { }
+        }
 
         // v2.32.0 — launch-failure counter. Cross-platform: persists
         // a strike count in launch-counter.json next to config.yaml,

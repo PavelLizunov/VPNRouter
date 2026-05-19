@@ -315,33 +315,34 @@ public class VpnEngine : IDisposable
     {
         OnStatus("Stopping...");
 
-        // BR-5 (brat 2026-05-19): kill sing-box FIRST so VPN traffic
-        // routing stops immediately, before any of the cleanup steps
-        // that previously took 2-3 seconds (DnsHardening.Restore +
-        // FirewallManager rules + Firewall block rules delete).
-        //
+        // BR-5 (brat 2026-05-19) — re-ordered so sing-box dies EARLY,
+        // before the firewall cleanup that previously took 2-3 seconds.
         // brat-2026-05-19 reported "internet from the required IP
         // appeared for a couple of seconds after turning off" — the
         // log showed a 2.3-second window between [VpnEngine] Stopping
         // and [SingBoxManager] Stopping sing-box, during which the
         // VPN was still routing through the live wintun adapter.
-        // Reordering closes that window: after this line returns,
-        // sing-box's TUN inbound stops accepting packets, so traffic
-        // immediately fails over to the OS default route (direct).
         //
-        // The remaining cleanup (Dns hardening, firewall rules,
-        // health monitor) can run with sing-box already gone — they
-        // don't depend on it being alive. F-E probe cancellation
-        // happens before the kill so a probe in-flight doesn't fire
-        // AutoFailover during the brief teardown window.
+        // BR-6a (audit follow-up 2026-05-20) — refined ordering after
+        // the r9 audit caught a race window: in r9 the order was
+        //   _probeCts.Cancel → _singBox.Stop → ... → _healthMonitor.Stop
+        // That left a ~50-200 ms window in which the HealthMonitor's
+        // periodic timer (30s interval) could observe sing-box dead +
+        // _vpnWasRunning true and fire AttemptRestart — a false
+        // restart of the VPN immediately after the user pressed Stop.
+        // The branch in OnHealthTick does NOT check _isStopping, so
+        // the only safe ordering is "stop the monitor before killing
+        // its target". HealthMonitor.Stop is fast (~ms — disposes a
+        // Timer) so doing it first costs nothing on the user-visible
+        // disconnect path.
         try { _probeCts?.Cancel(); } catch { }
+        try { _healthMonitor?.Stop(); } catch { }  // BR-6a: BEFORE sing-box
         try { _singBox?.Stop(); } catch { }
 
 #if PLATFORM_WINDOWS
         try { WindowsDnsHardening.Restore(_logger); } catch { }
 #endif
 
-        try { _healthMonitor?.Stop(); } catch { }
         try { _etw?.Stop(); } catch { }
 
         if (_activeProfile?.BlockOnVpnFail == true)
