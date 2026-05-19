@@ -2,6 +2,7 @@ using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 using VPNRouter.Core.Models;
+using VPNRouter.Core.Yaml;
 
 namespace VPNRouter.Core.Services;
 
@@ -300,8 +301,22 @@ public static class SettingsLoader
             }
         }
 
-        var deserializer = new DeserializerBuilder()
+        // Phase 6 Wave 31a (2026-05-18): StaticDeserializerBuilder + the
+        // analyzer-generated YamlStaticContext close the last two reflective
+        // YamlDotNet paths (IL3050 dynamic-code warnings) from the Wave 30
+        // NativeAOT readiness audit. Brief: plans/phase6-yamldotnet-staticgen-
+        // 2026-05-18.md. Behaviour is equivalent to the prior reflective
+        // builder — round-trip tests in YamlStaticContextRoundTripTests pin
+        // wire-format compatibility.
+        //
+        // DateTimeOffset shim: Vecc.YamlDotNet.Analyzers.StaticGenerator 15.1.2
+        // does not handle DateTimeOffset / DateTimeOffset? out of the box
+        // (emits {} on serialize, throws on deserialize). DateTimeOffsetYamlConverter
+        // restores parity with the reflective builder — see file header on
+        // the converter class for the retirement criteria.
+        var deserializer = new StaticDeserializerBuilder(new YamlStaticContext())
             .WithNamingConvention(UnderscoredNamingConvention.Instance)
+            .WithTypeConverter(new DateTimeOffsetYamlConverter())
             .IgnoreUnmatchedProperties()
             .Build();
 
@@ -445,8 +460,16 @@ public static class SettingsLoader
         var configPath = path ?? DefaultConfigPath;
         Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
 
-        var serializer = new SerializerBuilder()
+        // Phase 6 Wave 31a (2026-05-18): StaticSerializerBuilder twin of the
+        // Parse() swap above — uses the same YamlStaticContext to avoid the
+        // reflective IObjectGraphVisitor walk. AOT-clean, no behaviour
+        // change vs the SerializerBuilder it replaces. DateTimeOffsetYamlConverter
+        // is the same compat shim wired into Parse() above; without it, the
+        // static serializer emits `{}` for both DateTimeOffset and DateTimeOffset?
+        // properties (silently lossy round-trip).
+        var serializer = new StaticSerializerBuilder(new YamlStaticContext())
             .WithNamingConvention(UnderscoredNamingConvention.Instance)
+            .WithTypeConverter(new DateTimeOffsetYamlConverter())
             .Build();
 
         File.WriteAllText(configPath, serializer.Serialize(settings));

@@ -32,6 +32,21 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="5.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
+    <!-- Phase 6 Wave 31a (2026-05-18): YamlDotNet source-generator analyzer.
+         Emits a `YamlStaticContext` partial class so `StaticDeserializerBuilder`
+         + `StaticSerializerBuilder` replace the reflective `DeserializerBuilder` /
+         `SerializerBuilder` ctors in SettingsLoader.cs — kills the last two
+         IL3050 warnings in CLI's Core dependency tree from the Wave 30 audit.
+         NB: NuGet id is `Vecc.YamlDotNet.Analyzers.StaticGenerator` (not the
+         `YamlDotNet.Analyzers.StaticGenerator` form the audit predicted) —
+         upstream maintainer hands the analyzer package off to a separate
+         publisher. Version pinned to match the main YamlDotNet 15.1.2 pin
+         above. `PrivateAssets=all` keeps the analyzer out of downstream
+         consumers (App / Service / CLI / Tests). -->
+    <PackageReference Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="15.1.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <!-- Windows-only packages (ETW, WMI, SystemEvents). Only loaded when
