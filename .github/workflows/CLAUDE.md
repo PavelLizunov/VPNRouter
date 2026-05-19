@@ -21,9 +21,9 @@ CI pipelines. 4 workflow'а — каждый делает что-то специ
 | `HOMEBREW_TAP_DISPATCH_TOKEN` | `build-mac.yml` Trigger Homebrew Cask step (cross-repo dispatch к `PavelLizunov/homebrew-vpnrouter`) |
 | `ANDROID_KEYSTORE_BASE64` | `build-android.yml` Decode signing keystore step — base64-encoded JKS keystore для подписи APK |
 | `ANDROID_KEYSTORE_PASSWORD` | `build-android.yml` dotnet publish step — пароль keystore + key |
-| `LIBBOX_AAR_BASE64` | `build-android.yml` Provision libbox.aar step — base64-encoded ~11.7 MB sing-box gomobile binding (gitignored в репо). См. `.github/SECRETS.md` за provisioning-командой. |
+| ~~`LIBBOX_AAR_BASE64`~~ | retired Wave 32 — replaced by tooling release fetch (48 KB secret cap × 15.6 MB aar = impossible). См. `.github/SECRETS.md` "Internal tooling releases". |
 
-Phase 6 Wave 26 (2026-05-18) добавила `LIBBOX_AAR_BASE64` чтобы CI мог собрать Android APK после Wave 23 (commit c33e372) бампа на net10.0-android36.0 + Avalonia 12. libbox.aar остаётся gitignored (private gomobile build, не комитим). Подробности + rotation policy — `.github/SECRETS.md`.
+Phase 6 Wave 26 (2026-05-18) добавила `LIBBOX_AAR_BASE64` чтобы CI мог собрать Android APK после Wave 23 (commit c33e372) бампа на net10.0-android36.0 + Avalonia 12. **Phase 7 Wave 32 (2026-05-19)** отретайрил этот secret — design не работал из-за 48 KB cap. Заменён на fetch из internal tooling release (`tooling-libbox-singbox-1.13.10` сейчас) через `gh release download` + `GITHUB_TOKEN`. Rotation procedure при bumps sing-box версии — `.github/SECRETS.md` "Internal tooling releases".
 
 `GH_TOKEN` обязателен в env для каждого `gh release ...` step (иначе anonymously fails). См. `plans/session-handoff-2026-04-24.md` — урок от пропущенного `GH_TOKEN` в Trigger Homebrew Cask step.
 

@@ -16,9 +16,9 @@ Add / rotate via: **Repo Settings → Secrets and variables → Actions
 | `HOMEBREW_TAP_DISPATCH_TOKEN` | `build-mac.yml` | cross-repo dispatch to `PavelLizunov/homebrew-vpnrouter` on stable cuts | PAT, classic, `repo` scope |
 | `ANDROID_KEYSTORE_BASE64` | `build-android.yml` | signing the release APK so existing installs accept updates | base64-encoded JKS keystore |
 | `ANDROID_KEYSTORE_PASSWORD` | `build-android.yml` | unlocks the keystore + key during signing | plain string |
-| `LIBBOX_AAR_BASE64` | `build-android.yml` | provisions the gitignored `VPNRouter.Android/Lib/libbox.aar` so `dotnet publish` can resolve the `<AndroidLibrary>` reference | base64-encoded aar (~11.7 MB → ~15 MB b64) |
+| ~~`LIBBOX_AAR_BASE64`~~ | retired Wave 32 | replaced by tooling-release pattern below (48 KB secret cap × 15.6 MB aar = impossible) | — |
 
-## `LIBBOX_AAR_BASE64`
+## Internal tooling releases (Phase 7 Wave 32)
 
 ### What it is
 
@@ -35,57 +35,78 @@ large enough to bloat the git history if committed.
 Reproducible build script: `tools/build-libbox-aar.sh` (tracked in
 the repo). The script invokes gomobile against
 `tools/sing-box-upstream/`; the upstream submodule is private as of
-Phase 6, so CI cannot regenerate the aar yet — secret-stored
-provisioning is the bridge until that flips public in Phase 7.
+Phase 7, so CI cannot regenerate the aar yet — release-asset
+provisioning is the bridge until that flips public.
 
-### Provisioning command
+### Why a release asset instead of a secret
 
-Run once on the dev workstation that built the aar:
+Phase 6 Wave 26 (2026-05-18) wired secret-based provisioning via
+`LIBBOX_AAR_BASE64`. The design was fundamentally broken: GitHub
+Actions secrets are capped at **48 KB**, and `libbox.aar` base64-
+encoded is **~15.6 MB** — about 325× over the limit. Every
+`gh secret set LIBBOX_AAR_BASE64` attempt returns HTTP 422
+("Value is too large"). Wave 32 (2026-05-19) replaced the design
+with the release-asset pattern below.
 
-```bash
-# Linux / WSL
-base64 -w 0 VPNRouter.Android/Lib/libbox.aar > libbox.aar.b64
+GitHub release assets have a 2 GB per-file cap and are downloadable
+via the ambient `GITHUB_TOKEN` (no additional secret needed for the
+download). The tooling release lives on the same repo as the
+product; it doesn't pollute the user-facing release list because
+the `tooling-*` tag prefix + non-`--latest` flag keeps it out of the
+default "Latest" filter.
 
-# macOS (no -w flag in BSD base64)
-base64 -i VPNRouter.Android/Lib/libbox.aar | tr -d '\n' > libbox.aar.b64
+### Active tooling release
 
-# Windows PowerShell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("VPNRouter.Android/Lib/libbox.aar")) `
-  | Out-File -Encoding ASCII -NoNewline libbox.aar.b64
-```
+| Tag | Asset | sing-box version | Created |
+|---|---|---|---|
+| `tooling-libbox-singbox-1.13.10` | `libbox.aar` (~11.7 MB) | 1.13.10 | 2026-05-19 |
 
-Then upload the file's contents (NOT a path) into the secret store:
-
-1. Open https://github.com/PavelLizunov/VPNRouter/settings/secrets/actions
-2. Click **New repository secret**
-3. Name: `LIBBOX_AAR_BASE64`
-4. Secret: paste the contents of `libbox.aar.b64` (single line, no
-   trailing newline)
-5. Click **Add secret**
-6. **Delete `libbox.aar.b64` from disk** — never commit it. The file
-   is not in `.gitignore` because we don't want to encourage the
-   pattern.
-
-### How CI consumes it
-
-`build-android.yml` step `Provision libbox.aar from secret`:
+Referenced from `.github/workflows/build-android.yml`:
 
 ```yaml
 env:
-  LIBBOX_AAR_B64: ${{ secrets.LIBBOX_AAR_BASE64 }}
-run: |
-  mkdir -p VPNRouter.Android/Lib
-  echo "$LIBBOX_AAR_B64" | base64 -d > VPNRouter.Android/Lib/libbox.aar
-  test -s VPNRouter.Android/Lib/libbox.aar   # fail if empty
+  LIBBOX_RELEASE_TAG: "tooling-libbox-singbox-1.13.10"
 ```
 
-Graceful skip: if the secret is unset (fresh fork, pre-provisioned
-repo) the workflow warns + records the run as green without an APK
-artifact. This matches the `ANDROID_KEYSTORE_BASE64` pattern from
-v2.32.2-r2 — keeps the release CI list visually clean while Android
-infra is still being stood up.
+### Provisioning command (one-time per sing-box version)
 
-### Rotation
+Run on the dev workstation that just rebuilt `libbox.aar`:
+
+```bash
+gh release create tooling-libbox-singbox-<NEW_VERSION> \
+  --repo PavelLizunov/VPNRouter \
+  --title "Tooling: libbox.aar (sing-box <NEW_VERSION> gomobile binding)" \
+  --notes "Internal CI asset. Fetched by .github/workflows/build-android.yml via 'gh release download' using GITHUB_TOKEN. Not user-facing — see .github/SECRETS.md for rotation procedure when upgrading sing-box version." \
+  VPNRouter.Android/Lib/libbox.aar
+```
+
+Then bump `LIBBOX_RELEASE_TAG` in `.github/workflows/build-android.yml`
+to `tooling-libbox-singbox-<NEW_VERSION>` and commit.
+
+### How CI consumes it
+
+`build-android.yml` step `Provision libbox.aar from tooling release`:
+
+```yaml
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  LIBBOX_RELEASE_TAG: "tooling-libbox-singbox-1.13.10"
+run: |
+  mkdir -p VPNRouter.Android/Lib
+  gh release download "$LIBBOX_RELEASE_TAG" \
+    --repo "$GITHUB_REPOSITORY" \
+    --pattern "libbox.aar" \
+    --output VPNRouter.Android/Lib/libbox.aar
+  test -s VPNRouter.Android/Lib/libbox.aar
+```
+
+Graceful skip: if `gh release download` fails (release missing,
+asset missing, token scope wrong) the workflow warns + records the
+run as green without an APK artifact. This matches the
+`ANDROID_KEYSTORE_BASE64` pattern from v2.32.2-r2 — keeps the
+release CI list visually clean while Android infra is bedded in.
+
+### Rotation (when sing-box bumps)
 
 `libbox.aar` is a build artifact, not a cryptographic secret. Rotate
 when:
@@ -95,10 +116,24 @@ when:
   version constant).
 - A security advisory affects the bundled Go stdlib / sing-box deps.
 
-To rotate: rebuild via `tools/build-libbox-aar.sh`, re-run the
-provisioning command above, paste into the same secret name (GitHub
-overwrites by default). No code changes needed in CI — the next
-build picks up the new bytes.
+To rotate:
+
+1. Rebuild `libbox.aar` via `tools/build-libbox-aar.sh` against the
+   new sing-box upstream tag.
+2. Create a new tooling release with the new tag (see "Provisioning
+   command" above).
+3. Bump `LIBBOX_RELEASE_TAG` in `.github/workflows/build-android.yml`.
+4. Commit the workflow change. Next tag push picks up the new aar
+   automatically.
+5. After one stable cycle, delete the OLD tooling release (it stays
+   in git history via the tag — `git checkout tooling-libbox-singbox-X.Y.Z`).
+
+### Migrating from the retired LIBBOX_AAR_BASE64 secret
+
+If `LIBBOX_AAR_BASE64` was ever set (it cannot be, due to size cap,
+but a partial value may exist from a failed `gh secret set`), revoke
+it via `gh secret delete LIBBOX_AAR_BASE64 --repo PavelLizunov/VPNRouter`.
+No production impact — the workflow no longer reads this secret.
 
 ## `ANDROID_KEYSTORE_BASE64` + `ANDROID_KEYSTORE_PASSWORD`
 

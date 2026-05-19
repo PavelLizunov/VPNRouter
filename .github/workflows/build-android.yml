@@ -155,53 +155,76 @@ jobs:
           echo "Keystore decoded: $(stat -c '%s bytes' "$GITHUB_WORKSPACE/vpnrouter.keystore")"
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
-      # ── Provision libbox.aar from secret ───────────────────────────────
-      # Wave 26 (Phase 6, 2026-05-18) — libbox.aar (sing-box gomobile
+      # ── Provision libbox.aar from internal tooling release ─────────────
+      # Phase 7 Wave 32 (2026-05-19) — libbox.aar (sing-box gomobile
       # binding, ~11.7 MB) is gitignored because it ships outside the
       # repo. Local builds drop the aar at VPNRouter.Android/Lib/ by
-      # hand; CI restores it from the LIBBOX_AAR_BASE64 repository
-      # secret. The aar is referenced by VPNRouter.Android.csproj
+      # hand; CI restores it from a dedicated internal "tooling"
+      # release on the same repo, fetched via the ambient GITHUB_TOKEN.
+      #
+      # Why a release asset instead of a secret? GitHub Actions secrets
+      # are capped at 48 KB; base64-encoded libbox.aar is ~15.6 MB.
+      # Phase 6 Wave 26's LIBBOX_AAR_BASE64 design exceeded that cap
+      # by ~325x and was never possible to provision (returned HTTP
+      # 422 "Value is too large" on every `gh secret set` attempt).
+      # Release assets, by contrast, have a 2 GB per-file cap.
+      #
+      # The aar is referenced by VPNRouter.Android.csproj
       # (<AndroidLibrary Include="Lib\libbox.aar" Bind="false" />) so
       # `dotnet publish` fails with a missing-file error if this step
       # is skipped — that's the dependent gate.
       #
-      # Provisioning command for the secret (run locally once, then
-      # paste the b64 string into Repo Settings → Secrets and variables
-      # → Actions → New repository secret named LIBBOX_AAR_BASE64):
+      # Rotation: when sing-box bumps to 1.13.11+, build the new aar
+      # locally (see plans/vpnrouter-wgturn-cli-phase1.md + Phase A
+      # roadmap), then:
       #
-      #   base64 -w 0 VPNRouter.Android/Lib/libbox.aar > libbox.aar.b64
-      #   # or on macOS:
-      #   base64 -i VPNRouter.Android/Lib/libbox.aar | tr -d '\n' > libbox.aar.b64
+      #   gh release create tooling-libbox-singbox-X.Y.Z \
+      #     --repo PavelLizunov/VPNRouter \
+      #     --title "Tooling: libbox.aar (sing-box X.Y.Z gomobile binding)" \
+      #     --notes "Internal CI asset. See .github/SECRETS.md." \
+      #     VPNRouter.Android/Lib/libbox.aar
       #
-      # See .github/SECRETS.md for the full secret-management protocol
-      # + rotation policy. DO NOT commit a real libbox.aar — the
+      # and bump LIBBOX_RELEASE_TAG below. The OLD tooling release can
+      # be deleted (or kept for history) after one stable cycle.
+      #
+      # See .github/SECRETS.md for the full rotation procedure.
+      # DO NOT commit a real libbox.aar — the
       # VPNRouter.Android/Lib/libbox*.aar gitignore rule is intentional.
       #
-      # Graceful skip pattern matches Decode signing keystore: if the
-      # secret isn't present we set skip=true + warning, so a fresh
-      # fork or pre-provisioned repo records the build as a green run
-      # with a warning rather than a red failure. Once both secrets
-      # are configured the build proceeds normally.
-      - name: Provision libbox.aar from secret
+      # Graceful skip pattern: if `gh release download` fails (release
+      # missing, asset missing, token-scoped wrong), set skip=true so
+      # a fresh fork or pre-provisioned repo records the build as a
+      # green run with a warning rather than a red failure.
+      - name: Provision libbox.aar from tooling release
         id: libbox_provision
         if: steps.keystore_decode.outputs.skip != 'true'
         env:
-          LIBBOX_AAR_B64: ${{ secrets.LIBBOX_AAR_BASE64 }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pin to a specific tooling release to make sing-box upgrades
+          # explicit. Bump when libbox.aar is rebuilt against a new
+          # sing-box version. See block comment above for rotation.
+          LIBBOX_RELEASE_TAG: "tooling-libbox-singbox-1.13.10"
         run: |
           set -euo pipefail
-          if [ -z "${LIBBOX_AAR_B64:-}" ]; then
-            echo "::warning::LIBBOX_AAR_BASE64 secret is not set — skipping Android APK build. See .github/SECRETS.md for the one-time provisioning command."
+          mkdir -p VPNRouter.Android/Lib
+          # --pattern restricts download to the expected asset name.
+          # The tooling release should only contain libbox.aar but be
+          # defensive in case future assets get added (e.g., debug
+          # variants, sha256 sidecars).
+          if ! gh release download "$LIBBOX_RELEASE_TAG" \
+               --repo "$GITHUB_REPOSITORY" \
+               --pattern "libbox.aar" \
+               --output VPNRouter.Android/Lib/libbox.aar 2>&1; then
+            echo "::warning::Failed to fetch libbox.aar from tooling release $LIBBOX_RELEASE_TAG — skipping Android APK build. See .github/SECRETS.md for tooling-release provisioning."
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          mkdir -p VPNRouter.Android/Lib
-          echo "$LIBBOX_AAR_B64" | base64 -d > VPNRouter.Android/Lib/libbox.aar
-          # Fail loudly if the secret decoded to an empty / corrupt
-          # file. test -s succeeds only when the file exists AND has
-          # non-zero size; a truncated or wrongly-pasted secret will
+          # Fail loudly if the downloaded asset is empty / corrupt.
+          # test -s succeeds only when the file exists AND has
+          # non-zero size; a torn download or wrong-name asset would
           # produce a 0-byte file here.
           test -s VPNRouter.Android/Lib/libbox.aar
-          echo "libbox.aar decoded: $(stat -c '%s bytes' VPNRouter.Android/Lib/libbox.aar)"
+          echo "libbox.aar provisioned: $(stat -c '%s bytes' VPNRouter.Android/Lib/libbox.aar) from release $LIBBOX_RELEASE_TAG"
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
       # ── Build signed APK ───────────────────────────────────────────────
