@@ -35,10 +35,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - name: Setup .NET 8 SDK
+      # Wave 26 (Phase 6, 2026-05-18) — bumped to multi-version setup so
+      # both 8.0 + 10.0 SDKs are available. Wave 23 (commit c33e372,
+      # Phase 5) moved Android to net10.0-android36.0 + Avalonia 12 which
+      # requires the .NET 10 SDK; the rest of the solution stays on net8.0
+      # so we keep 8.0.x in the install list. setup-dotnet@v4 takes a
+      # multi-line list and side-by-side installs both runtimes.
+      - name: Setup .NET 8 + 10 SDK
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       # Phase 1 Q9 — NuGet package cache. `dotnet publish` for the Android
       # head restores hundreds of MB of packages on cold runs. Keyed on the
@@ -78,10 +86,29 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407  # v3.2.2
 
+      # Wave 26 (Phase 6, 2026-05-18) — explicit platforms;android-36
+      # + build-tools;36.0.0 install. setup-android only ships the
+      # default platform (android-34 as of v3.2.2); .NET Android 10
+      # build for net10.0-android36.0 needs API 36 + matching build-
+      # tools. Without this step `dotnet publish` fails with NETSDK1139
+      # ("target framework moniker 'net10.0-android36.0' is not
+      # recognized") or aapt2 missing-platform errors.
+      - name: Install Android SDK platform 36
+        run: |
+          set -euo pipefail
+          SDKMGR="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "$SDKMGR" --install "platforms;android-36" "build-tools;36.0.0"
+
       # The Android workload is not bundled with setup-dotnet; it has to
       # be installed explicitly. ~3-4 min on a cold runner.
+      # Wave 26 (Phase 6, 2026-05-18) — added --skip-manifest-update.
+      # Without it the install bumps the workload manifest first which
+      # can pull a newer Android workload version than what the .NET 10
+      # SDK ships locally; the --skip flag pins to the SDK's bundled
+      # manifest (matches the developer-VM toolchain documented in the
+      # Phase 5 ship report `plans/phase5-android-net10-2026-05-18.md`).
       - name: Install .NET Android workload
-        run: dotnet workload install android
+        run: dotnet workload install android --skip-manifest-update
 
       - name: Resolve version from tag or input
         id: version
@@ -128,6 +155,55 @@ jobs:
           echo "Keystore decoded: $(stat -c '%s bytes' "$GITHUB_WORKSPACE/vpnrouter.keystore")"
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
+      # ── Provision libbox.aar from secret ───────────────────────────────
+      # Wave 26 (Phase 6, 2026-05-18) — libbox.aar (sing-box gomobile
+      # binding, ~11.7 MB) is gitignored because it ships outside the
+      # repo. Local builds drop the aar at VPNRouter.Android/Lib/ by
+      # hand; CI restores it from the LIBBOX_AAR_BASE64 repository
+      # secret. The aar is referenced by VPNRouter.Android.csproj
+      # (<AndroidLibrary Include="Lib\libbox.aar" Bind="false" />) so
+      # `dotnet publish` fails with a missing-file error if this step
+      # is skipped — that's the dependent gate.
+      #
+      # Provisioning command for the secret (run locally once, then
+      # paste the b64 string into Repo Settings → Secrets and variables
+      # → Actions → New repository secret named LIBBOX_AAR_BASE64):
+      #
+      #   base64 -w 0 VPNRouter.Android/Lib/libbox.aar > libbox.aar.b64
+      #   # or on macOS:
+      #   base64 -i VPNRouter.Android/Lib/libbox.aar | tr -d '\n' > libbox.aar.b64
+      #
+      # See .github/SECRETS.md for the full secret-management protocol
+      # + rotation policy. DO NOT commit a real libbox.aar — the
+      # VPNRouter.Android/Lib/libbox*.aar gitignore rule is intentional.
+      #
+      # Graceful skip pattern matches Decode signing keystore: if the
+      # secret isn't present we set skip=true + warning, so a fresh
+      # fork or pre-provisioned repo records the build as a green run
+      # with a warning rather than a red failure. Once both secrets
+      # are configured the build proceeds normally.
+      - name: Provision libbox.aar from secret
+        id: libbox_provision
+        if: steps.keystore_decode.outputs.skip != 'true'
+        env:
+          LIBBOX_AAR_B64: ${{ secrets.LIBBOX_AAR_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${LIBBOX_AAR_B64:-}" ]; then
+            echo "::warning::LIBBOX_AAR_BASE64 secret is not set — skipping Android APK build. See .github/SECRETS.md for the one-time provisioning command."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mkdir -p VPNRouter.Android/Lib
+          echo "$LIBBOX_AAR_B64" | base64 -d > VPNRouter.Android/Lib/libbox.aar
+          # Fail loudly if the secret decoded to an empty / corrupt
+          # file. test -s succeeds only when the file exists AND has
+          # non-zero size; a truncated or wrongly-pasted secret will
+          # produce a 0-byte file here.
+          test -s VPNRouter.Android/Lib/libbox.aar
+          echo "libbox.aar decoded: $(stat -c '%s bytes' VPNRouter.Android/Lib/libbox.aar)"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
       # ── Build signed APK ───────────────────────────────────────────────
       # arm64-only by default — covers all currently-shipping phones at
       # ~47 MB instead of ~120 MB for the all-RID fat APK. arm/x64/x86
@@ -138,7 +214,9 @@ jobs:
       # Configuration=Release; we override with the absolute path so the
       # MSBuild target finds the file regardless of working directory.
       - name: dotnet publish (android-arm64, signed)
-        if: steps.keystore_decode.outputs.skip != 'true'
+        if: >-
+          steps.keystore_decode.outputs.skip != 'true' &&
+          steps.libbox_provision.outputs.skip != 'true'
         env:
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
@@ -160,7 +238,9 @@ jobs:
       # without RID subdir under bin/). `find` is more robust than hard-
       # coding the path. The signed APK always carries the -Signed suffix.
       - name: Locate + rename APK
-        if: steps.keystore_decode.outputs.skip != 'true'
+        if: >-
+          steps.keystore_decode.outputs.skip != 'true' &&
+          steps.libbox_provision.outputs.skip != 'true'
         id: apk
         run: |
           set -euo pipefail
@@ -177,7 +257,9 @@ jobs:
           echo "apk=$APK_OUT" >> "$GITHUB_OUTPUT"
 
       - name: Compute SHA256
-        if: steps.keystore_decode.outputs.skip != 'true'
+        if: >-
+          steps.keystore_decode.outputs.skip != 'true' &&
+          steps.libbox_provision.outputs.skip != 'true'
         run: |
           set -euo pipefail
           APK="${{ steps.apk.outputs.apk }}"
@@ -185,7 +267,9 @@ jobs:
           echo "→ $(cat "${APK}.sha256")"
 
       - name: Upload as workflow artifacts
-        if: steps.keystore_decode.outputs.skip != 'true'
+        if: >-
+          steps.keystore_decode.outputs.skip != 'true' &&
+          steps.libbox_provision.outputs.skip != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: android-build-v${{ steps.version.outputs.version }}
@@ -197,6 +281,7 @@ jobs:
       - name: Upload to GitHub Release
         if: >-
           steps.keystore_decode.outputs.skip != 'true' &&
+          steps.libbox_provision.outputs.skip != 'true' &&
           (github.event_name == 'push' ||
           (github.event_name == 'workflow_dispatch' && inputs.upload_to_release))
         env:

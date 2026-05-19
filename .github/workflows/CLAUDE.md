@@ -9,6 +9,7 @@ CI pipelines. 4 workflow'а — каждый делает что-то специ
 |---|---|---|
 | `build-mac.yml` | `push` tag `v*` + `workflow_dispatch` | Собирает macOS DMG + ZIP на mac-runner. Уплоадит на release. Дисптачит Homebrew Cask update (только stable, prerelease skip). |
 | `build-linux.yml` | `push` tag `v*` + `workflow_dispatch` | Linux .deb (postinst setcap для passwordless TUN) + AppImage + .tar.gz + 4 sha256. Уплоадит на release. |
+| `build-android.yml` | `push` tag `v*` + `workflow_dispatch` | Android APK (arm64, signed). Phase 6 Wave 26 (2026-05-18) бампнул на .NET 10 + Android API 36 + Avalonia 12 + provision libbox.aar из `LIBBOX_AAR_BASE64` secret. Graceful skip если keystore/libbox secrets не выставлены. |
 | `build-free-pool.yml` | cron каждые 6ч + `workflow_dispatch` | Server-side aggregator: фетчит 14 free-config sources, validates TCP+TLS, GeoIP enrich → `pool.json` artifact для in-app Free Configs tab. |
 | `publish-apt.yml` | `release` event + `workflow_dispatch` | Index'ит .deb из последнего stable release в reprepro APT repo на gh-pages. Также копирует `install.sh`, `install.ps1`, `uninstall.ps1`, `index.html` → gh-pages. CNAME `vpn.ninitux.com` deploy via GitHub Pages. |
 
@@ -18,6 +19,11 @@ CI pipelines. 4 workflow'а — каждый делает что-то специ
 |---|---|
 | `GITHUB_TOKEN` | автоматический, для `gh release upload --clobber` etc. |
 | `HOMEBREW_TAP_DISPATCH_TOKEN` | `build-mac.yml` Trigger Homebrew Cask step (cross-repo dispatch к `PavelLizunov/homebrew-vpnrouter`) |
+| `ANDROID_KEYSTORE_BASE64` | `build-android.yml` Decode signing keystore step — base64-encoded JKS keystore для подписи APK |
+| `ANDROID_KEYSTORE_PASSWORD` | `build-android.yml` dotnet publish step — пароль keystore + key |
+| `LIBBOX_AAR_BASE64` | `build-android.yml` Provision libbox.aar step — base64-encoded ~11.7 MB sing-box gomobile binding (gitignored в репо). См. `.github/SECRETS.md` за provisioning-командой. |
+
+Phase 6 Wave 26 (2026-05-18) добавила `LIBBOX_AAR_BASE64` чтобы CI мог собрать Android APK после Wave 23 (commit c33e372) бампа на net10.0-android36.0 + Avalonia 12. libbox.aar остаётся gitignored (private gomobile build, не комитим). Подробности + rotation policy — `.github/SECRETS.md`.
 
 `GH_TOKEN` обязателен в env для каждого `gh release ...` step (иначе anonymously fails). См. `plans/session-handoff-2026-04-24.md` — урок от пропущенного `GH_TOKEN` в Trigger Homebrew Cask step.
 
