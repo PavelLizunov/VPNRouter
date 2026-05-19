@@ -79,18 +79,35 @@ public static class LeakProtection
                     "ConfigMode=subscribe but every subscription is disabled. " +
                     "Enable at least one subscription before connecting.");
             }
-            else if (enabledSubsWithServers.Count == 0 && manualServerCount == 0 && !hasLegacyVlessServer)
-            {
-                // This is the F-12 silent-leak class. We have an enabled
-                // subscription but no servers fetched yet and no manual
-                // fallback — generating a config now would leave proxy
-                // outbounds empty.
-                errors.Add(
-                    "ConfigMode=subscribe but no subscription has fetched any servers and " +
-                    "no manual VLESS server is configured as a fallback. " +
-                    "Click 'Refresh All' on the Subscribe tab to fetch servers " +
-                    "before connecting (F-12 silent-leak guard, parity audit).");
-            }
+            // Wave 39 follow-up (BR-1, brat 2026-05-19): the F-12
+            // "no subscription has fetched any servers" branch USED to
+            // throw here even when the user had a manual Vless.Server
+            // legacy scalar or Vless.Servers list to fall back on. That
+            // short-circuited VlessServersResolver's documented fallback
+            // path (visible in v2.32.2 logs as
+            // "[WRN] [VlessServersResolver] config_mode=subscribe but no
+            //  enabled subscription has servers. Falling back to
+            //  manually-configured Vless.Servers / Vless.Server.").
+            //
+            // The resolver runs RIGHT AFTER this check inside
+            // StartupPipeline.ExecuteAsync (line ~518), and it will
+            // throw on empty aggregate via the
+            // `ConfigGenerator empty servers` hard guard further
+            // downstream. So we keep the subs.Count == 0 + every-sub-
+            // disabled checks (defense-in-depth: those are AppSettings
+            // model invariants, not resolver-decidable). The third
+            // branch — subs registered, some enabled, none with servers
+            // — is deliberately removed: it's the case the resolver was
+            // designed to handle via manual fallback. If no manual exists
+            // either, the empty-aggregate ConfigGenerator guard catches
+            // it with a clear "VLESS servers list is empty" error.
+            //
+            // The locals below stay referenced by the isGenerated branch
+            // so removing them isn't quite a "delete unused" — leaving
+            // them where they are makes the diff diff-only-the-branch.
+            _ = enabledSubsWithServers;
+            _ = manualServerCount;
+            _ = hasLegacyVlessServer;
         }
         else if (isGenerated)
         {

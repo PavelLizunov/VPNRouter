@@ -450,10 +450,46 @@ public static class TunAdapterDiagnostics
     /// path is handled gracefully (no-op), so the direct call is a
     /// cheap belt-and-suspenders complement to enumeration.</para>
     /// </summary>
+    /// <summary>
+    /// Wave 39 follow-up (BR-2, brat 2026-05-19): per-process cache flag
+    /// — set to 1 the first time we observe the
+    /// <c>Remove-NetAdapter</c> cmdlet missing from the user's PowerShell
+    /// environment. Subsequent <see cref="TryRemoveAdapterAsync"/> calls
+    /// short-circuit on this flag and skip the 600-1000ms PowerShell
+    /// spin-up entirely.
+    ///
+    /// <para>brat's machine (Windows Server / Win11 LTSC / language-pack
+    /// install variant — exact cause unknown) ships PowerShell without
+    /// the <c>NetAdapter</c> module installed. Every cleanup-site call
+    /// (StartupPipeline.ExecuteAsync, SingBoxManager.LaunchProcess,
+    /// SingBoxManager.StopInternal.killed.async) blew ~600ms on the
+    /// failed cmdlet probe — 3 calls per connect cycle multiplied by
+    /// HealthMonitor restart retries surfaced as a 33-second TUN
+    /// warm-up vs v2.32.2's 2 seconds.</para>
+    ///
+    /// <para>Detection signal: stderr containing "is not recognized as
+    /// the name of a cmdlet". Once latched, the flag stays set for the
+    /// process lifetime — the user's PowerShell modules aren't going
+    /// to materialise mid-session. Restart picks up changes.</para>
+    /// </summary>
+    private static int s_removeNetAdapterMissing; // 0 = unknown, 1 = confirmed missing
+
     [SupportedOSPlatform("windows")]
     internal static async Task<bool> TryRemoveAdapterAsync(
         ILogger? logger, string adapterName, string context)
     {
+        // BR-2 fast-fail: if a previous call already observed the cmdlet
+        // missing, skip the PowerShell round-trip. Saves ~600ms × every
+        // cleanup site × every connect attempt.
+        if (Volatile.Read(ref s_removeNetAdapterMissing) == 1)
+        {
+            logger?.Debug(
+                "[TunDiag] {Ctx}: skipping Remove-NetAdapter for '{Name}' " +
+                "(cmdlet was missing on first probe; cached for process lifetime)",
+                context, adapterName);
+            return false;
+        }
+
         try
         {
             // Embed adapterName via single-quoted PowerShell string. The
@@ -477,9 +513,40 @@ public static class TunAdapterDiagnostics
                 return true;
             }
 
+            // BR-2 cmdlet-missing latch: stderr from powershell.exe when
+            // a cmdlet is missing looks like
+            //   "Remove-NetAdapter : The term 'Remove-NetAdapter' is not
+            //    recognized as the name of a cmdlet, function, ..."
+            // The substring "is not recognized as the name of a cmdlet"
+            // is locale-EN; the localised Russian/German/etc. variants
+            // also contain the cmdlet name literal so we match on the
+            // English phrase OR on the literal name appearing after
+            // "term '" — robust to either locale.
+            var stderrText = stderr ?? string.Empty;
+            var stdoutText = stdout ?? string.Empty;
+            var looksLikeCmdletMissing =
+                stderrText.IndexOf("is not recognized", StringComparison.OrdinalIgnoreCase) >= 0
+                || stderrText.IndexOf("не распознано", StringComparison.OrdinalIgnoreCase) >= 0
+                || stderrText.IndexOf("nicht erkannt", StringComparison.OrdinalIgnoreCase) >= 0
+                || stdoutText.IndexOf("is not recognized", StringComparison.OrdinalIgnoreCase) >= 0;
+            if (looksLikeCmdletMissing
+                && Interlocked.CompareExchange(ref s_removeNetAdapterMissing, 1, 0) == 0)
+            {
+                // First-time observation — log once at Information level so
+                // the user/ops can see the environment limitation. All
+                // subsequent calls log at Debug only.
+                logger?.Information(
+                    "[TunDiag] {Ctx}: Remove-NetAdapter cmdlet not available in this " +
+                    "PowerShell environment (NetAdapter module missing). " +
+                    "Skipping direct-by-name fallback for the rest of this process — " +
+                    "netsh enumeration cleanup still runs. Adapter '{Name}' left untouched.",
+                    context, adapterName);
+                return false;
+            }
+
             logger?.Warning(
                 "[TunDiag] {Ctx}: Remove-NetAdapter for '{Name}' returned exit {Exit}: stdout='{Out}' stderr='{Err}'",
-                context, adapterName, exitCode, stdout?.Trim(), stderr?.Trim());
+                context, adapterName, exitCode, stdoutText.Trim(), stderrText.Trim());
             return false;
         }
         catch (Exception ex)

@@ -93,11 +93,26 @@ public class LeakProtectionAppSettingsTests
     }
 
     [Fact]
-    public void Subscribe_EnabledSubButNoServersAndNoFallback_Fails()
+    public void Subscribe_EnabledSubButNoServers_DefersToResolverFallback()
     {
-        // F-12 critical scenario: ConfigMode=subscribe with an enabled sub
-        // but no servers fetched yet AND no manual VLESS fallback. The
-        // engine would otherwise generate a config with empty outbounds.
+        // BR-1 (brat 2026-05-19) — softened F-12: ConfigMode=subscribe
+        // with an enabled sub that has no servers yet is no longer a
+        // pre-generation invariant violation. VlessServersResolver runs
+        // RIGHT AFTER this validation in StartupPipeline.ExecuteAsync
+        // (line ~518) and already emits a clear warning + falls back to
+        // manual Vless.Servers / Vless.Server, OR throws on truly empty
+        // aggregate via the ConfigGenerator empty-servers hard guard.
+        //
+        // Before BR-1: this test asserted IsValid=false with a "Refresh"
+        // hint. brat's r5 logs at 21:39:47.920 showed F-12 firing for this
+        // exact case while v2.32.2 successfully connected by falling
+        // through to the resolver's manual-fallback log line:
+        //   [WRN] [VlessServersResolver] config_mode=subscribe but no
+        //   enabled subscription has servers. Falling back to manually-
+        //   configured Vless.Servers / Vless.Server.
+        //
+        // The defense-in-depth net was preempting the resolver's own
+        // intended behaviour. Now we trust the resolver to handle it.
         var settings = new AppSettings
         {
             App = new AppConfig
@@ -118,9 +133,10 @@ public class LeakProtectionAppSettingsTests
 
         var result = LeakProtection.ValidateAppSettings(settings);
 
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, e =>
-            e.Contains("Refresh", StringComparison.OrdinalIgnoreCase));
+        Assert.True(result.IsValid,
+            "BR-1: empty-subs + subscribe mode should defer to " +
+            "VlessServersResolver fallback, not throw at validation. " +
+            "Errors: " + string.Join("; ", result.Errors));
     }
 
     [Fact]
@@ -213,5 +229,61 @@ public class LeakProtectionAppSettingsTests
         var result = LeakProtection.ValidateAppSettings(null!);
 
         Assert.False(result.IsValid);
+    }
+
+    [Fact]
+    public void Subscribe_BratScenarioTwoSubsBothEmpty_DefersToResolverFallback()
+    {
+        // BR-1 pin (brat 2026-05-19) — reproduces the exact AppSettings
+        // shape that triggered v2.35.0-r5's incorrect F-12 fire at the
+        // moment brat clicked "Ignore conflict, retry" after his LAN
+        // subscription started returning 0 servers:
+        //
+        // - configMode = subscribe (his standard mode)
+        // - 2 subscriptions, BOTH enabled, BOTH with empty Servers
+        //   (the user's primary sub had momentarily-empty servers in
+        //   memory due to the same-cycle SaveSettings flow, and the
+        //   LAN sub was permanently empty because his self-hosted
+        //   endpoint returns "JSON response has no 'config' field")
+        // - No manual Vless.Servers list (subscribe mode = empty list)
+        // - No legacy Vless.Server scalar (cleared)
+        //
+        // Pre-BR-1: F-12 fired, user got "ConfigMode=subscribe but no
+        // subscription has fetched any servers" and had to roll back.
+        // Post-BR-1: validation passes, VlessServersResolver runs next
+        // and either falls back (manual entry exists somewhere) or the
+        // ConfigGenerator empty-servers hard guard throws with a
+        // clearer message ("VLESS servers list is empty").
+        var settings = new AppSettings
+        {
+            App = new AppConfig
+            {
+                ConfigMode = "subscribe",
+                Subscriptions = new List<SubscriptionEntry>
+                {
+                    new()
+                    {
+                        Name = "ninitux",
+                        Url = "https://ninitux.example/sub",
+                        Enabled = true,
+                        Servers = new List<VlessServerEntry>()
+                    },
+                    new()
+                    {
+                        Name = "lan-self-hosted",
+                        Url = "http://192.168.0.236:18402/sub/redacted",
+                        Enabled = true,
+                        Servers = new List<VlessServerEntry>()
+                    }
+                }
+            }
+        };
+
+        var result = LeakProtection.ValidateAppSettings(settings);
+
+        Assert.True(result.IsValid,
+            "brat r5 scenario must NOT throw F-12 — resolver " +
+            "owns the empty-aggregate fallback. Errors: " +
+            string.Join("; ", result.Errors));
     }
 }

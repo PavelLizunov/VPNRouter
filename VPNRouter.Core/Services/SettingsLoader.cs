@@ -237,6 +237,34 @@ public static class SettingsLoader
             return defaults;
         }
 
+        // BR-3 (brat 2026-05-19) — single-line diagnostic snapshot of the
+        // post-parse, post-migration, post-validation state. Helps future
+        // user-report investigations see the exact AppSettings shape r6
+        // worked with without needing the actual config.yaml file. The
+        // shape mirrors brat's r5 mystery: schema=4 vs 5, sub count + per-
+        // sub server count, manual Vless.Servers count, legacy Vless.Server
+        // scalar presence, config_mode.
+        try
+        {
+            var subSummary = parsed.App?.Subscriptions == null || parsed.App.Subscriptions.Count == 0
+                ? "none"
+                : string.Join(",", parsed.App.Subscriptions.Select(s =>
+                    $"{(s == null ? "?" : (s.Enabled ? "+" : "-"))}{(s?.Servers?.Count ?? 0)}"));
+            var legacyVless = string.IsNullOrWhiteSpace(parsed.Vless?.Server) ? "empty" : "set";
+            Console.Error.WriteLine(
+                $"[SettingsLoader] Loaded {configPath}: schema={parsed.SchemaVersion}, " +
+                $"config_mode={parsed.App?.ConfigMode ?? "(null)"}, " +
+                $"subs={parsed.App?.Subscriptions?.Count ?? 0}[{subSummary}], " +
+                $"vless.servers={parsed.Vless?.Servers?.Count ?? 0}, " +
+                $"vless.server={legacyVless}, " +
+                $"active_sub='{parsed.App?.ActiveSubscriptionServer ?? string.Empty}', " +
+                $"active_vless='{parsed.Vless?.ActiveServer ?? string.Empty}'");
+        }
+        catch
+        {
+            // Diagnostic only — must never block load.
+        }
+
         return parsed;
     }
 
