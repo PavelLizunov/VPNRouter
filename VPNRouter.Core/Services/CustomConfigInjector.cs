@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -36,6 +37,18 @@ public static class CustomConfigInjector
     internal static readonly JsonSerializerOptions InjectorOutputOptions = new()
     {
         WriteIndented = true,
+        // Phase 6 — .NET 10 ships with
+        // JsonSerializerIsReflectionEnabledByDefault=false. Without a
+        // TypeInfoResolver, JsonNode.ToJsonString(options) throws
+        // "JsonSerializerOptions instance must specify a TypeInfoResolver"
+        // when iterating JsonValueCustomized<string> entries (the
+        // primitive leaves of the injected node tree). Combine the
+        // source-gen context with the reflective fallback so the
+        // injector's node tree (mix of registered DTOs + primitives)
+        // serializes cleanly on both .NET 8 and .NET 10 runtimes.
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            Json.AppJsonContext.Default,
+            new DefaultJsonTypeInfoResolver()),
     };
     /// <summary>
     /// Inject process routing into a raw sing-box JSON config.

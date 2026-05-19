@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
@@ -203,10 +204,28 @@ public static class CustomRulesImportExport
 
     // ─── VPNRouter JSON (native) ──────────────────────────────────────────
 
+    // Phase 6 — .NET 10 ships with
+    // JsonSerializerIsReflectionEnabledByDefault=false. Without a
+    // TypeInfoResolver, serialization throws at first call. Combine the
+    // source-gen context with the reflective fallback so List<CustomRule>
+    // round-trips on both .NET 8 and .NET 10 runtimes.
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         WriteIndented = true,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            Json.AppJsonContext.Default,
+            new DefaultJsonTypeInfoResolver()),
+    };
+
+    // Sibling options for sing-box-native export — no SnakeCaseLower,
+    // matches Hiddify / NekoBox wire format.
+    private static readonly JsonSerializerOptions SingBoxNativeOptions = new()
+    {
+        WriteIndented = true,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            Json.AppJsonContext.Default,
+            new DefaultJsonTypeInfoResolver()),
     };
 
     private static ImportResult ImportVpnrouterJson(string text)
@@ -471,6 +490,6 @@ public static class CustomRulesImportExport
 
             entries.Add(entry);
         }
-        return JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(entries, SingBoxNativeOptions);
     }
 }

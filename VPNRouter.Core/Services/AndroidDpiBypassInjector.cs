@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 
 namespace VPNRouter.Core.Services;
 
@@ -49,6 +50,23 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public static class AndroidDpiBypassInjector
 {
+    /// <summary>
+    /// Phase 6 — shared options for the injector's
+    /// <see cref="JsonNode.ToJsonString(JsonSerializerOptions)"/> call.
+    /// .NET 10's <c>JsonSerializerIsReflectionEnabledByDefault=false</c>
+    /// makes the bare <c>new JsonSerializerOptions { WriteIndented=true }</c>
+    /// pattern throw at serialize time; combining the source-gen context
+    /// with a reflective fallback fixes it cleanly for both .NET 8 and
+    /// .NET 10 runtimes.
+    /// </summary>
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            Json.AppJsonContext.Default,
+            new DefaultJsonTypeInfoResolver()),
+    };
+
     /// <summary>
     /// Outbound types that route to a real upstream — these are the
     /// candidates for fragmentation. http/socks listed because users
@@ -145,10 +163,13 @@ public static class AndroidDpiBypassInjector
                 }
             }
 
-            return root.ToJsonString(new JsonSerializerOptions
-            {
-                WriteIndented = true,
-            });
+            // Phase 6 — .NET 10 ships with
+            // JsonSerializerIsReflectionEnabledByDefault=false. Without a
+            // TypeInfoResolver, the JsonValueCustomized leaves throw at
+            // serialize time. Reuse the static field below so the options
+            // instance is shared across calls (less allocation than the
+            // pre-Phase-6 inline new in the hot mutate path).
+            return root.ToJsonString(JsonOptions);
         }
         catch
         {
