@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using VPNRouter.Android.Json;
 using VPNRouter.Core.Json;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
@@ -67,15 +68,16 @@ public static class AndroidStorage
         // VlessServerEntry + their List<T> wrappers are registered in
         // AppJsonContext so the SharedPreferences read/write paths
         // (GetSubscriptions / SetSubscriptions / GetServers / SetServers)
-        // route through generated JsonTypeInfo on AOT builds. The
-        // AndroidStorage.ServerTestResultDto + CustomCategory shapes are
-        // NOT registered in Core (they live in Android-only code or, in
-        // CustomCategory's case, would pull a too-wide dependency without
-        // a clear win) so the reflective fallback handles them today.
-        // Phase 6 candidate: add a sibling Android-side AndroidJsonContext
-        // partial to register the Android-only ServerTestResultDto, then
-        // wire that resolver into this same chain.
+        // route through generated JsonTypeInfo on AOT builds.
+        // Phase 6 — Wave 28 6-AJ-1 (2026-05-18): AndroidJsonContext
+        // wires the Android-side shapes that Core cannot reach
+        // (ServerTestResultDto + its Dictionary wrapper, CustomCategory
+        // + its List wrapper, and the per-app-packages List<string>).
+        // Chain order: AndroidJsonContext first (Android-specific takes
+        // priority), then AppJsonContext (Core types), then reflective
+        // fallback (for any one-off anonymous shapes — none today).
         TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AndroidJsonContext.Default,
             AppJsonContext.Default,
             new DefaultJsonTypeInfoResolver()),
     };
