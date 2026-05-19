@@ -17,6 +17,7 @@
 | 31a | YamlDotNet → StaticDeserializerBuilder swap | `1558d93..6ce171b` | MEDIUM (settings load/save path) |
 | 31b | 5 small JsonSerializer cleanups + JsonArray.Add fixes | `44a6de5..a3dce43` | LOW (mechanical) |
 | 31b-fixup | FreeConfigDeepVerifier ToJsonString cleanup | `0e67aa7` | LOW (single-line) |
+| 31a-android-fix | Vecc analyzer for Android (Wave 31a missed source-link case) | `858b59f` | LOW (csproj-only) |
 
 ## Numbers (Phase 6 net)
 
@@ -170,7 +171,7 @@ source-gen analyzer for AOT-clean YAML load/save.
   tests covering defaults round-trip, fully-populated round-trip
   exercising every node-kind, and snake_case alias mapping)
 
-**Surprises (4)**:
+**Surprises (5)**:
 
 1. **Package id** — `Vecc.YamlDotNet.Analyzers.StaticGenerator`, not
    the `YamlDotNet.Analyzers.StaticGenerator` predicted in Wave 30
@@ -193,6 +194,20 @@ source-gen analyzer for AOT-clean YAML load/save.
    `WithTypeConverter` on both builders. Retirement criterion
    documented in file header (drop when Vecc 15.2.x adds native
    `DateTimeOffset` support).
+5. **Android source-link gap** (caught post-ship in commit `858b59f`)
+   — Wave 31a added the analyzer PackageReference only to
+   `VPNRouter.Core.csproj`. `VPNRouter.Android` source-links Core's
+   `.cs` files via `<Compile Include="..\VPNRouter.Core\**\*.cs">`
+   (no ProjectReference, see Android.csproj rationale lines 60-79),
+   so the analyzer didn't run on the Android compile pass. Symptom:
+   `error CS1503: Argument 1: cannot convert from 'YamlStaticContext'
+   to 'YamlDotNet.Serialization.StaticContext'`. Wave 31a's
+   verification (`dotnet build VPNRouter.sln -c Release`) missed
+   this because Android target is gated behind
+   `EnableAndroidTarget=true`. Surfaced during the v2.35.0-r3 APK
+   rebuild that pulled the Android asset back into the release.
+   Fix: mirror the analyzer PackageReference into Android.csproj —
+   17-line change.
 
 ### Wave 31b — 5 JsonSerializer cleanups + JsonArray.Add fixes (`104ade9 + c12f765`)
 
@@ -252,9 +267,19 @@ cherry-pick commit closes the gap.
    AOT-only with zero reflective serialization paths.
 3. **Service AOT**: Service inherits Core. Once CLI lands, Service is
    ~2-4 hours of additional verification (per Wave 30 estimates).
-4. **CI Android builds**: Wave 26 closes the toolchain gap — any tag
-   push that's tagged after `LIBBOX_AAR_BASE64` secret provisioning
-   will produce signed APK in CI without depending on the local VM.
+4. **CI Android builds**: Wave 26 closes the toolchain gap (.NET 10 +
+   android-36 + workload), and the v2.35.0-r3 ship cycle provisioned
+   the `ANDROID_KEYSTORE_BASE64` + `ANDROID_KEYSTORE_PASSWORD` secrets.
+   The keystore is the Xamarin-auto-generated debug keystore from this
+   VM (cert SHA256
+   `C3:FC:0C:EA:B0:0A:0B:8B:72:9B:1F:65:01:73:57:FA:AE:C1:ED:35:B1:1E:AB:1E:32:E0:3C:42:C8:D3:D3:7A`,
+   alias renamed `androiddebugkey` → `vpnrouter` to match workflow
+   expectation), preserving the v2.35.0-r2 → r3 auto-update path on
+   the test phone (KYOCERA A101BM Android 12 arm64-v8a). Caveat:
+   `LIBBOX_AAR_BASE64` (Wave 26 design intent) does NOT fit in the
+   GH Actions 48 KB secret limit (15.6 MB base64); CI Android build
+   still skips gracefully without that secret. Wave 32 reworks the
+   provisioning via release-asset fetch.
 
 ## Carry-over to Phase 7
 
@@ -265,6 +290,7 @@ cherry-pick commit closes the gap.
 | `cli-aot` CI job | ~1 h | One-off workflow |
 | Service AOT prep + verification | ~2-4 h | Mostly inherits Core |
 | `RealSettingsStore.Instance` full DI rollout (14 sites) | ~1 d | Wave 27 carry-over |
+| **`LIBBOX_AAR_BASE64` 48 KB limit workaround** | ~2-3 h | Wave 26 design flaw: GH Actions secrets capped at 48 KB but libbox.aar base64 = 15.6 MB. Options: (a) host libbox.aar as a release asset on a private internal-tooling release on the repo, fetch via `gh release download` with `GITHUB_TOKEN` in workflow; (b) use Git LFS for `VPNRouter.Android/Lib/libbox.aar` (lift gitignore exception); (c) external blob store with token. (a) is cleanest. |
 | Avalonia AOT (App) | multi-week | v4.0 scope; Avalonia 12 axaml binding inference uses reflection |
 
 ## Commits (Phase 6 atomic timeline)
@@ -284,6 +310,9 @@ a3dce43  docs(plan): 6-31b — Outcome section + verification gate results
 1558d93  docs(plan): Phase 6 Wave 31a — YamlDotNet StaticDeserializerBuilder swap brief
 b446f3d  refactor(yaml): Phase 6 Wave 31a — swap to StaticDeserializerBuilder
 6ce171b  docs(plan): Phase 6 Wave 31a — fill Outcome section post-implementation
+a2967db  docs(plan): Phase 6 completion rollup — Waves 26-28 + 30 + 31a + 31b + CI rescue
+26b380f  chore(version): bump to 2.35.0-r3 — Phase 6 ship candidate
+858b59f  fix(android): wire Vecc.YamlDotNet.Analyzers.StaticGenerator into Android.csproj
 ```
 
 Plus the rollup commit for this doc.
