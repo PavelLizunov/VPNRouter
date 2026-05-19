@@ -89,10 +89,13 @@ namespace VPNRouter.Core.Json;
 [JsonSourceGenerationOptions(
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(ClashSelectProxyDto))]
+[JsonSerializable(typeof(ClashSetConfigDto))]
 [JsonSerializable(typeof(ConfigShareDocument))]
 [JsonSerializable(typeof(GitHubAsset))]
 [JsonSerializable(typeof(GitHubRelease))]
 [JsonSerializable(typeof(GitHubRelease[]))]
+[JsonSerializable(typeof(LaunchFailureCounter.State))]
 [JsonSerializable(typeof(List<SubscriptionEntry>))]
 [JsonSerializable(typeof(List<VlessServerEntry>))]
 [JsonSerializable(typeof(ProcessRule))]

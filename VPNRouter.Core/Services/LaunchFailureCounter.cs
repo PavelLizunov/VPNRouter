@@ -3,6 +3,8 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+using VPNRouter.Core.Json;
 
 namespace VPNRouter.Core.Services;
 
@@ -231,10 +233,17 @@ public static class LaunchFailureCounter
         }
     }
 
+    // Phase 6 — Wave 31b (2026-05-19): wired TypeInfoResolver to
+    // AppJsonContext.Default so AOT publish can resolve LaunchFailureCounter.State
+    // via compiled JsonTypeInfo. Brief: plans/phase6-json-cleanups-2026-05-18.md.
+    // Reflective fallback retained for any one-off shape (none today).
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AppJsonContext.Default,
+            new DefaultJsonTypeInfoResolver()),
     };
 }

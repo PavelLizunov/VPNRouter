@@ -1,6 +1,8 @@
 #nullable enable
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+using VPNRouter.CLI.Helpers;
 using VPNRouter.Core.Services;
 
 namespace VPNRouter.CLI.Commands;
@@ -51,11 +53,30 @@ public static class StateFile
     /// <c>PropertyNameCaseInsensitive=true</c> tolerates pre-Phase-4
     /// state.json files that were written with un-attributed PascalCase
     /// keys — both forms parse cleanly.
+    ///
+    /// <para>Phase 6 — Wave 31b (2026-05-19): wired
+    /// <c>TypeInfoResolver</c> to chain
+    /// <see cref="CliJsonContext"/> (CLI-side <see cref="RunState"/>
+    /// registration) → reflective fallback. AOT publish can now resolve
+    /// <c>RunState</c> via compiled
+    /// <see cref="System.Text.Json.Serialization.Metadata.JsonTypeInfo{T}"/>
+    /// instead of dynamic-code generation.
+    ///
+    /// Core's <c>AppJsonContext</c> is intentionally NOT chained here:
+    /// it is <c>internal</c> to <c>VPNRouter.Core</c> and CLI is not in
+    /// the <c>InternalsVisibleTo</c> list. <see cref="RunState"/> only
+    /// references built-in types (<c>int</c>, <c>string</c>,
+    /// <c>DateTime</c>, <c>List&lt;string&gt;</c>) so no Core DTO needs
+    /// to be reachable through this options instance. Brief:
+    /// <c>plans/phase6-json-cleanups-2026-05-18.md</c>.</para>
     /// </summary>
     internal static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            CliJsonContext.Default,
+            new DefaultJsonTypeInfoResolver()),
     };
 
     private static readonly string Path =

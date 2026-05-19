@@ -4,7 +4,9 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Serilog;
+using VPNRouter.Core.Json;
 
 namespace VPNRouter.Core.Services;
 
@@ -129,7 +131,15 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         // pre-2D-4: { "path": "<escaped path>" } with backslash escaping.
         // Use System.Text.Json for the escape instead of ad-hoc string
         // replace — handles Windows path separators + Unicode correctly.
-        var body = JsonSerializer.Serialize(new { path = configPath });
+        //
+        // Phase 6 — Wave 31b (2026-05-19): the pre-Wave-31b code used an
+        // anonymous type (`new { path = ... }`) which triggers IL3050 at
+        // AOT publish (no compiled JsonTypeInfo). Hoisted to a named
+        // record + [JsonPropertyName("path")] so the wire format stays
+        // identical (lowercase "path" key) while AOT can resolve it via
+        // the AppJsonContext source generator.
+        var body = JsonSerializer.Serialize(
+            new ClashSetConfigDto(configPath), SerializerOptions);
         var url = $"{_baseUrl}/configs?force=true";
 
         try
@@ -273,7 +283,10 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         // generated config. Same defensive escape sing-box's own UI does.
         var encodedGroup = Uri.EscapeDataString(group);
         var url = $"{_baseUrl}/proxies/{encodedGroup}";
-        var body = JsonSerializer.Serialize(new { name });
+        // Phase 6 — Wave 31b (2026-05-19): see ReloadConfigAsync above —
+        // anonymous-type Serialize hoisted to a named record for AOT.
+        var body = JsonSerializer.Serialize(
+            new ClashSelectProxyDto(name), SerializerOptions);
 
         try
         {
@@ -399,10 +412,20 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         return false;
     }
 
+    // Phase 6 — Wave 31b (2026-05-19): wired TypeInfoResolver to
+    // AppJsonContext.Default so the generator-emitted JsonTypeInfo for
+    // ClashSetConfigDto / ClashSelectProxyDto / VersionDto /
+    // ConnectionsDto / ProxiesEnvelopeDto resolves AOT-cleanly.
+    // Reflective fallback retained for any one-off shape (none today).
+    // The internal DTO records below are also used through this options
+    // instance so they need to be context-registered (see AppJsonContext).
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         NumberHandling = JsonNumberHandling.AllowReadingFromString,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AppJsonContext.Default,
+            new DefaultJsonTypeInfoResolver()),
     };
 
     // sing-box's /version returns { "version": "1.13.10", "premium": true, ... }.
@@ -450,3 +473,22 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         public int Delay { get; set; }
     }
 }
+
+// Phase 6 — Wave 31b (2026-05-19): hoisted anonymous-type Serialize
+// sites in ClashSingBoxApi.ReloadConfigAsync + .SelectProxyAsync to
+// named records so AppJsonContext can register them and AOT can resolve
+// their JsonTypeInfo at compile time. The wire format is identical:
+// the [JsonPropertyName] attributes pin the same lowercase key names
+// the anonymous types emitted by default (anon properties preserve
+// declared casing — `new { path = ... }` writes "path"; `new { name }`
+// writes "name"). Phase 4 STJ migration tests pinning these bodies
+// pass unchanged.
+//
+// Visibility: internal so AppJsonContext (also internal) can reference
+// them. Records take one positional parameter each — matches the
+// single-field shape of the original anonymous types.
+internal sealed record ClashSetConfigDto(
+    [property: JsonPropertyName("path")] string Path);
+
+internal sealed record ClashSelectProxyDto(
+    [property: JsonPropertyName("name")] string Name);

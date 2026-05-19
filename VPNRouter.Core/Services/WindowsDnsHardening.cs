@@ -1,6 +1,8 @@
 #if PLATFORM_WINDOWS
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.Win32;
 using Serilog;
 
@@ -262,10 +264,20 @@ public static class WindowsDnsHardening
     // both writers produced PascalCase keys identically). The file is
     // private to a single owner (the elevated VPN process), so there's
     // no DoS-untrusted-input scenario — MaxDepth left at STJ default.
+    //
+    // Phase 6 — Wave 31b (2026-05-19): wired TypeInfoResolver to the
+    // Windows-only sibling JsonSerializerContext below so AOT publish
+    // can resolve HardeningState + SavedRegValue via compiled
+    // JsonTypeInfo. Brief: plans/phase6-json-cleanups-2026-05-18.md.
+    // Reflective fallback retained in the Combine chain for forward-
+    // compat with any one-off shape (none today).
     private static readonly JsonSerializerOptions HardeningStateOptions = new()
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            WindowsDnsHardeningJsonContext.Default,
+            new DefaultJsonTypeInfoResolver()),
     };
 
     private static void SaveState(HardeningState state)
@@ -295,17 +307,42 @@ public static class WindowsDnsHardening
 
     // ─── State types ──────────────────────────────────────────────────────────
 
-    private class HardeningState
+    // Phase 6 — Wave 31b (2026-05-19): visibility flipped private → internal
+    // so the sibling JsonSerializerContext below (also Windows-only) can
+    // generate JsonTypeInfo for them at compile time. The contract is
+    // assembly-private — InternalsVisibleTo VPNRouter.Tests sees them too,
+    // which is the desired behaviour (tests can construct + assert state
+    // shapes directly). No external caller depends on these types.
+    internal sealed class HardeningState
     {
         public SavedRegValue Smhnr { get; set; } = new();
         public SavedRegValue ParallelAAAA { get; set; } = new();
         public bool TunMetricChanged { get; set; }
     }
 
-    private class SavedRegValue
+    internal sealed class SavedRegValue
     {
         public bool HadValue { get; set; }
         public int OldValue { get; set; }
     }
+}
+
+// Phase 6 — Wave 31b (2026-05-19): sibling JsonSerializerContext for the
+// dns_hardening_state.json sidecar. Windows-only because the entire
+// containing class is gated behind PLATFORM_WINDOWS — registering
+// HardeningState in the cross-platform VPNRouter.Core.Json.AppJsonContext
+// would require either #if-guarded attributes (clumsy) or moving the
+// state types out of the Windows-only file (defeats the platform gating).
+//
+// Same generator options as AppJsonContext (PropertyNameCaseInsensitive,
+// WhenWritingNull) so the resolver chain composes uniformly with the
+// reflective fallback in HardeningStateOptions.
+[JsonSourceGenerationOptions(
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(WindowsDnsHardening.HardeningState))]
+[JsonSerializable(typeof(WindowsDnsHardening.SavedRegValue))]
+internal sealed partial class WindowsDnsHardeningJsonContext : JsonSerializerContext
+{
 }
 #endif

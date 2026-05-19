@@ -218,16 +218,6 @@ public static class CustomRulesImportExport
             new DefaultJsonTypeInfoResolver()),
     };
 
-    // Sibling options for sing-box-native export — no SnakeCaseLower,
-    // matches Hiddify / NekoBox wire format.
-    private static readonly JsonSerializerOptions SingBoxNativeOptions = new()
-    {
-        WriteIndented = true,
-        TypeInfoResolver = JsonTypeInfoResolver.Combine(
-            Json.AppJsonContext.Default,
-            new DefaultJsonTypeInfoResolver()),
-    };
-
     private static ImportResult ImportVpnrouterJson(string text)
     {
         var warnings = new List<string>();
@@ -490,6 +480,30 @@ public static class CustomRulesImportExport
 
             entries.Add(entry);
         }
-        return JsonSerializer.Serialize(entries, SingBoxNativeOptions);
+        // Phase 6 — Wave 31b (2026-05-19): retire the inline
+        // `new JsonSerializerOptions { WriteIndented = true }` duplicate.
+        // Reuse the file's existing JsonOptions field (also
+        // WriteIndented=true; PropertyNamingPolicy=SnakeCaseLower is a
+        // no-op here because the serialised payload is
+        // List<object>/Dictionary<string,object> — naming policy only
+        // applies to property names, and these structures expose no
+        // typed properties to the serializer. Dictionary keys + nested
+        // List<string>/List<int>/string/int values pass through verbatim.
+        //
+        // Note: this is the one branch in this file that the AOT
+        // source-gen cannot pin via AppJsonContext — the
+        // object/Dictionary recursion is fundamentally reflective.
+        // Wave 31b leaves it on the reflective fallback path; a
+        // future wave will restructure the export DTO to a concrete
+        // record tree (one record per match-type + one wrapper) to
+        // make it AOT-clean. For now, the duplicate-options cleanup
+        // is enough — and the existing test
+        // `SingBoxJson_ExportProducesValidImportableForm` pins the
+        // wire format byte-equivalent.
+        //
+        // (Supersedes the e3b3ef4 hotfix's separate SingBoxNativeOptions
+        // field — that was a defensive guard before Wave 31b's analysis
+        // showed JsonOptions covers this case fine.)
+        return JsonSerializer.Serialize(entries, JsonOptions);
     }
 }
