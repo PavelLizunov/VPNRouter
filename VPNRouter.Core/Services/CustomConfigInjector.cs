@@ -178,11 +178,13 @@ public static class CustomConfigInjector
                 return; // already has urltest, don't add another
         }
 
-        // Create urltest from selector's children
+        // Create urltest from selector's children.
+        // Phase 6 — Wave 31b: cast to (JsonNode?) so the compiler picks
+        // JsonArray.Add(JsonNode?) instead of Add<T>(T) (IL3050).
         var childTagsArray = new JsonArray();
         foreach (var c in children)
         {
-            childTagsArray.Add(StjNodeHelpers.AsString(c) ?? "");
+            childTagsArray.Add((JsonNode?)JsonValue.Create(StjNodeHelpers.AsString(c) ?? ""));
         }
         var urltest = new JsonObject
         {
@@ -526,9 +528,11 @@ public static class CustomConfigInjector
     /// </summary>
     private static JsonArray BuildProcessNameArray(IEnumerable<string> processes)
     {
+        // Phase 6 — Wave 31b: cast to (JsonNode?) so the compiler picks
+        // JsonArray.Add(JsonNode?) instead of Add<T>(T) (IL3050).
         var array = new JsonArray();
         foreach (var p in processes)
-            array.Add(p);
+            array.Add((JsonNode?)JsonValue.Create(p));
         return array;
     }
 
@@ -706,7 +710,9 @@ public static class CustomConfigInjector
         var geoIpPath = AppPaths.GeoIpRuPath.Replace('\\', '/');
         var geoSitePath = AppPaths.GeoSiteRuPath.Replace('\\', '/');
 
-        ruleSet.Add(new JsonObject
+        // Phase 6 — Wave 31b: cast each JsonObject to (JsonNode?) so the
+        // compiler picks JsonArray.Add(JsonNode?) instead of Add<T>(T) (IL3050).
+        ruleSet.Add((JsonNode?)new JsonObject
         {
             ["type"] = "local",
             ["tag"] = GeoIpRuleSetTag,
@@ -714,7 +720,7 @@ public static class CustomConfigInjector
             ["path"] = geoIpPath
         });
 
-        ruleSet.Add(new JsonObject
+        ruleSet.Add((JsonNode?)new JsonObject
         {
             ["type"] = "local",
             ["tag"] = GeoSiteRuleSetTag,
@@ -742,8 +748,9 @@ public static class CustomConfigInjector
                 servers.RemoveAt(i);
         }
 
-        // Yandex DNS via dns-direct outbound (real NIC, no proxy, no loop)
-        servers.Add(new JsonObject
+        // Yandex DNS via dns-direct outbound (real NIC, no proxy, no loop).
+        // Phase 6 — Wave 31b: cast to (JsonNode?) for AOT-clean Add (IL3050).
+        servers.Add((JsonNode?)new JsonObject
         {
             ["type"] = "udp",
             ["tag"] = DirectDnsRuTag,
@@ -778,7 +785,10 @@ public static class CustomConfigInjector
         // Insert after process_name rules but before any catch-all
         var dnsRule = new JsonObject
         {
-            ["rule_set"] = new JsonArray { GeoSiteRuleSetTag },
+            // Phase 6 — Wave 31b: cast literal to (JsonNode?) inside the
+            // collection initializer so the desugared .Add call picks the
+            // non-generic Add(JsonNode?) overload (IL3050).
+            ["rule_set"] = new JsonArray { (JsonNode?)JsonValue.Create(GeoSiteRuleSetTag) },
             ["server"] = DirectDnsRuTag
         };
         if (isActionBased)
@@ -832,10 +842,16 @@ public static class CustomConfigInjector
         // Place before process_name rules but after sniff/dns/private-ip.
         int insertAt = FindGeoInsertIndex(rules, isActionBased);
 
-        // Single rule with both rule_sets — sing-box matches if ANY in the array matches
+        // Single rule with both rule_sets — sing-box matches if ANY in the array matches.
+        // Phase 6 — Wave 31b: cast each literal to (JsonNode?) so the
+        // desugared .Add calls pick the non-generic Add(JsonNode?) (IL3050).
         var geoRule = new JsonObject
         {
-            ["rule_set"] = new JsonArray { GeoSiteRuleSetTag, GeoIpRuleSetTag },
+            ["rule_set"] = new JsonArray
+            {
+                (JsonNode?)JsonValue.Create(GeoSiteRuleSetTag),
+                (JsonNode?)JsonValue.Create(GeoIpRuleSetTag),
+            },
             ["outbound"] = "direct"
         };
         if (isActionBased)
@@ -1091,7 +1107,8 @@ public static class CustomConfigInjector
                 var dnsOutbounds = config["outbounds"] as JsonArray;
                 if (dnsOutbounds != null && !dnsOutbounds.Any(o => StjNodeHelpers.AsString(o?["tag"]) == "dns-direct"))
                 {
-                    dnsOutbounds.Add(new JsonObject
+                    // Phase 6 — Wave 31b: cast to (JsonNode?) for AOT-clean Add (IL3050).
+                    dnsOutbounds.Add((JsonNode?)new JsonObject
                     {
                         ["type"] = "direct",
                         ["tag"] = "dns-direct",
@@ -1234,20 +1251,23 @@ public static class CustomConfigInjector
                 // TUN-specific fixes
                 if (StjNodeHelpers.AsString(obj["type"]) == "tun")
                 {
-                    // Convert legacy inet4_address/inet6_address → address array (removed in 1.12)
+                    // Convert legacy inet4_address/inet6_address → address array (removed in 1.12).
+                    // Phase 6 — Wave 31b: wrap strings in JsonValue.Create() +
+                    // cast to (JsonNode?) so the .Add picks the non-generic
+                    // overload (IL3050).
                     if (obj["address"] == null)
                     {
                         var addrs = new JsonArray();
                         var inet4 = StjNodeHelpers.AsString(obj["inet4_address"]);
                         if (inet4 != null)
                         {
-                            addrs.Add(inet4);
+                            addrs.Add((JsonNode?)JsonValue.Create(inet4));
                             obj.Remove("inet4_address");
                         }
                         var inet6 = StjNodeHelpers.AsString(obj["inet6_address"]);
                         if (inet6 != null)
                         {
-                            addrs.Add(inet6);
+                            addrs.Add((JsonNode?)JsonValue.Create(inet6));
                             obj.Remove("inet6_address");
                         }
                         if (addrs.Count > 0)
@@ -1277,8 +1297,10 @@ public static class CustomConfigInjector
                         }
                         foreach (var addr in excludeAddresses)
                             merged.Add(addr);
+                        // Phase 6 — Wave 31b: wrap string in JsonValue.Create() +
+                        // cast to (JsonNode?) for AOT-clean Add (IL3050).
                         var mergedArray = new JsonArray();
-                        foreach (var s in merged) mergedArray.Add(s);
+                        foreach (var s in merged) mergedArray.Add((JsonNode?)JsonValue.Create(s));
                         obj["route_exclude_address"] = mergedArray;
                     }
                 }

@@ -276,6 +276,10 @@ public sealed class VlessDeepVerifier
             _             => BuildVlessOutbound(s),
         };
 
+        // Phase 6 — Wave 31b: cast every JsonArray element to (JsonNode?)
+        // so the desugared .Add calls pick JsonArray.Add(JsonNode?) instead
+        // of Add<T>(T) (IL3050). Same wire-format output, zero behaviour
+        // change — just helps the AOT analyser.
         var root = new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = "error" },
@@ -283,13 +287,13 @@ public sealed class VlessDeepVerifier
             {
                 ["servers"] = new JsonArray
                 {
-                    new JsonObject { ["type"] = "udp", ["tag"] = "dns-google", ["server"] = "1.1.1.1", ["detour"] = "dns-direct-out" },
+                    (JsonNode?)new JsonObject { ["type"] = "udp", ["tag"] = "dns-google", ["server"] = "1.1.1.1", ["detour"] = "dns-direct-out" },
                 },
                 ["final"] = "dns-google",
             },
             ["inbounds"] = new JsonArray
             {
-                new JsonObject
+                (JsonNode?)new JsonObject
                 {
                     ["type"] = "socks",
                     ["tag"] = "socks-in",
@@ -300,8 +304,8 @@ public sealed class VlessDeepVerifier
             },
             ["outbounds"] = new JsonArray
             {
-                outbound,
-                new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true },
+                (JsonNode?)outbound,
+                (JsonNode?)new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true },
             },
             ["route"] = new JsonObject
             {
@@ -309,8 +313,8 @@ public sealed class VlessDeepVerifier
                 ["default_domain_resolver"] = new JsonObject { ["server"] = "dns-google" },
                 ["rules"] = new JsonArray
                 {
-                    new JsonObject { ["action"] = "sniff" },
-                    new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" },
+                    (JsonNode?)new JsonObject { ["action"] = "sniff" },
+                    (JsonNode?)new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" },
                 },
             },
             ["experimental"] = new JsonObject
@@ -589,13 +593,15 @@ public sealed class VlessDeepVerifier
     /// </summary>
     internal static JsonObject BuildTuicOutbound(VlessServerEntry s)
     {
+        // Phase 6 — Wave 31b: wrap strings in JsonValue.Create() + cast to
+        // (JsonNode?) so .Add picks the non-generic overload (IL3050).
         var alpn = new JsonArray();
         if (!string.IsNullOrWhiteSpace(s.Tls?.Alpn))
         {
             foreach (var part in s.Tls!.Alpn.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                alpn.Add(part);
+                alpn.Add((JsonNode?)JsonValue.Create(part));
         }
-        if (alpn.Count == 0) alpn.Add("h3");
+        if (alpn.Count == 0) alpn.Add((JsonNode?)JsonValue.Create("h3"));
 
         return new JsonObject
         {

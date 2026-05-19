@@ -399,6 +399,11 @@ public sealed class FreeConfigDeepVerifier
         // sing-box 1.13.3 quirk: DNS server with detour:"direct" is FATAL if the direct
         // outbound is "empty" (just {type:direct,tag:direct}). Workaround: separate
         // 'dns-direct' outbound with udp_fragment:true so it's non-empty.
+        //
+        // Phase 6 — Wave 31b: cast every JsonArray element to (JsonNode?)
+        // so the desugared .Add calls pick JsonArray.Add(JsonNode?) instead
+        // of Add<T>(T) (IL3050). Same wire-format output, zero behaviour
+        // change — just helps the AOT analyser.
         var root = new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = "error" },
@@ -406,13 +411,13 @@ public sealed class FreeConfigDeepVerifier
             {
                 ["servers"] = new JsonArray
                 {
-                    new JsonObject { ["type"] = "udp", ["tag"] = "dns-google", ["server"] = "1.1.1.1", ["detour"] = "dns-direct-out" },
+                    (JsonNode?)new JsonObject { ["type"] = "udp", ["tag"] = "dns-google", ["server"] = "1.1.1.1", ["detour"] = "dns-direct-out" },
                 },
                 ["final"] = "dns-google",
             },
             ["inbounds"] = new JsonArray
             {
-                new JsonObject
+                (JsonNode?)new JsonObject
                 {
                     ["type"] = "socks",
                     ["tag"] = "socks-in",
@@ -423,9 +428,9 @@ public sealed class FreeConfigDeepVerifier
             },
             ["outbounds"] = new JsonArray
             {
-                outbound,
+                (JsonNode?)outbound,
                 // Dedicated non-empty direct outbound for DNS detour (udp_fragment:true makes it non-empty in 1.13).
-                new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true },
+                (JsonNode?)new JsonObject { ["type"] = "direct", ["tag"] = "dns-direct-out", ["udp_fragment"] = true },
             },
             ["route"] = new JsonObject
             {
@@ -433,8 +438,8 @@ public sealed class FreeConfigDeepVerifier
                 ["default_domain_resolver"] = new JsonObject { ["server"] = "dns-google" },
                 ["rules"] = new JsonArray
                 {
-                    new JsonObject { ["action"] = "sniff" },
-                    new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" },
+                    (JsonNode?)new JsonObject { ["action"] = "sniff" },
+                    (JsonNode?)new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" },
                 },
             },
         };
