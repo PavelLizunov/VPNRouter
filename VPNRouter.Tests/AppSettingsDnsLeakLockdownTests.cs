@@ -175,37 +175,28 @@ public class AppSettingsDnsLeakLockdownTests
     // ─── Task 2.5: Migrator from v2 sets DnsLeakLockdown = false ─────────
 
     [Fact]
-    public void SettingsMigrator_FromLegacyV2_DefaultsLockdownFalse()
+    public void SettingsMigrator_FromLegacyV2_DefaultsLockdownTrue_BR5()
     {
-        // Pins POST-Wave-39. FAILS against pre-Wave-39 — the migrator
-        // doesn't touch DnsLeakLockdown yet because the property doesn't
-        // exist.
-        //
-        // Why v2 specifically: the AM-1 + F-B migration already lives at
-        // v2→v3 and pre-Wave-39 the schema is at v4 (W-2 wgturn move).
-        // Wave 39 likely bumps to v5 OR slots into the existing v3 step
-        // since the wgturn move (v3→v4) was on-disk only, not settings
-        // shape. Either way, a settings tree starting at v2 (or any pre-
-        // Wave-39 version) MUST end at the current schema with
-        // DnsLeakLockdown == false. We don't pin the exact step number
-        // — only the end-to-end "started legacy, ended with false"
-        // contract.
+        // BR-5 (brat 2026-05-19) — flipped from opt-out (false) to
+        // opt-in-by-default (true). Original Wave 39 was cautious about
+        // LAN-DNS-proxy users; brat's logs showed DNS leaking to a RU
+        // ISP resolver (95.85.16.212) because the protection that was
+        // the whole point of Wave 39 never activated for upgrade users.
+        // Now everyone gets the default-on protection; LAN-proxy users
+        // can disable via Settings → Leak Protection.
         var s = new AppSettings { SchemaVersion = 2 };
-        // Apply the v2→v3 migration step at minimum (it's the first
-        // step that runs on legacy data). Wave 39 may extend this OR
-        // add a new step; either way the end state must be false.
         var migrated = SettingsMigrator.Migrate(
             s, from: 2, to: AppSettings.CurrentSchemaVersion);
 
         var prop = GetDnsLeakLockdownProperty();
         var value = (bool)prop.GetValue(migrated.App)!;
 
-        Assert.False(value,
-            "Wave 39 brief §'Files to touch (Agent A)': upgrade users " +
-            "from legacy schema (v2 or earlier) must NOT be surprised — " +
-            "DnsLeakLockdown must end up false. They can flip it on via " +
-            "the new Settings checkbox once they've read the tooltip " +
-            "warning about local DNS proxies.");
+        Assert.True(value,
+            "BR-5: upgrade users from legacy schema must end up with " +
+            "DnsLeakLockdown=true so DNS leak protection is active out " +
+            "of the box. Original false default was the trigger for " +
+            "brat's RU ISP DNS leak (singbox.log dns: exchanged trace " +
+            "to 95.85.16.212).");
     }
 
     // ─── Task 2.6: Migrator on already-migrated config preserves user choice ─

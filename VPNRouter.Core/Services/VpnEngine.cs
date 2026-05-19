@@ -315,13 +315,31 @@ public class VpnEngine : IDisposable
     {
         OnStatus("Stopping...");
 
+        // BR-5 (brat 2026-05-19): kill sing-box FIRST so VPN traffic
+        // routing stops immediately, before any of the cleanup steps
+        // that previously took 2-3 seconds (DnsHardening.Restore +
+        // FirewallManager rules + Firewall block rules delete).
+        //
+        // brat-2026-05-19 reported "internet from the required IP
+        // appeared for a couple of seconds after turning off" — the
+        // log showed a 2.3-second window between [VpnEngine] Stopping
+        // and [SingBoxManager] Stopping sing-box, during which the
+        // VPN was still routing through the live wintun adapter.
+        // Reordering closes that window: after this line returns,
+        // sing-box's TUN inbound stops accepting packets, so traffic
+        // immediately fails over to the OS default route (direct).
+        //
+        // The remaining cleanup (Dns hardening, firewall rules,
+        // health monitor) can run with sing-box already gone — they
+        // don't depend on it being alive. F-E probe cancellation
+        // happens before the kill so a probe in-flight doesn't fire
+        // AutoFailover during the brief teardown window.
+        try { _probeCts?.Cancel(); } catch { }
+        try { _singBox?.Stop(); } catch { }
+
 #if PLATFORM_WINDOWS
         try { WindowsDnsHardening.Restore(_logger); } catch { }
 #endif
-
-        // F-E (2026-05-11): cancel any queued post-start probe so it
-        // doesn't fire AutoFailover after a manual disconnect.
-        try { _probeCts?.Cancel(); } catch { }
 
         try { _healthMonitor?.Stop(); } catch { }
         try { _etw?.Stop(); } catch { }
@@ -332,7 +350,6 @@ public class VpnEngine : IDisposable
             try { _firewall?.DeleteAllRules(); } catch { }
         }
 
-        try { _singBox?.Stop(); } catch { }
         try { _firewall?.Dispose(); } catch { }
 
         _singBox = null;

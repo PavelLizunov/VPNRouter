@@ -596,15 +596,35 @@ public static class SettingsMigrator
             // a hand-edited yaml with a stripped section.
             logger?.Warning(
                 "[SettingsMigrator] v4->v5 (Wave 39): settings.App was null, " +
-                "skipping DnsLeakLockdown opt-out flip");
+                "skipping DnsLeakLockdown setup");
             return s;
         }
 
-        s.App.DnsLeakLockdown = false;
+        // BR-5 (brat 2026-05-19): flipped from opt-out (false) to
+        // opt-in (true) for upgrade users. Original Wave 39 logic was
+        // cautious about users running a local DNS proxy on non-
+        // loopback IPs (dnscrypt-proxy on a LAN address, AdGuard Home
+        // on a sibling NIC) — those installations would suddenly see
+        // their DNS blocked. In practice that's a small minority and
+        // brat-2026-05-19 surfaced the cost of the opt-out default:
+        //   - DNS queries leaked to RU ISP resolver (95.85.16.212
+        //     visible in singbox.log dns: exchanged trace) because
+        //     Windows DNS Client kept racing the configured resolvers
+        //     in parallel despite SMHNR + ParallelAAAA registry hardening.
+        //   - The user did not know to flip the Settings toggle, so the
+        //     protection that was the whole point of Wave 39 never
+        //     activated.
+        //
+        // Flipping the default protects everyone on upgrade with the
+        // smaller cost (LAN-proxy users see the block, follow up with
+        // a support ping, and disable via Settings). The toggle still
+        // exists at Settings → Leak Protection → "Block DNS outside
+        // VPN" so power users can opt out at any time.
+        s.App.DnsLeakLockdown = true;
         logger?.Information(
-            "[SettingsMigrator] v4->v5 (Wave 39): set DnsLeakLockdown=false for " +
-            "pre-Wave-39 config (opt-in for upgrade users; user can enable in " +
-            "Settings to activate firewall-level DNS leak protection)");
+            "[SettingsMigrator] v4->v5 (Wave 39 + BR-5): set DnsLeakLockdown=true for " +
+            "pre-Wave-39 config (default-on protects against the brat-2026-05-19 RU " +
+            "ISP DNS leak class; LAN-proxy users can disable via Settings → Leak Protection)");
         return s;
     }
 }
