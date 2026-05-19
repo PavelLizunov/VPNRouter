@@ -199,28 +199,116 @@ Per `plans/v3.0-execution-methodology.md`:
 
 ## Outcome
 
-_To be filled in after verification gate passes._
-
 ### Tooling state
 
-- TBD
+- .NET 10.0.300 SDK on Windows 11 LTSC 2024 VM.
+- Roslyn compiler 5.6.0-2.26230.102 (`csc.exe` shipped with SDK).
+- YamlDotNet 15.1.2 (existing pin, unchanged).
+- Vecc.YamlDotNet.Analyzers.StaticGenerator 15.1.2 (new).
+- xUnit v3 3.2.2.
 
 ### What actually happened
 
-- TBD
+End-to-end swap landed clean, but only after two analyzer-bug
+workarounds documented below:
+
+1. NuGet package id is **`Vecc.YamlDotNet.Analyzers.StaticGenerator`**,
+   not `YamlDotNet.Analyzers.StaticGenerator`. The upstream YamlDotNet
+   maintainer hands the analyzer off to a separate publisher
+   (EdwardCooke / Vecc). Version 15.1.2 aligns with the existing
+   YamlDotNet 15.1.2 pin.
+2. The analyzer auto-generates `public partial class YamlStaticContext :
+   YamlDotNet.Serialization.StaticContext` — so the hand-authored half
+   has to be `public partial` too (CS9023 if you make it `internal`),
+   and must NOT specify the base class itself (CS0263 if both partial
+   declarations name it). The brief's "make it internal" suggestion
+   doesn't survive contact with the generator's actual output.
+3. **Bug 1 — explicit collection registration crashes the analyzer**:
+   `[YamlSerializable(typeof(Dictionary<string, List<string>>))]` makes
+   the analyzer throw `IndexOutOfRangeException` at build time
+   (suppressed-by-default CS8785 warning, then silent absence of
+   generated code). Workaround: register only leaf DTOs; the analyzer's
+   `ClassSyntaxReceiver.CheckForSupportedGeneric` recursively walks
+   property types and handles collections transitively.
+4. **Bug 2 — DateTimeOffset is not in the analyzer's scalar coercion
+   table**. The static serializer emits `{}` for `DateTimeOffset` /
+   `DateTimeOffset?` fields. The static deserializer throws
+   `ArgumentOutOfRangeException: Unknown type: System.DateTimeOffset`.
+   Affected fields: `SubscriptionEntry.LastRefreshedAt` (DateTimeOffset?)
+   + `WgturnEntry.AddedAt` (DateTimeOffset). Workaround: hand-written
+   `DateTimeOffsetYamlConverter : IYamlTypeConverter` registered via
+   `WithTypeConverter(...)` on both builders. Wire format: ISO 8601
+   round-trip (`"O"` specifier).
 
 ### Files changed / LOC delta
 
-- TBD
+| File | Change | LOC delta |
+|---|---|---:|
+| `VPNRouter.Core/VPNRouter.Core.csproj` | added analyzer PackageReference | +15 |
+| `VPNRouter.Core/Yaml/YamlStaticContext.cs` | NEW partial context | +109 |
+| `VPNRouter.Core/Yaml/DateTimeOffsetYamlConverter.cs` | NEW compat shim | +84 |
+| `VPNRouter.Core/Services/SettingsLoader.cs` | two-site builder swap + shim wiring | +27 / -2 |
+| `VPNRouter.Tests/YamlStaticContextRoundTripTests.cs` | NEW 3-test pin suite | +624 |
+
+Totals: **+859 / -2 LOC** across 5 files; 3 new files committed.
 
 ### Tests added
 
-- TBD
+`YamlStaticContextRoundTripTests` (3 tests):
+
+1. **`Defaults_SaveAndReload_PreservesAllDefaultValues`** — exercise
+   `SettingsLoader.ResetToDefaults(path)` → `Parse(File.ReadAllText)`
+   round-trip on a freshly-constructed `AppSettings`. Asserts every
+   reference-typed sub-section is non-null after parse + spot-checks
+   18 scalar default values to pin alias mappings.
+2. **`Populated_RoundTrip_PreservesEveryNestedFieldKind`** — build a
+   maximally-populated `AppSettings` with non-default values in every
+   nested DTO branch (scalar string/int/bool, nested DTO, `List<T>`,
+   `List<DTO>`, `Dictionary<string, string>`, `Dictionary<string,
+   List<string>>`, `DateTimeOffset?`, `DateTimeOffset`, `DateTime`).
+   Saves through `SettingsLoader.Save`, re-parses via
+   `SettingsLoader.Parse`, asserts ~60 specific values across the full
+   graph — pins the DateTimeOffset shim path and every field that gets
+   serialized by the static builder.
+3. **`WireFormat_SnakeCaseAliases_HonoredByStaticDeserializer`** —
+   hand-crafted YAML fixture with every `[YamlMember(Alias = "...")]`
+   mapping exercised. Catches alias drift between the reflective and
+   static parsers (which the round-trip tests above wouldn't see since
+   both legs use the same static builder).
+
+Total regression suite: **1154 pass, 4 skip, 0 fail** (was 1151/4/0
+pre-swap). No prior tests broke.
 
 ### Surprises
 
-- TBD
+- **Package id divergence** — pre-implementation NuGet search caught
+  this before the csproj edit, so it cost ~5 min of investigation
+  rather than blocking the wave.
+- **`public partial class` requirement** — discovered via CS9023 on
+  the first build attempt; updated YamlStaticContext.cs visibility
+  before the swap.
+- **Analyzer crash on `Dictionary<string, List<string>>`** —
+  reproduced isolated in `/tmp/yamltest` standalone project, confirmed
+  it's an analyzer bug not a project quirk. Root cause: the analyzer's
+  `ClassSyntaxReceiver.CheckForSupportedGeneric` recursion when the
+  type is registered explicitly via `[YamlSerializable]` hits an
+  array index it doesn't bound-check. Working theory: it tries to
+  process `Dictionary<,>` as if it were `List<>` somewhere on the
+  explicit-registration path. The transitive-discovery codepath
+  (when the same type is found via a property of a registered DTO)
+  doesn't hit the bug.
+- **DateTimeOffset not in the scalar table** — confirmed via probe
+  binary in `/tmp/probebin` against the analyzer's output. `DateTime`
+  works (ISO 8601 round-trip), `DateTimeOffset` doesn't. Reflective
+  builder handled both via its default scalar resolver; static
+  builder ships with a fixed table that misses DateTimeOffset.
+  Custom `IYamlTypeConverter` was the cleanest path; the brief
+  explicitly allowed for this kind of compat shim.
 
 ### Commit hashes (worktree `worktree-agent-ae9c2310a04cdf9bd`)
 
-- TBD
+- `7b84cd8` — `docs(plan)`: this brief, pre-implementation (no Outcome).
+- `9497b04` — `refactor(yaml)`: implementation + tests + analyzer
+  workarounds.
+- (next) — `docs(plan)`: this brief, post-implementation, with the
+  Outcome section populated.
