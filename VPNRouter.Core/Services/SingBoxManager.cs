@@ -221,18 +221,45 @@ public class SingBoxManager : IDisposable
             State = SingBoxState.Stopped;
             if (releaseLock) _tunLock.Release();
 
-            // v2.30.1-r5: belt-and-braces orphan cleanup. OnProcessExited
-            // (above) already does this when the Exited callback fires,
-            // but if the process was force-killed AND the callback was
-            // suppressed (EnableRaisingEvents=false from a prior Stop),
-            // we'd skip the disable. Run it again here so the orphan
-            // can't slip through.
+            // v2.30.1-r5 + hotfix 2026-05-19: belt-and-braces orphan
+            // cleanup. OnProcessExited (above) already does this when
+            // the Exited callback fires, but if the process was force-
+            // killed AND the callback was suppressed
+            // (EnableRaisingEvents=false from a prior Stop), we'd skip
+            // the disable. Run it again here so the orphan can't slip
+            // through. The hotfix adds an async Remove-NetAdapter
+            // after the sync disable so the device record is gone by
+            // the time any subsequent Start / Restart fires (otherwise
+            // sing-box's WintunCreateAdapter would FATAL with
+            // ERROR_FILE_EXISTS — alicemoren1991-2026-05-19).
+            //
+            // Fire-and-forget on a background Task: StopInternal is
+            // called from sync paths (Stop, Restart, Dispose) and we
+            // don't want to block UI/CLI returns on the ~150 ms
+            // PowerShell spawn cost. The defence-in-depth
+            // PreStartCleanupAsync in LaunchProcess will catch
+            // whatever this misses anyway.
             if (OperatingSystem.IsWindows())
             {
                 try
                 {
                     TunAdapterDiagnostics.DisableOrphanedAdapter(
                         _logger, DefaultTunInterfaceName, "SingBoxManager.StopInternal.early");
+
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await TunAdapterDiagnostics.TryRemoveAdapterAsync(
+                                _logger, DefaultTunInterfaceName,
+                                "SingBoxManager.StopInternal.early.async");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Warning(ex,
+                                "[SingBoxManager] Async orphan adapter remove failed (non-fatal)");
+                        }
+                    });
                 }
                 catch (Exception ex)
                 {
@@ -260,6 +287,48 @@ public class SingBoxManager : IDisposable
             State = SingBoxState.Stopped;
             _tunLock.Release();
             _logger.Information("[SingBoxManager] sing-box stopped");
+
+            // Hotfix 2026-05-19: also clean up the wintun adapter on
+            // graceful Stop. The graceful path above sets
+            // EnableRaisingEvents=false before Kill(), which intentionally
+            // suppresses the Exited callback (and its
+            // OnProcessExited-driven cleanup). Without an explicit
+            // call here, every graceful Stop leaves the VPNRouter-TUN
+            // device record alive, and the next Start hits ERROR_FILE_EXISTS
+            // when WintunCreateAdapter runs. LaunchProcess's
+            // PreStartCleanupAsync would catch it, but doing it here
+            // means the device is gone moments after Stop returns —
+            // important for Restart() which goes Stop → Sleep(750) →
+            // LaunchProcess: any slack between disable + remove is
+            // covered by the settle delay. Fire-and-forget because
+            // StopInternal is sync and callers don't await.
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    TunAdapterDiagnostics.DisableOrphanedAdapter(
+                        _logger, DefaultTunInterfaceName, "SingBoxManager.StopInternal.killed");
+
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await TunAdapterDiagnostics.TryRemoveAdapterAsync(
+                                _logger, DefaultTunInterfaceName,
+                                "SingBoxManager.StopInternal.killed.async");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Warning(ex,
+                                "[SingBoxManager] Async orphan adapter remove failed (non-fatal)");
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
+                }
+            }
         }
     }
 
@@ -576,31 +645,47 @@ public class SingBoxManager : IDisposable
 
     private void LaunchProcess(string exePath)
     {
-        // v2.31.9-r4 — pre-launch TUN adapter readiness for Windows. EVERY
-        // start path passes through here (user Start, Apply hot-reload-
-        // fallback restart, HealthMonitor crash recovery), so this is
-        // the single chokepoint where we ensure the wintun adapter is
-        // in a state sing-box can open.
+        // Hotfix 2026-05-19 (v2.35.0) — pre-launch TUN adapter cleanup
+        // for Windows. EVERY start path passes through here (user Start,
+        // Apply hot-reload-fallback restart, HealthMonitor crash recovery,
+        // manual Restart), so this is the single chokepoint where we
+        // ensure the wintun adapter is in a state sing-box's
+        // WintunCreateAdapter can succeed.
         //
-        // Pre-r4 only <see cref="VpnEngine.StartAsync"/> called
-        // <see cref="TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent"/>
-        // — auto-restart paths (Apply, HealthMonitor) skipped it, so a
-        // disabled adapter from a prior r5 cleanup would FATAL the
-        // next process with "configure tun interface: The device is
-        // not ready for use". brat-2026-05-05 hit this on Apply.
+        // sing-box 1.13.x doesn't OPEN existing adapters, it CREATES
+        // them. If a prior session left a VPNRouter-TUN device record
+        // behind (even disabled), the next WintunCreateAdapter call
+        // refuses with ERROR_FILE_EXISTS:
+        //   FATAL configure tun interface: Cannot create a file when
+        //   that file already exists.
+        // The pre-v2.35 workaround (pre-enable via netsh) only
+        // restored the name reservation — the device record stayed
+        // and the FATAL still fired. PreStartCleanupAsync does the
+        // right dance: disable + Remove-NetAdapter so the next create
+        // call hits a clean slate. It also has a defence-in-depth
+        // direct-by-name pass on the well-known VPNRouter-TUN name
+        // so locale-dependent netsh enumeration quirks can't slip
+        // an adapter past us.
         //
-        // Idempotent + bounded (3 s netsh timeout). Linux/macOS no-op.
+        // Sync-over-async via GetAwaiter().GetResult() is safe here:
+        // LaunchProcess is itself a sync void method called from sync
+        // sites (Start / Restart / Stop's escalation chain). The async
+        // work inside PreStartCleanupAsync is bounded (5 s netsh +
+        // 10 s PowerShell timeouts) so worst case we block for
+        // ~15-20 s; in practice it's well under 1 s. Linux/macOS
+        // returns 0 immediately — no wintun, no work, no block.
         if (OperatingSystem.IsWindows())
         {
             try
             {
-                TunAdapterDiagnostics.EnsureAdapterEnabledOrAbsent(
-                    _logger, DefaultTunInterfaceName, "SingBoxManager.LaunchProcess");
+                TunAdapterDiagnostics.PreStartCleanupAsync(
+                        _logger, "SingBoxManager.LaunchProcess")
+                    .GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
                 _logger.Warning(ex,
-                    "[SingBoxManager] pre-launch adapter readiness check failed (non-fatal)");
+                    "[SingBoxManager] pre-launch TUN cleanup failed (non-fatal)");
             }
         }
 
@@ -766,16 +851,34 @@ public class SingBoxManager : IDisposable
         State = SingBoxState.Failed;
         Crashed?.Invoke(this, EventArgs.Empty);
 
-        // v2.30.1-r5: aggressive cleanup of the orphaned wintun adapter
-        // after silent crash. User report 2026-05-01: "у пользователя
-        // периодически не убивается сетевой интерфейс и ему приходится
-        // перезагружать Windows". When sing-box dies via Windows
-        // TerminateProcess (e.g. on wake-from-sleep), it doesn't get
-        // a chance to release the wintun handle cleanly. The adapter
-        // hangs around in netsh inventory holding the default routes
-        // and DNS settings, so the user's network stays "stuck". Disable
-        // the adapter explicitly so Windows drops those routes; the
-        // adapter will be re-enabled on next sing-box start.
+        // v2.30.1-r5 + hotfix 2026-05-19: aggressive cleanup of the
+        // orphaned wintun adapter after silent crash. User report
+        // 2026-05-01: "у пользователя периодически не убивается сетевой
+        // интерфейс и ему приходится перезагружать Windows". When
+        // sing-box dies via Windows TerminateProcess (e.g. on
+        // wake-from-sleep), it doesn't get a chance to release the
+        // wintun handle cleanly. The adapter hangs around in netsh
+        // inventory holding the default routes and DNS settings, so
+        // the user's network stays "stuck".
+        //
+        // Step 1 (sync): disable via netsh — frees the kernel handle
+        // so Windows drops the routes immediately.
+        // Step 2 (fire-and-forget): kick off Remove-NetAdapter on a
+        // background Task so the device record itself goes away. By
+        // the time HealthMonitor.AttemptRestart fires its
+        // SingBoxManager.Restart() call (5-10 s of exponential backoff
+        // later), the device record should be gone — NOT just disabled.
+        // Pre-hotfix, only the disable ran; the next sing-box
+        // WintunCreateAdapter then hit ERROR_FILE_EXISTS and FATAL'd
+        // (alicemoren1991 log 2026-05-19, restart-loop reproduction).
+        //
+        // OnProcessExited is a sync void called from the Process.Exited
+        // event on a threadpool thread, so we can't await directly.
+        // Task.Run( ... .ContinueWith( ... )) gives us the fire-and-
+        // forget pattern without blocking the event callback, and the
+        // exception-swallowing ContinueWith ensures an async failure
+        // can never crash the host (Process.Exited handler exceptions
+        // would propagate to AppDomain.UnhandledException otherwise).
         if (OperatingSystem.IsWindows())
         {
             try
@@ -791,6 +894,21 @@ public class SingBoxManager : IDisposable
                 // the user already sees today.
                 TunAdapterDiagnostics.DisableOrphanedAdapter(
                     _logger, DefaultTunInterfaceName, "SingBoxManager.OnProcessExited");
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await TunAdapterDiagnostics.TryRemoveAdapterAsync(
+                            _logger, DefaultTunInterfaceName,
+                            "SingBoxManager.OnProcessExited.async");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning(ex,
+                            "[SingBoxManager] Async orphan adapter remove failed (non-fatal)");
+                    }
+                });
             }
             catch (Exception ex)
             {

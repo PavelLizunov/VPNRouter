@@ -173,27 +173,34 @@ public static class TunAdapterDiagnostics
     }
 
     /// <summary>
-    /// v2.30.2-r1: re-enable a wintun adapter that may have been left in
-    /// "Admin disabled" state by a prior <see cref="DisableOrphanedAdapter"/>
-    /// cleanup. sing-box refuses to start with the FATAL message
-    /// <c>configure tun interface: The device is not ready for use</c>
-    /// when the named adapter exists but is administratively disabled —
-    /// it can't open the wintun handle.
+    /// <b>[LEGACY — DO NOT USE IN LAUNCH PATHS.]</b> Pre-enabled the
+    /// wintun adapter so sing-box could open it. Worked around a
+    /// v2.30.2-r1 FATAL ("The device is not ready for use") that arose
+    /// when a prior <see cref="DisableOrphanedAdapter"/> cleanup had
+    /// left the adapter in "Admin disabled" state.
     ///
-    /// <para>Field log evidence (z:\vpnrouter20260501.log,
-    /// 14:15:42 → 14:16:30): r5 cleanup ran and disabled the adapter
-    /// after a TUN-recreation FATAL crash. ~30s later sing-box was
-    /// restarted by HealthMonitor, but the adapter row was still
-    /// "Disabled / Disconnected" in netsh, and the new sing-box hit
-    /// "device not ready" → second FATAL → second restart. Eventually
-    /// sing-box succeeded only because Windows finally finished tearing
-    /// down the disabled handle (~22s lag).</para>
+    /// <para><b>Why deprecated (2026-05-19, hotfix shipped in v2.35.0):</b>
+    /// sing-box 1.13.x doesn't OPEN existing adapters, it CREATES them
+    /// via <c>WintunCreateAdapter</c>. Re-enabling the disabled adapter
+    /// just restores its name reservation — the next
+    /// <c>WintunCreateAdapter</c> call then refuses with
+    /// ERROR_FILE_EXISTS:
+    /// <c>configure tun interface: Cannot create a file when that file
+    /// already exists</c>. Field log evidence
+    /// (<c>Z:/alicemoren1991/vpnrouter20260519.log</c>) showed the
+    /// auto-restart loop crashing on every iteration because of this.
+    /// The proper fix is <see cref="PreStartCleanupAsync"/>, which
+    /// disables + <i>removes</i> the device record so sing-box's create
+    /// call hits a clean slate.</para>
     ///
-    /// <para>Pre-emptively re-enabling the adapter before the new
-    /// sing-box launch lets the network stack open it immediately,
-    /// avoiding the bounce. Idempotent: re-enabling an already-enabled
-    /// adapter is a no-op; "not found" is treated as success.</para>
+    /// <para>Method body retained so any external references compile,
+    /// but no production code in this repo calls it any more. Callers
+    /// in worktrees / branches may still reference it — they should
+    /// migrate to <see cref="PreStartCleanupAsync"/> (enumerate-and-clean)
+    /// or <see cref="TryRemoveAdapterAsync"/> (direct-by-name) on next
+    /// rebase.</para>
     /// </summary>
+    [Obsolete("Replaced by PreStartCleanupAsync — pre-enable does not solve sing-box's WintunCreateAdapter ERROR_FILE_EXISTS. See v2.35.0 hotfix brief plans/hotfix-tun-adapter-orphan-pre-enable-2026-05-19.md.", error: false)]
     [SupportedOSPlatform("windows")]
     public static void EnsureAdapterEnabledOrAbsent(ILogger? logger, string interfaceName, string context)
     {
@@ -297,6 +304,9 @@ public static class TunAdapterDiagnostics
     {
         if (!OperatingSystem.IsWindows()) return 0;
 
+        int removed = 0;
+        var enumerationFoundDefault = false;
+
         try
         {
             var (_, netshOut, _) = await RunAndCaptureAsync(
@@ -306,39 +316,70 @@ public static class TunAdapterDiagnostics
             if (staleAdapters.Count == 0)
             {
                 logger?.Information(
-                    "[TunDiag] {Ctx}: pre-start cleanup: no stale TUN adapters found",
+                    "[TunDiag] {Ctx}: pre-start cleanup: no stale TUN adapters found via netsh enumeration",
                     context);
-                return 0;
+            }
+            else
+            {
+                logger?.Information(
+                    "[TunDiag] {Ctx}: pre-start cleanup: found {Count} stale TUN adapter(s) via enumeration: {Names}",
+                    context, staleAdapters.Count, string.Join(", ", staleAdapters));
+
+                foreach (var adapter in staleAdapters)
+                {
+                    if (string.Equals(adapter, DefaultTunInterfaceName, StringComparison.OrdinalIgnoreCase))
+                        enumerationFoundDefault = true;
+
+                    // Disable first — frees the wintun kernel handle so the
+                    // subsequent Remove-NetAdapter actually succeeds. Already
+                    // idempotent; "not found" is treated as success.
+                    DisableOrphanedAdapter(logger, adapter, context);
+
+                    if (await TryRemoveAdapterAsync(logger, adapter, context))
+                        removed++;
+                }
             }
 
-            logger?.Information(
-                "[TunDiag] {Ctx}: pre-start cleanup: found {Count} stale TUN adapter(s): {Names}",
-                context, staleAdapters.Count, string.Join(", ", staleAdapters));
-
-            int removed = 0;
-            foreach (var adapter in staleAdapters)
+            // Defence-in-depth (hotfix 2026-05-19 / v2.35.0): the netsh
+            // enumeration above has been observed to miss the default
+            // VPNRouter-TUN adapter in field logs while
+            // <see cref="DisableOrphanedAdapter"/> — which targets a known
+            // name directly — DID find and act on it. Likely root cause is
+            // locale-dependent netsh formatting or a transient state where
+            // the adapter row is reported via a different column the parser
+            // skips. Either way: an unconditional direct-by-name pass on
+            // the well-known VPNRouter-TUN name is cheap (one netsh + one
+            // PowerShell, both bounded and idempotent) and guarantees the
+            // adapter we own is gone even if enumeration missed it. Skip
+            // the redundant call only when the enumeration already
+            // processed that exact name.
+            if (!enumerationFoundDefault)
             {
-                // Disable first — frees the wintun kernel handle so the
-                // subsequent Remove-NetAdapter actually succeeds. Already
-                // idempotent; "not found" is treated as success.
-                DisableOrphanedAdapter(logger, adapter, context);
-
-                if (await TryRemoveAdapterAsync(logger, adapter, context))
+                logger?.Debug(
+                    "[TunDiag] {Ctx}: pre-start cleanup: direct-by-name fallback for '{Iface}' (enumeration didn't list it)",
+                    context, DefaultTunInterfaceName);
+                DisableOrphanedAdapter(logger, DefaultTunInterfaceName, context);
+                if (await TryRemoveAdapterAsync(logger, DefaultTunInterfaceName, context))
                     removed++;
             }
 
             logger?.Information(
-                "[TunDiag] {Ctx}: pre-start cleanup: removed {Removed} of {Total} stale TUN adapter(s)",
-                context, removed, staleAdapters.Count);
+                "[TunDiag] {Ctx}: pre-start cleanup: removed {Removed} TUN adapter(s) total (enumeration + direct fallback)",
+                context, removed);
 
             return removed;
         }
         catch (Exception ex)
         {
             logger?.Warning(ex, "[TunDiag] {Ctx}: pre-start cleanup failed (non-fatal)", context);
-            return 0;
+            return removed;
         }
     }
+
+    /// <summary>Default TUN adapter name we own (matches
+    /// <c>SingBoxManager.DefaultTunInterfaceName</c>). Kept private to
+    /// avoid spreading the literal across cleanup paths.</summary>
+    private const string DefaultTunInterfaceName = "VPNRouter-TUN";
 
     /// <summary>
     /// Parse the output of <c>netsh interface show interface</c> and
@@ -394,9 +435,23 @@ public static class TunAdapterDiagnostics
     /// <para>Uses a single inline command rather than a temp .ps1 so we
     /// don't have to manage a script-on-disk lifecycle. <c>-NoProfile
     /// -NonInteractive</c> keeps PowerShell startup tight (~150 ms).</para>
+    ///
+    /// <para><b>Direct-call sibling to <see cref="PreStartCleanupAsync"/>.</b>
+    /// PreStartCleanupAsync enumerates adapters via <c>netsh interface
+    /// show interface</c> first and then calls this helper per match.
+    /// SingBoxManager's <c>OnProcessExited</c>, <c>StopInternal</c>, and
+    /// <c>LaunchProcess</c> paths call it <b>directly by known name</b>
+    /// (the well-known <c>VPNRouter-TUN</c> default) so they don't pay
+    /// the enumeration cost and don't depend on
+    /// <see cref="ExtractStaleAdapterNames"/> parsing the localized
+    /// netsh output correctly — important because field logs have shown
+    /// the enumeration occasionally missing the adapter while the
+    /// direct-by-name path always works. The "not found" exit code 1
+    /// path is handled gracefully (no-op), so the direct call is a
+    /// cheap belt-and-suspenders complement to enumeration.</para>
     /// </summary>
     [SupportedOSPlatform("windows")]
-    private static async Task<bool> TryRemoveAdapterAsync(
+    internal static async Task<bool> TryRemoveAdapterAsync(
         ILogger? logger, string adapterName, string context)
     {
         try
