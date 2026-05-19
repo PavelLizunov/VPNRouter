@@ -1855,6 +1855,27 @@
                            TextWrapping="Wrap"
                            VerticalAlignment="Center"/>
               </Grid>
+              <!-- Wave 39 (v2.35.0-r5) — DNS-leak firewall lockdown. Sits at
+                   the bottom of the Leak Protection card because it is the
+                   most-strict / most-blast-radius toggle of the group:
+                   blocks all non-TUN UDP/53, TCP/53, TCP/853 via Windows
+                   Firewall while VPN is active. Default true for new
+                   installs, false for upgrades (migrated via
+                   SettingsMigrator). Sibling DNS-related boxes use the same
+                   24,* grid + Center vertical alignment per the v2.30.0-r6
+                   layout note above. -->
+              <Grid ColumnDefinitions="24,*" ColumnSpacing="6"
+                    ToolTip.Tip="{Binding L_TipDnsLeakLockdown}">
+                <CheckBox Grid.Column="0"
+                          IsChecked="{Binding IsDnsLeakLockdownEnabled, Mode=TwoWay}"
+                          AutomationProperties.Name="{Binding DnsLeakLockdownLabel}"
+                          MinHeight="0" Padding="0"
+                          VerticalAlignment="Center"/>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding DnsLeakLockdownLabel}"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Center"/>
+              </Grid>
             </StackPanel>
           </Border>
         </StackPanel>

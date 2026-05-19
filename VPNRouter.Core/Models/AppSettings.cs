@@ -25,8 +25,16 @@ public class AppSettings
     /// on-demand download flow. Migration moves any pre-existing
     /// binary + version stamp out of the legacy location. See
     /// <c>plans/wgturn-on-demand-download.md</c> §3 + §5.</para>
+    ///
+    /// <para>v5 bump (2026-05-19, Wave 39): adds
+    /// <see cref="AppConfig.DnsLeakLockdown"/> firewall-level DNS-port
+    /// block toggle. Fresh installs inherit the C# default <c>true</c>;
+    /// pre-Wave-39 configs are migrated with <c>false</c> so users
+    /// running a local DNS proxy on a non-loopback IP aren't suddenly
+    /// cut off without explicit opt-in. See
+    /// <c>plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md</c>.</para>
     /// </summary>
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     [YamlMember(Alias = "schema_version")]
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -475,6 +483,34 @@ public class AppConfig
     /// </summary>
     [YamlMember(Alias = "flush_dns_on_start")]
     public bool FlushDnsOnStart { get; set; } = true;
+
+    /// <summary>
+    /// v2.35.0-r5 Wave 39 (2026-05-19): blocks outbound DNS (UDP/TCP 53 +
+    /// TCP 853) on all non-loopback interfaces while VPN is connected,
+    /// preventing the Windows DNS Client from leaking queries to ISP DNS
+    /// resolvers despite our SMHNR/ParallelAAAA hardening
+    /// (<see cref="VPNRouter.Core.Services.WindowsDnsHardening"/>).
+    ///
+    /// <para>Root cause: even with SMHNR + ParallelAAAA registry hardening
+    /// applied, Windows 11 22H2+ still races multiple resolvers in parallel
+    /// under specific conditions (TUN metric ties, NetworkLocationAwareness
+    /// classifying TUN as private, partial IPv6, etc.). The brat user-report
+    /// 2026-05-19 showed 119:119:119 hits to 3 Russian ISP resolvers via
+    /// ipleak.net despite an active VLESS+Reality VPN — proof of full DNS
+    /// privacy regression. The only foolproof block is a firewall-level
+    /// outbound block on the DNS ports; sing-box's DNS flow goes via VLESS
+    /// outbound on port 443 (DoH to AdGuard/Cloudflare) so port 53/853
+    /// blocks do not affect the legitimate VPN-side DNS path.</para>
+    ///
+    /// <para>Disabled by default for existing installs (don't surprise
+    /// users running a local DNS proxy on non-loopback like dnscrypt-proxy
+    /// or AdGuard Home on a LAN IP); new installs default true. UI toggle
+    /// lives on the Settings page. See <c>plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md</c>
+    /// for the full rationale, threat model, and known limitations.</para>
+    /// </summary>
+    [YamlMember(Alias = "dns_leak_lockdown")]
+    [JsonPropertyName("dns_leak_lockdown")]
+    public bool DnsLeakLockdown { get; set; } = true;
 
     /// <summary>
     /// v2.32.3 (2026-05-17): one-shot counter populated by

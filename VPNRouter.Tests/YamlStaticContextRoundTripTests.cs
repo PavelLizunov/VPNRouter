@@ -445,7 +445,11 @@ public class YamlStaticContextRoundTripTests : IDisposable
     [Fact]
     public void WireFormat_SnakeCaseAliases_HonoredByStaticDeserializer()
     {
-        const string yaml = @"schema_version: 4
+        // Wave 39 (2026-05-19) bumped CurrentSchemaVersion 4 → 5 (added
+        // App.DnsLeakLockdown + v4→v5 migrator step). Use 5 here so the
+        // post-deserialize round-trip preserves the value (Migrate is not
+        // exercised by this test).
+        const string yaml = @"schema_version: 5
 app:
   log_level: warning
   routing_mode: full
@@ -530,8 +534,9 @@ update:
 
         var settings = SettingsLoader.Parse(yaml);
 
-        // schema_version alias
-        Assert.Equal(4, settings.SchemaVersion);
+        // schema_version alias (Wave 39 bumped to 5 — see comment at top
+        // of the YAML literal above)
+        Assert.Equal(5, settings.SchemaVersion);
 
         // app.* aliases
         Assert.Equal("warning", settings.App.LogLevel);

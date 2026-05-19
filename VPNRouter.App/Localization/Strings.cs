@@ -257,6 +257,9 @@ public static class Strings
     // DoH client = real IP" as a leak). Strict DNS forces all DNS through
     // the VPN tunnel for that perfect-on-tests outcome.
     public static string StrictDnsLabel => global::VPNRouter.Core.Localization.Strings.StrictDnsLabel;
+    // Wave 39 (v2.35.0-r5) — firewall-level DNS lockdown setting.
+    public static string DnsLeakLockdownLabel => global::VPNRouter.Core.Localization.Strings.DnsLeakLockdownLabel;
+    public static string TipDnsLeakLockdown => global::VPNRouter.Core.Localization.Strings.TipDnsLeakLockdown;
 
     // ── Updates ──
     public static string CheckForUpdates => global::VPNRouter.Core.Localization.Strings.CheckForUpdates;

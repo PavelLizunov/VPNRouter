@@ -258,6 +258,8 @@ public partial class MainWindowViewModel
     public string L_TipLeakForceIpv4 => Strings.TipLeakForceIpv4;
     public string L_TipLeakStrictDns => Strings.TipLeakStrictDns;
     public string L_TipLeakStrictMode => Strings.TipLeakStrictMode;
+    public string L_TipDnsLeakLockdown => Strings.TipDnsLeakLockdown;
+    public string L_DnsLeakLockdownLabel => Strings.DnsLeakLockdownLabel;
     public string L_TipOpenLogs => Strings.TipOpenLogs;
     public string L_TipRefreshSubscription => Strings.TipRefreshSubscription;
     public string L_TipRemoveApp => Strings.TipRemoveApp;

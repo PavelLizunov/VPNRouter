@@ -1073,6 +1073,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private bool _flushDnsOnStart = true;
     [ObservableProperty] private bool _strictDns = false;
     [ObservableProperty] private bool _blockAds = false;
+    // Wave 39 (v2.35.0-r5): firewall-level DNS lockdown. When ON, the
+    // FirewallManager adds outbound block rules for UDP/53, TCP/53, TCP/853
+    // on all non-TUN interfaces while VPN is active. Protects against the
+    // Windows DNS Client multi-resolver race that survives our existing
+    // SMHNR/ParallelAAAA registry hardening (some Win11 22H2+ paths query
+    // every configured resolver in parallel regardless of the registry
+    // settings). Default true for the property — Agent A's AppSettings
+    // change defaults the underlying setting to true for new installs and
+    // false for upgrades via SettingsMigrator. See
+    // plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md.
+    [ObservableProperty] private bool _isDnsLeakLockdownEnabled = true;
 
     // Apply changes (hot-reload) UX state
     [ObservableProperty] private bool _hasPendingAppChanges;
@@ -2093,6 +2104,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         SaveSettings();
     }
 
+    // Wave 39 (v2.35.0-r5): persist DNS leak lockdown toggle immediately
+    // and surface the Apply pending state while VPN is connected so the
+    // change re-applies the firewall lockdown on the next Apply. Hot-reload
+    // is not enough — the lockdown lives in firewall rules, not sing-box
+    // config, so FirewallManager.EnableDnsLockdownAsync / DisableDnsLockdownAsync
+    // (Agent A) must run after the user toggles. The Apply path already
+    // invokes those after a successful sing-box reload. Pattern mirrors
+    // OnAutostartZapretChanged above (load-guard + try/catch on SaveSettings).
+    partial void OnIsDnsLeakLockdownEnabledChanged(bool value)
+    {
+        if (_isLoadingUI) return;
+        try { SaveSettings(); }
+        catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto-save on IsDnsLeakLockdownEnabled change failed"); }
+        if (IsConnected) HasPendingAppChanges = true;
+    }
+
     // Zapret section navigator (master-detail).
     // v2.31.6-r5 (ZAPRET-2): consolidated 7 sections → 5 per user
     // feedback 2026-05-03 night («упростить ZAPRET страницу — где
@@ -2235,6 +2262,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string ForceIpv4Label => Strings.ForceIpv4Label;
     public string FlushDnsLabel => Strings.FlushDnsLabel;
     public string StrictDnsLabel => Strings.StrictDnsLabel;
+    public string DnsLeakLockdownLabel => Strings.DnsLeakLockdownLabel;
     public string BlockAdsLabel => IsRussian ? "Блокировать рекламу и трекеры" : "Block ads & trackers";
     public string BlockAdsHint => IsRussian
         ? "AdGuard DNS + adblock rule_set (~300K доменов)"
@@ -2776,6 +2804,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         FlushDnsOnStart = _settings.App.FlushDnsOnStart;
         StrictDns = _settings.App.StrictDns;
         BlockAds = _settings.App.BlockAds;
+        // Wave 39 — DNS leak lockdown (firewall block of UDP/53, TCP/53,
+        // TCP/853 on non-TUN interfaces while VPN is active).
+        IsDnsLeakLockdownEnabled = _settings.App.DnsLeakLockdown;
 
         // Autostart
         AutostartVpn = _settings.App.AutostartVpn;
@@ -3391,6 +3422,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         _settings.App.FlushDnsOnStart = FlushDnsOnStart;
         _settings.App.StrictDns = StrictDns;
         _settings.App.BlockAds = BlockAds;
+        // Wave 39 — DNS leak lockdown setting (default flipped per
+        // SettingsMigrator: true for fresh installs, false for upgrades).
+        _settings.App.DnsLeakLockdown = IsDnsLeakLockdownEnabled;
         _settings.App.AutostartVpn = AutostartVpn;
         _settings.App.AutostartZapret = AutostartZapret;
         _settings.App.AutostartTgProxy = AutostartTgProxy;

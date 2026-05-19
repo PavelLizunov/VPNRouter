@@ -385,6 +385,13 @@ public static class Strings
     public static string StrictDnsLabel => Ru
         ? "Строгий DNS (весь DNS через VPN — рекомендуется при leak-тестах)"
         : "Strict DNS (all DNS via VPN — recommended for leak tests)";
+    // Wave 39 (v2.35.0-r5) — firewall-level DNS lockdown. Targets the
+    // Windows DNS Client multi-resolver race that bypasses sing-box even
+    // with SMHNR/ParallelAAAA disabled. See
+    // plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md.
+    public static string DnsLeakLockdownLabel => Ru
+        ? "Блокировать DNS вне VPN (защита от утечек)"
+        : "Block DNS outside VPN (leak protection)";
 
     // ── Updates ──
     public static string CheckForUpdates => Ru ? "Проверить обновления" : "Check for updates";
@@ -1198,6 +1205,14 @@ public static class Strings
     public static string TipLeakFlushDns => Ru
         ? "Очищать кэш DNS при старте VPN"
         : "Flush DNS cache when VPN starts";
+    // Wave 39 (v2.35.0-r5) — long-form tooltip explaining the firewall
+    // lockdown's blast radius. Copy intentionally calls out the dnscrypt-proxy
+    // / AdGuard Home / Pi-hole exception so power users know to disable it
+    // if they run a local resolver. See
+    // plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md §Risk + rollback.
+    public static string TipDnsLeakLockdown => Ru
+        ? "Блокирует системные DNS-запросы по UDP/53, TCP/53 и TCP/853 на всех интерфейсах кроме TUN, пока VPN активен. Защищает от утечки DNS к провайдеру даже если Windows DNS Client использует множественные резолверы параллельно. Может сломать локальные DNS-прокси (dnscrypt-proxy, AdGuard Home на 127.0.0.1) — отключите если используете."
+        : "Blocks system DNS queries on UDP/53, TCP/53, and TCP/853 across all non-TUN interfaces while VPN is active. Protects against DNS leaks to ISP resolvers even when Windows DNS Client races multiple resolvers in parallel. May break local DNS proxies (dnscrypt-proxy, AdGuard Home on 127.0.0.1) — disable if you use one.";
     public static string TipBlockAds => Ru
         ? "Блокировать известные рекламные/трекинг домены на уровне VPN DNS"
         : "Block known ad/tracker domains at the VPN DNS layer";

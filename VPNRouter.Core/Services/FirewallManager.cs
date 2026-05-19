@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text;
 using Serilog;
 using VPNRouter.Core.Interfaces;
@@ -25,6 +26,35 @@ namespace VPNRouter.Core.Services;
 public class FirewallManager : IFirewallManager
 {
     private const string RulePrefix = "VPNRouter_Block_";
+
+    // ─── Wave 39 (2026-05-19): DNS leak lockdown rule names ──────────────────
+    //
+    // 4 firewall rules that block outbound DNS-port traffic on every adapter
+    // EXCEPT loopback. Sing-box's DNS path goes via VLESS outbound (DoH on
+    // port 443) so these blocks don't affect VPN-side DNS; they only kill
+    // queries the Windows DNS Client tries to race in parallel via the
+    // ethernet adapter directly to ISP resolvers.
+    //
+    // The Allow rule is prefixed with `0_` so it sorts FIRST lexically. While
+    // Windows Firewall evaluation is action+specificity-based rather than
+    // pure-name-order, the `0_` prefix is a defensive belt-and-braces against
+    // future netsh internals changes and stays readable in the Windows
+    // Firewall UI (the user sees the allow rule above the blocks).
+    internal const string DnsLockdownAllowRule = "0_VPNRouter-DnsLockdown-LoopbackAllow";
+    internal const string DnsLockdownUdp53Rule = "VPNRouter-DnsLockdown-UDP53";
+    internal const string DnsLockdownTcp53Rule = "VPNRouter-DnsLockdown-TCP53";
+    internal const string DnsLockdownTcp853Rule = "VPNRouter-DnsLockdown-TCP853";
+
+    // Prefixes covered by CleanupOrphanedRules — anything we ever add to the
+    // firewall must be enumerable from here so a previous abnormal exit
+    // doesn't leave the user's network locked down on next boot.
+    private static readonly string[] AllPrefixes =
+    {
+        RulePrefix,
+        "VPNRouter-DnsLockdown-",
+        "0_VPNRouter-DnsLockdown-",
+    };
+
     private readonly ILogger _logger;
     private readonly List<string> _managedRules = new();
     private bool _disposed;
@@ -259,11 +289,23 @@ public class FirewallManager : IFirewallManager
     /// <summary>
     /// Remove any VPNRouter firewall rules left from a previous crash.
     /// netsh does NOT support wildcards in rule names, so we enumerate
-    /// all rules and delete those matching our prefix by exact name.
+    /// all rules and delete those matching one of our managed prefixes
+    /// by exact name.
+    ///
+    /// <para>Wave 39 (2026-05-19) extension: in addition to the legacy
+    /// <c>VPNRouter_Block_*</c> prefix used for block_on_vpn_fail rules,
+    /// we now also sweep the <c>VPNRouter-DnsLockdown-*</c> and
+    /// <c>0_VPNRouter-DnsLockdown-*</c> prefixes used by
+    /// <see cref="EnableDnsLockdownAsync"/>. Without this extension, an
+    /// abnormal exit while the DNS lockdown is active would leave the
+    /// user unable to resolve any DNS on next boot until they manually
+    /// flushed Windows Firewall.</para>
     /// </summary>
     public void CleanupOrphanedRules()
     {
-        var orphaned = FindRulesByPrefix(RulePrefix);
+        var orphaned = new List<string>();
+        foreach (var prefix in AllPrefixes)
+            orphaned.AddRange(FindRulesByPrefix(prefix));
 
         if (orphaned.Count == 0)
         {
@@ -405,5 +447,242 @@ public class FirewallManager : IFirewallManager
         if (_disposed) return;
         _disposed = true;
         DeleteAllRules();
+    }
+
+    // ─── Wave 39 (2026-05-19): DNS leak lockdown helpers ─────────────────────
+    //
+    // Static helpers (no per-instance state) because they're called from the
+    // also-static <see cref="WindowsDnsHardening.Apply"/> /
+    // <see cref="WindowsDnsHardening.Restore"/> entry points. The 4 rules
+    // they manage are independent of the per-process block_on_vpn_fail
+    // rules — they live in their own namespace, get their own
+    // cleanup path, and are enumerable by <see cref="CleanupOrphanedRules"/>
+    // via the dual-prefix sweep.
+
+    /// <summary>
+    /// Wave 39 (2026-05-19) — install 4 outbound-firewall rules that prevent
+    /// the Windows DNS Client from leaking queries to non-VPN resolvers:
+    ///
+    /// <list type="number">
+    /// <item><c>0_VPNRouter-DnsLockdown-LoopbackAllow</c> — allow UDP/53 to
+    /// 127.0.0.1 (lets local DNS proxies on loopback keep working, e.g.
+    /// dnscrypt-proxy on 127.0.0.1:53). Prefixed with <c>0_</c> so the rule
+    /// sorts above the block rules in the Firewall UI; Windows Firewall
+    /// evaluation is action+specificity-based but more-specific Allow on a
+    /// remoteip=127.0.0.1 still wins for loopback traffic.</item>
+    /// <item><c>VPNRouter-DnsLockdown-UDP53</c> — block UDP/53 outbound on
+    /// all interfaces (covers standard DNS queries).</item>
+    /// <item><c>VPNRouter-DnsLockdown-TCP53</c> — block TCP/53 outbound
+    /// (DNS over TCP, used when responses exceed UDP MTU).</item>
+    /// <item><c>VPNRouter-DnsLockdown-TCP853</c> — block TCP/853 outbound
+    /// (DNS over TLS endpoint port — both standalone DoT clients and the
+    /// Windows DNS Client's DoH-fallback-to-DoT path use this).</item>
+    /// </list>
+    ///
+    /// <para>Sing-box's DNS flow goes via VLESS outbound on port 443 (DoH to
+    /// AdGuard/Cloudflare), NOT via 53/853 — these blocks do NOT affect the
+    /// legitimate VPN-side DNS path; they only kill queries the Windows DNS
+    /// Client races in parallel via ethernet directly to ISP resolvers.</para>
+    ///
+    /// <para>Idempotent: netsh returns a non-zero exit code with "Rule already
+    /// exists" when you re-add an existing rule. We catch that and log debug
+    /// rather than failing the start. The asymmetric error handling
+    /// (swallow + log) ensures a netsh hiccup during VPN start never blocks
+    /// the user from connecting.</para>
+    ///
+    /// <para>No-op on non-Windows (the helper returns immediately on
+    /// macOS/Linux). The <c>[SupportedOSPlatform]</c> attribute documents
+    /// the platform contract; the runtime guard makes a cross-platform
+    /// build link cleanly without #ifdef.</para>
+    /// </summary>
+    /// <param name="logger">Serilog logger for status/error output.</param>
+    /// <param name="ct">Cancellation token (currently advisory — netsh
+    /// calls run synchronously with bounded per-call timeouts).</param>
+    [SupportedOSPlatform("windows")]
+    public static async Task EnableDnsLockdownAsync(ILogger? logger = null, CancellationToken ct = default)
+    {
+        var log = logger ?? Log.Logger;
+        if (!OperatingSystem.IsWindows())
+        {
+            log.Debug("[FirewallManager] DNS lockdown skipped — non-Windows platform");
+            return;
+        }
+
+        // 5s outer timeout so a stuck netsh doesn't block VPN startup.
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                // 1. Allow UDP/53 to 127.0.0.1 — must be added FIRST so any
+                //    local DNS proxy on loopback (dnscrypt-proxy etc.) keeps
+                //    working before the blocks below activate. Idempotent —
+                //    if the rule already exists, netsh logs "already exists"
+                //    and exits non-zero, which we treat as success.
+                RunNetshStatic(log,
+                    $"advfirewall firewall add rule " +
+                    $"name=\"{DnsLockdownAllowRule}\" " +
+                    $"dir=out action=allow " +
+                    $"protocol=UDP remoteip=127.0.0.1 remoteport=53 " +
+                    $"enable=yes profile=any " +
+                    $"description=\"VPNRouter Wave 39: allow loopback DNS for local proxies\"");
+
+                // 2. Block UDP/53 outbound everywhere else.
+                RunNetshStatic(log,
+                    $"advfirewall firewall add rule " +
+                    $"name=\"{DnsLockdownUdp53Rule}\" " +
+                    $"dir=out action=block " +
+                    $"protocol=UDP remoteport=53 " +
+                    $"enable=yes profile=any " +
+                    $"description=\"VPNRouter Wave 39: block UDP/53 to prevent DNS leak\"");
+
+                // 3. Block TCP/53 outbound (DNS-over-TCP fallback).
+                RunNetshStatic(log,
+                    $"advfirewall firewall add rule " +
+                    $"name=\"{DnsLockdownTcp53Rule}\" " +
+                    $"dir=out action=block " +
+                    $"protocol=TCP remoteport=53 " +
+                    $"enable=yes profile=any " +
+                    $"description=\"VPNRouter Wave 39: block TCP/53 to prevent DNS leak\"");
+
+                // 4. Block TCP/853 outbound (DNS-over-TLS).
+                RunNetshStatic(log,
+                    $"advfirewall firewall add rule " +
+                    $"name=\"{DnsLockdownTcp853Rule}\" " +
+                    $"dir=out action=block " +
+                    $"protocol=TCP remoteport=853 " +
+                    $"enable=yes profile=any " +
+                    $"description=\"VPNRouter Wave 39: block TCP/853 (DNS-over-TLS) to prevent DNS leak\"");
+            }, timeoutCts.Token).ConfigureAwait(false);
+
+            log.Information(
+                "[FirewallManager] DNS leak lockdown enabled — UDP/53, TCP/53, " +
+                "TCP/853 blocked on non-loopback interfaces");
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            log.Warning("[FirewallManager] DNS leak lockdown setup timed out after 5s — partial rule set may be active");
+        }
+        catch (Exception ex)
+        {
+            log.Warning(ex, "[FirewallManager] DNS leak lockdown setup failed (non-fatal — VPN start continues)");
+        }
+    }
+
+    /// <summary>
+    /// Wave 39 (2026-05-19) — remove the 4 DNS-lockdown rules installed by
+    /// <see cref="EnableDnsLockdownAsync"/>. Tolerates rule-not-found
+    /// (netsh exit code 1 when the rule doesn't exist) so re-running the
+    /// disable on an already-clean state is a no-op.
+    ///
+    /// <para>Called from <see cref="WindowsDnsHardening.Restore"/> as part
+    /// of the symmetric VPN-stop path. Also indirectly via
+    /// <see cref="CleanupOrphanedRules"/> on app boot if the previous run
+    /// crashed without a clean Restore.</para>
+    /// </summary>
+    /// <param name="logger">Serilog logger for status/error output.</param>
+    /// <param name="ct">Cancellation token (currently advisory).</param>
+    [SupportedOSPlatform("windows")]
+    public static async Task DisableDnsLockdownAsync(ILogger? logger = null, CancellationToken ct = default)
+    {
+        var log = logger ?? Log.Logger;
+        if (!OperatingSystem.IsWindows())
+        {
+            log.Debug("[FirewallManager] DNS lockdown disable skipped — non-Windows platform");
+            return;
+        }
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                // netsh returns exit code 1 with "No rules match" when the
+                // rule isn't there. RunNetshStatic logs the warning but
+                // doesn't throw — sufficient for our idempotency need.
+                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownAllowRule}\"");
+                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownUdp53Rule}\"");
+                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp53Rule}\"");
+                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp853Rule}\"");
+            }, timeoutCts.Token).ConfigureAwait(false);
+
+            log.Information(
+                "[FirewallManager] DNS leak lockdown disabled — 4 firewall rules deleted");
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            log.Warning("[FirewallManager] DNS leak lockdown teardown timed out after 5s — orphan rules may remain (CleanupOrphanedRules will sweep on next boot)");
+        }
+        catch (Exception ex)
+        {
+            log.Warning(ex, "[FirewallManager] DNS leak lockdown teardown failed (non-fatal)");
+        }
+    }
+
+    /// <summary>
+    /// Static-friendly netsh invoker for the Wave 39 lockdown helpers.
+    /// Mirrors the per-instance <see cref="RunNetsh"/> shape but emits to
+    /// the supplied logger directly so the static helpers don't need an
+    /// instance. Returns true on exit code 0; logs the failure for any
+    /// non-zero exit but doesn't throw — both EnableDnsLockdownAsync and
+    /// DisableDnsLockdownAsync intentionally tolerate per-rule failures
+    /// (idempotency: "rule already exists" / "no rules match" come back
+    /// with non-zero exits).
+    /// </summary>
+    private static bool RunNetshStatic(ILogger log, string arguments)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "netsh.exe",
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = ConsoleEncoding,
+                StandardErrorEncoding = ConsoleEncoding
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc == null)
+            {
+                log.Warning("[FirewallManager] Failed to start netsh.exe");
+                return false;
+            }
+
+            var stdout = proc.StandardOutput.ReadToEnd();
+            var stderr = proc.StandardError.ReadToEnd();
+
+            // 3s per-call timeout — independent of the outer wrapper's 5s.
+            if (!proc.WaitForExit(3000))
+            {
+                try { proc.Kill(); } catch { }
+                log.Warning("[FirewallManager] netsh timed out after 3s for: {Args}", arguments);
+                return false;
+            }
+
+            if (proc.ExitCode != 0)
+            {
+                // Common idempotency cases: "rule already exists" on add,
+                // "no rules match the specified criteria" on delete. Both
+                // map to non-zero exit but are expected — log at Debug.
+                log.Debug("[FirewallManager] netsh returned {Code} for: {Args} | stdout: {Out} | stderr: {Err}",
+                    proc.ExitCode, arguments, stdout.Trim(), stderr.Trim());
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log.Warning(ex, "[FirewallManager] netsh failed: {Args}", arguments);
+            return false;
+        }
     }
 }

@@ -244,3 +244,242 @@ DoH service path bypasses firewall), Wave 39b options:
    differently — has its own anti-leak heuristics).
 
 Defer to user feedback after Wave 39 ships.
+## Audit findings (Agent C, 2026-05-19)
+
+Read-only audit of the Wave 39 proposal against the rest of the
+codebase and the broader Windows DNS ecosystem. Findings are
+documented here for Agent A's reference and as a record for future
+DNS-related hotfixes.
+
+### 1. All Windows DNS Client bypass paths
+
+The brief covers UDP/53, TCP/53, TCP/853. Other DNS paths Windows
+may use:
+
+- **UDP/443 + TCP/443 (DoH / DoT-over-443)** — Cloudflare 1.1.1.1's
+  DoH endpoint is on TCP/443, and Windows 11 22H2+ has a built-in
+  DoH service that talks to `cloudflare-dns.com:443`. We CANNOT
+  block port 443 generally (that's HTTPS — breaks all browsing).
+  Wave 39 leaves this path alone; sing-box's TUN already captures
+  it because all 443 outbound goes through the routing engine. The
+  Wave-39 brief §"Sibling concern" already notes this is the path
+  the user's NL Datacamp resolvers (`185.229.191.160`,
+  `84.17.46.77`) likely take — upstream of Cloudflare, not a leak.
+- **UDP/853 (DoT-over-UDP / DoQ)** — RFC 8094 DoT is TCP-only. DNS-
+  over-QUIC (RFC 9250) DOES use UDP/853. Brief doesn't mention.
+  **Recommendation for Wave 39b**: add UDP/853 to the block set
+  alongside TCP/853 — same defense-in-depth, no real-world
+  resolver currently uses it but Windows 11 24H2 might enable it
+  by default.
+- **TCP/5353 / UDP/5353 (mDNS over TCP/UDP)** — see §2.
+- **TCP/5355 / UDP/5355 (LLMNR)** — see §2.
+- **TCP/137 / UDP/137 / UDP/138 (NetBIOS-NS)** — legacy name resolution.
+  Windows Server 2022 still falls back to NBNS when DNS fails.
+  Not a privacy threat at the same scale (resolves NetBIOS computer
+  names, not internet hostnames) but the brat-style leak test would
+  catch it as a non-VPN-DNS hit. Probably out of scope for Wave 39.
+
+### 2. mDNS / LLMNR
+
+Windows uses these for local network name resolution:
+
+- **mDNS** — UDP 5353, IANA-registered, `*.local` domains
+- **LLMNR** — UDP 5355, deprecated since 2024 but still default-on
+  in Windows 11 Home
+
+Both are **multicast** (224.0.0.251 for mDNS, 224.0.0.252 for LLMNR)
+or destination-specific to the local subnet. Privacy risk is LOW —
+the LAN-only nature means queries don't leave the user's network
+segment. The brat test wouldn't see these on ipleak.net.
+
+**Recommendation**: do NOT block 5353/5355 in Wave 39. Blocking mDNS
+breaks printer discovery, Bonjour services, Apple HomeKit, Spotify
+Connect on LAN. Blocking LLMNR breaks pre-Windows-Server-2008 NetBIOS
+fallback (some users still have those). Trade-off: keeping these
+allowed means a malicious LAN-resident attacker could observe DNS
+queries, but that's already true regardless of VPN status — Wave 39
+is about cloud-DNS leaks, not LAN-DNS sniffing.
+
+**Document in release notes**: "mDNS/LLMNR remain unblocked.
+Local printer / Bonjour discovery continues to work. If you need
+LAN-DNS isolation, disable LLMNR via Group Policy and use
+firewall-level mDNS blocking — out of scope for VPNRouter."
+
+### 3. WireGuard / AmneziaWG / OpenVPN coexistence
+
+Critical concern: VPNRouter Wave 39 blocks UDP/53 + TCP/53 + TCP/853
+on ALL interfaces. If user has another VPN running (e.g. AmneziaWG
+on `10.9.1.x` for Forgejo access, like our dev environment), THAT
+VPN's DNS resolution will also be blocked.
+
+**Coexistence matrix**:
+
+| Other VPN type | Effect of Wave 39 |
+|---|---|
+| WireGuard with public DNS (`1.1.1.1`) | DNS queries blocked → other VPN cannot resolve hostnames |
+| AmneziaWG with internal DNS (`10.9.1.1`) | DNS queries blocked → blocked |
+| OpenVPN with `dhcp-option DNS` | OpenVPN's DNS configures resolver to a typically-non-loopback IP — blocked |
+| Tailscale (uses 100.x DNS) | DNS to MagicDNS (100.100.100.100:53) — **BLOCKED** |
+| Cisco AnyConnect | Internal corp DNS — **BLOCKED** |
+
+**Mitigation paths**:
+
+1. **Document in tooltip + release notes**: "If you use another VPN
+   simultaneously, disable this setting. VPNRouter's DNS lockdown
+   blocks port 53 globally — it doesn't know about other VPN tunnels."
+2. **Future Wave 39b**: scope the block rules to specific
+   `interfacetype=any` minus a whitelist of VPN-adapter ranges.
+   netsh doesn't natively support "exclude these IPs" — would need
+   PowerShell `New-NetFirewallRule -LocalAddress -RemoteAddress`
+   syntax + maintenance of a curated VPN-subnet list. Complex.
+3. **Auto-detect**: enumerate active network adapters at VPN-start
+   time, skip the lockdown if a non-VPNRouter VPN adapter is
+   detected (Tailscale, WireGuard kernel module, etc.). High false-
+   positive risk — defer to user opt-in.
+
+**Recommendation for Wave 39**: ship as-is (defaults true new
+installs, false upgrades, opt-in via UI), document the coexistence
+concern in tooltip + release notes. Don't block ship on this — most
+users don't run two VPNs simultaneously.
+
+### 4. Local DNS proxies
+
+Brief covers the common case (`127.0.0.1:53`) via the loopback-allow
+rule. Additional considerations:
+
+- **dnscrypt-proxy bound to non-loopback** — some users bind it to
+  `0.0.0.0:53` so other LAN devices can use them as a DNS server.
+  Our lockdown blocks this (LAN devices can't query 127.0.0.1 from
+  outside). User would need to disable Wave 39 OR rebind to
+  loopback.
+- **AdGuard Home @ 127.0.0.1:53** — covered by loopback rule. OK.
+- **AdGuard Home @ 192.168.x.x:53** — NOT covered. Blocked. User
+  needs to disable Wave 39.
+- **Pi-hole running on same machine via Docker** — depends on bind
+  address. `127.0.0.1:53` OK, `0.0.0.0:53` blocked (Docker host
+  networking blocks LAN access, but the local Windows host still
+  queries 127.0.0.1 internally — still OK).
+- **YogaDNS / Acrylic DNS** — local DNS proxies that bind to
+  loopback by default. OK.
+- **DNSCrypt-Proxy + DoH** — local proxy talks to DoH upstream
+  (Cloudflare, Quad9) on TCP/443 — our lockdown doesn't block 443.
+  Local query 127.0.0.1:53 OK, upstream 443 OK. Works.
+
+**Trade-off**: the loopback-allow rule is sufficient for ~95% of
+local-DNS-proxy users. The remaining 5% (LAN-shared DNS proxies)
+need to disable Wave 39 OR rebind to loopback. Document in tooltip.
+
+### 5. Recovery for users locked-out
+
+**Scenario**: Wave 39 enabled, user kills VPNRouter via Task Manager
+(app crash, SIGKILL, etc.). Do firewall rules linger and break
+all DNS?
+
+**Yes — without cleanup, the user's DNS is permanently broken until
+they manually delete the rules or restart VPNRouter cleanly.**
+This is THE critical UX risk.
+
+**Cleanup paths**:
+
+1. **Process exit handler** — `FirewallManager.Dispose()` calls
+   `DeleteAllRules()`. For Wave 39, the new `DisableDnsLockdownAsync`
+   should ALSO be called on Dispose. Issue: Dispose only fires on
+   graceful shutdown. A `Process.Kill()` from Task Manager does NOT
+   call Dispose. Same risk exists for existing
+   `VPNRouter_Block_*` rules — they linger if app crashes mid-VPN
+   with `block_on_vpn_fail` engaged.
+2. **CleanupOrphanedRules at app boot** — Agent C's test
+   `CleanupOrphanedRules_AlsoRemovesDnsLockdownRules` pins this:
+   on next VPNRouter launch, any `VPNRouter-DnsLockdown-*` rule
+   from a prior session is detected by `FindRulesByPrefix` and
+   deleted. **This is the user's recovery path.**
+3. **What if user can't launch VPNRouter?** (e.g. uninstalled it
+   while rules are active). They'd need to manually run
+   `netsh advfirewall firewall delete rule name="VPNRouter-DnsLockdown-UDP53"`
+   etc. **Recommendation**: ship a `repair.cmd` script in the
+   installer (similar to existing helper.cmd) that wipes all
+   `VPNRouter-*` firewall rules. v2.31.8-r10 already established
+   this pattern for the helper.cmd CMD-parser fix.
+4. **Service-mode cleanup** — when running as Windows Service,
+   `Service.OnStop()` should also call DisableDnsLockdown. Verify
+   in `VPNRouterService.cs` that the service lifecycle hook is wired.
+
+**Critical**: extend `CleanupOrphanedRules` to handle BOTH the
+`VPNRouter_Block_` prefix (existing) AND `VPNRouter-DnsLockdown-`
+prefix (new). The test pin enforces this.
+
+### 6. Test-mode bypass
+
+**Concern**: would Wave 39 break our existing `SingBoxCheck`
+integration tests that run sing-box on loopback?
+
+**No.** sing-box check is a config validator, not a network listener
+— it doesn't bind to port 53. The integration tests that run
+sing-box.exe to validate generated JSON don't open DNS sockets;
+they parse + dry-run the config and exit. Wave 39's firewall rules
+are scoped to outbound DNS connections, not inbound sing-box
+operations. Safe.
+
+The `Generate_FromSubscribeMode_PassesSingBoxCheck` test is the one
+sing-box live-spawn test in our suite — verified it does NOT do any
+DNS resolution, only `sing-box check -c <file>` which is filesystem-
+only.
+
+### 7. Service mode
+
+**LocalSystem privileges** — when running as a Windows Service
+(`VPNRouter.Service.exe`), the process runs as `LocalSystem` (or a
+configured service account). LocalSystem has full firewall admin
+rights — netsh commands work. OK.
+
+**User-mode CLI** — when running `VPNRouter.CLI.exe start` as a
+regular user, netsh requires elevation. The CLI already does
+`AdminHelper.IsAdmin()` check at startup and refuses to start
+without elevation. Wave 39 doesn't change this requirement — same
+posture. OK.
+
+**Desktop App (`VPNRouter.App.exe`)** — runs as the logged-in user
+by default. The App talks to the Service via IPC; the Service
+performs all privileged operations including netsh. So Wave 39's
+netsh calls happen in the Service context, not the App context.
+If a user runs the App without Service installed (rare but possible),
+the App falls back to running its own sing-box process — and in
+that case it would need elevation to call netsh. Verify
+`MainWindowViewModel` checks `AdminHelper.IsAdmin()` before enabling
+the DNS lockdown toggle. **Agent B's UI work should handle this**
+(grey out the toggle + tooltip "requires elevation" if non-admin).
+
+### 8. Bonus: ordering vs. existing `VPNRouter_Block_*` rules
+
+The existing `block_on_vpn_fail` subsystem uses rules named
+`VPNRouter_Block_*` (underscore) — Wave 39 uses
+`VPNRouter-DnsLockdown-*` (hyphen). Different prefixes ensure
+`FindRulesByPrefix` enumeration doesn't accidentally match both.
+Naming choice is good.
+
+**However**: when both subsystems are active (Wave 39 lockdown +
+existing `block_on_vpn_fail`), Windows Firewall evaluates rules in
+lexically-sorted name order. The Wave 39 loopback-allow rule
+(prefix `0_VPNRouter-` or unprefixed `VPNRouter-`) needs to sort
+BEFORE both the Wave 39 block rules AND the existing
+`VPNRouter_Block_*` rules to guarantee loopback DNS works. The
+`0_` prefix is safer than relying on hyphen-vs-underscore ASCII
+ordering (hyphen 0x2D < underscore 0x5F, so `VPNRouter-` sorts
+before `VPNRouter_` naturally — but `0_` makes it explicit and
+robust against future renames).
+
+### Summary for Agent A
+
+Wave 39 implementation is sound. Recommendations:
+
+1. Use `0_VPNRouter-DnsLockdown-LoopbackAllow` (sort-first prefix)
+   for the allow rule rather than relying on name ordering.
+2. Add UDP/853 to the block set (defence-in-depth for DoQ).
+3. Extend `CleanupOrphanedRules` to sweep BOTH prefixes
+   (test pin enforces this).
+4. Wire `DisableDnsLockdown` into the Service's `OnStop` lifecycle
+   AND the App's `Dispose` path.
+5. Ship a `repair.cmd` in the installer to wipe rules if user
+   ever locks themselves out post-uninstall.
+6. Tooltip warning: "Disable if you use another VPN client
+   simultaneously" + "Local DNS proxies must bind to 127.0.0.1".

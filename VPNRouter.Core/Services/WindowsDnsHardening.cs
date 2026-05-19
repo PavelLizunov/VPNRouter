@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Microsoft.Win32;
 using Serilog;
+using VPNRouter.Core.Models;
 
 namespace VPNRouter.Core.Services;
 
@@ -46,8 +47,35 @@ public static class WindowsDnsHardening
     /// <summary>
     /// Apply DNS hardening: disable SMHNR + parallel A/AAAA, set TUN metric.
     /// Saves original values so they can be restored later.
+    ///
+    /// <para>Legacy entry point — kept so callers that don't have access to
+    /// <see cref="AppSettings"/> (e.g. crash-recovery cleanup paths) can
+    /// still run the registry + TUN-metric portion of hardening without the
+    /// Wave 39 firewall lockdown layer. New callers should prefer the
+    /// <see cref="Apply(AppSettings, ILogger?)"/> overload so the
+    /// <see cref="AppConfig.DnsLeakLockdown"/> toggle is honoured.</para>
     /// </summary>
-    public static void Apply(ILogger? logger = null)
+    public static void Apply(ILogger? logger = null) => Apply(null, logger);
+
+    /// <summary>
+    /// Wave 39 (2026-05-19) overload — also installs the firewall-level
+    /// DNS-port lockdown when <see cref="AppConfig.DnsLeakLockdown"/> is
+    /// true (default for new installs; opt-in for upgrades, see
+    /// <see cref="SettingsMigrator.Migrate_4_to_5"/>).
+    ///
+    /// <para>The firewall portion runs as a fire-and-forget background
+    /// task so a slow netsh call doesn't block VPN startup. This mirrors
+    /// the pattern used elsewhere in the codebase for non-critical
+    /// auxiliary work (e.g. Wave 38a OnProcessExited diagnostics). The
+    /// firewall helpers themselves are idempotent and bounded by
+    /// per-call + outer 5s timeouts, so a hang is contained.</para>
+    /// </summary>
+    /// <param name="settings">App settings carrying the
+    /// <see cref="AppConfig.DnsLeakLockdown"/> flag. Null means
+    /// "skip the Wave 39 firewall layer" — back-compat behaviour for
+    /// the legacy <see cref="Apply(ILogger?)"/> path.</param>
+    /// <param name="logger">Serilog logger for status/error output.</param>
+    public static void Apply(AppSettings? settings, ILogger? logger = null)
     {
         var log = logger ?? Log.Logger;
 
@@ -79,10 +107,47 @@ public static class WindowsDnsHardening
         {
             log.Warning(ex, "[DnsHardening] Apply failed (non-fatal)");
         }
+
+        // Wave 39 — firewall-level DNS leak lockdown. Fire-and-forget so a
+        // stuck netsh (rare) doesn't stall VPN startup; the helper has its
+        // own 5s outer timeout + 3s per-rule timeout. The lockdown is
+        // independent of the registry/TUN-metric hardening above so a
+        // failure in one path doesn't void the other.
+        if (settings?.App?.DnsLeakLockdown == true)
+        {
+            log.Information("[DnsHardening] DnsLeakLockdown enabled — installing firewall rules in background");
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await FirewallManager.EnableDnsLockdownAsync(log);
+                }
+                catch (Exception ex)
+                {
+                    log.Warning(ex, "[DnsHardening] Background DNS lockdown install failed (non-fatal)");
+                }
+            });
+        }
+        else
+        {
+            log.Debug("[DnsHardening] DnsLeakLockdown disabled — skipping firewall rule install");
+        }
     }
 
     /// <summary>
     /// Restore original DNS settings.
+    ///
+    /// <para>Wave 39 (2026-05-19) extension: also unconditionally calls
+    /// <see cref="FirewallManager.DisableDnsLockdownAsync"/> to tear down
+    /// the firewall-level DNS port blocks. The disable is idempotent —
+    /// netsh reports "no rules match" with a non-zero exit when the rules
+    /// aren't there, which the firewall helper tolerates. We deliberately
+    /// don't gate on a state flag because the lockdown is a separate
+    /// safety layer; we want it cleaned up on every Stop regardless of
+    /// whether Apply enabled it this session (defensive — handles the
+    /// edge case where the user disabled the setting between Start and
+    /// Stop, or where a crash-recovery Restore is sweeping leftover
+    /// state from an earlier process).</para>
     /// </summary>
     public static void Restore(ILogger? logger = null)
     {
@@ -94,23 +159,42 @@ public static class WindowsDnsHardening
             if (state == null)
             {
                 log.Debug("[DnsHardening] No saved state — nothing to restore");
-                return;
             }
+            else
+            {
+                RestoreValue(Registry.LocalMachine, SmhnrPolicyKey, SmhnrPolicyValue, state.Smhnr, log);
+                RestoreValue(Registry.LocalMachine, ParallelKey, ParallelValue, state.ParallelAAAA, log);
 
-            RestoreValue(Registry.LocalMachine, SmhnrPolicyKey, SmhnrPolicyValue, state.Smhnr, log);
-            RestoreValue(Registry.LocalMachine, ParallelKey, ParallelValue, state.ParallelAAAA, log);
+                // Reset TUN metric (only matters if interface still exists, e.g. crash recovery)
+                if (state.TunMetricChanged)
+                    TrySetTunMetric(0, log); // 0 = automatic
 
-            // Reset TUN metric (only matters if interface still exists, e.g. crash recovery)
-            if (state.TunMetricChanged)
-                TrySetTunMetric(0, log); // 0 = automatic
-
-            try { File.Delete(StatePath); } catch { }
-            log.Information("[DnsHardening] Restored to original values");
+                try { File.Delete(StatePath); } catch { }
+                log.Information("[DnsHardening] Restored to original values");
+            }
         }
         catch (Exception ex)
         {
             log.Warning(ex, "[DnsHardening] Restore failed (non-fatal)");
         }
+
+        // Wave 39 — always attempt to tear down the firewall-level DNS
+        // lockdown. Idempotent; netsh returns non-zero for "no rules match"
+        // which the helper logs at Debug and treats as success. Fire-and-
+        // forget so a stuck netsh during shutdown doesn't block VpnEngine.Stop
+        // (which has its own try/catch wrapper around this call but still
+        // wouldn't want to wait on a 5s timeout per call).
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await FirewallManager.DisableDnsLockdownAsync(log);
+            }
+            catch (Exception ex)
+            {
+                log.Warning(ex, "[DnsHardening] Background DNS lockdown teardown failed (non-fatal)");
+            }
+        });
     }
 
     // ─── Private ──────────────────────────────────────────────────────────────

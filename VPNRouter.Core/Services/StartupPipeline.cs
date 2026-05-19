@@ -1127,7 +1127,11 @@ internal sealed class StartupPipeline
             _host.OnStatus("Firewall leak protection ready (armed for VPN failure)");
 
 #if PLATFORM_WINDOWS
-        WindowsDnsHardening.Apply(_host.Logger);
+        // Wave 39 (2026-05-19): pass settings so WindowsDnsHardening can
+        // honour the AppConfig.DnsLeakLockdown toggle and install the
+        // Wave 39 firewall-level DNS port blocks alongside the existing
+        // SMHNR / ParallelAAAA / TUN-metric hardening.
+        WindowsDnsHardening.Apply(settings, _host.Logger);
 #endif
     }
 }

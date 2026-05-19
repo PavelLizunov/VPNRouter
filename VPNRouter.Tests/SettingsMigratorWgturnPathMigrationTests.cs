@@ -134,11 +134,16 @@ public class SettingsMigratorWgturnPathMigrationTests
         WithTempDataDir(_ =>
         {
             var s = new AppSettings { SchemaVersion = 3 };
+            // Wave 39 (2026-05-19) — CurrentSchemaVersion bumped 4→5.
+            // The 3-to-4 migration step still exists as an intermediate
+            // hop (wgturn-cli binary path move); use the explicit `to: 4`
+            // upper bound so we exercise ONLY this step and don't roll
+            // forward to the new v5 (DnsLeakLockdown) step too.
             var migrated = SettingsMigrator.Migrate(s, from: 3, to: 4);
 
             Assert.Equal(4, migrated.SchemaVersion);
-            // Sanity — current schema constant is in sync with the bump.
-            Assert.Equal(AppSettings.CurrentSchemaVersion, migrated.SchemaVersion);
+            // Sanity (Wave 39+ no longer ties this step's target to
+            // CurrentSchemaVersion; v5 is one step beyond).
         });
     }
 

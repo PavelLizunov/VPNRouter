@@ -50,8 +50,14 @@ public class MainWindowViewModelCharacterizationTests
     /// the overload with <c>RealSettingsStore.Instance</c> default —
     /// production callers see zero behaviour change.</para>
     /// </summary>
+    /// <summary>
+    /// Wave 39 (2026-05-19) — re-pinned after Agent B added the
+    /// `IsDnsLeakLockdownEnabled` ObservableProperty pair (auto-generated
+    /// public partial method `OnIsDnsLeakLockdownEnabledChanged(bool)`
+    /// + property getter/setter). New surface, intentional drift.
+    /// </summary>
     private const string PinnedHashWindows =
-        "3196656766a521ac6b41b392629bd0102e884f6186a0a6d840abaaee9c18fca1";
+        "36585b1ab04a883947dbd77028865cb061c96ca40dbe2612f3cd3ba3b7a6ee5d";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

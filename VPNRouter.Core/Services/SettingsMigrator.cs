@@ -39,6 +39,7 @@ public static class SettingsMigrator
                 1 => Migrate_1_to_2(settings, logger),
                 2 => Migrate_2_to_3(settings, logger),
                 3 => Migrate_3_to_4(settings, logger),
+                4 => Migrate_4_to_5(settings, logger),
                 _ => throw new InvalidOperationException(
                     $"No SettingsMigrator step defined for schema v{v} -> v{v + 1}. " +
                     $"This means the config file schema is newer than the running app — " +
@@ -539,6 +540,54 @@ public static class SettingsMigrator
                 "relocation skipped due to IO error");
         }
 
+        return s;
+    }
+
+    /// <summary>
+    /// v2.35.0-r5 Wave 39 (2026-05-19): introduces
+    /// <see cref="AppConfig.DnsLeakLockdown"/> — a firewall-level outbound
+    /// block on UDP/53, TCP/53, and TCP/853 to prevent the Windows DNS
+    /// Client multi-resolver race from leaking queries to ISP resolvers
+    /// despite our SMHNR/ParallelAAAA registry hardening.
+    ///
+    /// <para>Fresh installs inherit the C# default <c>true</c> (active
+    /// protection out of the box). For users upgrading from an older
+    /// schema (anyone whose yaml records a schema version &lt; 5), we
+    /// flip the flag to <c>false</c> so we don't surprise people running
+    /// a local DNS proxy on a non-loopback IP (dnscrypt-proxy on a LAN
+    /// address, AdGuard Home on a sibling NIC, etc.). They can opt in
+    /// later via the Settings toggle once they understand the
+    /// implications.</para>
+    ///
+    /// <para>Detection: the schema-version walker only enters this step
+    /// when the file's recorded version was &lt; 5, which by definition
+    /// means "existing user from before the field existed". Fresh
+    /// installs never run this step because <see cref="AppSettings.SchemaVersion"/>
+    /// defaults to <see cref="AppSettings.CurrentSchemaVersion"/>.</para>
+    ///
+    /// <para>Idempotent: re-running on a v5 settings tree is a no-op
+    /// because the migrator's outer loop only fires steps whose source
+    /// version is below the target. The body is a single field write so
+    /// even a manually-triggered re-run is harmless.</para>
+    /// </summary>
+    private static AppSettings Migrate_4_to_5(AppSettings s, ILogger? logger)
+    {
+        if (s.App == null)
+        {
+            // Defensive — shouldn't happen because AppSettings ctor
+            // initialises App, but the migrator chain shouldn't NRE on
+            // a hand-edited yaml with a stripped section.
+            logger?.Warning(
+                "[SettingsMigrator] v4->v5 (Wave 39): settings.App was null, " +
+                "skipping DnsLeakLockdown opt-out flip");
+            return s;
+        }
+
+        s.App.DnsLeakLockdown = false;
+        logger?.Information(
+            "[SettingsMigrator] v4->v5 (Wave 39): set DnsLeakLockdown=false for " +
+            "pre-Wave-39 config (opt-in for upgrade users; user can enable in " +
+            "Settings to activate firewall-level DNS leak protection)");
         return s;
     }
 }
