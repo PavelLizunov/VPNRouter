@@ -178,6 +178,112 @@ confirm an APK is produced.
 
 Plus the CI-smoke gate from §"How" step 6: workflow_dispatch on v2.35.0-r3 must produce a fresh APK successfully.
 
-## Outcome (filled after merge)
+## Outcome (filled 2026-05-19)
 
-(TBD post-implementation)
+**Status**: **PASS** (with newly-surfaced follow-up — see below)
+
+**Commits**:
+- `e54e423` — brief
+- `fdb715d` — implementation (workflow + SECRETS.md + CLAUDE.md)
+
+**Pushed**: github + origin commit `fdb715d`
+
+**Test deltas**: 0 (CI-only change, no production code)
+
+**Files changed**: 3 · +125/-67 LOC
+
+**Setup work** (outside diff): created internal release
+`tooling-libbox-singbox-1.13.10`
+(https://github.com/PavelLizunov/VPNRouter/releases/tag/tooling-libbox-singbox-1.13.10)
+with `libbox.aar` (11.7 MB) as sole asset.
+
+**Gate results**:
+- [x] **Gate 1 — Build clean**: `dotnet build VPNRouter.sln -c Release` →
+  0 errors, 0 warnings (clean after testhost lock cleared)
+- [x] **Gate 2 — Tests green**: 1124 / 0 failed / 4 skipped / 1128 total
+- [x] **Gate 3 — Docs**: brief Outcome filled, SECRETS.md "Internal
+  tooling releases" section written with provisioning command +
+  rotation procedure, CLAUDE.md secrets table updated
+- [x] **Gate 4 — Self-review**: N/A. Diff is 125 LOC of YAML + Markdown,
+  no production code. Standard `gh release download` idiom with the
+  ambient `GITHUB_TOKEN` (default `contents:read` scope), no privilege
+  escalation. Not security-sensitive.
+- [-] **Gate 5 — MCP verify**: N/A — no UI surface.
+- [-] **Gate 6 — Characterization diff**: N/A — not a god-file split.
+
+**Extra gate from §"How" step 6 (CI smoke)**:
+- [x] Workflow_dispatch on `main` (build-android.yml ref=main,
+  version=2.35.0-r3) — run `26099691547`
+- [x] **`libbox.aar provisioned: 11747194 bytes from release
+  tooling-libbox-singbox-1.13.10`** logged at 13:17:51 UTC. Wave 32's
+  specific change works end-to-end: the `gh release download` step
+  successfully fetched the aar from the new tooling release.
+- [-] **APK upload step did NOT run.** The build failed AFTER libbox
+  provision succeeded, on the next step (`dotnet publish (android-arm64,
+  signed)`) with:
+    `error NU1102: Unable to find package
+     Microsoft.NETCore.App.Runtime.Mono.linux-x64 with version
+     (= 10.0.8). Nearest version: 9.0.0-preview.7.24405.7`
+
+  Investigated: Microsoft has NOT published `.NET 10`-line Mono
+  runtime packs for `linux-x64`, `win-x64`, OR `osx-x64` on nuget.org
+  (last 10.x version: 9.0.0-preview.7 — they renamed/restructured
+  between 9 and 10). Locally on the dev VM the build succeeds because
+  the SDK install includes the runtime pack on disk; CI's clean restore
+  hits nuget.org first and fails.
+
+  This is an **ecosystem-level upstream issue**, latent since Phase 5
+  Wave 23 (net8.0-android → net10.0-android36.0 bump in commit
+  c33e372, 2026-05-18). Wave 26's `LIBBOX_AAR_BASE64` skip path
+  masked this — the Android publish never ran in CI after Wave 23, so
+  the NuGet restore failure never surfaced. Wave 32 unblocked the
+  libbox step, which then surfaced the next blocker.
+
+**Surprises encountered**:
+
+1. **First workflow_dispatch picked the OLD workflow YAML**. I
+   dispatched with `--ref v2.35.0-r3` thinking that would build
+   v2.35.0-r3 — but `--ref` selects which COMMIT's workflow file to
+   execute. v2.35.0-r3 is tagged before Wave 32's commit, so the OLD
+   workflow YAML (using `LIBBOX_AAR_BASE64`) ran instead of my new
+   tooling-release fetch. Fixed by re-dispatching with
+   `--ref main -f version=2.35.0-r3`.
+2. **Workflow expects `version` input WITHOUT `v` prefix** — the step
+   "Resolve version from tag or input" line 122 builds `tag=v$VERSION`,
+   so passing `v2.35.0-r3` produces `vv2.35.0-r3` (double v). Caught
+   on the second dispatch attempt; corrected the third dispatch to
+   `version=2.35.0-r3`.
+3. **NU1102 on Mono.linux-x64 — Microsoft has not published .NET 10
+   Mono runtime packs to NuGet yet** (see above). This is the root of
+   the CI failure post-Wave-32, but it's a Wave 32b scope, not Wave
+   32 scope.
+
+**Follow-ups spawned**:
+
+- **Wave 32b — NU1102 workaround for CI Android build**. Options:
+  (a) Add local `dotnet` install dir as a NuGet source so the SDK-
+      bundled Mono runtime pack is restorable (likely simplest);
+  (b) Wait for Microsoft to publish 10.x Mono.linux-x64 packs to
+      nuget.org (timeline unknown — could be weeks/months);
+  (c) Pin Android target framework to `net9.0-android` until 10.x
+      Mono packs ship (regression vs Wave 23 / Phase 5).
+  Recommendation: try (a) first as a small workflow YAML patch.
+  Effort estimate: 1-2h.
+- **Until Wave 32b lands**: continue building APK locally on the
+  dev VM via `build.ps1 -AndroidAlso -Upload` (the path used for
+  v2.35.0-r3 manual APK upload).
+
+**Rollback**:
+- Workflow: `git revert fdb715d` (restores secret-based provisioning
+  step, which silently skips anyway since `LIBBOX_AAR_BASE64` cannot
+  be set).
+- Tooling release: `gh release delete tooling-libbox-singbox-1.13.10
+  --repo PavelLizunov/VPNRouter --yes` (no auto-update consumers, safe
+  to delete).
+
+**Lessons for methodology doc** (if any):
+
+- `workflow_dispatch --ref <tag>` runs the workflow YAML from THAT
+  tag, not from `main`. Always use `--ref main` for CI smoke tests
+  of workflow-only changes. (Could add to the "CI smoke" section of
+  the methodology doc.)
