@@ -93,6 +93,23 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="5.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
+    <!-- Phase 6 Wave 31a (commit b446f3d) added Vecc.YamlDotNet.Analyzers.StaticGenerator
+         to Core.csproj for the StaticDeserializerBuilder swap in
+         VPNRouter.Core/Services/SettingsLoader.cs. Android source-links
+         Core's .cs files via <Compile Include="..\VPNRouter.Core\**\*.cs">
+         above (no ProjectReference, see csproj comment line 60-79), which
+         pulls in SettingsLoader.cs source but does NOT inherit Core's
+         analyzer PackageReferences. Without this duplicate reference here,
+         the Android compile pass produces 0 of the generator's partial
+         halves → YamlStaticContext lacks the `: StaticContext` base, so
+         the StaticDeserializerBuilder ctor call in SettingsLoader fails
+         compile with CS1503 "cannot convert from 'YamlStaticContext' to
+         'StaticContext'". Mirroring the analyzer-style PackageReference
+         from Core.csproj fixes it. -->
+    <PackageReference Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="15.1.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
