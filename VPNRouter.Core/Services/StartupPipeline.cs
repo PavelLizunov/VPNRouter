@@ -1017,7 +1017,11 @@ internal sealed class StartupPipeline
         _host.OnStatus($"sing-box started (PID {pid})");
 
         // Fire-and-forget warmup probe — give TUN routing tables time to settle.
-        ScheduleWarmupProbe(pid, ct);
+        // BR-7 (brat 2026-05-20) — passes settings so the success branch can
+        // arm the deferred Wave 39 firewall DNS lockdown (was installed
+        // immediately by WindowsDnsHardening.Apply pre-r11 and broke warm-up
+        // itself on slow-TUN machines).
+        ScheduleWarmupProbe(pid, settings, ct);
 
         // Phase 8.5 — F-E post-start probe via Clash API. The host wires
         // this with a Stop()+Restart delegate so a failure tears the live
@@ -1035,8 +1039,22 @@ internal sealed class StartupPipeline
     /// Schedule the TUN warmup probe (15 attempts × 1s) on a background task.
     /// Captures the PID snapshot to avoid NRE if Stop() races between this
     /// scheduling call and the lambda body running.
+    ///
+    /// <para>BR-7 (brat 2026-05-20) — also responsible for arming the
+    /// Wave 39 firewall DNS lockdown AFTER warm-up confirms TUN routing.
+    /// On slow-TUN machines the lockdown installed via
+    /// <see cref="WindowsDnsHardening.Apply"/> previously fired immediately
+    /// after sing-box started, which broke DNS resolution for the warm-up
+    /// probe itself: the probe needs to resolve gstatic.com via Cloudflare
+    /// DoH through TUN, but with UDP/53 already banned on Ethernet and TUN
+    /// not yet routing, the system fell into a 33-second resolution
+    /// timeout. The user perceived this as "no internet after install".
+    /// Deferring the lockdown to the success branch closes that window.
+    /// If warm-up FAILS the lockdown is intentionally NOT installed — the
+    /// user gets internet (with a DNS leak risk that's preferable to
+    /// 33 s of no internet at all).</para>
     /// </summary>
-    private void ScheduleWarmupProbe(int pidSnapshot, CancellationToken ct)
+    private void ScheduleWarmupProbe(int pidSnapshot, AppSettings settings, CancellationToken ct)
     {
         _host.OnStatus("Warming up network...");
         _ = Task.Run(async () =>
@@ -1053,6 +1071,19 @@ internal sealed class StartupPipeline
                         "[StartupPipeline] TUN ready after {Ms}ms (attempt {Attempt})",
                         sw.ElapsedMilliseconds, attempt);
                     _host.OnStatus($"Connected (PID {pidSnapshot})");
+
+                    // BR-7: arm the Wave 39 firewall DNS lockdown now that
+                    // TUN is confirmed routing. Idempotent + fire-and-
+                    // forget; doesn't affect the user-visible Connected
+                    // state.
+#if PLATFORM_WINDOWS
+                    try { WindowsDnsHardening.EnableLockdownIfConfigured(settings, _host.Logger); }
+                    catch (Exception ex)
+                    {
+                        _host.Logger?.Warning(ex,
+                            "[StartupPipeline] BR-7 deferred lockdown arm threw (non-fatal)");
+                    }
+#endif
                     return;
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -1063,7 +1094,10 @@ internal sealed class StartupPipeline
                 }
             }
             _host.Logger?.Warning(
-                "[StartupPipeline] TUN warm-up failed after {Ms}ms", sw.ElapsedMilliseconds);
+                "[StartupPipeline] TUN warm-up failed after {Ms}ms — " +
+                "Wave 39 firewall DNS lockdown NOT installed (BR-7: prefer " +
+                "internet-up + DNS-leak-risk over internet-down + lockdown-on)",
+                sw.ElapsedMilliseconds);
             _host.OnStatus($"Connected (PID {pidSnapshot})");
         }, ct);
     }

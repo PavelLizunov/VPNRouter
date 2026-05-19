@@ -108,30 +108,66 @@ public static class WindowsDnsHardening
             log.Warning(ex, "[DnsHardening] Apply failed (non-fatal)");
         }
 
-        // Wave 39 — firewall-level DNS leak lockdown. Fire-and-forget so a
-        // stuck netsh (rare) doesn't stall VPN startup; the helper has its
-        // own 5s outer timeout + 3s per-rule timeout. The lockdown is
-        // independent of the registry/TUN-metric hardening above so a
-        // failure in one path doesn't void the other.
-        if (settings?.App?.DnsLeakLockdown == true)
-        {
-            log.Information("[DnsHardening] DnsLeakLockdown enabled — installing firewall rules in background");
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await FirewallManager.EnableDnsLockdownAsync(log);
-                }
-                catch (Exception ex)
-                {
-                    log.Warning(ex, "[DnsHardening] Background DNS lockdown install failed (non-fatal)");
-                }
-            });
-        }
-        else
+        // BR-7 (brat 2026-05-20) — lockdown installation moved OUT of
+        // Apply. The previous flow installed the firewall lockdown
+        // immediately after sing-box started, which on slow-TUN
+        // machines (brat's Win11 LTSC took 33 s for wintun to be
+        // routable) caused the warm-up HTTP probe to gstatic.com to
+        // fail: DNS resolution for gstatic.com was blocked because
+        // UDP/53 was banned on Ethernet and the TUN adapter wasn't
+        // forwarding DNS to sing-box yet. Result: 33 s window where
+        // the user could not browse, panic, rollback. r11 splits the
+        // two layers:
+        //
+        //   * Registry + TUN-metric hardening (above) is immediate.
+        //     Safe — these don't break in-flight resolution.
+        //
+        //   * Firewall lockdown is installed by
+        //     <see cref="EnableLockdownIfConfigured"/> from
+        //     <see cref="VPNRouter.Core.Services.StartupPipeline"/>'s
+        //     warm-up probe success branch, so the lockdown only
+        //     fires once TUN is confirmed routing. If warm-up fails,
+        //     lockdown never installs — user keeps internet (with a
+        //     DNS-leak risk noted in the logs).
+    }
+
+    /// <summary>
+    /// BR-7 (brat 2026-05-20) — install the Wave 39 firewall-level
+    /// DNS-port lockdown. Called from
+    /// <see cref="VPNRouter.Core.Services.StartupPipeline"/>'s warm-up
+    /// success branch so the lockdown only blocks UDP/53 + TCP/53 +
+    /// TCP/853 on non-loopback interfaces AFTER TUN is confirmed
+    /// routing. Pre-r11 this lived inside Apply and fired immediately
+    /// — which broke the warm-up probe itself on slow-TUN machines.
+    ///
+    /// <para>No-op when <see cref="AppConfig.DnsLeakLockdown"/> is
+    /// false or settings is null. Fire-and-forget background task —
+    /// the user-visible Connected state doesn't gate on lockdown
+    /// install completing.</para>
+    /// </summary>
+    public static void EnableLockdownIfConfigured(AppSettings? settings, ILogger? logger = null)
+    {
+        var log = logger ?? Log.Logger;
+        if (settings?.App?.DnsLeakLockdown != true)
         {
             log.Debug("[DnsHardening] DnsLeakLockdown disabled — skipping firewall rule install");
+            return;
         }
+
+        log.Information(
+            "[DnsHardening] DnsLeakLockdown enabled — installing firewall rules in background " +
+            "(BR-7: deferred until TUN warm-up confirmed routing)");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await FirewallManager.EnableDnsLockdownAsync(log);
+            }
+            catch (Exception ex)
+            {
+                log.Warning(ex, "[DnsHardening] Background DNS lockdown install failed (non-fatal)");
+            }
+        });
     }
 
     /// <summary>
