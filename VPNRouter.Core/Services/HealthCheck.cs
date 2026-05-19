@@ -102,11 +102,8 @@ public static class HealthCheck
             try
             {
                 var json = File.ReadAllText(userCatalogue);
-                // Phase 4 (2026-05-18): STJ deserialize. ProfileManager's
-                // SafeJsonOptions pins case-insensitive + MaxDepth=32 — same
-                // DoS guard as the Newtonsoft predecessor.
-                var collection = JsonSerializer.Deserialize<ProfileCollection>(
-                    json, ProfileManager.SafeJsonOptions);
+                var collection = JsonSerializer.Deserialize(
+                    json, Json.AppJsonContext.Default.ProfileCollection);
                 if (collection == null || collection.Profiles == null)
                 {
                     results.Add(new(Level.Err,

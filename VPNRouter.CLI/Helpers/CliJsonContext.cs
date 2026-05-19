@@ -41,9 +41,14 @@ namespace VPNRouter.CLI.Helpers;
 /// </list>
 /// </para>
 /// </summary>
+// Phase 7 Wave 34 (2026-05-19): WriteIndented=true added so the
+// JsonTypeInfo<RunState> overload produces the same pretty-printed
+// state.json that the legacy StateFile.Options instance pinned (and the
+// stop/status commands eyeball when troubleshooting).
 [JsonSourceGenerationOptions(
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    PropertyNameCaseInsensitive = true)]
+    PropertyNameCaseInsensitive = true,
+    WriteIndented = true)]
 [JsonSerializable(typeof(RunState))]
 internal sealed partial class CliJsonContext : JsonSerializerContext
 {

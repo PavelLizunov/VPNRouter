@@ -46,38 +46,11 @@ public static class StateFile
     /// </summary>
     public const int CurrentSchemaVersion = 1;
 
-    /// <summary>
-    /// STJ options for state.json read/write. <c>WriteIndented=true</c>
-    /// matches the pre-Phase-4 Newtonsoft <c>Formatting.Indented</c>
-    /// shape so an existing state.json on disk looks unchanged.
-    /// <c>PropertyNameCaseInsensitive=true</c> tolerates pre-Phase-4
-    /// state.json files that were written with un-attributed PascalCase
-    /// keys — both forms parse cleanly.
-    ///
-    /// <para>Phase 6 — Wave 31b (2026-05-19): wired
-    /// <c>TypeInfoResolver</c> to chain
-    /// <see cref="CliJsonContext"/> (CLI-side <see cref="RunState"/>
-    /// registration) → reflective fallback. AOT publish can now resolve
-    /// <c>RunState</c> via compiled
-    /// <see cref="System.Text.Json.Serialization.Metadata.JsonTypeInfo{T}"/>
-    /// instead of dynamic-code generation.
-    ///
-    /// Core's <c>AppJsonContext</c> is intentionally NOT chained here:
-    /// it is <c>internal</c> to <c>VPNRouter.Core</c> and CLI is not in
-    /// the <c>InternalsVisibleTo</c> list. <see cref="RunState"/> only
-    /// references built-in types (<c>int</c>, <c>string</c>,
-    /// <c>DateTime</c>, <c>List&lt;string&gt;</c>) so no Core DTO needs
-    /// to be reachable through this options instance. Brief:
-    /// <c>plans/phase6-json-cleanups-2026-05-18.md</c>.</para>
-    /// </summary>
-    internal static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = true,
-        PropertyNameCaseInsensitive = true,
-        TypeInfoResolver = JsonTypeInfoResolver.Combine(
-            CliJsonContext.Default,
-            new DefaultJsonTypeInfoResolver()),
-    };
+    // Phase 7 Wave 34 (2026-05-19): retired the local Options field.
+    // Both Write/Read now use the JsonTypeInfo<RunState> overload directly
+    // against CliJsonContext.Default. WriteIndented + PropertyNameCaseInsensitive
+    // moved to CliJsonContext's [JsonSourceGenerationOptions] (Wave 34
+    // change). Wire format identical.
 
     private static readonly string Path =
         System.IO.Path.Combine(
@@ -90,7 +63,7 @@ public static class StateFile
         // constructed RunState externally without touching the property.
         state.SchemaVersion = CurrentSchemaVersion;
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(Path)!);
-        File.WriteAllText(Path, JsonSerializer.Serialize(state, Options));
+        File.WriteAllText(Path, JsonSerializer.Serialize(state, CliJsonContext.Default.RunState));
     }
 
     public static RunState? Read()
@@ -101,7 +74,7 @@ public static class StateFile
         var result = CacheRecovery.LoadOrRecover<RunState>(
             Path,
             CurrentSchemaVersion,
-            json => JsonSerializer.Deserialize<RunState>(json, Options),
+            json => JsonSerializer.Deserialize(json, CliJsonContext.Default.RunState),
             structuralCheck: null,
             logger: null);
 

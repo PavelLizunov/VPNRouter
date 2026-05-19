@@ -290,7 +290,8 @@ cherry-pick commit closes the gap.
 | `cli-aot` CI job | ~1 h | One-off workflow |
 | Service AOT prep + verification | ~2-4 h | Mostly inherits Core |
 | `RealSettingsStore.Instance` full DI rollout (14 sites) | ~1 d | Wave 27 carry-over |
-| **`LIBBOX_AAR_BASE64` 48 KB limit workaround** | ~2-3 h | Wave 26 design flaw: GH Actions secrets capped at 48 KB but libbox.aar base64 = 15.6 MB. Options: (a) host libbox.aar as a release asset on a private internal-tooling release on the repo, fetch via `gh release download` with `GITHUB_TOKEN` in workflow; (b) use Git LFS for `VPNRouter.Android/Lib/libbox.aar` (lift gitignore exception); (c) external blob store with token. (a) is cleanest. |
+| ~~`LIBBOX_AAR_BASE64` 48 KB limit workaround~~ | **DONE** Wave 32 | Implemented via tooling-release pattern (option a from original plan). `gh release download` from `tooling-libbox-singbox-1.13.10` works end-to-end in CI. See `plans/phase7-wave32-libbox-release-asset-2026-05-19.md`. |
+| **Wave 32b — NU1102 on `Microsoft.NETCore.App.Runtime.Mono.linux-x64`** | TBD (multi-hour) | Surfaced after Wave 32 unblocked libbox. Microsoft has NOT published 10.x Mono runtime packs to nuget.org (latest 10.x = `9.0.0-preview.7.24405.7`). Affects Linux + Windows + macOS CI runners. Local builds work because SDK install bundles the pack on disk + obj/ cache reuses prior restore. Options: pre-restore via `dotnet workload restore`, explicit `<RestoreSources>` fallback to SDK packs dir, or wait for upstream publish. Latent since Phase 5 Wave 23 (.NET 10 bump). |
 | Avalonia AOT (App) | multi-week | v4.0 scope; Avalonia 12 axaml binding inference uses reflection |
 
 ## Commits (Phase 6 atomic timeline)

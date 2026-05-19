@@ -139,7 +139,7 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         // identical (lowercase "path" key) while AOT can resolve it via
         // the AppJsonContext source generator.
         var body = JsonSerializer.Serialize(
-            new ClashSetConfigDto(configPath), SerializerOptions);
+            new ClashSetConfigDto(configPath), Json.AppJsonContext.Default.ClashSetConfigDto);
         var url = $"{_baseUrl}/configs?force=true";
 
         try
@@ -203,8 +203,8 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
                 return null;
 
             await using var stream = await response.Content.ReadAsStreamAsync(deadlineCts.Token).ConfigureAwait(false);
-            var doc = await JsonSerializer.DeserializeAsync<VersionDto>(
-                stream, SerializerOptions, deadlineCts.Token).ConfigureAwait(false);
+            var doc = await JsonSerializer.DeserializeAsync(
+                stream, Json.AppJsonContext.Default.VersionDto, deadlineCts.Token).ConfigureAwait(false);
 
             return string.IsNullOrEmpty(doc?.Version) ? null : doc.Version;
         }
@@ -241,8 +241,8 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
                 return failureSnapshot;
 
             await using var stream = await response.Content.ReadAsStreamAsync(deadlineCts.Token).ConfigureAwait(false);
-            var dto = await JsonSerializer.DeserializeAsync<ConnectionsDto>(
-                stream, SerializerOptions, deadlineCts.Token).ConfigureAwait(false);
+            var dto = await JsonSerializer.DeserializeAsync(
+                stream, Json.AppJsonContext.Default.ConnectionsDto, deadlineCts.Token).ConfigureAwait(false);
 
             if (dto is null)
                 return failureSnapshot;
@@ -286,7 +286,7 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         // Phase 6 — Wave 31b (2026-05-19): see ReloadConfigAsync above —
         // anonymous-type Serialize hoisted to a named record for AOT.
         var body = JsonSerializer.Serialize(
-            new ClashSelectProxyDto(name), SerializerOptions);
+            new ClashSelectProxyDto(name), Json.AppJsonContext.Default.ClashSelectProxyDto);
 
         try
         {
@@ -337,8 +337,8 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
                 return Array.Empty<ProxyInfo>();
 
             await using var stream = await response.Content.ReadAsStreamAsync(deadlineCts.Token).ConfigureAwait(false);
-            var dto = await JsonSerializer.DeserializeAsync<ProxiesEnvelopeDto>(
-                stream, SerializerOptions, deadlineCts.Token).ConfigureAwait(false);
+            var dto = await JsonSerializer.DeserializeAsync(
+                stream, Json.AppJsonContext.Default.ProxiesEnvelopeDto, deadlineCts.Token).ConfigureAwait(false);
 
             if (dto?.Proxies is null)
                 return Array.Empty<ProxyInfo>();
@@ -412,31 +412,22 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         return false;
     }
 
-    // Phase 6 — Wave 31b (2026-05-19): wired TypeInfoResolver to
-    // AppJsonContext.Default so the generator-emitted JsonTypeInfo for
-    // ClashSetConfigDto / ClashSelectProxyDto / VersionDto /
-    // ConnectionsDto / ProxiesEnvelopeDto resolves AOT-cleanly.
-    // Reflective fallback retained for any one-off shape (none today).
-    // The internal DTO records below are also used through this options
-    // instance so they need to be context-registered (see AppJsonContext).
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        NumberHandling = JsonNumberHandling.AllowReadingFromString,
-        TypeInfoResolver = JsonTypeInfoResolver.Combine(
-            AppJsonContext.Default,
-            new DefaultJsonTypeInfoResolver()),
-    };
+    // Phase 7 Wave 34: flipped private → internal sealed so AppJsonContext
+    // can register these DTOs. The JsonSerializableAttribute requires
+    // referenceable types from the context's compilation unit; internal
+    // + InternalsVisibleTo("VPNRouter.Tests") keeps the surface private to
+    // Core's assembly while making the types reachable from
+    // Json/AppJsonContext.cs.
 
     // sing-box's /version returns { "version": "1.13.10", "premium": true, ... }.
-    private sealed class VersionDto
+    internal sealed class VersionDto
     {
         [JsonPropertyName("version")]
         public string? Version { get; set; }
     }
 
     // sing-box's /connections returns { "downloadTotal":N, "uploadTotal":N, "connections":[...] }.
-    private sealed class ConnectionsDto
+    internal sealed class ConnectionsDto
     {
         [JsonPropertyName("downloadTotal")]
         public long DownloadTotal { get; set; }
@@ -449,13 +440,13 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
     }
 
     // sing-box's /proxies returns { "proxies": { "name": { type, history, ... } } }.
-    private sealed class ProxiesEnvelopeDto
+    internal sealed class ProxiesEnvelopeDto
     {
         [JsonPropertyName("proxies")]
         public Dictionary<string, ProxyDto>? Proxies { get; set; }
     }
 
-    private sealed class ProxyDto
+    internal sealed class ProxyDto
     {
         [JsonPropertyName("type")]
         public string? Type { get; set; }
@@ -464,7 +455,7 @@ public sealed class ClashSingBoxApi : ISingBoxApi, IDisposable
         public List<ProxyHistoryDto>? History { get; set; }
     }
 
-    private sealed class ProxyHistoryDto
+    internal sealed class ProxyHistoryDto
     {
         [JsonPropertyName("time")]
         public string? Time { get; set; }

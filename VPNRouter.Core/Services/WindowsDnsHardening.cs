@@ -257,35 +257,19 @@ public static class WindowsDnsHardening
     /// </summary>
     internal static IProcessRunner? _runnerOverride;
 
-    // Phase 4 (2026-05-18) — STJ for the dns_hardening_state.json sidecar.
-    // Wire format is byte-identical: WriteIndented mirrors Newtonsoft's
-    // Formatting.Indented; PropertyNameCaseInsensitive tolerates any pre-
-    // Phase-4 file (HardeningState had no [JsonProperty] annotations so
-    // both writers produced PascalCase keys identically). The file is
-    // private to a single owner (the elevated VPN process), so there's
-    // no DoS-untrusted-input scenario — MaxDepth left at STJ default.
-    //
-    // Phase 6 — Wave 31b (2026-05-19): wired TypeInfoResolver to the
-    // Windows-only sibling JsonSerializerContext below so AOT publish
-    // can resolve HardeningState + SavedRegValue via compiled
-    // JsonTypeInfo. Brief: plans/phase6-json-cleanups-2026-05-18.md.
-    // Reflective fallback retained in the Combine chain for forward-
-    // compat with any one-off shape (none today).
-    private static readonly JsonSerializerOptions HardeningStateOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNameCaseInsensitive = true,
-        TypeInfoResolver = JsonTypeInfoResolver.Combine(
-            WindowsDnsHardeningJsonContext.Default,
-            new DefaultJsonTypeInfoResolver()),
-    };
+    // Phase 7 Wave 34 (2026-05-19): retired the local HardeningStateOptions
+    // field. Both Save/Load now use the JsonTypeInfo<HardeningState>
+    // overload directly against WindowsDnsHardeningJsonContext.Default.
+    // Wire format identical (PascalCase keys + WriteIndented matched what
+    // the local options pinned; both inherited from the context's
+    // [JsonSourceGenerationOptions] in Wave 31b).
 
     private static void SaveState(HardeningState state)
     {
         try
         {
             Directory.CreateDirectory(AppPaths.DataDir);
-            var json = JsonSerializer.Serialize(state, HardeningStateOptions);
+            var json = JsonSerializer.Serialize(state, WindowsDnsHardeningJsonContext.Default.HardeningState);
             File.WriteAllText(StatePath, json);
         }
         catch { }
@@ -297,7 +281,7 @@ public static class WindowsDnsHardening
         {
             if (!File.Exists(StatePath)) return null;
             var json = File.ReadAllText(StatePath);
-            return JsonSerializer.Deserialize<HardeningState>(json, HardeningStateOptions);
+            return JsonSerializer.Deserialize(json, WindowsDnsHardeningJsonContext.Default.HardeningState);
         }
         catch
         {
@@ -337,9 +321,13 @@ public static class WindowsDnsHardening
 // Same generator options as AppJsonContext (PropertyNameCaseInsensitive,
 // WhenWritingNull) so the resolver chain composes uniformly with the
 // reflective fallback in HardeningStateOptions.
+// Phase 7 Wave 34: WriteIndented=true preserves the human-readable
+// dns_hardening_state.json shape that the retired HardeningStateOptions
+// field pinned pre-Wave-34.
 [JsonSourceGenerationOptions(
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    PropertyNameCaseInsensitive = true)]
+    PropertyNameCaseInsensitive = true,
+    WriteIndented = true)]
 [JsonSerializable(typeof(WindowsDnsHardening.HardeningState))]
 [JsonSerializable(typeof(WindowsDnsHardening.SavedRegValue))]
 internal sealed partial class WindowsDnsHardeningJsonContext : JsonSerializerContext

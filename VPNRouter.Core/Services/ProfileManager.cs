@@ -259,11 +259,7 @@ public class LocalProfileSource : IProfileSource
         // v2.31.0-r1 (CO-4): MaxDepth-capped deserialization on local files
         // — user could place a malicious profiles.json that crashes the
         // app or causes stack overflow via nested arrays.
-        // Phase 3B (2026-05-18): switched from JsonConvert.DeserializeObject
-        // to JsonSerializer.Deserialize. Same DoS guard semantics via
-        // MaxDepth=32 on SafeJsonOptions; case-insensitive matching kept
-        // for backward-compat with hand-edited profiles.
-        var result = JsonSerializer.Deserialize<ProfileCollection>(json, ProfileManager.SafeJsonOptions);
+        var result = JsonSerializer.Deserialize(json, Json.AppJsonContext.Default.ProfileCollection);
         return Task.FromResult(result);
     }
 }
@@ -350,9 +346,7 @@ public class GitHubProfileSource : IProfileSource
             // profile URL — the channel is HTTPS but a compromised tap or
             // typosquatted URL could feed adversarial JSON. ProfileCollection
             // is shallow (~3 levels), 32 leaves enormous head-room.
-            // Phase 3B (2026-05-18): JsonSerializer (STJ) with MaxDepth=32 on
-            // SafeJsonOptions preserves the DoS guard.
-            var result = JsonSerializer.Deserialize<ProfileCollection>(json, ProfileManager.SafeJsonOptions);
+            var result = JsonSerializer.Deserialize(json, Json.AppJsonContext.Default.ProfileCollection);
 
             // v2.32.0 — wrap raw upstream JSON in a schema-versioned envelope
             // before persisting. The cache is consulted on offline starts;
@@ -367,11 +361,7 @@ public class GitHubProfileSource : IProfileSource
                     UpstreamUrl = _url,
                     Profiles = result,
                 };
-                // Phase 3B: STJ JsonSerializer.Serialize with WriteIndented=true
-                // (set on SafeJsonOptions) matches the pre-migration Newtonsoft
-                // Formatting.Indented output shape — same human-readable cache
-                // file on disk for diagnostics.
-                var wrapperJson = JsonSerializer.Serialize(wrapper, ProfileManager.SafeJsonOptions);
+                var wrapperJson = JsonSerializer.Serialize(wrapper, Json.AppJsonContext.Default.ProfileCacheFile);
                 await File.WriteAllTextAsync(cacheFile, wrapperJson, ct);
             }
 
@@ -387,7 +377,7 @@ public class GitHubProfileSource : IProfileSource
             var loaded = CacheRecovery.LoadOrRecover<ProfileCacheFile>(
                 cacheFile,
                 CurrentSchemaVersion,
-                json => JsonSerializer.Deserialize<ProfileCacheFile>(json, ProfileManager.SafeJsonOptions),
+                json => JsonSerializer.Deserialize(json, Json.AppJsonContext.Default.ProfileCacheFile),
                 wrap => wrap.Profiles is not null,
                 Log.Logger);
 

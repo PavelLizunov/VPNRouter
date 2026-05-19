@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using YamlDotNet.Serialization;
 
 namespace VPNRouter.Core.Models;
@@ -565,8 +566,19 @@ public class CustomCategory
 /// </summary>
 public class CustomRule
 {
+    // Phase 7 Wave 34 (2026-05-19): explicit [JsonPropertyName] so the
+    // snake_case JSON wire format (NekoBox/Hiddify interop + previously-
+    // exported user files) is preserved when serializing through
+    // AppJsonContext's JsonTypeInfo<List<CustomRule>>. Pre-Wave-34 the
+    // local `CustomRulesImportExport.JsonOptions` used
+    // PropertyNamingPolicy=SnakeCaseLower; the JsonTypeInfo<T> overload
+    // pins to the context's options instead, which has no naming policy.
+    // [JsonPropertyName] on each property is the property-level
+    // equivalent — works the same on import/export.
+
     /// <summary>"direct" | "proxy" | "block".</summary>
     [YamlMember(Alias = "action")]
+    [JsonPropertyName("action")]
     public string Action { get; set; } = "direct";
 
     /// <summary>
@@ -585,18 +597,22 @@ public class CustomRule
     /// </list>
     /// </summary>
     [YamlMember(Alias = "type")]
+    [JsonPropertyName("type")]
     public string Type { get; set; } = "domain_suffix";
 
     /// <summary>Comma-separated multi-value (single-value for geosite/geoip).</summary>
     [YamlMember(Alias = "value")]
+    [JsonPropertyName("value")]
     public string Value { get; set; } = string.Empty;
 
     /// <summary>Optional human label for the UI rule list.</summary>
     [YamlMember(Alias = "comment")]
+    [JsonPropertyName("comment")]
     public string Comment { get; set; } = string.Empty;
 
     /// <summary>True ⇒ rule active. Allows toggling without deleting.</summary>
     [YamlMember(Alias = "enabled")]
+    [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 }
 

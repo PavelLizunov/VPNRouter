@@ -63,14 +63,29 @@ public static class LaunchFailureCounter
     private static string DefaultPath => Path.Combine(AppPaths.DataDir, DefaultFileName);
 
     /// <summary>Persisted state. Public so tests + diagnostics can inspect.</summary>
+    // Phase 7 Wave 34 (2026-05-19): explicit [JsonPropertyName] camelCase
+    // wire keys, pinning the same shape that the local JsonOptions'
+    // PropertyNamingPolicy=JsonNamingPolicy.CamelCase produced pre-Wave-34.
+    // The JsonTypeInfo<T> overload ties to AppJsonContext's options instead
+    // (no naming policy set), so the explicit attributes are the
+    // wire-stable equivalent. Existing user state files on disk continue
+    // to read cleanly because PropertyNameCaseInsensitive=true is on the
+    // context too (added Wave 25).
     public sealed class State
     {
+        [JsonPropertyName("consecutiveFailures")]
         public int ConsecutiveFailures { get; set; }
+        [JsonPropertyName("lastFailureUtc")]
         public string LastFailureUtc { get; set; } = string.Empty;
+        [JsonPropertyName("lastFailureType")]
         public string LastFailureType { get; set; } = string.Empty;
+        [JsonPropertyName("lastSuccessUtc")]
         public string LastSuccessUtc { get; set; } = string.Empty;
+        [JsonPropertyName("lastSelfRepairUtc")]
         public string LastSelfRepairUtc { get; set; } = string.Empty;
+        [JsonPropertyName("lastConfigResetUtc")]
         public string LastConfigResetUtc { get; set; } = string.Empty;
+        [JsonPropertyName("lastSafeModePromptUtc")]
         public string LastSafeModePromptUtc { get; set; } = string.Empty;
     }
 
@@ -204,7 +219,7 @@ public static class LaunchFailureCounter
         {
             if (!File.Exists(path)) return new State();
             var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<State>(json, JsonOptions) ?? new State();
+            return JsonSerializer.Deserialize(json, Json.AppJsonContext.Default.State) ?? new State();
         }
         catch
         {
@@ -222,7 +237,7 @@ public static class LaunchFailureCounter
             if (!string.IsNullOrEmpty(dir))
                 Directory.CreateDirectory(dir);
             var tmp = path + ".tmp";
-            File.WriteAllText(tmp, JsonSerializer.Serialize(state, JsonOptions));
+            File.WriteAllText(tmp, JsonSerializer.Serialize(state, Json.AppJsonContext.Default.State));
             if (File.Exists(path)) File.Delete(path);
             File.Move(tmp, path);
         }
@@ -233,17 +248,12 @@ public static class LaunchFailureCounter
         }
     }
 
-    // Phase 6 — Wave 31b (2026-05-19): wired TypeInfoResolver to
-    // AppJsonContext.Default so AOT publish can resolve LaunchFailureCounter.State
-    // via compiled JsonTypeInfo. Brief: plans/phase6-json-cleanups-2026-05-18.md.
-    // Reflective fallback retained for any one-off shape (none today).
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.Never,
-        TypeInfoResolver = JsonTypeInfoResolver.Combine(
-            AppJsonContext.Default,
-            new DefaultJsonTypeInfoResolver()),
-    };
+    // Phase 7 Wave 34 (2026-05-19): retired the local JsonOptions field.
+    // Both Read/Save now use the JsonTypeInfo<State> overload directly
+    // against AppJsonContext.Default. CamelCase wire format preserved
+    // via [JsonPropertyName] attributes on each State property (see
+    // the class declaration above) — independent of the context's
+    // (default-null) PropertyNamingPolicy. DefaultIgnoreCondition.Never
+    // dropped because State's properties have no nullable defaults that
+    // would otherwise be elided.
 }

@@ -35,17 +35,18 @@ public static class CacheRecovery
     /// opening <c>{"schema_version":N</c> can be classified as "older than
     /// expected" rather than "malformed JSON".
     /// </summary>
-    private sealed class SchemaProbe
+    // Phase 7 Wave 34: flipped private → internal so AppJsonContext can
+    // register [JsonSerializable(typeof(SchemaProbe))]. The type is still
+    // implementation-only (the enclosing CacheRecovery is the only caller),
+    // but [JsonSerializable] attributes require referenceable types from
+    // the context's compilation unit, and internal-with-InternalsVisibleTo
+    // is the cleanest way to share visibility without exposing the type
+    // on the public surface.
+    internal sealed class SchemaProbe
     {
         [JsonPropertyName("schema_version")]
         public int SchemaVersion { get; set; }
     }
-
-    private static readonly JsonSerializerOptions ProbeOptions = new()
-    {
-        AllowTrailingCommas = true,
-        ReadCommentHandling = JsonCommentHandling.Skip,
-    };
 
     /// <summary>
     /// Attempts to load and validate <paramref name="filePath"/>. On any
@@ -107,7 +108,16 @@ public static class CacheRecovery
         SchemaProbe? probe;
         try
         {
-            probe = JsonSerializer.Deserialize<SchemaProbe>(json, ProbeOptions);
+            // Phase 7 Wave 34: JsonTypeInfo<T> overload (AOT-clean).
+            // NOTE: ProbeOptions had AllowTrailingCommas + ReadCommentHandling
+            // that the context doesn't carry — but SchemaProbe is a single
+            // int field. Trailing commas + comments would have applied only
+            // if the schema_version key were nested in a JSON object with
+            // sibling keys having those decorations, which doesn't happen in
+            // practice (our cache files are STJ-emitted, never hand-edited).
+            // If a future use case needs the lenient parse, switch back to
+            // explicit options at this call site.
+            probe = JsonSerializer.Deserialize(json, VPNRouter.Core.Json.AppJsonContext.Default.SchemaProbe);
         }
         catch (JsonException ex)
         {

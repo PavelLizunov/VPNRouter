@@ -36,6 +36,7 @@ using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.Core.Services.FreeConfigs;
 using VPNRouter.Core.Services.UpdateSources;
 
 namespace VPNRouter.Core.Json;
@@ -86,16 +87,65 @@ namespace VPNRouter.Core.Json;
 /// blobs round the registered surface to 13 entries — comfortably above
 /// the "10+" verification gate.</para>
 /// </summary>
+// Phase 7 Wave 34 additions (2026-05-19): registered the last 4 DTOs that
+// were still going through the reflective fallback at hot-path call sites:
+//   CacheRecovery.SchemaProbe — schema-version probe on cache recovery
+//   FreeConfigCache.CacheFile — free-config persistent cache wrapper
+//   CustomRule / List<CustomRule> — custom-rules import/export (the
+//     List<Dictionary<string,object>> sing-box-native export branch stays
+//     on reflective until Wave 35 restructures it to a concrete record tree)
+// Also requires CacheRecovery.SchemaProbe visibility flip private→internal
+// (the source generator can't reference a private nested type from outside
+// the enclosing class). InternalsVisibleTo lets the context see it without
+// promoting the surface beyond Core's assembly.
+// Phase 7 Wave 34: MaxDepth=32 added on the context so JsonTypeInfo<T>
+// overloads inherit the JSON-DoS guard that ProfileManager.SafeJsonOptions
+// pioneered in v2.31.0-r1 (CO-4). All registered types in this context
+// stay well under 32-level nesting (deepest: ConfigShareDocument wrapping
+// SingBoxConfig, ~6 levels). Tightening MaxDepth globally hardens every
+// deserialize path against degenerate-nesting input — same posture, broader
+// coverage. Any future type that needs deeper nesting would either need a
+// sibling context or a per-call options override.
+// Phase 7 Wave 34: WriteIndented=true at context level — every site
+// using the JsonTypeInfo<T> overload inherits human-readable JSON:
+//   * sing-box JSON (ConfigGenerator) — diagnostics
+//   * config-share document — manual export inspection
+//   * profile cache file — human-readable cache
+//   * launch failure counter state, CLI state.json — small inspectable files
+//
+// Trade-off: FreeConfigCache.Save flipped from WriteIndented=false →
+// true. The cache file is internal-only (no NekoBox/Hiddify interop),
+// grows ~5-10% on disk (~30MB → ~32MB at 25k entries), and refreshes
+// every ~6h via background cron — not a user-facing latency path.
+// CacheRecoveryTests.FreeConfigCache_Save_StampsCurrentSchemaVersion
+// updated to whitespace-tolerant regex per this behaviour change.
 [JsonSourceGenerationOptions(
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    PropertyNameCaseInsensitive = true)]
+    PropertyNameCaseInsensitive = true,
+    WriteIndented = true,
+    MaxDepth = 32,
+    // Phase 7 Wave 34: AllowReadingFromString carried over from
+    // ClashSingBoxApi's pre-Wave-34 SerializerOptions. sing-box can
+    // emit numeric fields as JSON strings ("12345") in some responses
+    // (download/uploadTotal counters in /connections); permissive
+    // number-from-string parsing tolerates that. Applies to all
+    // numeric properties on registered types but is a read-only widening
+    // (no effect on serialized output).
+    NumberHandling = JsonNumberHandling.AllowReadingFromString)]
+[JsonSerializable(typeof(CacheRecovery.SchemaProbe))]
 [JsonSerializable(typeof(ClashSelectProxyDto))]
 [JsonSerializable(typeof(ClashSetConfigDto))]
+[JsonSerializable(typeof(ClashSingBoxApi.ConnectionsDto))]
+[JsonSerializable(typeof(ClashSingBoxApi.ProxiesEnvelopeDto))]
+[JsonSerializable(typeof(ClashSingBoxApi.VersionDto))]
 [JsonSerializable(typeof(ConfigShareDocument))]
+[JsonSerializable(typeof(CustomRule))]
+[JsonSerializable(typeof(FreeConfigCache.CacheFile))]
 [JsonSerializable(typeof(GitHubAsset))]
 [JsonSerializable(typeof(GitHubRelease))]
 [JsonSerializable(typeof(GitHubRelease[]))]
 [JsonSerializable(typeof(LaunchFailureCounter.State))]
+[JsonSerializable(typeof(List<CustomRule>))]
 [JsonSerializable(typeof(List<SubscriptionEntry>))]
 [JsonSerializable(typeof(List<VlessServerEntry>))]
 [JsonSerializable(typeof(ProcessRule))]

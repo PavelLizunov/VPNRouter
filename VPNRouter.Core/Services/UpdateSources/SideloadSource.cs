@@ -102,8 +102,8 @@ public sealed class SideloadSource : IUpdateSource
         GitHubRelease[]? releases;
         try
         {
-            releases = JsonSerializer.Deserialize<GitHubRelease[]>(
-                listResponse.AsString(), GitHubReleaseSource.GitHubReleaseJsonOptions);
+            releases = JsonSerializer.Deserialize(
+                listResponse.AsString(), VPNRouter.Core.Json.AppJsonContext.Default.GitHubReleaseArray);
         }
         catch (JsonException)
         {

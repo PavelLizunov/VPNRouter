@@ -176,20 +176,18 @@ public static class HttpResponseExtensions
     public static string AsString(this HttpResponse response) =>
         Encoding.UTF8.GetString(response.Body);
 
-    /// <summary>
-    /// Decode body as JSON of <typeparamref name="T"/> via
-    /// <see cref="System.Text.Json"/>. Throws if the body is empty or
-    /// deserialises to <c>null</c>.
-    /// </summary>
-    public static T AsJson<T>(this HttpResponse response, JsonSerializerOptions? options = null)
-    {
-        ArgumentNullException.ThrowIfNull(response);
-        var value = JsonSerializer.Deserialize<T>(response.Body, options);
-        if (value is null)
-            throw new InvalidOperationException(
-                $"HTTP body deserialized to null for type {typeof(T).Name} (body length: {response.Body.Length})");
-        return value;
-    }
+    // Phase 7 Wave 34 (2026-05-19): removed `AsJson<T>(HttpResponse,
+    // JsonSerializerOptions?)` extension. It was added by Phase 2D as a
+    // convenience but never actually called — every IHttpClient consumer
+    // (GitHubReleaseSource, SideloadSource, SubscriptionFetcher,
+    // FreeConfigPoolFetcher, etc.) deserializes directly on
+    // `response.Body` or `response.AsString()` with a context-bound
+    // JsonTypeInfo<T>. Keeping a generic `Deserialize<T>(byte[],
+    // JsonSerializerOptions)` shape with zero callers just to satisfy
+    // a possible-future use case would carry an unsuppressable IL2026/
+    // IL3050 AOT warning forever. If a future caller wants this
+    // convenience, they should add a typed overload (e.g.
+    // `AsJson(this HttpResponse, JsonTypeInfo<T>)`) that's AOT-clean.
 
     /// <summary>2xx status code check.</summary>
     public static bool IsSuccess(this HttpResponse response) =>

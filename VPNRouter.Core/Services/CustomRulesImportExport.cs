@@ -247,7 +247,15 @@ public static class CustomRulesImportExport
                 warnings.Add("JSON: expected an array of rules, or an object with a \"rules\" array");
                 return new ImportResult(new(), warnings, Format.VpnrouterJson);
             }
-            var rules = JsonSerializer.Deserialize<List<CustomRule>>(arr.GetRawText(), JsonOptions)
+            // Phase 7 Wave 34: JsonTypeInfo<T> overload (AOT-clean).
+            // NOTE: AppJsonContext sets PropertyNamingPolicy=null at the
+            // [JsonSourceGenerationOptions] level (the default), while the
+            // local JsonOptions had PropertyNamingPolicy=SnakeCaseLower for
+            // the import/export wire format. The CustomRule type carries
+            // [JsonPropertyName("...")] attributes per field, so snake_case
+            // is preserved by the attributes regardless of the policy on
+            // options. Verified via the existing CustomRulesImportExportTests.
+            var rules = JsonSerializer.Deserialize(arr.GetRawText(), VPNRouter.Core.Json.AppJsonContext.Default.ListCustomRule)
                 ?? new List<CustomRule>();
             return new ImportResult(rules, warnings, Format.VpnrouterJson);
         }
@@ -260,7 +268,10 @@ public static class CustomRulesImportExport
 
     private static string ExportVpnrouterJson(IReadOnlyList<CustomRule> rules)
     {
-        return JsonSerializer.Serialize(rules.ToList(), JsonOptions);
+        // Phase 7 Wave 34: JsonTypeInfo<T> overload (AOT-clean). See
+        // ImportVpnrouterJson note about snake_case + [JsonPropertyName]
+        // preserving wire format independent of PropertyNamingPolicy.
+        return JsonSerializer.Serialize(rules.ToList(), VPNRouter.Core.Json.AppJsonContext.Default.ListCustomRule);
     }
 
     // ─── sing-box-native JSON ─────────────────────────────────────────────

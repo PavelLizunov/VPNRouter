@@ -787,7 +787,7 @@ public static class ConfigGenerator
 
     public static string Serialize(SingBoxConfig config)
     {
-        return JsonSerializer.Serialize(config, SingBoxOptions);
+        return JsonSerializer.Serialize(config, Json.AppJsonContext.Default.SingBoxConfig);
     }
 
     // ─── DNS (sing-box 1.12+ format) ──────────────────────────────────────────

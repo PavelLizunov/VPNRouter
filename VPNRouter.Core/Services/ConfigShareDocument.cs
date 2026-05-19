@@ -49,35 +49,6 @@ public sealed class ConfigShareDocument
     /// <summary>Bump when an incompatible field shape is introduced.</summary>
     public const int CurrentVersion = 1;
 
-    /// <summary>
-    /// STJ options for ConfigShareDocument serialization. WriteIndented
-    /// matches the pre-Phase-4 Newtonsoft Formatting.Indented output.
-    /// DefaultIgnoreCondition=WhenWritingNull mirrors the per-property
-    /// NullValueHandling.Ignore the prior Newtonsoft writer applied to
-    /// each optional field; the [JsonIgnore(Condition=WhenWritingNull)]
-    /// attributes below reinforce it at the property level so any future
-    /// caller passing custom JsonSerializerOptions still elides nulls.
-    /// PropertyNameCaseInsensitive=true preserves the Newtonsoft default
-    /// for tolerant deserialize of hand-edited / future-platform exports.
-    /// </summary>
-    internal static readonly JsonSerializerOptions DocumentOptions = new()
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        PropertyNameCaseInsensitive = true,
-        // Phase 5 — Wave 25 AOT-2 (2026-05-18): ConfigShareDocument is
-        // registered in AppJsonContext (alongside its SubscriptionEntry /
-        // VlessServerEntry sub-trees). Round-trip via source-gen on AOT
-        // builds; reflective fallback handles the ExportedFromInfo /
-        // ExportedSettings / PerAppFilterExport / SubscriptionEntry inner
-        // types in this version (they're reachable through
-        // ConfigShareDocument's compiled JsonTypeInfo so they'll move to
-        // generator-emitted resolvers in the next AOT pass automatically).
-        TypeInfoResolver = JsonTypeInfoResolver.Combine(
-            AppJsonContext.Default,
-            new DefaultJsonTypeInfoResolver()),
-    };
-
     [JsonPropertyName("schema")]
     public string Schema { get; set; } = SchemaMarker;
 
@@ -122,7 +93,7 @@ public sealed class ConfigShareDocument
     public static string Serialize(ConfigShareDocument doc)
     {
         if (doc == null) throw new ArgumentNullException(nameof(doc));
-        return JsonSerializer.Serialize(doc, DocumentOptions);
+        return JsonSerializer.Serialize(doc, Json.AppJsonContext.Default.ConfigShareDocument);
     }
 
     /// <summary>
@@ -190,7 +161,7 @@ public sealed class ConfigShareDocument
         ConfigShareDocument? document;
         try
         {
-            document = JsonSerializer.Deserialize<ConfigShareDocument>(json, DocumentOptions);
+            document = JsonSerializer.Deserialize(json, Json.AppJsonContext.Default.ConfigShareDocument);
         }
         catch (Exception ex)
         {

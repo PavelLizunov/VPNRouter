@@ -349,7 +349,16 @@ public sealed class CacheRecoveryTests
         cache.Save(file);
 
         var raw = File.ReadAllText(path);
-        Assert.Contains("\"schema_version\":1", raw);
+        // Phase 7 Wave 34 (2026-05-19): the FreeConfigCache file shape moved
+        // from compact (WriteIndented=false on the local JsonOptions) to
+        // indented (WriteIndented=true on AppJsonContext) when the cache
+        // serializer migrated to the JsonTypeInfo<T> overload. The cache
+        // file is internal-only (no interop with NekoBox/Hiddify/etc.), and
+        // the on-disk size grows ~50% but stays well within sensible
+        // bounds. Updated this assertion to be whitespace-flexible so the
+        // contract pinned here is "schema_version key has value 1",
+        // independent of the formatter's indentation choice.
+        Assert.Matches("\"schema_version\"\\s*:\\s*1", raw);
     }
 
     // ─── ProfileCacheFile integration tests ──────────────────────────────────

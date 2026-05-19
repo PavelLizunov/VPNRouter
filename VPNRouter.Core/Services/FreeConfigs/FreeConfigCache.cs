@@ -17,11 +17,14 @@ public sealed class FreeConfigCache
     /// </summary>
     public const int CurrentSchemaVersion = 1;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = false,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
+    // Phase 7 Wave 34: retired the local JsonOptions field. Save/Load
+    // now use the JsonTypeInfo<CacheFile> overload directly against
+    // AppJsonContext.Default. Wire format change: WriteIndented flipped
+    // false → true to match the global context posture; ~5-10% on-disk
+    // size growth, acceptable for an internal cache file with no
+    // external interop. See CacheRecoveryTests.cs:341
+    // FreeConfigCache_Save_StampsCurrentSchemaVersion for the test
+    // expectation update.
 
     private readonly string _path;
     private readonly ILogger _logger;
@@ -67,7 +70,7 @@ public sealed class FreeConfigCache
         var result = CacheRecovery.LoadOrRecover<CacheFile>(
             _path,
             CurrentSchemaVersion,
-            json => JsonSerializer.Deserialize<CacheFile>(json, JsonOptions),
+            json => JsonSerializer.Deserialize(json, VPNRouter.Core.Json.AppJsonContext.Default.CacheFile),
             cf => cf.Configs is not null,
             _logger);
 
@@ -123,7 +126,7 @@ public sealed class FreeConfigCache
             file.SchemaVersion = CurrentSchemaVersion;
             EnsureCacheDir();
             var tmp = _path + ".tmp";
-            var json = JsonSerializer.Serialize(file, JsonOptions);
+            var json = JsonSerializer.Serialize(file, VPNRouter.Core.Json.AppJsonContext.Default.CacheFile);
             File.WriteAllText(tmp, json);
             if (File.Exists(_path)) File.Delete(_path);
             File.Move(tmp, _path);
