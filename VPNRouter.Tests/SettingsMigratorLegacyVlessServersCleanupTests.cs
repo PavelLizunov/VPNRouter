@@ -81,13 +81,20 @@ public class SettingsMigratorLegacyVlessServersCleanupTests
     }
 
     [Fact]
-    public void Cleanup_StasFixture_RemovesOrphans_ResetsActiveServer()
+    public void Cleanup_StasFixture_RemovesOrphans_PreservesActiveServer_BR4()
     {
-        // Reproduces the stas evidence config: an enabled subscription
-        // with 7 working servers + 2 orphan entries in vless.servers
-        // (one of which is the active_server). After cleanup, both
-        // orphans are gone and active_server is reset because it
-        // referenced one of the removed entries.
+        // BR-4 refinement (brat 2026-05-19): the orphan cleanup now
+        // distinguishes "stale auto-migrated duplicate" from "user-added
+        // manual entry the user selected as active". An entry referenced
+        // by vless.active_server represents user intent — keep it, even
+        // when it doesn't match a subscription server.
+        //
+        // In the original stas scenario, the orphan placeholder credentials
+        // are now caught by SettingsMigrator.PruneKnownPlaceholders (the
+        // dedicated placeholder cleanup pass run AFTER migration). That
+        // catches stas-class entries by Reality pubkey fingerprint instead
+        // of by name-mismatch — more precise + doesn't over-strip the
+        // brat-class manual fallback.
         var s = new AppSettings();
 
         s.App.Subscriptions.Add(new SubscriptionEntry
@@ -108,9 +115,10 @@ public class SettingsMigratorLegacyVlessServersCleanupTests
 
         SettingsMigrator.CleanupOrphanVlessServers(s);
 
-        Assert.Empty(s.Vless.Servers);
-        // Both entries were orphans → active_server reset.
-        Assert.True(string.IsNullOrEmpty(s.Vless.ActiveServer));
+        // BR-4: active entry preserved, other orphan stripped.
+        Assert.Single(s.Vless.Servers);
+        Assert.Equal("khunrath_ln", s.Vless.Servers[0].Name);
+        Assert.Equal("khunrath_ln", s.Vless.ActiveServer);
     }
 
     [Fact]
@@ -143,6 +151,9 @@ public class SettingsMigratorLegacyVlessServersCleanupTests
     [Fact]
     public void Cleanup_IsIdempotent_DoubleApplyIsSameAsSingle()
     {
+        // BR-4 update: active server preserved (orphan-1), other orphans
+        // stripped. Idempotency still holds — second apply preserves the
+        // same single active entry.
         var s = new AppSettings();
         s.App.Subscriptions.Add(new SubscriptionEntry
         {
@@ -159,8 +170,10 @@ public class SettingsMigratorLegacyVlessServersCleanupTests
         SettingsMigrator.CleanupOrphanVlessServers(s);
         var afterSecond = s.Vless.Servers.Count;
 
-        Assert.Equal(0, afterFirst);
-        Assert.Equal(0, afterSecond);
+        // BR-4: orphan-1 kept (active), orphan-2 stripped → 1 entry.
+        Assert.Equal(1, afterFirst);
+        Assert.Equal(1, afterSecond);
+        Assert.Equal("orphan-1", s.Vless.Servers[0].Name);
     }
 
     [Fact]
@@ -184,11 +197,10 @@ public class SettingsMigratorLegacyVlessServersCleanupTests
     }
 
     [Fact]
-    public void Migrate_FromV2_PerformsCleanup_AdvancesToV3()
+    public void Migrate_FromV2_PerformsCleanup_PreservesActive_AdvancesToV3()
     {
-        // End-to-end migrator step: starting at schema 2, the v2→v3 step
-        // should perform the orphan cleanup as a side-effect (in addition
-        // to the AM-1 apps-mode seed) and arrive at schema 3.
+        // BR-4: end-to-end migrator step preserves the active orphan
+        // (user intent signal). Only non-active orphans are stripped.
         var s = new AppSettings { SchemaVersion = 2 };
         s.App.Subscriptions.Add(new SubscriptionEntry
         {
@@ -196,14 +208,17 @@ public class SettingsMigratorLegacyVlessServersCleanupTests
             Enabled = true,
             Servers = new List<VlessServerEntry> { MakeServer("alive", "1.1.1.1") },
         });
-        s.Vless.Servers.Add(MakeServer("orphan", "8.8.8.8"));
-        s.Vless.ActiveServer = "orphan";
+        s.Vless.Servers.Add(MakeServer("user-manual", "8.8.8.8"));
+        s.Vless.Servers.Add(MakeServer("stale-orphan", "9.9.9.9"));
+        s.Vless.ActiveServer = "user-manual";
 
         var migrated = SettingsMigrator.Migrate(s, from: 2, to: 3);
 
         Assert.Equal(3, migrated.SchemaVersion);
-        Assert.Empty(migrated.Vless.Servers);
-        Assert.True(string.IsNullOrEmpty(migrated.Vless.ActiveServer));
+        // BR-4: user-manual kept, stale-orphan stripped.
+        Assert.Single(migrated.Vless.Servers);
+        Assert.Equal("user-manual", migrated.Vless.Servers[0].Name);
+        Assert.Equal("user-manual", migrated.Vless.ActiveServer);
     }
 
     [Fact]

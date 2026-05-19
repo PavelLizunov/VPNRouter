@@ -273,12 +273,28 @@ public static class SettingsMigrator
             }
         }
 
+        // BR-4 (brat 2026-05-19): preserve the entry referenced by
+        // vless.active_server even when it doesn't match a subscription
+        // server key. That entry is the user's intentional manual
+        // fallback — wiping it broke brat's connect-via-Ignore path on
+        // r5. Original F-B heuristic assumed every vless.servers[] entry
+        // outside the subscription list was an auto-migrated duplicate
+        // from the stas-class shadow-override bug; in practice users
+        // also add manual servers via the Servers tab, and those land
+        // in the same list. Use ActiveServer membership as the user-
+        // intent signal: if the user selected this row as active, it's
+        // not a stale auto-migrated leftover.
+        var activeServerName = vless.ActiveServer ?? string.Empty;
+
         var keep = new List<VlessServerEntry>(vless.Servers.Count);
         var removed = new List<VlessServerEntry>();
         foreach (var srv in vless.Servers)
         {
             if (srv == null) continue;
-            if (subKeys.Contains(MakeServerKey(srv)))
+            var matchesSub = subKeys.Contains(MakeServerKey(srv));
+            var isActive = !string.IsNullOrEmpty(activeServerName)
+                && string.Equals(srv.Name, activeServerName, StringComparison.OrdinalIgnoreCase);
+            if (matchesSub || isActive)
                 keep.Add(srv);
             else
                 removed.Add(srv);
@@ -290,7 +306,8 @@ public static class SettingsMigrator
         {
             logger?.Warning(
                 "[SettingsMigrator] Removed orphan vless.servers entry: " +
-                "{Name} ({Server}:{Port}) — not in any enabled subscription",
+                "{Name} ({Server}:{Port}) — not in any enabled subscription and not " +
+                "referenced by vless.active_server (BR-4: brat 2026-05-19)",
                 string.IsNullOrEmpty(r.Name) ? "(unnamed)" : r.Name,
                 r.Server,
                 r.Port);
