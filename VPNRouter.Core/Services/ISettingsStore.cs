@@ -103,12 +103,15 @@ public interface ISettingsStore
 /// instantiating multiple <see cref="RealSettingsStore"/> instances would
 /// just hand out aliases to the same underlying state.
 ///
-/// <para><b>Phase 4 — Wave 19 (v3.0 refactor):</b> sole approved suppression
-/// site for the <see cref="ObsoleteAttribute"/>-marked
-/// <see cref="SettingsLoader.Load"/> / <see cref="SettingsLoader.Save"/>
-/// static methods. All other callers route through <see cref="ISettingsStore"/>;
-/// this delegation is what makes <see cref="Instance"/> a working back-compat
-/// shim until Phase 5 retires the static API entirely.</para>
+/// <para><b>Phase 6 (v3.0 refactor):</b> <see cref="SettingsLoader.Load"/>
+/// + <see cref="SettingsLoader.Save"/> are now <c>internal static</c>
+/// rather than <c>public [Obsolete]</c>, so the previous CS0618
+/// suppression block here is no longer needed — same-assembly callers
+/// in <c>VPNRouter.Core</c> see the internal API directly. The
+/// <see cref="Instance"/> singleton remains as the back-compat default
+/// for ctor-injected <see cref="ISettingsStore"/> consumers (CLI commands,
+/// the desktop ViewModel, Service, AutoFailoverEngine, StartupPipeline,
+/// FreeConfigs VM, plus the contract test suite).</para>
 /// </summary>
 public sealed class RealSettingsStore : ISettingsStore
 {
@@ -117,19 +120,12 @@ public sealed class RealSettingsStore : ISettingsStore
 
     private RealSettingsStore() { }
 
-    // Phase 4 Wave 19 — RealSettingsStore is the sole approved suppression
-    // site for the Obsolete-marked static SettingsLoader.Load/Save. Every
-    // ctor-injected ISettingsStore caller hits this delegation transparently.
-#pragma warning disable CS0618
-
     /// <inheritdoc />
     public AppSettings Load(string? path = null) => SettingsLoader.Load(path);
 
     /// <inheritdoc />
     public void Save(AppSettings settings, string? path = null) =>
         SettingsLoader.Save(settings, path);
-
-#pragma warning restore CS0618
 
     /// <inheritdoc />
     public string? ResetToDefaults(string? path = null) =>

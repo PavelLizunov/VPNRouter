@@ -4,17 +4,15 @@ using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
 using Xunit;
 
-// Phase 4 Wave 19 (v3.0 refactor): suppress CS0618 at file scope. The
-// integration test below specifically pins SettingsLoader.Load static
-// behaviour (rename invalid yaml → write defaults → populate
-// LastRecoveryNotice). Routing through ISettingsStore would bypass the
-// crash-recovery code path that's the load-bearing thing under test.
-// See sister suite SettingsLoaderRobustnessTests for the rationale.
-// Phase 5 Wave 24 re-verified zero external callers and kept the
-// obsolete marker at error: false (CS0619 obsolete-as-error is not
-// pragma-suppressible, which would break the four documented
-// suppression sites including this one).
-#pragma warning disable CS0618
+// Phase 6 (v3.0 refactor): the integration test below specifically pins
+// SettingsLoader.Load static behaviour (rename invalid yaml → write
+// defaults → populate LastRecoveryNotice). Routing through
+// ISettingsStore would bypass the crash-recovery code path that's the
+// load-bearing thing under test. See sister suite
+// SettingsLoaderRobustnessTests for the rationale. After Wave 27,
+// Load/Save are `internal static` (no longer `[Obsolete]`);
+// friend-assembly access comes from VPNRouter.Core.csproj's
+// <InternalsVisibleTo Include="VPNRouter.Tests" />.
 
 namespace VPNRouter.Tests;
 

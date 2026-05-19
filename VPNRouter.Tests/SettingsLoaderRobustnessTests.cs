@@ -8,18 +8,15 @@ using VPNRouter.Core.Services;
 using VPNRouter.Tests.Fakes;
 using Xunit;
 
-// Phase 4 Wave 19 (v3.0 refactor): this suite pins the static
+// Phase 6 (v3.0 refactor): this suite pins the static
 // SettingsLoader.Load/Save back-compat surface that RealSettingsStore
 // delegates to. Test cases must keep calling the static API directly
 // (not via ISettingsStore) because we want crash-mode behaviour,
 // .unloadable-{ts} rename, parse-error backups, etc. — those are
 // static-loader semantics that the interface intentionally abstracts
-// away. Suppress CS0618 at file scope so the obsolete-marker doesn't
-// flag the load-bearing pin calls. Production callers go through
-// ISettingsStore via DI; this test file is one of the four documented
-// suppression sites (Phase 5 Wave 24 kept the marker at error: false
-// because CS0619 is not pragma-suppressible).
-#pragma warning disable CS0618
+// away. After Wave 27, Load/Save are `internal static` (no longer
+// `[Obsolete]`); friend-assembly access comes from
+// VPNRouter.Core.csproj's <InternalsVisibleTo Include="VPNRouter.Tests" />.
 
 namespace VPNRouter.Tests;
 
