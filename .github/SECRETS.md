@@ -75,9 +75,42 @@ Run on the dev workstation that just rebuilt `libbox.aar`:
 ```bash
 gh release create tooling-libbox-singbox-<NEW_VERSION> \
   --repo PavelLizunov/VPNRouter \
+  --prerelease \
   --title "Tooling: libbox.aar (sing-box <NEW_VERSION> gomobile binding)" \
   --notes "Internal CI asset. Fetched by .github/workflows/build-android.yml via 'gh release download' using GITHUB_TOKEN. Not user-facing — see .github/SECRETS.md for rotation procedure when upgrading sing-box version." \
   VPNRouter.Android/Lib/libbox.aar
+```
+
+**CRITICAL — must include `--prerelease`** even though tooling releases
+aren't user-facing prereleases per se. Without `--prerelease`, GitHub
+auto-marks the newest non-prerelease release as `Latest`. The first
+`tooling-libbox-singbox-1.13.10` release was created without this
+flag on 2026-05-19, which broke:
+
+- `packaging/windows/install.ps1` one-liner: its `?per_page=30` query +
+  "first non-prerelease" filter picked the tooling release, then failed
+  to find `VPNRouter-v*-win.zip` (tooling release only carries
+  `libbox.aar`) — `iwr -useb vpn.ninitux.com/install.ps1 | iex` was
+  broken for ~3 hours.
+- `publish-apt.yml`: workflow fired on `release` event, attempted to
+  index a non-existent `.deb` asset, exited 1 (no actual damage to
+  the APT gh-pages tree but a red CI run sits in the history).
+- GitHub Releases page: showed tooling release as Latest, confusing
+  to anyone visiting `https://github.com/PavelLizunov/VPNRouter/releases`.
+
+Safe paths (verified via post-incident audit):
+- In-app `UpdateChecker.GitHubReleaseSource`: filters by
+  `TryParseSemVer(tag.TrimStart('v'))` — `tooling-*` tags fail parsing
+  and get skipped. Unaffected.
+- `build-mac.yml`, `build-linux.yml`, `build-android.yml`: all use
+  `on: push: tags: 'v*'`. Tooling tags start with `tooling-`, don't
+  trigger. Homebrew Cask wasn't bumped.
+
+Recovery procedure if this happens again:
+
+```bash
+gh release edit tooling-libbox-singbox-<VERSION> --prerelease
+gh release edit v<latest-stable> --latest
 ```
 
 Then bump `LIBBOX_RELEASE_TAG` in `.github/workflows/build-android.yml`

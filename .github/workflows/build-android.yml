@@ -180,12 +180,21 @@ jobs:
       #
       #   gh release create tooling-libbox-singbox-X.Y.Z \
       #     --repo PavelLizunov/VPNRouter \
+      #     --prerelease \
       #     --title "Tooling: libbox.aar (sing-box X.Y.Z gomobile binding)" \
       #     --notes "Internal CI asset. See .github/SECRETS.md." \
       #     VPNRouter.Android/Lib/libbox.aar
       #
-      # and bump LIBBOX_RELEASE_TAG below. The OLD tooling release can
-      # be deleted (or kept for history) after one stable cycle.
+      # CRITICAL: include `--prerelease`! Without it, GitHub auto-marks
+      # the tooling release as Latest, which breaks the install.ps1
+      # one-liner (it queries /releases?per_page=30 + filter
+      # not-prerelease + first → picks tooling, fails to find win.zip).
+      # The original 2026-05-19 tooling release missed this flag and
+      # broke installs for ~3 hours. Post-incident SECRETS.md was
+      # updated with the corrected provisioning command.
+      #
+      # The OLD tooling release can be deleted (or kept for history)
+      # after one stable cycle.
       #
       # See .github/SECRETS.md for the full rotation procedure.
       # DO NOT commit a real libbox.aar — the
