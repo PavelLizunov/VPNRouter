@@ -244,6 +244,10 @@ public static class SettingsLoader
         // shape mirrors brat's r5 mystery: schema=4 vs 5, sub count + per-
         // sub server count, manual Vless.Servers count, legacy Vless.Server
         // scalar presence, config_mode.
+        //
+        // Writes to BOTH Serilog (so it surfaces in vpnrouter*.log that
+        // users share) AND Console.Error (so it surfaces in CLI / Service
+        // host stdout when Serilog isn't initialised yet at the call site).
         try
         {
             var subSummary = parsed.App?.Subscriptions == null || parsed.App.Subscriptions.Count == 0
@@ -251,14 +255,21 @@ public static class SettingsLoader
                 : string.Join(",", parsed.App.Subscriptions.Select(s =>
                     $"{(s == null ? "?" : (s.Enabled ? "+" : "-"))}{(s?.Servers?.Count ?? 0)}"));
             var legacyVless = string.IsNullOrWhiteSpace(parsed.Vless?.Server) ? "empty" : "set";
-            Console.Error.WriteLine(
+            var line =
                 $"[SettingsLoader] Loaded {configPath}: schema={parsed.SchemaVersion}, " +
                 $"config_mode={parsed.App?.ConfigMode ?? "(null)"}, " +
                 $"subs={parsed.App?.Subscriptions?.Count ?? 0}[{subSummary}], " +
                 $"vless.servers={parsed.Vless?.Servers?.Count ?? 0}, " +
                 $"vless.server={legacyVless}, " +
                 $"active_sub='{parsed.App?.ActiveSubscriptionServer ?? string.Empty}', " +
-                $"active_vless='{parsed.Vless?.ActiveServer ?? string.Empty}'");
+                $"active_vless='{parsed.Vless?.ActiveServer ?? string.Empty}'";
+            Console.Error.WriteLine(line);
+            // Mirror to Serilog if it's been initialised. Guard with a
+            // null-conditional on Logger.Information — if Serilog isn't
+            // wired yet (which is rare; Program.cs wires it before
+            // anything else loads settings), Information is a no-op.
+            try { Serilog.Log.Logger?.Information(line); }
+            catch { /* Serilog not initialised — Console.Error has it */ }
         }
         catch
         {
