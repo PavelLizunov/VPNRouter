@@ -608,9 +608,14 @@ public class FirewallManager : IFirewallManager
                     $"description=\"VPNRouter Wave 39 BR-9: block TCP/853 to prevent DNS leak (TUN range excluded)\"");
             }, timeoutCts.Token).ConfigureAwait(false);
 
+            // BR-9 r18: log message reflects current architecture. r17
+            // dropped the separate allow rule and narrowed the block rule's
+            // remoteip to the COMPLEMENT of {Tun}, so {Tun} is the *excluded*
+            // range — not an allow scope. Wording matters for log readers.
             log.Information(
                 "[FirewallManager] DNS leak lockdown enabled — UDP/53, TCP/53, " +
-                "TCP/853 blocked on non-loopback interfaces; TUN allow scope={Tun}", tunAllowIp);
+                "TCP/853 blocked on non-loopback interfaces; TUN block-exclusion={Tun} " +
+                "(block rules scoped to complement-of-TUN, BR-9)", tunAllowIp);
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
