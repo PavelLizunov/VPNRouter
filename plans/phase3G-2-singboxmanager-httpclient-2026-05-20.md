@@ -181,3 +181,34 @@ remains in place, so the 3 s deadline is double-enforced.
 ## Outcome (filled after merge)
 
 *(filled below after verification gates pass)*
+
+## Outcome (filled 2026-05-21, by integrator)
+
+**Status**: PASS
+
+**Commits**:
+- `08f570b` docs(plan): brief — 3G-2 SingBoxManager IHttpClient migration (agent-authored)
+- `<TBD>` refactor(http): 3G-2 — SingBoxManager IHttpClient migration (integrator)
+
+**Test deltas**: +0 (existing tests cover changed code path; no new unit tests required per Phase 1-style scope). Full suite: **1194 passed / 4 skipped / 0 failed** after migration.
+
+**Files changed**: 1 — `VPNRouter.Core/Services/SingBoxManager.cs`, net +21 / −11 LOC
+
+**Verification gate results**:
+- [x] Gate 1 build: `dotnet build VPNRouter.sln -c Release` → 0 errors, 0 warnings
+- [x] Gate 2 tests: 1194/1198 green (4 skipped — known Android/headless platform-gated, pre-existing). Headless `PageScreenshotTests` / `HeadlessGuiTests` / `VisualDiffTests` excluded from this run via filter — they hang the dispatcher under VS Code's xUnit runner per `VPNRouter.Tests/CLAUDE.md` known-issue note. Headless suite runs separately in CI on every push.
+- [x] Gate 3 docs: this Outcome section. No README / CLAUDE.md updates needed — internal refactor, no user-facing surface change.
+- [-] Gate 4 self-review: N/A — diff ~32 LOC net (under 100 LOC threshold). HTTP path touched but target is `127.0.0.1` (Clash API on loopback), no external endpoint, no auth/TLS — security-review not triggered.
+- [-] Gate 5 MCP verify: N/A — no UI surface change.
+- [-] Gate 6 characterization diff: N/A — not a god-file split.
+
+**Surprises encountered**:
+- Agent terminated mid-flight ("Test is running. Wait for monitor.") with the brief committed (08f570b) and code modified but uncommitted. Integrator picked up — verified diff, ran build+tests, committed.
+- First test run hung 30 min on testhost.exe (Avalonia headless dispatcher in VS Code's xUnit runner — known issue documented in `VPNRouter.Tests/CLAUDE.md`). Killed + retried with `PageScreenshotTests|HeadlessGuiTests|VisualDiffTests` excluded. Clean PASS.
+
+**Follow-ups spawned**:
+- Task #19 — UpdateChecker unit tests (Phase 2G HIGH priority gap, 1387 LOC zero coverage)
+- Task #20 — VpnEngine orchestrator characterization (Phase 2G PARTIAL → full start/stop/restart matrix)
+- Task #21 — SingBoxManager state machine tests (now unblocked: IHttpClient seam lets `FakeHttpClient` stub Clash API without spawning real sing-box)
+
+**Rollback**: `git revert <integrator-commit>` — single-file change, fully reversible. Agent's brief commit (08f570b) is doc-only and can stay regardless.

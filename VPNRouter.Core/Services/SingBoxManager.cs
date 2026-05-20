@@ -28,7 +28,11 @@ public class SingBoxManager : IDisposable
     /// </summary>
     private bool _linuxUsedPkexec;
 
-    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(3) };
+    // 3G-2 (v3.0 refactor): replaced the per-class `static readonly HttpClient`
+    // with the shared IHttpClient seam — consolidated retry policy, shared
+    // DNS-refresh pool (PolicyHttpClient.Shared), test-injectable.
+    // Roadmap: plans/v3.0-refactor-roadmap.md §3G-2.
+    private readonly IHttpClient _http;
 
     public SingBoxState State { get; private set; } = SingBoxState.Stopped;
     public int? Pid => _process?.HasExited == false ? _process.Id : null;
@@ -38,10 +42,15 @@ public class SingBoxManager : IDisposable
     /// this to keep their persisted PID in sync with the live process.</summary>
     public event Action<int>? Started;
 
-    public SingBoxManager(SingBoxSettings settings, ILogger? logger = null)
+    /// <param name="http">3G-2 (v3.0 refactor): HTTP seam used for Clash API
+    /// hot-reload + liveness probe. Defaults to <see cref="PolicyHttpClient.Shared"/>;
+    /// tests inject <c>FakeHttpClient</c> to stub the 127.0.0.1 Clash API
+    /// without a real sing-box process.</param>
+    public SingBoxManager(SingBoxSettings settings, ILogger? logger = null, IHttpClient? http = null)
     {
         _settings = settings;
         _logger = logger ?? Log.Logger;
+        _http = http ?? PolicyHttpClient.Shared;
         _tunLock = TunOwnershipLock.Instance(_logger);
 
         // Release lock on ungraceful process exit (Environment.Exit, Ctrl+C, crash).
@@ -557,23 +566,31 @@ public class SingBoxManager : IDisposable
             //   2. Future: convert to async signature and propagate awaits up
             //      to HealthMonitor.OnDebounceElapsed / AttemptRestart.
             // For now (1) is non-invasive and bounds the worst case explicitly.
+            //
+            // 3G-2 (v3.0 refactor): bumped from `_http.PutAsync(...)` to the
+            // shared `IHttpClient.SendAsync(HttpRequest)` seam. Same URL, same
+            // 3s deadline (now belt-and-braces — `HttpRequest.Timeout` + the
+            // CancellationToken below both enforce it), same JSON body.
             var url = $"http://{_settings.ClashApi}/configs?force=true";
             var body = $"{{\"path\":\"{_currentConfigPath.Replace("\\", "\\\\")}\"}}";
-            var content = new StringContent(body, Encoding.UTF8, "application/json");
+            var bodyBytes = Encoding.UTF8.GetBytes(body);
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-            using var response = _http.PutAsync(url, content, cts.Token).GetAwaiter().GetResult();
+            var response = _http.SendAsync(new HttpRequest(
+                HttpMethod.Put, new Uri(url),
+                Body: bodyBytes,
+                BodyContentType: "application/json",
+                Timeout: TimeSpan.FromSeconds(3)), cts.Token).GetAwaiter().GetResult();
 
-            if (response.IsSuccessStatusCode)
+            if (response.IsSuccess())
             {
                 _logger.Information("[SingBoxManager] Hot-reload succeeded (HTTP {Code}) — TUN stays up",
-                    (int)response.StatusCode);
+                    response.StatusCode);
                 return true;
             }
 
-            var respBody = response.Content.ReadAsStringAsync(cts.Token).GetAwaiter().GetResult();
             _logger.Warning("[SingBoxManager] Hot-reload HTTP {Code}: {Body}",
-                (int)response.StatusCode, respBody);
+                response.StatusCode, response.AsString());
             return false;
         }
         catch (OperationCanceledException)
@@ -793,13 +810,18 @@ public class SingBoxManager : IDisposable
         Started?.Invoke(_process.Id);
     }
 
-    /// <summary>Check if sing-box Clash API responds (macOS: sing-box runs as root child of sudo).</summary>
+    /// <summary>Check if sing-box Clash API responds (macOS: sing-box runs as root child of sudo).
+    /// 3G-2 (v3.0 refactor): routed through the shared <see cref="IHttpClient"/>
+    /// seam with an explicit 3 s deadline mirroring the legacy <c>HttpClient.Timeout</c>.</summary>
     private bool IsClashApiAlive()
     {
         try
         {
-            using var response = _http.GetAsync($"http://{_settings.ClashApi}/configs").GetAwaiter().GetResult();
-            return response.IsSuccessStatusCode;
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            var response = _http.SendAsync(new HttpRequest(
+                HttpMethod.Get, new Uri($"http://{_settings.ClashApi}/configs"),
+                Timeout: TimeSpan.FromSeconds(3)), cts.Token).GetAwaiter().GetResult();
+            return response.IsSuccess();
         }
         catch { return false; }
     }
