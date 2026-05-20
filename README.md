@@ -146,8 +146,8 @@ For the one-liner install on all three platforms, see the [**Install**](#install
 | `VPNRouter-v{version}-linux-amd64.deb` | 🐧 Linux | Debian/Ubuntu package (systemd service + desktop entry). Install: `sudo dpkg -i <file>.deb` |
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Portable single-file build. `chmod +x`, run, no install needed |
 | `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Raw tarball (for manual install or packaging into other formats) |
-| `VPNRouter-v{version}-android.apk` | 🤖 Android | Signed APK (debug-signed for now), API 23+, supports arm64/arm/x64/x86 in one universal APK |
-| `*.sha256` companion files | All | SHA256 hash sidecars — auto-updater + CI integrity check verify before extracting |
+| `VPNRouter-v{version}-android.apk` | 🤖 Android | Signed APK, API 23+, arm64/arm/x64/x86 universal. **Note**: temporarily absent from prerelease & stable releases since v2.32.2 — CI cannot resolve a preview .NET 10 SDK runtime pack (`Microsoft.NETCore.App.Runtime.Mono.linux-x64 = 10.0.8`) from any public NuGet feed (`NU1102`). The workflow stays in place and can be manually triggered via `gh workflow run "Build Android APK"` to probe upstream progress. APK will return to releases automatically once .NET 10 ships GA or the pack lands on nuget.org. Build from source meanwhile via `dotnet publish VPNRouter.Android/...` if you have internal feed access. Tracked in `MEMORY.md` "Wave 32b NU1102". |
+| `*.sha256` companion files | All | SHA256 hash sidecars — auto-updater + CI integrity check verify before extracting. Every binary above ships with a `<file>.sha256` sidecar (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Verify with `sha256sum -c <file>.sha256` on Linux or `Get-FileHash <file>` on Windows. |
 
 Also served automatically every 6 hours:
 

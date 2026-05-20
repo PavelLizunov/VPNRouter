@@ -146,6 +146,8 @@ One-liner'ы для всех трёх платформ — см. секцию [*
 | `VPNRouter-v{version}-linux-amd64.deb` | 🐧 Linux | Пакет для Debian/Ubuntu (systemd-сервис + desktop entry). Установка: `sudo dpkg -i <file>.deb` |
 | `VPNRouter-v{version}-linux-x86_64.AppImage` | 🐧 Linux | Портативный single-file билд. `chmod +x`, запуск, установка не нужна |
 | `VPNRouter-v{version}-linux.tar.gz` | 🐧 Linux | Сырой tarball (для ручной установки или упаковки в другие форматы) |
+| `VPNRouter-v{version}-android.apk` | 🤖 Android | Подписанный APK, API 23+, arm64/arm/x64/x86 универсальный. **Внимание**: временно отсутствует в prerelease и stable releases начиная с v2.32.2 — CI не может разрешить preview .NET 10 SDK runtime pack (`Microsoft.NETCore.App.Runtime.Mono.linux-x64 = 10.0.8`) ни из одного публичного NuGet feed (`NU1102`). Workflow в репо сохранён, можно вручную запустить через `gh workflow run "Build Android APK"` чтобы проверять upstream-прогресс. APK вернётся в релизы автоматически когда .NET 10 выйдет GA или нужный pack появится на nuget.org. Пока можно собирать из исходников через `dotnet publish VPNRouter.Android/...` если есть доступ к internal feed. Tracked в `MEMORY.md` "Wave 32b NU1102". |
+| `*.sha256` для каждого бинарника | All | SHA256-сайдкары рядом с каждым артефактом (Windows `*-win.zip` + `*-update-win.zip`, macOS `*-mac.dmg` + `*-mac.zip`, Linux `*.deb` + `*.AppImage` + `*.tar.gz`). Авто-апдейтер + CI integrity check проверяют hash перед распаковкой. Ручная проверка: `sha256sum -c <file>.sha256` на Linux или `Get-FileHash <file>` на Windows. |
 
 Также обновляется автоматически каждые 6 часов:
 

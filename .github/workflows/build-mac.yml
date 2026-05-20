@@ -120,6 +120,25 @@ jobs:
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
+      # r17 — generate sha256 sidecars so the release asset list matches
+      # the Linux pattern (every binary + matching .sha256). Lets install
+      # scripts verify integrity without parsing the GitHub UI. Single
+      # `shasum -a 256` per artifact; we write the hash file in the
+      # canonical "<hash>  <filename>" format so `sha256sum -c` works.
+      - name: Generate SHA256 sidecars
+        id: artifacts-sha
+        run: |
+          set -euo pipefail
+          DMG="${{ steps.artifacts.outputs.dmg }}"
+          ZIP="${{ steps.artifacts.outputs.zip }}"
+          for f in "$DMG" "$ZIP"; do
+            BASENAME=$(basename "$f")
+            (cd "$(dirname "$f")" && shasum -a 256 "$BASENAME" > "${BASENAME}.sha256")
+            echo "→ $(cat "${f}.sha256")"
+          done
+          echo "dmg_sha=${DMG}.sha256" >> "$GITHUB_OUTPUT"
+          echo "zip_sha=${ZIP}.sha256" >> "$GITHUB_OUTPUT"
+
       - name: Upload as workflow artifacts (always — preserves build even if release upload fails)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
@@ -127,6 +146,8 @@ jobs:
           path: |
             /tmp/VPNRouter-v*-mac.dmg
             /tmp/VPNRouter-v*-mac.zip
+            /tmp/VPNRouter-v*-mac.dmg.sha256
+            /tmp/VPNRouter-v*-mac.zip.sha256
           retention-days: 30
 
       - name: Upload to GitHub Release
@@ -140,6 +161,8 @@ jobs:
           TAG="${{ steps.version.outputs.tag }}"
           DMG="${{ steps.artifacts.outputs.dmg }}"
           ZIP="${{ steps.artifacts.outputs.zip }}"
+          DMG_SHA="${{ steps.artifacts-sha.outputs.dmg_sha }}"
+          ZIP_SHA="${{ steps.artifacts-sha.outputs.zip_sha }}"
 
           # Ensure the release exists before uploading. gh release view exits 1 if missing.
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -148,8 +171,8 @@ jobs:
           fi
 
           echo "Uploading to release $TAG..."
-          gh release upload "$TAG" "$DMG" "$ZIP" --repo "$GITHUB_REPOSITORY" --clobber
-          echo "✓ Uploaded DMG + ZIP to $TAG"
+          gh release upload "$TAG" "$DMG" "$ZIP" "$DMG_SHA" "$ZIP_SHA" --repo "$GITHUB_REPOSITORY" --clobber
+          echo "✓ Uploaded DMG + ZIP + 2 SHA256 sidecars to $TAG"
 
       # ── Homebrew Cask auto-bump (stable releases only) ─────────────────
       # Fires `repository_dispatch` in the PavelLizunov/homebrew-vpnrouter

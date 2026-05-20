@@ -526,6 +526,20 @@ public class FirewallManager : IFirewallManager
         // /30 range when caller didn't supply.
         var tunAllowIp = NormalizeTunAllowIp(tunCidr) ?? "172.19.0.0/30";
 
+        // BR-9 (brat 2026-05-20, r17) — for the BLOCK rules below we
+        // need the COMPLEMENT of the TUN range, because Windows Defender
+        // Firewall's documented outbound semantics are
+        // "Block always wins over Allow" (verified by user-report
+        // 2026-05-20: r16's separate TUN allow rule had no effect — the
+        // unscoped block rule kept overriding it).
+        //
+        // The fix is to NARROW the block rule's `remoteip` so it never
+        // matches TUN-bound DNS traffic in the first place. The block
+        // applies to "every IP except the TUN /30 + loopback". netsh
+        // accepts comma-separated IP lists with explicit ranges, so we
+        // emit two ranges: 0.0.0.0..(tun-1) and (tun-end+1)..255.255.255.255.
+        var blockExclusionRange = ComputeBlockExclusionRange(tunAllowIp) ?? "0.0.0.0-172.18.255.255,172.19.0.4-255.255.255.255";
+
         // 5s outer timeout so a stuck netsh doesn't block VPN startup.
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(5));
@@ -547,61 +561,51 @@ public class FirewallManager : IFirewallManager
                     $"enable=yes profile=any " +
                     $"description=\"VPNRouter Wave 39: allow loopback DNS for local proxies\"");
 
-                // 1b. BR-8 (brat 2026-05-20) — allow UDP/53 + TCP/53 + TCP/853
-                //     to the TUN adapter's DNS endpoint. sing-box listens on
-                //     172.19.0.2:53 for DNS hijacked from apps via the TUN
-                //     inbound; without this explicit allow, the unscoped
-                //     block rules below ban every UDP/53 destination
-                //     including TUN, which broke DNS for brat after the
-                //     Wave 39 lockdown installed (r11 deferred it past
-                //     warm-up but the lockdown still blocked once on).
-                //     Windows Firewall outbound semantics: Allow takes
-                //     precedence over Block when both match — so this allow
-                //     wins for TUN-bound DNS while the block still wins for
-                //     any other destination.
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownTunAllowRule}\" " +
-                    $"dir=out action=allow " +
-                    $"remoteip={tunAllowIp} remoteport=53,853 " +
-                    $"protocol=UDP " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter Wave 39 BR-8: allow DNS to TUN adapter (sing-box hijack endpoint)\"");
-                RunNetshStatic(log,
-                    $"advfirewall firewall add rule " +
-                    $"name=\"{DnsLockdownTunAllowRule}-TCP\" " +
-                    $"dir=out action=allow " +
-                    $"remoteip={tunAllowIp} remoteport=53,853 " +
-                    $"protocol=TCP " +
-                    $"enable=yes profile=any " +
-                    $"description=\"VPNRouter Wave 39 BR-8: allow DNS (TCP) to TUN adapter\"");
+                // r12 BR-8 attempt installed a separate allow rule for the
+                // TUN range — but that didn't work in practice because
+                // Windows Defender Firewall outbound semantics ("Block
+                // wins over Allow") gave precedence to the block rule
+                // anyway. brat 2026-05-20 user report confirmed: r16 (with
+                // allow rule) still broke internet whenever the checkbox
+                // was on. r17 (BR-9) removes the separate allow and
+                // narrows the block rule's `remoteip` instead so it
+                // never matches the TUN range to begin with. See
+                // ComputeBlockExclusionRange below for the math.
 
-                // 2. Block UDP/53 outbound everywhere else.
+                // 2. Block UDP/53 outbound EVERYWHERE EXCEPT TUN range.
+                // BR-9: `remoteip` scoped to complement-of-TUN range so the
+                // block rule never matches TUN-bound DNS traffic. This is
+                // the only reliable way given Windows Firewall outbound's
+                // "Block wins over Allow" semantics — a separate allow rule
+                // (BR-8 r12 attempt) doesn't override the block.
                 RunNetshStatic(log,
                     $"advfirewall firewall add rule " +
                     $"name=\"{DnsLockdownUdp53Rule}\" " +
                     $"dir=out action=block " +
                     $"protocol=UDP remoteport=53 " +
+                    $"remoteip={blockExclusionRange} " +
                     $"enable=yes profile=any " +
-                    $"description=\"VPNRouter Wave 39: block UDP/53 to prevent DNS leak\"");
+                    $"description=\"VPNRouter Wave 39 BR-9: block UDP/53 to prevent DNS leak (TUN range excluded)\"");
 
-                // 3. Block TCP/53 outbound (DNS-over-TCP fallback).
+                // 3. Block TCP/53 outbound (DNS-over-TCP fallback), same scope.
                 RunNetshStatic(log,
                     $"advfirewall firewall add rule " +
                     $"name=\"{DnsLockdownTcp53Rule}\" " +
                     $"dir=out action=block " +
                     $"protocol=TCP remoteport=53 " +
+                    $"remoteip={blockExclusionRange} " +
                     $"enable=yes profile=any " +
-                    $"description=\"VPNRouter Wave 39: block TCP/53 to prevent DNS leak\"");
+                    $"description=\"VPNRouter Wave 39 BR-9: block TCP/53 to prevent DNS leak (TUN range excluded)\"");
 
-                // 4. Block TCP/853 outbound (DNS-over-TLS).
+                // 4. Block TCP/853 outbound (DNS-over-TLS), same scope.
                 RunNetshStatic(log,
                     $"advfirewall firewall add rule " +
                     $"name=\"{DnsLockdownTcp853Rule}\" " +
                     $"dir=out action=block " +
                     $"protocol=TCP remoteport=853 " +
+                    $"remoteip={blockExclusionRange} " +
                     $"enable=yes profile=any " +
-                    $"description=\"VPNRouter Wave 39: block TCP/853 (DNS-over-TLS) to prevent DNS leak\"");
+                    $"description=\"VPNRouter Wave 39 BR-9: block TCP/853 to prevent DNS leak (TUN range excluded)\"");
             }, timeoutCts.Token).ConfigureAwait(false);
 
             log.Information(
@@ -652,7 +656,9 @@ public class FirewallManager : IFirewallManager
                 // rule isn't there. RunNetshStatic logs the warning but
                 // doesn't throw — sufficient for our idempotency need.
                 RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownAllowRule}\"");
-                // BR-8: also remove the two TUN-allow rules added in r12.
+                // BR-9 r17: still delete r12's TUN-allow rules in case a
+                // user is upgrading from r12..r16 — those rules wouldn't
+                // help but they're harmless cruft we should clean up.
                 RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTunAllowRule}\"");
                 RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTunAllowRule}-TCP\"");
                 RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownUdp53Rule}\"");
@@ -661,7 +667,7 @@ public class FirewallManager : IFirewallManager
             }, timeoutCts.Token).ConfigureAwait(false);
 
             log.Information(
-                "[FirewallManager] DNS leak lockdown disabled — 6 firewall rules deleted (BR-8 r12)");
+                "[FirewallManager] DNS leak lockdown disabled — firewall rules deleted (BR-9 r17)");
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
@@ -727,6 +733,57 @@ public class FirewallManager : IFirewallManager
             };
             var networkAddr = new System.Net.IPAddress(netBytes);
             return $"{networkAddr}/{prefix}";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// BR-9 (brat 2026-05-20, r17) — compute the COMPLEMENT of the TUN
+    /// CIDR for use as the BLOCK rule's <c>remoteip</c> scope. Windows
+    /// Defender Firewall outbound semantics make "Block wins over Allow"
+    /// (Microsoft docs + r16 user verification: a separate TUN allow
+    /// rule has no effect). The only reliable way to let TUN-bound DNS
+    /// through while still blocking ISP/public-resolver leaks is to
+    /// scope the block rule itself so it never matches TUN destinations.
+    ///
+    /// <para>Returns two ranges: <c>0.0.0.0..(tun-1), (tun-end+1)..255.255.255.255</c>.
+    /// netsh accepts comma-separated ranges in <c>remoteip</c>. Returns
+    /// null for invalid input; caller falls back to a hard-coded default
+    /// for the bundled <c>172.19.0.0/30</c> TUN.</para>
+    /// </summary>
+    internal static string? ComputeBlockExclusionRange(string? tunCidr)
+    {
+        if (string.IsNullOrWhiteSpace(tunCidr)) return null;
+        try
+        {
+            var trimmed = tunCidr.Trim();
+            var slash = trimmed.IndexOf('/');
+            var ipPart = slash >= 0 ? trimmed[..slash] : trimmed;
+            var prefix = slash >= 0 && int.TryParse(trimmed[(slash + 1)..], out var p) ? p : 30;
+
+            if (!System.Net.IPAddress.TryParse(ipPart, out var parsed))
+                return null;
+            if (parsed.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+                return null;
+
+            var bytes = parsed.GetAddressBytes();
+            var hostBits = 32 - prefix;
+            uint mask = hostBits >= 32 ? 0u : (0xFFFFFFFFu << hostBits);
+            uint addr = ((uint)bytes[0] << 24) | ((uint)bytes[1] << 16) | ((uint)bytes[2] << 8) | bytes[3];
+            uint network = addr & mask;
+            uint broadcast = network | (~mask & 0xFFFFFFFFu);
+
+            // Guard against pathological inputs.
+            if (network == 0u) return $"{Format(broadcast + 1u)}-255.255.255.255";
+            if (broadcast == 0xFFFFFFFFu) return $"0.0.0.0-{Format(network - 1u)}";
+
+            return $"0.0.0.0-{Format(network - 1u)},{Format(broadcast + 1u)}-255.255.255.255";
+
+            static string Format(uint a) =>
+                $"{(a >> 24) & 0xFF}.{(a >> 16) & 0xFF}.{(a >> 8) & 0xFF}.{a & 0xFF}";
         }
         catch
         {

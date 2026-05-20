@@ -52,4 +52,27 @@ public class FirewallManagerTunAllowTests
         var result = FirewallManager.NormalizeTunAllowIp("172.19.0.1");
         Assert.Equal("172.19.0.0/30", result);
     }
+
+    // ─── BR-9 r17: ComputeBlockExclusionRange ───────────────────────────────
+
+    [Theory]
+    [InlineData("172.19.0.1/30", "0.0.0.0-172.18.255.255,172.19.0.4-255.255.255.255")] // bundled default
+    [InlineData("10.8.0.1/24",   "0.0.0.0-10.7.255.255,10.8.1.0-255.255.255.255")]
+    [InlineData("192.168.5.5/16", "0.0.0.0-192.167.255.255,192.169.0.0-255.255.255.255")]
+    public void ComputeBlockExclusionRange_ProducesCorrectComplement(string tunCidr, string expected)
+    {
+        var result = FirewallManager.ComputeBlockExclusionRange(tunCidr);
+        Assert.Equal(expected, result);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-an-ip")]
+    [InlineData("::1/128")]
+    public void ComputeBlockExclusionRange_InvalidInput_ReturnsNull(string? tunCidr)
+    {
+        var result = FirewallManager.ComputeBlockExclusionRange(tunCidr);
+        Assert.Null(result);
+    }
 }
