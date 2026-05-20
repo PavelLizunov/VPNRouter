@@ -28,11 +28,14 @@ public class AppSettings
     ///
     /// <para>v5 bump (2026-05-19, Wave 39): adds
     /// <see cref="AppConfig.DnsLeakLockdown"/> firewall-level DNS-port
-    /// block toggle. Fresh installs inherit the C# default <c>true</c>;
-    /// pre-Wave-39 configs are migrated with <c>false</c> so users
-    /// running a local DNS proxy on a non-loopback IP aren't suddenly
-    /// cut off without explicit opt-in. See
-    /// <c>plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md</c>.</para>
+    /// block toggle. <strong>BR-10 (2026-05-20, post-v2.35.0)</strong>:
+    /// default is <c>false</c> for ALL installs (fresh + upgrade). User
+    /// must explicitly enable via Settings → Leak Protection. Original
+    /// BR-5 default-on was too disruptive for LAN-DNS-proxy users
+    /// (dnscrypt-proxy, AdGuard Home on a sibling NIC); sing-box already
+    /// routes app DNS via VLESS:443 (DoH), so the firewall block is
+    /// belt-and-suspenders defense-in-depth, not a baseline requirement.
+    /// See <c>plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md</c>.</para>
     /// </summary>
     public const int CurrentSchemaVersion = 5;
 
@@ -502,15 +505,20 @@ public class AppConfig
     /// outbound on port 443 (DoH to AdGuard/Cloudflare) so port 53/853
     /// blocks do not affect the legitimate VPN-side DNS path.</para>
     ///
-    /// <para>Disabled by default for existing installs (don't surprise
-    /// users running a local DNS proxy on non-loopback like dnscrypt-proxy
-    /// or AdGuard Home on a LAN IP); new installs default true. UI toggle
-    /// lives on the Settings page. See <c>plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md</c>
+    /// <para><strong>BR-10 (2026-05-20)</strong>: default OFF for ALL
+    /// installs (was BR-5 default-on for new installs in v2.35.0). User
+    /// opts in via Settings → Leak Protection. Rationale: sing-box
+    /// already routes app DNS via VLESS:443 (DoH AdGuard/Cloudflare), so
+    /// the firewall block is belt-and-suspenders, not baseline. LAN-DNS-
+    /// proxy users (dnscrypt-proxy, AdGuard Home on sibling NIC) lose
+    /// DNS when this is on, so default-on surprised non-power users.
+    /// UI toggle lives on the Settings page. See
+    /// <c>plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md</c>
     /// for the full rationale, threat model, and known limitations.</para>
     /// </summary>
     [YamlMember(Alias = "dns_leak_lockdown")]
     [JsonPropertyName("dns_leak_lockdown")]
-    public bool DnsLeakLockdown { get; set; } = true;
+    public bool DnsLeakLockdown { get; set; } = false;
 
     /// <summary>
     /// v2.32.3 (2026-05-17): one-shot counter populated by

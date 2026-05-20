@@ -57,25 +57,26 @@ public class AppSettingsDnsLeakLockdownTests
     // ─── Task 2.1: New install default = true ────────────────────────────
 
     [Fact]
-    public void NewInstall_DefaultsToTrue()
+    public void NewInstall_DefaultsToFalse()
     {
-        // Pins POST-Wave-39 behavior. FAILS against pre-Wave-39 because
-        // the property doesn't exist on AppConfig yet.
-        //
-        // What this pins: a freshly-constructed AppSettings (i.e. new
-        // install on a machine with no config.yaml) has
-        // App.DnsLeakLockdown == true. Privacy-by-default — new users
-        // get protected without opting in.
+        // BR-10 (post-v2.35.0, 2026-05-20): default flipped from true
+        // (r9 BR-5) back to false. User now explicitly opts in via
+        // Settings → Leak Protection. Rationale: sing-box already
+        // routes app DNS via VLESS:443 (DoH) which is the primary
+        // leak protection; the firewall block is belt-and-suspenders
+        // for users who want it, but default-on too disruptive for
+        // LAN-DNS-proxy installs (dnscrypt-proxy, AdGuard Home).
         var settings = new AppSettings();
         Assert.NotNull(settings.App);
 
         var prop = GetDnsLeakLockdownProperty();
         var defaultValue = (bool)prop.GetValue(settings.App)!;
 
-        Assert.True(defaultValue,
-            "Wave 39 brief §'Files to touch (Agent A)': new installs must " +
-            "default to true (privacy-by-default). SettingsMigrator handles " +
-            "the upgrade-path opt-in separately.");
+        Assert.False(defaultValue,
+            "BR-10 (2026-05-20): new installs must default to false. " +
+            "User opts in via Settings → Leak Protection if they want " +
+            "the firewall block layer. sing-box DNS routing via VLESS:443 " +
+            "remains the primary leak protection.");
     }
 
     // ─── Task 2.2 + 2.3: YAML round-trip preserves true/false ────────────
@@ -134,27 +135,13 @@ public class AppSettingsDnsLeakLockdownTests
     // ─── Task 2.4: Legacy YAML without key → C# default (true) ───────────
 
     [Fact]
-    public void Yaml_LegacyConfigWithoutField_DefaultsToTrue()
+    public void Yaml_LegacyConfigWithoutField_DefaultsToFalse()
     {
-        // Pins POST-Wave-39 behavior at the YAML deserialization LAYER
-        // only. FAILS against pre-Wave-39 because the property doesn't
-        // exist.
-        //
-        // Note this conflicts with SettingsMigrator's intended behavior
-        // (which should set false for v2→v3 upgrades to avoid surprising
-        // existing users). The migrator runs AFTER YAML load, so YAML-
-        // default is true, then migrator may flip to false. This test
-        // exercises ONLY the YAML layer — the migrator behavior is
-        // pinned separately by SettingsMigrator_FromLegacyV2_*.
-        //
-        // To exercise the YAML layer in isolation, parse a yaml with
-        // schema_version: 4 (already-migrated) so no migration runs
-        // and we observe the pure deserialization default.
-        // Schema 5 (post-Wave-39) so SettingsMigrator skips v4→v5 step
-        // that would flip dns_leak_lockdown to false for upgrade users.
-        // The intent of THIS test is to exercise YAML deserialization
-        // in isolation; the upgrade-path migration is pinned by
-        // SettingsMigrator_FromLegacyV2_DefaultsLockdownFalse instead.
+        // BR-10 (2026-05-20): YAML layer must deserialize missing
+        // field to the (newly-flipped) C# default of false.
+        // Parse with schema_version: 5 so SettingsMigrator skips the
+        // v4→v5 step that would also set it to false explicitly — we
+        // want to exercise YAML deserialization in isolation here.
         var yaml = """
             schema_version: 5
             app:
@@ -165,25 +152,29 @@ public class AppSettingsDnsLeakLockdownTests
         var prop = GetDnsLeakLockdownProperty();
         var value = (bool)prop.GetValue(settings.App)!;
 
-        Assert.True(value,
+        Assert.False(value,
             "Legacy YAML (no dns_leak_lockdown key) at the YAML layer " +
-            "must deserialize to the C# default (true). SettingsMigrator " +
-            "may flip this to false later for upgrade users; that's pinned " +
-            "by SettingsMigrator_FromLegacyV2_DefaultsLockdownFalse.");
+            "must deserialize to the C# default (false post-BR-10). " +
+            "SettingsMigrator independently sets the same value for " +
+            "pre-v5 upgrades; that's pinned by " +
+            "SettingsMigrator_FromLegacyV2_DefaultsLockdownFalse.");
     }
 
     // ─── Task 2.5: Migrator from v2 sets DnsLeakLockdown = false ─────────
 
     [Fact]
-    public void SettingsMigrator_FromLegacyV2_DefaultsLockdownTrue_BR5()
+    public void SettingsMigrator_FromLegacyV2_DefaultsLockdownFalse_BR10()
     {
-        // BR-5 (brat 2026-05-19) — flipped from opt-out (false) to
-        // opt-in-by-default (true). Original Wave 39 was cautious about
-        // LAN-DNS-proxy users; brat's logs showed DNS leaking to a RU
-        // ISP resolver (95.85.16.212) because the protection that was
-        // the whole point of Wave 39 never activated for upgrade users.
-        // Now everyone gets the default-on protection; LAN-proxy users
-        // can disable via Settings → Leak Protection.
+        // BR-10 (post-v2.35.0, 2026-05-20) — flipped BACK from BR-5's
+        // default-on (true) to opt-in-by-default (false). r17 BR-9
+        // fixed the firewall block math so the feature works correctly
+        // when enabled, but that doesn't change the policy question:
+        // should it be on for everyone or only for users who want it?
+        // Sing-box already routes app DNS via VLESS:443 (DoH) which is
+        // the primary leak protection. The firewall block is belt-
+        // and-suspenders. Default-on broke LAN-DNS-proxy users
+        // (dnscrypt-proxy, AdGuard Home on sibling NIC) without their
+        // knowing why. Now opt-in via Settings → Leak Protection.
         var s = new AppSettings { SchemaVersion = 2 };
         var migrated = SettingsMigrator.Migrate(
             s, from: 2, to: AppSettings.CurrentSchemaVersion);
@@ -191,12 +182,12 @@ public class AppSettingsDnsLeakLockdownTests
         var prop = GetDnsLeakLockdownProperty();
         var value = (bool)prop.GetValue(migrated.App)!;
 
-        Assert.True(value,
-            "BR-5: upgrade users from legacy schema must end up with " +
-            "DnsLeakLockdown=true so DNS leak protection is active out " +
-            "of the box. Original false default was the trigger for " +
-            "brat's RU ISP DNS leak (singbox.log dns: exchanged trace " +
-            "to 95.85.16.212).");
+        Assert.False(value,
+            "BR-10: upgrade users from legacy schema must end up with " +
+            "DnsLeakLockdown=false. User opts in via Settings → Leak " +
+            "Protection if they want the firewall block. sing-box DNS " +
+            "routing via VLESS:443 remains the primary leak protection " +
+            "regardless of this toggle.");
     }
 
     // ─── Task 2.6: Migrator on already-migrated config preserves user choice ─
