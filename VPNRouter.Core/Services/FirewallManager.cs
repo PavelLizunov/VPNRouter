@@ -41,6 +41,14 @@ public class FirewallManager : IFirewallManager
     // future netsh internals changes and stays readable in the Windows
     // Firewall UI (the user sees the allow rule above the blocks).
     internal const string DnsLockdownAllowRule = "0_VPNRouter-DnsLockdown-LoopbackAllow";
+    // BR-8 (brat 2026-05-20) — second allow rule whitelisting the TUN
+    // adapter's own DNS endpoint (sing-box listens on 172.19.0.2:53 by
+    // default). Pre-r12 the unscoped block rule below banned ALL UDP/53
+    // outbound including TUN-bound queries, so DNS through sing-box was
+    // broken whenever the user had Wave 39 enabled. The leading "0_"
+    // prefix sorts it to the top of the Windows Firewall UI list so the
+    // ordering matches the install order (allows first, blocks after).
+    internal const string DnsLockdownTunAllowRule = "0_VPNRouter-DnsLockdown-TunAllow";
     internal const string DnsLockdownUdp53Rule = "VPNRouter-DnsLockdown-UDP53";
     internal const string DnsLockdownTcp53Rule = "VPNRouter-DnsLockdown-TCP53";
     internal const string DnsLockdownTcp853Rule = "VPNRouter-DnsLockdown-TCP853";
@@ -499,7 +507,10 @@ public class FirewallManager : IFirewallManager
     /// <param name="ct">Cancellation token (currently advisory — netsh
     /// calls run synchronously with bounded per-call timeouts).</param>
     [SupportedOSPlatform("windows")]
-    public static async Task EnableDnsLockdownAsync(ILogger? logger = null, CancellationToken ct = default)
+    public static async Task EnableDnsLockdownAsync(
+        ILogger? logger = null,
+        string? tunCidr = null,
+        CancellationToken ct = default)
     {
         var log = logger ?? Log.Logger;
         if (!OperatingSystem.IsWindows())
@@ -507,6 +518,13 @@ public class FirewallManager : IFirewallManager
             log.Debug("[FirewallManager] DNS lockdown skipped — non-Windows platform");
             return;
         }
+
+        // BR-8 (brat 2026-05-20) — derive the TUN allow IP from the
+        // settings-provided CIDR. Caller passes settings.Tun.Ipv4Address
+        // (e.g. "172.19.0.1/30"). Strip the prefix length to get the
+        // network for the netsh rule. Falls back to the bundled-default
+        // /30 range when caller didn't supply.
+        var tunAllowIp = NormalizeTunAllowIp(tunCidr) ?? "172.19.0.0/30";
 
         // 5s outer timeout so a stuck netsh doesn't block VPN startup.
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -528,6 +546,35 @@ public class FirewallManager : IFirewallManager
                     $"protocol=UDP remoteip=127.0.0.1 remoteport=53 " +
                     $"enable=yes profile=any " +
                     $"description=\"VPNRouter Wave 39: allow loopback DNS for local proxies\"");
+
+                // 1b. BR-8 (brat 2026-05-20) — allow UDP/53 + TCP/53 + TCP/853
+                //     to the TUN adapter's DNS endpoint. sing-box listens on
+                //     172.19.0.2:53 for DNS hijacked from apps via the TUN
+                //     inbound; without this explicit allow, the unscoped
+                //     block rules below ban every UDP/53 destination
+                //     including TUN, which broke DNS for brat after the
+                //     Wave 39 lockdown installed (r11 deferred it past
+                //     warm-up but the lockdown still blocked once on).
+                //     Windows Firewall outbound semantics: Allow takes
+                //     precedence over Block when both match — so this allow
+                //     wins for TUN-bound DNS while the block still wins for
+                //     any other destination.
+                RunNetshStatic(log,
+                    $"advfirewall firewall add rule " +
+                    $"name=\"{DnsLockdownTunAllowRule}\" " +
+                    $"dir=out action=allow " +
+                    $"remoteip={tunAllowIp} remoteport=53,853 " +
+                    $"protocol=UDP " +
+                    $"enable=yes profile=any " +
+                    $"description=\"VPNRouter Wave 39 BR-8: allow DNS to TUN adapter (sing-box hijack endpoint)\"");
+                RunNetshStatic(log,
+                    $"advfirewall firewall add rule " +
+                    $"name=\"{DnsLockdownTunAllowRule}-TCP\" " +
+                    $"dir=out action=allow " +
+                    $"remoteip={tunAllowIp} remoteport=53,853 " +
+                    $"protocol=TCP " +
+                    $"enable=yes profile=any " +
+                    $"description=\"VPNRouter Wave 39 BR-8: allow DNS (TCP) to TUN adapter\"");
 
                 // 2. Block UDP/53 outbound everywhere else.
                 RunNetshStatic(log,
@@ -559,7 +606,7 @@ public class FirewallManager : IFirewallManager
 
             log.Information(
                 "[FirewallManager] DNS leak lockdown enabled — UDP/53, TCP/53, " +
-                "TCP/853 blocked on non-loopback interfaces");
+                "TCP/853 blocked on non-loopback interfaces; TUN allow scope={Tun}", tunAllowIp);
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
@@ -605,13 +652,16 @@ public class FirewallManager : IFirewallManager
                 // rule isn't there. RunNetshStatic logs the warning but
                 // doesn't throw — sufficient for our idempotency need.
                 RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownAllowRule}\"");
+                // BR-8: also remove the two TUN-allow rules added in r12.
+                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTunAllowRule}\"");
+                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTunAllowRule}-TCP\"");
                 RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownUdp53Rule}\"");
                 RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp53Rule}\"");
                 RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp853Rule}\"");
             }, timeoutCts.Token).ConfigureAwait(false);
 
             log.Information(
-                "[FirewallManager] DNS leak lockdown disabled — 4 firewall rules deleted");
+                "[FirewallManager] DNS leak lockdown disabled — 6 firewall rules deleted (BR-8 r12)");
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
@@ -633,6 +683,57 @@ public class FirewallManager : IFirewallManager
     /// (idempotency: "rule already exists" / "no rules match" come back
     /// with non-zero exits).
     /// </summary>
+    /// <summary>
+    /// BR-8 (brat 2026-05-20) — translate the settings-provided TUN CIDR
+    /// (e.g. <c>"172.19.0.1/30"</c>) into a network address suitable for
+    /// the netsh <c>remoteip</c> parameter.
+    ///
+    /// <para>netsh accepts CIDR notation directly (<c>172.19.0.0/30</c>)
+    /// so we just normalise the network portion. The default sing-box
+    /// TUN config uses /30 with .1 as the host (Windows side) and .2 as
+    /// sing-box's DNS endpoint; we want both inside the allow scope.
+    /// Returns null for invalid input — caller falls back to the bundled
+    /// default range.</para>
+    /// </summary>
+    internal static string? NormalizeTunAllowIp(string? tunCidr)
+    {
+        if (string.IsNullOrWhiteSpace(tunCidr)) return null;
+        try
+        {
+            // Strip the host octet → network. Accepts "172.19.0.1/30" or
+            // "172.19.0.0/30" or even bare "172.19.0.0".
+            var trimmed = tunCidr.Trim();
+            var slash = trimmed.IndexOf('/');
+            var ip = slash >= 0 ? trimmed[..slash] : trimmed;
+            var prefix = slash >= 0 && int.TryParse(trimmed[(slash + 1)..], out var p) ? p : 30;
+
+            if (!System.Net.IPAddress.TryParse(ip, out var parsed))
+                return null;
+            if (parsed.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+                return null; // IPv4 only — sing-box TUN config is IPv4 in our shipping defaults.
+
+            // Compute network address by masking host bits.
+            var bytes = parsed.GetAddressBytes();
+            var hostBits = 32 - prefix;
+            uint mask = hostBits >= 32 ? 0u : (0xFFFFFFFFu << hostBits);
+            uint addr = ((uint)bytes[0] << 24) | ((uint)bytes[1] << 16) | ((uint)bytes[2] << 8) | bytes[3];
+            uint network = addr & mask;
+            var netBytes = new byte[]
+            {
+                (byte)(network >> 24),
+                (byte)(network >> 16),
+                (byte)(network >> 8),
+                (byte)network,
+            };
+            var networkAddr = new System.Net.IPAddress(netBytes);
+            return $"{networkAddr}/{prefix}";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static bool RunNetshStatic(ILogger log, string arguments)
     {
         try

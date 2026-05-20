@@ -157,11 +157,17 @@ public static class WindowsDnsHardening
         log.Information(
             "[DnsHardening] DnsLeakLockdown enabled — installing firewall rules in background " +
             "(BR-7: deferred until TUN warm-up confirmed routing)");
+        // BR-8 (brat 2026-05-20) — pass the TUN CIDR so EnableDnsLockdownAsync
+        // can add an explicit allow rule for sing-box's TUN DNS endpoint
+        // (typically 172.19.0.2:53). Without this, the unscoped block rule
+        // banned every UDP/53 outbound including TUN-bound DNS, leaving the
+        // user without working DNS once the lockdown installed.
+        var tunCidr = settings.Tun?.Ipv4Address;
         _ = Task.Run(async () =>
         {
             try
             {
-                await FirewallManager.EnableDnsLockdownAsync(log);
+                await FirewallManager.EnableDnsLockdownAsync(log, tunCidr);
             }
             catch (Exception ex)
             {
