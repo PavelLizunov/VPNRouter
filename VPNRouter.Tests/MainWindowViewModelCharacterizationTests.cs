@@ -79,9 +79,18 @@ public class MainWindowViewModelCharacterizationTests
     /// Wave-19 value pending an actual CI surface; this commit closes that
     /// loop. Same `MainWindowViewModel(ISettingsStore?)` ctor surface on
     /// both platforms.</para>
+    ///
+    /// <para><b>r13 (audit 2026-05-20):</b> CI dotnet-test has been failing
+    /// since r5 (Wave 39) because that release added the
+    /// `IsDnsLeakLockdownEnabled` ObservableProperty pair — the Windows pin
+    /// got bumped at the time but the Linux pin was missed. r12 user-
+    /// reported CI failure email caught this. Updated Linux hash to the
+    /// post-Wave-39 value captured from CI run 26150686106. Going forward,
+    /// every release that touches MVM surface MUST update both pins, and
+    /// CI status must be checked after every ship (not just locally).</para>
     /// </summary>
     private const string PinnedHashLinux =
-        "4868da739918ff7ed09f2d117b01ca900ec3aa2ac499c9086ce6a9e68acd0279";
+        "1d24dea2e2d97c83fc3b7a86335606288478184c7ebcfcb34958ef2d467acb18";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()
