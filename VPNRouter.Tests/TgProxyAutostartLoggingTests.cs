@@ -86,10 +86,15 @@ public sealed class TgProxyAutostartLoggingTests
         Assert.Contains("redactedArgs", stripped);
         Assert.Contains("RedactSecretInArgs", stripped);
 
-        // Post-spawn watchdog: WaitForExit(2000) must run + log on
-        // early exit. Pin the timeout literal + the "within 2s" wording
-        // so a future refactor that removes the probe is caught.
-        Assert.Contains("WaitForExit(2000)", stripped);
+        // Post-spawn watchdog: a 2s probe must run + log on early exit.
+        // Phase 3+ (2026-05-21) migrated the sync `WaitForExit(2000)` to an
+        // async `WaitForExitAsync(probeCts.Token)` with a 2s linked CTS —
+        // same observable 2-second budget, different sync mechanism. Pin
+        // both the 2s budget literal AND the "within 2s" wording so a
+        // future refactor that drops the probe entirely (or shortens it)
+        // is caught.
+        Assert.Contains("WaitForExitAsync", stripped);
+        Assert.Contains("FromMilliseconds(2000)", stripped);
         Assert.Contains("within 2s", stripped);
 
         // ExitCode + StandardError tail must appear in the log path

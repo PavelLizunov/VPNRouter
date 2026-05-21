@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Linq;
 using System.Collections.Generic;
+using System.Text;
 using Serilog;
 
 namespace VPNRouter.Core.Services;
@@ -14,11 +15,27 @@ namespace VPNRouter.Core.Services;
 public class TgProxyManager : IDisposable
 {
     private readonly ILogger _logger;
-    private Process? _process;
+    private readonly IProcessRunner _runner;
+    // Phase 3+ (2026-05-21): IProcessRunner adoption (long-lived spawn).
+    // The legacy `Process? _process` field is gone — the handle owns Process
+    // lifetime now. Captured-stderr ring buffer feeds the early-exit log,
+    // replacing the post-exit StandardError.ReadToEnd() drain (which is
+    // unreachable through IProcessHandle by design — stderr is consumed
+    // exclusively via ErrorLine events).
+    private IProcessHandle? _handle;
+    private readonly StringBuilder _capturedStderr = new();
+    private readonly object _stderrGate = new();
     private bool _disposed;
 
-    public bool IsRunning => _process != null && !_process.HasExited;
-    public int? Pid => IsRunning ? _process?.Id : null;
+    /// <summary>Test-only seam: swap in a fake for the long-lived
+    /// python.exe spawn. Production paths use the default
+    /// <see cref="ProcessRunner"/>. Not thread-safe — assumes serial
+    /// xUnit execution within the fixture; tests reset in try/finally
+    /// (or use the per-instance ctor injection below).</summary>
+    internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
+
+    public bool IsRunning => _handle != null && !_handle.HasExited;
+    public int? Pid => IsRunning ? _handle?.Pid : null;
 
     /// <summary>Last parsed stats line from stdout.</summary>
     public string? LastStats { get; private set; }
@@ -26,9 +43,10 @@ public class TgProxyManager : IDisposable
     /// <summary>Fired when stats line is parsed from output.</summary>
     public event Action<string>? StatsUpdated;
 
-    public TgProxyManager(ILogger? logger = null)
+    public TgProxyManager(ILogger? logger = null, IProcessRunner? runner = null)
     {
         _logger = logger ?? Log.Logger;
+        _runner = runner ?? Runner;
     }
 
     /// <summary>
@@ -55,81 +73,112 @@ public class TgProxyManager : IDisposable
         // copy is what gets emitted; the real one stays on the local PSI only.
         var redactedArgs = RedactSecretInArgs(args);
 
-        var psi = new ProcessStartInfo
+        // Phase 3+ (2026-05-21): argv list mirrors the legacy `Arguments`
+        // string verbatim. Building a List<string> by whitespace-splitting is
+        // safe here because every value (port int, host literal, hex secret,
+        // module path) contains no whitespace itself — the legacy string was
+        // already shell-parseable as a list of bare tokens.
+        var argv = new List<string>
         {
-            FileName = TgProxyUpdater.PythonExePath,
-            Arguments = args,
-            WorkingDirectory = TgProxyUpdater.TgProxyDir,
-            CreateNoWindow = true,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
+            "-m", "proxy.tg_ws_proxy",
+            "--port", port.ToString(),
+            "--host", "127.0.0.1",
+            "--secret", secret,
         };
+        if (verbose) argv.Add("--verbose");
+
+        var request = new ProcessRequest(
+            ExecutablePath: TgProxyUpdater.PythonExePath,
+            Arguments: argv,
+            WorkingDirectory: TgProxyUpdater.TgProxyDir,
+            CaptureStdout: true,
+            CaptureStderr: true);
 
         _logger.Information(
             "[TgProxy] Spawn ProcessStartInfo: FileName={FileName}, Arguments={Arguments}, WorkingDirectory={WorkingDirectory}, CreateNoWindow={CreateNoWindow}, UseShellExecute={UseShellExecute}",
-            psi.FileName, redactedArgs, psi.WorkingDirectory, psi.CreateNoWindow, psi.UseShellExecute);
+            request.ExecutablePath, redactedArgs, request.WorkingDirectory, true, false);
 
-        _process = Process.Start(psi);
-        if (_process == null)
+        // Reset captured stderr for this spawn — the post-exit log on early
+        // failure pulls from this ring buffer instead of StandardError.ReadToEnd
+        // (which is unreachable via IProcessHandle).
+        lock (_stderrGate) _capturedStderr.Clear();
+
+        try
         {
-            _logger.Error("[TgProxy] Failed to start process (Process.Start returned null)");
-            throw new InvalidOperationException("Failed to start tg-ws-proxy");
+            _handle = _runner.Start(request);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[TgProxy] Failed to start process");
+            throw new InvalidOperationException("Failed to start tg-ws-proxy", ex);
         }
 
-        _process.EnableRaisingEvents = true;
-        _process.Exited += (_, _) =>
+        // IProcessHandle wires EnableRaisingEvents = true at construction
+        // (ProcessRunner.cs:155). The Exited callback fires on a threadpool
+        // thread; capture the handle in a local so the lambda sees the right
+        // instance even if Stop() nulls _handle mid-flight.
+        var startedHandle = _handle;
+        startedHandle.Exited += (_, code) =>
         {
-            _logger.Warning("[TgProxy] Process exited (exit code: {Code})", _process?.ExitCode);
+            _logger.Warning("[TgProxy] Process exited (exit code: {Code})", code);
         };
 
-        // Capture stdout/stderr for stats and error detection
-        _process.OutputDataReceived += OnOutputData;
-        _process.ErrorDataReceived += OnOutputData;
-        _process.BeginOutputReadLine();
-        _process.BeginErrorReadLine();
+        // Single OnOutputLine handler subscribes to BOTH stdout and stderr —
+        // mirrors the legacy `OutputDataReceived += OnOutputData;
+        // ErrorDataReceived += OnOutputData;` pair. Stats lines come on stdout
+        // in production; the unified subscription keeps stderr noise visible
+        // via the same StatsUpdated channel if Python ever rotates which
+        // stream stats land on.
+        startedHandle.OutputLine += OnOutputLineHandler;
+        startedHandle.ErrorLine += OnErrorLineHandler;
 
-        _logger.Information("[TgProxy] Spawned PID {Pid}", _process.Id);
+        _logger.Information("[TgProxy] Spawned PID {Pid}", startedHandle.Pid);
 
         // v2.31.10 — short post-spawn watchdog. Python embeddable failures
         // (missing wheels, broken ._pth, port already in use) frequently
         // exit within ms. Without this probe, the only signal is the
         // generic "[TgProxy] Process exited" warning fired async, which
         // races with the autostart-success log line above and confuses
-        // the trail. WaitForExit returns true when the process is gone
-        // — log the exit code + stderr tail explicitly.
+        // the trail. WaitForExitAsync returns naturally when the process is
+        // gone; the linked 2s CTS fires OperationCanceledException if it
+        // doesn't — same semantics as the legacy `WaitForExit(2000)` bool.
         try
         {
-            if (_process.WaitForExit(2000))
+            using var probeCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(2000));
+            try
             {
-                var exitCode = _process.ExitCode;
+                // .GetAwaiter().GetResult() preserves the legacy sync Start
+                // signature so callers don't need refactoring. The async
+                // WaitForExitAsync is the natural shape for the new seam.
+                var exitCode = startedHandle.WaitForExitAsync(probeCts.Token)
+                    .GetAwaiter().GetResult();
+
                 _logger.Error(
                     "[TgProxy] Process exited within 2s of spawn (PID {Pid}, ExitCode {ExitCode}) — likely startup failure",
-                    _process.Id, exitCode);
+                    startedHandle.Pid, exitCode);
 
-                // StandardError may already be partially drained by ErrorDataReceived.
-                // Best-effort: read whatever's left. ReadToEnd on an exited process
-                // returns immediately with the remaining buffer.
-                try
+                // Captured stderr ring buffer replaces the legacy
+                // StandardError.ReadToEnd() — same observable effect
+                // (an error-tail log line for the operator), now sourced
+                // from the ErrorLine event stream which has been
+                // accumulating since spawn.
+                string stderrTail;
+                lock (_stderrGate) stderrTail = _capturedStderr.ToString();
+
+                if (!string.IsNullOrWhiteSpace(stderrTail))
                 {
-                    var stderrTail = _process.StandardError.ReadToEnd();
-                    if (!string.IsNullOrWhiteSpace(stderrTail))
-                    {
-                        _logger.Error(
-                            "[TgProxy] StandardError tail (PID {Pid}): {Stderr}",
-                            _process.Id, stderrTail.Trim());
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.Debug(ex, "[TgProxy] StandardError drain after early exit failed");
+                    _logger.Error(
+                        "[TgProxy] StandardError tail (PID {Pid}): {Stderr}",
+                        startedHandle.Pid, stderrTail.Trim());
                 }
             }
-            else
+            catch (OperationCanceledException)
             {
+                // 2s elapsed without natural exit — process still alive.
+                // Same path as legacy `WaitForExit(2000) == false`.
                 _logger.Information(
                     "[TgProxy] Process still alive after 2s probe (PID {Pid})",
-                    _process.Id);
+                    startedHandle.Pid);
             }
         }
         catch (Exception ex)
@@ -151,15 +200,53 @@ public class TgProxyManager : IDisposable
             args, @"--secret\s+\S+", "--secret REDACTED");
     }
 
-    private void OnOutputData(object sender, DataReceivedEventArgs e)
+    // Phase 3+ (2026-05-21): IProcessHandle event shape uses
+    // `EventHandler<string>` where the string is the line directly (no
+    // DataReceivedEventArgs wrapper). The line-empty guard from the legacy
+    // OnOutputData(...) is preserved by the handle implementation itself —
+    // ProcessHandle.Begin (ProcessRunner.cs:231-238) already filters
+    // `e.Data != null` before raising OutputLine/ErrorLine, so subscribers
+    // see only real lines.
+    private void OnOutputLineHandler(object? sender, string line)
     {
-        if (string.IsNullOrEmpty(e.Data)) return;
+        if (string.IsNullOrEmpty(line)) return;
 
         // Parse stats line: "stats: total=X active=Y ws=Z ..."
-        if (e.Data.Contains("stats:"))
+        if (line.Contains("stats:"))
         {
-            LastStats = e.Data;
-            StatsUpdated?.Invoke(e.Data);
+            LastStats = line;
+            StatsUpdated?.Invoke(line);
+        }
+    }
+
+    private void OnErrorLineHandler(object? sender, string line)
+    {
+        if (string.IsNullOrEmpty(line)) return;
+
+        // Capture stderr to a ring buffer for the post-exit error log — the
+        // legacy code drained StandardError.ReadToEnd() on early-exit, but
+        // IProcessHandle exposes stderr only via the ErrorLine event stream.
+        // Accumulating the lines as they arrive gives the early-exit log path
+        // the same observable result (an error tail) without holding onto the
+        // raw stream reader. Cap the buffer to keep memory bounded for
+        // long-lived runs where stderr might keep emitting warnings.
+        const int MaxStderrBuffer = 16 * 1024;
+        lock (_stderrGate)
+        {
+            if (_capturedStderr.Length < MaxStderrBuffer)
+            {
+                _capturedStderr.AppendLine(line);
+            }
+        }
+
+        // Stats lines historically arrived on either stdout OR stderr (the
+        // legacy code subscribed both event types to the same OnOutputData
+        // handler). Mirror that behaviour: stderr lines also feed the stats
+        // parser so a Python rotation between streams doesn't kill stats UX.
+        if (line.Contains("stats:"))
+        {
+            LastStats = line;
+            StatsUpdated?.Invoke(line);
         }
     }
 
@@ -234,18 +321,37 @@ public class TgProxyManager : IDisposable
 
     public void Stop()
     {
-        if (_process == null || _process.HasExited)
+        if (_handle == null || _handle.HasExited)
         {
-            _process = null;
+            _handle?.Dispose();
+            _handle = null;
             return;
         }
 
-        _logger.Information("[TgProxy] Stopping (PID {Pid})", _process.Id);
+        var handle = _handle;
+        _logger.Information("[TgProxy] Stopping (PID {Pid})", handle.Pid);
 
         try
         {
-            _process.Kill(entireProcessTree: true);
-            _process.WaitForExit(3000);
+            // Phase 3+: IProcessHandle.Kill is idempotent + entireProcessTree
+            // by default; Dispose mirrors SingBoxManager.Stop's "disable
+            // Exited callback before kill" invariant (ProcessRunner.cs:288-290).
+            handle.Kill(entireProcessTree: true);
+
+            // Symmetric replacement for the legacy `_process.WaitForExit(3000)`
+            // synchronisation barrier. The .GetAwaiter().GetResult() keeps
+            // Stop() sync-callable.
+            using var stopCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(3000));
+            try
+            {
+                handle.WaitForExitAsync(stopCts.Token).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException)
+            {
+                // 3s elapsed — process may still be exiting. Dispose below
+                // will fire the final kill via ProcessHandle.Dispose.
+                _logger.Debug("[TgProxy] WaitForExitAsync timeout (3s) — proceeding to dispose");
+            }
         }
         catch (Exception ex)
         {
@@ -253,8 +359,8 @@ public class TgProxyManager : IDisposable
         }
         finally
         {
-            _process?.Dispose();
-            _process = null;
+            try { handle.Dispose(); } catch { /* defensive */ }
+            _handle = null;
             _logger.Information("[TgProxy] Stopped");
         }
     }
@@ -278,7 +384,7 @@ public class TgProxyManager : IDisposable
     /// <c>tg-ws-proxy</c> / <c>TgWsProxy_windows</c> by process name matched
     /// NOTHING — those names don't exist. The page's Stop button was calling
     /// this helper expecting processes to die, but nothing happened unless
-    /// the current app instance still held <see cref="_process"/> (i.e. had
+    /// the current app instance still held an active handle (i.e. had
     /// launched the proxy in this session). If tg-ws-proxy was started by
     /// the Windows Service or a previous session, Stop was effectively a
     /// no-op and the proxy kept serving traffic.
