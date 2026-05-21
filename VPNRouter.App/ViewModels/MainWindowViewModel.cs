@@ -3773,7 +3773,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             try
             {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                // v2.35.2 (PinkuDani 2026-05-21): bumped 30s → 60s. On Windows
+                // 10 LTSC / Server SKUs without the NetAdapter PowerShell
+                // module, every Remove-NetAdapter call costs ~1s for the
+                // CommandNotFoundException to surface; 5+ callsites per cycle
+                // pushed total Start time past 30s for slow machines and
+                // forced Stop on a still-starting sing-box. 60s budget closes
+                // the Stop-after-Start race for that class. Future Fix #2
+                // Stage 2 will split into Phase A (start) + Phase B (TUN
+                // warm-up) once VpnEngine.Connected event lands.
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
                 // v2.32.1-r5 (Bug-r10-B): session-scoped opt-out from
                 // ConflictingVpnDetector. _skipConflictCheckOnce is set
                 // by IgnoreVpnConflictCommand. Consumed exactly once —
@@ -3883,7 +3892,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
             catch (OperationCanceledException)
             {
-                _logger.Error("[VM] Start timed out after 30s");
+                _logger.Error("[VM] Start timed out after 60s — possible cause: slow firewall rule creation, missing NetAdapter PowerShell module (Windows 10 LTSC / Server SKUs), or pre-start TUN cleanup hang. Stopping engine.");
                 try { await Task.Run(() => _engine.Stop()); } catch { }
                 IsConnecting = false;
                 IsConnected = false;
@@ -5140,7 +5149,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 try
                 {
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                    // v2.35.2 (PinkuDani 2026-05-21): bumped 30s → 60s, see
+                    // matching comment in main ToggleConnectionAsync. With
+                    // up to 3 retries this means worst-case wall-clock of
+                    // 180s before giving up, but only on TunOwnershipException
+                    // (Service stealing the TUN handle) — far better than
+                    // forcibly killing a slow-but-healthy startup.
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
                     await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
                     break; // success
                 }

@@ -122,7 +122,11 @@ public partial class MainWindowViewModel
             }
 
             // Start with the new active server.
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            // v2.35.2 (PinkuDani 2026-05-21): bumped 30s → 60s. See matching
+            // comment in MainWindowViewModel.cs ToggleConnectionAsync about
+            // the Windows 10 LTSC / missing-NetAdapter-PowerShell-module
+            // class hardening.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
             await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
             return true;
         }
