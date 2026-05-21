@@ -189,7 +189,7 @@ public sealed class VpnEngineOrchestratorTests
         // start it first" rather than the generic "Apply failed".
         using var engine = BuildIdleEngine();
 
-        var result = await engine.ApplyAsync(new AppSettings());
+        var result = await engine.ApplyAsync(new AppSettings(), TestContext.Current.CancellationToken);
 
         Assert.False(result);
     }
@@ -207,7 +207,7 @@ public sealed class VpnEngineOrchestratorTests
         var statuses = new List<string>();
         engine.StatusChanged += s => statuses.Add(s);
 
-        await engine.ApplyAsync(new AppSettings());
+        await engine.ApplyAsync(new AppSettings(), TestContext.Current.CancellationToken);
 
         Assert.DoesNotContain(statuses, s => s.Contains("Applying", StringComparison.OrdinalIgnoreCase));
     }

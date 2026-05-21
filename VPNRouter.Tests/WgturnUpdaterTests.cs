@@ -272,7 +272,7 @@ public sealed class WgturnUpdaterTests
         // (acquire the semaphore). The first awaited call is
         // _http.GetStringAsync, which takes >0ms.
         await Task.Yield();
-        await Task.Delay(50);
+        await Task.Delay(50, TestContext.Current.CancellationToken);
 
         // Second download — must fast-fail on the lock check.
         var ex = await Assert.ThrowsAsync<WgturnDownloadException>(async () =>

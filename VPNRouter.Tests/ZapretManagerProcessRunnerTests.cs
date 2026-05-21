@@ -200,7 +200,7 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
             // The Exited event fires synchronously on the test thread because
             // FakeProcessHandle.SignalExit invokes it directly. Allow a moment
             // for the lambda's DetectImmediateExit call to complete.
-            await Task.Delay(50);
+            await Task.Delay(50, TestContext.Current.CancellationToken);
 
             Assert.Equal(1, immediateExitFired);
         }
@@ -233,7 +233,7 @@ public sealed class ZapretManagerProcessRunnerTests : IDisposable
         {
             sut.Start("--wf-tcp=443");
             handle.SignalExit(0);
-            await Task.Delay(50);
+            await Task.Delay(50, TestContext.Current.CancellationToken);
 
             Assert.Equal(0, immediateExitFired);
         }

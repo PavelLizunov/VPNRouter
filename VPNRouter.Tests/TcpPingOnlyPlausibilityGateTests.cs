@@ -43,7 +43,7 @@ public class TcpPingOnlyPlausibilityGateTests
         };
 
         var tester = new VPNRouter.Core.Services.FreeConfigs.FreeConfigTester();
-        await tester.TcpPingOnlyAsync(entry);
+        await tester.TcpPingOnlyAsync(entry, TestContext.Current.CancellationToken);
 
         // On failure the helper preserves both LatencyMs and Status —
         // the comment in the implementation explicitly calls this out

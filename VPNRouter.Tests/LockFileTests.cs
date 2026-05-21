@@ -63,7 +63,7 @@ public sealed class LockFileTests
         // A second instance attempting to acquire must be blocked. (Direct
         // probe against the underlying file-system contract — proves the
         // lock is genuinely held, not just that the payload was written.)
-        var second = await fs.TryAcquireExclusiveLockAsync(path, TimeSpan.FromMilliseconds(50));
+        var second = await fs.TryAcquireExclusiveLockAsync(path, TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
         Assert.Null(second);
 
         sut.ReleaseInstance();

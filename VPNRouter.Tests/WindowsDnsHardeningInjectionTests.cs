@@ -148,7 +148,7 @@ public sealed class WindowsDnsHardeningInjectionTests
             ActiveProfile = "TestProfile"
         };
 
-        var ok = await engine.ApplyAsync(settings);
+        var ok = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
 
         Assert.False(ok);
         // The whole point: idle Apply is a fast no-op that doesn't touch
