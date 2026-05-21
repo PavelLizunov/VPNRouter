@@ -260,7 +260,7 @@ Failure modes are limited to:
 
 **Status**: PASS — 19 tests added, all green.
 
-**Commit**: `<TBD>` test(singbox): 2G — 19 state-machine characterization tests
+**Commit**: `7a5420c` test(singbox): 2G — 19 state-machine characterization tests
 
 **Test deltas**: +19 in
 `VPNRouter.Tests/SingBoxManagerStateMachineTests.cs` (three extras

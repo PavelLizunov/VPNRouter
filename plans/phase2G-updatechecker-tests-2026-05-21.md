@@ -158,7 +158,7 @@ Failure modes are limited to:
 
 **Status**: PASS — 19 tests added, all green.
 
-**Commit**: `<TBD>` test(updatechecker): 2G — 19 unit tests covering SemVer/channel/asset
+**Commit**: `247f6a6` test(updatechecker): 2G — 19 unit tests covering SemVer/channel/asset
 
 **Test deltas**: +19 in `VPNRouter.Tests/UpdateCheckerTests.cs`
 (slightly more than the 17 estimated in the brief — the SemVer +

@@ -197,7 +197,7 @@ Failure modes are limited to:
 
 **Status**: PASS — 16 tests added, all green.
 
-**Commit**: `<TBD>` test(vpnengine): 2G — 16 characterization tests for orchestrator
+**Commit**: `14c512e` test(vpnengine): 2G — 16 characterization tests for orchestrator
 
 **Test deltas**: +16 in
 `VPNRouter.Tests/VpnEngineOrchestratorTests.cs` (two extras vs.
