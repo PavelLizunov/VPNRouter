@@ -152,7 +152,7 @@ public sealed class VpnEngineStartAsyncSeamTests
         using var engine = BuildEngine();
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await engine.StartAsync(settings, default, skipVpnConflictCheck: true));
+            await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
 
         // The exact message is owned by VlessServersResolver.DescribeEmptyReason;
         // we pin on the user-facing actionable hint rather than the literal
@@ -197,7 +197,7 @@ public sealed class VpnEngineStartAsyncSeamTests
         using var engine = BuildEngine();
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await engine.StartAsync(settings, default, skipVpnConflictCheck: true));
+            await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
 
         Assert.NotNull(ex.Message);
         Assert.False(engine.IsRunning);
@@ -218,7 +218,7 @@ public sealed class VpnEngineStartAsyncSeamTests
         using var engine = BuildEngine();
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await engine.StartAsync(settings, default, skipVpnConflictCheck: true));
+            await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
 
         Assert.NotNull(ex.Message);
         Assert.False(engine.IsRunning);
@@ -245,7 +245,7 @@ public sealed class VpnEngineStartAsyncSeamTests
         var preMonitored = engine.MonitoredProcesses.Count;
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await engine.StartAsync(settings, default, skipVpnConflictCheck: true));
+            await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
 
         // Post-throw state must match pre-throw state.
         Assert.Equal(preIsRunning, engine.IsRunning);
@@ -290,7 +290,7 @@ public sealed class VpnEngineStartAsyncSeamTests
         using var engine = BuildEngine();
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await engine.StartAsync(settings, default, skipVpnConflictCheck: true));
+            await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
 
         // The phase-1 throw site message is "No active profile specified
         // in config." — pin loosely on the actionable substring "active
@@ -319,7 +319,7 @@ public sealed class VpnEngineStartAsyncSeamTests
         using var engine = BuildEngine();
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await engine.StartAsync(settings, default, skipVpnConflictCheck: true));
+            await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
 
         // Pin the path-in-message format so the actionable error stays
         // useful.
@@ -349,7 +349,7 @@ public sealed class VpnEngineStartAsyncSeamTests
             using var engine = BuildEngine();
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-                await engine.StartAsync(settings, default, skipVpnConflictCheck: true));
+                await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true));
 
             // The exact wording is owned by CustomConfigInjector.Validate,
             // but it has to contain "validation" or equivalent to be
@@ -434,7 +434,7 @@ public sealed class VpnEngineStartAsyncSeamTests
 
         using var engine = BuildEngine();
 
-        var result = await engine.ApplyAsync(settings);
+        var result = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
 
         Assert.False(result);
         // Engine state unchanged.
@@ -464,7 +464,7 @@ public sealed class VpnEngineStartAsyncSeamTests
         // servers throw assuming no real VPN client is hogging wintun on
         // the CI machine (which there shouldn't be).
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await engine.StartAsync(settings, default));
+            await engine.StartAsync(settings, TestContext.Current.CancellationToken));
         // No assert on engine state — already covered by other tests.
     }
 }

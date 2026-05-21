@@ -40,7 +40,7 @@ public sealed class ISingBoxApiContractTests
         const string path = @"C:\ProgramData\VPNRouter\config\current.json";
 
         // Act
-        var result = await fake.ReloadConfigAsync(path);
+        var result = await fake.ReloadConfigAsync(path, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(result);
@@ -57,7 +57,7 @@ public sealed class ISingBoxApiContractTests
         fake.SimulateCrash();
 
         // Act
-        var result = await fake.ReloadConfigAsync("any/path");
+        var result = await fake.ReloadConfigAsync("any/path", TestContext.Current.CancellationToken);
 
         // Assert: returns false but call is still recorded so the test
         // can assert HealthMonitor *attempted* the hot-reload before
@@ -75,7 +75,7 @@ public sealed class ISingBoxApiContractTests
         // call is logged.
         var fake = new FakeSingBoxApi { Version = "1.13.10", TunnelHealthy = true };
 
-        var version = await fake.GetVersionAsync();
+        var version = await fake.GetVersionAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("1.13.10", version);
         Assert.Contains(fake.Calls, c => c.Method == "GetVersion");
@@ -90,7 +90,7 @@ public sealed class ISingBoxApiContractTests
         fake.Proxies.Add(new ProxyInfo("b", "vless", 80, DateTimeOffset.UtcNow));
 
         // Act
-        var ok = await fake.SelectProxyAsync("select", "b");
+        var ok = await fake.SelectProxyAsync("select", "b", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(ok);
@@ -110,7 +110,7 @@ public sealed class ISingBoxApiContractTests
         fake.Proxies.Add(new ProxyInfo("direct", "direct", DelayMs: null, DelayMeasuredAt: null));
 
         // Act
-        var list = await fake.ListProxiesAsync();
+        var list = await fake.ListProxiesAsync(TestContext.Current.CancellationToken);
 
         // Assert — both proxies surface, both fields preserved.
         Assert.Equal(2, list.Count);
@@ -138,27 +138,28 @@ public sealed class ISingBoxApiContractTests
         try
         {
             using var api = new ClashSingBoxApi(baseUrl: baseUrl);
+            var ct = TestContext.Current.CancellationToken;
 
             // --- ReloadConfigAsync: PUT /configs?force=true ---
-            var reloadOk = await api.ReloadConfigAsync(@"C:\fake\path.json");
+            var reloadOk = await api.ReloadConfigAsync(@"C:\fake\path.json", ct);
             Assert.True(reloadOk);
 
             // --- GetVersionAsync: GET /version → {"version": "1.13.10"} ---
-            var version = await api.GetVersionAsync();
+            var version = await api.GetVersionAsync(ct);
             Assert.Equal("1.13.10", version);
 
             // --- GetConnectionsAsync: GET /connections ---
-            var snapshot = await api.GetConnectionsAsync();
+            var snapshot = await api.GetConnectionsAsync(ct);
             Assert.Equal(2, snapshot.ActiveCount);
             Assert.Equal(123L, snapshot.TotalUploadBytes);
             Assert.Equal(456L, snapshot.TotalDownloadBytes);
 
             // --- SelectProxyAsync: PUT /proxies/select ---
-            var selectOk = await api.SelectProxyAsync("select", "proxyA");
+            var selectOk = await api.SelectProxyAsync("select", "proxyA", ct);
             Assert.True(selectOk);
 
             // --- ListProxiesAsync: GET /proxies ---
-            var proxies = await api.ListProxiesAsync();
+            var proxies = await api.ListProxiesAsync(ct);
             Assert.NotEmpty(proxies);
             Assert.Contains(proxies, p => p.Name == "proxyA" && p.Type == "vless");
 

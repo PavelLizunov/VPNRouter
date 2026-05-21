@@ -30,9 +30,10 @@ public class IFileSystemContractTests
         var fs = NewFs();
         const string path = @"C:\test\file.txt";
         const string content = "hello, мир\n2nd line";
+        var ct = TestContext.Current.CancellationToken;
 
-        await fs.WriteAllTextAsync(path, content);
-        var roundTripped = await fs.ReadAllTextAsync(path);
+        await fs.WriteAllTextAsync(path, content, ct);
+        var roundTripped = await fs.ReadAllTextAsync(path, ct);
 
         Assert.Equal(content, roundTripped);
         Assert.True(fs.FileExists(path));
@@ -47,14 +48,15 @@ public class IFileSystemContractTests
         var fs = NewFs();
         const string path = @"C:\bin\blob.dat";
         var bytes = new byte[] { 0x00, 0xFF, 0x42, 0x10, 0xAA };
+        var ct = TestContext.Current.CancellationToken;
 
-        await fs.WriteAllBytesAsync(path, bytes);
-        var roundTripped = await fs.ReadAllBytesAsync(path);
+        await fs.WriteAllBytesAsync(path, bytes, ct);
+        var roundTripped = await fs.ReadAllBytesAsync(path, ct);
 
         Assert.Equal(bytes, roundTripped);
         // Defensive-copy on read: mutating result must not affect store.
         roundTripped[0] = 0x77;
-        var second = await fs.ReadAllBytesAsync(path);
+        var second = await fs.ReadAllBytesAsync(path, ct);
         Assert.Equal(0x00, second[0]);
     }
 
@@ -124,12 +126,13 @@ public class IFileSystemContractTests
     {
         var fs = NewFs();
         const string path = @"C:\locks\app.lock";
+        var ct = TestContext.Current.CancellationToken;
 
         await using var _ = await ToDisposableAsync(
-            fs.TryAcquireExclusiveLockAsync(path, TimeSpan.FromMilliseconds(100)));
+            fs.TryAcquireExclusiveLockAsync(path, TimeSpan.FromMilliseconds(100), ct));
 
         // Second concurrent acquire (without releasing first) returns null.
-        var second = await fs.TryAcquireExclusiveLockAsync(path, TimeSpan.FromMilliseconds(50));
+        var second = await fs.TryAcquireExclusiveLockAsync(path, TimeSpan.FromMilliseconds(50), ct);
         Assert.Null(second);
     }
 
@@ -138,12 +141,13 @@ public class IFileSystemContractTests
     {
         var fs = NewFs();
         const string path = @"C:\locks\busy.lock";
+        var ct = TestContext.Current.CancellationToken;
 
-        var first = await fs.TryAcquireExclusiveLockAsync(path, TimeSpan.FromMilliseconds(100));
+        var first = await fs.TryAcquireExclusiveLockAsync(path, TimeSpan.FromMilliseconds(100), ct);
         Assert.NotNull(first);
 
         var start = DateTime.UtcNow;
-        var second = await fs.TryAcquireExclusiveLockAsync(path, TimeSpan.FromMilliseconds(80));
+        var second = await fs.TryAcquireExclusiveLockAsync(path, TimeSpan.FromMilliseconds(80), ct);
         var elapsed = DateTime.UtcNow - start;
 
         Assert.Null(second);
@@ -154,7 +158,7 @@ public class IFileSystemContractTests
 
         // Releasing the first lock allows a subsequent acquire to succeed.
         first!.Dispose();
-        var third = await fs.TryAcquireExclusiveLockAsync(path, TimeSpan.FromMilliseconds(100));
+        var third = await fs.TryAcquireExclusiveLockAsync(path, TimeSpan.FromMilliseconds(100), ct);
         Assert.NotNull(third);
         third!.Dispose();
     }
@@ -169,6 +173,7 @@ public class IFileSystemContractTests
         var fs = NewFs();
         const int taskCount = 32;
         const int perTask = 100;
+        var ct = TestContext.Current.CancellationToken;
 
         var tasks = Enumerable.Range(0, taskCount).Select(t =>
             Task.Run(async () =>
@@ -176,9 +181,9 @@ public class IFileSystemContractTests
                 for (int i = 0; i < perTask; i++)
                 {
                     var path = $@"C:\par\t{t}\f{i}.txt";
-                    await fs.WriteAllTextAsync(path, $"{t}:{i}");
+                    await fs.WriteAllTextAsync(path, $"{t}:{i}", ct);
                 }
-            })).ToArray();
+            }, ct)).ToArray();
 
         await Task.WhenAll(tasks);
 
@@ -189,7 +194,7 @@ public class IFileSystemContractTests
             for (int i = 0; i < perTask; i += 25)
             {
                 var path = $@"C:\par\t{t}\f{i}.txt";
-                Assert.Equal($"{t}:{i}", await fs.ReadAllTextAsync(path));
+                Assert.Equal($"{t}:{i}", await fs.ReadAllTextAsync(path, ct));
             }
         }
     }

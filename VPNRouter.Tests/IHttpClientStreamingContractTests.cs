@@ -50,14 +50,15 @@ public sealed class IHttpClientStreamingContractTests
 
         // Act — open stream, read all bytes via CopyToAsync.
         byte[] actual;
+        var ct = TestContext.Current.CancellationToken;
         await using (var resp = await http.SendStreamingAsync(
-            new HttpRequest(HttpMethod.Get, new Uri(TestUrl))))
+            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)), ct))
         {
             Assert.Equal(200, resp.StatusCode);
             Assert.True(resp.IsSuccess());
 
             using var sink = new MemoryStream();
-            await resp.Body.CopyToAsync(sink);
+            await resp.Body.CopyToAsync(sink, ct);
             actual = sink.ToArray();
         }
 
@@ -94,7 +95,8 @@ public sealed class IHttpClientStreamingContractTests
         // reading any body bytes. This is the canonical use case for
         // download progress reporting.
         await using var resp = await http.SendStreamingAsync(
-            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)));
+            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)),
+            TestContext.Current.CancellationToken);
 
         // Assert — headers + ContentLength are present + body has NOT
         // been consumed yet.
@@ -168,10 +170,11 @@ public sealed class IHttpClientStreamingContractTests
         using var http = new PolicyHttpClient(new HttpClient(handler));
 
         // Act — read a tiny prefix then dispose.
+        var ct = TestContext.Current.CancellationToken;
         var resp = await http.SendStreamingAsync(
-            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)));
+            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)), ct);
         var prefix = new byte[4];
-        var read = await resp.Body.ReadAsync(prefix);
+        var read = await resp.Body.ReadAsync(prefix, ct);
         await resp.DisposeAsync();
 
         // Assert — got the prefix, body is now closed.
@@ -211,8 +214,9 @@ public sealed class IHttpClientStreamingContractTests
         // Act — drain the body in 64 KB chunks and tally the total. This
         // is the canonical "stream to file" pattern used by
         // ZapretUpdater / WgturnUpdater / UpdateChecker.
+        var ct = TestContext.Current.CancellationToken;
         await using var resp = await http.SendStreamingAsync(
-            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)));
+            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)), ct);
 
         Assert.Equal(SizeBytes, resp.ContentLength);
 
@@ -220,7 +224,7 @@ public sealed class IHttpClientStreamingContractTests
         long total = 0;
         int chunks = 0;
         int n;
-        while ((n = await resp.Body.ReadAsync(buffer)) > 0)
+        while ((n = await resp.Body.ReadAsync(buffer, ct)) > 0)
         {
             total += n;
             chunks++;
@@ -250,8 +254,9 @@ public sealed class IHttpClientStreamingContractTests
 
         // Act — open + drain.
         byte[] received;
+        var ct = TestContext.Current.CancellationToken;
         await using (var resp = await fake.SendStreamingAsync(
-            new HttpRequest(HttpMethod.Get, new Uri(TestUrl))))
+            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)), ct))
         {
             Assert.Equal(200, resp.StatusCode);
             Assert.True(resp.IsSuccess());
@@ -259,7 +264,7 @@ public sealed class IHttpClientStreamingContractTests
             Assert.Equal("yes", resp.Headers["X-Stub"]);
 
             using var sink = new MemoryStream();
-            await resp.Body.CopyToAsync(sink);
+            await resp.Body.CopyToAsync(sink, ct);
             received = sink.ToArray();
         }
 

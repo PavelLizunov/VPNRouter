@@ -47,7 +47,8 @@ public sealed class IHttpClientContractTests
 
         // Act
         var response = await http.SendAsync(
-            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)));
+            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)),
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(200, response.StatusCode);
@@ -72,7 +73,8 @@ public sealed class IHttpClientContractTests
             new HttpRequest(
                 HttpMethod.Get,
                 new Uri(TestUrl),
-                Timeout: TimeSpan.FromMilliseconds(50))));
+                Timeout: TimeSpan.FromMilliseconds(50)),
+            TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -97,7 +99,8 @@ public sealed class IHttpClientContractTests
             HttpMethod.Get,
             new Uri(TestUrl),
             RetryCount: 2,
-            RetryBaseDelay: TimeSpan.FromMilliseconds(1)));
+            RetryBaseDelay: TimeSpan.FromMilliseconds(1)),
+            TestContext.Current.CancellationToken);
 
         // Assert — final success + handler hit exactly 3 times.
         Assert.Equal(200, response.StatusCode);
@@ -119,7 +122,8 @@ public sealed class IHttpClientContractTests
 
         // Act
         var response = await http.SendAsync(
-            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)));
+            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)),
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(404, response.StatusCode);
@@ -138,7 +142,8 @@ public sealed class IHttpClientContractTests
 
         // Act
         var response = await fake.SendAsync(
-            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)));
+            new HttpRequest(HttpMethod.Get, new Uri(TestUrl)),
+            TestContext.Current.CancellationToken);
 
         // Assert — the route's canned response surfaces 1:1.
         Assert.Equal(201, response.StatusCode);
@@ -152,9 +157,10 @@ public sealed class IHttpClientContractTests
         var fake = new FakeHttpClient().Setup(TestUrl, "{}");
 
         // Act — fire 3 distinct requests.
-        await fake.SendAsync(new HttpRequest(HttpMethod.Get, new Uri(TestUrl + "?a=1")));
-        await fake.SendAsync(new HttpRequest(HttpMethod.Post, new Uri(TestUrl), Body: new byte[] { 1, 2 }, BodyContentType: "application/octet-stream"));
-        await fake.SendAsync(new HttpRequest(HttpMethod.Get, new Uri(TestUrl + "?a=2")));
+        var ct = TestContext.Current.CancellationToken;
+        await fake.SendAsync(new HttpRequest(HttpMethod.Get, new Uri(TestUrl + "?a=1")), ct);
+        await fake.SendAsync(new HttpRequest(HttpMethod.Post, new Uri(TestUrl), Body: new byte[] { 1, 2 }, BodyContentType: "application/octet-stream"), ct);
+        await fake.SendAsync(new HttpRequest(HttpMethod.Get, new Uri(TestUrl + "?a=2")), ct);
 
         // Assert — all 3 captured in call order with the right shape.
         var sent = fake.SentRequests;
