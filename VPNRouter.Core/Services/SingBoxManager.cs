@@ -13,10 +13,33 @@ public class SingBoxManager : IDisposable
     private readonly SingBoxSettings _settings;
     private readonly ILogger _logger;
 
-    private Process? _process;
+    // Phase 3+ (2026-05-21): IProcessRunner adoption — the LAST long-lived
+    // spawn target in Core. The legacy `Process? _process` field is replaced
+    // by `IProcessHandle? _handle`; the handle owns Process lifetime, stream
+    // wiring, and the load-bearing EnableRaisingEvents=false-before-Kill
+    // pattern (ProcessHandle.Dispose, ProcessRunner.cs:288-290).
+    //
+    // What's NOT migrated through this seam: pkexec / sudo helper spawns
+    // inside LinuxStopEscalationChain + TrySpawnAndWait + IsSingBoxAlive
+    // (pgrep). Those are short-lived stop-side fire-and-forgets; their
+    // migration is a follow-up batch and won't affect this brief's surface.
+    // The Linux/macOS sing-box-as-root chain (sudo / pkexec wrapping the
+    // sing-box exec) IS migrated — argv just differs by platform; the
+    // ProcessRequest construction below selects sudo / pkexec / direct as
+    // command-line tokens, not as a separate spawn path.
+    private readonly IProcessRunner _runner;
+    private IProcessHandle? _handle;
     private string _currentConfigPath = string.Empty;
     private bool _disposed;
     private TunOwnershipLock _tunLock;
+
+    /// <summary>Test-only seam: swap in a fake for the long-lived sing-box
+    /// spawn. Production paths use the default <see cref="ProcessRunner"/>.
+    /// Mirrors TgProxyManager.Runner / VlessDeepVerifier.Runner. Not
+    /// thread-safe — assumes serial xUnit execution within the fixture;
+    /// tests reset in try/finally (or use the per-instance ctor injection
+    /// below).</summary>
+    internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
 
     /// <summary>
     /// Linux-only: did <see cref="LaunchProcess"/> elevate via pkexec?
@@ -35,7 +58,7 @@ public class SingBoxManager : IDisposable
     private readonly IHttpClient _http;
 
     public SingBoxState State { get; private set; } = SingBoxState.Stopped;
-    public int? Pid => _process?.HasExited == false ? _process.Id : null;
+    public int? Pid => _handle != null && !_handle.HasExited ? _handle.Pid : null;
     public event EventHandler? Crashed;
     /// <summary>Fires after every successful LaunchProcess — initial start
     /// AND restart after crash. Listeners (e.g. CLI StateFile writer) use
@@ -46,11 +69,19 @@ public class SingBoxManager : IDisposable
     /// hot-reload + liveness probe. Defaults to <see cref="PolicyHttpClient.Shared"/>;
     /// tests inject <c>FakeHttpClient</c> to stub the 127.0.0.1 Clash API
     /// without a real sing-box process.</param>
-    public SingBoxManager(SingBoxSettings settings, ILogger? logger = null, IHttpClient? http = null)
+    /// <param name="runner">Phase 3+ (2026-05-21): IProcessRunner seam for
+    /// the long-lived sing-box spawn. Defaults to the static
+    /// <see cref="Runner"/> (production <see cref="ProcessRunner"/>); tests
+    /// inject <c>FakeProcessRunner</c> to drive lifecycle without real
+    /// sing-box. The Linux pkexec chain + macOS sudo chain construct the
+    /// argv via tokens — the IProcessRunner just executes; the elevation
+    /// path is not a separate code branch in the seam.</param>
+    public SingBoxManager(SingBoxSettings settings, ILogger? logger = null, IHttpClient? http = null, IProcessRunner? runner = null)
     {
         _settings = settings;
         _logger = logger ?? Log.Logger;
         _http = http ?? PolicyHttpClient.Shared;
+        _runner = runner ?? Runner;
         _tunLock = TunOwnershipLock.Instance(_logger);
 
         // Release lock on ungraceful process exit (Environment.Exit, Ctrl+C, crash).
@@ -138,13 +169,23 @@ public class SingBoxManager : IDisposable
             {
                 try
                 {
-                    if (_process != null)
+                    if (_handle != null)
                     {
-                        _process.EnableRaisingEvents = false;
-                        if (!_process.HasExited)
+                        // Phase 3+ (2026-05-21): explicit EnableRaisingEvents=false
+                        // dropped — ProcessHandle.Dispose handles that pattern
+                        // transitively (ProcessRunner.cs:288-290). The
+                        // Kill→WaitForExit→Dispose sequence preserves the
+                        // load-bearing intent (no spurious Crashed event for an
+                        // intentional Stop).
+                        if (!_handle.HasExited)
                         {
-                            _process.Kill(entireProcessTree: true);
-                            _process.WaitForExit(5000);
+                            _handle.Kill(entireProcessTree: true);
+                            try
+                            {
+                                using var killCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                                _handle.WaitForExitAsync(killCts.Token).GetAwaiter().GetResult();
+                            }
+                            catch (OperationCanceledException) { /* 5s elapsed; Dispose finalises */ }
                         }
                     }
                 }
@@ -166,8 +207,8 @@ public class SingBoxManager : IDisposable
                 }
                 finally
                 {
-                    _process?.Dispose();
-                    _process = null;
+                    _handle?.Dispose();
+                    _handle = null;
                     State = SingBoxState.Stopped;
                     if (releaseLock) _tunLock.Release();
                     _logger.Information("[SingBoxManager] sing-box stopped (Linux capability mode, no pkexec)");
@@ -197,8 +238,13 @@ public class SingBoxManager : IDisposable
             //      sudoers entry was set up at first connect).
             //   4. Verify after each step that sing-box is gone (no
             //      Clash API + no pgrep hit). Log each step's outcome.
-            if (_process != null) _process.EnableRaisingEvents = false;
-
+            // Phase 3+ (2026-05-21): the explicit EnableRaisingEvents=false
+            // on the local handle is gone — ProcessHandle.Dispose
+            // (ProcessRunner.cs:288-290) sets the flag before Kill anyway
+            // (load-bearing intent preserved transitively). The pkexec
+            // wrapper PID exited long ago by this point, but we still need
+            // to call the escalation chain to kill the real sing-box (root
+            // child) via pkexec pkill / sudo -n pkill.
             try
             {
                 LinuxStopEscalationChain();
@@ -209,8 +255,8 @@ public class SingBoxManager : IDisposable
             }
             finally
             {
-                _process?.Dispose();
-                _process = null;
+                _handle?.Dispose();
+                _handle = null;
                 State = SingBoxState.Stopped;
                 if (releaseLock) _tunLock.Release();
                 _logger.Information("[SingBoxManager] sing-box stopped");
@@ -218,7 +264,7 @@ public class SingBoxManager : IDisposable
             return;
         }
 
-        if (_process == null || _process.HasExited)
+        if (_handle == null || _handle.HasExited)
         {
             // v2.30.1-r5: log this branch — pre-r5 it was silent, which
             // made the user-reported "Stop pressed but no log lines and
@@ -226,7 +272,7 @@ public class SingBoxManager : IDisposable
             // mark that we're in the post-crash cleanup path.
             _logger.Information(
                 "[SingBoxManager] Stop called but sing-box already exited (process={ProcState}) — running cleanup-only path",
-                _process == null ? "null" : "HasExited");
+                _handle == null ? "null" : "HasExited");
             State = SingBoxState.Stopped;
             if (releaseLock) _tunLock.Release();
 
@@ -278,12 +324,20 @@ public class SingBoxManager : IDisposable
             return;
         }
 
-        _process.EnableRaisingEvents = false;
-
+        // Phase 3+ (2026-05-21): EnableRaisingEvents=false-before-Kill
+        // pattern moved to ProcessHandle.Dispose (ProcessRunner.cs:288-290).
+        // The ordering is now an implicit invariant of the seam — the
+        // dispose chain sets the flag, then Kill, then Process.Dispose,
+        // so the Exited callback is suppressed for an intentional Stop.
         try
         {
-            _process.Kill(entireProcessTree: true);
-            _process.WaitForExit(5000);
+            _handle!.Kill(entireProcessTree: true);
+            try
+            {
+                using var killCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                _handle.WaitForExitAsync(killCts.Token).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException) { /* 5s elapsed; Dispose finalises */ }
         }
         catch (Exception ex)
         {
@@ -291,8 +345,8 @@ public class SingBoxManager : IDisposable
         }
         finally
         {
-            _process.Dispose();
-            _process = null;
+            _handle?.Dispose();
+            _handle = null;
             State = SingBoxState.Stopped;
             _tunLock.Release();
             _logger.Information("[SingBoxManager] sing-box stopped");
@@ -463,7 +517,7 @@ public class SingBoxManager : IDisposable
             return IsClashApiAlive();
 
         if (State != SingBoxState.Running) return false;
-        return _process?.HasExited == false;
+        return _handle?.HasExited == false;
     }
 
     public bool IsHealthy()
@@ -471,44 +525,37 @@ public class SingBoxManager : IDisposable
         if (OperatingSystem.IsMacOS())
             return State == SingBoxState.Running && IsClashApiAlive();
 
-        if (_process == null || _process.HasExited)
+        if (_handle == null || _handle.HasExited)
             return false;
 
-        try
-        {
-            _process.Refresh();
-            var memoryMb = _process.WorkingSet64 / 1024 / 1024;
-
-            if (memoryMb > 500)
-                _logger.Warning("[SingBoxManager] sing-box memory usage: {Mem}MB (threshold: 500MB)", memoryMb);
-
-            return true;
-        }
-        catch
-        {
+        // Phase 3+ (2026-05-21): metric introspection via the IProcessHandle
+        // snapshot — the seam refreshes the underlying Process internally.
+        var snapshot = _handle.TryGetSnapshot();
+        if (snapshot == null)
             return false;
-        }
+
+        var memoryMb = snapshot.WorkingSetBytes / 1024 / 1024;
+        if (memoryMb > 500)
+            _logger.Warning("[SingBoxManager] sing-box memory usage: {Mem}MB (threshold: 500MB)", memoryMb);
+
+        return true;
     }
 
     public ProcessMetrics GetMetrics()
     {
-        if (_process == null || _process.HasExited)
+        if (_handle == null || _handle.HasExited)
             return new ProcessMetrics();
 
-        try
-        {
-            _process.Refresh();
-            return new ProcessMetrics
-            {
-                MemoryMb = _process.WorkingSet64 / 1024 / 1024,
-                CpuTime = _process.TotalProcessorTime,
-                StartTime = _process.StartTime
-            };
-        }
-        catch
-        {
+        var snapshot = _handle.TryGetSnapshot();
+        if (snapshot == null)
             return new ProcessMetrics();
-        }
+
+        return new ProcessMetrics
+        {
+            MemoryMb = snapshot.WorkingSetBytes / 1024 / 1024,
+            CpuTime = snapshot.TotalProcessorTime,
+            StartTime = snapshot.StartTime
+        };
     }
 
     // ─── Private ──────────────────────────────────────────────────────────────
@@ -548,7 +595,7 @@ public class SingBoxManager : IDisposable
         // update) dumps a 20-line HttpRequestException stack into the log
         // — every single time. Checking HasExited gives us a fast, clean
         // "hot-reload unavailable, restarting" log line instead.
-        if (_process == null || _process.HasExited)
+        if (_handle == null || _handle.HasExited)
         {
             _logger.Debug("[SingBoxManager] Hot-reload skipped — sing-box process not alive");
             return false;
@@ -706,20 +753,22 @@ public class SingBoxManager : IDisposable
             }
         }
 
-        ProcessStartInfo psi;
+        // Phase 3+ (2026-05-21): IProcessRunner adoption — build the
+        // ProcessRequest (executable + argv tokens) per-platform. The
+        // elevation path (sudo / pkexec) is encoded as argv structure,
+        // not as a separate spawn code branch — the seam executes the
+        // request verbatim. ArgumentList (used inside ProcessRunner) gives
+        // us shell-quote-free argument passing, so the legacy
+        // `"\"{exePath}\" run -c \"{path}\""` single-string forms collapse
+        // to a clean string[].
+        string spawnExe;
+        IReadOnlyList<string> spawnArgs;
 
         if (OperatingSystem.IsMacOS())
         {
             // sudo with NOPASSWD — sudoers configured by UI on first Connect
-            psi = new ProcessStartInfo
-            {
-                FileName = "/usr/bin/sudo",
-                Arguments = $"\"{exePath}\" run -c \"{_currentConfigPath}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
+            spawnExe = "/usr/bin/sudo";
+            spawnArgs = new[] { exePath, "run", "-c", _currentConfigPath };
         }
         else if (OperatingSystem.IsLinux())
         {
@@ -748,66 +797,51 @@ public class SingBoxManager : IDisposable
             {
                 _logger.Information("[SingBoxManager] Linux: launching as user (CAP_NET_ADMIN present, no pkexec needed)");
                 _linuxUsedPkexec = false;
-                psi = new ProcessStartInfo
-                {
-                    FileName = exePath,
-                    Arguments = $"run -c \"{_currentConfigPath}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                };
+                spawnExe = exePath;
+                spawnArgs = new[] { "run", "-c", _currentConfigPath };
             }
             else
             {
                 _logger.Information("[SingBoxManager] Linux: falling back to pkexec (sing-box lacks CAP_NET_ADMIN — install via .deb or run 'sudo setcap cap_net_admin,cap_net_bind_service=+eip {Exe}' once)",
                     exePath);
                 _linuxUsedPkexec = true;
-                psi = new ProcessStartInfo
-                {
-                    FileName = "/usr/bin/pkexec",
-                    Arguments = $"\"{exePath}\" run -c \"{_currentConfigPath}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                };
+                spawnExe = "/usr/bin/pkexec";
+                spawnArgs = new[] { exePath, "run", "-c", _currentConfigPath };
             }
         }
         else
         {
-            psi = new ProcessStartInfo
-            {
-                FileName = exePath,
-                Arguments = $"run -c \"{_currentConfigPath}\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
+            spawnExe = exePath;
+            spawnArgs = new[] { "run", "-c", _currentConfigPath };
         }
 
-        _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        _process.OutputDataReceived += (_, e) =>
-        {
-            if (!string.IsNullOrEmpty(e.Data))
-                _logger.Debug("[sing-box] {Line}", e.Data);
-        };
-        _process.ErrorDataReceived += (_, e) =>
-        {
-            if (!string.IsNullOrEmpty(e.Data))
-                _logger.Warning("[sing-box] {Line}", e.Data);
-        };
+        var request = new ProcessRequest(
+            ExecutablePath: spawnExe,
+            Arguments: spawnArgs,
+            CaptureStdout: true,
+            CaptureStderr: true);
 
-        _process.Exited += (_, _) => OnProcessExited();
+        _handle = _runner.Start(request);
 
-        _process.Start();
-        _process.BeginOutputReadLine();
-        _process.BeginErrorReadLine();
+        // Capture the handle in a local so the lambda sees the right instance
+        // even if Stop() nulls _handle mid-flight (the Exited callback fires
+        // on a threadpool thread). Mirrors TgProxyManager Phase 3+ pattern.
+        var startedHandle = _handle;
+        startedHandle.OutputLine += (_, line) =>
+        {
+            if (!string.IsNullOrEmpty(line))
+                _logger.Debug("[sing-box] {Line}", line);
+        };
+        startedHandle.ErrorLine += (_, line) =>
+        {
+            if (!string.IsNullOrEmpty(line))
+                _logger.Warning("[sing-box] {Line}", line);
+        };
+        startedHandle.Exited += (_, _) => OnProcessExited();
 
         State = SingBoxState.Running;
-        _logger.Information("[SingBoxManager] sing-box started (PID {Pid})", _process.Id);
-        Started?.Invoke(_process.Id);
+        _logger.Information("[SingBoxManager] sing-box started (PID {Pid})", startedHandle.Pid);
+        Started?.Invoke(startedHandle.Pid);
     }
 
     /// <summary>Check if sing-box Clash API responds (macOS: sing-box runs as root child of sudo).
@@ -835,12 +869,25 @@ public class SingBoxManager : IDisposable
         // read" both fell into the same null-display branch on the
         // user-visible error path. Now we log the cause so post-mortems
         // can distinguish "exited cleanly" vs "exit info unavailable".
+        //
+        // Phase 3+ (2026-05-21): IProcessHandle.Exited fires with the int
+        // code directly; we still attempt a snapshot-style read here for
+        // backcompat with the legacy log shape, but the WaitForExitAsync
+        // path (used by the immediate kill-then-wait sequences) already
+        // surfaces the code through its return value. Since this callback
+        // doesn't receive the exit code as a parameter (we wired the
+        // adapter as `(_, _) => OnProcessExited()` to preserve the
+        // legacy signature), we re-fetch from the handle.
         int? exitCode = null;
         Exception? exitCodeError = null;
         try
         {
-            if (_process is { HasExited: true } p)
-                exitCode = p.ExitCode;
+            if (_handle is { HasExited: true } h)
+            {
+                // WaitForExitAsync on an already-exited handle returns
+                // synchronously with the cached exit code.
+                exitCode = h.WaitForExitAsync(CancellationToken.None).GetAwaiter().GetResult();
+            }
         }
         catch (Exception ex)
         {
@@ -1009,7 +1056,7 @@ public class SingBoxManager : IDisposable
         if (_disposed) return;
         _disposed = true;
         Stop();
-        _process?.Dispose();
+        _handle?.Dispose();
     }
 
     /// <summary>

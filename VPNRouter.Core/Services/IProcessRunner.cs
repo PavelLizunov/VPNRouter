@@ -173,4 +173,34 @@ public interface IProcessHandle : IDisposable
     /// <summary>Fires once when the process exits, with the exit code.
     /// May fire on a background thread.</summary>
     event EventHandler<int>? Exited;
+
+    /// <summary>
+    /// Phase 3+ (2026-05-21): metric introspection for long-lived spawn
+    /// owners (notably <c>SingBoxManager.GetMetrics</c> / <c>IsHealthy</c>).
+    /// Refreshes the underlying OS process and returns a point-in-time
+    /// snapshot of working-set memory, total CPU time, and start time.
+    /// Returns <c>null</c> when the process has exited, was never started,
+    /// or the metrics can't be read (e.g. permission denied on a foreign
+    /// uid). Reads are best-effort — the catch-all in the implementation
+    /// must not throw.
+    /// </summary>
+    ProcessSnapshot? TryGetSnapshot();
 }
+
+/// <summary>
+/// Point-in-time snapshot of an <see cref="IProcessHandle"/>. Captures
+/// the OS metrics callers used to reach via <c>Process.WorkingSet64</c>,
+/// <c>Process.TotalProcessorTime</c>, and <c>Process.StartTime</c>
+/// directly before the IProcessRunner seam landed.
+/// </summary>
+/// <param name="WorkingSetBytes">RSS in bytes. Divide by 1 MiB for the
+/// SingBoxManager "memory threshold" log line.</param>
+/// <param name="TotalProcessorTime">User + kernel CPU time consumed by
+/// the process since spawn.</param>
+/// <param name="StartTime">Local-time spawn instant. Used by status
+/// readouts ("running for X seconds"). Local-time matches the legacy
+/// <c>Process.StartTime</c> contract.</param>
+public sealed record ProcessSnapshot(
+    long WorkingSetBytes,
+    TimeSpan TotalProcessorTime,
+    DateTime StartTime);

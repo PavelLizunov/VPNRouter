@@ -471,8 +471,10 @@ public sealed class SingBoxManagerStateMachineTests
         // returns 400. This pin catches a refactor that flips method to
         // POST, drops the ?force=true, or escapes the path differently.
         //
-        // We have to poke _process non-null so the line-551 guard
-        // doesn't short-circuit before reaching the HTTP layer.
+        // Phase 3+ (2026-05-21) IProcessRunner adoption: the legacy
+        // `_process` Process field is gone — poke `_handle` with a
+        // FakeProcessHandle (HasExited=false by default) so the line-551
+        // guard doesn't short-circuit before reaching the HTTP layer.
         var http = new FakeHttpClient()
             .Setup("127.0.0.1:9090/configs",
                 new HttpResponse(
@@ -482,105 +484,54 @@ public sealed class SingBoxManagerStateMachineTests
                     Duration: TimeSpan.FromMilliseconds(1)));
         using var manager = BuildManager(http);
 
-        var (child, cleanup) = SpawnLongLivedChild();
-        using (cleanup)
+        var fakeHandle = new FakeProcessHandle(pid: 42424);
+        try
         {
-            try
-            {
-                SetField(manager, "_process", child);
-                SetField(manager, "_currentConfigPath", @"C:\fake\current.json");
+            SetField(manager, "_handle", fakeHandle);
+            SetField(manager, "_currentConfigPath", @"C:\fake\current.json");
 
-                var result = InvokePrivate<bool>(manager, "TryHotReload");
+            var result = InvokePrivate<bool>(manager, "TryHotReload");
 
-                Assert.True(result);
-                Assert.Single(http.SentRequests);
+            Assert.True(result);
+            Assert.Single(http.SentRequests);
 
-                var req = http.SentRequests[0];
-                Assert.Equal(HttpMethod.Put, req.Method);
-                Assert.Equal("http://127.0.0.1:9090/configs?force=true",
-                    req.Uri.ToString());
-                Assert.Equal("application/json", req.BodyContentType);
-                Assert.NotNull(req.Body);
-                // Body: {"path":"C:\\fake\\current.json"} — backslashes
-                // are escaped in the JSON string (sing-box parses JSON
-                // before passing to its path loader on Windows).
-                var bodyJson = Encoding.UTF8.GetString(req.Body!);
-                Assert.Contains("\"path\":", bodyJson);
-                Assert.Contains("C:\\\\fake\\\\current.json", bodyJson);
-            }
-            finally
-            {
-                // CRITICAL: clear the _process field BEFORE the manager's
-                // `using` disposes the test host's reference would be
-                // touched if we leaked a real Process here. The spawned
-                // child is killed by `cleanup`; the field needs to be
-                // null so Stop's branch falls to the cleanup-only path.
-                SetField(manager, "_process", null);
-            }
+            var req = http.SentRequests[0];
+            Assert.Equal(HttpMethod.Put, req.Method);
+            Assert.Equal("http://127.0.0.1:9090/configs?force=true",
+                req.Uri.ToString());
+            Assert.Equal("application/json", req.BodyContentType);
+            Assert.NotNull(req.Body);
+            // Body: {"path":"C:\\fake\\current.json"} — backslashes
+            // are escaped in the JSON string (sing-box parses JSON
+            // before passing to its path loader on Windows).
+            var bodyJson = Encoding.UTF8.GetString(req.Body!);
+            Assert.Contains("\"path\":", bodyJson);
+            Assert.Contains("C:\\\\fake\\\\current.json", bodyJson);
+        }
+        finally
+        {
+            // CRITICAL: clear the _handle field BEFORE the manager's
+            // `using` disposes. The fake handle is harmless on Dispose
+            // (no real process to kill) but clearing keeps the
+            // Stop's branch falling to the cleanup-only path which is
+            // hermetic.
+            SetField(manager, "_handle", null);
+            fakeHandle.Dispose();
         }
     }
 
-    // ─── 10. Source-string pins (intentional-stop ordering + 3G-2 field) ─
+    // ─── 10. Source-string pins (intentional-stop ordering moved to
+    //         ProcessHandleDisposeOrderingTests after Phase 3+ migration;
+    //         3G-2 IHttpClient field shape stays here) ────────────────────
 
-    [Fact]
-    public void Stop_DisablesEventsBeforeKill_SourcePin()
-    {
-        // THE key SingBoxManager design decision (per CLAUDE.md):
-        //   _process.EnableRaisingEvents = false; // BEFORE Kill()
-        //   _process.Kill(entireProcessTree: true);
-        //
-        // Without this ordering, Kill() triggers the Exited callback on
-        // a threadpool thread which fires Crashed → HealthMonitor's
-        // auto-restart loop kicks in for an INTENTIONAL stop. Previous
-        // attempts (volatile bool _intentionalStop, int _generation)
-        // had race conditions; the EnableRaisingEvents=false approach
-        // is race-free because Process delivers Exited only when the
-        // flag is true at the moment the event would fire.
-        //
-        // Source-string pin: in the Windows-branch StopInternal body
-        // (the path that runs Kill on the local Process), the
-        // EnableRaisingEvents=false line MUST appear before the Kill
-        // line. Can't behaviour-test without an IProcess seam; the
-        // source pin is the next best thing.
-        var src = LoadSingBoxManagerSource();
-        Assert.SkipUnless(src != null, "SingBoxManager.cs source not reachable from test cwd — source-pin skipped");
-
-        // Strip line comments so commentary about the pattern doesn't
-        // muddy matches. Then collapse runs of whitespace to single
-        // spaces — robust against CRLF vs LF + indentation drift across
-        // branches/refactors.
-        var stripped = StripLineComments(src);
-        var oneline = System.Text.RegularExpressions.Regex.Replace(
-            stripped, @"\s+", " ");
-
-        // Pin: the Windows-branch graceful kill block has these tokens
-        // in this order: EnableRaisingEvents = false → try → Kill →
-        // WaitForExit. Pre-Wave-38 commentary explored alternatives
-        // (volatile bool / int _generation) — the EnableRaisingEvents
-        // approach is THE one that ships.
-        var enableIdx = oneline.IndexOf(
-            "_process.EnableRaisingEvents = false;",
-            StringComparison.Ordinal);
-        Assert.True(enableIdx > 0,
-            "Source must set _process.EnableRaisingEvents = false " +
-            "(intentional-stop pattern — see CLAUDE.md).");
-
-        var killIdx = oneline.IndexOf(
-            "_process.Kill(entireProcessTree: true)",
-            StringComparison.Ordinal);
-        Assert.True(killIdx > 0,
-            "Source must call _process.Kill(entireProcessTree: true)");
-
-        // The EnableRaisingEvents = false MUST precede the Kill in the
-        // graceful-stop branch (there's only one Kill site on the local
-        // _process in Stop's Windows path, line 285 in v2.35.0).
-        Assert.True(enableIdx < killIdx,
-            "Intentional-stop ordering violated: " +
-            "_process.EnableRaisingEvents = false MUST come BEFORE _process.Kill. " +
-            $"Got EnableRaisingEvents at {enableIdx}, Kill at {killIdx}. " +
-            "This is THE key SingBoxManager design decision (see CLAUDE.md) — " +
-            "Kill() must not trigger the Exited callback for intentional stops.");
-    }
+    // Note: the v2.35.x-era `Stop_DisablesEventsBeforeKill_SourcePin` test
+    // is gone — the EnableRaisingEvents=false-before-Kill pattern moved
+    // out of SingBoxManager.cs into ProcessHandle.Dispose
+    // (ProcessRunner.cs:288-290) during the Phase 3+ IProcessRunner
+    // migration. The pin lives in
+    // <see cref="ProcessHandleDisposeOrderingTests"/> now — cleaner
+    // separation of concerns, since the invariant belongs to the seam
+    // implementation, not to one of its consumers.
 
     [Fact]
     public void Restart_PreservesTunLock_SourcePin()

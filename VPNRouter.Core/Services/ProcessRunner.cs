@@ -263,6 +263,25 @@ internal sealed class ProcessHandle : IProcessHandle
         catch { /* idempotent — race with natural exit is fine */ }
     }
 
+    /// <inheritdoc />
+    public ProcessSnapshot? TryGetSnapshot()
+    {
+        try
+        {
+            // Mirror the legacy SingBoxManager.GetMetrics pattern:
+            // Refresh() snapshots the current Process counters from the OS;
+            // without it WorkingSet64 etc. return cached (potentially stale)
+            // values from the last refresh tick.
+            if (_process.HasExited) return null;
+            _process.Refresh();
+            return new ProcessSnapshot(
+                WorkingSetBytes: _process.WorkingSet64,
+                TotalProcessorTime: _process.TotalProcessorTime,
+                StartTime: _process.StartTime);
+        }
+        catch { return null; }
+    }
+
     private void OnProcessExited(object? sender, EventArgs e)
     {
         // Fired by the runtime on a threadpool thread when the OS notifies

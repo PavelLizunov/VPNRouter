@@ -168,6 +168,23 @@ public sealed class FakeProcessHandle : IProcessHandle
         SignalExit(exitCode: -1);
     }
 
+    /// <summary>Test-side: stub the snapshot the production path reads via
+    /// <see cref="TryGetSnapshot"/>. Default null mirrors the
+    /// "process has exited / metrics unavailable" branch — production tests
+    /// for SingBoxManager.GetMetrics empty-default rely on this default.</summary>
+    public ProcessSnapshot? SnapshotStub { get; set; }
+
+    /// <summary>Test-side: how many times <see cref="TryGetSnapshot"/> has
+    /// been called. Used by wire-shape tests that pin the metrics-refresh
+    /// callsite count.</summary>
+    public int SnapshotCallCount { get; private set; }
+
+    public ProcessSnapshot? TryGetSnapshot()
+    {
+        SnapshotCallCount++;
+        return SnapshotStub;
+    }
+
     /// <summary>Test-side: emit a stdout line.</summary>
     public void EmitOutput(string line) => OutputLine?.Invoke(this, line);
 
