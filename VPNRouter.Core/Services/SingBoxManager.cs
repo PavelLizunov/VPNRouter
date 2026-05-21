@@ -402,7 +402,15 @@ public class SingBoxManager : IDisposable
             _handle?.Dispose();
             _handle = null;
             State = SingBoxState.Stopped;
-            _tunLock.Release();
+            // Task #53 (2026-05-21): gate on `releaseLock` to match the
+            // 3 sibling paths above (Linux capability mode line 267,
+            // pkexec/macOS line 315, Windows post-crash cleanup line
+            // 331). Pre-Task-#53 this release was unconditional, which
+            // meant Restart()'s `StopInternal(releaseLock: false)` call
+            // STILL dropped the TUN lock — recreating the cross-instance
+            // race the named semaphore was designed to prevent. See
+            // plans/task53-singboxmanager-restart-tunlock-2026-05-21.md.
+            if (releaseLock) _tunLock.Release();
             _logger.Information("[SingBoxManager] sing-box stopped");
 
             // Hotfix 2026-05-19: also clean up the wintun adapter on
