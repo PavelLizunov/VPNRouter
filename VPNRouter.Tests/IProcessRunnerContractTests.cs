@@ -53,7 +53,7 @@ public sealed class IProcessRunnerContractTests
             ExecutablePath: "cmd.exe",
             Arguments: new[] { "/c", "echo hello-stdout" });
 
-        var result = await runner.RunAsync(request);
+        var result = await runner.RunAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(ExpectedSuccessExitCode, result.ExitCode);
         Assert.Contains("hello-stdout", result.Stdout);
@@ -74,7 +74,7 @@ public sealed class IProcessRunnerContractTests
             Timeout: TimeSpan.FromMilliseconds(500));
 
         var startedAt = DateTime.UtcNow;
-        var result = await runner.RunAsync(request);
+        var result = await runner.RunAsync(request, TestContext.Current.CancellationToken);
         var elapsed = DateTime.UtcNow - startedAt;
 
         Assert.True(result.TimedOut, "Expected TimedOut=true on timeout");
@@ -99,7 +99,7 @@ public sealed class IProcessRunnerContractTests
         var task = runner.RunAsync(request, cts.Token);
 
         // Wait briefly so the process is actually running, then cancel.
-        await Task.Delay(100);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await task);
@@ -131,10 +131,10 @@ public sealed class IProcessRunnerContractTests
             lock (lines) lines.Add(line.Trim());
         };
 
-        var exitCode = await handle.WaitForExitAsync(CancellationToken.None);
+        var exitCode = await handle.WaitForExitAsync(TestContext.Current.CancellationToken);
 
         // Give the OutputDataReceived dispatcher a beat to flush after exit.
-        await Task.Delay(200);
+        await Task.Delay(200, TestContext.Current.CancellationToken);
 
         Assert.Equal(ExpectedSuccessExitCode, exitCode);
         lock (lines)
@@ -165,7 +165,7 @@ public sealed class IProcessRunnerContractTests
         };
 
         // Wait a beat to ensure the process is running before kill.
-        await Task.Delay(100);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
         Assert.False(handle.HasExited);
 
         handle.Kill();
@@ -197,7 +197,7 @@ public sealed class IProcessRunnerContractTests
         Assert.True(pid > 0);
 
         // Verify the process is alive before disposing.
-        await Task.Delay(100);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
         Assert.False(handle.HasExited);
 
         // Dispose should kill cleanly without throwing.
@@ -209,7 +209,7 @@ public sealed class IProcessRunnerContractTests
         // Give the OS a brief window to clean up the process. After dispose
         // the process should be dead. We use Process.GetProcessById which
         // throws when the PID is no longer valid as a proxy for "dead".
-        await Task.Delay(300);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
 
         var stillAlive = false;
         try

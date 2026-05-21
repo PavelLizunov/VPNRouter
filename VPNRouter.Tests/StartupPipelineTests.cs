@@ -124,7 +124,7 @@ public sealed class StartupPipelineTests : IDisposable
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await pipeline.ExecuteAsync(
                 new StartupContext(settings, StartupMode.HotReload),
-                default));
+                TestContext.Current.CancellationToken));
 
         // HotReload skips conflict / DNS / geo preflight, so the next gate
         // we hit is the "no active profile" guard in ResolveProfileAndServers.
@@ -149,7 +149,7 @@ public sealed class StartupPipelineTests : IDisposable
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await pipeline.ExecuteAsync(
                 new StartupContext(settings, StartupMode.HotReload),
-                default));
+                TestContext.Current.CancellationToken));
 
         // Either the DescribeEmptyReason message or the F-12 invariant
         // violation message — both are actionable. We pin that SOMETHING
@@ -218,7 +218,7 @@ public sealed class StartupPipelineTests : IDisposable
         // after phase 4 with the regenerated JSON.
         var result = await pipeline.ExecuteAsync(
             new StartupContext(settings, StartupMode.HotReload),
-            default);
+            TestContext.Current.CancellationToken);
 
         Assert.True(result.Success);
         Assert.NotNull(result.ConfigJson);
@@ -252,7 +252,7 @@ public sealed class StartupPipelineTests : IDisposable
 
         var result = await pipeline.ExecuteAsync(
             new StartupContext(settings, StartupMode.HotReload),
-            default);
+            TestContext.Current.CancellationToken);
 
         Assert.True(result.Success);
         Assert.False(result.EarlyReturn);
@@ -299,7 +299,7 @@ public sealed class StartupPipelineTests : IDisposable
 
         var result = await pipeline.ExecuteAsync(
             new StartupContext(settings, StartupMode.HotReload),
-            default);
+            TestContext.Current.CancellationToken);
 
         Assert.True(result.Success);
         // In HotReload mode phase 6 is skipped; we just pin that firewall
@@ -329,7 +329,7 @@ public sealed class StartupPipelineTests : IDisposable
 
         var result = await pipeline.ExecuteAsync(
             new StartupContext(settings, StartupMode.HotReload),
-            default);
+            TestContext.Current.CancellationToken);
 
         Assert.True(result.Success);
         Assert.False(result.EarlyReturn);   // F-E early-return path never fired
@@ -357,7 +357,7 @@ public sealed class StartupPipelineTests : IDisposable
 
         var result = await pipeline.ExecuteAsync(
             new StartupContext(settings, StartupMode.HotReload),
-            default);
+            TestContext.Current.CancellationToken);
 
         Assert.True(result.Success);
         Assert.NotNull(result.Profile);

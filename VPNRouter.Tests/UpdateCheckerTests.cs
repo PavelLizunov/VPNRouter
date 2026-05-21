@@ -198,7 +198,7 @@ public sealed class UpdateCheckerTests
         var settings = new UpdateSettings { Channel = "stable", GitHubRepo = "PavelLizunov/VPNRouter" };
         var source = new GitHubReleaseSource(settings, "2.34.0", http, NullInstaller.Instance);
 
-        var info = await source.CheckAsync();
+        var info = await source.CheckAsync(TestContext.Current.CancellationToken);
 
         Assert.Null(info);
     }
@@ -215,7 +215,7 @@ public sealed class UpdateCheckerTests
         var settings = new UpdateSettings { Channel = "experimental", GitHubRepo = "PavelLizunov/VPNRouter" };
         var source = new GitHubReleaseSource(settings, "2.34.0", http, NullInstaller.Instance);
 
-        var info = await source.CheckAsync();
+        var info = await source.CheckAsync(TestContext.Current.CancellationToken);
 
         Assert.NotNull(info);
         Assert.Equal("2.35.0-r1", info!.Version);
@@ -233,7 +233,7 @@ public sealed class UpdateCheckerTests
         var settings = new UpdateSettings { Channel = "stable", GitHubRepo = "PavelLizunov/VPNRouter" };
         var source = new GitHubReleaseSource(settings, "2.34.0", http, NullInstaller.Instance);
 
-        var info = await source.CheckAsync();
+        var info = await source.CheckAsync(TestContext.Current.CancellationToken);
 
         Assert.Null(info);
     }
@@ -255,7 +255,7 @@ public sealed class UpdateCheckerTests
         var settings = new UpdateSettings { Channel = "stable", GitHubRepo = "PavelLizunov/VPNRouter" };
         var source = new GitHubReleaseSource(settings, "2.34.0", http, NullInstaller.Instance);
 
-        var info = await source.CheckAsync();
+        var info = await source.CheckAsync(TestContext.Current.CancellationToken);
 
         Assert.Null(info);
     }
@@ -272,7 +272,7 @@ public sealed class UpdateCheckerTests
         var settings = new UpdateSettings { Channel = "stable", GitHubRepo = "PavelLizunov/VPNRouter" };
         var source = new GitHubReleaseSource(settings, "2.34.0", http, NullInstaller.Instance);
 
-        var info = await source.CheckAsync();
+        var info = await source.CheckAsync(TestContext.Current.CancellationToken);
 
         Assert.Null(info);
     }
@@ -298,7 +298,7 @@ public sealed class UpdateCheckerTests
         var settings = new UpdateSettings { Channel = "stable", GitHubRepo = "PavelLizunov/VPNRouter" };
         var source = new GitHubReleaseSource(settings, "2.34.0", http, NullInstaller.Instance);
 
-        var info = await source.CheckAsync();
+        var info = await source.CheckAsync(TestContext.Current.CancellationToken);
 
         // The platform suffix is host-dependent. On Linux CI we expect
         // the linux full asset; on Windows dev we expect the win full

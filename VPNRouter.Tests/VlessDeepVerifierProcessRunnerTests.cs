@@ -81,16 +81,17 @@ public sealed class VlessDeepVerifierProcessRunnerTests
             fake.OnStart(_ => true, _ => handle);
 
             var verifier = new VlessDeepVerifier(SilentLogger(), binPath, fake);
+            var testCt = TestContext.Current.CancellationToken;
             // Don't await — fire the call, then immediately snapshot the
             // ProcessRequest. The probe will sit waiting for the SOCKS
             // port to bind (it won't); kill via handle.SignalExit after.
-            var probeTask = verifier.VerifyAsync(CleanEntry(), measureBandwidth: false);
+            var probeTask = verifier.VerifyAsync(CleanEntry(), measureBandwidth: false, testCt);
 
             // Give the verifier a moment to enter the spawn block. The
             // request is synchronously recorded by FakeProcessRunner before
             // VerifyAsync awaits anything I/O-bound on the spawn.
             for (var i = 0; i < 50 && fake.StartCalls.Count == 0; i++)
-                await Task.Delay(20);
+                await Task.Delay(20, testCt);
 
             Assert.Single(fake.StartCalls);
             var call = fake.StartCalls[0];
@@ -136,12 +137,13 @@ public sealed class VlessDeepVerifierProcessRunnerTests
             });
 
             var verifier = new VlessDeepVerifier(SilentLogger(), binPath, fake);
-            var probeTask = verifier.VerifyAsync(CleanEntry(), measureBandwidth: false);
+            var testCt = TestContext.Current.CancellationToken;
+            var probeTask = verifier.VerifyAsync(CleanEntry(), measureBandwidth: false, testCt);
 
             // Wait for the handle to be created (the subscription is wired
             // synchronously after _runner.Start), then pump a stderr line.
             for (var i = 0; i < 50 && captured == null; i++)
-                await Task.Delay(20);
+                await Task.Delay(20, testCt);
             Assert.NotNull(captured);
             captured!.EmitError("FATAL: bind: address already in use");
 
@@ -181,7 +183,7 @@ public sealed class VlessDeepVerifierProcessRunnerTests
             fake.OnStart(_ => true, _ => handle);
 
             var verifier = new VlessDeepVerifier(SilentLogger(), binPath, fake);
-            var result = await verifier.VerifyAsync(CleanEntry(), measureBandwidth: false);
+            var result = await verifier.VerifyAsync(CleanEntry(), measureBandwidth: false, TestContext.Current.CancellationToken);
 
             Assert.False(result.Ok);
             Assert.True(handle.HasExited, "handle should be marked exited after the finally block ran");
@@ -218,7 +220,7 @@ public sealed class VlessDeepVerifierProcessRunnerTests
 
             // Wait for the spawn to register, then cancel.
             for (var i = 0; i < 50 && fake.StartCalls.Count == 0; i++)
-                await Task.Delay(20);
+                await Task.Delay(20, TestContext.Current.CancellationToken);
             cts.Cancel();
 
             var result = await probeTask;

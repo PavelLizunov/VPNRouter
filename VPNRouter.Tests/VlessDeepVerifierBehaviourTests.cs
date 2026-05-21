@@ -62,7 +62,7 @@ public sealed class VlessDeepVerifierBehaviourTests
         entry.Reality.PublicKey = PlaceholderPubkey;
 
         var verifier = new VlessDeepVerifier(SilentLogger(), NoBinaryPath);
-        var result = await verifier.VerifyAsync(entry, measureBandwidth: false);
+        var result = await verifier.VerifyAsync(entry, measureBandwidth: false, TestContext.Current.CancellationToken);
 
         Assert.False(result.Ok);
         Assert.NotNull(result.Error);
@@ -77,7 +77,7 @@ public sealed class VlessDeepVerifierBehaviourTests
         entry.Reality.ShortId = PlaceholderShortId;
 
         var verifier = new VlessDeepVerifier(SilentLogger(), NoBinaryPath);
-        var result = await verifier.VerifyAsync(entry, measureBandwidth: false);
+        var result = await verifier.VerifyAsync(entry, measureBandwidth: false, TestContext.Current.CancellationToken);
 
         Assert.False(result.Ok);
         Assert.NotNull(result.Error);
@@ -95,7 +95,7 @@ public sealed class VlessDeepVerifierBehaviourTests
         entry.Server = PlaceholderServer;
 
         var verifier = new VlessDeepVerifier(SilentLogger(), NoBinaryPath);
-        var result = await verifier.VerifyAsync(entry, measureBandwidth: false);
+        var result = await verifier.VerifyAsync(entry, measureBandwidth: false, TestContext.Current.CancellationToken);
 
         Assert.False(result.Ok);
         Assert.NotNull(result.Error);
@@ -115,7 +115,7 @@ public sealed class VlessDeepVerifierBehaviourTests
         entry.Reality.PublicKey = PlaceholderPubkey; // placeholder
 
         var verifier = new VlessDeepVerifier(SilentLogger(), NoBinaryPath); // no binary
-        var result = await verifier.VerifyAsync(entry, measureBandwidth: false);
+        var result = await verifier.VerifyAsync(entry, measureBandwidth: false, TestContext.Current.CancellationToken);
 
         Assert.False(result.Ok);
         Assert.Contains("placeholder", result.Error!, StringComparison.OrdinalIgnoreCase);
@@ -136,7 +136,7 @@ public sealed class VlessDeepVerifierBehaviourTests
         Assert.False(verifier.IsAvailable);
 
         var entry = CleanVlessEntry();
-        var result = await verifier.VerifyAsync(entry, measureBandwidth: false);
+        var result = await verifier.VerifyAsync(entry, measureBandwidth: false, TestContext.Current.CancellationToken);
 
         Assert.False(result.Ok);
         Assert.NotNull(result.Error);
@@ -178,7 +178,8 @@ public sealed class VlessDeepVerifierBehaviourTests
         await verifier.VerifyBatchAsync(
             entries,
             (e, r) => { lock (results) results.Add((e, r)); },
-            measureBandwidth: false);
+            measureBandwidth: false,
+            ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(entries.Length, results.Count);
         Assert.All(results, pair =>
