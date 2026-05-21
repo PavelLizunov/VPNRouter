@@ -302,16 +302,24 @@ public sealed class UpdateCheckerTests
 
         // The platform suffix is host-dependent. On Linux CI we expect
         // the linux full asset; on Windows dev we expect the win full
-        // asset. Either way, the picked AssetName must NOT contain
-        // "update" — that's the load-bearing assertion.
-        if (info != null)
+        // asset. macOS would see null (the synthetic release matrix
+        // only includes win + linux — see BuildReleasesJson defaults).
+        //
+        // Tighten the assertion (2026-05-21 review pass): explicitly
+        // gate by platform so a future synthetic-matrix change that
+        // accidentally drops the OS-matching asset surfaces as a
+        // failure here, not a vacuous pass.
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux())
         {
-            Assert.DoesNotContain("update", info.AssetName, StringComparison.OrdinalIgnoreCase);
+            Assert.NotNull(info);
+            Assert.DoesNotContain("update", info!.AssetName, StringComparison.OrdinalIgnoreCase);
         }
-        // null is also acceptable if the OS-specific asset isn't in
-        // the synthetic release (e.g. running on macOS where we only
-        // included win + linux below). The asset matrix below covers
-        // win+linux but not mac — see BuildReleasesJson.
+        else
+        {
+            // macOS / other: synthetic release has no matching asset,
+            // so null is the expected outcome.
+            Assert.Null(info);
+        }
     }
 
     // ─── helpers ─────────────────────────────────────────────────────────

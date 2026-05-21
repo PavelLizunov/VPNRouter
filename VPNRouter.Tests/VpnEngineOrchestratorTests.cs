@@ -298,12 +298,22 @@ public sealed class VpnEngineOrchestratorTests
     }
 
     [Fact]
-    public void ResolveCustomConfigPath_MultiConfig_PicksActiveByNameWhenSet()
+    public void ResolveCustomConfigPath_MultiConfig_NonExistentFiles_FallsBackToLegacyEmptyConfig()
     {
-        // Multi-config flow: ActiveCustomConfig identifies WHICH entry's
-        // path is the live one. Pin name-based match (case-sensitive per
-        // the implementation — Equals(name)) so future refactors don't
-        // silently relax the comparison.
+        // Characterization pin for the multi-config + filesystem-miss
+        // branch. With Name="backup" set as ActiveCustomConfig but
+        // C:\nonexistent\*.json not on disk, the resolver's File.Exists
+        // gate fails the multi-config branch and falls through to the
+        // legacy CustomConfig string. Here CustomConfig is empty, so
+        // ExpandEnvironmentVariables("") returns "". Pin: no throw, no
+        // accidental wrong-entry pick, fallback path activates.
+        //
+        // NOTE: this test does NOT verify the multi-config "active by
+        // name" PICK semantics directly — that requires real files on
+        // disk and lives in integration tests. The name was previously
+        // "PicksActiveByNameWhenSet" which was misleading; renamed
+        // 2026-05-21 in the post-2G review pass to match what's
+        // actually asserted.
         var settings = new AppSettings
         {
             App = new AppConfig
@@ -317,16 +327,6 @@ public sealed class VpnEngineOrchestratorTests
             }
         };
 
-        // Neither file exists, so we hit the legacy fallback — but the
-        // returned path should be ExpandEnvironmentVariables of empty
-        // CustomConfig. So we can't verify the multi-config branch's
-        // "active by name" pick directly without filesystem. We verify
-        // the negative: the multi-config NAME selection logic doesn't
-        // throw and doesn't accidentally pick the wrong entry.
-        // (The actual filesystem-bypassing test of that branch lives in
-        // integration tests with real files.)
-        // For this idempotent characterization, assert at least the path
-        // is non-throwing and a string (legacy fallback empty here).
         var path = VpnEngine.ResolveCustomConfigPath(settings);
 
         // CustomConfig is empty → ExpandEnvironmentVariables("") = "".
@@ -370,7 +370,8 @@ public sealed class VpnEngineOrchestratorTests
         // If a future refactor reorders these (or extracts them into a
         // helper that loses the ordering), this regression pin fails.
         var src = LoadVpnEngineSource();
-        if (src == null) return; // CI without source — skip
+        Assert.SkipUnless(src != null, "VpnEngine.cs source not reachable from test cwd — source-pin skipped");
+        // ! after SkipUnless asserts non-null path: src is non-null past this line.
 
         // Find the public Stop method body.
         var stopIdx = src.IndexOf("public void Stop()");
@@ -403,9 +404,9 @@ public sealed class VpnEngineOrchestratorTests
         // GC-driven Dispose would leak sing-box (root-owned via pkexec
         // on Linux / orphaned wintun adapter on Windows).
         var src = LoadVpnEngineSource();
-        if (src == null) return; // CI without source — skip
+        Assert.SkipUnless(src != null, "VpnEngine.cs source not reachable from test cwd — source-pin skipped");
 
-        var disposeIdx = src.IndexOf("public void Dispose()");
+        var disposeIdx = src!.IndexOf("public void Dispose()");
         Assert.True(disposeIdx >= 0, "Source must contain 'public void Dispose()'");
 
         // The "if (IsRunning) Stop();" guard must appear inside the

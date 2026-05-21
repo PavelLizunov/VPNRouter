@@ -543,7 +543,7 @@ public sealed class SingBoxManagerStateMachineTests
         // line. Can't behaviour-test without an IProcess seam; the
         // source pin is the next best thing.
         var src = LoadSingBoxManagerSource();
-        if (src == null) return; // partial CI checkout
+        Assert.SkipUnless(src != null, "SingBoxManager.cs source not reachable from test cwd — source-pin skipped");
 
         // Strip line comments so commentary about the pattern doesn't
         // muddy matches. Then collapse runs of whitespace to single
@@ -592,10 +592,10 @@ public sealed class SingBoxManagerStateMachineTests
         // restarting) could slip in and grab the TUN adapter, leaving
         // the UI's Restart() to fail with TunOwnershipException.
         var src = LoadSingBoxManagerSource();
-        if (src == null) return;
+        Assert.SkipUnless(src != null, "SingBoxManager.cs source not reachable from test cwd — source-pin skipped");
 
         // Locate the Restart method body.
-        var restartIdx = src.IndexOf("public void Restart()",
+        var restartIdx = src!.IndexOf("public void Restart()",
             StringComparison.Ordinal);
         Assert.True(restartIdx >= 0, "Source must contain 'public void Restart()'");
 
@@ -625,10 +625,10 @@ public sealed class SingBoxManagerStateMachineTests
         //   - Must NOT contain `static readonly HttpClient`.
         //   - Must NOT contain `static readonly IHttpClient`.
         var src = LoadSingBoxManagerSource();
-        if (src == null) return;
+        Assert.SkipUnless(src != null, "SingBoxManager.cs source not reachable from test cwd — source-pin skipped");
 
         // Strip line comments so commentary doesn't muddy the match.
-        var stripped = StripLineComments(src);
+        var stripped = StripLineComments(src!);
 
         Assert.Contains("private readonly IHttpClient _http;", stripped);
         Assert.DoesNotContain("static readonly HttpClient", stripped);
