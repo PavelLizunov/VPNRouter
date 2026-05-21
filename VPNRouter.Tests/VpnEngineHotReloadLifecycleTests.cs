@@ -374,7 +374,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
         Assert.False(initialHandle.HasExited);
 
         // Drive Apply.
-        var ok = await engine.ApplyAsync(settings);
+        var ok = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
 
         Assert.True(ok);
 
@@ -417,7 +417,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
         Assert.Equal(1, dnsHardening.ApplyCount);
         Assert.Equal(0, dnsHardening.RestoreCount);
 
-        var ok = await engine.ApplyAsync(settings);
+        var ok = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
         Assert.True(ok);
 
         // Apply should NOT have touched the DNS hardening Apply/Restore
@@ -461,7 +461,7 @@ public sealed class VpnEngineHotReloadLifecycleTests
         Assert.Equal(0, firewall.CreateBlockRulesCount);
 
         // Drive Apply.
-        var ok = await engine.ApplyAsync(settings);
+        var ok = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
         Assert.True(ok);
 
         // After Apply: monitor.Start was NOT called again (HotReload

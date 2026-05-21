@@ -64,13 +64,14 @@ public sealed class AndroidSideloadCallerTests
         };
 
         // Act — replicate the call chain.
-        var checkResult = await fake.CheckAsync();
+        var ct = TestContext.Current.CancellationToken;
+        var checkResult = await fake.CheckAsync(ct);
         Assert.NotNull(checkResult);
 
-        var stagedPath = await fake.DownloadAsync(checkResult!);
+        var stagedPath = await fake.DownloadAsync(checkResult!, ct: ct);
         Assert.Equal("/data/data/com.ninitux.vpnrouter/cache/update.apk", stagedPath);
 
-        var applyResult = await fake.ApplyAsync(checkResult!, stagedPath);
+        var applyResult = await fake.ApplyAsync(checkResult!, stagedPath, ct);
 
         // Assert
         Assert.True(applyResult);
@@ -124,7 +125,7 @@ public sealed class AndroidSideloadCallerTests
             installer);
 
         // Act
-        var found = await source.CheckAsync();
+        var found = await source.CheckAsync(TestContext.Current.CancellationToken);
 
         // Assert — APK picked over ZIP.
         Assert.NotNull(found);

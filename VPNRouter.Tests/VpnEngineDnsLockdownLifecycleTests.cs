@@ -347,7 +347,7 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         using var cleanup = new DnsLockdownCleanup(
             engine, stubExe, prevSingBoxRunner, prevTunDiagRunner, prevWarmupHttp);
 
-        await engine.StartAsync(settings, default, skipVpnConflictCheck: true);
+        await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true);
 
         // Phase 8 fired Apply with settings carrying DnsLeakLockdown=true.
         Assert.Equal(1, dnsHardening.ApplyCount);
@@ -421,7 +421,7 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         using var cleanup = new DnsLockdownCleanup(
             engine, stubExe, prevSingBoxRunner, prevTunDiagRunner, prevWarmupHttp);
 
-        await engine.StartAsync(settings, default, skipVpnConflictCheck: true);
+        await engine.StartAsync(settings, TestContext.Current.CancellationToken, skipVpnConflictCheck: true);
 
         // Phase 8 fired Apply with DnsLeakLockdown=true.
         Assert.Equal(1, dnsHardening.ApplyCount);
@@ -431,7 +431,7 @@ public sealed class VpnEngineDnsLockdownLifecycleTests
         // hit the throwing fake at least once + fall into the failure
         // path — but isn't long enough for the full 15-attempt loop
         // to expire on its own (15s).
-        await Task.Delay(2000);
+        await Task.Delay(2000, TestContext.Current.CancellationToken);
 
         // Stop the engine — cancels the warmup probe's ct, so the
         // failure branch's final "warmup failed" warning runs without

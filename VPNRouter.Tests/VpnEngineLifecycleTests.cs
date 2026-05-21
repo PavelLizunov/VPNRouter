@@ -522,7 +522,8 @@ public sealed class VpnEngineLifecycleTests
             var settings = BuildHappyPathSettings(stubExe);
 
             // First cycle.
-            await engine.StartAsync(settings, default, skipVpnConflictCheck: true);
+            var testCt = TestContext.Current.CancellationToken;
+            await engine.StartAsync(settings, testCt, skipVpnConflictCheck: true);
             Assert.Equal(1, dnsHardening.ApplyCount);
             Assert.Equal(0, dnsHardening.RestoreCount);
 
@@ -536,7 +537,7 @@ public sealed class VpnEngineLifecycleTests
             var (secondRunner, secondHandle) = BuildSingBoxSpawnFake(pid: 99102);
             SingBoxManager.Runner = secondRunner;
 
-            await engine.StartAsync(settings, default, skipVpnConflictCheck: true);
+            await engine.StartAsync(settings, testCt, skipVpnConflictCheck: true);
 
             // Apply fired a second time; Restore still at 1 (no intervening
             // Stop yet).
@@ -699,7 +700,7 @@ public sealed class VpnEngineLifecycleTests
         {
             var settings = BuildHappyPathSettings(singBoxExePath: "irrelevant");
 
-            var ok = await engine.ApplyAsync(settings);
+            var ok = await engine.ApplyAsync(settings, TestContext.Current.CancellationToken);
 
             Assert.False(ok);
             // Apply / Restore / EnableLockdown — all zero. Pipeline phases
@@ -734,7 +735,7 @@ public sealed class VpnEngineLifecycleTests
 
         var result = await pipeline.ExecuteAsync(
             new StartupContext(settings, StartupMode.HotReload),
-            default);
+            TestContext.Current.CancellationToken);
 
         Assert.True(result.Success);
         Assert.NotNull(result.ConfigJson);

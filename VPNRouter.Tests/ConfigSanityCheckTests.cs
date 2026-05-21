@@ -294,7 +294,7 @@ public class ConfigSanityCheckTests
         var http = new HttpClient(handler);
         var check = new ConfigSanityCheck(httpClient: http);
 
-        var result = await check.ProbeAsync(9090);
+        var result = await check.ProbeAsync(9090, TestContext.Current.CancellationToken);
 
         Assert.False(result.IsDead);
         Assert.Equal(123, result.LastDelayMs);
@@ -319,7 +319,7 @@ public class ConfigSanityCheckTests
         var http = new HttpClient(handler);
         var check = new ConfigSanityCheck(httpClient: http);
 
-        var result = await check.ProbeAsync(9090);
+        var result = await check.ProbeAsync(9090, TestContext.Current.CancellationToken);
 
         Assert.True(result.IsDead);
         Assert.Equal(2, handler.Calls);
@@ -329,7 +329,7 @@ public class ConfigSanityCheckTests
     public async Task Probe_InvalidPort_FailsFast()
     {
         var check = new ConfigSanityCheck();
-        var result = await check.ProbeAsync(0);
+        var result = await check.ProbeAsync(0, TestContext.Current.CancellationToken);
 
         Assert.True(result.IsDead);
         Assert.Contains("invalid", result.Reason!, StringComparison.OrdinalIgnoreCase);
