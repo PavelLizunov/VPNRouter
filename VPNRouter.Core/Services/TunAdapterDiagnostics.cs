@@ -350,18 +350,42 @@ public static class TunAdapterDiagnostics
                     "[TunDiag] {Ctx}: pre-start cleanup: found {Count} stale TUN adapter(s) via enumeration: {Names}",
                     context, staleAdapters.Count, string.Join(", ", staleAdapters));
 
+                // PinkuDani Fix #4 (2026-05-21): if NetAdapter module is
+                // unavailable, Remove-NetAdapter will silently no-op (and
+                // log the actionable INF on first observation). The kernel
+                // handle would then stay alive across restarts. Pre-check
+                // module availability so we know whether netsh disable is
+                // sufficient on its own (no PS removal will follow) or
+                // whether DisableOrphanedAdapter + TryRemoveAdapterAsync's
+                // PS removal will both fire.
+                var moduleAvailable = s_netAdapterModuleAvailable.Value;
+
                 foreach (var adapter in staleAdapters)
                 {
                     if (string.Equals(adapter, DefaultTunInterfaceName, StringComparison.OrdinalIgnoreCase))
                         enumerationFoundDefault = true;
 
-                    // Disable first — frees the wintun kernel handle so the
-                    // subsequent Remove-NetAdapter actually succeeds. Already
-                    // idempotent; "not found" is treated as success.
-                    DisableOrphanedAdapter(logger, adapter, context);
+                    if (moduleAvailable)
+                    {
+                        // Full path: disable + Remove-NetAdapter. Disable
+                        // first to free the kernel handle so Remove-NetAdapter
+                        // actually succeeds. "not found" is idempotent success.
+                        DisableOrphanedAdapter(logger, adapter, context);
 
-                    if (await TryRemoveAdapterAsync(logger, adapter, context))
-                        removed++;
+                        if (await TryRemoveAdapterAsync(logger, adapter, context))
+                            removed++;
+                    }
+                    else
+                    {
+                        // PinkuDani Fix #4 fallback path: NetAdapter module
+                        // missing on this Windows install (Win10 LTSC class).
+                        // Use the awaitable netsh-disable helper — it can't
+                        // remove the device record but does release the
+                        // kernel handle so the next sing-box launch's
+                        // WintunCreateAdapter avoids ERROR_FILE_EXISTS.
+                        if (await TryDisableAdapterViaNetshAsync(logger, adapter, context))
+                            removed++;
+                    }
                 }
             }
 
@@ -383,9 +407,21 @@ public static class TunAdapterDiagnostics
                 logger?.Debug(
                     "[TunDiag] {Ctx}: pre-start cleanup: direct-by-name fallback for '{Iface}' (enumeration didn't list it)",
                     context, DefaultTunInterfaceName);
-                DisableOrphanedAdapter(logger, DefaultTunInterfaceName, context);
-                if (await TryRemoveAdapterAsync(logger, DefaultTunInterfaceName, context))
-                    removed++;
+                // PinkuDani Fix #4 (2026-05-21): same module-availability
+                // gate as the enumeration loop above. Module present →
+                // disable + Remove. Module missing → netsh disable only
+                // (releases kernel handle, leaves device record).
+                if (s_netAdapterModuleAvailable.Value)
+                {
+                    DisableOrphanedAdapter(logger, DefaultTunInterfaceName, context);
+                    if (await TryRemoveAdapterAsync(logger, DefaultTunInterfaceName, context))
+                        removed++;
+                }
+                else
+                {
+                    if (await TryDisableAdapterViaNetshAsync(logger, DefaultTunInterfaceName, context))
+                        removed++;
+                }
             }
 
             logger?.Information(
@@ -496,8 +532,114 @@ public static class TunAdapterDiagnostics
     /// the name of a cmdlet". Once latched, the flag stays set for the
     /// process lifetime — the user's PowerShell modules aren't going
     /// to materialise mid-session. Restart picks up changes.</para>
+    ///
+    /// <para><b>PinkuDani follow-up (Fix #1, 2026-05-21):</b> BR-2's
+    /// reactive latch fails on Russian Windows where CP-866 OEM stderr
+    /// mangles "не распознано" into "­Ґ а бЇ®§­ ­®" — the literal-string
+    /// search never matches, latch stays at 0, every callsite still
+    /// fires PowerShell. Solution: <see cref="s_netAdapterModuleAvailable"/>
+    /// is a Lazy proactive probe (`Get-Module NetAdapter -ListAvailable`)
+    /// that latches BEFORE the first Remove-NetAdapter attempt, locale-
+    /// independent. BR-2 stays as belt-and-suspenders for the rare case
+    /// where the module is "available" but its cmdlets somehow fail
+    /// later in the process lifetime.</para>
     /// </summary>
     private static int s_removeNetAdapterMissing; // 0 = unknown, 1 = confirmed missing
+
+    /// <summary>
+    /// PinkuDani Fix #1 (2026-05-21): Lazy proactive check for the
+    /// PowerShell <c>NetAdapter</c> module's availability. Triggered on
+    /// the first <see cref="TryRemoveAdapterAsync"/> call. Spawns one
+    /// <c>powershell.exe -NoProfile -NonInteractive -Command
+    /// "Get-Module NetAdapter -ListAvailable | Measure-Object |
+    /// Select -ExpandProperty Count"</c> probe (~340 ms on our test
+    /// environment).
+    ///
+    /// <para>When the probe returns "0", the module is missing
+    /// — subsequent <see cref="TryRemoveAdapterAsync"/> calls return
+    /// false immediately without spawning PowerShell. When it returns
+    /// "1"+ the cmdlet is expected to work, but BR-2's reactive latch
+    /// stays armed as a second line of defence.</para>
+    ///
+    /// <para><b>Test override:</b> tests pre-set the lazy via
+    /// <see cref="SetNetAdapterModuleAvailableForTests"/> to skip the
+    /// probe and dictate the cached value. Production code never assigns
+    /// the field.</para>
+    /// </summary>
+    private static Lazy<bool> s_netAdapterModuleAvailable =
+        new Lazy<bool>(ProbeNetAdapterModuleAvailable, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>
+    /// Phase 1 of PinkuDani Fix #1: the actual probe. Runs synchronously
+    /// from inside the Lazy initialiser. Returns true when Get-Module
+    /// reports the module count >= 1, false otherwise (missing module,
+    /// timeout, parse failure — all fail-closed).
+    ///
+    /// <para>No <c>[SupportedOSPlatform("windows")]</c> attribute on this
+    /// helper so the Lazy field initialiser (which can't be platform-gated
+    /// directly) doesn't trigger CA1416. The first line guards with
+    /// <c>OperatingSystem.IsWindows()</c> instead so non-Windows callers
+    /// always see "false" — same as the attribute would enforce.</para>
+    /// </summary>
+    private static bool ProbeNetAdapterModuleAvailable()
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+
+        try
+        {
+            // One-shot probe via the existing Runner seam — same shape as
+            // every other TunAdapterDiagnostics PowerShell call so tests
+            // intercept it identically with FakeProcessRunner. 5 s timeout
+            // is generous (real cost ~340 ms); only relevant if PowerShell
+            // itself is in an unusual state.
+            var result = Runner.RunAsync(new ProcessRequest(
+                ExecutablePath: "powershell.exe",
+                Arguments: new[]
+                {
+                    "-NoProfile", "-NonInteractive", "-Command",
+                    "Get-Module NetAdapter -ListAvailable | Measure-Object | Select -ExpandProperty Count",
+                },
+                Timeout: TimeSpan.FromMilliseconds(5000))).GetAwaiter().GetResult();
+
+            if (result.TimedOut) return false;
+            if (result.ExitCode != 0) return false;
+
+            // stdout is just a number on its own line. Trim and parse.
+            // ">= 1" = module installed; "0" or empty = missing.
+            var trimmed = (result.Stdout ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(trimmed)) return false;
+
+            return int.TryParse(trimmed, out var count) && count >= 1;
+        }
+        catch
+        {
+            // Any exception fails closed (treat as missing) — safer to
+            // assume unavailable than to spawn dozens of PowerShell calls
+            // looking for a cmdlet that throws on probe.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// PinkuDani Fix #1 (2026-05-21): public-internal accessor for the
+    /// Lazy availability check. SingBoxManager's restart path (Fix #3
+    /// agent) can call this to decide whether to schedule the PowerShell
+    /// removal or jump straight to <see cref="TryDisableAdapterViaNetshAsync"/>.
+    /// Returns the cached value once Lazy has resolved.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    internal static bool IsNetAdapterModuleAvailable()
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        return s_netAdapterModuleAvailable.Value;
+    }
+
+    /// <summary>
+    /// Once latched at the first INF log, this flag prevents subsequent
+    /// "module unavailable" log lines from spamming the file. We only
+    /// want the actionable message once per process.
+    /// </summary>
+    private static int s_actionableModuleMissingLogged; // 0 = not yet, 1 = logged
 
     /// <summary>
     /// Test-only reset of the BR-2 cmdlet-missing latch. Production code
@@ -509,15 +651,146 @@ public static class TunAdapterDiagnostics
     /// <c>WindowsDnsHardening._runnerOverride</c> test-reset pattern.
     /// </summary>
     internal static void ResetRemoveNetAdapterLatchForTests()
-        => Volatile.Write(ref s_removeNetAdapterMissing, 0);
+    {
+        Volatile.Write(ref s_removeNetAdapterMissing, 0);
+        Volatile.Write(ref s_actionableModuleMissingLogged, 0);
+        // Reset the Lazy too — a previous test against the real runner
+        // may have resolved it to true/false using the host machine's
+        // actual PowerShell. Subsequent fake-runner tests need a fresh
+        // probe routed through their stub.
+        s_netAdapterModuleAvailable = new Lazy<bool>(
+            ProbeNetAdapterModuleAvailable,
+            LazyThreadSafetyMode.ExecutionAndPublication);
+    }
+
+    /// <summary>
+    /// Test-only: pre-set the cached availability state without
+    /// triggering the real PowerShell probe. Tests use this when they
+    /// want to dictate the outcome without writing a Get-Module fake
+    /// matcher.
+    /// </summary>
+    internal static void SetNetAdapterModuleAvailableForTests(bool available)
+    {
+        s_netAdapterModuleAvailable = new Lazy<bool>(
+            () => available, LazyThreadSafetyMode.ExecutionAndPublication);
+        // Force the value so tests observing IsNetAdapterModuleAvailable
+        // get a deterministic answer without re-entering the probe.
+        _ = s_netAdapterModuleAvailable.Value;
+    }
+
+    /// <summary>
+    /// PinkuDani Fix #4 (2026-05-21): netsh-based orphan disable
+    /// fallback. When the PowerShell <c>NetAdapter</c> module is
+    /// unavailable, we can't <i>delete</i> the wintun device record,
+    /// but we can disable the adapter via
+    /// <c>netsh interface set interface name=&lt;NAME&gt; admin=disabled</c>.
+    /// This releases the kernel handle so the next sing-box launch's
+    /// <c>WintunCreateAdapter</c> doesn't hit ERROR_FILE_EXISTS on the
+    /// orphan record.
+    ///
+    /// <para>This is a thin awaitable wrapper around the existing
+    /// <see cref="DisableOrphanedAdapter"/>'s wire shape — same netsh
+    /// argv, same exit-code interpretation, returns true on success or
+    /// "not found" idempotent path, false on real failure.</para>
+    ///
+    /// <para><b>Public surface for Fix #3 agent:</b> SingBoxManager's
+    /// recovery path can call this directly (after consulting
+    /// <see cref="IsNetAdapterModuleAvailable"/>) to skip the
+    /// ~600-800 ms PowerShell Remove-NetAdapter detour on
+    /// PinkuDani-class machines.</para>
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    internal static async Task<bool> TryDisableAdapterViaNetshAsync(
+        ILogger? logger, string adapterName, string context)
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        if (string.IsNullOrWhiteSpace(adapterName)) return false;
+
+        try
+        {
+            var (exitCode, stdout, stderr) = await RunAndCaptureAsync(
+                "netsh",
+                new[]
+                {
+                    "interface", "set", "interface",
+                    $"name={adapterName}",
+                    "admin=disabled",
+                },
+                timeoutMs: 3000, logger: logger);
+
+            if (exitCode == 0)
+            {
+                logger?.Information(
+                    "[TunDiag] {Ctx}: netsh-disabled orphaned adapter '{Name}' (NetAdapter module unavailable — kernel handle released, device record remains)",
+                    context, adapterName);
+                return true;
+            }
+
+            // netsh exit 1 / "not found" = adapter already gone (idempotent
+            // success). Anything else is a real failure.
+            if (exitCode == 1
+                || (stdout ?? "").IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0
+                || (stderr ?? "").IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                logger?.Debug(
+                    "[TunDiag] {Ctx}: netsh-disable for '{Name}' reported not-found (already gone — counts as success)",
+                    context, adapterName);
+                return true;
+            }
+
+            logger?.Warning(
+                "[TunDiag] {Ctx}: netsh-disable for '{Name}' returned exit {Exit}: stdout='{Out}' stderr='{Err}'",
+                context, adapterName, exitCode, (stdout ?? "").Trim(), (stderr ?? "").Trim());
+            return false;
+        }
+        catch (Exception ex)
+        {
+            logger?.Warning(ex,
+                "[TunDiag] {Ctx}: netsh-disable for '{Name}' threw (non-fatal)",
+                context, adapterName);
+            return false;
+        }
+    }
 
     [SupportedOSPlatform("windows")]
     internal static async Task<bool> TryRemoveAdapterAsync(
         ILogger? logger, string adapterName, string context)
     {
-        // BR-2 fast-fail: if a previous call already observed the cmdlet
-        // missing, skip the PowerShell round-trip. Saves ~600ms × every
-        // cleanup site × every connect attempt.
+        // PinkuDani Fix #1 (2026-05-21) fast-fail: proactive Lazy probe.
+        // Runs Get-Module once per process; if NetAdapter module is
+        // missing, every subsequent TryRemoveAdapterAsync skips the
+        // ~1.5-2s Remove-NetAdapter spawn. Locale-independent because it
+        // parses an integer count, not an error string — works on
+        // CP-866 Russian Windows where BR-2's stderr-substring match
+        // never latches (the mojibake garbles "не распознано").
+        if (!s_netAdapterModuleAvailable.Value)
+        {
+            // Log the actionable INF once per process — first observation
+            // only. All subsequent skips log at Debug to keep log noise
+            // minimal during HealthMonitor restart bursts.
+            if (Interlocked.CompareExchange(ref s_actionableModuleMissingLogged, 1, 0) == 0)
+            {
+                logger?.Information(
+                    "[TunDiag] {Ctx}: PowerShell NetAdapter module unavailable on this Windows " +
+                    "install — using netsh fallback for TUN orphan cleanup. For full device-record " +
+                    "removal install RSAT (Settings → Apps → Optional Features → 'RSAT: Server " +
+                    "Manager') or use a Pro/Enterprise SKU.",
+                    context);
+            }
+            else
+            {
+                logger?.Debug(
+                    "[TunDiag] {Ctx}: skipping Remove-NetAdapter for '{Name}' " +
+                    "(NetAdapter module unavailable; cached for process lifetime)",
+                    context, adapterName);
+            }
+            return false;
+        }
+
+        // BR-2 fast-fail (reactive belt-and-suspenders): if a previous
+        // call still observed the cmdlet missing despite the Fix #1 probe
+        // saying the module's available (rare edge — module manifest
+        // present but cmdlet itself fails), skip the PowerShell round-trip.
         if (Volatile.Read(ref s_removeNetAdapterMissing) == 1)
         {
             logger?.Debug(

@@ -208,6 +208,17 @@ public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
                 Stderr: "",
                 Duration: TimeSpan.FromMilliseconds(10),
                 TimedOut: false));
+        // PinkuDani Fix #1 (2026-05-21): PreStartCleanupAsync's first
+        // Remove-NetAdapter call lazily probes `Get-Module NetAdapter
+        // -ListAvailable | Measure-Object | Select -ExpandProperty
+        // Count` to decide whether the cmdlet is available. Match this
+        // probe explicitly and return "1" so the cmdlet is treated as
+        // available and the Remove-NetAdapter wire shape is exercised
+        // exactly like pre-fix.
+        fake.OnRun(r => r.ExecutablePath == "powershell.exe" &&
+                       r.Arguments.Count == 4 &&
+                       r.Arguments[3].Contains("Get-Module NetAdapter"),
+            new ProcessResult(0, "1\r\n", "", TimeSpan.FromMilliseconds(5), false));
         fake.OnRun(_ => true,
             new ProcessResult(0, "", "", TimeSpan.FromMilliseconds(5), false));
 
@@ -229,8 +240,16 @@ public class TunAdapterDiagnosticsProcessRunnerWireShapeTests
         Assert.Contains(disableCalls,
             c => c.Arguments.Contains("name=VPNRouter-TUN"));
 
+        // After PinkuDani Fix #1 (2026-05-21), PreStartCleanupAsync also
+        // probes `Get-Module NetAdapter -ListAvailable` lazily before the
+        // first Remove-NetAdapter — so the powershell.exe call set
+        // includes the probe + the Remove-NetAdapter script. Filter to
+        // the Remove-NetAdapter shape specifically (look for
+        // "Remove-NetAdapter" in the -Command arg) to pin its wire shape.
         var removeCalls = fake.RunCalls.Where(c =>
-            c.ExecutablePath == "powershell.exe").ToList();
+            c.ExecutablePath == "powershell.exe" &&
+            c.Arguments.Count == 4 &&
+            c.Arguments[3].Contains("Remove-NetAdapter")).ToList();
         Assert.NotEmpty(removeCalls);
         // The PowerShell command is passed as 4 argv tokens: -NoProfile,
         // -NonInteractive, -Command, <script>.
