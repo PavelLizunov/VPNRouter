@@ -103,6 +103,7 @@ public sealed class MvmTwoPhaseStartTimerTests
         // Connected.
         var fake = new FakeEngineEvents();
         var (startTask, _) = ControlledTask();
+        var ct = TestContext.Current.CancellationToken;
 
         // Use tight budgets so the test runs in milliseconds.
         var phaseA = TimeSpan.FromMilliseconds(500);
@@ -113,13 +114,14 @@ public sealed class MvmTwoPhaseStartTimerTests
             subscribeStarted: fake.SubscribeStarted,
             subscribeConnected: fake.SubscribeConnected,
             phaseABudget: phaseA,
-            phaseBBudget: phaseB);
+            phaseBBudget: phaseB,
+            cancellationToken: ct);
 
         // Yield so the coordinator wires up subscriptions and enters its
         // Task.WhenAny on Phase A before we fire.
-        await Task.Delay(50);
+        await Task.Delay(50, ct);
         fake.FireStarted(12345);
-        await Task.Delay(50);
+        await Task.Delay(50, ct);
         fake.FireConnected(12345);
 
         var outcome = await coordinatorTask;
@@ -151,7 +153,8 @@ public sealed class MvmTwoPhaseStartTimerTests
             subscribeStarted: fake.SubscribeStarted,
             subscribeConnected: fake.SubscribeConnected,
             phaseABudget: phaseA,
-            phaseBBudget: phaseB);
+            phaseBBudget: phaseB,
+            cancellationToken: TestContext.Current.CancellationToken);
         var elapsed = DateTime.UtcNow - start;
 
         Assert.Equal(TwoPhaseStartOutcome.PhaseATimeout, outcome);
@@ -178,19 +181,21 @@ public sealed class MvmTwoPhaseStartTimerTests
 
         var phaseA = TimeSpan.FromMilliseconds(400);
         var phaseB = TimeSpan.FromMilliseconds(400);
+        var ct = TestContext.Current.CancellationToken;
 
         var coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
             startTask: startTask,
             subscribeStarted: fake.SubscribeStarted,
             subscribeConnected: fake.SubscribeConnected,
             phaseABudget: phaseA,
-            phaseBBudget: phaseB);
+            phaseBBudget: phaseB,
+            cancellationToken: ct);
 
-        await Task.Delay(100);
+        await Task.Delay(100, ct);
         fake.FireStarted(54321);
 
         // Wait inside Phase B for ~200ms then fire Connected.
-        await Task.Delay(100);
+        await Task.Delay(100, ct);
         fake.FireConnected(54321);
 
         var outcome = await coordinatorTask;
@@ -209,15 +214,17 @@ public sealed class MvmTwoPhaseStartTimerTests
 
         var phaseA = TimeSpan.FromMilliseconds(500);
         var phaseB = TimeSpan.FromMilliseconds(300);
+        var ct = TestContext.Current.CancellationToken;
 
         var coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
             startTask: startTask,
             subscribeStarted: fake.SubscribeStarted,
             subscribeConnected: fake.SubscribeConnected,
             phaseABudget: phaseA,
-            phaseBBudget: phaseB);
+            phaseBBudget: phaseB,
+            cancellationToken: ct);
 
-        await Task.Delay(50);
+        await Task.Delay(50, ct);
         fake.FireStarted(99999);
 
         var outcome = await coordinatorTask;
@@ -265,14 +272,16 @@ public sealed class MvmTwoPhaseStartTimerTests
         var startTcs = new TaskCompletionSource<bool>(
             TaskCreationOptions.RunContinuationsAsynchronously);
 
+        var ct = TestContext.Current.CancellationToken;
         var coordinatorTask = TwoPhaseStartCoordinator.RunAsync(
             startTask: startTcs.Task,
             subscribeStarted: fake.SubscribeStarted,
             subscribeConnected: fake.SubscribeConnected,
             phaseABudget: TimeSpan.FromSeconds(5),
-            phaseBBudget: TimeSpan.FromSeconds(5));
+            phaseBBudget: TimeSpan.FromSeconds(5),
+            cancellationToken: ct);
 
-        await Task.Delay(50);
+        await Task.Delay(50, ct);
         startTcs.TrySetException(new InvalidOperationException("conflicting VPN"));
 
         var outcome = await coordinatorTask;
@@ -304,7 +313,8 @@ public sealed class MvmTwoPhaseStartTimerTests
             subscribeStarted: fake.SubscribeStarted,
             subscribeConnected: fake.SubscribeConnected,
             phaseABudget: TimeSpan.FromMilliseconds(100),
-            phaseBBudget: TimeSpan.FromSeconds(5));
+            phaseBBudget: TimeSpan.FromSeconds(5),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(1, fake.StartedSubscriptions);
         Assert.Equal(1, fake.StartedUnsubscriptions);

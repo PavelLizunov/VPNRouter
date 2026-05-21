@@ -71,7 +71,7 @@ public class AutoFailoverEngineTests
         var sanity = new ConfigSanityCheck();
         var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
-        var outcome = await engine.HandleDeadConfigAsync("test dead reason");
+        var outcome = await engine.HandleDeadConfigAsync("test dead reason", TestContext.Current.CancellationToken);
 
         Assert.True(outcome.Switched);
         Assert.Equal("srv-2", outcome.NewActiveServer);
@@ -92,7 +92,7 @@ public class AutoFailoverEngineTests
         var sanity = new ConfigSanityCheck();
         var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
-        var outcome = await engine.HandleDeadConfigAsync("test");
+        var outcome = await engine.HandleDeadConfigAsync("test", TestContext.Current.CancellationToken);
 
         Assert.True(outcome.Switched);
         Assert.Equal("srv-3", outcome.NewActiveServer);
@@ -114,14 +114,15 @@ public class AutoFailoverEngineTests
         var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
         // Burn through 3 attempts.
+        var ct = TestContext.Current.CancellationToken;
         for (int i = 0; i < AutoFailoverEngine.MaxAttempts; i++)
         {
-            var ok = await engine.HandleDeadConfigAsync($"dead-{i}");
+            var ok = await engine.HandleDeadConfigAsync($"dead-{i}", ct);
             Assert.True(ok.Switched, $"Attempt {i + 1} should have switched");
         }
 
         // 4th call must NOT switch — cap reached.
-        var fourth = await engine.HandleDeadConfigAsync("dead-4");
+        var fourth = await engine.HandleDeadConfigAsync("dead-4", ct);
         Assert.False(fourth.Switched);
         Assert.NotNull(fourth.UserFacingMessage);
         Assert.Contains("Все серверы", fourth.UserFacingMessage!);
@@ -139,7 +140,7 @@ public class AutoFailoverEngineTests
         var sanity = new ConfigSanityCheck();
         var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
-        var outcome = await engine.HandleDeadConfigAsync("test");
+        var outcome = await engine.HandleDeadConfigAsync("test", TestContext.Current.CancellationToken);
 
         Assert.False(outcome.Switched);
         Assert.Null(outcome.NewActiveServer);
@@ -161,12 +162,13 @@ public class AutoFailoverEngineTests
         var sanity = new ConfigSanityCheck();
         var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
-        var first = await engine.HandleDeadConfigAsync("first dead");
+        var ct = TestContext.Current.CancellationToken;
+        var first = await engine.HandleDeadConfigAsync("first dead", ct);
         Assert.Equal("srv-2", first.NewActiveServer);
 
         // After the first switch, ActiveServer = srv-2. Another dead-config
         // event should rotate to srv-3, not back to srv-1.
-        var second = await engine.HandleDeadConfigAsync("second dead");
+        var second = await engine.HandleDeadConfigAsync("second dead", ct);
         Assert.Equal("srv-3", second.NewActiveServer);
     }
 
@@ -185,7 +187,7 @@ public class AutoFailoverEngineTests
         var sanity = new ConfigSanityCheck();
         var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
-        var outcome = await engine.HandleDeadConfigAsync("dead");
+        var outcome = await engine.HandleDeadConfigAsync("dead", TestContext.Current.CancellationToken);
 
         Assert.True(outcome.Switched);
         Assert.Equal("manual-2", outcome.NewActiveServer);
@@ -202,7 +204,7 @@ public class AutoFailoverEngineTests
         var sanity = new ConfigSanityCheck();
         var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
-        var outcome = await engine.HandleDeadConfigAsync("dead");
+        var outcome = await engine.HandleDeadConfigAsync("dead", TestContext.Current.CancellationToken);
 
         Assert.False(outcome.Switched);
         Assert.NotNull(outcome.UserFacingMessage);
@@ -227,7 +229,7 @@ public class AutoFailoverEngineTests
             },
             store: _store);
 
-        var outcome = await engine.HandleDeadConfigAsync("dead");
+        var outcome = await engine.HandleDeadConfigAsync("dead", TestContext.Current.CancellationToken);
 
         Assert.True(outcome.Switched);
         Assert.Equal(1, restartCalls);
@@ -245,7 +247,7 @@ public class AutoFailoverEngineTests
         var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
         // Run one failover so TriedServers populates.
-        _ = await engine.HandleDeadConfigAsync("dead");
+        _ = await engine.HandleDeadConfigAsync("dead", TestContext.Current.CancellationToken);
         Assert.NotEmpty(engine.TriedServers);
 
         engine.ResetCycle();
@@ -312,7 +314,7 @@ public class AutoFailoverEngineTests
             restart: _ => { Interlocked.Increment(ref restartCalls); return Task.FromResult(true); },
             store: _store);
 
-        var outcome = await engine.HandleDeadConfigAsync("Clash API HTTP 504");
+        var outcome = await engine.HandleDeadConfigAsync("Clash API HTTP 504", TestContext.Current.CancellationToken);
 
         // No auto-swap — user-facing error returned instead
         Assert.False(outcome.Switched);
@@ -343,7 +345,7 @@ public class AutoFailoverEngineTests
         var sanity = new ConfigSanityCheck();
         var engine = new AutoFailoverEngine(settings, sanity, store: _store);
 
-        var outcome = await engine.HandleDeadConfigAsync("dead");
+        var outcome = await engine.HandleDeadConfigAsync("dead", TestContext.Current.CancellationToken);
 
         Assert.True(outcome.Switched);
         Assert.Equal("manual-2", outcome.NewActiveServer);

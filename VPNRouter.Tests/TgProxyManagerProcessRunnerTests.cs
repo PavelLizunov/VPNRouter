@@ -138,9 +138,10 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
             // the test thread for the full budget — the fake handle stays
             // alive (never SignalExit'd) so the probe will hit the
             // OperationCanceledException branch after 2s. Run it async.
+            var testCt = TestContext.Current.CancellationToken;
             using var startCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var startTask = Task.Run(() =>
-                sut.Start(port: 4444, secret: "deadbeef0123456789abcdef01234567"));
+                sut.Start(port: 4444, secret: "deadbeef0123456789abcdef01234567"), testCt);
 
             // Wait until the runner has been invoked. Defensive deadline
             // — the FakeProcessRunner.Start path is synchronous so this
@@ -177,7 +178,7 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
 
             // Let the probe finish before disposing the SUT.
             handle.SignalExit(0);
-            startTask.Wait(TimeSpan.FromSeconds(3));
+            startTask.Wait(TimeSpan.FromSeconds(3), testCt);
         }
         finally
         {
@@ -203,8 +204,9 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         var sut = new TgProxyManager(logger: null, runner: fake);
         try
         {
+            var testCt = TestContext.Current.CancellationToken;
             var startTask = Task.Run(() =>
-                sut.Start(port: 1443, secret: "abc123def456", verbose: true));
+                sut.Start(port: 1443, secret: "abc123def456", verbose: true), testCt);
 
             using var spin = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             while (fake.StartCalls.Count == 0 && !spin.IsCancellationRequested) Thread.Sleep(10);
@@ -215,7 +217,7 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
             Assert.Equal(9, call.Arguments.Count); // 8 base + 1 verbose
 
             handle.SignalExit(0);
-            startTask.Wait(TimeSpan.FromSeconds(3));
+            startTask.Wait(TimeSpan.FromSeconds(3), testCt);
         }
         finally { sut.Dispose(); }
     }
@@ -243,11 +245,12 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
             // Spin the Start on a worker — the 2s probe DOES block the
             // calling thread (sync .GetAwaiter().GetResult()), which is
             // intentional. We want the start to return WITHOUT throwing.
-            var startTask = Task.Run(() => sut.Start(1443, "secretX"));
+            var testCt = TestContext.Current.CancellationToken;
+            var startTask = Task.Run(() => sut.Start(1443, "secretX"), testCt);
 
             // Wait up to 5s for Start to return naturally — should complete
             // after the 2s probe budget elapses.
-            Assert.True(startTask.Wait(TimeSpan.FromSeconds(5)),
+            Assert.True(startTask.Wait(TimeSpan.FromSeconds(5), testCt),
                 "Start should return within 5s — the 2s probe budget plus dispatch overhead.");
 
             // Manager state: running, has a PID.
@@ -283,7 +286,8 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
 
         try
         {
-            var startTask = Task.Run(() => sut.Start(1443, "secretY"));
+            var testCt = TestContext.Current.CancellationToken;
+            var startTask = Task.Run(() => sut.Start(1443, "secretY"), testCt);
 
             using var spin = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             while (fake.StartCalls.Count == 0 && !spin.IsCancellationRequested) Thread.Sleep(10);
@@ -302,7 +306,7 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
 
             // Let the probe complete + cleanup.
             handle.SignalExit(0);
-            startTask.Wait(TimeSpan.FromSeconds(5));
+            startTask.Wait(TimeSpan.FromSeconds(5), testCt);
 
             Assert.Equal(3, statsCaptured.Count);
             Assert.Equal("stats: total=30 active=7 ws=3", sut.LastStats);
@@ -332,8 +336,9 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         var sut = new TgProxyManager(logger: null, runner: fake);
         try
         {
-            var startTask = Task.Run(() => sut.Start(1443, "secretZ"));
-            startTask.Wait(TimeSpan.FromSeconds(5));
+            var testCt = TestContext.Current.CancellationToken;
+            var startTask = Task.Run(() => sut.Start(1443, "secretZ"), testCt);
+            startTask.Wait(TimeSpan.FromSeconds(5), testCt);
 
             Assert.True(sut.IsRunning);
             Assert.Equal(99005, sut.Pid);
@@ -366,8 +371,9 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         var sut = new TgProxyManager(logger: null, runner: fake);
         try
         {
-            var startTask = Task.Run(() => sut.Start(1443, "secretQ"));
-            startTask.Wait(TimeSpan.FromSeconds(5));
+            var testCt = TestContext.Current.CancellationToken;
+            var startTask = Task.Run(() => sut.Start(1443, "secretQ"), testCt);
+            startTask.Wait(TimeSpan.FromSeconds(5), testCt);
 
             sut.Stop();
             // Second call — must not throw, must not change state.

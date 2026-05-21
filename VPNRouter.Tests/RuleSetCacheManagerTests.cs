@@ -52,15 +52,17 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var counting = new CountingHandler();
         var client = new HttpClient(counting);
 
+        var ct = TestContext.Current.CancellationToken;
         var result = await RuleSetCacheManager.EnsureLocalAsync(
             "https://example.invalid/test.srs",
             filename,
             httpClient: client,
-            cacheDir: _tempCacheDir);
+            cacheDir: _tempCacheDir,
+            cancellationToken: ct);
 
         Assert.Equal(path, result);
         Assert.Equal(0, counting.RequestCount); // fresh → no fetch
-        Assert.Equal(bytes, await File.ReadAllBytesAsync(path));
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(path, ct));
     }
 
     [Fact]
@@ -77,15 +79,17 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var handler = new StaticResponseHandler(HttpStatusCode.OK, freshBody);
         var client = new HttpClient(handler);
 
+        var ct = TestContext.Current.CancellationToken;
         var result = await RuleSetCacheManager.EnsureLocalAsync(
             "https://example.invalid/test.srs",
             filename,
             httpClient: client,
-            cacheDir: _tempCacheDir);
+            cacheDir: _tempCacheDir,
+            cancellationToken: ct);
 
         Assert.Equal(path, result);
         Assert.Equal(1, handler.RequestCount);
-        Assert.Equal(freshBody, await File.ReadAllBytesAsync(path));
+        Assert.Equal(freshBody, await File.ReadAllBytesAsync(path, ct));
     }
 
     [Fact]
@@ -101,16 +105,18 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var handler = new ThrowingHandler(new HttpRequestException("simulated DNS fail"));
         var client = new HttpClient(handler);
 
+        var ct = TestContext.Current.CancellationToken;
         var result = await RuleSetCacheManager.EnsureLocalAsync(
             "https://example.invalid/test.srs",
             filename,
             httpClient: client,
-            cacheDir: _tempCacheDir);
+            cacheDir: _tempCacheDir,
+            cancellationToken: ct);
 
         Assert.Equal(path, result);
         Assert.Equal(1, handler.RequestCount);
         // Stale file still exists, content not corrupted.
-        Assert.Equal(stale, await File.ReadAllBytesAsync(path));
+        Assert.Equal(stale, await File.ReadAllBytesAsync(path, ct));
     }
 
     [Fact]
@@ -126,7 +132,8 @@ public sealed class RuleSetCacheManagerTests : IDisposable
             "https://example.invalid/test.srs",
             filename,
             httpClient: client,
-            cacheDir: _tempCacheDir);
+            cacheDir: _tempCacheDir,
+            cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
         Assert.Equal(1, handler.RequestCount);
@@ -144,15 +151,17 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var handler = new StaticResponseHandler(HttpStatusCode.OK, body);
         var client = new HttpClient(handler);
 
+        var ct = TestContext.Current.CancellationToken;
         var result = await RuleSetCacheManager.EnsureLocalAsync(
             "https://example.invalid/test.srs",
             filename,
             httpClient: client,
-            cacheDir: _tempCacheDir);
+            cacheDir: _tempCacheDir,
+            cancellationToken: ct);
 
         Assert.Equal(path, result);
         Assert.True(File.Exists(path));
-        Assert.Equal(body, await File.ReadAllBytesAsync(path));
+        Assert.Equal(body, await File.ReadAllBytesAsync(path, ct));
         Assert.Equal(1, handler.RequestCount);
     }
 
@@ -167,7 +176,8 @@ public sealed class RuleSetCacheManagerTests : IDisposable
             "https://example.invalid/missing.srs",
             filename,
             httpClient: client,
-            cacheDir: _tempCacheDir);
+            cacheDir: _tempCacheDir,
+            cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
         Assert.False(File.Exists(ExpectedCachedFile(filename)));
@@ -184,7 +194,8 @@ public sealed class RuleSetCacheManagerTests : IDisposable
             "https://example.invalid/empty.srs",
             filename,
             httpClient: client,
-            cacheDir: _tempCacheDir);
+            cacheDir: _tempCacheDir,
+            cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Null(result);
         Assert.False(File.Exists(ExpectedCachedFile(filename)));
@@ -198,7 +209,8 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         // Pre-existing tmp from a previous failed run.
         var tmpPath = path + ".tmp";
-        await File.WriteAllBytesAsync(tmpPath, Encoding.UTF8.GetBytes("PREV-TMP"));
+        var ct = TestContext.Current.CancellationToken;
+        await File.WriteAllBytesAsync(tmpPath, Encoding.UTF8.GetBytes("PREV-TMP"), ct);
 
         var body = Encoding.UTF8.GetBytes("CLEAN-FRESH");
         var handler = new StaticResponseHandler(HttpStatusCode.OK, body);
@@ -208,10 +220,11 @@ public sealed class RuleSetCacheManagerTests : IDisposable
             "https://example.invalid/atomic.srs",
             filename,
             httpClient: client,
-            cacheDir: _tempCacheDir);
+            cacheDir: _tempCacheDir,
+            cancellationToken: ct);
 
         Assert.Equal(path, result);
-        Assert.Equal(body, await File.ReadAllBytesAsync(path));
+        Assert.Equal(body, await File.ReadAllBytesAsync(path, ct));
         // Tmp leftover is overwritten + renamed away after success.
         Assert.False(File.Exists(tmpPath));
     }
@@ -236,7 +249,8 @@ public sealed class RuleSetCacheManagerTests : IDisposable
             RuleSetCacheManager.EnsureLocalAsync(
                 "",
                 "test.srs",
-                cacheDir: _tempCacheDir));
+                cacheDir: _tempCacheDir,
+                cancellationToken: TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -256,16 +270,18 @@ public sealed class RuleSetCacheManagerTests : IDisposable
         var handler = new StaticResponseHandler(HttpStatusCode.OK, fakeSrs);
         var client = new HttpClient(handler);
 
+        var ct = TestContext.Current.CancellationToken;
         var path = await RuleSetCacheManager.EnsureLocalAsync(
             "https://raw.githubusercontent.com/REIJI007/AdBlock_Rule_For_Sing-box/main/adblock_reject.srs",
             filename,
             httpClient: client,
-            cacheDir: _tempCacheDir);
+            cacheDir: _tempCacheDir,
+            cancellationToken: ct);
 
         Assert.NotNull(path);
         Assert.EndsWith(filename, path);
         Assert.True(File.Exists(path));
-        Assert.Equal(fakeSrs, await File.ReadAllBytesAsync(path));
+        Assert.Equal(fakeSrs, await File.ReadAllBytesAsync(path, ct));
     }
 
     [Fact]

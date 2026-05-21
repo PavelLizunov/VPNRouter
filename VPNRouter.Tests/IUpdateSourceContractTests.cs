@@ -100,7 +100,7 @@ public sealed class IUpdateSourceContractTests
             new FakeDesktopInstaller());
 
         // Act
-        var info = await source.CheckAsync();
+        var info = await source.CheckAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(info);
@@ -139,7 +139,7 @@ public sealed class IUpdateSourceContractTests
             new FakeDesktopInstaller());
 
         // Act
-        var info = await source.CheckAsync();
+        var info = await source.CheckAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(info);
@@ -171,7 +171,7 @@ public sealed class IUpdateSourceContractTests
             new FakeDesktopInstaller());
 
         // Act
-        var info = await source.CheckAsync();
+        var info = await source.CheckAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(info);
@@ -209,7 +209,7 @@ public sealed class IUpdateSourceContractTests
         var sink = new CapturingProgress(captured);
 
         // Act
-        var path = await source.DownloadAsync(info, sink);
+        var path = await source.DownloadAsync(info, sink, TestContext.Current.CancellationToken);
 
         // Assert — installer was invoked, path bubbled up, progress
         // events surfaced 1:1 from installer to caller.
@@ -250,7 +250,7 @@ public sealed class IUpdateSourceContractTests
             new FakeAndroidInstaller());
 
         // Act
-        var info = await source.CheckAsync();
+        var info = await source.CheckAsync(TestContext.Current.CancellationToken);
 
         // Assert — APK chosen, not the desktop zip.
         Assert.NotNull(info);
@@ -267,7 +267,8 @@ public sealed class IUpdateSourceContractTests
         // known SHA. Source must verify and return the path.
         var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-test-{Guid.NewGuid():N}.apk");
         var bytes = Encoding.UTF8.GetBytes("fake APK contents for SHA test");
-        await File.WriteAllBytesAsync(tempPath, bytes);
+        var ct = TestContext.Current.CancellationToken;
+        await File.WriteAllBytesAsync(tempPath, bytes, ct);
         var expectedSha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
         try
@@ -281,7 +282,7 @@ public sealed class IUpdateSourceContractTests
                 fakeInstaller);
 
             // Act
-            var path = await source.DownloadAsync(info);
+            var path = await source.DownloadAsync(info, ct: ct);
 
             // Assert — path bubbles up; file still on disk for the next step.
             Assert.Equal(tempPath, path);
@@ -308,7 +309,8 @@ public sealed class IUpdateSourceContractTests
 
         var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-test-{Guid.NewGuid():N}.apk");
         var bytes = Encoding.UTF8.GetBytes("fake APK contents for mismatch test");
-        await File.WriteAllBytesAsync(tempPath, bytes);
+        var ct = TestContext.Current.CancellationToken;
+        await File.WriteAllBytesAsync(tempPath, bytes, ct);
         // Use a wrong but well-formed SHA so the validation reaches the
         // compare step rather than failing on shape.
         var wrongSha = new string('b', 64);
@@ -325,7 +327,7 @@ public sealed class IUpdateSourceContractTests
 
             // Act + Assert — must throw + file removed so retry pulls fresh.
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-                () => source.DownloadAsync(info));
+                () => source.DownloadAsync(info, ct: ct));
             Assert.Contains("checksum mismatch", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.False(File.Exists(tempPath),
                 "Corrupted APK must be deleted on SHA mismatch so the next attempt downloads fresh bytes.");
@@ -353,7 +355,7 @@ public sealed class IUpdateSourceContractTests
             fakeInstaller);
 
         // Act
-        var result = await source.ApplyAsync(info, @"/data/data/com.app/cache/update.apk");
+        var result = await source.ApplyAsync(info, @"/data/data/com.app/cache/update.apk", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(result);
@@ -370,7 +372,7 @@ public sealed class IUpdateSourceContractTests
         // in-app check returns null (no banner). Phase 4 will replace
         // with Play In-App Update API.
         var source = new PlayStoreSource();
-        var info = await source.CheckAsync();
+        var info = await source.CheckAsync(TestContext.Current.CancellationToken);
         Assert.Null(info);
         Assert.Equal("play-store", source.SourceId);
     }
@@ -383,11 +385,12 @@ public sealed class IUpdateSourceContractTests
         // QA rather than as a silent no-op.
         var source = new PlayStoreSource();
         var info = SampleSourceInfo(sha: null);
+        var ct = TestContext.Current.CancellationToken;
 
         await Assert.ThrowsAsync<NotSupportedException>(
-            () => source.DownloadAsync(info));
+            () => source.DownloadAsync(info, ct: ct));
         await Assert.ThrowsAsync<NotSupportedException>(
-            () => source.ApplyAsync(info, "/data/data/x/files/x.apk"));
+            () => source.ApplyAsync(info, "/data/data/x/files/x.apk", ct));
     }
 
     // ─── Helpers ────────────────────────────────────────────────────────
