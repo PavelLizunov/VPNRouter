@@ -34,6 +34,7 @@ public sealed class VlessDeepVerifier
 {
     private readonly ILogger _logger;
     private readonly string _singBoxPath;
+    private readonly IProcessRunner _runner;
 
     private const string ProbeUrl = "https://www.cloudflare.com/cdn-cgi/trace";
     private static readonly TimeSpan SingBoxWarmup = TimeSpan.FromMilliseconds(1500);
@@ -42,10 +43,22 @@ public sealed class VlessDeepVerifier
 
     public int MaxConcurrency { get; set; } = 5;
 
-    public VlessDeepVerifier(ILogger logger)
+    // Phase 3+ (2026-05-21) IProcessRunner adoption — first long-lived spawn
+    // target. The sing-box probe lifetime is ≤12s (OverallTimeout) and the
+    // service doesn't subscribe to the Exited event, so the implicit
+    // EnableRaisingEvents=false handling inside ProcessHandle.Dispose carries
+    // the load-bearing intent (no spurious Exited callback) transitively. See
+    // brief: plans/phase3-iprocessrunner-vlessdeepverifier-2026-05-21.md
+    /// <summary>Test-only seam: swap in a fake. Production paths use the
+    /// default <see cref="ProcessRunner"/>. Not thread-safe — assumes serial
+    /// xUnit execution within the fixture; tests reset in try/finally.</summary>
+    internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
+
+    public VlessDeepVerifier(ILogger logger, IProcessRunner? runner = null)
     {
         _logger = logger;
         _singBoxPath = AppPaths.SingBoxExePath;
+        _runner = runner ?? Runner;
     }
 
     /// <summary>
@@ -54,11 +67,16 @@ public sealed class VlessDeepVerifier
     /// be exercised deterministically (production resolves to
     /// <see cref="AppPaths.SingBoxExePath"/>). Marked <c>internal</c> +
     /// visible to <c>VPNRouter.Tests</c> via <c>InternalsVisibleTo</c>.
+    ///
+    /// <para>Phase 3+ (2026-05-21): optional <paramref name="runner"/>
+    /// arg lets wire-shape tests inject a <c>FakeProcessRunner</c>
+    /// without depending on the static <see cref="Runner"/> seam.</para>
     /// </summary>
-    internal VlessDeepVerifier(ILogger logger, string singBoxPath)
+    internal VlessDeepVerifier(ILogger logger, string singBoxPath, IProcessRunner? runner = null)
     {
         _logger = logger;
         _singBoxPath = singBoxPath;
+        _runner = runner ?? Runner;
     }
 
     public bool IsAvailable => File.Exists(_singBoxPath);
@@ -154,7 +172,7 @@ public sealed class VlessDeepVerifier
         var socksPort = FindFreePort();
         var clashPort = FindFreePort();
         string? tmpConfigPath = null;
-        Process? process = null;
+        IProcessHandle? handle = null;
         var stderrBuffer = new StringBuilder(capacity: 2048);
 
         using var overallCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -166,33 +184,36 @@ public sealed class VlessDeepVerifier
             tmpConfigPath = Path.Combine(Path.GetTempPath(), $"sb-dv-{Guid.NewGuid():N}.json");
             await File.WriteAllTextAsync(tmpConfigPath, configJson, overallCts.Token);
 
-            process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = _singBoxPath,
-                    Arguments = $"run -c \"{tmpConfigPath}\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                },
-                EnableRaisingEvents = false,
-            };
-            process.ErrorDataReceived += (_, e) =>
-            {
-                if (e.Data != null) stderrBuffer.Append(e.Data).Append('\n');
-            };
+            // Phase 3+ (2026-05-21): route the sing-box spawn through
+            // IProcessRunner so wire-shape tests can pin the argv +
+            // CaptureStderr without invoking the real binary. Drop the
+            // explicit `EnableRaisingEvents = false` — this service never
+            // subscribed to Exited, and ProcessHandle.Dispose disables the
+            // flag before Kill anyway (ProcessRunner.cs lines 280-293), so
+            // the load-bearing intent (no spurious Exited callback) is
+            // preserved transitively.
+            var request = new ProcessRequest(
+                ExecutablePath: _singBoxPath,
+                Arguments: new[] { "run", "-c", tmpConfigPath },
+                CaptureStdout: true,
+                CaptureStderr: true);
 
-            if (!process.Start())
+            try
             {
-                _logger.Warning("[VlessDeepVerifier] {Name}: sing-box spawn returned false", label);
+                handle = _runner.Start(request);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[VlessDeepVerifier] {Name}: sing-box spawn failed", label);
                 return DeepVerifyResult.Failed("sing-box spawn failed");
             }
 
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-            _logger.Debug("[VlessDeepVerifier] {Name}: sing-box spawned pid={Pid} socks={SocksPort}", label, process.Id, socksPort);
+            handle.ErrorLine += (_, line) =>
+            {
+                if (line != null) stderrBuffer.Append(line).Append('\n');
+            };
+
+            _logger.Debug("[VlessDeepVerifier] {Name}: sing-box spawned pid={Pid} socks={SocksPort}", label, handle.Pid, socksPort);
 
             if (!await WaitForPortBoundAsync(socksPort, SingBoxWarmup, overallCts.Token))
             {
@@ -236,12 +257,14 @@ public sealed class VlessDeepVerifier
         {
             try
             {
-                if (process != null && !process.HasExited)
+                if (handle != null)
                 {
-                    process.Kill(entireProcessTree: true);
-                    process.WaitForExit(2000);
+                    if (!handle.HasExited)
+                    {
+                        handle.Kill(entireProcessTree: true);
+                    }
+                    handle.Dispose();
                 }
-                process?.Dispose();
             }
             catch { }
 

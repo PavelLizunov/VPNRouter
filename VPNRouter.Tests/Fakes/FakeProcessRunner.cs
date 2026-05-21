@@ -145,6 +145,14 @@ public sealed class FakeProcessHandle : IProcessHandle
 
     public bool HasExited => _exit.Task.IsCompleted;
 
+    /// <summary>Test-side: how many times <see cref="Kill"/> has been
+    /// invoked on this handle. Used by wire-shape tests asserting the
+    /// kill-in-finally path actually fires (e.g. on probe timeout or
+    /// caller cancellation). Production ProcessHandle.Kill is idempotent
+    /// for already-exited processes, so multiple-call observability here
+    /// is behaviourally inert.</summary>
+    public int KillCallCount { get; private set; }
+
     public event EventHandler<string>? OutputLine;
     public event EventHandler<string>? ErrorLine;
     public event EventHandler<int>? Exited;
@@ -156,6 +164,7 @@ public sealed class FakeProcessHandle : IProcessHandle
 
     public void Kill(bool entireProcessTree = true)
     {
+        KillCallCount++;
         SignalExit(exitCode: -1);
     }
 
