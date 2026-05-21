@@ -211,6 +211,13 @@ rule.
 * Their full-suite-run instability is documented in `VPNRouter.Tests/CLAUDE.md`
   "Headless tests — known issues" and pre-dates this commit (confirmed
   with `git stash` baseline run on `b012fe6`).
+- [x] **Post-push CI verify** (commit `16042ac`):
+  `gh api repos/PavelLizunov/VPNRouter/commits/16042ac/check-runs` →
+  `grep` check: success, `test` check (Linux): success.
+  Initial push (`de5942c`) had one Linux jitter flake on
+  `PhaseA_NoSingBoxIn60s_PhaseATimeout`'s elapsed-time `≥ 200ms`
+  assertion (Task.Delay returned 199.6ms). Fixed in follow-up `16042ac`
+  by widening lower bound 20ms.
 
 ## Outcome
 
