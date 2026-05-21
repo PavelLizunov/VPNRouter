@@ -51,6 +51,14 @@ public class FirewallManagerProcessRunnerWireShapeTests
     [Fact]
     public async Task EnableDnsLockdownAsync_EmitsAllowRuleWithLoopbackRemoteIp()
     {
+        // Windows-only: EnableDnsLockdownAsync early-returns on non-Windows
+        // (see [SupportedOSPlatform("windows")] + OperatingSystem.IsWindows()
+        // guard in FirewallManager.cs). The test exercises the netsh wire
+        // shape which is meaningless on Linux/macOS. Linux CI was failing
+        // this since 1242b9e — gate clearly per OS.
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "EnableDnsLockdownAsync is Windows-only (netsh)");
+
         // BR-9 Wave 39: the first rule installed is the allow rule scoped
         // to 127.0.0.1 so local DNS proxies on loopback keep working.
         // remoteip=127.0.0.1 must appear in the argv, and protocol must
@@ -81,6 +89,9 @@ public class FirewallManagerProcessRunnerWireShapeTests
     [Fact]
     public async Task EnableDnsLockdownAsync_BlockRulesUseComplementRemoteIp()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "EnableDnsLockdownAsync is Windows-only (netsh)");
+
         // BR-9 r17: the 3 block rules (UDP/53, TCP/53, TCP/853) MUST scope
         // their remoteip to the complement-of-TUN range so they never
         // match TUN-bound DNS traffic. This pins the
@@ -121,6 +132,9 @@ public class FirewallManagerProcessRunnerWireShapeTests
     [Fact]
     public async Task EnableDnsLockdownAsync_FallbackCidr_UsesBundledDefault()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "EnableDnsLockdownAsync is Windows-only (netsh)");
+
         // tunCidr null/empty must fall through to the bundled default
         // 172.19.0.0/30 — same complement range as the explicit
         // 172.19.0.1/30 input.
@@ -146,6 +160,9 @@ public class FirewallManagerProcessRunnerWireShapeTests
     [Fact]
     public async Task DisableDnsLockdownAsync_DeletesAllSixRuleNames()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "DisableDnsLockdownAsync is Windows-only (netsh)");
+
         // r17 Disable path tears down: the canonical 4 (allow + 3 blocks)
         // PLUS the legacy r12 TUN-allow rules (deleted on best-effort
         // basis for users upgrading from r12..r16). Total = 6 delete
