@@ -155,10 +155,15 @@ public sealed class MvmTwoPhaseStartTimerTests
         var elapsed = DateTime.UtcNow - start;
 
         Assert.Equal(TwoPhaseStartOutcome.PhaseATimeout, outcome);
-        // Approximate elapsed near phase A budget (give a fat 2s slop for
-        // CI jitter / thread-pool contention).
-        Assert.True(elapsed >= phaseA, $"Expected at least {phaseA} elapsed, got {elapsed}");
-        Assert.True(elapsed < phaseA + TimeSpan.FromSeconds(2), $"Expected at most {phaseA + TimeSpan.FromSeconds(2)} elapsed, got {elapsed}");
+        // Approximate elapsed near phase A budget. Lower bound is fuzzy
+        // because Task.Delay is "approximately N" not "at least N exactly"
+        // — Linux CI's tight loop saw 199.6ms for a 200ms delay (FX timer
+        // granularity ≈ 16ms). Allow a 20ms early grace for CI jitter.
+        var lowerBound = phaseA - TimeSpan.FromMilliseconds(20);
+        Assert.True(elapsed >= lowerBound,
+            $"Expected at least {lowerBound} elapsed (= phaseA {phaseA} - 20ms grace), got {elapsed}");
+        Assert.True(elapsed < phaseA + TimeSpan.FromSeconds(2),
+            $"Expected at most {phaseA + TimeSpan.FromSeconds(2)} elapsed, got {elapsed}");
     }
 
     // ─── Test 3: Phase B success ────────────────────────────────────────
