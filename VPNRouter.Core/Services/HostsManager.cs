@@ -37,6 +37,17 @@ public sealed class HostsManager
     private readonly IFileSystem _fs;
     private readonly string _hostsPath;
     private readonly IHttpClient _http;
+    private readonly IProcessRunner _runner;
+
+    // Phase 3+ (2026-05-21) IProcessRunner adoption: shared seam for the
+    // FlushDns helper. Instance methods route through _runner so tests can
+    // inject a per-instance fake via the ctor without touching global
+    // state, but the default still flows from here. Mirrors the pattern in
+    // FirewallManager / ZapretActions.
+    /// <summary>Test-only seam: swap in a fake. Production paths use the
+    /// default <see cref="ProcessRunner"/>. Not thread-safe — assumes serial
+    /// xUnit execution within the fixture; tests reset in try/finally.</summary>
+    internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
 
     /// <summary>
     /// Default singleton wired to <see cref="RealFileSystem"/> and the
@@ -53,11 +64,15 @@ public sealed class HostsManager
     /// </summary>
     /// <param name="http">3G-2: HTTP seam. Defaults to <see cref="PolicyHttpClient.Shared"/>;
     /// tests inject <c>FakeHttpClient</c> to stub the Flowseal fetch.</param>
-    public HostsManager(IFileSystem? fileSystem = null, string? hostsPath = null, IHttpClient? http = null)
+    /// <param name="runner">Phase 3+ (2026-05-21): IProcessRunner seam for the
+    /// FlushDns helper. Defaults to a new <see cref="ProcessRunner"/>; tests
+    /// inject <c>FakeProcessRunner</c> to stub the ipconfig invocation.</param>
+    public HostsManager(IFileSystem? fileSystem = null, string? hostsPath = null, IHttpClient? http = null, IProcessRunner? runner = null)
     {
         _fs = fileSystem ?? new RealFileSystem();
         _hostsPath = hostsPath ?? HostsPath;
         _http = http ?? PolicyHttpClient.Shared;
+        _runner = runner ?? Runner;
     }
 
     /// <summary>Instance variant of <see cref="IsInstalled"/>.</summary>
@@ -262,24 +277,34 @@ public sealed class HostsManager
         return newLines;
     }
 
-    private static void FlushDns(ILogger? logger)
+    /// <summary>
+    /// Flush the Windows DNS cache via <c>ipconfig /flushdns</c>. Called after
+    /// every hosts-file mutation so the new entries become effective without
+    /// requiring a reboot.
+    ///
+    /// <para>Phase 3+ (2026-05-21) IProcessRunner adoption: routed through
+    /// <see cref="_runner"/>. Wire shape preserved — same single
+    /// <c>/flushdns</c> argument, same 5s timeout. Pre-Phase-3+ the
+    /// <c>using var proc = Process.Start(psi); proc?.WaitForExit(5000)</c>
+    /// pattern was used to avoid leaking native process handles on timeout
+    /// (v2.20.2). The IProcessRunner implementation owns its <c>Process</c>
+    /// via <c>using</c> inside <c>ProcessRunner.RunAsync</c>, so the leak
+    /// mitigation transfers automatically.</para>
+    /// </summary>
+    private void FlushDns(ILogger? logger)
     {
         try
         {
-            var psi = new System.Diagnostics.ProcessStartInfo
+            var result = _runner.RunAsync(new ProcessRequest(
+                ExecutablePath: "ipconfig",
+                Arguments: new[] { "/flushdns" },
+                Timeout: TimeSpan.FromMilliseconds(5000))).GetAwaiter().GetResult();
+
+            if (result.TimedOut)
             {
-                FileName = "ipconfig",
-                Arguments = "/flushdns",
-                CreateNoWindow = true,
-                UseShellExecute = false,
-                RedirectStandardOutput = true
-            };
-            // v2.20.2: wrap in using — without it, if WaitForExit times out
-            // (5 s) the native Process handle leaks. Over a long-running
-            // session (especially on Windows where ipconfig is called on
-            // every hosts mutation) the handle table grows unbounded.
-            using var proc = System.Diagnostics.Process.Start(psi);
-            proc?.WaitForExit(5000);
+                logger?.Warning("[Hosts] ipconfig /flushdns timed out after 5s");
+                return;
+            }
             logger?.Debug("[Hosts] DNS cache flushed");
         }
         catch (Exception ex)
