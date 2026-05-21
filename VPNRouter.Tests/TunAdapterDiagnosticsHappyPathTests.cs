@@ -1,0 +1,299 @@
+#nullable enable
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using VPNRouter.Core.Services;
+using VPNRouter.Tests.Fakes;
+using Xunit;
+
+namespace VPNRouter.Tests;
+
+/// <summary>
+/// Task #36-B (Phase 4 prep, 2026-05-21) happy-path coverage for
+/// <see cref="TunAdapterDiagnostics.PreStartCleanupAsync"/>. Wire-shape
+/// (<c>TunAdapterDiagnosticsProcessRunnerWireShapeTests</c>) and module-
+/// availability (<c>TunAdapterDiagnosticsNetAdapterAvailabilityTests</c>)
+/// suites pin per-call argv + cache invariants. This file pins the
+/// orchestrator's end-to-end "orphan found → cleanup succeeds, count
+/// returned" contract that production callers (VpnEngine pre-start,
+/// SingBoxManager auto-restart) actually consume.
+///
+/// <para>Three happy paths:</para>
+/// <list type="number">
+/// <item>NetAdapter module available + orphan found → PowerShell
+/// Remove-NetAdapter fires, count == 1.</item>
+/// <item>NetAdapter module unavailable + orphan found → netsh-disable
+/// fallback (Fix #4) fires, no PowerShell, count == 1.</item>
+/// <item>No orphan in enumeration + module unavailable → enumeration
+/// + defence-in-depth direct-by-name netsh-disable fallback fire, no
+/// PowerShell Remove-NetAdapter at all.</item>
+/// </list>
+///
+/// <para>All three are Windows-only (PreStartCleanupAsync early-returns
+/// 0 on non-Windows via <see cref="OperatingSystem.IsWindows"/>). Linux
+/// CI skips via <see cref="Assert.SkipUnless(bool, string)"/> per the
+/// post-ddc2399 pattern.</para>
+/// </summary>
+public sealed class TunAdapterDiagnosticsHappyPathTests
+{
+    // ─── helpers ────────────────────────────────────────────────────────
+
+    /// <summary>Identify the `netsh interface show interface` enumeration
+    /// call shape (single source of truth for matchers/assertions).</summary>
+    private static bool IsNetshEnumeration(ProcessRequest r)
+    {
+        return r.ExecutablePath == "netsh"
+            && r.Arguments.Count == 3
+            && r.Arguments[0] == "interface"
+            && r.Arguments[1] == "show"
+            && r.Arguments[2] == "interface";
+    }
+
+    /// <summary>Identify a `netsh interface set interface name=... admin=disabled`
+    /// call shape — the cleanup path used by both DisableOrphanedAdapter
+    /// and TryDisableAdapterViaNetshAsync (Fix #4 fallback).</summary>
+    private static bool IsNetshDisable(ProcessRequest r)
+    {
+        return r.ExecutablePath == "netsh"
+            && r.Arguments.Contains("admin=disabled");
+    }
+
+    /// <summary>Identify a PowerShell Remove-NetAdapter call shape.</summary>
+    private static bool IsRemoveNetAdapter(ProcessRequest r)
+    {
+        return r.ExecutablePath == "powershell.exe"
+            && r.Arguments.Count == 4
+            && r.Arguments[3].Contains("Remove-NetAdapter");
+    }
+
+    /// <summary>Swap in fake Runner, pre-set NetAdapter module availability,
+    /// run body, restore. Mirrors the WithFakeAsync pattern from
+    /// <c>TunAdapterDiagnosticsNetAdapterAvailabilityTests</c>.</summary>
+    private static async Task WithFakeAsync(
+        FakeProcessRunner fake,
+        bool moduleAvailable,
+        Func<Task> body)
+    {
+        var previous = TunAdapterDiagnostics.Runner;
+        TunAdapterDiagnostics.Runner = fake;
+        TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
+        TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(moduleAvailable);
+        try { await body(); }
+        finally
+        {
+            TunAdapterDiagnostics.Runner = previous;
+            TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
+        }
+    }
+
+    // ─── Test 1: module available + orphan found → PowerShell removal ───
+
+    [Fact]
+    public async Task PreStartCleanupAsync_OrphanFound_ModuleAvailable_RemoveNetAdapterFires()
+    {
+        // PreStartCleanupAsync is [SupportedOSPlatform("windows")] and
+        // early-returns 0 on non-Windows. Linux CI must skip rather than
+        // fail an "Assert.Equal(1, removed)" with the production guard's
+        // baseline 0.
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "PreStartCleanupAsync is Windows-only (netsh + Remove-NetAdapter)");
+
+        // Enumeration returns one VPNRouter-TUN orphan row. NetAdapter
+        // module is forced available so the full path runs:
+        // DisableOrphanedAdapter (netsh disable) + TryRemoveAdapterAsync
+        // (PowerShell Remove-NetAdapter). Both fakes return success; the
+        // count returned must be 1 (single orphan removed).
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsNetshEnumeration,
+            new ProcessResult(
+                ExitCode: 0,
+                Stdout:
+                """
+                Admin State    State          Type             Interface Name
+                -------------------------------------------------------------------------
+                Enabled        Connected      Dedicated        Ethernet
+                Disabled       Disconnected   Dedicated        VPNRouter-TUN
+                """,
+                Stderr: "",
+                Duration: TimeSpan.FromMilliseconds(10),
+                TimedOut: false));
+        // netsh admin=disabled — used by DisableOrphanedAdapter during
+        // the per-adapter cleanup loop (release kernel handle before
+        // PowerShell removal).
+        fake.OnRun(IsNetshDisable,
+            new ProcessResult(0, "Ok.", "", TimeSpan.FromMilliseconds(5), false));
+        // PowerShell Remove-NetAdapter — exit 0 indicates "adapter removed".
+        fake.OnRun(IsRemoveNetAdapter,
+            new ProcessResult(0, "", "", TimeSpan.FromMilliseconds(5), false));
+
+        int removed = 0;
+        await WithFakeAsync(fake, moduleAvailable: true, async () =>
+        {
+            removed = await TunAdapterDiagnostics.PreStartCleanupAsync(
+                logger: null, context: "test.happy.ps-remove");
+        });
+
+        // Single orphan handled → returned count is 1.
+        Assert.Equal(1, removed);
+
+        // The enumeration call fired exactly once at the top of the
+        // orchestrator.
+        var enumCalls = fake.RunCalls.Where(IsNetshEnumeration).ToList();
+        Assert.Single(enumCalls);
+
+        // netsh disable carried the VPNRouter-TUN name token (single argv
+        // entry; .NET ArgumentList re-quotes for the kernel if needed).
+        var disableCalls = fake.RunCalls.Where(IsNetshDisable).ToList();
+        Assert.NotEmpty(disableCalls);
+        Assert.Contains(disableCalls,
+            c => c.Arguments.Contains("name=VPNRouter-TUN"));
+
+        // Remove-NetAdapter PowerShell call fired with the single-quoted
+        // adapter-name embed (whitelist-safe, no apostrophe path).
+        var removeCalls = fake.RunCalls.Where(IsRemoveNetAdapter).ToList();
+        Assert.NotEmpty(removeCalls);
+        var psCall = removeCalls[0];
+        Assert.Equal(4, psCall.Arguments.Count);
+        Assert.Equal("-NoProfile", psCall.Arguments[0]);
+        Assert.Equal("-NonInteractive", psCall.Arguments[1]);
+        Assert.Equal("-Command", psCall.Arguments[2]);
+        Assert.Contains("Get-NetAdapter", psCall.Arguments[3]);
+        Assert.Contains("Remove-NetAdapter", psCall.Arguments[3]);
+        Assert.Contains("'VPNRouter-TUN'", psCall.Arguments[3]);
+    }
+
+    // ─── Test 2: module unavailable + orphan found → netsh fallback ─────
+
+    [Fact]
+    public async Task PreStartCleanupAsync_OrphanFound_ModuleUnavailable_NetshFallbackFires()
+    {
+        // PinkuDani Fix #4 path: when the NetAdapter PowerShell module is
+        // missing on the host (Win10 LTSC class — no RSAT, no Pro/Ent
+        // module), the orchestrator must skip the PowerShell removal
+        // entirely and use the awaitable netsh-disable fallback to at
+        // least release the wintun kernel handle. The device record
+        // can't be removed without PowerShell, but the next sing-box
+        // WintunCreateAdapter won't hit ERROR_FILE_EXISTS on the orphan
+        // because the handle was freed.
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "PreStartCleanupAsync is Windows-only (netsh)");
+
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsNetshEnumeration,
+            new ProcessResult(
+                ExitCode: 0,
+                Stdout:
+                """
+                Admin State    State          Type             Interface Name
+                -------------------------------------------------------------------------
+                Enabled        Connected      Dedicated        Ethernet
+                Disabled       Disconnected   Dedicated        VPNRouter-TUN
+                """,
+                Stderr: "",
+                Duration: TimeSpan.FromMilliseconds(10),
+                TimedOut: false));
+        // netsh admin=disabled — used by both legacy DisableOrphanedAdapter
+        // and Fix #4 TryDisableAdapterViaNetshAsync. With moduleAvailable
+        // = false, only the latter fires.
+        fake.OnRun(IsNetshDisable,
+            new ProcessResult(0, "Ok.", "", TimeSpan.FromMilliseconds(5), false));
+
+        int removed = 0;
+        await WithFakeAsync(fake, moduleAvailable: false, async () =>
+        {
+            removed = await TunAdapterDiagnostics.PreStartCleanupAsync(
+                logger: null, context: "test.happy.netsh-fallback");
+        });
+
+        // Single orphan netsh-disabled → counts as "handled" (1).
+        // TryDisableAdapterViaNetshAsync returns true on exit 0 so the
+        // PreStartCleanupAsync removed counter increments.
+        Assert.Equal(1, removed);
+
+        // No PowerShell Remove-NetAdapter call must appear — the Fix #4
+        // path is the entire point of this test.
+        Assert.DoesNotContain(fake.RunCalls, IsRemoveNetAdapter);
+
+        // netsh admin=disabled fired for VPNRouter-TUN.
+        var disableCalls = fake.RunCalls.Where(IsNetshDisable).ToList();
+        Assert.NotEmpty(disableCalls);
+        var primary = disableCalls.First(c =>
+            c.Arguments.Contains("name=VPNRouter-TUN"));
+        Assert.Equal("netsh", primary.ExecutablePath);
+        Assert.Equal(new[]
+        {
+            "interface", "set", "interface",
+            "name=VPNRouter-TUN",
+            "admin=disabled",
+        }, primary.Arguments);
+    }
+
+    // ─── Test 3: no orphans found → skip per-adapter cleanup, count == 0 ─
+
+    [Fact]
+    public async Task PreStartCleanupAsync_NoOrphans_ModuleUnavailable_SkipsPowerShellRemoval()
+    {
+        // No VPNRouter-TUN or sing-box-tun row in the enumeration output
+        // → the per-adapter cleanup loop is skipped (staleAdapters.Count
+        // == 0). The defence-in-depth direct-by-name fallback still runs
+        // for the default VPNRouter-TUN name, but with moduleAvailable
+        // = false it routes to TryDisableAdapterViaNetshAsync, NOT
+        // PowerShell Remove-NetAdapter.
+        //
+        // Critical pin: no PowerShell call at all. With "adapter not
+        // found" returned from netsh disable, TryDisableAdapterViaNetshAsync
+        // would treat the exit-1 path as idempotent-success (+1 to
+        // removed), so we craft the fake to return a "real failure" exit
+        // code (5, "Access is denied" — purely synthetic) for the
+        // fallback netsh call. That makes removed == 0, which is what
+        // production callers (VpnEngine pre-start gate) consume as the
+        // "no cleanup needed" signal.
+        Assert.SkipUnless(OperatingSystem.IsWindows(),
+            "PreStartCleanupAsync is Windows-only (netsh)");
+
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsNetshEnumeration,
+            new ProcessResult(
+                ExitCode: 0,
+                Stdout:
+                """
+                Admin State    State          Type             Interface Name
+                -------------------------------------------------------------------------
+                Enabled        Connected      Dedicated        Ethernet
+                Enabled        Connected      Dedicated        Wi-Fi
+                """,
+                Stderr: "",
+                Duration: TimeSpan.FromMilliseconds(10),
+                TimedOut: false));
+        // Defence-in-depth fallback call: simulate a "real failure" exit
+        // (not "not found") so TryDisableAdapterViaNetshAsync returns
+        // false → removed stays at 0. This is the canonical "nothing to
+        // clean up" outcome.
+        fake.OnRun(IsNetshDisable,
+            new ProcessResult(
+                ExitCode: 5,
+                Stdout: "",
+                Stderr: "Access is denied (synthetic — fallback returned failure)",
+                Duration: TimeSpan.FromMilliseconds(5),
+                TimedOut: false));
+
+        int removed = 0;
+        await WithFakeAsync(fake, moduleAvailable: false, async () =>
+        {
+            removed = await TunAdapterDiagnostics.PreStartCleanupAsync(
+                logger: null, context: "test.happy.no-orphan");
+        });
+
+        // Nothing handled → 0.
+        Assert.Equal(0, removed);
+
+        // Enumeration call fired exactly once.
+        var enumCalls = fake.RunCalls.Where(IsNetshEnumeration).ToList();
+        Assert.Single(enumCalls);
+
+        // No PowerShell call at all (no Remove-NetAdapter probe even —
+        // SetNetAdapterModuleAvailableForTests(false) bypassed the Lazy).
+        Assert.DoesNotContain(fake.RunCalls, r =>
+            r.ExecutablePath == "powershell.exe");
+    }
+}
