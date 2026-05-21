@@ -158,7 +158,9 @@ None. All 3 deferred items shipped.
 - [x] Full test suite (Core + non-GUI): 1354 passed / 4 skipped / 0 failed,
   duration 1m44s. Baseline pre-Task-#49 was 1339 (post-`b012fe6`); 7 new
   Task-#49 tests + concurrent agent work brought the total to 1358.
-- [ ] Post-push CI verify.
+- [x] Post-push CI verify (commit `69f0d4c`):
+    - `grep placeholder fingerprints` — completed/success.
+    - `dotnet test` — completed/success.
 - [x] Brief: this file.
 
 ## Outcome
