@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using Serilog;
@@ -13,11 +14,26 @@ namespace VPNRouter.Core.Services;
 public class ZapretManager : IDisposable
 {
     private readonly ILogger _logger;
-    private Process? _process;
+    private readonly IProcessRunner _runner;
+    // Phase 3+ (2026-05-21): IProcessRunner adoption (long-lived spawn,
+    // third file after TgProxyManager + VlessDeepVerifier). winws.exe runs
+    // as a child of `cmd.exe /c <bat>` because the legacy spawn used
+    // `UseShellExecute=true` + .bat path directly — `UseShellExecute=false`
+    // (hardwired in ProcessRunner) cannot exec a .bat, only a real
+    // executable. The cmd.exe wrapper preserves the Cygwin "real console
+    // required" semantics: with CaptureStdout/Err=false the runner does
+    // NOT redirect cmd.exe streams, so winws.exe inherits a real (hidden)
+    // console, which Cygwin's POSIX resolver needs to function.
+    private IProcessHandle? _handle;
     private bool _disposed;
 
-    public bool IsRunning => _process != null && !_process.HasExited;
-    public int? Pid => IsRunning ? _process?.Id : null;
+    /// <summary>Test-only seam: swap in a fake for the long-lived
+    /// winws.exe / cmd.exe spawn. Production paths use the default
+    /// <see cref="ProcessRunner"/>. Mirrors TgProxyManager.Runner.</summary>
+    internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
+
+    public bool IsRunning => _handle != null && !_handle.HasExited;
+    public int? Pid => IsRunning ? _handle?.Pid : null;
 
     /// <summary>Check if winws.exe is running globally (handles .bat wrapper case).</summary>
     public static bool IsWinwsRunning() => Process.GetProcessesByName("winws").Length > 0;
@@ -56,9 +72,10 @@ public class ZapretManager : IDisposable
     /// </summary>
     public static readonly TimeSpan ImmediateExitWindow = TimeSpan.FromSeconds(2);
 
-    public ZapretManager(ILogger? logger = null)
+    public ZapretManager(ILogger? logger = null, IProcessRunner? runner = null)
     {
         _logger = logger ?? Log.Logger;
+        _runner = runner ?? Runner;
     }
 
     /// <summary>
@@ -101,29 +118,27 @@ public class ZapretManager : IDisposable
 
         _logger.Information("[Zapret] Launching silent wrapper: {Path}", wrapperPath);
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = wrapperPath,
-            UseShellExecute = true,
-            WindowStyle = ProcessWindowStyle.Hidden,
-            WorkingDirectory = zapretDir
-        };
-
-        _process = Process.Start(psi);
-        if (_process == null)
-            throw new InvalidOperationException("Failed to launch silent wrapper");
+        // Phase 3+ (2026-05-21): IProcessRunner.Start cannot exec a .bat
+        // directly (UseShellExecute=false is hardwired in ProcessRunner). Wrap
+        // with `cmd.exe /c <wrapper>` so the .bat content runs unchanged. The
+        // wrapper itself owns the Cygwin SET BIN=/SET LISTS= contract — this
+        // migration does NOT touch wrapper generation above. CaptureStdout /
+        // CaptureStderr stay false so cmd.exe streams are inherited rather
+        // than pipe-redirected — Cygwin winws.exe needs a real (hidden)
+        // console handle, which the runner provides via CreateNoWindow=true
+        // when streams aren't redirected.
+        _handle = StartCmdBat(wrapperPath, zapretDir);
 
         var startedAt = DateTime.UtcNow;
-        _process.EnableRaisingEvents = true;
-        _process.Exited += (_, _) =>
+        var startedHandle = _handle;
+        startedHandle.Exited += (_, code) =>
         {
             var runtime = DateTime.UtcNow - startedAt;
-            var code = _process?.ExitCode;
             _logger.Warning("[Zapret] Wrapper exited (exit code: {Code})", code);
             DetectImmediateExit(runtime, code);
         };
 
-        _logger.Information("[Zapret] Silent wrapper started (PID {Pid})", _process.Id);
+        _logger.Information("[Zapret] Silent wrapper started (PID {Pid})", startedHandle.Pid);
     }
 
     /// <summary>
@@ -159,31 +174,52 @@ public class ZapretManager : IDisposable
         var batContent = BuildCygwinLaunchBat(binDir, ZapretUpdater.ListsDir, args);
         File.WriteAllText(batPath, batContent);
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = batPath,
-            UseShellExecute = true,
-            WindowStyle = ProcessWindowStyle.Hidden
-        };
-
-        _process = Process.Start(psi);
-        if (_process == null)
-        {
-            _logger.Error("[Zapret] Failed to start process");
-            throw new InvalidOperationException("Failed to start winws.exe");
-        }
+        // Phase 3+ (2026-05-21): Same cmd.exe-wrapping rationale as
+        // StartFromBat above — runner can't exec .bat directly, and Cygwin
+        // winws.exe needs the inherited console that UseShellExecute=false +
+        // no stream redirection produces.
+        _handle = StartCmdBat(batPath, workingDir: null);
 
         var startedAt = DateTime.UtcNow;
-        _process.EnableRaisingEvents = true;
-        _process.Exited += (_, _) =>
+        var startedHandle = _handle;
+        startedHandle.Exited += (_, code) =>
         {
             var runtime = DateTime.UtcNow - startedAt;
-            var code = _process?.ExitCode;
             _logger.Warning("[Zapret] Process exited (exit code: {Code})", code);
             DetectImmediateExit(runtime, code);
         };
 
-        _logger.Information("[Zapret] Started (PID {Pid})", _process.Id);
+        _logger.Information("[Zapret] Started (PID {Pid})", startedHandle.Pid);
+    }
+
+    /// <summary>
+    /// Phase 3+ (2026-05-21): shared `cmd.exe /c <bat>` spawn helper for both
+    /// <see cref="Start"/> and <see cref="StartFromBat"/>. Centralises the
+    /// IProcessRunner request shape so both call sites stay in lockstep:
+    /// <list type="bullet">
+    ///   <item><description><c>ExecutablePath = "cmd.exe"</c> — required
+    ///     because the runner forces <c>UseShellExecute=false</c> and a
+    ///     <c>.bat</c> isn't a real PE; cmd.exe is the interpreter.</description></item>
+    ///   <item><description><c>Arguments = ["/c", batPath]</c> — `/c` runs
+    ///     the .bat then exits cmd.exe (don't keep the shell alive).</description></item>
+    ///   <item><description><c>CaptureStdout = false</c>, <c>CaptureStderr =
+    ///     false</c> — DO NOT redirect cmd.exe streams. Cygwin winws.exe
+    ///     needs a real (hidden) console; pipe-redirected stdout breaks
+    ///     it ("cannot access file" silent exit). CreateNoWindow=true on
+    ///     ProcessRunner gives us a hidden console, which is what we
+    ///     want.</description></item>
+    /// </list>
+    /// </summary>
+    private IProcessHandle StartCmdBat(string batPath, string? workingDir)
+    {
+        var request = new ProcessRequest(
+            ExecutablePath: "cmd.exe",
+            Arguments: new List<string> { "/c", batPath },
+            WorkingDirectory: workingDir,
+            CaptureStdout: false,
+            CaptureStderr: false);
+
+        return _runner.Start(request);
     }
 
     /// <summary>
@@ -271,18 +307,39 @@ public class ZapretManager : IDisposable
 
     public void Stop()
     {
-        if (_process == null || _process.HasExited)
+        if (_handle == null || _handle.HasExited)
         {
-            _process = null;
+            _handle?.Dispose();
+            _handle = null;
             return;
         }
 
-        _logger.Information("[Zapret] Stopping (PID {Pid})", _process.Id);
+        var handle = _handle;
+        _logger.Information("[Zapret] Stopping (PID {Pid})", handle.Pid);
 
         try
         {
-            _process.Kill(entireProcessTree: true);
-            _process.WaitForExit(3000);
+            // Phase 3+: IProcessHandle.Kill is idempotent + entireProcessTree
+            // by default. Killing cmd.exe with entireProcessTree=true takes
+            // down the child winws.exe transitively, matching the legacy
+            // `_process.Kill(entireProcessTree:true)` semantics on the
+            // ShellExecute-spawned wrapper.
+            handle.Kill(entireProcessTree: true);
+
+            // Symmetric replacement for the legacy `_process.WaitForExit(3000)`
+            // synchronisation barrier. .GetAwaiter().GetResult() keeps Stop()
+            // sync-callable for the App + Service callers.
+            using var stopCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(3000));
+            try
+            {
+                handle.WaitForExitAsync(stopCts.Token).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException)
+            {
+                // 3s elapsed — process may still be exiting. Dispose below
+                // fires the final kill via ProcessHandle.Dispose.
+                _logger.Debug("[Zapret] WaitForExitAsync timeout (3s) — proceeding to dispose");
+            }
         }
         catch (Exception ex)
         {
@@ -290,8 +347,8 @@ public class ZapretManager : IDisposable
         }
         finally
         {
-            _process?.Dispose();
-            _process = null;
+            try { handle.Dispose(); } catch { /* defensive */ }
+            _handle = null;
             _logger.Information("[Zapret] Stopped");
         }
     }
