@@ -92,6 +92,29 @@ public class VpnEngine : IDisposable
     /// the moment HealthMonitor does its first restart.</summary>
     public event Action<int>? SingBoxStarted;
 
+    /// <summary>
+    /// Fires EXACTLY ONCE per successful Start lifecycle when the TUN warmup
+    /// probe (<see cref="StartupPipeline.ScheduleWarmupProbe"/>) confirms
+    /// <c>gstatic.com</c> is reachable through the tunnel. Payload is the
+    /// sing-box PID.
+    ///
+    /// <para>Does NOT fire when warmup fails (the 15-attempt loop expires) —
+    /// callers wanting the "warmup loop ended" signal must subscribe to
+    /// <see cref="StatusChanged"/> and filter by the specific
+    /// <c>"Connected (PID N)"</c> message text. That string is emitted on
+    /// BOTH the success and failure branches of the warmup loop, which is
+    /// exactly the ambiguity this typed event resolves.</para>
+    ///
+    /// <para>Task #41 Stage 1 (PinkuDani 2026-05-21): added so the App-side
+    /// VM can split the connect timeout into Phase A (start budget — wait
+    /// for sing-box to come up) + Phase B (TUN warm-up budget — wait for
+    /// confirmed routability). See
+    /// <c>plans/phase4-vpnengine-connected-event-stage1-2026-05-21.md</c>
+    /// for the design rationale. Stage 2 (App-side two-phase timer in
+    /// <c>MainWindowViewModel</c>) is a separate change.</para>
+    /// </summary>
+    public event Action<int>? Connected;
+
     /// <summary>F-E (2026-05-11): fired when <see cref="AutoFailoverEngine"/>
     /// switches to a different server after the pre-start sanity check or
     /// post-start Clash API probe flagged the active one as dead. Carries
@@ -828,6 +851,15 @@ public class VpnEngine : IDisposable
         public void OnWarning(string message) => _engine.Warning?.Invoke(message);
 
         public void OnSingBoxStarted(int pid) => _engine.SingBoxStarted?.Invoke(pid);
+
+        // Task #41 Stage 1 (2026-05-21) — fire the typed Connected event on
+        // the engine ONLY when the pipeline's warmup probe success branch
+        // calls into this. StartupPipeline does not invoke this from the
+        // failure branch (the 15-attempt loop expiring still emits the
+        // "Connected (PID N)" StatusChanged string for back-compat, but
+        // the typed event stays silent — that's the invariant Stage 2's
+        // App-side two-phase timer depends on).
+        public void OnConnected(int pid) => _engine.Connected?.Invoke(pid);
 
         public void OnRestartAttempted(int attempt, int max) =>
             _engine.RestartAttempted?.Invoke(attempt, max);

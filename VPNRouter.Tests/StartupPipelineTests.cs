@@ -449,6 +449,11 @@ public sealed class StartupPipelineTests : IDisposable
         public void OnStatus(string message) => Statuses.Add(message);
         public void OnWarning(string message) => Warnings.Add(message);
         public void OnSingBoxStarted(int pid) { }
+        // Task #41 Stage 1 (2026-05-21) — record OnConnected calls so the
+        // success-branch-only invariant (see StartupPipeline.ScheduleWarmupProbe)
+        // can be pinned by tests that drive the host directly.
+        public List<int> ConnectedPids { get; } = new();
+        public void OnConnected(int pid) => ConnectedPids.Add(pid);
         public void OnRestartAttempted(int attempt, int max) { }
         public void OnAutoFailoverTriggered(string message) =>
             AutoFailoverInvoked = true;

@@ -186,6 +186,22 @@ internal interface IStartupHost
     /// <summary>Forward the per-launch sing-box PID notification.</summary>
     void OnSingBoxStarted(int pid);
 
+    /// <summary>
+    /// Task #41 Stage 1 (2026-05-21) — forward the "TUN warmup probe confirmed
+    /// reachability" notification. Implementations raise the engine's typed
+    /// <c>Connected</c> event so App-side consumers can distinguish actual
+    /// TUN-ready confirmation from the ambiguous <c>"Connected (PID N)"</c>
+    /// <c>StatusChanged</c> string (which is also emitted on warmup failure
+    /// for back-compat).
+    ///
+    /// <para>The pipeline calls this from EXACTLY ONE site:
+    /// <see cref="StartupPipeline.ScheduleWarmupProbe"/>'s success branch
+    /// (after <c>http.GetStringAsync(gstatic)</c> returns). The failure
+    /// branch (15-attempt loop expiring) does NOT call this — Stage 2's
+    /// App-side two-phase VM timer relies on that invariant.</para>
+    /// </summary>
+    void OnConnected(int pid);
+
     /// <summary>Forward HealthMonitor restart-attempt notifications.</summary>
     void OnRestartAttempted(int attempt, int max);
 
@@ -1087,6 +1103,23 @@ internal sealed class StartupPipeline
                         sw.ElapsedMilliseconds, attempt);
                     _host.OnStatus($"Connected (PID {pidSnapshot})");
 
+                    // Task #41 Stage 1 (PinkuDani 2026-05-21) — fire the
+                    // typed Connected event on the engine. This is the
+                    // ONLY call site for OnConnected; the symmetric
+                    // failure branch below intentionally does NOT fire it,
+                    // so App-side consumers can use this as the unambiguous
+                    // "TUN really up" signal (vs the OnStatus string which
+                    // is emitted on both branches for back-compat). Stage 2
+                    // (App-side two-phase VM timer) depends on this
+                    // invariant — see plans/phase4-vpnengine-connected-
+                    // event-stage1-2026-05-21.md.
+                    try { _host.OnConnected(pidSnapshot); }
+                    catch (Exception ex)
+                    {
+                        _host.Logger?.Warning(ex,
+                            "[StartupPipeline] OnConnected callback threw (non-fatal)");
+                    }
+
                     // BR-7: arm the Wave 39 firewall DNS lockdown now that
                     // TUN is confirmed routing. Idempotent + fire-and-
                     // forget; doesn't affect the user-visible Connected
@@ -1118,6 +1151,15 @@ internal sealed class StartupPipeline
                 "internet-up + DNS-leak-risk over internet-down + lockdown-on)",
                 sw.ElapsedMilliseconds);
             _host.OnStatus($"Connected (PID {pidSnapshot})");
+            // Task #41 Stage 1 (PinkuDani 2026-05-21) — INTENTIONALLY NOT
+            // calling _host.OnConnected here. The OnStatus string above is
+            // ambiguous (it's emitted on both branches for back-compat with
+            // pre-#41 consumers that scan StatusChanged for "Connected (PID");
+            // the typed OnConnected event must stay silent so App-side
+            // consumers can distinguish actual TUN-ready from "warmup loop
+            // expired but we let sing-box live anyway." Do NOT add a call
+            // here without first migrating Stage 2 off the
+            // success-branch-only invariant.
         }, ct);
     }
 
