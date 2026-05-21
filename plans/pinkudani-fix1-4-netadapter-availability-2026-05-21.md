@@ -276,4 +276,4 @@ auto-update will close this loop.
 
 ### Commit
 
-`67eb8ff` — `fix(tundiag): cache NetAdapter availability + netsh fallback`.
+`66e1407` — `fix(tundiag): cache NetAdapter availability + netsh fallback`.
