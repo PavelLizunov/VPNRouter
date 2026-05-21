@@ -285,6 +285,43 @@ internal sealed class StartupPipeline
     private readonly ISettingsStore _store;
     private readonly IWindowsDnsHardening _dnsHardening;
 
+    /// <summary>
+    /// Task #49 (2026-05-21): static seam for the TUN warmup probe's
+    /// HTTP client. Default behaviour calls <c>new HttpClient</c> inline
+    /// (preserving pre-Task-#49 production semantics — minimal allocations,
+    /// no shared connection pool to leak); test code sets this field to
+    /// a <c>FakeHttpClient</c> to drive the BR-7 success branch
+    /// deterministically without hitting <c>gstatic.com</c> on the real
+    /// internet.
+    ///
+    /// <para>Mirrors the existing static-seam pattern used by
+    /// <see cref="SingBoxManager.Runner"/> and
+    /// <see cref="TunAdapterDiagnostics.Runner"/>: production behaviour
+    /// uses an inline default; tests overwrite + restore via try/finally.
+    /// Each test must save the previous value before swapping and restore
+    /// it in cleanup so a crash mid-test doesn't leak the swap into the
+    /// next test.</para>
+    ///
+    /// <para><b>Thread-safety</b>: the field is set from test setup
+    /// (single-threaded per xUnit's <c>parallelizeTestCollections: false</c>)
+    /// and read from the warmup probe's <see cref="Task.Run"/> body.
+    /// Volatile semantics aren't strictly needed since the swap happens
+    /// before <see cref="ExecuteAsync"/> is invoked and the test holds a
+    /// strong reference to the fake, but we still snapshot the field into
+    /// a local at the top of <see cref="ScheduleWarmupProbe"/> for clarity.</para>
+    ///
+    /// <para><b>Why not a ctor parameter</b>: the existing
+    /// <see cref="StartupPipeline"/> ctor already carries 3 seams
+    /// (host, store, dnsHardening) and adding a fourth would require
+    /// re-plumbing both <see cref="VpnEngine.StartAsync"/> AND
+    /// <see cref="VpnEngine.ApplyAsync"/> ctor calls + adding a
+    /// <see cref="VpnEngine"/> ctor parameter — 3+ file change. The
+    /// static seam matches what Group 1 (Task #36-C) already established
+    /// for the sing-box / tundiag side, keeping the test-injection
+    /// vocabulary uniform.</para>
+    /// </summary>
+    public static IHttpClient? WarmupHttp;
+
     /// <param name="host">VpnEngine-side callback surface used to mutate
     /// engine state + raise events through the 8 pipeline phases.</param>
     /// <param name="store">3G-1 (v3.0 refactor): persistence seam used by
@@ -1088,16 +1125,53 @@ internal sealed class StartupPipeline
     private void ScheduleWarmupProbe(int pidSnapshot, AppSettings settings, CancellationToken ct)
     {
         _host.OnStatus("Warming up network...");
+        // Task #49 (2026-05-21): snapshot the static seam locally so the
+        // background task body sees a stable IHttpClient reference for the
+        // full warmup loop (avoids a race where a test resets WarmupHttp
+        // to null between StartAsync return and the warmup probe firing).
+        // Default null means "fall back to the inline HttpClient" — the
+        // production path that pre-Task-#49 always ran.
+        var seamHttp = WarmupHttp;
         _ = Task.Run(async () =>
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            // Two probe shapes:
+            //   • seamHttp != null → IHttpClient seam (test FakeHttpClient or
+            //     a process-wide IHttpClient set by future production wiring).
+            //   • seamHttp == null → inline HttpClient with the same Timeout
+            //     as pre-Task-#49 (semantically identical to the original
+            //     `using var http = new HttpClient { Timeout = 3s }`).
+            // The inline-HttpClient branch is kept as the default so a
+            // future refactor that wants to drop the static seam can do so
+            // safely (no behaviour change for un-overridden production).
+            using var inlineHttp = seamHttp == null
+                ? new HttpClient { Timeout = TimeSpan.FromSeconds(3) }
+                : null;
             for (int attempt = 1; attempt <= 15; attempt++)
             {
                 try
                 {
                     await Task.Delay(1000, ct);
-                    await http.GetStringAsync("https://www.gstatic.com/generate_204", ct);
+                    if (seamHttp != null)
+                    {
+                        // IHttpClient seam — return value is checked against
+                        // 2xx to match the throw-on-non-2xx semantics of
+                        // HttpClient.GetStringAsync used by the inline branch.
+                        var resp = await seamHttp.SendAsync(
+                            new HttpRequest(
+                                HttpMethod.Get,
+                                new Uri("https://www.gstatic.com/generate_204"),
+                                Timeout: TimeSpan.FromSeconds(3)),
+                            ct);
+                        if (!resp.IsSuccess())
+                            throw new HttpRequestException(
+                                $"warmup probe HTTP {resp.StatusCode}");
+                    }
+                    else
+                    {
+                        await inlineHttp!.GetStringAsync(
+                            "https://www.gstatic.com/generate_204", ct);
+                    }
                     _host.Logger?.Information(
                         "[StartupPipeline] TUN ready after {Ms}ms (attempt {Attempt})",
                         sw.ElapsedMilliseconds, attempt);
