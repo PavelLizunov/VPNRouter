@@ -65,6 +65,50 @@ public class SingBoxManager : IDisposable
     /// this to keep their persisted PID in sync with the live process.</summary>
     public event Action<int>? Started;
 
+    // PinkuDani Fix #3 (2026-05-21): bounded stderr ring buffer for crash
+    // diagnostics. Scanned in OnProcessExited to detect the specific
+    // "TUN orphan" crash class (Cannot create a file when that file
+    // already exists — sing-box's WintunCreateAdapter ERROR_FILE_EXISTS).
+    // When the scan matches, LastCrashWasTunOrphan flips true so
+    // HealthMonitor.AttemptRestart can fire a netsh-disable cleanup
+    // before the next launch attempt — closes the gap where Fix #1+#4's
+    // PreStartCleanupAsync netsh-enumeration didn't list the orphan
+    // adapter on PinkuDani-class machines.
+    //
+    // Bounded at 50 lines so a chatty sing-box (10k+ debug lines / sec
+    // under heavy load) doesn't blow memory; we only need the FATAL
+    // and the warning that precedes it for the signature match.
+    private const int StderrBufferSize = 50;
+    private readonly string[] _capturedStderr = new string[StderrBufferSize];
+    private int _capturedStderrCount;
+    private readonly object _capturedStderrLock = new();
+
+    /// <summary>
+    /// PinkuDani Fix #3 (2026-05-21): true if the most recent sing-box exit
+    /// was caused by a TUN configuration conflict — specifically the
+    /// <c>configure tun interface: Cannot create a file when that file
+    /// already exists</c> FATAL that fires when wintun's kernel state still
+    /// holds a `VPNRouter-TUN` device record from a previous session that
+    /// our standard `PreStartCleanupAsync` cleanup didn't remove (typically
+    /// because the netsh enumeration step missed the orphan or
+    /// `Remove-NetAdapter` was unavailable).
+    ///
+    /// <para>Reset to <c>false</c> on every successful <see cref="StartWithJson"/>,
+    /// <see cref="Stop"/>, and <see cref="Dispose"/> — only the immediately-
+    /// preceding crash's signature controls the flag. <see cref="HealthMonitor"/>
+    /// reads this in its <c>AttemptRestart</c> continuation to fire a
+    /// netsh-based force-disable on `VPNRouter-TUN` before the next
+    /// <see cref="Restart"/> call.</para>
+    ///
+    /// <para>Detection covers three substring patterns observed in field
+    /// logs (PinkuDani 2026-05-21, alicemoren1991 2026-05-19): the FATAL
+    /// itself, the broader `configure tun interface:` prefix (catches
+    /// localised variants and future TUN-config-failure modes), and the
+    /// `open interface take too much time to finish` warning that precedes
+    /// the FATAL in network-interface-change races.</para>
+    /// </summary>
+    public bool LastCrashWasTunOrphan { get; private set; }
+
     /// <param name="http">3G-2 (v3.0 refactor): HTTP seam used for Clash API
     /// hot-reload + liveness probe. Defaults to <see cref="PolicyHttpClient.Shared"/>;
     /// tests inject <c>FakeHttpClient</c> to stub the 127.0.0.1 Clash API
@@ -140,7 +184,17 @@ public class SingBoxManager : IDisposable
         }
     }
 
-    public void Stop() => StopInternal(releaseLock: true);
+    public void Stop()
+    {
+        // PinkuDani Fix #3 (2026-05-21): user-initiated stop clears the
+        // TUN-orphan crash flag — the crash window from the previous
+        // session is no longer relevant. (Restart() goes through
+        // StopInternal(releaseLock:false) instead and intentionally
+        // preserves the flag so HealthMonitor's restart path still sees
+        // it.)
+        LastCrashWasTunOrphan = false;
+        StopInternal(releaseLock: true);
+    }
 
     private void StopInternal(bool releaseLock)
     {
@@ -709,6 +763,27 @@ public class SingBoxManager : IDisposable
 
     private void LaunchProcess(string exePath)
     {
+        // PinkuDani Fix #3 (2026-05-21): reset the TUN-orphan crash flag +
+        // stderr ring buffer at the launch chokepoint. EVERY start path
+        // passes through here (user Start via StartWithJson, HealthMonitor
+        // Restart, manual Restart), so this guarantees the new lifecycle
+        // doesn't inherit a stale flag/buffer from the previous sing-box
+        // session.
+        //
+        // Without this reset: HealthMonitor reads the flag, fires netsh
+        // disable, calls Restart() (which goes StopInternal → LaunchProcess
+        // — NO buffer/flag reset before). Old "Cannot create a file" lines
+        // linger in the ring buffer; if the new sing-box crashes with
+        // unrelated stderr that doesn't fill the 50-slot buffer, the
+        // scanner would re-match the OLD lines and false-positive on the
+        // next OnProcessExited.
+        LastCrashWasTunOrphan = false;
+        lock (_capturedStderrLock)
+        {
+            _capturedStderrCount = 0;
+            Array.Clear(_capturedStderr, 0, _capturedStderr.Length);
+        }
+
         // Hotfix 2026-05-19 (v2.35.0) — pre-launch TUN adapter cleanup
         // for Windows. EVERY start path passes through here (user Start,
         // Apply hot-reload-fallback restart, HealthMonitor crash recovery,
@@ -835,7 +910,21 @@ public class SingBoxManager : IDisposable
         startedHandle.ErrorLine += (_, line) =>
         {
             if (!string.IsNullOrEmpty(line))
+            {
                 _logger.Warning("[sing-box] {Line}", line);
+                // PinkuDani Fix #3 (2026-05-21): stash the stderr line into
+                // the bounded ring buffer so OnProcessExited can scan it
+                // for the TUN-orphan crash signature. The lock is cheap
+                // here (line frequency is low — sing-box stderr is FATAL/
+                // WARN tier, not the chatty stdout debug stream); buffer
+                // is fixed-size 50 so memory is bounded regardless of
+                // sing-box behaviour.
+                lock (_capturedStderrLock)
+                {
+                    _capturedStderr[_capturedStderrCount % StderrBufferSize] = line;
+                    _capturedStderrCount++;
+                }
+            }
         };
         startedHandle.Exited += (_, _) => OnProcessExited();
 
@@ -916,6 +1005,14 @@ public class SingBoxManager : IDisposable
         // the crash boundary so the next log dump the user sends already
         // contains the relevant sing-box context. Best-effort; never throws.
         LogSingBoxCrashTail();
+
+        // PinkuDani Fix #3 (2026-05-21): scan the captured stderr ring
+        // buffer for the TUN-orphan crash signature. Set BEFORE the
+        // Crashed event fires so HealthMonitor's auto-restart loop (which
+        // subscribes to Crashed) observes the flag in time for its
+        // AttemptRestart continuation. Best-effort; never throws — buffer
+        // is small, scan is O(50 lines × small constant).
+        DetectTunOrphanCrashSignature();
 
         State = SingBoxState.Failed;
         Crashed?.Invoke(this, EventArgs.Empty);
@@ -1042,6 +1139,87 @@ public class SingBoxManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// PinkuDani Fix #3 (2026-05-21): scan the captured stderr ring buffer
+    /// for substrings that identify the "TUN orphan" crash class — when
+    /// sing-box's <c>WintunCreateAdapter</c> refuses with
+    /// ERROR_FILE_EXISTS because a previous-session adapter record is
+    /// still alive in the kernel.
+    ///
+    /// <para>Sets <see cref="LastCrashWasTunOrphan"/> true when any of
+    /// three patterns is found in the captured stderr lines. Patterns are
+    /// English-locale because sing-box emits its logs in English regardless
+    /// of OS UI language (verified via PinkuDani log line 124 — Russian
+    /// Windows still shows the English FATAL).</para>
+    ///
+    /// <para>Best-effort — never throws. Buffer is small (50 lines) so
+    /// scan cost is negligible (≤50 IndexOf calls per crash). Reads the
+    /// buffer under the same lock as the writer in the ErrorLine handler
+    /// so we don't tear a mid-write line.</para>
+    /// </summary>
+    private void DetectTunOrphanCrashSignature()
+    {
+        try
+        {
+            // Snapshot the buffer under the lock so the writer can't tear
+            // a mid-write line. The snapshot is cheap — 50 string refs.
+            string[] snapshot;
+            int count;
+            lock (_capturedStderrLock)
+            {
+                snapshot = (string[])_capturedStderr.Clone();
+                count = _capturedStderrCount;
+            }
+
+            if (count == 0)
+            {
+                LastCrashWasTunOrphan = false;
+                return;
+            }
+
+            // Walk the bounded snapshot. The ring buffer wraps around
+            // when count > buffer length; either way, every slot we
+            // examine is either a captured line or null (slot never
+            // touched). null is safe — IndexOf would NRE so check first.
+            var keep = Math.Min(count, StderrBufferSize);
+            for (var i = 0; i < keep; i++)
+            {
+                var line = snapshot[i];
+                if (string.IsNullOrEmpty(line)) continue;
+
+                // Three signature patterns:
+                // 1. The FATAL itself — the strongest signal.
+                // 2. The broader `configure tun interface:` prefix — catches
+                //    other TUN-config-failure modes that share the
+                //    orphan-handle root cause.
+                // 3. The `open interface take too much time to finish`
+                //    warning that precedes the FATAL on network-interface-
+                //    change races (per PinkuDani 2026-05-21 log line 165).
+                if (line.IndexOf("Cannot create a file when that file already exists",
+                        StringComparison.OrdinalIgnoreCase) >= 0
+                    || line.IndexOf("configure tun interface:",
+                        StringComparison.OrdinalIgnoreCase) >= 0
+                    || line.IndexOf("open interface take too much time to finish",
+                        StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    LastCrashWasTunOrphan = true;
+                    _logger.Warning(
+                        "[SingBoxManager] Detected TUN-orphan crash signature in stderr — " +
+                        "HealthMonitor will fire netsh disable on VPNRouter-TUN before restart.");
+                    return;
+                }
+            }
+
+            LastCrashWasTunOrphan = false;
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex,
+                "[SingBoxManager] DetectTunOrphanCrashSignature scan threw (non-fatal)");
+            LastCrashWasTunOrphan = false;
+        }
+    }
+
     private static string WriteJsonToDisk(string json)
     {
         Directory.CreateDirectory(AppPaths.ConfigDir);
@@ -1055,6 +1233,10 @@ public class SingBoxManager : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        // PinkuDani Fix #3 (2026-05-21): clear the TUN-orphan flag on
+        // teardown so a Dispose-then-rebuild path (uncommon but possible
+        // in long-lived services) doesn't carry stale state.
+        LastCrashWasTunOrphan = false;
         Stop();
         _handle?.Dispose();
     }

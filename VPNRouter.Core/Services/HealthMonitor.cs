@@ -449,6 +449,12 @@ public class HealthMonitor : IDisposable
                 var scan = _scanner.ScanForProfile(_activeProfile);
                 var configJson = GenerateConfigJson(scan.ProcessNames);
 
+                // PinkuDani Fix #3 (2026-05-21): if SingBoxManager flagged
+                // the previous crash as a TUN orphan, force-disable the
+                // adapter via netsh BEFORE the next restart attempt. See
+                // RunTunOrphanRecoveryCleanup for the rationale + timing.
+                if (!RunTunOrphanRecoveryCleanup(ct)) return;
+
                 // Phase 2D-4 (2026-05-17): try hot-reload via the
                 // ISingBoxApi split first; fall back to a full restart
                 // if it didn't take. Pre-2D-4 this was a single
@@ -477,6 +483,79 @@ public class HealthMonitor : IDisposable
                 _logger.Error(ex, "[HealthMonitor] Restart attempt {N} failed", _restartAttempts);
             }
         }, CancellationToken.None); // ContinueWith always runs, checks ct inside
+    }
+
+    /// <summary>
+    /// PinkuDani Fix #3 (2026-05-21): if <see cref="SingBoxManager.LastCrashWasTunOrphan"/>
+    /// is true, force-disable the well-known <c>VPNRouter-TUN</c> adapter
+    /// via netsh before the AttemptRestart caller goes to relaunch sing-box.
+    ///
+    /// <para>Closes the gap where Fix #1+#4's <c>PreStartCleanupAsync</c>
+    /// didn't find the orphan via netsh enumeration on PinkuDani-class
+    /// machines (enumeration timing unreliable mid-restart-loop).
+    /// Direct-by-name + netsh-only — bypasses both enumeration uncertainty
+    /// AND the unreliable PowerShell module that Win10 LTSC strips out.</para>
+    ///
+    /// <para>Windows-only — Linux/macOS sing-box doesn't use wintun so
+    /// there's no equivalent crash class. The flag check short-circuits
+    /// when false (the common case for non-TUN-orphan crashes) so we
+    /// don't pay the ~5-50ms netsh cost on unrelated restarts.</para>
+    ///
+    /// <para>Internal so tests can invoke it directly via reflection
+    /// without waiting 5+ seconds for AttemptRestart's exponential
+    /// backoff timer to fire. Returns true when the caller should
+    /// proceed with the restart; false only when the caller cancellation
+    /// fires during the post-disable settle delay (caller should bail
+    /// out of the continuation, since Stop() / a new restart is racing).</para>
+    ///
+    /// <para>Brief: plans/pinkudani-fix3-singbox-tun-orphan-recovery-2026-05-21.md.</para>
+    /// </summary>
+    internal bool RunTunOrphanRecoveryCleanup(CancellationToken ct)
+    {
+        if (!_singBox.LastCrashWasTunOrphan) return true;
+        if (!OperatingSystem.IsWindows()) return true;
+
+        _logger.Information(
+            "[HealthMonitor] Previous crash was TUN orphan ('Cannot create a file when that file already exists'). " +
+            "Force-disabling VPNRouter-TUN via netsh before retry.");
+
+        try
+        {
+            var disabled = TunAdapterDiagnostics
+                .TryDisableAdapterViaNetshAsync(
+                    _logger, "VPNRouter-TUN",
+                    "HealthMonitor.AttemptRestart.TunOrphan")
+                .GetAwaiter().GetResult();
+
+            if (!disabled)
+            {
+                _logger.Warning(
+                    "[HealthMonitor] netsh disable failed — retry may also fail. " +
+                    "User may need to manually disable VPNRouter-TUN in Network Connections " +
+                    "OR install RSAT NetAdapter PowerShell module for reliable cleanup.");
+            }
+
+            // Brief delay so Windows has time to tear down the wintun
+            // kernel handle after netsh disable. Per Agent A (Fix #1+#4)
+            // brief: netsh admin=disabled is documented to release the
+            // kernel handle but exact timing is unverified. 500ms is
+            // generous; tune down later once field validation closes the
+            // unverified-assumption loop.
+            Task.Delay(500, ct).GetAwaiter().GetResult();
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            // ct fired during the delay — Stop() / new restart is racing.
+            // Tell the caller to bail out of the continuation.
+            return false;
+        }
+        catch (Exception netshEx)
+        {
+            _logger.Warning(netshEx,
+                "[HealthMonitor] netsh disable for VPNRouter-TUN threw (non-fatal) — continuing with restart");
+            return true;
+        }
     }
 
     /// <summary>
