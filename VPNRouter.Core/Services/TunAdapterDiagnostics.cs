@@ -26,9 +26,26 @@ namespace VPNRouter.Core.Services;
 /// in the device manager when sing-box exits without releasing it,
 /// freeing the OS network stack from the dangling routes / DNS that
 /// were keeping the user's network state stuck.</para>
+///
+/// <para>Phase 3+ (2026-05-21) IProcessRunner adoption: every netsh /
+/// powershell shell-out routes through the static <see cref="Runner"/>
+/// seam so tests can swap in a <c>FakeProcessRunner</c> to drive canned
+/// stdout / exit codes. Wire shape (executable + args + timeouts)
+/// preserved byte-for-byte vs the pre-migration direct-Process code.</para>
 /// </summary>
 public static class TunAdapterDiagnostics
 {
+    /// <summary>
+    /// Phase 3+ (2026-05-21) IProcessRunner seam. Tests assign a
+    /// <c>FakeProcessRunner</c> before exercising the static helpers and
+    /// reset back to the default in a try/finally. Not thread-safe —
+    /// assumes serial xUnit execution within the fixture (single test
+    /// class), matching the existing
+    /// <c>WindowsDnsHardening._runnerOverride</c> + <c>FirewallManager.Runner</c>
+    /// patterns.
+    /// </summary>
+    internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
+
     /// <summary>
     /// Log current TUN adapter inventory via <c>netsh interface show interface</c>.
     /// Windows-only; returns silently on other platforms. Errors are swallowed
@@ -41,20 +58,16 @@ public static class TunAdapterDiagnostics
 
         try
         {
-            var psi = new ProcessStartInfo("netsh", "interface show interface")
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8,
-            };
+            // Phase 3+ (2026-05-21): routed through IProcessRunner. Same
+            // 3 s timeout + `netsh interface show interface` args as the
+            // pre-migration direct-Process call.
+            var psiResult = Runner.RunAsync(new ProcessRequest(
+                ExecutablePath: "netsh",
+                Arguments: new[] { "interface", "show", "interface" },
+                Timeout: TimeSpan.FromMilliseconds(3000))).GetAwaiter().GetResult();
 
-            using var proc = Process.Start(psi);
-            if (proc == null) return;
-
-            var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(3000);
+            if (psiResult.TimedOut) return;
+            var output = psiResult.Stdout;
 
             // Parse out lines referencing our interface name. The netsh
             // output is verbose and English-locale-dependent; we only
@@ -122,36 +135,43 @@ public static class TunAdapterDiagnostics
 
         try
         {
-            var psi = new ProcessStartInfo("netsh",
-                $"interface set interface name=\"{interfaceName}\" admin=disabled")
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8,
-            };
+            // Phase 3+ (2026-05-21): routed through IProcessRunner. The
+            // `name=` token carries the interface name as a single argv
+            // entry (.NET's ArgumentList re-quotes it for the kernel when
+            // the value contains spaces), matching the pre-migration
+            // command-line shape `netsh interface set interface
+            // name="VPNRouter-TUN" admin=disabled`.
+            var psiResult = Runner.RunAsync(new ProcessRequest(
+                ExecutablePath: "netsh",
+                Arguments: new[]
+                {
+                    "interface", "set", "interface",
+                    $"name={interfaceName}",
+                    "admin=disabled",
+                },
+                Timeout: TimeSpan.FromMilliseconds(3000))).GetAwaiter().GetResult();
 
-            using var proc = Process.Start(psi);
-            if (proc == null)
+            if (psiResult.TimedOut)
             {
-                logger?.Warning("[TunDiag] {Ctx}: failed to spawn netsh for adapter disable", context);
+                logger?.Warning(
+                    "[TunDiag] {Ctx}: netsh disable for '{Iface}' timed out after 3s",
+                    context, interfaceName);
                 return;
             }
 
-            var stdout = proc.StandardOutput.ReadToEnd();
-            var stderr = proc.StandardError.ReadToEnd();
-            proc.WaitForExit(3000);
+            var stdout = psiResult.Stdout;
+            var stderr = psiResult.Stderr;
+            var exitCode = psiResult.ExitCode;
 
             // netsh exit codes: 0 = success, 1 = "element not found"
             // (adapter already gone — fine), other = real failure.
-            if (proc.ExitCode == 0)
+            if (exitCode == 0)
             {
                 logger?.Information(
                     "[TunDiag] {Ctx}: disabled orphaned adapter '{Iface}' (network stack should release routes)",
                     context, interfaceName);
             }
-            else if (proc.ExitCode == 1
+            else if (exitCode == 1
                      || stdout.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0
                      || stderr.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0)
             {
@@ -163,7 +183,7 @@ public static class TunAdapterDiagnostics
             {
                 logger?.Warning(
                     "[TunDiag] {Ctx}: netsh disable for '{Iface}' returned exit {Code}: stdout='{Out}' stderr='{Err}'",
-                    context, interfaceName, proc.ExitCode, stdout.Trim(), stderr.Trim());
+                    context, interfaceName, exitCode, stdout.Trim(), stderr.Trim());
             }
         }
         catch (Exception ex)
@@ -209,34 +229,38 @@ public static class TunAdapterDiagnostics
 
         try
         {
-            var psi = new ProcessStartInfo("netsh",
-                $"interface set interface name=\"{interfaceName}\" admin=enabled")
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8,
-            };
+            // Phase 3+ (2026-05-21): routed through IProcessRunner. Same
+            // 3 s timeout + `netsh interface set interface name=... admin=enabled`
+            // argv shape as the pre-migration code.
+            var psiResult = Runner.RunAsync(new ProcessRequest(
+                ExecutablePath: "netsh",
+                Arguments: new[]
+                {
+                    "interface", "set", "interface",
+                    $"name={interfaceName}",
+                    "admin=enabled",
+                },
+                Timeout: TimeSpan.FromMilliseconds(3000))).GetAwaiter().GetResult();
 
-            using var proc = Process.Start(psi);
-            if (proc == null)
+            if (psiResult.TimedOut)
             {
-                logger?.Debug("[TunDiag] {Ctx}: failed to spawn netsh for pre-enable check", context);
+                logger?.Debug(
+                    "[TunDiag] {Ctx}: netsh pre-enable for '{Iface}' timed out after 3s",
+                    context, interfaceName);
                 return;
             }
 
-            var stdout = proc.StandardOutput.ReadToEnd();
-            var stderr = proc.StandardError.ReadToEnd();
-            proc.WaitForExit(3000);
+            var stdout = psiResult.Stdout;
+            var stderr = psiResult.Stderr;
+            var exitCode = psiResult.ExitCode;
 
-            if (proc.ExitCode == 0)
+            if (exitCode == 0)
             {
                 logger?.Information(
                     "[TunDiag] {Ctx}: pre-enabled adapter '{Iface}' (was disabled or already enabled)",
                     context, interfaceName);
             }
-            else if (proc.ExitCode == 1
+            else if (exitCode == 1
                      || stdout.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0
                      || stderr.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0)
             {
@@ -248,7 +272,7 @@ public static class TunAdapterDiagnostics
             {
                 logger?.Debug(
                     "[TunDiag] {Ctx}: netsh enable for '{Iface}' returned exit {Code}: stdout='{Out}' stderr='{Err}'",
-                    context, interfaceName, proc.ExitCode, stdout.Trim(), stderr.Trim());
+                    context, interfaceName, exitCode, stdout.Trim(), stderr.Trim());
             }
         }
         catch (Exception ex)
@@ -310,7 +334,8 @@ public static class TunAdapterDiagnostics
         try
         {
             var (_, netshOut, _) = await RunAndCaptureAsync(
-                "netsh", "interface show interface", timeoutMs: 5000, logger: logger);
+                "netsh", new[] { "interface", "show", "interface" },
+                timeoutMs: 5000, logger: logger);
 
             var staleAdapters = ExtractStaleAdapterNames(netshOut);
             if (staleAdapters.Count == 0)
@@ -474,6 +499,18 @@ public static class TunAdapterDiagnostics
     /// </summary>
     private static int s_removeNetAdapterMissing; // 0 = unknown, 1 = confirmed missing
 
+    /// <summary>
+    /// Test-only reset of the BR-2 cmdlet-missing latch. Production code
+    /// never resets the flag (the user's PowerShell modules aren't going
+    /// to materialise mid-session). Tests that swap in a
+    /// <c>FakeProcessRunner</c> need to clear the latch so they aren't
+    /// short-circuited by a previous real-runner test that observed the
+    /// cmdlet missing. Mirrors the
+    /// <c>WindowsDnsHardening._runnerOverride</c> test-reset pattern.
+    /// </summary>
+    internal static void ResetRemoveNetAdapterLatchForTests()
+        => Volatile.Write(ref s_removeNetAdapterMissing, 0);
+
     [SupportedOSPlatform("windows")]
     internal static async Task<bool> TryRemoveAdapterAsync(
         ILogger? logger, string adapterName, string context)
@@ -500,9 +537,14 @@ public static class TunAdapterDiagnostics
                 $"Get-NetAdapter -Name '{adapterName}' -ErrorAction SilentlyContinue | " +
                 "Remove-NetAdapter -Confirm:$false -ErrorAction SilentlyContinue";
 
+            // Phase 3+ (2026-05-21): pre-split argv. The script is a SINGLE
+            // argv element (one long PS expression) — .NET ArgumentList
+            // wraps it in quotes for the kernel because it contains
+            // whitespace, matching the pre-migration command line shape
+            // `powershell.exe -NoProfile -NonInteractive -Command "<script>"`.
             var (exitCode, stdout, stderr) = await RunAndCaptureAsync(
                 "powershell.exe",
-                $"-NoProfile -NonInteractive -Command \"{script}\"",
+                new[] { "-NoProfile", "-NonInteractive", "-Command", script },
                 timeoutMs: 10000, logger: logger);
 
             if (exitCode == 0)
@@ -563,43 +605,42 @@ public static class TunAdapterDiagnostics
     /// Bounded by <paramref name="timeoutMs"/> — kills the process on
     /// timeout so a hung netsh / PowerShell can't stall pre-start.
     /// Errors swallowed and surfaced as exit code -1.
+    ///
+    /// <para>Phase 3+ (2026-05-21): routed through the static
+    /// <see cref="Runner"/> seam. Pre-migration this method accepted a
+    /// single shell-style <c>arguments</c> string; post-migration we
+    /// accept a pre-split argv array so the call sites (which already
+    /// know their token boundaries) skip the round-trip through a shell
+    /// arg parser. <see cref="ProcessRunner"/>'s
+    /// <see cref="ProcessStartInfo.ArgumentList"/> path re-serializes each
+    /// argv token for the kernel, yielding byte-equivalent command lines
+    /// to what CreateProcess used to see.</para>
     /// </summary>
     private static async Task<(int exitCode, string stdout, string stderr)> RunAndCaptureAsync(
-        string fileName, string arguments, int timeoutMs, ILogger? logger)
+        string fileName, IReadOnlyList<string> arguments, int timeoutMs, ILogger? logger)
     {
         try
         {
-            var psi = new ProcessStartInfo(fileName, arguments)
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8,
-            };
+            var result = await Runner.RunAsync(new ProcessRequest(
+                ExecutablePath: fileName,
+                Arguments: arguments,
+                Timeout: TimeSpan.FromMilliseconds(timeoutMs))).ConfigureAwait(false);
 
-            using var proc = Process.Start(psi);
-            if (proc == null) return (-1, string.Empty, string.Empty);
-
-            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
-            var stderrTask = proc.StandardError.ReadToEndAsync();
-
-            using var cts = new CancellationTokenSource(timeoutMs);
-            try
+            if (result.TimedOut)
             {
-                await proc.WaitForExitAsync(cts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                try { proc.Kill(entireProcessTree: true); } catch { }
-                return (-1, await stdoutTask, await stderrTask);
+                // Pre-migration: on timeout we issued Kill(entireProcessTree:true)
+                // and returned (-1, captured stdout, captured stderr).
+                // IProcessRunner already kills on timeout (entireProcessTree:true
+                // — see ProcessRunner.TryKill); we just surface -1 to keep the
+                // exit-code contract identical for downstream callers.
+                return (-1, result.Stdout, result.Stderr);
             }
 
-            return (proc.ExitCode, await stdoutTask, await stderrTask);
+            return (result.ExitCode, result.Stdout, result.Stderr);
         }
         catch (Exception ex)
         {
-            logger?.Debug(ex, "[TunDiag] command '{Cmd} {Args}' threw", fileName, arguments);
+            logger?.Debug(ex, "[TunDiag] command '{Cmd} {Args}' threw", fileName, string.Join(' ', arguments));
             return (-1, string.Empty, string.Empty);
         }
     }

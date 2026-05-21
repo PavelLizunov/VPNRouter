@@ -64,6 +64,7 @@ public class FirewallManager : IFirewallManager
     };
 
     private readonly ILogger _logger;
+    private readonly IProcessRunner _runner;
     private readonly List<string> _managedRules = new();
     private bool _disposed;
 
@@ -73,6 +74,15 @@ public class FirewallManager : IFirewallManager
     // mojibake like "РќРё РѕРґРЅРѕ РїСЂР°РІРёР»Рѕ" in vpnrouter.log every time a
     // firewall rule operation hit a localized warning. Resolve once at type
     // init so each PSI we spawn can pin the right encoding.
+    //
+    // Phase 3+ (2026-05-21) IProcessRunner adoption: ConsoleEncoding is no
+    // longer applied per-call (ProcessRequest has no StandardOutputEncoding
+    // surface). The structural block-aware parser in FindRulesByPrefix is
+    // already locale-tolerant — the rule-name token is ASCII regardless of
+    // display language, and label rows like `Описание:` are filtered out by
+    // the blank-line block boundary, not by string match. The OEM encoding
+    // remains resolved here so future ProcessRequest extension can pick it
+    // back up without re-introducing the kernel32 P/Invoke.
     private static readonly Encoding ConsoleEncoding = ResolveConsoleEncoding();
 
     [DllImport("kernel32.dll")]
@@ -95,9 +105,23 @@ public class FirewallManager : IFirewallManager
         }
     }
 
-    public FirewallManager(ILogger? logger = null)
+    // Phase 3+ (2026-05-21) IProcessRunner adoption: shared seam for both
+    // instance and static helpers. Static helpers
+    // (EnableDnsLockdownAsync / DisableDnsLockdownAsync / RunNetshStatic)
+    // use this directly. Instance methods route through _runner so tests
+    // can inject per-instance fakes via the ctor without touching global
+    // state, but the default still flows from here. Mirrors the pattern in
+    // ZapretActions / WindowsDnsHardening._runnerOverride.
+    /// <summary>Test-only seam: swap in a fake for the static
+    /// netsh helpers. Production paths use the default
+    /// <see cref="ProcessRunner"/>. Not thread-safe — assumes serial
+    /// xUnit execution within the fixture; tests reset in try/finally.</summary>
+    internal static IProcessRunner Runner { get; set; } = new ProcessRunner();
+
+    public FirewallManager(ILogger? logger = null, IProcessRunner? runner = null)
     {
         _logger = logger ?? Log.Logger;
+        _runner = runner ?? Runner;
     }
 
     // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -267,25 +291,22 @@ public class FirewallManager : IFirewallManager
         // 2. Try where.exe — finds executables on PATH
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "where.exe",
-                Arguments = processName,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                StandardOutputEncoding = ConsoleEncoding,
-                StandardErrorEncoding = ConsoleEncoding
-            };
+            // Phase 3+ (2026-05-21): routed through IProcessRunner. Where.exe
+            // emits one path per line; legacy code read only the first line
+            // (.ReadLine()) — replicate via Split + First on the captured
+            // stdout to keep the wire-equivalent behaviour.
+            var result = _runner.RunAsync(new ProcessRequest(
+                ExecutablePath: "where.exe",
+                Arguments: new[] { processName },
+                Timeout: TimeSpan.FromMilliseconds(3000))).GetAwaiter().GetResult();
 
-            using var proc = Process.Start(psi);
-            if (proc != null)
+            if (!result.TimedOut && result.ExitCode == 0 && !string.IsNullOrEmpty(result.Stdout))
             {
-                var output = proc.StandardOutput.ReadLine();
-                proc.WaitForExit(3000);
-                if (proc.ExitCode == 0 && !string.IsNullOrEmpty(output) && File.Exists(output))
-                    return output;
+                var firstLine = result.Stdout
+                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .FirstOrDefault();
+                if (!string.IsNullOrEmpty(firstLine) && File.Exists(firstLine))
+                    return firstLine;
             }
         }
         catch { /* where.exe not available or failed */ }
@@ -340,24 +361,19 @@ public class FirewallManager : IFirewallManager
 
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "netsh.exe",
-                Arguments = "advfirewall firewall show rule name=all dir=out",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                StandardOutputEncoding = ConsoleEncoding,
-                StandardErrorEncoding = ConsoleEncoding
-            };
+            // Phase 3+ (2026-05-21): routed through IProcessRunner. Wire shape
+            // preserved — same `advfirewall firewall show rule name=all
+            // dir=out` netsh args, same 10s outer cap. The block-aware
+            // parser below is locale-tolerant (it uses blank-line boundaries
+            // rather than label match), so the lost OEM encoding override
+            // does not affect rule-name detection (rule names are ASCII).
+            var psiResult = _runner.RunAsync(new ProcessRequest(
+                ExecutablePath: "netsh.exe",
+                Arguments: new[] { "advfirewall", "firewall", "show", "rule", "name=all", "dir=out" },
+                Timeout: TimeSpan.FromMilliseconds(10_000))).GetAwaiter().GetResult();
 
-            using var proc = Process.Start(psi);
-            if (proc == null) return result;
-
-            // Read all output — can be large, but we only need rule names
-            var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(10_000);
+            if (psiResult.TimedOut) return result;
+            var output = psiResult.Stdout;
 
             // v2.31.0-r1 (CO-5 audit fix): the previous parser matched ANY
             // line where the value-after-`:` started with the prefix. On
@@ -405,39 +421,40 @@ public class FirewallManager : IFirewallManager
 
     /// <summary>
     /// Execute a netsh command. Returns true if exit code is 0.
+    ///
+    /// <para>Phase 3+ (2026-05-21): routed through IProcessRunner. Wire shape
+    /// preserved — callers pass shell-style argument strings (e.g.
+    /// <c>advfirewall firewall add rule name="..." program="..."</c>) and we
+    /// split on whitespace into argv tokens that ProcessRunner's
+    /// ArgumentList passes verbatim to netsh. The split is whitespace-only
+    /// (no quote awareness) because every existing call site uses
+    /// <c>name="..."</c> / <c>program="..."</c> kvpairs whose VALUES may
+    /// contain spaces — those go through unmolested because the split
+    /// happens BEFORE the quotes are interpreted. Callers that previously
+    /// emitted <c>name="VPNRouter_Block_App"</c> still emit the literal
+    /// quoted argument; netsh receives the whole token including the
+    /// embedded double-quotes, which it strips per its own arg parser.</para>
     /// </summary>
     private bool RunNetsh(string arguments)
     {
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "netsh.exe",
-                Arguments = arguments,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                StandardOutputEncoding = ConsoleEncoding,
-                StandardErrorEncoding = ConsoleEncoding
-            };
+            var argv = SplitShellArgs(arguments);
+            var result = _runner.RunAsync(new ProcessRequest(
+                ExecutablePath: "netsh.exe",
+                Arguments: argv,
+                Timeout: TimeSpan.FromMilliseconds(5000))).GetAwaiter().GetResult();
 
-            using var proc = Process.Start(psi);
-            if (proc == null)
+            if (result.TimedOut)
             {
-                _logger.Warning("[Firewall] Failed to start netsh.exe");
+                _logger.Warning("[Firewall] netsh timed out for: {Args}", arguments);
                 return false;
             }
 
-            // Read streams before WaitForExit to avoid deadlocks on large output
-            var stdout = proc.StandardOutput.ReadToEnd();
-            var stderr = proc.StandardError.ReadToEnd();
-            proc.WaitForExit(5000);
-
-            if (proc.ExitCode != 0)
+            if (result.ExitCode != 0)
             {
                 _logger.Warning("[Firewall] netsh returned {Code} for: {Args} | stdout: {Out} | stderr: {Err}",
-                    proc.ExitCode, arguments, stdout.Trim(), stderr.Trim());
+                    result.ExitCode, arguments, result.Stdout.Trim(), result.Stderr.Trim());
                 return false;
             }
 
@@ -448,6 +465,76 @@ public class FirewallManager : IFirewallManager
             _logger.Warning(ex, "[Firewall] netsh failed: {Args}", arguments);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Split a shell-style argument string into argv tokens for
+    /// <see cref="ProcessRequest.Arguments"/>. <b>Quote-aware</b> — whitespace
+    /// inside <c>"..."</c> stays in one token, and the surrounding double
+    /// quotes are stripped (matching <c>CommandLineToArgvW</c> semantics).
+    ///
+    /// <para><b>Why we strip quotes</b>: pre-Phase 3+ the arg string was
+    /// passed via <see cref="ProcessStartInfo.Arguments"/> verbatim and
+    /// Windows did its own quote-aware split inside CreateProcess —
+    /// netsh.exe ultimately received bare values like
+    /// <c>description=VPNRouter block_on_vpn_fail</c> (no quotes around the
+    /// value). Post-Phase 3+ we use
+    /// <see cref="ProcessStartInfo.ArgumentList"/> which re-serializes each
+    /// token using <c>PasteArguments.AppendArgument</c>: if the token
+    /// contains a space, .NET surrounds it with quotes; if it ALREADY
+    /// contains quote characters, .NET back-slash-escapes them. To preserve
+    /// the original wire shape (bare value reaching netsh), we strip the
+    /// surrounding double-quotes during the split. .NET then re-quotes for
+    /// us based on whether the bare value contains whitespace — yielding
+    /// the byte-equivalent command line netsh used to receive.</para>
+    ///
+    /// <para>Inputs handled:
+    /// <list type="bullet">
+    /// <item><c>key=value</c> (no quotes, no spaces) — passed through.</item>
+    /// <item><c>key="value with spaces"</c> — token = <c>key=value with spaces</c>;
+    /// .NET re-quotes for the kernel.</item>
+    /// <item><c>key=val,val2</c> (commas, no spaces, no quotes — BR-9
+    /// <c>remoteip=...</c>) — passed through as a single token.</item>
+    /// </list></para>
+    ///
+    /// <para>This is NOT a general shell parser — it deliberately does NOT
+    /// support escape sequences (<c>\"</c>), single quotes, or nested
+    /// quoting. The class never emits those shapes. Marked
+    /// <c>internal</c> so the wire-shape tests can pin the split behaviour
+    /// directly without round-tripping through netsh.</para>
+    /// </summary>
+    internal static string[] SplitShellArgs(string arguments)
+    {
+        var result = new List<string>();
+        var current = new StringBuilder();
+        var inQuotes = false;
+
+        for (int i = 0; i < arguments.Length; i++)
+        {
+            var c = arguments[i];
+            if (c == '"')
+            {
+                // Drop the quote character itself — toggle the in-quotes
+                // flag so the next space is treated as content, not a
+                // separator.
+                inQuotes = !inQuotes;
+            }
+            else if (!inQuotes && (c == ' ' || c == '\t'))
+            {
+                if (current.Length > 0)
+                {
+                    result.Add(current.ToString());
+                    current.Clear();
+                }
+            }
+            else
+            {
+                current.Append(c);
+            }
+        }
+
+        if (current.Length > 0) result.Add(current.ToString());
+        return result.ToArray();
     }
 
     public void Dispose()
@@ -685,16 +772,6 @@ public class FirewallManager : IFirewallManager
     }
 
     /// <summary>
-    /// Static-friendly netsh invoker for the Wave 39 lockdown helpers.
-    /// Mirrors the per-instance <see cref="RunNetsh"/> shape but emits to
-    /// the supplied logger directly so the static helpers don't need an
-    /// instance. Returns true on exit code 0; logs the failure for any
-    /// non-zero exit but doesn't throw — both EnableDnsLockdownAsync and
-    /// DisableDnsLockdownAsync intentionally tolerate per-rule failures
-    /// (idempotency: "rule already exists" / "no rules match" come back
-    /// with non-zero exits).
-    /// </summary>
-    /// <summary>
     /// BR-8 (brat 2026-05-20) — translate the settings-provided TUN CIDR
     /// (e.g. <c>"172.19.0.1/30"</c>) into a network address suitable for
     /// the netsh <c>remoteip</c> parameter.
@@ -796,47 +873,47 @@ public class FirewallManager : IFirewallManager
         }
     }
 
+    /// <summary>
+    /// Static-friendly netsh invoker for the Wave 39 lockdown helpers.
+    /// Mirrors the per-instance <see cref="RunNetsh"/> shape but emits to
+    /// the supplied logger directly so the static helpers don't need an
+    /// instance. Returns true on exit code 0; logs the failure for any
+    /// non-zero exit but doesn't throw — both EnableDnsLockdownAsync and
+    /// DisableDnsLockdownAsync intentionally tolerate per-rule failures
+    /// (idempotency: "rule already exists" / "no rules match" come back
+    /// with non-zero exits).
+    ///
+    /// <para>Phase 3+ (2026-05-21) IProcessRunner adoption: routed through
+    /// the class-static <see cref="Runner"/> seam. Wire shape preserved —
+    /// same 3 s per-call timeout, same exit-code semantics, same arg
+    /// tokenisation via <see cref="SplitShellArgs"/>. Tests may swap
+    /// <see cref="Runner"/> for a <c>FakeProcessRunner</c> and assert the
+    /// captured <c>RunCalls</c> shape including the BR-9 <c>remoteip=...</c>
+    /// argument.</para>
+    /// </summary>
     private static bool RunNetshStatic(ILogger log, string arguments)
     {
         try
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "netsh.exe",
-                Arguments = arguments,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                StandardOutputEncoding = ConsoleEncoding,
-                StandardErrorEncoding = ConsoleEncoding
-            };
+            var argv = SplitShellArgs(arguments);
+            var result = Runner.RunAsync(new ProcessRequest(
+                ExecutablePath: "netsh.exe",
+                Arguments: argv,
+                Timeout: TimeSpan.FromMilliseconds(3000))).GetAwaiter().GetResult();
 
-            using var proc = Process.Start(psi);
-            if (proc == null)
+            if (result.TimedOut)
             {
-                log.Warning("[FirewallManager] Failed to start netsh.exe");
-                return false;
-            }
-
-            var stdout = proc.StandardOutput.ReadToEnd();
-            var stderr = proc.StandardError.ReadToEnd();
-
-            // 3s per-call timeout — independent of the outer wrapper's 5s.
-            if (!proc.WaitForExit(3000))
-            {
-                try { proc.Kill(); } catch { }
                 log.Warning("[FirewallManager] netsh timed out after 3s for: {Args}", arguments);
                 return false;
             }
 
-            if (proc.ExitCode != 0)
+            if (result.ExitCode != 0)
             {
                 // Common idempotency cases: "rule already exists" on add,
                 // "no rules match the specified criteria" on delete. Both
                 // map to non-zero exit but are expected — log at Debug.
                 log.Debug("[FirewallManager] netsh returned {Code} for: {Args} | stdout: {Out} | stderr: {Err}",
-                    proc.ExitCode, arguments, stdout.Trim(), stderr.Trim());
+                    result.ExitCode, arguments, result.Stdout.Trim(), result.Stderr.Trim());
                 return false;
             }
 
