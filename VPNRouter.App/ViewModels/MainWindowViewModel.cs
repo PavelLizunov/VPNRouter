@@ -3897,8 +3897,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 IsConnecting = false;
                 IsConnected = false;
                 StatusText = IsRussian
-                    ? "Таймаут при запуске (30 сек). Проверьте логи."
-                    : "Startup timed out (30s). Check logs.";
+                    ? "Таймаут при запуске (60 сек). Проверьте логи."
+                    : "Startup timed out (60s). Check logs.";
                 ConnectButtonText = Strings.StartVPN;
                 return;
             }
