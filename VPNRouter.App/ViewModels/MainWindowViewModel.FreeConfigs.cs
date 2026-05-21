@@ -122,12 +122,53 @@ public partial class MainWindowViewModel
             }
 
             // Start with the new active server.
-            // v2.35.2 (PinkuDani 2026-05-21): bumped 30s → 60s. See matching
-            // comment in MainWindowViewModel.cs ToggleConnectionAsync about
-            // the Windows 10 LTSC / missing-NetAdapter-PowerShell-module
-            // class hardening.
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-            await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
+            // v2.35.2 Stage 2 (PinkuDani 2026-05-21) — two-phase start timer.
+            // Same Phase A (60s) + Phase B (20s) budgets as
+            // ToggleConnectionAsync. Phase A diagnostic returns false (caller
+            // is the Free Configs page Apply button; UI just turns off the
+            // spinner). Phase B reuses StatusText for the user-visible
+            // failure note.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
+                Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
+                Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
+            var startTask = Task.Run(
+                () => _engine.StartAsync(_settings, cts.Token),
+                cts.Token);
+
+            var outcome = await Internals.TwoPhaseStartCoordinator.RunAsync(
+                startTask: startTask,
+                subscribeStarted: handler =>
+                {
+                    void Wrapper(int pid) => handler(pid);
+                    _engine.SingBoxStarted += Wrapper;
+                    return () => _engine.SingBoxStarted -= Wrapper;
+                },
+                subscribeConnected: handler =>
+                {
+                    void Wrapper(int pid) => handler(pid);
+                    _engine.Connected += Wrapper;
+                    return () => _engine.Connected -= Wrapper;
+                },
+                cancellationToken: cts.Token);
+
+            if (outcome == Internals.TwoPhaseStartOutcome.PhaseATimeout)
+            {
+                _logger.Warning("[VM] ApplyFreeConfig: Phase A (sing-box launch) timed out after {N}s",
+                    (int)Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds);
+                try { await Task.Run(() => _engine.Stop()); } catch { }
+                StatusText = Strings.StartTimeoutPhaseA;
+                return false;
+            }
+            if (outcome == Internals.TwoPhaseStartOutcome.PhaseBTimeout)
+            {
+                _logger.Warning("[VM] ApplyFreeConfig: Phase B (TUN warm-up) timed out after {N}s",
+                    (int)Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds);
+                try { await Task.Run(() => _engine.Stop()); } catch { }
+                StatusText = Strings.StartTimeoutPhaseB;
+                return false;
+            }
+            // Surface any exception from startTask (Connected / StartTaskCompleted / Cancelled).
+            await startTask;
             return true;
         }
         catch (Exception ex)

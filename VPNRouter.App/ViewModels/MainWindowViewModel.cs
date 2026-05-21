@@ -3773,16 +3773,32 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             try
             {
-                // v2.35.2 (PinkuDani 2026-05-21): bumped 30s → 60s. On Windows
-                // 10 LTSC / Server SKUs without the NetAdapter PowerShell
-                // module, every Remove-NetAdapter call costs ~1s for the
-                // CommandNotFoundException to surface; 5+ callsites per cycle
-                // pushed total Start time past 30s for slow machines and
-                // forced Stop on a still-starting sing-box. 60s budget closes
-                // the Stop-after-Start race for that class. Future Fix #2
-                // Stage 2 will split into Phase A (start) + Phase B (TUN
-                // warm-up) once VpnEngine.Connected event lands.
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                // v2.35.2 Stage 2 (PinkuDani 2026-05-21) — two-phase start
+                // timer. Closes the original Fix #2 spec deferred until the
+                // typed VpnEngine.Connected event landed in Stage 1
+                // (commit b012fe6). Replaces the pre-Stage-2 single 60s
+                // CTS+10s polling pattern with:
+                //
+                //   * Phase A budget (60s) — wait for SingBoxStarted event.
+                //     If we hit the budget, sing-box never spawned (real
+                //     hang in DeployAndSetupFirewall / TunAdapterDiagnostics
+                //     / wintun launch); Stop with Phase A diagnostic.
+                //   * Phase B budget (20s) — wait for Connected event
+                //     (TUN warm-up gstatic probe success). If we hit the
+                //     budget, sing-box is running but TUN never confirmed;
+                //     Stop with Phase B diagnostic (wintun driver issue or
+                //     upstream firewall blocking the probe).
+                //
+                // The pre-Stage-2 60s comment block (Win10 LTSC NetAdapter
+                // PowerShell module pay) is now Phase A's budget. Phase B's
+                // 20s is sized at 4x the happy-path warmup probe (~5s on
+                // healthy installs, 15 attempts × 1s loop in
+                // ScheduleWarmupProbe). The pre-Stage-2 IsRunning 10s
+                // polling fallback is gone — Connected event is the
+                // unambiguous "actually routing" signal.
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
+                    Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
+                    Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
                 // v2.32.1-r5 (Bug-r10-B): session-scoped opt-out from
                 // ConflictingVpnDetector. _skipConflictCheckOnce is set
                 // by IgnoreVpnConflictCommand. Consumed exactly once —
@@ -3790,43 +3806,35 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 // re-detects.
                 var skipConflictCheck = _skipConflictCheckOnce;
                 _skipConflictCheckOnce = false;
-                await Task.Run(() => _engine.StartAsync(_settings, cts.Token, skipConflictCheck), cts.Token);
 
-                // v2.20.6: poll _engine.IsRunning up to 10 seconds, on a
-                // thread-pool thread, WITHOUT the 30 s StartAsync CTS.
-                //
-                // v2.20.4 ran the poll on the UI thread inside a `while`
-                // and used `await Task.Delay(250, cts.Token)`. Two bugs:
-                //
-                //   1. `_engine.IsRunning` on macOS calls IsClashApiAlive
-                //      (synchronous HTTP GET with 3-second timeout). That
-                //      was blocking the UI thread up to 3 s per iteration.
-                //   2. Passing cts.Token to Task.Delay meant that if
-                //      StartAsync had consumed 25+ s on macOS (sudo +
-                //      sing-box warmup + healthmonitor setup), the CTS
-                //      tripped DURING our poll → OperationCanceledException
-                //      → catch block → _engine.Stop() → OnEngineStatus
-                //      emits "Stopped" → UI demotes to "not connected"
-                //      even though sing-box is actually running.
-                //
-                // Fix: poll runs on a thread-pool thread (no UI block),
-                // uses Thread.Sleep locally (no token, no exception), and
-                // gets a fresh 10 s window that starts AFTER StartAsync
-                // returns. Windows IsRunning is O(1) (Process.HasExited),
-                // so the loop exits on the first iteration there.
-                var ready = await Task.Run(() =>
-                {
-                    var until = DateTime.UtcNow.AddSeconds(10);
-                    while (DateTime.UtcNow < until)
+                var startTask = Task.Run(
+                    () => _engine.StartAsync(_settings, cts.Token, skipConflictCheck),
+                    cts.Token);
+
+                var outcome = await Internals.TwoPhaseStartCoordinator.RunAsync(
+                    startTask: startTask,
+                    subscribeStarted: handler =>
                     {
-                        if (_engine.IsRunning) return true;
-                        System.Threading.Thread.Sleep(250);
-                    }
-                    return false;
-                });
+                        void Wrapper(int pid) => handler(pid);
+                        _engine.SingBoxStarted += Wrapper;
+                        return () => _engine.SingBoxStarted -= Wrapper;
+                    },
+                    subscribeConnected: handler =>
+                    {
+                        void Wrapper(int pid) => handler(pid);
+                        _engine.Connected += Wrapper;
+                        return () => _engine.Connected -= Wrapper;
+                    },
+                    cancellationToken: cts.Token);
 
-                if (ready)
+                if (outcome == Internals.TwoPhaseStartOutcome.Connected)
                 {
+                    // Phase A + B both passed — sing-box up AND TUN warmup
+                    // probe succeeded. Surface await on startTask in case
+                    // a late exception was buffered (rare; defence pin).
+                    try { await startTask; } catch { /* event-side success
+                        is the authoritative signal; startTask exception
+                        post-Connected is a non-event race */ }
                     IsConnected = true;
                     IsConnecting = false;
                     _lastSuccessfulConnectAt = DateTime.UtcNow;
@@ -3838,17 +3846,51 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     // and retried — pre-r9-E the banner would linger).
                     ConflictingVpnWarningText = string.Empty;
                 }
-                else
+                else if (outcome == Internals.TwoPhaseStartOutcome.StartTaskCompleted)
                 {
-                    // StartAsync returned without exception but the
-                    // engine still reports not-running after 10 s. Don't
-                    // demote — VpnEngine's own warmup task emits
-                    // "Connected" after up to 15 s (see VpnEngine.cs
-                    // line ~403/413), and OnEngineStatus will flip
-                    // IsConnected=true when that event arrives. Explicit
-                    // Stop() call would kill a tunnel that's actually
-                    // working.
-                    _logger.Warning("[VM] Engine not ready after 10 s — leaving state to OnEngineStatus");
+                    // StartAsync returned BEFORE SingBoxStarted fired.
+                    // Surface any exception (TunOwnershipException,
+                    // ConflictingVpnException, etc.) by awaiting the task.
+                    // If it returned cleanly, OnEngineStatus will eventually
+                    // flip IsConnected when the engine emits a status event.
+                    await startTask;
+                    _logger.Warning("[VM] StartAsync returned without firing SingBoxStarted — leaving state to OnEngineStatus");
+                }
+                else if (outcome == Internals.TwoPhaseStartOutcome.PhaseATimeout)
+                {
+                    _logger.Error("[VM] Phase A (sing-box launch) timed out after {N}s — sing-box never reported started. Possible cause: slow firewall rule creation, missing NetAdapter PowerShell module (Windows 10 LTSC / Server SKUs), or pre-start TUN cleanup hang. Stopping engine.",
+                        (int)Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds);
+                    try { await Task.Run(() => _engine.Stop()); } catch { }
+                    IsConnecting = false;
+                    IsConnected = false;
+                    StatusText = Strings.StartTimeoutPhaseA;
+                    ConnectButtonText = Strings.StartVPN;
+                    return;
+                }
+                else if (outcome == Internals.TwoPhaseStartOutcome.PhaseBTimeout)
+                {
+                    _logger.Error("[VM] Phase B (TUN warm-up) timed out after {N}s — sing-box started but Connected event never fired. Possible cause: wintun driver issue, network interface gone, or warmup probe blocked. Stopping engine.",
+                        (int)Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds);
+                    try { await Task.Run(() => _engine.Stop()); } catch { }
+                    IsConnecting = false;
+                    IsConnected = false;
+                    StatusText = Strings.StartTimeoutPhaseB;
+                    ConnectButtonText = Strings.StartVPN;
+                    return;
+                }
+                else // Cancelled
+                {
+                    // Outer CTS tripped (likely because both Phase A and
+                    // Phase B budgets summed up have expired). Map to the
+                    // same diagnostic as the dominant phase — Phase A's
+                    // is the conservative default (start never happened).
+                    _logger.Error("[VM] Two-phase start cancelled by outer CTS");
+                    try { await Task.Run(() => _engine.Stop()); } catch { }
+                    IsConnecting = false;
+                    IsConnected = false;
+                    StatusText = Strings.StartTimeoutPhaseA;
+                    ConnectButtonText = Strings.StartVPN;
+                    return;
                 }
             }
             catch (TunOwnershipException)
@@ -3892,13 +3934,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             }
             catch (OperationCanceledException)
             {
-                _logger.Error("[VM] Start timed out after 60s — possible cause: slow firewall rule creation, missing NetAdapter PowerShell module (Windows 10 LTSC / Server SKUs), or pre-start TUN cleanup hang. Stopping engine.");
+                // Stage 2 (2026-05-21): the coordinator's normal Phase A /
+                // Phase B paths now produce explicit outcomes; this catch
+                // only fires if a deeper StartAsync call surfaces an OCE
+                // after the coordinator already saw StartTaskCompleted, or
+                // the outer CTS race itself. Mirrors the Phase A diagnostic
+                // since "no signal at all" is conservatively a Phase A
+                // class of failure.
+                _logger.Error("[VM] OperationCanceledException out of two-phase start path — treating as Phase A timeout. Stopping engine.");
                 try { await Task.Run(() => _engine.Stop()); } catch { }
                 IsConnecting = false;
                 IsConnected = false;
-                StatusText = IsRussian
-                    ? "Таймаут при запуске (60 сек). Проверьте логи."
-                    : "Startup timed out (60s). Check logs.";
+                StatusText = Strings.StartTimeoutPhaseA;
                 ConnectButtonText = Strings.StartVPN;
                 return;
             }
@@ -5149,14 +5196,60 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 try
                 {
-                    // v2.35.2 (PinkuDani 2026-05-21): bumped 30s → 60s, see
-                    // matching comment in main ToggleConnectionAsync. With
-                    // up to 3 retries this means worst-case wall-clock of
-                    // 180s before giving up, but only on TunOwnershipException
-                    // (Service stealing the TUN handle) — far better than
-                    // forcibly killing a slow-but-healthy startup.
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
-                    await Task.Run(() => _engine.StartAsync(_settings, cts.Token), cts.Token);
+                    // v2.35.2 Stage 2 (PinkuDani 2026-05-21): two-phase start
+                    // timer. Same Phase A (60s) + Phase B (20s) budgets as
+                    // the main ToggleConnectionAsync — with up to 3 retries
+                    // worst-case wall-clock is 3 × 80s = 240s, but only on
+                    // TunOwnershipException (Service stealing the TUN
+                    // handle).
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(
+                        Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds +
+                        Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds));
+                    var startTask = Task.Run(
+                        () => _engine.StartAsync(_settings, cts.Token),
+                        cts.Token);
+
+                    var outcome = await Internals.TwoPhaseStartCoordinator.RunAsync(
+                        startTask: startTask,
+                        subscribeStarted: handler =>
+                        {
+                            void Wrapper(int pid) => handler(pid);
+                            _engine.SingBoxStarted += Wrapper;
+                            return () => _engine.SingBoxStarted -= Wrapper;
+                        },
+                        subscribeConnected: handler =>
+                        {
+                            void Wrapper(int pid) => handler(pid);
+                            _engine.Connected += Wrapper;
+                            return () => _engine.Connected -= Wrapper;
+                        },
+                        cancellationToken: cts.Token);
+
+                    if (outcome == Internals.TwoPhaseStartOutcome.PhaseATimeout)
+                    {
+                        _logger.Error("[VM] Reconnect: Phase A (sing-box launch) timed out after {N}s",
+                            (int)Internals.TwoPhaseStartCoordinator.DefaultPhaseABudget.TotalSeconds);
+                        try { await Task.Run(() => _engine.Stop()); } catch { }
+                        IsConnected = false;
+                        StatusText = Strings.StartTimeoutPhaseA;
+                        ConnectButtonText = Strings.StartVPN;
+                        return;
+                    }
+                    if (outcome == Internals.TwoPhaseStartOutcome.PhaseBTimeout)
+                    {
+                        _logger.Error("[VM] Reconnect: Phase B (TUN warm-up) timed out after {N}s",
+                            (int)Internals.TwoPhaseStartCoordinator.DefaultPhaseBBudget.TotalSeconds);
+                        try { await Task.Run(() => _engine.Stop()); } catch { }
+                        IsConnected = false;
+                        StatusText = Strings.StartTimeoutPhaseB;
+                        ConnectButtonText = Strings.StartVPN;
+                        return;
+                    }
+                    // StartTaskCompleted / Connected / Cancelled: surface
+                    // any exception from startTask. Throws (e.g.
+                    // TunOwnershipException) re-enter the outer catch which
+                    // triggers the retry loop.
+                    await startTask;
                     break; // success
                 }
                 catch (TunOwnershipException) when (attempt < maxRetries)

@@ -122,6 +122,20 @@ public static class Strings
     public static string Starting => Ru ? "Запуск..." : "Starting...";
     public static string Stopping => Ru ? "Остановка..." : "Stopping...";
 
+    // ── Task #41 Stage 2 (PinkuDani 2026-05-21) — two-phase Start timer ──
+    // Phase A diagnostic: sing-box never reported started within 60s.
+    // Real hang at firewall / TUN cleanup / wintun launch.
+    public static string StartTimeoutPhaseA => Ru
+        ? "Таймаут запуска (60 с). Sing-box не стартовал."
+        : "Start timed out (60s). sing-box never started.";
+
+    // Phase B diagnostic: sing-box started but the TUN warmup probe never
+    // confirmed reachability within 20s. wintun driver issue, network gone,
+    // or warmup probe blocked by upstream firewall.
+    public static string StartTimeoutPhaseB => Ru
+        ? "Таймаут TUN (20 с). Запуск не завершён."
+        : "TUN warm-up timed out (20s). Start incomplete.";
+
     // ── Server list columns ──
     public static string ColName => Ru ? "Имя" : "Name";
     public static string ColServer => Ru ? "Сервер" : "Server";

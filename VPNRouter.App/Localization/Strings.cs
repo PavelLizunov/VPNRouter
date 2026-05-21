@@ -97,6 +97,10 @@ public static class Strings
     public static string Starting => global::VPNRouter.Core.Localization.Strings.Starting;
     public static string Stopping => global::VPNRouter.Core.Localization.Strings.Stopping;
 
+    // Task #41 Stage 2 (PinkuDani 2026-05-21) — two-phase Start timer diagnostics.
+    public static string StartTimeoutPhaseA => global::VPNRouter.Core.Localization.Strings.StartTimeoutPhaseA;
+    public static string StartTimeoutPhaseB => global::VPNRouter.Core.Localization.Strings.StartTimeoutPhaseB;
+
     // ── Server list columns ──
     public static string ColName => global::VPNRouter.Core.Localization.Strings.ColName;
     public static string ColServer => global::VPNRouter.Core.Localization.Strings.ColServer;
