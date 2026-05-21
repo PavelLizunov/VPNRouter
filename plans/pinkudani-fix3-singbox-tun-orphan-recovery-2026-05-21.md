@@ -230,4 +230,4 @@ SingBoxManager's perspective (confirmed via FakeProcessHandle's
 
 ### Commit
 
-`<filled in after commit>`
+`8adfed7` — `fix(singbox): recover from TUN orphan crash via netsh disable`.
