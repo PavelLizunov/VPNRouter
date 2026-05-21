@@ -24,6 +24,7 @@ public class VpnEngine : IDisposable
     private readonly IProcessScanner _scanner;
     private readonly Func<IFirewallManager> _firewallFactory;
     private readonly Func<IProcessMonitor> _monitorFactory;
+    private readonly IWindowsDnsHardening _dnsHardening;
     private readonly ILogger? _logger;
 
     // F-E (2026-05-11): runtime safety net for dead/placeholder configs.
@@ -124,12 +125,19 @@ public class VpnEngine : IDisposable
         IProcessScanner scanner,
         Func<IFirewallManager> firewallFactory,
         Func<IProcessMonitor> monitorFactory,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        IWindowsDnsHardening? dnsHardening = null)
     {
         _scanner = scanner;
         _firewallFactory = firewallFactory;
         _monitorFactory = monitorFactory;
         _logger = logger;
+        // Task #36-A (Phase 4): the DNS-hardening seam. Defaults to the
+        // back-compat singleton that wraps the static WindowsDnsHardening
+        // facade (no-op on non-Windows). Tests pass NullWindowsDnsHardening
+        // so the happy-path lifecycle suite (Task #36-C) doesn't mutate the
+        // CI / dev machine's machine-wide DNS policy in HKLM.
+        _dnsHardening = dnsHardening ?? WindowsDnsHardeningImpl.Default;
     }
 
     // ─── Start ───────────────────────────────────────────────────────────────
@@ -161,7 +169,11 @@ public class VpnEngine : IDisposable
         // plans/phase3-3C-startup-pipeline-2026-05-18.md and the file-
         // header comment in StartupPipeline.cs for the rationale.
         var host = new VpnEngineStartupHost(this);
-        var pipeline = new StartupPipeline(host);
+        // Task #36-A — plumb the DNS-hardening seam from the engine into
+        // the pipeline so Null* test doubles installed at engine construction
+        // propagate down to phase 7 (BR-7 deferred lockdown) + phase 8
+        // (Apply) without separate wiring.
+        var pipeline = new StartupPipeline(host, dnsHardening: _dnsHardening);
         var result = await pipeline.ExecuteAsync(
             new StartupContext(settings, StartupMode.ColdStart, skipVpnConflictCheck),
             ct);
@@ -230,7 +242,11 @@ public class VpnEngine : IDisposable
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var host = new VpnEngineStartupHost(this);
-            var pipeline = new StartupPipeline(host);
+            // Task #36-A — same as StartAsync: propagate the DNS-hardening
+            // seam into the pipeline. HotReload itself doesn't fire phase 7/8,
+            // but keeping the wiring symmetric means future evolution of the
+            // HotReload phase mask doesn't have to be re-plumbed.
+            var pipeline = new StartupPipeline(host, dnsHardening: _dnsHardening);
             var result = await pipeline.ExecuteAsync(
                 new StartupContext(settings, StartupMode.HotReload),
                 ct);
@@ -339,9 +355,12 @@ public class VpnEngine : IDisposable
         try { _healthMonitor?.Stop(); } catch { }  // BR-6a: BEFORE sing-box
         try { _singBox?.Stop(); } catch { }
 
-#if PLATFORM_WINDOWS
-        try { WindowsDnsHardening.Restore(_logger); } catch { }
-#endif
+        // Task #36-A (Phase 4) — routed through IWindowsDnsHardening so the
+        // happy-path Stop test (Task #36-C) captures the Restore invocation
+        // through NullWindowsDnsHardening without mutating HKLM. Impl is a
+        // no-op on non-Windows builds; the prior PLATFORM_WINDOWS guard at
+        // the call site collapsed into the impl itself.
+        try { _dnsHardening.Restore(_logger); } catch { }
 
         try { _etw?.Stop(); } catch { }
 

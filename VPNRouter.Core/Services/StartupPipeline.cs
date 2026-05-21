@@ -267,17 +267,32 @@ internal sealed class StartupPipeline
 {
     private readonly IStartupHost _host;
     private readonly ISettingsStore _store;
+    private readonly IWindowsDnsHardening _dnsHardening;
 
+    /// <param name="host">VpnEngine-side callback surface used to mutate
+    /// engine state + raise events through the 8 pipeline phases.</param>
     /// <param name="store">3G-1 (v3.0 refactor): persistence seam used by
     /// the ActiveProfile sanitisation step. Defaults to
     /// <see cref="RealSettingsStore.Instance"/> for back-compat — pre-3G
     /// the code called <c>SettingsLoader.Load/Save</c> statically. Tests
     /// inject <c>InMemorySettingsStore</c> to keep the pipeline isolated
     /// from the on-disk config.</param>
-    public StartupPipeline(IStartupHost host, ISettingsStore? store = null)
+    /// <param name="dnsHardening">Task #36-A (v3.0 refactor Phase 4):
+    /// Windows DNS-leak-mitigation seam. Defaults to
+    /// <see cref="WindowsDnsHardeningImpl.Default"/> which wraps the
+    /// existing static facade (and is a no-op on non-Windows builds).
+    /// Tests inject <c>NullWindowsDnsHardening</c> so the lifecycle
+    /// happy-path test (Task #36-C) doesn't mutate HKLM. The seam covers
+    /// phase 7's BR-7 deferred-lockdown branch AND phase 8's apply step,
+    /// so a single fake captures both touch points.</param>
+    public StartupPipeline(
+        IStartupHost host,
+        ISettingsStore? store = null,
+        IWindowsDnsHardening? dnsHardening = null)
     {
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _store = store ?? RealSettingsStore.Instance;
+        _dnsHardening = dnsHardening ?? WindowsDnsHardeningImpl.Default;
     }
 
     /// <summary>
@@ -1076,14 +1091,18 @@ internal sealed class StartupPipeline
                     // TUN is confirmed routing. Idempotent + fire-and-
                     // forget; doesn't affect the user-visible Connected
                     // state.
-#if PLATFORM_WINDOWS
-                    try { WindowsDnsHardening.EnableLockdownIfConfigured(settings, _host.Logger); }
+                    //
+                    // Task #36-A (Phase 4) — routed through IWindowsDnsHardening
+                    // so tests inject NullWindowsDnsHardening and capture the
+                    // BR-7 branch without touching real netsh / firewall. The
+                    // impl is a no-op on non-Windows (no #if needed at the
+                    // call site).
+                    try { _dnsHardening.EnableLockdownIfConfigured(settings, _host.Logger); }
                     catch (Exception ex)
                     {
                         _host.Logger?.Warning(ex,
                             "[StartupPipeline] BR-7 deferred lockdown arm threw (non-fatal)");
                     }
-#endif
                     return;
                 }
                 catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -1160,13 +1179,17 @@ internal sealed class StartupPipeline
         if (profile.BlockOnVpnFail)
             _host.OnStatus("Firewall leak protection ready (armed for VPN failure)");
 
-#if PLATFORM_WINDOWS
         // Wave 39 (2026-05-19): pass settings so WindowsDnsHardening can
         // honour the AppConfig.DnsLeakLockdown toggle and install the
         // Wave 39 firewall-level DNS port blocks alongside the existing
         // SMHNR / ParallelAAAA / TUN-metric hardening.
-        WindowsDnsHardening.Apply(settings, _host.Logger);
-#endif
+        //
+        // Task #36-A (Phase 4) — routed through IWindowsDnsHardening so
+        // happy-path lifecycle tests (Task #36-C) inject NullWindowsDnsHardening
+        // and capture this invocation without touching HKLM. Impl is a
+        // no-op on non-Windows, replacing the prior #if PLATFORM_WINDOWS
+        // guard at the call site.
+        _dnsHardening.Apply(settings, _host.Logger);
     }
 }
 
