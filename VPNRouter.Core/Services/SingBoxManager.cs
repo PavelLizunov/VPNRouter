@@ -30,8 +30,27 @@ public class SingBoxManager : IDisposable
     private readonly IProcessRunner _runner;
     private IProcessHandle? _handle;
     private string _currentConfigPath = string.Empty;
-    private bool _disposed;
+    // B1 (v2.36 SingBoxManager lifecycle hardening): widened from `bool`
+    // to `int` so Dispose can use Interlocked.CompareExchange for
+    // atomic single-execution. Read by the ProcessExit ApplyDomain
+    // handler (via Volatile.Read) to decide whether to run fallback
+    // cleanup. 0 = alive, 1 = disposed.
+    // See plans/singbox-lifecycle-hardening-v2.36.md.
+    private int _disposed;
     private TunOwnershipLock _tunLock;
+
+    // B2 (v2.36 SingBoxManager lifecycle hardening, see
+    // plans/singbox-lifecycle-hardening-v2.36.md): atomic guard so only
+    // one thread at a time progresses through StopInternal's body.
+    // Concurrent Stop() callers (UI Disconnect + HealthMonitor restart
+    // backoff + ProcessExit fallback) used to all reach the four Release
+    // sites; TunOwnershipLock's _owned guard prevented the SemaphoreFullException,
+    // but other StopInternal side-effects (Kill, _handle clear, State flip)
+    // could still race. CompareExchange returns previous value — only the
+    // thread that flips 0→1 wins entry; others see 1 and return early.
+    // Resets to 0 in finally so sequential Stop()'s re-enter normally.
+    // 0 = idle, 1 = stopping.
+    private int _stopState;
 
     /// <summary>Test-only seam: swap in a fake for the long-lived sing-box
     /// spawn. Production paths use the default <see cref="ProcessRunner"/>.
@@ -128,8 +147,24 @@ public class SingBoxManager : IDisposable
         _runner = runner ?? Runner;
         _tunLock = TunOwnershipLock.Instance(_logger);
 
-        // Release lock on ungraceful process exit (Environment.Exit, Ctrl+C, crash).
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => _tunLock.Dispose();
+        // B1 (v2.36 SingBoxManager lifecycle hardening): ProcessExit
+        // fallback runs ONLY if Dispose() hasn't already executed.
+        //   Normal shutdown: Dispose() sets _disposed=1 first → this
+        //     lambda reads 1 and no-ops. Cleanup goes through the
+        //     explicit Dispose path (which calls _tunLock.Dispose() too).
+        //   Abrupt termination (Environment.Exit, OOM-kill, Ctrl+C
+        //     without graceful shutdown): _disposed stays 0 → this
+        //     lambda runs as the last-resort cleanup, releasing the
+        //     TUN lock so the next instance can acquire it.
+        // Pre-B1 the lambda always ran AND Dispose did its cleanup —
+        // TunOwnershipLock.Dispose is idempotent so no crash, but the
+        // dual-path pattern was muddled. See
+        // plans/singbox-lifecycle-hardening-v2.36.md.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            if (Volatile.Read(ref _disposed) == 0)
+                _tunLock.Dispose();
+        };
     }
 
     // ─── Public API ───────────────────────────────────────────────────────────
@@ -198,6 +233,21 @@ public class SingBoxManager : IDisposable
 
     private void StopInternal(bool releaseLock)
     {
+        // B2 (v2.36 SingBoxManager lifecycle hardening): atomic
+        // concurrent-Stop guard. Only one thread flips _stopState from 0→1
+        // and proceeds; others see the non-zero value and bail. Resets to
+        // 0 in finally so sequential Stop()'s re-enter normally. Closes
+        // the race window where two callers (UI Disconnect + HealthMonitor
+        // restart backoff + ProcessExit fallback) could all enter
+        // StopInternal concurrently and race on Kill / _handle clear /
+        // State flip side-effects. See `plans/singbox-lifecycle-hardening-v2.36.md`.
+        if (Interlocked.CompareExchange(ref _stopState, 1, 0) != 0)
+        {
+            _logger.Debug("[SingBoxManager] StopInternal: concurrent call detected (releaseLock={Release}), skipping", releaseLock);
+            return;
+        }
+        try
+        {
         _logger.Information("[SingBoxManager] Stopping sing-box (PID {Pid})", Pid);
 
         if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
@@ -454,6 +504,15 @@ public class SingBoxManager : IDisposable
                     _logger.Warning(ex, "[SingBoxManager] Orphan adapter cleanup failed (non-fatal)");
                 }
             }
+        }
+        }
+        finally
+        {
+            // B2 (v2.36): reset _stopState so subsequent (sequential)
+            // Stop() callers can re-enter normally. Concurrent callers
+            // saw 1 above and bailed; this releases the guard for the
+            // next legitimate Stop().
+            Volatile.Write(ref _stopState, 0);
         }
     }
 
@@ -1239,14 +1298,27 @@ public class SingBoxManager : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        // B1 (v2.36): atomic single-execution guard. CompareExchange
+        // returns the prior value of _disposed; only the thread that
+        // observes 0 (and flips to 1) proceeds with cleanup. Concurrent
+        // Dispose() calls from multiple threads are now safe — only one
+        // runs the body. Pre-B1 this was a `bool _disposed` flag with
+        // an unprotected check-then-set, which had a theoretical
+        // race (concurrent Dispose from finalizer + manual call).
+        if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
         // PinkuDani Fix #3 (2026-05-21): clear the TUN-orphan flag on
         // teardown so a Dispose-then-rebuild path (uncommon but possible
         // in long-lived services) doesn't carry stale state.
         LastCrashWasTunOrphan = false;
         Stop();
         _handle?.Dispose();
+        // B1 (v2.36): explicit _tunLock disposal in the normal cleanup
+        // path. Pre-B1 the ProcessExit ApplyDomain hook was the only
+        // site that called _tunLock.Dispose(); now Dispose() owns the
+        // cleanup directly and ProcessExit no-ops (via the
+        // Volatile.Read(_disposed) gate in the ctor lambda). The
+        // double-cleanup ambiguity is gone.
+        _tunLock.Dispose();
     }
 
     /// <summary>
