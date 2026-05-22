@@ -278,18 +278,22 @@ parity (потому что shipping parity — leverage для validating refac
 если после refactor'а APK всё ещё ship'ится одной командой, значит
 не сломали).
 
-### Phase H — Single localization source-of-truth
+### Phase H — Single localization source-of-truth — DONE (2026-05-22 recon)
 
-**Сейчас** дублируем все строки в `VPNRouter.App/Localization/Strings.cs` И
-`VPNRouter.Android/Localization.cs`. Drift-risk: за время AND-* portов уже
-было ~3 случая где Android string отличался от desktop'а на пунктуацию.
+**Состояние**: оба wrapper'а уже pure pass-through к
+`VPNRouter.Core/Localization/Strings.cs`:
+- `VPNRouter.App/Localization/Strings.cs` — 593 members, 0 non-pass-through.
+- `VPNRouter.Android/Localization.cs` — 884 members, 0 non-pass-through, плюс
+  3 bootstrap members (`Ru`, `LoadFromStorage`, `ToggleAndPersist`) которые
+  Android-specific и должны остаться.
 
-**Цель**: один файл `VPNRouter.Avalonia.UI/Localization/Strings.cs` (или в
-Core если решим что Core может содержать UI strings). Оба apps consumed.
+Core Strings.cs — единственный source of truth (~895 members). Phase 2A
+(App pass-through) и параллельный Android pass-through уже завершены до
+текущей session'и. Drift-risk закрыт.
 
-Делается тривиально как часть Phase G (вместе с extraction). Стоит
-выделить отдельной фазой потому что можно сделать **до** Phase G как
-isolated win — намного меньше effort (~2-3 hours).
+Дальнейшая консолидация (например shared `VPNRouter.Avalonia.UI` project
+со Strings) — косметика, не add'ит value пока wrapper'ы — pure delegation.
+Не приоритет.
 
 ---
 
