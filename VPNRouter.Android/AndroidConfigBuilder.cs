@@ -357,6 +357,42 @@ public static class AndroidConfigBuilder
                 }
             }
 
+            // 3. EMERGENCY r2 fix (EOStārāTheia 2026-05-23 v2.36.0-r1 ship
+            //    broke Android entirely): strip tcp_keep_alive +
+            //    tcp_keep_alive_interval from outbounds.
+            //
+            //    Despite sing-box.exe 1.13 docs documenting these as valid
+            //    Dial Fields at outbound top-level (and accepting them
+            //    fine on Windows/Mac/Linux), libbox.aar 1.13.10's gomobile
+            //    binding rejects them with:
+            //      "proxyerror: decode config:
+            //       outbounds[0].tcp_keep_alive: json: unknown field"
+            //
+            //    Root cause: libbox.aar's struct definitions (or its strict-
+            //    JSON decoder path) lacks these fields. Possibly a stripped
+            //    build (sing-box-for-android historically dropped optional
+            //    Dial Fields to shrink APK size). Until investigated +
+            //    fixed in libbox.aar build, Android skips F4 keepalive.
+            //
+            //    Desktop (Windows/Mac/Linux) keeps F4 — sing-box.exe binary
+            //    accepts the fields correctly.
+            //
+            //    On Android, mobile NAT idle timeout symptom (5-min auto-
+            //    disconnect) returns until libbox.aar is rebuilt with the
+            //    dialer fields. F1 (health probe path) fix stays effective.
+            //
+            //    See plans/android-disconnect-investigation-v2.36.md +
+            //    plans/release-notes-v2.36.0-r2.md.
+            if (root["outbounds"] is JsonArray outbounds)
+            {
+                foreach (var outboundNode in outbounds)
+                {
+                    if (outboundNode is not JsonObject ob) continue;
+                    ob.Remove("tcp_keep_alive");
+                    ob.Remove("tcp_keep_alive_interval");
+                }
+            }
+
             return root.ToJsonString(new System.Text.Json.JsonSerializerOptions
             {
                 WriteIndented = true
