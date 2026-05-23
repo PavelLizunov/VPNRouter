@@ -1524,7 +1524,14 @@ public partial class AndroidApp : Avalonia.Application
                 headerRow,
                 statusCard,
                 _menuFeedback,
-                _updateBanner!,
+                // v2.36.0-r3 UX-2 fix (EOStārāTheia 2026-05-23): _updateBanner
+                // was here. Moved out to the root Grid as a top-floating
+                // overlay so the banner is visible in BOTH Simple and
+                // Advanced shell modes. Pre-r3 banner was a child of this
+                // Simple-page innerStack — when user switched to Advanced
+                // shell (which overlays Simple), the banner became hidden
+                // and user couldn't access the update flow without
+                // switching back to Simple. See root Grid below.
                 configRowButton,
                 _formCard,
                 _ctaConnect,
@@ -1720,13 +1727,31 @@ public partial class AndroidApp : Avalonia.Application
         // AndroidApp.AdvancedShell.cs.
         _advShellOverlay = BuildAdvancedShellOverlay();
 
+        // v2.36.0-r3 UX-2 fix (EOStārāTheia 2026-05-23): wrap the
+        // _updateBanner in a top-aligned floating container so it appears
+        // ABOVE both Simple page (mainScroller) and Advanced shell
+        // (_advShellOverlay). Margin pushes it below the system status
+        // bar (16dp safe gap). The banner's own IsVisible toggle controls
+        // when it surfaces.
+        var updateBannerFloating = new Grid
+        {
+            VerticalAlignment = VerticalAlignment.Top,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Margin = new Thickness(16, 16, 16, 0),
+            Background = Brushes.Transparent,
+            Children = { _updateBanner! },
+        };
+
         return new Grid
         {
             // Per-feature overlays folded into Advanced shell tabs (AND-ADV-MIGRATE).
             // Kebab QR-share also removed (chip naughty-darwin) — _cfgQrOverlay gone.
+            // r3: updateBannerFloating last → top z-order, visible in both
+            // Simple + Advanced modes.
             Children = { mainScroller, _logOverlay,
                          _cfgExportOverlay, _cfgImportOverlay, _profilesOverlay,
-                         _advShellOverlay }
+                         _advShellOverlay,
+                         updateBannerFloating }
         };
     }
 
@@ -1886,6 +1911,14 @@ public partial class AndroidApp : Avalonia.Application
         AndroidStorage.SetUpdateChannel(_settingsReceivePrereleases.IsChecked == true ? "experimental" : "stable");
         // Update channel doesn't affect the running tunnel — no need to
         // mark dirty. Auto-saved badge stays.
+        //
+        // v2.36.0-r3 UX-1 fix (EOStārāTheia 2026-05-23): trigger an
+        // update check immediately after the channel flip. Pre-r3 the
+        // user had to RELAUNCH the app (or wait for the next periodic
+        // check) before the newly-eligible prerelease showed up in the
+        // banner — confusing because the toggle felt like a no-op. Now
+        // the banner reflects the new channel within seconds.
+        _ = RunUpdateCheckAsync(manual: true);
     }
 
     private void OnSettingsCheckUpdatesClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

@@ -417,7 +417,12 @@ public static class Strings
         ? "Доступно обновление v{0} ({1:F1} МБ)"
         : "Update available: v{0} ({1:F1} MB)";
     public static string UpdateButton => Ru ? "Обновить" : "Update";
-    public static string UpdateDownloading => Ru ? "Загрузка обновления..." : "Downloading update...";
+    // v2.36.0-r3 (EOStārāTheia 2026-05-23 UX-3 fix): added {0} placeholder
+    // for download percentage. Pre-r3 the string was constant — the
+    // string.Format(UpdateDownloading, pct) call silently dropped the pct
+    // argument because no placeholder existed. User saw "Загрузка
+    // обновления..." indefinitely with no way to tell if hung or progressing.
+    public static string UpdateDownloading => Ru ? "Загрузка обновления: {0}%" : "Downloading update: {0}%";
     public static string UpdateApplying => Ru ? "Применение обновления..." : "Applying update...";
     public static string UpdateRestarting => Ru ? "Перезапуск..." : "Restarting...";
     public static string UpdateFailed => Ru ? "Ошибка обновления: {0}" : "Update failed: {0}";
