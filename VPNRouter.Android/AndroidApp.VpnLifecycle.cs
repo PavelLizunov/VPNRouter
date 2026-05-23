@@ -570,14 +570,25 @@ public partial class AndroidApp
         _lastHealthProbeAt = DateTime.UtcNow;
         try
         {
+            // F1 fix (EOStārāTheia 2026-05-23 — v2.36 hotfix): read from
+            // FilesDir (private sandbox), NOT GetExternalFilesDir.
+            // Bug-AND-011 / Critical-1 (2026-05-16) moved sing-box's
+            // log.output to the app's private sandbox (FilesDir) for
+            // security — VLESS UUIDs / Reality handshake metadata
+            // shouldn't leak to world-readable storage. But this health
+            // probe wasn't updated to match, so it kept reading from
+            // /sdcard/Android/data/.../singbox.log which never exists
+            // post-AND-011. Result: every Android user saw the
+            // "Проверка не отвечает" warning permanently regardless of
+            // tunnel health. See plans/android-disconnect-investigation-v2.36.md.
             var ctx = global::Android.App.Application.Context;
-            var extDir = ctx.GetExternalFilesDir(null);
-            if (extDir is null)
+            var filesDir = ctx.FilesDir;
+            if (filesDir is null)
             {
                 _lastHealthOk = false;
                 return;
             }
-            var logPath = System.IO.Path.Combine(extDir.AbsolutePath, "singbox.log");
+            var logPath = System.IO.Path.Combine(filesDir.AbsolutePath, "singbox.log");
             if (!System.IO.File.Exists(logPath))
             {
                 _lastHealthOk = false;

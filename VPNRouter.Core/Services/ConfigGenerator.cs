@@ -1067,7 +1067,18 @@ public static class ConfigGenerator
             Transport  = transportType.Equals("tcp", StringComparison.OrdinalIgnoreCase)
                 ? null
                 : BuildTransportConfig(transportType, transport),
-            DomainResolver = "local-dns"
+            DomainResolver = "local-dns",
+            // v2.36 F4 fix (EOStārāTheia 2026-05-23 — Android ~5 min
+            // auto-disconnect). sing-box 1.13's default tcp_keep_alive
+            // initial period is 5m, which doesn't beat ISP/NAT idle
+            // timeouts on mobile (typically 30-180s). Forces the
+            // connection to drop silently right at the 5-min mark.
+            // Setting both fields to 30s makes OS-level keepalive
+            // probes fire BEFORE NAT mappings expire. Cross-platform
+            // (also helps desktop on flaky home routers / corporate
+            // NATs). See plans/android-disconnect-investigation-v2.36.md.
+            TcpKeepAlive         = "30s",
+            TcpKeepAliveInterval = "30s",
         };
     }
 

@@ -237,6 +237,36 @@ public class SingBoxOutbound
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DomainResolver { get; set; }
 
+    // ── TCP dial keepalive (v2.36 F4 fix — EOStārāTheia 2026-05-23) ──
+    // sing-box 1.13 changed the default tcp_keep_alive INITIAL period
+    // from 10m → 5m, meaning OS-level keepalive probes don't start until
+    // the connection has been idle for 5 minutes. On mobile with NAT /
+    // ISP middlebox idle timeouts (typically 30-180s) this guarantees
+    // the connection drops silently before keepalive ever kicks in.
+    // EOStārāTheia's report ("~5 min auto-disconnect") matches the
+    // sing-box default exactly. Setting tcp_keep_alive=30s forces the
+    // first keepalive probe much earlier so NAT mappings stay alive.
+    // tcp_keep_alive_interval=30s keeps subsequent probes frequent.
+    // See plans/android-disconnect-investigation-v2.36.md.
+
+    /// <summary>
+    /// TCP keep-alive INITIAL period — duration string ("30s", "2m").
+    /// sing-box 1.13 default = 5m which is too long for mobile NAT
+    /// timeouts. Set short on outbounds that should survive idle phone.
+    /// </summary>
+    [JsonPropertyName("tcp_keep_alive")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TcpKeepAlive { get; set; }
+
+    /// <summary>
+    /// TCP keep-alive probe INTERVAL — duration string ("30s", "75s").
+    /// sing-box 1.13 default = 75s. Set shorter for aggressive mobile
+    /// keepalive ("30s" recommended).
+    /// </summary>
+    [JsonPropertyName("tcp_keep_alive_interval")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TcpKeepAliveInterval { get; set; }
+
     // ── URLTest outbound fields (for multi-server failover) ────────────────
 
     /// <summary>Tags of child outbounds (e.g. ["vless-0", "vless-1"]). Used when type=urltest.</summary>
