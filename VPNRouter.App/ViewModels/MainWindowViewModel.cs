@@ -1120,6 +1120,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private List<VPNRouter.Core.Services.ZapretStrategy> _parsedStrategies = new();
     [ObservableProperty] private bool _receivePrereleases = false;
 
+    // v2.36.0-r8 (cross-platform field) — suppress flag for Bug-r9-G AV toast
+    // during ZapretAutoStrategy probe loop. Declared at top-level (NOT inside
+    // #if PLATFORM_WINDOWS) because OnZapretImmediateExit is also cross-
+    // platform — Mac/Linux compile would fail otherwise (caught by r8 CI run
+    // 26371608493).
+    private bool _suppressZapretAvToast = false;
+
     // v2.36.0-r8 — ZapretOneTap design state. Three-axis state drives the
     // hero card title/lede/chip visibility on DpiBypassPage:
     //   _isZapretProbing  — true while ZapretAutoStrategy.ProbeAsync loops
@@ -4605,9 +4612,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // v2.36.0-r8 — suppress flag for Bug-r9-G AV toast. OnZapretImmediateExit
-    // checks this before raising the toast. Set true around ProbeAndStartZapretAsync.
-    private bool _suppressZapretAvToast = false;
 #endif
 
     // ── Zapret tools (diagnostics, Discord cache, hosts, service menu) ──
