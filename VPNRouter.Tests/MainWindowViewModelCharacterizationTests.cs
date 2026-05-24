@@ -56,8 +56,18 @@ public class MainWindowViewModelCharacterizationTests
     /// public partial method `OnIsDnsLeakLockdownEnabledChanged(bool)`
     /// + property getter/setter). New surface, intentional drift.
     /// </summary>
+    /// <summary>
+    /// v2.36 (2026-05-24) — MVP one-button TgProxy UX surface added:
+    /// new ObservableProperties (<c>IsTelegramSchemeWarningVisible</c>,
+    /// <c>TgProxyDownloadStep</c>), new getter
+    /// (<c>HasTgProxyDownloadStep</c>), three new label getters
+    /// (<c>L_TgProxySchemeMissingWarning</c>, <c>L_TgProxyDismiss</c>,
+    /// <c>L_TgProxyCopyLink</c>), one new RelayCommand
+    /// (<c>DismissTelegramSchemeWarning</c>), one new partial method
+    /// (<c>OnTgProxyDownloadStepChanged</c>). Intentional drift.
+    /// </summary>
     private const string PinnedHashWindows =
-        "36585b1ab04a883947dbd77028865cb061c96ca40dbe2612f3cd3ba3b7a6ee5d";
+        "498a9748060e8e4a9a31fc0906175d52fd3b013b09dc297b843a0834a8d5b687";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
@@ -88,6 +98,15 @@ public class MainWindowViewModelCharacterizationTests
     /// post-Wave-39 value captured from CI run 26150686106. Going forward,
     /// every release that touches MVM surface MUST update both pins, and
     /// CI status must be checked after every ship (not just locally).</para>
+    ///
+    /// <para><b>v2.36 (2026-05-24):</b> MVP one-button TgProxy UX surface
+    /// added (see PinnedHashWindows summary). Linux hash will need to be
+    /// re-pinned from the next ubuntu-latest CI run's "Actual:" line.
+    /// Pre-existing pattern documented in r13 note above — Linux pin
+    /// drifts on every Windows-untracked MVM addition. The added members
+    /// are NOT inside #if PLATFORM_WINDOWS blocks (they're cross-platform
+    /// observable properties + getters), so the Linux surface drifts
+    /// in lock-step with Windows.</para>
     /// </summary>
     private const string PinnedHashLinux =
         "1d24dea2e2d97c83fc3b7a86335606288478184c7ebcfcb34958ef2d467acb18";

@@ -337,6 +337,14 @@ public static class Strings
     public static string TgProxyCopySecretA11y => global::VPNRouter.Core.Localization.Strings.TgProxyCopySecretA11y;
     public static string TgProxyRegenerateSecretA11y => global::VPNRouter.Core.Localization.Strings.TgProxyRegenerateSecretA11y;
 
+    // v2.36 (MVP one-button) — delegate getters for new strings.
+    public static string TgProxyPortBusy => global::VPNRouter.Core.Localization.Strings.TgProxyPortBusy;
+    public static string TgProxyPortBusyWithOwner => global::VPNRouter.Core.Localization.Strings.TgProxyPortBusyWithOwner;
+    public static string TgProxySchemeMissingWarning => global::VPNRouter.Core.Localization.Strings.TgProxySchemeMissingWarning;
+    public static string TgProxyDownloadStep1Python => global::VPNRouter.Core.Localization.Strings.TgProxyDownloadStep1Python;
+    public static string TgProxyDownloadStep2Wheels => global::VPNRouter.Core.Localization.Strings.TgProxyDownloadStep2Wheels;
+    public static string TgProxyDownloadStep3Source => global::VPNRouter.Core.Localization.Strings.TgProxyDownloadStep3Source;
+
     public static string OpenFolder => global::VPNRouter.Core.Localization.Strings.OpenFolder;
     public static string OpenGitHub => global::VPNRouter.Core.Localization.Strings.OpenGitHub;
 

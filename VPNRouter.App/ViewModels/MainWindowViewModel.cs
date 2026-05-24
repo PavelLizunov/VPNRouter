@@ -1214,6 +1214,41 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool HasTgProxyToast => !string.IsNullOrEmpty(TgProxyToast);
 
     /// <summary>
+    /// v2.36 (MVP one-button): non-blocking warning banner state.
+    /// True when the <c>tg://</c> URI scheme has no registered
+    /// handler at startup-time pre-flight, meaning Telegram Desktop
+    /// is missing or not associated with the scheme. The proxy still
+    /// starts (user might pair via QR code on another device or
+    /// copy the link manually), but the banner offers a fallback
+    /// (Copy link + download Telegram hint).
+    ///
+    /// <para>Pre-fix the check fired only inside the final deep-link
+    /// open path (<see cref="OpenTgProxyInTelegram"/>), so a fresh
+    /// user clicking the footer button got the OS-error dialog
+    /// "We can't open this 'tg' link" instead of a contextual
+    /// banner pointing at the cause + fallback.</para>
+    /// </summary>
+    [ObservableProperty]
+    private bool _isTelegramSchemeWarningVisible;
+
+    /// <summary>
+    /// v2.36 (MVP one-button): per-step status text shown during a
+    /// running download. Drives the existing
+    /// <see cref="TgProxyStatus"/> field today; isolated property
+    /// so a future UI iteration can split the persistent runtime
+    /// status from the transient download progress.
+    /// </summary>
+    [ObservableProperty]
+    private string _tgProxyDownloadStep = string.Empty;
+
+    public bool HasTgProxyDownloadStep => !string.IsNullOrEmpty(TgProxyDownloadStep);
+
+    partial void OnTgProxyDownloadStepChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasTgProxyDownloadStep));
+    }
+
+    /// <summary>
     /// v2.31.6-r1 (TelegramPage UX simplification): true when the
     /// user has already set up the Telegram proxy at least once —
     /// binary is downloaded AND a secret has been generated. Drives
@@ -2395,6 +2430,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string LblUpdateTgProxy => IsRussian
         ? (TgProxyUpdater.IsInstalled() ? "Обновить TgProxy" : "Скачать TgProxy")
         : (TgProxyUpdater.IsInstalled() ? "Update TgProxy" : "Download TgProxy");
+
+    // v2.36 (MVP one-button task C): non-blocking scheme-missing
+    // banner. Bound from TelegramPage.axaml; visibility controlled
+    // by IsTelegramSchemeWarningVisible.
+    public string L_TgProxySchemeMissingWarning => Strings.TgProxySchemeMissingWarning;
+    public string L_TgProxyDismiss => IsRussian ? "Скрыть" : "Dismiss";
+    public string L_TgProxyCopyLink => IsRussian ? "Копировать ссылку" : "Copy link";
 
 
         // Phase 2B (Wave 8, 2026-05-18) - Troubleshooting / About / Reset / Logs
@@ -4405,6 +4447,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (IsTgProxyDownloading) return;
         IsTgProxyDownloading = true;
         TgProxyStatus = IsRussian ? "Загрузка tg-ws-proxy..." : "Downloading tg-ws-proxy...";
+        TgProxyDownloadStep = string.Empty;
 
         try
         {
@@ -4418,7 +4461,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             var updater = new TgProxyUpdater(_logger);
             updater.StatusChanged += s =>
-                Dispatcher.UIThread.Post(() => TgProxyStatus = s);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    // v2.36 (MVP one-button task A): per-step messages
+                    // from TgProxyUpdater carry "Step N/3:" prefix.
+                    // Mirror them into both the persistent status banner
+                    // (for backward-compatible logs / older bindings)
+                    // and the new TgProxyDownloadStep property that the
+                    // page banner can render distinctly. Non-step
+                    // messages (e.g. final "Installed v1.6.5") clear
+                    // the step badge naturally.
+                    TgProxyStatus = s;
+                    TgProxyDownloadStep = s.StartsWith("Step ") ? s : string.Empty;
+                });
 
             await updater.DownloadAsync(CancellationToken.None);
 
@@ -4435,6 +4490,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         finally
         {
             IsTgProxyDownloading = false;
+            TgProxyDownloadStep = string.Empty;
         }
 #endif
     }
@@ -4503,6 +4559,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 Dispatcher.UIThread.Post(() => TgProxyStats = ParseStatsShort(stats));
             _tgProxy.Start(TgProxyPort, TgProxySecret);
 
+            // v2.36 (MVP one-button task C): pre-flight scheme check
+            // after spawn succeeded but BEFORE the user is told to
+            // open Telegram. Banner is non-blocking — proxy keeps
+            // running. The check is cheap (registry probe) and
+            // returns true on non-Windows + on any registry error
+            // (defensive — don't show false-positive banner).
+            IsTelegramSchemeWarningVisible = !TgProxyManager.IsTelegramSchemeRegistered();
+
             // Verify it actually started
             await Task.Delay(2000);
             if (_tgProxy.IsRunning || TgProxyManager.IsAnyRunning(TgProxyPort))
@@ -4521,6 +4585,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     : "Error: tg-ws-proxy exited immediately.";
             }
             SaveSettings();
+        }
+        catch (TgProxyPortConflictException portEx)
+        {
+            // v2.36 (MVP one-button task B): typed port-conflict
+            // exception thrown by TgProxyManager.Start before the
+            // python spawn. Surface the cause + owner hint so the
+            // user knows whether to close another app or change
+            // the port in settings.
+            _logger.Warning(portEx,
+                "[VM] TgProxy start blocked: port {Port} busy (owner hint: {Owner})",
+                portEx.Port, portEx.OwnerProcessHint ?? "<unknown>");
+            TgProxyEnabled = false;
+            TgProxyStatus = portEx.OwnerProcessHint is null
+                ? string.Format(Strings.TgProxyPortBusy, portEx.Port)
+                : string.Format(Strings.TgProxyPortBusyWithOwner, portEx.Port, portEx.OwnerProcessHint);
+            ShowTgProxyToast(TgProxyStatus);
         }
         catch (Exception ex)
         {
@@ -4651,6 +4731,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #else
         await Task.CompletedTask;
 #endif
+    }
+
+    /// <summary>
+    /// v2.36 (MVP one-button task C): dismiss the non-blocking scheme-
+    /// missing warning banner. Banner re-shows next start if the
+    /// scheme is still unregistered (user re-installed Telegram, etc.).
+    /// </summary>
+    [RelayCommand]
+    private void DismissTelegramSchemeWarning()
+    {
+        IsTelegramSchemeWarningVisible = false;
     }
 
     [RelayCommand]

@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Linq;
 using System.Collections.Generic;
 using System.Text;
@@ -65,6 +67,23 @@ public class TgProxyManager : IDisposable
 
         if (!Directory.Exists(TgProxyUpdater.ProxySourceDir))
             throw new FileNotFoundException("Proxy source not found. Download tg-ws-proxy first.");
+
+        // v2.36 (MVP one-button): pre-flight port availability probe.
+        // Pre-fix the spawn would proceed when 1443 was taken by another
+        // process, Python would exit silently inside the 2s watchdog
+        // window with a generic "Process exited" warning, and the user
+        // got no port-conflict breadcrumb. The TcpListener bind probe
+        // is ~5ms cost, deterministic, and lets us throw a typed
+        // exception that the App layer catches to render a port-aware
+        // toast. Owner-hint probe (netstat) is best-effort.
+        if (!IsPortAvailable(port))
+        {
+            var ownerHint = TryResolvePortOwner(port);
+            _logger.Warning(
+                "[TgProxy] Port {Port} pre-flight probe: BUSY (owner hint: {Owner})",
+                port, ownerHint ?? "<unknown>");
+            throw new TgProxyPortConflictException(port, ownerHint);
+        }
 
         var args = $"-m proxy.tg_ws_proxy --port {port} --host 127.0.0.1 --secret {secret}";
         if (verbose) args += " --verbose";
@@ -248,6 +267,107 @@ public class TgProxyManager : IDisposable
             LastStats = line;
             StatsUpdated?.Invoke(line);
         }
+    }
+
+    /// <summary>
+    /// v2.36 (MVP one-button): TCP port availability probe.
+    ///
+    /// <para>Returns true if the loopback address can bind on
+    /// <paramref name="port"/>, false if another process holds the
+    /// port (or the bind fails for any reason — defensive false so
+    /// the spawn-side error path takes over).</para>
+    ///
+    /// <para>Cost: ~5ms on Windows / Linux / macOS, no network
+    /// dependency, no admin required. Listener is disposed
+    /// immediately so the actual production spawn can claim the
+    /// port without TIME_WAIT lingering.</para>
+    ///
+    /// <para>Used by <see cref="Start"/> before invoking the spawn
+    /// runner, throwing <see cref="TgProxyPortConflictException"/>
+    /// on conflict.</para>
+    /// </summary>
+    public static bool IsPortAvailable(int port)
+    {
+        if (port <= 0 || port > 65535) return false;
+
+        TcpListener? listener = null;
+        try
+        {
+            // Bind on loopback specifically — TgProxy listens on
+            // 127.0.0.1 only (TgProxyManager.Start arg --host 127.0.0.1),
+            // so the right test is loopback bind, not all-interfaces.
+            listener = new TcpListener(IPAddress.Loopback, port);
+            listener.Start();
+            return true;
+        }
+        catch (SocketException)
+        {
+            // SocketError.AddressAlreadyInUse is the canonical "port
+            // is taken" path. We don't distinguish — any SocketException
+            // during the bind probe is treated as "not available".
+            return false;
+        }
+        catch
+        {
+            // Defensive: any other exception (permission denied,
+            // weird firewall) → treat as unavailable. The user gets a
+            // port-conflict toast instead of a generic crash.
+            return false;
+        }
+        finally
+        {
+            try { listener?.Stop(); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// v2.36 (MVP one-button): best-effort owner-process hint for the
+    /// port-conflict exception's <see cref="TgProxyPortConflictException.OwnerProcessHint"/>.
+    /// Windows-only (netstat); silently returns null on Mac/Linux or
+    /// any failure. Used solely to enrich the typed exception's
+    /// human-readable message — never on the hot path.
+    /// </summary>
+    internal static string? TryResolvePortOwner(int port)
+    {
+        if (!OperatingSystem.IsWindows()) return null;
+        if (port <= 0) return null;
+
+        try
+        {
+            var psi = new ProcessStartInfo("netstat", "-ano")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true
+            };
+            using var proc = Process.Start(psi);
+            if (proc == null) return null;
+            var stdout = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit(2000);
+
+            foreach (var line in stdout.Split('\n'))
+            {
+                if (!line.Contains("LISTENING")) continue;
+                if (!line.Contains($":{port} ")) continue;
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 5) continue;
+                if (!int.TryParse(parts[^1], out var pid)) continue;
+                try
+                {
+                    using var p = Process.GetProcessById(pid);
+                    return $"{p.ProcessName} (PID {pid})";
+                }
+                catch
+                {
+                    return $"PID {pid}";
+                }
+            }
+        }
+        catch
+        {
+            // Best-effort — caller treats null as "couldn't identify".
+        }
+        return null;
     }
 
     /// <summary>

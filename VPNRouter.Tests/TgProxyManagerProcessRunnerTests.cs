@@ -81,6 +81,23 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// v2.36 (MVP one-button task B): Start() now does an IsPortAvailable
+    /// probe before invoking the runner. Tests that pass literal ports
+    /// (1443 / 4444) would race with whatever else is bound on the dev
+    /// box. Pick an ephemeral port via TcpListener(0) so the probe
+    /// reliably reports available. The fake runner doesn't care about
+    /// the port value — it's just an argv element.
+    /// </summary>
+    private static int PickFreePort()
+    {
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
+
     public void Dispose()
     {
         // Best-effort cleanup. Leave the directories alone (they may exist
@@ -138,10 +155,15 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
             // the test thread for the full budget — the fake handle stays
             // alive (never SignalExit'd) so the probe will hit the
             // OperationCanceledException branch after 2s. Run it async.
+            //
+            // v2.36 (MVP one-button task B): pick an ephemeral free port so
+            // the new IsPortAvailable pre-check inside Start() reliably
+            // returns true on dev boxes where literal 4444 might be bound.
             var testCt = TestContext.Current.CancellationToken;
             using var startCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var freePort = PickFreePort();
             var startTask = Task.Run(() =>
-                sut.Start(port: 4444, secret: "deadbeef0123456789abcdef01234567"), testCt);
+                sut.Start(port: freePort, secret: "deadbeef0123456789abcdef01234567"), testCt);
 
             // Wait until the runner has been invoked. Defensive deadline
             // — the FakeProcessRunner.Start path is synchronous so this
@@ -162,7 +184,7 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
             Assert.Equal(new[]
             {
                 "-m", "proxy.tg_ws_proxy",
-                "--port", "4444",
+                "--port", freePort.ToString(),
                 "--host", "127.0.0.1",
                 "--secret", "deadbeef0123456789abcdef01234567",
             }, call.Arguments.ToArray());
@@ -206,7 +228,7 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         {
             var testCt = TestContext.Current.CancellationToken;
             var startTask = Task.Run(() =>
-                sut.Start(port: 1443, secret: "abc123def456", verbose: true), testCt);
+                sut.Start(port: PickFreePort(), secret: "abc123def456", verbose: true), testCt);
 
             using var spin = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             while (fake.StartCalls.Count == 0 && !spin.IsCancellationRequested) Thread.Sleep(10);
@@ -246,7 +268,7 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
             // calling thread (sync .GetAwaiter().GetResult()), which is
             // intentional. We want the start to return WITHOUT throwing.
             var testCt = TestContext.Current.CancellationToken;
-            var startTask = Task.Run(() => sut.Start(1443, "secretX"), testCt);
+            var startTask = Task.Run(() => sut.Start(PickFreePort(), "secretX"), testCt);
 
             // Wait up to 5s for Start to return naturally — should complete
             // after the 2s probe budget elapses.
@@ -287,7 +309,7 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         try
         {
             var testCt = TestContext.Current.CancellationToken;
-            var startTask = Task.Run(() => sut.Start(1443, "secretY"), testCt);
+            var startTask = Task.Run(() => sut.Start(PickFreePort(), "secretY"), testCt);
 
             using var spin = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             while (fake.StartCalls.Count == 0 && !spin.IsCancellationRequested) Thread.Sleep(10);
@@ -337,7 +359,7 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         try
         {
             var testCt = TestContext.Current.CancellationToken;
-            var startTask = Task.Run(() => sut.Start(1443, "secretZ"), testCt);
+            var startTask = Task.Run(() => sut.Start(PickFreePort(), "secretZ"), testCt);
             startTask.Wait(TimeSpan.FromSeconds(5), testCt);
 
             Assert.True(sut.IsRunning);
@@ -372,7 +394,7 @@ public sealed class TgProxyManagerProcessRunnerTests : IDisposable
         try
         {
             var testCt = TestContext.Current.CancellationToken;
-            var startTask = Task.Run(() => sut.Start(1443, "secretQ"), testCt);
+            var startTask = Task.Run(() => sut.Start(PickFreePort(), "secretQ"), testCt);
             startTask.Wait(TimeSpan.FromSeconds(5), testCt);
 
             sut.Stop();

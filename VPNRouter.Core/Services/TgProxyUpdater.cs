@@ -143,7 +143,13 @@ public class TgProxyUpdater
     /// <summary>Download and extract Python embeddable distribution.</summary>
     private async Task DownloadPythonAsync(CancellationToken ct)
     {
-        StatusChanged?.Invoke($"Downloading Python {PythonVersion}...");
+        // v2.36 (MVP one-button): per-step progress feedback. Pre-fix
+        // the toast read "Downloading tg-ws-proxy..." for 30–90s with
+        // no signal of which sub-step was running (Python embeddable
+        // ~11 MB, wheels ~10 MB, source zipball ~4 MB). The "Step N/3:"
+        // prefix lets the user track progress; format is stable so
+        // tests + UI can parse it consistently.
+        StatusChanged?.Invoke($"Step 1/3: Downloading Python {PythonVersion} (~11 MB)...");
         _logger.Information("[TgProxy] Downloading Python embeddable: {Url}", PythonZipUrl);
 
         var tempZip = Path.GetTempFileName() + ".zip";
@@ -168,7 +174,7 @@ public class TgProxyUpdater
                 await response.Body.CopyToAsync(file, ct).ConfigureAwait(false);
             }
 
-            StatusChanged?.Invoke("Extracting Python...");
+            StatusChanged?.Invoke("Step 1/3: Extracting Python...");
             if (Directory.Exists(PythonDir))
                 Directory.Delete(PythonDir, recursive: true);
 
@@ -228,7 +234,11 @@ public class TgProxyUpdater
 
         foreach (var (pkgName, wheelPattern) in packages)
         {
-            StatusChanged?.Invoke($"Installing {pkgName}...");
+            // v2.36 (MVP one-button): unified "Step 2/3:" prefix for
+            // the wheels group — three sub-packages (pycparser/cffi/
+            // cryptography) collapse into one user-visible step so
+            // progress is tractable.
+            StatusChanged?.Invoke($"Step 2/3: Installing {pkgName}...");
             _logger.Information("[TgProxy] Downloading {Package}...", pkgName);
 
             var pypiUrl = $"https://pypi.org/pypi/{pkgName}/json";
@@ -309,7 +319,9 @@ public class TgProxyUpdater
     /// <summary>Download proxy source from GitHub (latest release tag).</summary>
     private async Task DownloadProxySourceAsync(CancellationToken ct)
     {
-        StatusChanged?.Invoke("Fetching proxy source...");
+        // v2.36 (MVP one-button): final "Step 3/3:" group covers the
+        // GitHub release fetch + zipball download + extract.
+        StatusChanged?.Invoke("Step 3/3: Fetching proxy source from GitHub...");
 
         // Get latest release tag
         var url = $"{GitHubApiBase}/{ProxyRepo}/releases/latest";
@@ -323,7 +335,7 @@ public class TgProxyUpdater
         var tagName = doc.RootElement.GetProperty("tag_name").GetString() ?? "unknown";
 
         _logger.Information("[TgProxy] Latest release: {Tag}", tagName);
-        StatusChanged?.Invoke($"Downloading {tagName}...");
+        StatusChanged?.Invoke($"Step 3/3: Downloading proxy source {tagName}...");
 
         // Download source zipball
         var zipballUrl = doc.RootElement.GetProperty("zipball_url").GetString()
@@ -349,7 +361,7 @@ public class TgProxyUpdater
                 await response.Body.CopyToAsync(file, ct).ConfigureAwait(false);
             }
 
-            StatusChanged?.Invoke("Extracting proxy source...");
+            StatusChanged?.Invoke("Step 3/3: Extracting proxy source...");
 
             // Extract to temp dir
             var tempDir = Path.Combine(Path.GetTempPath(), $"tgproxy-{Guid.NewGuid():N}");

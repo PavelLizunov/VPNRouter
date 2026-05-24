@@ -206,6 +206,52 @@
                                  CornerRadius="{StaticResource RadiusXs}"
                                  Foreground="{DynamicResource AccentSolidBrush}"/>
 
+                    <!-- v2.36 (MVP one-button task A) — per-step download
+                         label. Visible while a download is in flight.
+                         TgProxyDownloadStep carries "Step N/3:" prefix
+                         from TgProxyUpdater.StatusChanged so user sees
+                         which substep (Python / wheels / source) is
+                         running. Hidden when download isn't active or
+                         when the prefix-stripped text would be empty. -->
+                    <TextBlock IsVisible="{Binding HasTgProxyDownloadStep}"
+                               Text="{Binding TgProxyDownloadStep}"
+                               TextWrapping="Wrap"
+                               FontSize="10"
+                               Opacity="0.7"
+                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+                    <!-- v2.36 (MVP one-button task C) — non-blocking
+                         scheme-missing warning. Pops only when the
+                         tg:// URI scheme has no registered handler at
+                         start-time pre-flight. Proxy keeps running;
+                         banner offers Copy link + Dismiss fallbacks. -->
+                    <Border IsVisible="{Binding IsTelegramSchemeWarningVisible}"
+                            Padding="10,8"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Background="{DynamicResource WarningBgBrush}"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource WarningBorderBrush}">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="{Binding L_TgProxySchemeMissingWarning}"
+                                       TextWrapping="Wrap"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource WarningFgBrush}"/>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Content="{Binding L_TgProxyCopyLink}"
+                                        Command="{Binding CopyTgProxyLinkCommand}"
+                                        FontSize="10" Padding="8,4"
+                                        CornerRadius="{StaticResource RadiusSm}"/>
+                                <Button Content="{Binding L_TgProxyDismiss}"
+                                        Command="{Binding DismissTelegramSchemeWarningCommand}"
+                                        FontSize="10" Padding="8,4"
+                                        Background="Transparent"
+                                        BorderBrush="{DynamicResource WarningBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusSm}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
                     <!-- 4. 3-button row — v2.31.6-r5 (TG-2) demotion.
                          Pre-r5 the body had a primary-blue «Open in Telegram»
                          button that fired SetupTgProxyCommand (download +

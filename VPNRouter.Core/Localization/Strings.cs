@@ -507,6 +507,39 @@ public static class Strings
         ? "Сгенерировать новый MTProto secret"
         : "Generate new MTProto secret";
 
+    // v2.36 (MVP one-button task B): typed port-conflict toast text.
+    // Format args: {0} = port number, {1} = owner process hint
+    // (only on the *WithOwner variant). Format strings stay stable so
+    // unit tests can pin them via Assert.Contains.
+    public static string TgProxyPortBusy => Ru
+        ? "Порт {0} занят другим приложением. Закройте его или поменяйте порт в настройках."
+        : "Port {0} is busy. Close the other app or change the port in settings.";
+    public static string TgProxyPortBusyWithOwner => Ru
+        ? "Порт {0} занят: {1}. Закройте его или поменяйте порт в настройках."
+        : "Port {0} is busy (owner: {1}). Close the other app or change the port in settings.";
+
+    // v2.36 (MVP one-button task C): non-blocking warning banner shown
+    // when the tg:// URI scheme has no registered handler (Telegram
+    // Desktop not installed / no scheme association). Proxy keeps
+    // running — banner offers Copy link + Dismiss fallbacks.
+    public static string TgProxySchemeMissingWarning => Ru
+        ? "Telegram Desktop не найден. Прокси работает, но открыть его автоматически нельзя — скопируйте ссылку и добавьте вручную в Telegram (на этом или другом устройстве)."
+        : "Telegram Desktop not found. The proxy is running, but auto-open isn't available — copy the link below and add it manually in Telegram (here or on another device).";
+
+    // v2.36 (MVP one-button task A): per-step download progress text.
+    // Used by TgProxyUpdater.StatusChanged event consumers (the
+    // ViewModel mirrors them into the banner). Stable "Step N/3:"
+    // prefix lets tests pin the format.
+    public static string TgProxyDownloadStep1Python => Ru
+        ? "Шаг 1/3: Загрузка Python 3.12 (~11 МБ)..."
+        : "Step 1/3: Downloading Python 3.12 (~11 MB)...";
+    public static string TgProxyDownloadStep2Wheels => Ru
+        ? "Шаг 2/3: Установка зависимостей (cryptography, cffi, pycparser)..."
+        : "Step 2/3: Installing dependencies (cryptography, cffi, pycparser)...";
+    public static string TgProxyDownloadStep3Source => Ru
+        ? "Шаг 3/3: Загрузка proxy source с GitHub..."
+        : "Step 3/3: Downloading proxy source from GitHub...";
+
     public static string OpenFolder => Ru ? "Открыть папку" : "Open folder";
     public static string OpenGitHub => "GitHub";
 
