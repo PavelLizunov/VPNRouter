@@ -333,9 +333,13 @@ public class TgProxyManager : IDisposable
 
         try
         {
-            // Phase 3+: IProcessHandle.Kill is idempotent + entireProcessTree
-            // by default; Dispose mirrors SingBoxManager.Stop's "disable
-            // Exited callback before kill" invariant (ProcessRunner.cs:288-290).
+            // v2.36.0-r5 (audit followup to brat r4 fix): suppress Exited
+            // event BEFORE Kill so the OS notification doesn't fire as a
+            // false "[TgProxy] Process exited (exit code: -1)" log entry
+            // on intentional Stop. Same Phase 3+ refactor regression that
+            // affected SingBoxManager (fixed in r4) — TgProxy wires
+            // startedHandle.Exited just like SingBoxManager. Sibling bug.
+            handle.SuppressExitedEvent();
             handle.Kill(entireProcessTree: true);
 
             // Symmetric replacement for the legacy `_process.WaitForExit(3000)`

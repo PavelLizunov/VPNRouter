@@ -319,11 +319,16 @@ public class ZapretManager : IDisposable
 
         try
         {
-            // Phase 3+: IProcessHandle.Kill is idempotent + entireProcessTree
-            // by default. Killing cmd.exe with entireProcessTree=true takes
-            // down the child winws.exe transitively, matching the legacy
-            // `_process.Kill(entireProcessTree:true)` semantics on the
-            // ShellExecute-spawned wrapper.
+            // v2.36.0-r5 (audit followup to brat r4 fix): suppress Exited
+            // event BEFORE Kill so the OS notification doesn't fire
+            // ImmediateExitDetected (Bug-r9-G — surfaces AV-whitelist
+            // toast to user). Stop within 2s of Start would trip the
+            // detector, showing a FALSE "AV blocked Zapret" warning even
+            // though user just clicked Stop themselves. Same Phase 3+
+            // refactor regression that affected SingBoxManager (fixed
+            // in r4) + TgProxyManager (also r5). User-visible severity:
+            // Zapret = HIGH (false alarm), TgProxy = LOW (log noise).
+            handle.SuppressExitedEvent();
             handle.Kill(entireProcessTree: true);
 
             // Symmetric replacement for the legacy `_process.WaitForExit(3000)`

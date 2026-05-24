@@ -36,6 +36,46 @@ public static class CrashReporter
             WriteReport(e.Exception, fatal: false);
             e.SetObserved();  // otherwise the process may terminate
         };
+
+        // v2.36.0-r5 (brat 2026-05-24 silent-death diagnostic): write a
+        // shutdown marker on every process exit — graceful OR ungraceful.
+        //
+        // Brat reported a silent death where BOTH app + sing-box stopped
+        // logging at 12:18:18, no "Stopping" / "crashed" / exception entries
+        // anywhere. App stayed alive in process list but VPN appeared
+        // stopped + logger was silent. Hard to diagnose without
+        // distinguishing "logger stopped writing but process still alive"
+        // vs "process exited via some unlogged path".
+        //
+        // This marker resolves the ambiguity: if a shutdown-<stamp>.txt
+        // appears in crashes/ after a silent-death incident, the process
+        // DID exit (just without normal Stop logging). If no marker,
+        // logger died but process kept running (different bug class).
+        //
+        // ProcessExit handlers in .NET Core have NO 2-second time limit
+        // (unlike Framework), so we can safely do FileIO here. Catch-all
+        // defensive try/catch — marker writing must never throw and
+        // delay shutdown.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            try
+            {
+                var crashesDir = Path.Combine(AppPaths.DataDir, "crashes");
+                Directory.CreateDirectory(crashesDir);
+                var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff");
+                var path = Path.Combine(crashesDir, $"shutdown-{stamp}.txt");
+                var content =
+                    $"VPNRouter shutdown marker{Environment.NewLine}" +
+                    $"Version:   {VPNRouter.Core.AppVersion.Version}{Environment.NewLine}" +
+                    $"Time:      {DateTime.UtcNow:o}{Environment.NewLine}" +
+                    $"WorkingSet: {Environment.WorkingSet / (1024 * 1024)} MB{Environment.NewLine}" +
+                    $"ExitCode:   {Environment.ExitCode}{Environment.NewLine}" +
+                    $"Note: graceful shutdown — ProcessExit ApplyDomain handler fired.{Environment.NewLine}" +
+                    $"      For ungraceful (Kill/OOM) shutdowns this file is absent.{Environment.NewLine}";
+                File.WriteAllText(path, content);
+            }
+            catch { /* never throw from ProcessExit */ }
+        };
     }
 
     /// <summary>

@@ -167,6 +167,45 @@ public sealed class SingBoxManagerSuppressExitedEventTests
         Assert.True(handle.HasExited);
     }
 
+    // v2.36.0-r5: sister-service audit found 2 more sites with the same
+    // Phase 3+ regression. These pins ensure TgProxyManager + ZapretManager
+    // also call SuppressExitedEvent before Kill.
+
+    [Fact]
+    public void Source_TgProxyManager_StopCallsSuppressExitedEventBeforeKill()
+    {
+        // v2.36.0-r5 (audit followup) — TgProxyManager.Stop wires
+        // startedHandle.Exited to log "[TgProxy] Process exited" and
+        // calls handle.Kill without suppression. Sibling of brat's
+        // SingBoxManager regression.
+
+        var src = ReadSourceFile("VPNRouter.Core", "Services", "TgProxyManager.cs");
+
+        var suppressIdx = src.IndexOf("handle.SuppressExitedEvent()", StringComparison.Ordinal);
+        var killIdx = src.IndexOf("handle.Kill(entireProcessTree: true)", suppressIdx + 1, StringComparison.Ordinal);
+
+        Assert.True(suppressIdx >= 0, "Expected `handle.SuppressExitedEvent()` in TgProxyManager.cs");
+        Assert.True(killIdx >= 0, "Expected `handle.Kill(entireProcessTree: true)` after Suppress in TgProxyManager.cs");
+    }
+
+    [Fact]
+    public void Source_ZapretManager_StopCallsSuppressExitedEventBeforeKill()
+    {
+        // v2.36.0-r5 (audit followup) — ZapretManager has HIGHER user-
+        // visible severity than TgProxy: its Exited handler calls
+        // DetectImmediateExit which fires ImmediateExitDetected when
+        // runtime<2s + exitCode!=0. False user toast "AV blocked Zapret"
+        // when user themselves clicked Stop. Suppress prevents this.
+
+        var src = ReadSourceFile("VPNRouter.Core", "Services", "ZapretManager.cs");
+
+        var suppressIdx = src.IndexOf("handle.SuppressExitedEvent()", StringComparison.Ordinal);
+        var killIdx = src.IndexOf("handle.Kill(entireProcessTree: true)", suppressIdx + 1, StringComparison.Ordinal);
+
+        Assert.True(suppressIdx >= 0, "Expected `handle.SuppressExitedEvent()` in ZapretManager.cs");
+        Assert.True(killIdx >= 0, "Expected `handle.Kill(entireProcessTree: true)` after Suppress in ZapretManager.cs");
+    }
+
     private static string ReadSourceFile(params string[] segments)
     {
         var thisAssembly = typeof(SingBoxManager).Assembly;
