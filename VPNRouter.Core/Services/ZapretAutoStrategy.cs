@@ -389,11 +389,25 @@ public static class ZapretAutoStrategy
     /// <summary>
     /// Result of one Flowseal script sweep.
     /// </summary>
+    /// <remarks>
+    /// r4 added <paramref name="Diagnostic"/> and <paramref name="ErrorLines"/>:
+    /// - Diagnostic carries a short token explaining short-circuit reasons
+    ///   ("not_admin", "not_windows", "sweep_timeout", "missing_script") so
+    ///   the ViewModel can surface a specific toast instead of generic "no
+    ///   strategy matched". Empty/null for the happy path.
+    /// - ErrorLines is a ring-buffered tail of the last 8 [ERROR]/[WARN]
+    ///   lines the Flowseal script emitted on stdout. Useful for surfacing
+    ///   "zapret service installed", "curl missing", "DPI suite fetch failed"
+    ///   conditions instead of swallowing them in debug log.
+    /// Both fields default to empty for back-compat with r3 callers.
+    /// </remarks>
     public sealed record FlowsealSweepResult(
         string? Winner,
         int TestedCount,
         int TotalCount,
-        string FullOutput);
+        string FullOutput,
+        string? Diagnostic = null,
+        IReadOnlyList<string>? ErrorLines = null);
 
     /// <summary>
     /// Run Flowseal's `utils/test zapret.ps1` with auto-answers (mode=DPI,
@@ -411,11 +425,35 @@ public static class ZapretAutoStrategy
         ILogger? logger,
         CancellationToken ct)
     {
+        // C.3 (r4): admin pre-check. Flowseal's `test zapret.ps1` exits
+        // immediately on non-admin with [ERROR] Run as Administrator. If
+        // we don't surface that, the user sees "no strategy matched" with
+        // no clue why. Returning a typed Diagnostic="not_admin" lets the
+        // ViewModel render a specific localized error toast instead.
+        //
+        // Our desktop app already requires admin for TUN setup so this is
+        // double-coverage — defensive against UAC quirks / scheduled
+        // task / service-mode restarts that could lose elevation.
+        if (!OperatingSystem.IsWindows())
+        {
+            logger?.Information("[ZapretAutoStrategy] Flowseal probe only runs on Windows");
+            return new FlowsealSweepResult(null, 0, 0, "Flowseal probe is Windows-only",
+                Diagnostic: "not_windows", ErrorLines: Array.Empty<string>());
+        }
+
+        if (!IsRunningAsAdmin())
+        {
+            logger?.Warning("[ZapretAutoStrategy] Cannot run Flowseal probe — process not elevated");
+            return new FlowsealSweepResult(null, 0, 0, "Process not elevated",
+                Diagnostic: "not_admin", ErrorLines: Array.Empty<string>());
+        }
+
         var scriptPath = Path.Combine(zapretInstallDir, "utils", "test zapret.ps1");
         if (!File.Exists(scriptPath))
         {
             logger?.Warning("[ZapretAutoStrategy] Flowseal test zapret.ps1 not found at {Path}", scriptPath);
-            return new FlowsealSweepResult(null, 0, 0, $"missing: {scriptPath}");
+            return new FlowsealSweepResult(null, 0, 0, $"missing: {scriptPath}",
+                Diagnostic: "missing_script", ErrorLines: Array.Empty<string>());
         }
 
         var psi = new System.Diagnostics.ProcessStartInfo
@@ -437,6 +475,41 @@ public static class ZapretAutoStrategy
         int testedCount = 0;
         int totalCount = 0;
 
+        // r4 Part A — live X/Y status counter state. Each config-header line
+        // ("  [N/M] strategy.bat") resets these to 0; each per-test status
+        // line ("[TargetId][HTTP|TLS1.2|TLS1.3] code=... status=OK|FAIL|...")
+        // increments TotalChecks; status=OK additionally increments OkCount.
+        // The progress event fires on every status line so the UI lede can
+        // render "Тестирую (5/20): general (ALT3) · 12/18" with sub-second
+        // updates instead of waiting for the next config header.
+        //
+        // Locked behind a sync object — Process.OutputDataReceived can fire
+        // on the threadpool. Mutations of int fields are atomic on x64 but
+        // we still need the (ok, total) pair to be coherent for the progress
+        // snapshot.
+        int currentOkCount = 0;
+        int currentTotalChecks = 0;
+        var counterLock = new object();
+
+        // r4 C.4 — error-line ring buffer. Captures the last 8 [ERROR]/
+        // [WARN]/[WARNING] lines for surface to the user via toast when
+        // sweep returns no winner. Bounded so a chatty script can't OOM.
+        var errorLines = new List<string>(capacity: 8);
+
+        // Pre-compiled regex hot path — these fire on every stdout line.
+        var configHeaderRx = new System.Text.RegularExpressions.Regex(
+            @"\[(\d+)/(\d+)\]\s+(.+?)(?:\.bat)?\s*$",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+        var statusLineRx = new System.Text.RegularExpressions.Regex(
+            @"^\s*\[[^\]]+\]\[(?:HTTP|TLS1\.[23])\]\s.*?\bstatus=(\w+)\s*$",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+        var winnerRx = new System.Text.RegularExpressions.Regex(
+            @"Best config:\s*(.+?)(?:\.bat)?\s*$",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+        var errorLineRx = new System.Text.RegularExpressions.Regex(
+            @"^\s*\[(?:ERROR|WARN|WARNING)\]",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
         // Per-line stdout handler. Script writes via Write-Host so we get
         // each Write-Host invocation as one line on stdout.
         proc.OutputDataReceived += (sender, args) =>
@@ -445,23 +518,68 @@ public static class ZapretAutoStrategy
             var line = args.Data;
             outputBuilder.AppendLine(line);
 
-            // Per-config progress: "  [12/20] general (ALT5).bat"
-            var m = System.Text.RegularExpressions.Regex.Match(
-                line, @"\[(\d+)/(\d+)\]\s+(.+?)(?:\.bat)?\s*$");
+            // Per-config progress: "  [12/20] general (ALT5).bat" — resets
+            // the running OK/total counters for the new config.
+            var m = configHeaderRx.Match(line);
             if (m.Success
                 && int.TryParse(m.Groups[1].Value, out var n)
                 && int.TryParse(m.Groups[2].Value, out var t))
             {
-                testedCount = n;
-                totalCount = t;
+                lock (counterLock)
+                {
+                    currentOkCount = 0;
+                    currentTotalChecks = 0;
+                    testedCount = n;
+                    totalCount = t;
+                }
                 var strategy = m.Groups[3].Value.Trim();
-                progress?.Report(new FlowsealProgress(n, t, strategy));
+                progress?.Report(new FlowsealProgress(n, t, strategy, 0, 0));
+                return;
+            }
+
+            // Per-test status: "[YT_LIVE@0][HTTP] code=200 size=... status=OK"
+            // Each config has multiple targets × 3 test labels — we count
+            // status=OK as pass, everything else (FAIL/UNSUPPORTED/LIKELY_BLOCKED)
+            // as a fail for the running score.
+            var s = statusLineRx.Match(line);
+            if (s.Success)
+            {
+                var status = s.Groups[1].Value;
+                int snapOk, snapTotal, snapN, snapT;
+                lock (counterLock)
+                {
+                    currentTotalChecks++;
+                    if (status.Equals("OK", StringComparison.OrdinalIgnoreCase))
+                        currentOkCount++;
+                    snapOk = currentOkCount;
+                    snapTotal = currentTotalChecks;
+                    snapN = testedCount;
+                    snapT = totalCount;
+                }
+                if (snapN > 0 && snapT > 0)
+                {
+                    // Re-emit with same strategy name we don't have here;
+                    // ViewModel keeps last-known StrategyName so empty is fine.
+                    // Use empty-string strategy to signal "score update only".
+                    progress?.Report(new FlowsealProgress(snapN, snapT, string.Empty, snapOk, snapTotal));
+                }
+                return;
+            }
+
+            // Error / warning lines — ring buffer (cap at 8).
+            if (errorLineRx.IsMatch(line))
+            {
+                lock (counterLock)
+                {
+                    if (errorLines.Count >= 8) errorLines.RemoveAt(0);
+                    errorLines.Add(line.Trim());
+                }
+                logger?.Debug("[ZapretAutoStrategy] flowseal-script: {Line}", line.Trim());
                 return;
             }
 
             // Final winner: "Best config: general (ALT3).bat"
-            var w = System.Text.RegularExpressions.Regex.Match(
-                line, @"Best config:\s*(.+?)(?:\.bat)?\s*$");
+            var w = winnerRx.Match(line);
             if (w.Success)
             {
                 winner = w.Groups[1].Value.Trim();
@@ -494,35 +612,166 @@ public static class ZapretAutoStrategy
             logger?.Warning(ex, "[ZapretAutoStrategy] Failed to pipe Flowseal answers");
         }
 
-        // Wait for completion (full sweep is 2-7 min). Honor cancellation
-        // by killing the powershell process tree.
-        using (ct.Register(() =>
+        // r4 C.2 — hard timeout cap. Theoretical worst case is bounded by
+        // script's per-test 5 s timeout × test-suite-count × config-count,
+        // which can spiral past 10 min on flaky networks. We define a hard
+        // 10-min cap and kill the process tree if breached. Reasonable user
+        // patience ceiling per r3 release notes ("2-7 minutes typical").
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(FlowsealMaxSweepTime);
+        bool hitTimeout = false;
+        string? timeoutDiagnostic = null;
+
+        using (timeoutCts.Token.Register(() =>
         {
             try
             {
-                if (!proc.HasExited) proc.Kill(entireProcessTree: true);
+                if (!proc.HasExited)
+                {
+                    // Distinguish user-cancel from timeout-cancel — only the
+                    // latter is "abnormal" and worth surfacing as a diagnostic.
+                    if (!ct.IsCancellationRequested)
+                    {
+                        hitTimeout = true;
+                        logger?.Warning("[ZapretAutoStrategy] Flowseal sweep exceeded {Cap} cap — killing", FlowsealMaxSweepTime);
+                    }
+                    proc.Kill(entireProcessTree: true);
+                }
             }
             catch { /* defensive — process may have finished */ }
         }))
         {
             try
             {
-                await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+                await proc.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                logger?.Information("[ZapretAutoStrategy] Flowseal sweep canceled by user");
-                return new FlowsealSweepResult(null, testedCount, totalCount, outputBuilder.ToString());
+                if (hitTimeout) timeoutDiagnostic = "sweep_timeout";
+                else
+                {
+                    logger?.Information("[ZapretAutoStrategy] Flowseal sweep canceled by user");
+                    IReadOnlyList<string> errSnap;
+                    lock (counterLock) { errSnap = errorLines.ToArray(); }
+                    return new FlowsealSweepResult(null, testedCount, totalCount, outputBuilder.ToString(),
+                        Diagnostic: "canceled", ErrorLines: errSnap);
+                }
             }
         }
 
-        logger?.Information("[ZapretAutoStrategy] Flowseal sweep exited code={Code}, tested={N}/{Total}, winner={W}",
-            proc.ExitCode, testedCount, totalCount, winner ?? "<none>");
+        IReadOnlyList<string> finalErrors;
+        lock (counterLock) { finalErrors = errorLines.ToArray(); }
 
-        return new FlowsealSweepResult(winner, testedCount, totalCount, outputBuilder.ToString());
+        logger?.Information("[ZapretAutoStrategy] Flowseal sweep exited code={Code}, tested={N}/{Total}, winner={W}, errs={E}",
+            proc.HasExited ? proc.ExitCode : -1, testedCount, totalCount, winner ?? "<none>", finalErrors.Count);
+
+        return new FlowsealSweepResult(winner, testedCount, totalCount, outputBuilder.ToString(),
+            Diagnostic: timeoutDiagnostic, ErrorLines: finalErrors);
     }
 
-    public sealed record FlowsealProgress(int CurrentIndex, int TotalCount, string StrategyName);
+    /// <summary>
+    /// Hard cap on Flowseal sweep wall-time. Per r3 release notes the
+    /// typical sweep is 2–7 min; anything beyond 10 min is a script bug or
+    /// network catastrophe and should be aborted with a clear diagnostic.
+    /// </summary>
+    public static readonly TimeSpan FlowsealMaxSweepTime = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// Extended in r4: <paramref name="OkCount"/> and <paramref name="TotalChecks"/>
+    /// carry the running per-config check tally so the UI lede can render
+    /// «Тестирую (5/20): general (ALT3) · 12/18». r3 callers ignore the
+    /// defaulted fields and stay correct.
+    ///
+    /// When the parser emits a "score-only update" (per-test status line
+    /// processed but no new config header), <paramref name="StrategyName"/>
+    /// is empty — the ViewModel keeps its last known strategy name.
+    /// </summary>
+    public sealed record FlowsealProgress(
+        int CurrentIndex,
+        int TotalCount,
+        string StrategyName,
+        int OkCount = 0,
+        int TotalChecks = 0);
+
+    /// <summary>
+    /// True if the current process is running as a Windows administrator.
+    /// Returns false on non-Windows (caller is expected to gate by OS).
+    /// </summary>
+    public static bool IsRunningAsAdmin()
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+        try
+        {
+            using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            var principal = new System.Security.Principal.WindowsPrincipal(identity);
+            return principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// r4 Part B — check for orphaned ipset switch flag left by an
+    /// interrupted Flowseal sweep. The script writes `ipset_switched.flag`
+    /// at zapret root after backing up `lists/ipset-all.txt` to
+    /// `lists/ipset-all.test-backup.txt` and switching the live list to
+    /// "any" mode. On graceful exit / Ctrl+C the script restores; our
+    /// Process.Kill(entireProcessTree:true) bypasses both finally and trap
+    /// so we adopt the safety net ourselves.
+    /// </summary>
+    public static bool HasOrphanedIpsetFlag(string zapretInstallDir)
+    {
+        try
+        {
+            var flagPath = Path.Combine(zapretInstallDir, "ipset_switched.flag");
+            return File.Exists(flagPath);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// r4 Part B — restore `lists/ipset-all.txt` from the script's backup
+    /// and delete the orphan flag. Idempotent: no-op if no flag exists.
+    /// Matches Flowseal's `Set-IpsetMode -mode "restore"` semantics:
+    /// Move backup over the live file (overwrite). If the backup is
+    /// missing but the flag is present, leave the live file alone (don't
+    /// guess) and just delete the stale flag — the script handles this
+    /// case the same way on next run.
+    /// </summary>
+    public static void RestoreIpsetAfterKill(string zapretInstallDir, ILogger? logger)
+    {
+        try
+        {
+            var flagPath = Path.Combine(zapretInstallDir, "ipset_switched.flag");
+            if (!File.Exists(flagPath))
+            {
+                return; // nothing to do — common case
+            }
+
+            var listsDir = Path.Combine(zapretInstallDir, "lists");
+            var livePath = Path.Combine(listsDir, "ipset-all.txt");
+            var backupPath = Path.Combine(listsDir, "ipset-all.test-backup.txt");
+
+            if (File.Exists(backupPath))
+            {
+                File.Move(backupPath, livePath, overwrite: true);
+                logger?.Information("[ZapretAutoStrategy] Restored orphaned ipset from prior probe interrupt");
+            }
+            else
+            {
+                logger?.Warning("[ZapretAutoStrategy] Orphan ipset flag present but no backup at {Path} — leaving live list alone", backupPath);
+            }
+
+            try { File.Delete(flagPath); }
+            catch (Exception ex) { logger?.Warning(ex, "[ZapretAutoStrategy] Failed to delete orphan ipset flag"); }
+        }
+        catch (Exception ex)
+        {
+            logger?.Warning(ex, "[ZapretAutoStrategy] RestoreIpsetAfterKill failed");
+        }
+    }
 
     /// <summary>
     /// Tier classifier — turns per-attempt pass/fail counts into the verdict.

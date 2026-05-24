@@ -4555,20 +4555,49 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // not Process.Kill. Acceptable trade-off; user can manually flip
             // ipset back via expander if they cancel mid-sweep.
             var zapretDir = VPNRouter.Core.Services.ZapretUpdater.ZapretDir;
+
+            // r4 Part B (startup-side check): if a prior probe was killed
+            // mid-sweep, the script's `ipset_switched.flag` would still be on
+            // disk and `ipset-all.txt` would be in "any" mode. Clean up
+            // proactively before starting a fresh probe so the new run
+            // begins from a known-good ipset state — and so the user isn't
+            // silently wide-open if the probe-trigger happens minutes after
+            // an interrupted sweep.
+            try
+            {
+                if (VPNRouter.Core.Services.ZapretAutoStrategy.HasOrphanedIpsetFlag(zapretDir))
+                {
+                    VPNRouter.Core.Services.ZapretAutoStrategy.RestoreIpsetAfterKill(zapretDir, _logger);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[VM] Pre-probe ipset cleanup failed (continuing anyway)");
+            }
+
             var flowsealProgress = new Progress<VPNRouter.Core.Services.ZapretAutoStrategy.FlowsealProgress>(p =>
             {
-                ZapretProbeIndex = p.CurrentIndex - 1;  // FlowsealProgress is 1-based
-                ZapretProbeTotal = p.TotalCount;
-                ZapretProbeStrategy = p.StrategyName;
-                // No live X/Y score from Flowseal — its DPI checker emits
-                // pass/fail per target inside the config, but the format is
-                // verbose ("[CONFIG] target1: OK ... target2: FAIL ..."). For
-                // r3 we surface only per-config progress; score parsing
-                // deferred to a follow-up r if user wants it.
-                ZapretProbePassCount = 0;
-                ZapretProbeTotalCount = 0;
-                _logger.Information("[VM] ZapretOneTap Flowseal probe: {Index}/{Total} {Name}",
-                    p.CurrentIndex, p.TotalCount, p.StrategyName);
+                // r4 Part A — distinguish "new config header" vs "score-only update".
+                // New header carries a non-empty StrategyName + resets counts to 0;
+                // score-only update carries empty StrategyName + non-zero TotalChecks.
+                if (!string.IsNullOrEmpty(p.StrategyName))
+                {
+                    ZapretProbeIndex = p.CurrentIndex - 1;  // FlowsealProgress is 1-based
+                    ZapretProbeTotal = p.TotalCount;
+                    ZapretProbeStrategy = p.StrategyName;
+                    ZapretProbePassCount = 0;
+                    ZapretProbeTotalCount = 0;
+                    _logger.Information("[VM] ZapretOneTap Flowseal probe: {Index}/{Total} {Name}",
+                        p.CurrentIndex, p.TotalCount, p.StrategyName);
+                }
+                else if (p.TotalChecks > 0)
+                {
+                    // Score-only update — keep strategy + index, refresh score.
+                    // Triggers ZapretOneTapLede recompute so the UI lede shows
+                    // «Тестирую (5/20): general (ALT3) — 12/18 ok» live.
+                    ZapretProbePassCount = p.OkCount;
+                    ZapretProbeTotalCount = p.TotalChecks;
+                }
             });
 
             var sweep = await VPNRouter.Core.Services.ZapretAutoStrategy.RunFlowsealProbeAsync(
@@ -4633,7 +4662,37 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 IsZapretFallback = true;
                 ZapretEnabled = false;
-                ZapretStatus = Strings.ZapretOneTapAllFailedToast;
+                // r4 C.3 + C.4 — diagnostic-aware fallback messaging. If
+                // the sweep short-circuited for a known reason (not_admin,
+                // sweep_timeout, missing_script, canceled), surface that
+                // specific cause instead of the generic "no strategy
+                // matched" so the user knows what to fix. Otherwise fall
+                // back to the generic toast.
+                ZapretStatus = sweep.Diagnostic switch
+                {
+                    "not_admin" => IsRussian
+                        ? "Нужны права администратора для подбора стратегии. Перезапустите VPNRouter от админа."
+                        : "Administrator rights required to probe strategies. Restart VPNRouter as admin.",
+                    "sweep_timeout" => IsRussian
+                        ? "Подбор стратегии превысил 10 минут. Проверьте интернет и попробуйте ещё раз."
+                        : "Strategy probe exceeded 10 min cap. Check network and retry.",
+                    "missing_script" => IsRussian
+                        ? "Скрипт Flowseal не найден. Обнови Zapret через «Тонкую настройку»."
+                        : "Flowseal script missing. Update Zapret via Advanced settings.",
+                    "canceled" => IsRussian
+                        ? "Подбор отменён."
+                        : "Probe canceled.",
+                    _ => Strings.ZapretOneTapAllFailedToast,
+                };
+
+                // Log surface for any [ERROR]/[WARN] lines the script
+                // emitted — keeps the diagnostic searchable in Serilog
+                // without spamming the toast.
+                if (sweep.ErrorLines is { Count: > 0 })
+                {
+                    foreach (var errLine in sweep.ErrorLines)
+                        _logger.Warning("[VM] Flowseal script: {Line}", errLine);
+                }
             }
         }
         catch (Exception ex)
@@ -4645,6 +4704,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
         finally
         {
+            // r4 Part B (post-sweep ipset cleanup): regardless of how the
+            // sweep ended (winner / cancel / timeout / exception), check
+            // for and restore an orphan ipset switch. Idempotent — no-op
+            // if no flag exists. Catches the "killed mid-sweep" case while
+            // the user's session is still open instead of letting the
+            // wide-open ipset linger until the next probe.
+            try
+            {
+                var zd = VPNRouter.Core.Services.ZapretUpdater.ZapretDir;
+                VPNRouter.Core.Services.ZapretAutoStrategy.RestoreIpsetAfterKill(zd, _logger);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[VM] Post-probe ipset cleanup failed");
+            }
+
             IsZapretProbing = false;
             _suppressZapretAvToast = false;
             ZapretProbeIndex = 0;

@@ -63,12 +63,21 @@ jobs:
       # requires the .NET 10 SDK; the rest of the solution stays on net8.0
       # so we keep 8.0.x in the install list. setup-dotnet@v4 takes a
       # multi-line list and side-by-side installs both runtimes.
+      #
+      # 2026-05-25 (Wave 32c): pinned 10.0.x → 10.0.100 to dodge the
+      # `Microsoft.NETCore.App.Runtime.Mono.linux-x64 = 10.0.8` NU1102
+      # restore failure. SDK 10.0.300's workload manifest references that
+      # pack but it was never published to any public NuGet feed — Mono
+      # on Linux x64 was withdrawn from the .NET 10 target list. 10.0.100
+      # predates that manifest pin. Bump back to 10.0.x once the missing
+      # pack lands publicly (probe via api.nuget.org). Full root cause +
+      # remediation plan: `plans/research-android-ci-unblock-2026-05-25.md`.
       - name: Setup .NET 8 + 10 SDK
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
         with:
           dotnet-version: |
             8.0.x
-            10.0.x
+            10.0.100
 
       # Phase 1 Q9 — NuGet package cache. `dotnet publish` for the Android
       # head restores hundreds of MB of packages on cold runs. Keyed on the
