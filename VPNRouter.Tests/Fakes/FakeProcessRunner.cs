@@ -168,6 +168,23 @@ public sealed class FakeProcessHandle : IProcessHandle
         SignalExit(exitCode: -1);
     }
 
+    /// <summary>v2.36.0-r4 (brat 2026-05-24 — intentional-stop regression
+    /// fix): track Suppress calls so tests can pin the call ordering
+    /// (must precede Kill on intentional-Stop paths).</summary>
+    public int SuppressExitedEventCallCount { get; private set; }
+
+    public void SuppressExitedEvent()
+    {
+        SuppressExitedEventCallCount++;
+        // Test side: also flip a flag so subsequent SignalExit decides
+        // whether to fire Exited or not. The real ProcessHandle disables
+        // the OS Exited callback; we mirror by gating SignalExit's
+        // Exited?.Invoke on this flag.
+        _exitedSuppressed = true;
+    }
+
+    private bool _exitedSuppressed;
+
     /// <summary>Test-side: stub the snapshot the production path reads via
     /// <see cref="TryGetSnapshot"/>. Default null mirrors the
     /// "process has exited / metrics unavailable" branch — production tests
@@ -194,7 +211,13 @@ public sealed class FakeProcessHandle : IProcessHandle
     /// <summary>Test-side: signal that the fake process has exited.</summary>
     public void SignalExit(int exitCode)
     {
-        if (_exit.TrySetResult(exitCode)) Exited?.Invoke(this, exitCode);
+        // v2.36.0-r4 (brat fix): respect _exitedSuppressed flag. After
+        // SuppressExitedEvent, the OS callback wouldn't fire — mirror by
+        // not raising the C# Exited event. The exit Task still completes
+        // so WaitForExitAsync unblocks (production OS behaviour is the
+        // same — process IS dead, just no Exited event raised).
+        if (_exit.TrySetResult(exitCode) && !_exitedSuppressed)
+            Exited?.Invoke(this, exitCode);
     }
 
     public void Dispose()

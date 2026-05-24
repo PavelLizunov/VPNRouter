@@ -296,6 +296,23 @@ internal sealed class ProcessHandle : IProcessHandle
         catch { return -1; }
     }
 
+    public void SuppressExitedEvent()
+    {
+        // v2.36.0-r4 (brat 2026-05-24 — intentional-stop regression fix).
+        // Disable the OS-level Exited event subscription so a subsequent
+        // Kill from intentional Stop path doesn't raise a spurious
+        // "process crashed" event to subscribers. Pre-r4 only Dispose
+        // did this (line 307 below), but Dispose ran in StopInternal's
+        // `finally` AFTER Kill+WaitForExit had already completed and
+        // OnProcessExited had fired. SingBoxManager.StopInternal now
+        // calls this BEFORE Kill so the subscription is gone before
+        // the OS can raise the event.
+        //
+        // Idempotent. Defensive try/catch — if _process was already
+        // disposed by a racing path, we still no-op silently.
+        try { _process.EnableRaisingEvents = false; } catch { /* defensive */ }
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
@@ -303,7 +320,8 @@ internal sealed class ProcessHandle : IProcessHandle
         // Mirror SingBoxManager.Stop pattern: disable Exited callback BEFORE
         // killing so we don't fire a spurious Exited event on intentional
         // disposal. (See VPNRouter.Core/CLAUDE.md "SingBoxManager intentional
-        // stop" section.)
+        // stop" section.) — Also explicit via SuppressExitedEvent above for
+        // callers that want to disable without disposing the handle.
         try { _process.EnableRaisingEvents = false; } catch { /* defensive */ }
 
         Kill(entireProcessTree: true);

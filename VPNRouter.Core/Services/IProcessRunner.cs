@@ -175,6 +175,24 @@ public interface IProcessHandle : IDisposable
     event EventHandler<int>? Exited;
 
     /// <summary>
+    /// v2.36.0-r4 (brat 2026-05-24 — intentional-stop regression fix):
+    /// disable the OS-level <c>Exited</c>-event subscription BEFORE a
+    /// caller-initiated Kill. Closes the bug where SingBoxManager.Stop's
+    /// Kill→WaitForExit path fired a false "sing-box crashed (exit
+    /// code: -1)" event — because <see cref="IDisposable.Dispose"/>
+    /// (the only previous site disabling EnableRaisingEvents) ran in a
+    /// finally block AFTER the OS had already raised Exited.
+    ///
+    /// <para>Idempotent — calling on an already-suppressed (or
+    /// already-disposed) handle is a safe no-op. Does NOT kill the
+    /// process; pair with <see cref="Kill"/>.</para>
+    ///
+    /// <para>Use case: any "this is the intentional Stop / Restart
+    /// path, do NOT raise Crashed events to listeners" callsite.</para>
+    /// </summary>
+    void SuppressExitedEvent();
+
+    /// <summary>
     /// Phase 3+ (2026-05-21): metric introspection for long-lived spawn
     /// owners (notably <c>SingBoxManager.GetMetrics</c> / <c>IsHealthy</c>).
     /// Refreshes the underlying OS process and returns a point-in-time

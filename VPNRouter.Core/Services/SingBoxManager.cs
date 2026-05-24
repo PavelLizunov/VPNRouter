@@ -283,6 +283,10 @@ public class SingBoxManager : IDisposable
                         // intentional Stop).
                         if (!_handle.HasExited)
                         {
+                            // v2.36.0-r4 (brat 2026-05-24): suppress Exited
+                            // event BEFORE Kill — sibling fix to Windows graceful
+                            // path. See ProcessRunner.SuppressExitedEvent docs.
+                            _handle.SuppressExitedEvent();
                             _handle.Kill(entireProcessTree: true);
                             try
                             {
@@ -435,7 +439,20 @@ public class SingBoxManager : IDisposable
         // so the Exited callback is suppressed for an intentional Stop.
         try
         {
-            _handle!.Kill(entireProcessTree: true);
+            // v2.36.0-r4 (brat 2026-05-24 — intentional-stop regression fix):
+            // explicitly suppress Exited event BEFORE Kill so the OS
+            // notification doesn't bubble up as a false "sing-box
+            // crashed" event to HealthMonitor's Crashed handler. The
+            // Phase 3+ refactor (2026-05-21) moved EnableRaisingEvents=
+            // false into ProcessHandle.Dispose — but Dispose runs in
+            // the finally block AFTER WaitForExit completes, by which
+            // time the Exited callback has already fired. Brat's
+            // 12:11:49 log showed 14ms between intentional Stop and
+            // false "sing-box crashed (exit code: -1)" entry.
+            // SuppressExitedEvent breaks the OS-event subscription so
+            // the bubble-up never happens.
+            _handle!.SuppressExitedEvent();
+            _handle.Kill(entireProcessTree: true);
             try
             {
                 using var killCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
