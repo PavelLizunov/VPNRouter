@@ -70,8 +70,15 @@ public class MainWindowViewModelCharacterizationTests
     // new ObservableProperties (_zapretProbePassCount, _zapretProbeTotalCount)
     // plus NotifyPropertyChangedFor wiring on the existing hero labels.
     // Linux bump deferred to CI first-failure per documented workflow.
+    //
+    // v2.37.0-r7 bump (2026-05-25 night shift): localization batch — field
+    // defaults for _zapretStatus + _tgProxyStatus flipped from string literal
+    // "Stopped" to `Strings.Stopped` getter call. Field-initializer change
+    // is captured in the IL hash even though no public property signature
+    // changed (the public ZapretStatus / TgProxyStatus getters/setters are
+    // identical). Linux deferred to next CI failure per documented workflow.
     private const string PinnedHashWindows =
-        "3d2149b8823d7d0da433517d82318f8c22ec4aeb6967783cf5f6fb62c4924334";
+        "e13339c8e03074a5bcafc0e187c7d7d5a8d98c2e5a275b9d7a59a93b6ac85525";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

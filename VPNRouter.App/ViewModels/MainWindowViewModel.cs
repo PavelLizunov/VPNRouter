@@ -1107,7 +1107,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsCustomStrategy => ZapretStrategyIndex >= 0 && ZapretStrategyIndex < ZapretStrategies.Count
         && ZapretStrategies[ZapretStrategyIndex] == "custom";
     [ObservableProperty] private string _zapretCustomArgs = string.Empty;
-    [ObservableProperty] private string _zapretStatus = "Stopped";
+    // v2.37.0-r7 — uses Strings.Stopped (RU «Остановлен» / EN "Stopped")
+    // instead of hardcoded English literal. Pre-r7 the field default leaked
+    // English into RU UI on first launch. Re-init on language change handled
+    // by ReloadMainWindowForLocalization (window rebuild rebinds the VM).
+    [ObservableProperty] private string _zapretStatus = Strings.Stopped;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblDiscordHosts))]
     private bool _discordHostsInstalled = false;
@@ -1254,7 +1258,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(LblTgProxyHeroTitle))]
     [NotifyPropertyChangedFor(nameof(LblTgProxyHeroLede))]
     private bool _tgProxyEnabled = false;
-    [ObservableProperty] private string _tgProxyStatus = "Stopped";
+    // v2.37.0-r7 — uses Strings.Stopped. Same CLAUDE.md D1 fix as
+    // ZapretStatus above. Window rebuild on language change re-instantiates
+    // the VM so this picks up the new Lang.
+    [ObservableProperty] private string _tgProxyStatus = Strings.Stopped;
     [ObservableProperty]
     // v2.36.0-r7: lede + air-pill template substitute live port.
     [NotifyPropertyChangedFor(nameof(LblTgProxyHeroLede))]
@@ -2958,7 +2965,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         else
         {
             ZapretEnabled = false;
-            ZapretStatus = IsRussian ? "Остановлен" : "Stopped";
+            ZapretStatus = Strings.Stopped;
         }
 
 #if PLATFORM_WINDOWS
@@ -2988,7 +2995,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         else
         {
             TgProxyEnabled = false;
-            TgProxyStatus = IsRussian ? "Остановлен" : "Stopped";
+            TgProxyStatus = Strings.Stopped;
         }
 #endif
 
@@ -4274,7 +4281,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         {
             KillAllZapret();
             ZapretEnabled = false;
-            ZapretStatus = IsRussian ? "Остановлен" : "Stopped";
+            ZapretStatus = Strings.Stopped;
             SaveSettings();
             return;
         }
@@ -4469,7 +4476,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             ZapretProbePassCount = 0;
             ZapretProbeTotalCount = 0;
             IsZapretFallback = false;
-            ZapretStatus = IsRussian ? "Остановлен" : "Stopped";
+            ZapretStatus = Strings.Stopped;
             SaveSettings();
             return;
         }

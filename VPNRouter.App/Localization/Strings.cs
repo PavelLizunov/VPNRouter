@@ -96,6 +96,9 @@ public static class Strings
     // ── Action states ──
     public static string Starting => global::VPNRouter.Core.Localization.Strings.Starting;
     public static string Stopping => global::VPNRouter.Core.Localization.Strings.Stopping;
+    // v2.37.0-r7 — pass-through to Core for idle/quiescent status text
+    // (RU "Остановлен" / EN "Stopped"). Used by Zapret + TgProxy status fields.
+    public static string Stopped => global::VPNRouter.Core.Localization.Strings.Stopped;
 
     // Task #41 Stage 2 (PinkuDani 2026-05-21) — two-phase Start timer diagnostics.
     public static string StartTimeoutPhaseA => global::VPNRouter.Core.Localization.Strings.StartTimeoutPhaseA;

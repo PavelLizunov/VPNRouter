@@ -122,6 +122,13 @@ public static class Strings
     public static string Starting => Ru ? "Запуск..." : "Starting...";
     public static string Stopping => Ru ? "Остановка..." : "Stopping...";
 
+    // v2.37.0-r7 — idle/quiescent state for Zapret + TgProxy status fields.
+    // Distinct from Stopping («Остановка...») which is an active transition.
+    // Pre-r7 multiple sites used inline `IsRussian ? "Остановлен" : "Stopped"`
+    // ternaries + string-literal field defaults that hardcoded the English
+    // word, violating CLAUDE.md rule D1 (no English in RU UI).
+    public static string Stopped => Ru ? "Остановлен" : "Stopped";
+
     // ── Task #41 Stage 2 (PinkuDani 2026-05-21) — two-phase Start timer ──
     // Phase A diagnostic: sing-box never reported started within 60s.
     // Real hang at firewall / TUN cleanup / wintun launch.

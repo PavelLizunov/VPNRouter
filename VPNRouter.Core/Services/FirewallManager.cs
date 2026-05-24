@@ -27,6 +27,22 @@ public class FirewallManager : IFirewallManager
 {
     private const string RulePrefix = "VPNRouter_Block_";
 
+    // v2.37.0-r7 — extracted timeout magic numbers per Phase 1 quality pass.
+    // Pre-r7 these were inline `TimeSpan.FromMilliseconds(3000)` / `(5000)`
+    // calls in WhereProcess / RunNetsh paths. Named constants make the
+    // policy intent (how long do we wait before assuming hung) reviewable
+    // and tweakable in one place.
+    //
+    // Rationale:
+    //   - `where.exe` resolves PATH lookups locally; 3 s is generous for
+    //     even cold-cache PATH traversal on disk-loaded systems.
+    //   - `netsh.exe` interacts with the Windows Filtering Platform and
+    //     can take longer on first invocation after boot; 5 s covers the
+    //     advfirewall service cold-start without making rule edits feel
+    //     unresponsive.
+    private const int WhereExeTimeoutMs = 3000;
+    private const int NetshTimeoutMs = 5000;
+
     // ─── Wave 39 (2026-05-19): DNS leak lockdown rule names ──────────────────
     //
     // 4 firewall rules that block outbound DNS-port traffic on every adapter
@@ -298,7 +314,7 @@ public class FirewallManager : IFirewallManager
             var result = _runner.RunAsync(new ProcessRequest(
                 ExecutablePath: "where.exe",
                 Arguments: new[] { processName },
-                Timeout: TimeSpan.FromMilliseconds(3000))).GetAwaiter().GetResult();
+                Timeout: TimeSpan.FromMilliseconds(WhereExeTimeoutMs))).GetAwaiter().GetResult();
 
             if (!result.TimedOut && result.ExitCode == 0 && !string.IsNullOrEmpty(result.Stdout))
             {
@@ -443,7 +459,7 @@ public class FirewallManager : IFirewallManager
             var result = _runner.RunAsync(new ProcessRequest(
                 ExecutablePath: "netsh.exe",
                 Arguments: argv,
-                Timeout: TimeSpan.FromMilliseconds(5000))).GetAwaiter().GetResult();
+                Timeout: TimeSpan.FromMilliseconds(NetshTimeoutMs))).GetAwaiter().GetResult();
 
             if (result.TimedOut)
             {
