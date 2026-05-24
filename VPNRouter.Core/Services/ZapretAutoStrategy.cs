@@ -361,6 +361,169 @@ public static class ZapretAutoStrategy
         NoSignal,
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // v2.37.0-r3 — delegate-to-Flowseal probe (the canonical, slow, accurate
+    // path). Spawns `utils/test zapret.ps1` hidden, pipes "2\n1\n" stdin to
+    // auto-answer (DPI checkers mode + all configs), streams stdout to parse
+    // per-config progress + final "Best config: X" winner.
+    //
+    // WHY: r1/r2 HTTP HEAD probe is too lenient — HTTP HEAD 200 OK can pass
+    // even when DPI mangles the actual TLS stream afterwards. Flowseal's DPI
+    // checker (mode 2) does TCP-byte-level analysis detecting the "16-20
+    // freeze" pattern that's signature of DPI. Takes 2-5 minutes per full
+    // sweep but the verdict is trustworthy.
+    //
+    // USER (2026-05-25): «у тебя прошел очень быстро, через bat файл занимает
+    // минуты времени» — that's the cost of accuracy.
+    //
+    // Hidden console (CreateNoWindow + WindowStyle.Hidden + UseShellExecute
+    // false) — user never sees the powershell window; only the in-app progress
+    // chip "Тестирую (5/20): general (FAKE TLS AUTO ALT2)…".
+    //
+    // Caller responsibilities:
+    //   - Cancellation: CancellationToken kills the powershell process.
+    //   - On success: caller invokes startStrategy(winner) to apply.
+    //   - On failure (null winner): caller surfaces fallback UI.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Result of one Flowseal script sweep.
+    /// </summary>
+    public sealed record FlowsealSweepResult(
+        string? Winner,
+        int TestedCount,
+        int TotalCount,
+        string FullOutput);
+
+    /// <summary>
+    /// Run Flowseal's `utils/test zapret.ps1` with auto-answers (mode=DPI,
+    /// configs=all), parse stdout for per-config progress + final winner.
+    /// Returns null winner if all configs failed.
+    /// </summary>
+    /// <param name="zapretInstallDir">Where Flowseal is installed (parent of utils/).</param>
+    /// <param name="progress">Per-config progress reporter: emits as each
+    /// `[N/M] strategy.bat` line is parsed from stdout.</param>
+    /// <param name="logger">For diagnostic logging.</param>
+    /// <param name="ct">Cancellation — kills the powershell process.</param>
+    public static async Task<FlowsealSweepResult> RunFlowsealProbeAsync(
+        string zapretInstallDir,
+        IProgress<FlowsealProgress>? progress,
+        ILogger? logger,
+        CancellationToken ct)
+    {
+        var scriptPath = Path.Combine(zapretInstallDir, "utils", "test zapret.ps1");
+        if (!File.Exists(scriptPath))
+        {
+            logger?.Warning("[ZapretAutoStrategy] Flowseal test zapret.ps1 not found at {Path}", scriptPath);
+            return new FlowsealSweepResult(null, 0, 0, $"missing: {scriptPath}");
+        }
+
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
+            WorkingDirectory = zapretInstallDir,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            UseShellExecute = false,
+            WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
+        };
+
+        using var proc = new System.Diagnostics.Process { StartInfo = psi };
+        var outputBuilder = new System.Text.StringBuilder();
+        string? winner = null;
+        int testedCount = 0;
+        int totalCount = 0;
+
+        // Per-line stdout handler. Script writes via Write-Host so we get
+        // each Write-Host invocation as one line on stdout.
+        proc.OutputDataReceived += (sender, args) =>
+        {
+            if (args.Data == null) return;
+            var line = args.Data;
+            outputBuilder.AppendLine(line);
+
+            // Per-config progress: "  [12/20] general (ALT5).bat"
+            var m = System.Text.RegularExpressions.Regex.Match(
+                line, @"\[(\d+)/(\d+)\]\s+(.+?)(?:\.bat)?\s*$");
+            if (m.Success
+                && int.TryParse(m.Groups[1].Value, out var n)
+                && int.TryParse(m.Groups[2].Value, out var t))
+            {
+                testedCount = n;
+                totalCount = t;
+                var strategy = m.Groups[3].Value.Trim();
+                progress?.Report(new FlowsealProgress(n, t, strategy));
+                return;
+            }
+
+            // Final winner: "Best config: general (ALT3).bat"
+            var w = System.Text.RegularExpressions.Regex.Match(
+                line, @"Best config:\s*(.+?)(?:\.bat)?\s*$");
+            if (w.Success)
+            {
+                winner = w.Groups[1].Value.Trim();
+                logger?.Information("[ZapretAutoStrategy] Flowseal sweep winner: {Strategy}", winner);
+            }
+        };
+        proc.ErrorDataReceived += (sender, args) =>
+        {
+            if (!string.IsNullOrEmpty(args.Data))
+                logger?.Debug("[ZapretAutoStrategy] flowseal-stderr: {Line}", args.Data);
+        };
+
+        logger?.Information("[ZapretAutoStrategy] Spawning Flowseal script: {Path}", scriptPath);
+        proc.Start();
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+
+        // Auto-answer the two prompts: 2=DPI checker mode, 1=all configs.
+        // Script reads via Read-Host; piping via stdin reaches it once it
+        // calls Read-Host. Close stdin after answering so any subsequent
+        // Read-Host fails cleanly instead of hanging.
+        try
+        {
+            await proc.StandardInput.WriteLineAsync("2".AsMemory(), ct).ConfigureAwait(false);
+            await proc.StandardInput.WriteLineAsync("1".AsMemory(), ct).ConfigureAwait(false);
+            proc.StandardInput.Close();
+        }
+        catch (Exception ex)
+        {
+            logger?.Warning(ex, "[ZapretAutoStrategy] Failed to pipe Flowseal answers");
+        }
+
+        // Wait for completion (full sweep is 2-7 min). Honor cancellation
+        // by killing the powershell process tree.
+        using (ct.Register(() =>
+        {
+            try
+            {
+                if (!proc.HasExited) proc.Kill(entireProcessTree: true);
+            }
+            catch { /* defensive — process may have finished */ }
+        }))
+        {
+            try
+            {
+                await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                logger?.Information("[ZapretAutoStrategy] Flowseal sweep canceled by user");
+                return new FlowsealSweepResult(null, testedCount, totalCount, outputBuilder.ToString());
+            }
+        }
+
+        logger?.Information("[ZapretAutoStrategy] Flowseal sweep exited code={Code}, tested={N}/{Total}, winner={W}",
+            proc.ExitCode, testedCount, totalCount, winner ?? "<none>");
+
+        return new FlowsealSweepResult(winner, testedCount, totalCount, outputBuilder.ToString());
+    }
+
+    public sealed record FlowsealProgress(int CurrentIndex, int TotalCount, string StrategyName);
+
     /// <summary>
     /// Tier classifier — turns per-attempt pass/fail counts into the verdict.
     /// </summary>

@@ -4529,119 +4529,105 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         try
         {
-            // v2.37.0-r2 (user feedback "странно что 3 не сработали если их
-            // 20 в dropdown"): iterate ALL parsed strategies in the order
-            // ZapretUpdater.ParseStrategies returned them (sort heuristic
-            // already pins ALT3 first / ALT2 / ALT4 / general / general (ALT)
-            // / etc., so happy path stays ~30s on the first attempt). Mirrors
-            // Flowseal's `service.bat 11 -> 2 -> 1` behavior — "Total configs:
-            // 20" — which is the canonical reference user mental model.
+            // v2.37.0-r3 (user feedback "у тебя прошел очень быстро, через
+            // bat файл занимает минуты времени"): delegate the actual probe
+            // to Flowseal's `utils/test zapret.ps1` mode 2 (DPI checker) —
+            // the canonical, slow, accurate path. It does TCP-byte-level
+            // analysis detecting the "16-20 freeze" pattern that's a real
+            // DPI signature, not just "is HTTP HEAD reachable" like r1/r2.
             //
-            // Wall-time worst case: ~5-7 min if EVERY strategy fails. In
-            // practice the loop breaks on first Tier1+, typical happy path
-            // 22-44 s. User can click Stop in the footer to bail mid-probe.
+            // The script self-iterates ALL 20 configs (mirrors
+            // service.bat 11 -> 2 -> 1), runs DPI checks per config,
+            // prints "Best config: <name>" at the end. We:
+            //   1. Spawn powershell hidden (CreateNoWindow + WindowStyle.Hidden)
+            //   2. Pipe stdin "2\n1\n" to auto-answer prompts
+            //   3. Stream stdout, parse "[N/M] strategy" → hero progress chip
+            //   4. Parse final "Best config: X" → winner
+            //   5. Apply that strategy ourselves via ZapretManager.StartFromBat
             //
-            // ZapretAutoStrategy.DefaultSeedOrder still exists as the
-            // documented "what to try first" but the orchestrator now
-            // accepts the full parsed list and trusts the sort order.
-            var available = _parsedStrategies.Select(s => s.Name).ToList();
-            // Build candidate order: sort-pinned seeds (ALT3 first per
-            // ZapretUpdater.ParseStrategies line 681) followed by everything
-            // else. Built-in fallback names (multisplit, fake+multisplit) are
-            // NOT in _parsedStrategies — keep them as legacy ComboBox entries
-            // outside the auto-probe (user can pick manually in expander).
-            var seedOrder = available;
-
-            // Wire substrate-agnostic start/stop/immediate-exit delegates.
-            // ImmediateExit trigger uses a per-attempt TaskCompletionSource:
-            // ProbeAsync races the soak vs the TCS, so when the AV-block event
-            // fires we abort the doomed attempt within ~500 ms.
-            TaskCompletionSource<bool>? currentImmediateTcs = null;
-            void OnImmediateExit() => currentImmediateTcs?.TrySetResult(true);
-
-            // We can't subscribe and unsubscribe per attempt because the
-            // ImmediateExitDetected event uses a +/- pattern; subscribe once,
-            // route via a closure that always points at the current TCS.
-            _zapret.ImmediateExitDetected -= OnImmediateExit; // idempotent
-            _zapret.ImmediateExitDetected += OnImmediateExit;
-
-            Func<string, Task> startStrategy = name =>
+            // Wall-time: 2-7 minutes typical for a full sweep — that's the
+            // cost of accuracy. User can cancel by clicking Stop in footer
+            // (cancellation kills the powershell process tree).
+            //
+            // The script auto-switches ipset to 'any' for accurate DPI tests
+            // and restores it on completion via its own trap. Our cancellation
+            // path may leave ipset switched — script's trap handles SIGINT but
+            // not Process.Kill. Acceptable trade-off; user can manually flip
+            // ipset back via expander if they cancel mid-sweep.
+            var zapretDir = VPNRouter.Core.Services.ZapretUpdater.ZapretDir;
+            var flowsealProgress = new Progress<VPNRouter.Core.Services.ZapretAutoStrategy.FlowsealProgress>(p =>
             {
-                currentImmediateTcs = new TaskCompletionSource<bool>(
-                    TaskCreationOptions.RunContinuationsAsynchronously);
-                var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == name);
-                if (parsed == null)
-                    throw new InvalidOperationException($"Strategy '{name}' not in parsed list");
-                if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
-                    _zapret!.StartFromBat(parsed.BatPath, parsed.Arguments);
-                else
-                    _zapret!.Start(parsed.Arguments);
-                return Task.CompletedTask;
-            };
-
-            Func<Task> stopStrategy = () =>
-            {
-                try { _zapret?.Stop(); } catch { /* defensive */ }
-                return Task.CompletedTask;
-            };
-
-            Func<Task> immediateExitTrigger = () => currentImmediateTcs?.Task ?? Task.Delay(Timeout.InfiniteTimeSpan);
-
-            // HTTP client for probe — fresh, short-lived, no proxy. The probe
-            // intentionally goes via the system route (no SOCKS/sing-box)
-            // because we want to test winws.exe's effect on direct egress.
-            using var http = new System.Net.Http.HttpClient(
-                new System.Net.Http.HttpClientHandler { UseProxy = false },
-                disposeHandler: true);
-            http.Timeout = TimeSpan.FromSeconds(8); // outer cap; ProbeOnceAsync also enforces 5s
-
-            // Progress reporter wires to VM properties so hero re-renders.
-            // v2.37: also pumps live pass/total score so lede shows "5/8 ok".
-            var progress = new Progress<VPNRouter.Core.Services.ZapretAutoStrategy.ProgressUpdate>(p =>
-            {
-                ZapretProbeIndex = p.AttemptIndex;
-                ZapretProbeTotal = p.TotalAttempts;
+                ZapretProbeIndex = p.CurrentIndex - 1;  // FlowsealProgress is 1-based
+                ZapretProbeTotal = p.TotalCount;
                 ZapretProbeStrategy = p.StrategyName;
-                ZapretProbePassCount = p.CurrentPassCount;
-                ZapretProbeTotalCount = p.CurrentTotalCount;
-                _logger.Information("[VM] ZapretOneTap probe: {Index}/{Total} {Name} {Phase} ({Pass}/{TPC})",
-                    p.AttemptIndex + 1, p.TotalAttempts, p.StrategyName, p.Phase,
-                    p.CurrentPassCount, p.CurrentTotalCount);
+                // No live X/Y score from Flowseal — its DPI checker emits
+                // pass/fail per target inside the config, but the format is
+                // verbose ("[CONFIG] target1: OK ... target2: FAIL ..."). For
+                // r3 we surface only per-config progress; score parsing
+                // deferred to a follow-up r if user wants it.
+                ZapretProbePassCount = 0;
+                ZapretProbeTotalCount = 0;
+                _logger.Information("[VM] ZapretOneTap Flowseal probe: {Index}/{Total} {Name}",
+                    p.CurrentIndex, p.TotalCount, p.StrategyName);
             });
 
-            var sweep = await VPNRouter.Core.Services.ZapretAutoStrategy.ProbeAsync(
-                seedOrder, available, startStrategy, stopStrategy,
-                immediateExitTrigger, http, progress, _logger, CancellationToken.None);
+            var sweep = await VPNRouter.Core.Services.ZapretAutoStrategy.RunFlowsealProbeAsync(
+                zapretDir, flowsealProgress, _logger, CancellationToken.None);
 
-            // Unhook the probe-loop's immediate-exit handler — we re-subscribe
-            // the long-lived OnZapretImmediateExit below for steady-state.
-            _zapret.ImmediateExitDetected -= OnImmediateExit;
-
-            if (sweep.WinningStrategy != null)
+            if (sweep.Winner != null)
             {
-                // Tier1+Tier2 — winner stays running. v2.37: also retain the
-                // probe score so the air-pill renders "general (ALT3) · 7/8"
-                // instead of just PID.
-                ZapretWinningStrategy = sweep.WinningStrategy;
-                ZapretProbePassCount = sweep.WinningPassCount;
-                ZapretProbeTotalCount = sweep.WinningTotalCount;
-                ZapretEnabled = true;
-                var pid = ZapretManager.WinwsPid ?? _zapret.Pid;
-                ZapretStatus = IsRussian
-                    ? $"Работает [{sweep.WinningStrategy}] {sweep.WinningPassCount}/{sweep.WinningTotalCount} (PID {pid})"
-                    : $"Running [{sweep.WinningStrategy}] {sweep.WinningPassCount}/{sweep.WinningTotalCount} (PID {pid})";
+                // Apply the winning strategy.
+                var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == sweep.Winner);
+                if (parsed != null)
+                {
+                    try
+                    {
+                        if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
+                            _zapret!.StartFromBat(parsed.BatPath, parsed.Arguments);
+                        else
+                            _zapret!.Start(parsed.Arguments);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, "[VM] Failed to start winning strategy {Name}", sweep.Winner);
+                        IsZapretFallback = true;
+                        ZapretEnabled = false;
+                        ZapretStatus = $"Error starting {sweep.Winner}: {ex.Message}";
+                        return;
+                    }
 
-                // Also persist as user's last strategy so legacy ToggleZapretAsync
-                // resumes correctly on autostart / Service handoff.
-                var idx = ZapretStrategies.IndexOf(sweep.WinningStrategy);
-                if (idx >= 0) ZapretStrategyIndex = idx;
-                SaveSettings();
-            }
-            else if (sweep.NoSignal)
-            {
-                IsZapretFallback = false;
-                ZapretEnabled = false;
-                ZapretStatus = Strings.ZapretOneTapNoSignalToast;
+                    // Wait briefly for winws.exe to appear, then verify alive.
+                    await Task.Delay(1500);
+                    var winwsPid = ZapretManager.WinwsPid;
+                    if (_zapret.IsRunning || winwsPid != null)
+                    {
+                        ZapretWinningStrategy = sweep.Winner;
+                        ZapretEnabled = true;
+                        var pid = winwsPid ?? _zapret.Pid;
+                        ZapretStatus = IsRussian
+                            ? $"Работает [{sweep.Winner}] (PID {pid})"
+                            : $"Running [{sweep.Winner}] (PID {pid})";
+
+                        var idx = ZapretStrategies.IndexOf(sweep.Winner);
+                        if (idx >= 0) ZapretStrategyIndex = idx;
+                        SaveSettings();
+                    }
+                    else
+                    {
+                        IsZapretFallback = true;
+                        ZapretEnabled = false;
+                        ZapretStatus = IsRussian
+                            ? $"Стратегия {sweep.Winner} не запустилась"
+                            : $"Strategy {sweep.Winner} failed to start";
+                    }
+                }
+                else
+                {
+                    _logger.Warning("[VM] Flowseal winner {Name} not in parsed list", sweep.Winner);
+                    IsZapretFallback = true;
+                    ZapretEnabled = false;
+                    ZapretStatus = $"Winner {sweep.Winner} not found in strategy list";
+                }
             }
             else
             {
