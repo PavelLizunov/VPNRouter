@@ -48,6 +48,12 @@ namespace VPNRouter.App.ViewModels;
 /// </summary>
 public partial class MainWindowViewModel
 {
+    // v2.37.0-r8 — magic-number extraction. ResetConfig two-step UX:
+    // first click "arms" the button; second click within this window
+    // performs the reset. Auto-disarm prevents a stale armed state
+    // from ambushing a later click meant for another action.
+    private const int ResetConfigArmedTimeoutMs = 5000;
+
     // ── Version ──
     public string VersionText => $"by NiniTux  ·  v{AppVersion.Version}  ·  sing-box {GetSingBoxVersion()}";
 
@@ -267,7 +273,11 @@ public partial class MainWindowViewModel
             }
             // Auto-disarm after 5 seconds so a stale armed state can't
             // ambush a later click that was meant for something else.
-            _ = Task.Delay(5000, token).ContinueWith(t =>
+            // v2.37.0-r8 — extracted to named constant for the lower-bound
+            // rationale (5s is "long enough for the user to find their
+            // mouse target, short enough that a wandered click doesn't
+            // fire something unexpected").
+            _ = Task.Delay(ResetConfigArmedTimeoutMs, token).ContinueWith(t =>
             {
                 if (t.IsCanceled) return;
                 Avalonia.Threading.Dispatcher.UIThread.Post(() =>

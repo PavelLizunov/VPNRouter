@@ -55,6 +55,13 @@ namespace VPNRouter.App.ViewModels;
 /// </summary>
 public partial class MainWindowViewModel
 {
+    // v2.37.0-r8 — magic-number extraction (Autostart bootstrap timings).
+    // Settle window for TgProxy spawn — matches sibling `TgProxySettleDelayMs`
+    // in main `MainWindowViewModel.cs`. Kept distinct here because the bootstrap
+    // path runs at app start (different load profile vs warm interactive Start),
+    // so we may want to tune independently in the future.
+    private const int BootstrapSettleDelayMs = 2000;
+
     /// <summary>
     /// Entry point called from the constructor. Fire-and-forget; failures
     /// are logged and never propagate to the UI thread.
@@ -159,10 +166,11 @@ public partial class MainWindowViewModel
                 Dispatcher.UIThread.Post(() => TgProxyStats = ParseStatsShort(stats));
             _tgProxy.Start(TgProxyPort, TgProxySecret);
 
-            // Same 2 s settle window as the manual Toggle path
-            // (MainWindowViewModel.cs:4366) — proxy needs a moment to
-            // bind the port and start serving requests.
-            await Task.Delay(2000).ConfigureAwait(false);
+            // v2.37.0-r8 — extracted to named constant. Same 2s settle
+            // window as the manual Toggle path (sibling
+            // `MainWindowViewModel.cs` `TgProxySettleDelayMs` const).
+            // Proxy needs ~1.5s to bind the port and serve requests.
+            await Task.Delay(BootstrapSettleDelayMs).ConfigureAwait(false);
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {

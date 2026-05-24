@@ -43,6 +43,12 @@ namespace VPNRouter.Android;
 /// </summary>
 public partial class AndroidApp
 {
+    // v2.37.0-r8 — magic-number extraction. Menu feedback toast (kebab
+    // menu action confirmations, log path copy, etc.) auto-dismisses after
+    // this window so a stale «Скопировано» doesn't loiter across subsequent
+    // actions. 3s is long enough to read a short status string.
+    private const int MenuFeedbackDismissMs = 3000;
+
     /// <summary>
     /// v2.32.0 SR-1/2/3/4 — pull whatever recovery notices accumulated
     /// during this launch (bad SharedPrefs JSON deserialise, unknown
@@ -432,7 +438,11 @@ public partial class AndroidApp
         _menuFeedback.IsVisible = true;
         try
         {
-            await System.Threading.Tasks.Task.Delay(3000);
+            // v2.37.0-r8 — extracted from inline `Task.Delay(3000)` to
+            // named constant. 3s is long enough to read a short menu
+            // feedback string («Скопировано», «Открыто», etc.) without
+            // loitering through subsequent actions.
+            await System.Threading.Tasks.Task.Delay(MenuFeedbackDismissMs);
             if (_menuFeedback is not null && _menuFeedback.Text == text)
             {
                 _menuFeedback.IsVisible = false;

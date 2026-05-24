@@ -32,6 +32,25 @@ namespace VPNRouter.App.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
+    // v2.37.0-r8 — extracted timeout magic numbers per Phase 1 quality pass.
+    // Pre-r8 inline `Task.Delay(2000)` / `(5000)` at multiple sites obscured
+    // why the values are what they are. Named constants make the policy
+    // intent reviewable + tweakable in one place. Each comment explains
+    // the lower-bound rationale (what we'd break by going shorter).
+    //
+    // Rules toast (`SetRulesToast`): 2s lets users notice the message
+    // without it loitering through subsequent actions. Cancelled+reissued
+    // when a new toast arrives within the window.
+    private const int RulesToastDurationMs = 2000;
+    // TgProxy settle window: matches the AutostartBootstrap path's 2s
+    // (see `MainWindowViewModel.AutostartBootstrap.cs` line ~165). Proxy
+    // needs ≥1.5s on warm-startup to bind the port and serve requests.
+    private const int TgProxySettleDelayMs = 2000;
+    // Reconnect retry sleep when TUN lock stolen by Service: enough time
+    // for the Service's HealthMonitor to give up and release the lock on
+    // its own (default ~1.5s release window in Windows Service mode).
+    private const int ServiceReleaseRetryDelayMs = 2000;
+
     private readonly VpnEngine _engine;
     // v2.31.6-r12 (Phase H, iter#4 audit): Dispose-state guard.
     // Pre-r12 the VM had no IDisposable surface — _runtimeStatusTimer
@@ -1889,7 +1908,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             try { oldCts.Cancel(); } catch (ObjectDisposedException) { }
             oldCts.Dispose();
         }
-        _ = System.Threading.Tasks.Task.Delay(2000, token).ContinueWith(t =>
+        _ = System.Threading.Tasks.Task.Delay(RulesToastDurationMs, token).ContinueWith(t =>
         {
             if (t.IsCanceled) return;
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
@@ -5185,7 +5204,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             IsTelegramSchemeWarningVisible = !TgProxyManager.IsTelegramSchemeRegistered();
 
             // Verify it actually started
-            await Task.Delay(2000);
+            await Task.Delay(TgProxySettleDelayMs);
             if (_tgProxy.IsRunning || TgProxyManager.IsAnyRunning(TgProxyPort))
             {
                 TgProxyEnabled = true;
@@ -5972,7 +5991,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 catch (TunOwnershipException) when (attempt < maxRetries)
                 {
                     _logger.Warning("[VM] Reconnect: TUN lock stolen by service, retry {A}/{M}", attempt, maxRetries);
-                    await Task.Delay(2000); // wait for service to release
+                    await Task.Delay(ServiceReleaseRetryDelayMs); // wait for service to release
                 }
             }
 
