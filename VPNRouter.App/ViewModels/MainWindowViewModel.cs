@@ -917,9 +917,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// users without sing-box background know what each action does.</summary>
     public string NewRuleActionHint => NewRuleAction switch
     {
-        "direct" => IsRussian ? "напрямую (мимо VPN)"     : "direct (bypass VPN)",
-        "proxy"  => IsRussian ? "через VPN-туннель"       : "through the VPN tunnel",
-        "block"  => IsRussian ? "блокировать соединение"  : "block the connection",
+        // v2.37.0-r13 — localized text moved to Strings.cs.
+        "direct" => Strings.RuleActionHintDirect,
+        "proxy"  => Strings.RuleActionHintProxy,
+        "block"  => Strings.RuleActionHintBlock,
         _ => string.Empty,
     };
 
@@ -929,17 +930,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// raw sing-box term ("domain_suffix") makes immediate sense.</summary>
     public string NewRuleTypeHint => NewRuleType switch
     {
-        "domain"         => IsRussian ? "точное имя (discord.com)"        : "exact match (discord.com)",
-        "domain_suffix"  => IsRussian ? "оканчивается на (.discord.com)"  : "ends with (.discord.com)",
-        "domain_keyword" => IsRussian ? "содержит (discord)"              : "contains (discord)",
-        "ip_cidr"        => IsRussian ? "IPv4/IPv6 + маска (10.0.0.0/8)"  : "IPv4/IPv6 + mask (10.0.0.0/8)",
-        "port"           => IsRussian ? "порт или список (53,853)"        : "port or list (53,853)",
-        "port_range"     => IsRussian ? "диапазон портов (1000-2000)"     : "port range (1000-2000)",
-        "network"        => IsRussian ? "tcp или udp"                     : "tcp or udp",
-        "process_name"   => IsRussian ? "имя процесса (Discord.exe)"      : "process name (Discord.exe)",
-        "process_path"   => IsRussian ? "полный путь к .exe"              : "full .exe path",
-        "geosite"        => IsRussian ? "тег geosite (cn, ads, …)"        : "geosite tag (cn, ads, …)",
-        "geoip"          => IsRussian ? "тег geoip (cn, us, private)"     : "geoip tag (cn, us, private)",
+        // v2.37.0-r13 — localized text moved to Strings.cs.
+        "domain"         => Strings.RuleTypeHintDomain,
+        "domain_suffix"  => Strings.RuleTypeHintDomainSuffix,
+        "domain_keyword" => Strings.RuleTypeHintDomainKeyword,
+        "ip_cidr"        => Strings.RuleTypeHintIpCidr,
+        "port"           => Strings.RuleTypeHintPort,
+        "port_range"     => Strings.RuleTypeHintPortRange,
+        "network"        => Strings.RuleTypeHintNetwork,
+        "process_name"   => Strings.RuleTypeHintProcessName,
+        "process_path"   => Strings.RuleTypeHintProcessPath,
+        "geosite"        => Strings.RuleTypeHintGeosite,
+        "geoip"          => Strings.RuleTypeHintGeoip,
         _                => string.Empty,
     };
 

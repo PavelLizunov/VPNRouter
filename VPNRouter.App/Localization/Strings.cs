@@ -100,6 +100,23 @@ public static class Strings
     // (RU "Остановлен" / EN "Stopped"). Used by Zapret + TgProxy status fields.
     public static string Stopped => global::VPNRouter.Core.Localization.Strings.Stopped;
 
+    // v2.37.0-r13 — Custom Rules type-help pass-throughs (moved from
+    // inline IsRussian-ternaries in MainWindowViewModel switch arms).
+    public static string RuleActionHintDirect => global::VPNRouter.Core.Localization.Strings.RuleActionHintDirect;
+    public static string RuleActionHintProxy => global::VPNRouter.Core.Localization.Strings.RuleActionHintProxy;
+    public static string RuleActionHintBlock => global::VPNRouter.Core.Localization.Strings.RuleActionHintBlock;
+    public static string RuleTypeHintDomain => global::VPNRouter.Core.Localization.Strings.RuleTypeHintDomain;
+    public static string RuleTypeHintDomainSuffix => global::VPNRouter.Core.Localization.Strings.RuleTypeHintDomainSuffix;
+    public static string RuleTypeHintDomainKeyword => global::VPNRouter.Core.Localization.Strings.RuleTypeHintDomainKeyword;
+    public static string RuleTypeHintIpCidr => global::VPNRouter.Core.Localization.Strings.RuleTypeHintIpCidr;
+    public static string RuleTypeHintPort => global::VPNRouter.Core.Localization.Strings.RuleTypeHintPort;
+    public static string RuleTypeHintPortRange => global::VPNRouter.Core.Localization.Strings.RuleTypeHintPortRange;
+    public static string RuleTypeHintNetwork => global::VPNRouter.Core.Localization.Strings.RuleTypeHintNetwork;
+    public static string RuleTypeHintProcessName => global::VPNRouter.Core.Localization.Strings.RuleTypeHintProcessName;
+    public static string RuleTypeHintProcessPath => global::VPNRouter.Core.Localization.Strings.RuleTypeHintProcessPath;
+    public static string RuleTypeHintGeosite => global::VPNRouter.Core.Localization.Strings.RuleTypeHintGeosite;
+    public static string RuleTypeHintGeoip => global::VPNRouter.Core.Localization.Strings.RuleTypeHintGeoip;
+
     // v2.37.0-r10 — Zapret cache UI pass-throughs.
     public static string ZapretForceFreshProbeButton => global::VPNRouter.Core.Localization.Strings.ZapretForceFreshProbeButton;
     public static string ZapretClearCacheButton => global::VPNRouter.Core.Localization.Strings.ZapretClearCacheButton;

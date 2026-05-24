@@ -129,6 +129,30 @@ public static class Strings
     // word, violating CLAUDE.md rule D1 (no English in RU UI).
     public static string Stopped => Ru ? "Остановлен" : "Stopped";
 
+    // v2.37.0-r13 — Custom Rules type-help text. Pre-r13 these lived as
+    // inline IsRussian-ternaries in MainWindowViewModel.NewRuleActionHint
+    // (lines 918-924) + NewRuleTypeHint (lines 930-944). Moving them into
+    // Strings.cs (the canonical location for all localized text) makes the
+    // inventory greppable and the call sites cleaner.
+    //
+    // The dispatch switch (rule type → display name) stays in the VM —
+    // these are just per-type localized strings.
+    public static string RuleActionHintDirect => Ru ? "напрямую (мимо VPN)" : "direct (bypass VPN)";
+    public static string RuleActionHintProxy => Ru ? "через VPN-туннель" : "through the VPN tunnel";
+    public static string RuleActionHintBlock => Ru ? "блокировать соединение" : "block the connection";
+
+    public static string RuleTypeHintDomain => Ru ? "точное имя (discord.com)" : "exact match (discord.com)";
+    public static string RuleTypeHintDomainSuffix => Ru ? "оканчивается на (.discord.com)" : "ends with (.discord.com)";
+    public static string RuleTypeHintDomainKeyword => Ru ? "содержит (discord)" : "contains (discord)";
+    public static string RuleTypeHintIpCidr => Ru ? "IPv4/IPv6 + маска (10.0.0.0/8)" : "IPv4/IPv6 + mask (10.0.0.0/8)";
+    public static string RuleTypeHintPort => Ru ? "порт или список (53,853)" : "port or list (53,853)";
+    public static string RuleTypeHintPortRange => Ru ? "диапазон портов (1000-2000)" : "port range (1000-2000)";
+    public static string RuleTypeHintNetwork => Ru ? "tcp или udp" : "tcp or udp";
+    public static string RuleTypeHintProcessName => Ru ? "имя процесса (Discord.exe)" : "process name (Discord.exe)";
+    public static string RuleTypeHintProcessPath => Ru ? "полный путь к .exe" : "full .exe path";
+    public static string RuleTypeHintGeosite => Ru ? "тег geosite (cn, ads, …)" : "geosite tag (cn, ads, …)";
+    public static string RuleTypeHintGeoip => Ru ? "тег geoip (cn, us, private)" : "geoip tag (cn, us, private)";
+
     // v2.37.0-r10 — Zapret probe-cache UI controls (Tools expander).
     // r6 added the cache silently; r10 surfaces user controls:
     //   - "Найти заново (без кэша)" — bypasses cache, runs full sweep
