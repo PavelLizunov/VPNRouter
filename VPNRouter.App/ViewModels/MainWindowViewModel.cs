@@ -1154,6 +1154,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(LblZapretHeroTitle))]
     [NotifyPropertyChangedFor(nameof(LblZapretAirPill))]
     private string _zapretWinningStrategy = string.Empty;
+
+    // v2.37.0-r1 — multi-target probe score. Set by per-attempt progress
+    // reporter. Surfaces in hero lede ("Тестирую (1/3): general — 7/8 ok") +
+    // air-pill ("В эфире · general (ALT3) · 7/8") so the user can see
+    // confidence in the picked strategy.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
+    [NotifyPropertyChangedFor(nameof(LblZapretAirPill))]
+    private int _zapretProbePassCount = 0;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
+    [NotifyPropertyChangedFor(nameof(LblZapretAirPill))]
+    private int _zapretProbeTotalCount = 0;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroTitle))]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
@@ -4379,16 +4392,26 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>Hero lede — flips with the four states. Probing lede embeds
-    /// the live attempt index + name.</summary>
+    /// <summary>Hero lede — flips with the four states. v2.37: probing lede
+    /// embeds live per-target score "(2/3): general (ALT3) — 7/8 ok" so the
+    /// user can see exactly what's passing.</summary>
     public string LblZapretHeroLede
     {
         get
         {
             if (IsZapretProbing && ZapretProbeTotal > 0)
+            {
+                var name = string.IsNullOrEmpty(ZapretProbeStrategy) ? "..." : ZapretProbeStrategy;
+                // Once we have a probe count, show it — earlier in the attempt
+                // (during Starting/Soaking phases) ZapretProbeTotalCount=0 and
+                // we fall back to the no-score variant.
+                if (ZapretProbeTotalCount > 0)
+                    return Strings.ZapretOneTapLedeProbingScored(
+                        ZapretProbeIndex + 1, ZapretProbeTotal, name,
+                        ZapretProbePassCount, ZapretProbeTotalCount);
                 return Strings.ZapretOneTapLedeProbing(
-                    ZapretProbeIndex + 1, ZapretProbeTotal,
-                    string.IsNullOrEmpty(ZapretProbeStrategy) ? "..." : ZapretProbeStrategy);
+                    ZapretProbeIndex + 1, ZapretProbeTotal, name);
+            }
             if (ZapretEnabled) return Strings.ZapretOneTapLedeRunning;
             if (IsZapretFallback) return Strings.ZapretOneTapLedeFallback;
             return Strings.ZapretOneTapLedeStopped;
@@ -4403,15 +4426,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// <summary>Disable button during download + probing to prevent double-spawn.</summary>
     public bool IsZapretMagicButtonEnabled => !IsZapretDownloading && !IsZapretProbing;
 
-    /// <summary>Air pill text when running — "В эфире · strategy · PID 1234".</summary>
+    /// <summary>Air pill text when running. v2.37: shows probe score
+    /// "general (ALT3) · 7/8" when we have the count, otherwise falls back
+    /// to PID. Score conveys confidence ("7 of 8 targets confirmed") which
+    /// is more user-meaningful than the PID number.</summary>
     public string LblZapretAirPill
     {
         get
         {
+            var name = string.IsNullOrEmpty(ZapretWinningStrategy) ? "..." : ZapretWinningStrategy;
+            if (ZapretProbeTotalCount > 0)
+                return Strings.ZapretOneTapAirPillScored(name, ZapretProbePassCount, ZapretProbeTotalCount);
             var pid = ZapretManager.WinwsPid ?? 0;
-            return Strings.ZapretOneTapAirPill(
-                string.IsNullOrEmpty(ZapretWinningStrategy) ? "..." : ZapretWinningStrategy,
-                pid);
+            return Strings.ZapretOneTapAirPill(name, pid);
         }
     }
 
@@ -4439,6 +4466,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             KillAllZapret();
             ZapretEnabled = false;
             ZapretWinningStrategy = string.Empty;
+            ZapretProbePassCount = 0;
+            ZapretProbeTotalCount = 0;
             IsZapretFallback = false;
             ZapretStatus = IsRussian ? "Остановлен" : "Stopped";
             SaveSettings();
@@ -4549,13 +4578,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             http.Timeout = TimeSpan.FromSeconds(8); // outer cap; ProbeOnceAsync also enforces 5s
 
             // Progress reporter wires to VM properties so hero re-renders.
+            // v2.37: also pumps live pass/total score so lede shows "5/8 ok".
             var progress = new Progress<VPNRouter.Core.Services.ZapretAutoStrategy.ProgressUpdate>(p =>
             {
                 ZapretProbeIndex = p.AttemptIndex;
                 ZapretProbeTotal = p.TotalAttempts;
                 ZapretProbeStrategy = p.StrategyName;
-                _logger.Information("[VM] ZapretOneTap probe progress: {Index}/{Total} {Name} {Phase}",
-                    p.AttemptIndex + 1, p.TotalAttempts, p.StrategyName, p.Phase);
+                ZapretProbePassCount = p.CurrentPassCount;
+                ZapretProbeTotalCount = p.CurrentTotalCount;
+                _logger.Information("[VM] ZapretOneTap probe: {Index}/{Total} {Name} {Phase} ({Pass}/{TPC})",
+                    p.AttemptIndex + 1, p.TotalAttempts, p.StrategyName, p.Phase,
+                    p.CurrentPassCount, p.CurrentTotalCount);
             });
 
             var sweep = await VPNRouter.Core.Services.ZapretAutoStrategy.ProbeAsync(
@@ -4568,13 +4601,17 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
             if (sweep.WinningStrategy != null)
             {
-                // Tier1 — winner stays running.
+                // Tier1+Tier2 — winner stays running. v2.37: also retain the
+                // probe score so the air-pill renders "general (ALT3) · 7/8"
+                // instead of just PID.
                 ZapretWinningStrategy = sweep.WinningStrategy;
+                ZapretProbePassCount = sweep.WinningPassCount;
+                ZapretProbeTotalCount = sweep.WinningTotalCount;
                 ZapretEnabled = true;
                 var pid = ZapretManager.WinwsPid ?? _zapret.Pid;
                 ZapretStatus = IsRussian
-                    ? $"Работает [{sweep.WinningStrategy}] (PID {pid})"
-                    : $"Running [{sweep.WinningStrategy}] (PID {pid})";
+                    ? $"Работает [{sweep.WinningStrategy}] {sweep.WinningPassCount}/{sweep.WinningTotalCount} (PID {pid})"
+                    : $"Running [{sweep.WinningStrategy}] {sweep.WinningPassCount}/{sweep.WinningTotalCount} (PID {pid})";
 
                 // Also persist as user's last strategy so legacy ToggleZapretAsync
                 // resumes correctly on autostart / Service handoff.
@@ -4609,6 +4646,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             ZapretProbeIndex = 0;
             ZapretProbeTotal = 0;
             ZapretProbeStrategy = string.Empty;
+            // Don't clear ZapretProbePass/TotalCount here — they're the
+            // persisted score for the winning strategy and must survive
+            // the orchestrator's cleanup so the air-pill keeps showing
+            // "7/8" while the proxy is running. Cleared on Stop instead.
         }
     }
 

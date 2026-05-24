@@ -603,8 +603,12 @@ public static class Strings
         ? "Скачаем zapret, поставим Discord hosts, подберём рабочую стратегию автоматически."
         : "We download zapret, install Discord hosts, and auto-pick a working strategy.";
     public static string ZapretOneTapLedeProbing(int index, int total, string strategy) => Ru
-        ? $"Тестирую ({index}/{total}): {strategy} — пробую открыть youtube.com..."
-        : $"Probing ({index}/{total}): {strategy} — trying youtube.com...";
+        ? $"Тестирую ({index}/{total}): {strategy} — проверяю Discord и YouTube..."
+        : $"Probing ({index}/{total}): {strategy} — checking Discord and YouTube...";
+    // v2.37.0-r1: per-attempt score in lede ("3/8 ok" while probing).
+    public static string ZapretOneTapLedeProbingScored(int index, int total, string strategy, int pass, int totalProbes) => Ru
+        ? $"Тестирую ({index}/{total}): {strategy} — {pass}/{totalProbes} ok"
+        : $"Probing ({index}/{total}): {strategy} — {pass}/{totalProbes} ok";
     public static string ZapretOneTapLedeRunning => Ru
         ? "YouTube, Discord и другие заблокированные сервисы должны открываться через локальный bypass."
         : "YouTube, Discord and other blocked services should work via the local bypass.";
@@ -632,6 +636,10 @@ public static class Strings
     public static string ZapretOneTapAirPill(string strategy, int pid) => Ru
         ? $"В эфире · {strategy} · PID {pid}"
         : $"On the air · {strategy} · PID {pid}";
+    // v2.37.0-r1: air-pill with probe-score badge ("В эфире · general (ALT3) · 7/8").
+    public static string ZapretOneTapAirPillScored(string strategy, int pass, int total) => Ru
+        ? $"В эфире · {strategy} · {pass}/{total}"
+        : $"On the air · {strategy} · {pass}/{total}";
     public static string ZapretOneTapDownloading => Ru
         ? "Скачивание zapret..."
         : "Downloading zapret...";

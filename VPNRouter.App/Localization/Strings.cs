@@ -363,6 +363,7 @@ public static class Strings
     public static string ZapretOneTapTitleFallback => global::VPNRouter.Core.Localization.Strings.ZapretOneTapTitleFallback;
     public static string ZapretOneTapLedeStopped => global::VPNRouter.Core.Localization.Strings.ZapretOneTapLedeStopped;
     public static string ZapretOneTapLedeProbing(int i, int t, string s) => global::VPNRouter.Core.Localization.Strings.ZapretOneTapLedeProbing(i, t, s);
+    public static string ZapretOneTapLedeProbingScored(int i, int t, string s, int p, int tp) => global::VPNRouter.Core.Localization.Strings.ZapretOneTapLedeProbingScored(i, t, s, p, tp);
     public static string ZapretOneTapLedeRunning => global::VPNRouter.Core.Localization.Strings.ZapretOneTapLedeRunning;
     public static string ZapretOneTapLedeFallback => global::VPNRouter.Core.Localization.Strings.ZapretOneTapLedeFallback;
     public static string ZapretOneTapStep1 => global::VPNRouter.Core.Localization.Strings.ZapretOneTapStep1;
@@ -372,6 +373,7 @@ public static class Strings
     public static string ZapretOneTapStartButton => global::VPNRouter.Core.Localization.Strings.ZapretOneTapStartButton;
     public static string ZapretOneTapStopButton => global::VPNRouter.Core.Localization.Strings.ZapretOneTapStopButton;
     public static string ZapretOneTapAirPill(string s, int p) => global::VPNRouter.Core.Localization.Strings.ZapretOneTapAirPill(s, p);
+    public static string ZapretOneTapAirPillScored(string s, int p, int t) => global::VPNRouter.Core.Localization.Strings.ZapretOneTapAirPillScored(s, p, t);
     public static string ZapretOneTapDownloading => global::VPNRouter.Core.Localization.Strings.ZapretOneTapDownloading;
     public static string ZapretOneTapInstallingHosts => global::VPNRouter.Core.Localization.Strings.ZapretOneTapInstallingHosts;
     public static string ZapretOneTapAllFailedToast => global::VPNRouter.Core.Localization.Strings.ZapretOneTapAllFailedToast;

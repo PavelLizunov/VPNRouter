@@ -66,18 +66,12 @@ public class MainWindowViewModelCharacterizationTests
     /// (<c>DismissTelegramSchemeWarning</c>), one new partial method
     /// (<c>OnTgProxyDownloadStepChanged</c>). Intentional drift.
     /// </summary>
-    // v2.36.0-r8 (2026-05-24 late night): ZapretOneTap design surface
-    // added — LblZapretHeroTitle, LblZapretHeroLede, LblZapretMagicButton,
-    // LblZapretAirPill, IsZapretMagicButtonEnabled, L_ZapretOneTapStep1/2/3,
-    // L_ZapretOneTapTune, ZapretOneClickCommand + 7 new ObservableProperties
-    // (_isZapretProbing, _zapretProbeIndex, _zapretProbeTotal,
-    // _zapretProbeStrategy, _zapretWinningStrategy, _isZapretFallback,
-    // _suppressZapretAvToast). Plus NotifyPropertyChangedFor wiring on
-    // _zapretEnabled / _isZapretDownloading. All cross-platform getters,
-    // so Linux drifts in lock-step (Linux bump deferred to CI first-failure
-    // per documented workflow).
+    // v2.37.0-r1 (2026-05-24 night): multi-target Zapret probe added two
+    // new ObservableProperties (_zapretProbePassCount, _zapretProbeTotalCount)
+    // plus NotifyPropertyChangedFor wiring on the existing hero labels.
+    // Linux bump deferred to CI first-failure per documented workflow.
     private const string PinnedHashWindows =
-        "7bceb42caaaacc9fa839cf66190534b6570297cb68c9068ee7417c0d814d7634";
+        "3d2149b8823d7d0da433517d82318f8c22ec4aeb6967783cf5f6fb62c4924334";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
