@@ -4476,6 +4476,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string L_ZapretOneTapStep2 => Strings.ZapretOneTapStep2;
     public string L_ZapretOneTapStep3 => Strings.ZapretOneTapStep3;
 
+    /// <summary>v2.37.0-r11 — L_ getters for the cache-control buttons
+    /// inside the Tools expander.</summary>
+    public string L_ZapretForceFreshProbeButton => Strings.ZapretForceFreshProbeButton;
+    public string L_ZapretClearCacheButton => Strings.ZapretClearCacheButton;
+
     /// <summary>
     /// One-button magic Zapret orchestrator. Runs on the magic button click
     /// in the new DpiBypassPage hero card. Replaces ToggleZapretAsync for the

@@ -85,8 +85,14 @@ public class MainWindowViewModelCharacterizationTests
     //   - ForceFreshProbeCommand (RelayCommand)
     // This is intentional public-surface addition, not refactor drift.
     // Linux deferred to next CI failure per documented workflow.
+    //
+    // v2.37.0-r11 bump (same night shift): added 2 L_* localization
+    // getters for the new cache-control buttons wired into XAML:
+    //   - L_ZapretForceFreshProbeButton
+    //   - L_ZapretClearCacheButton
+    // Plus DpiBypassPage.axaml change wiring the controls. Linux deferred.
     private const string PinnedHashWindows =
-        "96b58e8386cfae77c556eaa28d462b070eb1528693dd6893e6c50570c7cf384d";
+        "904209f4fdb0da108b2b515e8e2b8ed63956d95364e593c909f13c6f72db3ebf";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

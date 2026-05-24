@@ -544,6 +544,28 @@
                                            HorizontalAlignment="Left"/>
                             </StackPanel>
 
+                            <!-- v2.37.0-r11 — Zapret probe cache controls (Tools sub-section).
+                                 Reads the cache state on every render via LblZapretCacheStatus,
+                                 exposes Force-fresh + Clear-cache commands so power users can
+                                 re-probe after a network change or wipe the cache for testing. -->
+                            <StackPanel Spacing="6" Margin="0,6,0,0">
+                                <TextBlock Text="{Binding LblZapretCacheStatus}"
+                                           FontSize="10" Opacity="0.6"
+                                           TextWrapping="Wrap"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button Content="{Binding L_ZapretForceFreshProbeButton}"
+                                            Command="{Binding ForceFreshProbeCommand}"
+                                            IsEnabled="{Binding !IsZapretProbing}"
+                                            FontSize="10" Padding="8,4"
+                                            CornerRadius="{StaticResource RadiusSm}"/>
+                                    <Button Content="{Binding L_ZapretClearCacheButton}"
+                                            Command="{Binding ClearZapretCacheCommand}"
+                                            FontSize="10" Padding="8,4"
+                                            CornerRadius="{StaticResource RadiusSm}"/>
+                                </StackPanel>
+                            </StackPanel>
+
                         </StackPanel>
                     </Expander>
 
