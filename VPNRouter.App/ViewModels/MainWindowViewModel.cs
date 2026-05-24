@@ -4575,6 +4575,43 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 _logger.Warning(ex, "[VM] Pre-probe ipset cleanup failed (continuing anyway)");
             }
 
+            // r6 — warm-start from cache. If the last successful sweep was
+            // recent (<7d) and the strategy has at least 1 confirmed success
+            // with <3 consecutive failures, skip the 2-7 min Flowseal sweep
+            // and apply the cached winner directly. On failure of cache hit,
+            // fall through to the full sweep automatically.
+            var cached = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
+            if (cached != null && cached.IsRecentAndReliable())
+            {
+                _logger.Information(
+                    "[VM] ZapretOneTap cache hit: trying {Strategy} (success count {N})",
+                    cached.Strategy, cached.SuccessRunCount);
+
+                ZapretProbeStrategy = cached.Strategy;
+                ZapretProbeIndex = 0;
+                ZapretProbeTotal = 1;
+                var hit = await TryApplyCachedWinnerAsync(cached.Strategy);
+                if (hit)
+                {
+                    VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(cached.Strategy, _logger);
+                    return;
+                }
+                else
+                {
+                    // Cache hit didn't pan out — record failure and proceed
+                    // to full sweep. After 3 consecutive failures the cache
+                    // entry stops being "reliable" automatically.
+                    VPNRouter.Core.Services.ZapretProbeCache.RecordFailure(cached.Strategy, _logger);
+                    _logger.Information("[VM] Cache miss path — running full sweep");
+                }
+            }
+            else if (cached != null)
+            {
+                _logger.Information(
+                    "[VM] Cache entry stale or unreliable (last sweep {LastSweep}, fails {Fails}) — running full sweep",
+                    cached.LastSweepAt, cached.LastFailureCount);
+            }
+
             var flowsealProgress = new Progress<VPNRouter.Core.Services.ZapretAutoStrategy.FlowsealProgress>(p =>
             {
                 // r4 Part A — distinguish "new config header" vs "score-only update".
@@ -4651,6 +4688,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
                         var idx = ZapretStrategies.IndexOf(sweep.Winner);
                         if (idx >= 0) ZapretStrategyIndex = idx;
+                        // r6 — persist this winner so the next probe warm-starts.
+                        VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(sweep.Winner, _logger);
                         SaveSettings();
                     }
                     else
@@ -4741,6 +4780,85 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // persisted score for the winning strategy and must survive
             // the orchestrator's cleanup so the air-pill keeps showing
             // "7/8" while the proxy is running. Cleared on Stop instead.
+        }
+    }
+
+    /// <summary>
+    /// r6 — warm-start path. Apply cached winning strategy directly and
+    /// verify via short multi-target HEAD probe (8 endpoints, 5 s timeout
+    /// each ≈ 5-7 s wall-time vs 2-7 min full Flowseal sweep). Returns
+    /// true on confirmed success (winws.exe alive AND >=70% targets pass),
+    /// false on any failure (caller falls through to full sweep).
+    /// </summary>
+    private async Task<bool> TryApplyCachedWinnerAsync(string strategy)
+    {
+        try
+        {
+            var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == strategy);
+            if (parsed == null)
+            {
+                _logger.Warning("[VM] Cached strategy {Name} not in parsed list — bypass cache", strategy);
+                return false;
+            }
+
+            ZapretProbeStrategy = strategy;
+            // 1. Start the strategy.
+            if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
+                _zapret!.StartFromBat(parsed.BatPath, parsed.Arguments);
+            else
+                _zapret!.Start(parsed.Arguments);
+
+            // 2. Wait briefly for winws.exe; Bug-r9-G fast-exit would
+            //    show up here as a missing PID after ~150 ms.
+            await Task.Delay(1500);
+            var winwsPid = ZapretManager.WinwsPid;
+            if (!_zapret.IsRunning && winwsPid == null)
+            {
+                _logger.Warning("[VM] Cached strategy {Name} failed to spawn winws.exe", strategy);
+                return false;
+            }
+
+            // 3. Multi-target HEAD probe — fast sanity, not the full
+            //    Flowseal DPI checker. If a strategy was good 6 days ago
+            //    and isn't immediately broken, this is enough confidence.
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(7) };
+            var targets = VPNRouter.Core.Services.ZapretAutoStrategy.LoadTargets(_logger);
+            var report = await VPNRouter.Core.Services.ZapretAutoStrategy.ProbeAllTargetsAsync(
+                targets, http, _logger, CancellationToken.None);
+            var passPercent = targets.Count == 0 ? 0 : (report.PassCount * 100) / targets.Count;
+            _logger.Information(
+                "[VM] Cache warm-start probe: {Pass}/{Total} ok ({Pct}%) on {Strategy}",
+                report.PassCount, targets.Count, passPercent, strategy);
+
+            if (passPercent >= VPNRouter.Core.Services.ZapretAutoStrategy.Tier2MinPassPercent)
+            {
+                // Treat Tier1+Tier2 as "good enough" — same threshold the
+                // original ZapretAutoStrategy probe uses.
+                ZapretWinningStrategy = strategy;
+                ZapretEnabled = true;
+                ZapretProbePassCount = report.PassCount;
+                ZapretProbeTotalCount = targets.Count;
+                var pid = winwsPid ?? _zapret.Pid;
+                ZapretStatus = IsRussian
+                    ? $"Работает [{strategy}] (PID {pid}, warm)"
+                    : $"Running [{strategy}] (PID {pid}, warm)";
+                var idx = ZapretStrategies.IndexOf(strategy);
+                if (idx >= 0) ZapretStrategyIndex = idx;
+                SaveSettings();
+                return true;
+            }
+
+            // Probe under threshold — strategy stopped working since last
+            // sweep. Stop the misfire so the full sweep starts clean.
+            _logger.Warning("[VM] Cache warm-start probe under threshold — stopping for fresh sweep");
+            try { _zapret?.Stop(); } catch { /* defensive */ }
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[VM] TryApplyCachedWinnerAsync threw");
+            try { _zapret?.Stop(); } catch { /* defensive */ }
+            return false;
         }
     }
 
