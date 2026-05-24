@@ -1184,9 +1184,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(LblTgProxyToggle))]
     [NotifyPropertyChangedFor(nameof(LblTgProxyMainAction))]
     [NotifyPropertyChangedFor(nameof(IsTgProxySetUp))]
+    // v2.36.0-r7: hero re-narrates between stopped/running states.
+    [NotifyPropertyChangedFor(nameof(LblTgProxyHeroTitle))]
+    [NotifyPropertyChangedFor(nameof(LblTgProxyHeroLede))]
     private bool _tgProxyEnabled = false;
     [ObservableProperty] private string _tgProxyStatus = "Stopped";
-    [ObservableProperty] private int _tgProxyPort = 1443;
+    [ObservableProperty]
+    // v2.36.0-r7: lede + air-pill template substitute live port.
+    [NotifyPropertyChangedFor(nameof(LblTgProxyHeroLede))]
+    [NotifyPropertyChangedFor(nameof(LblTgProxyAirPill))]
+    private int _tgProxyPort = 1443;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTgProxySetUp))]
     private string _tgProxySecret = "";
@@ -2437,6 +2444,23 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string L_TgProxySchemeMissingWarning => Strings.TgProxySchemeMissingWarning;
     public string L_TgProxyDismiss => IsRussian ? "Скрыть" : "Dismiss";
     public string L_TgProxyCopyLink => IsRussian ? "Копировать ссылку" : "Copy link";
+
+    // v2.36.0-r7 — TgProxyOneTap design hero labels. Switch on running
+    // state so the body re-narrates after Start: "Включить Telegram" →
+    // "Telegram через MTProto", lede updates with live port. Bind these
+    // and they re-fetch via NotifyPropertyChangedFor on TgProxyEnabled
+    // (see _tgProxyEnabled / _tgProxyPort fields).
+    public string LblTgProxyHeroTitle => TgProxyEnabled
+        ? Strings.TgProxyOneTapTitleRunning
+        : Strings.TgProxyOneTapTitleStopped;
+    public string LblTgProxyHeroLede => TgProxyEnabled
+        ? Strings.TgProxyOneTapLedeRunning(TgProxyPort)
+        : Strings.TgProxyOneTapLedeStopped;
+    public string L_TgProxyOneTapStep1 => Strings.TgProxyOneTapStep1;
+    public string L_TgProxyOneTapStep2 => Strings.TgProxyOneTapStep2;
+    public string L_TgProxyOneTapStep3 => Strings.TgProxyOneTapStep3;
+    public string L_TgProxyOneTapTune  => Strings.TgProxyOneTapTune;
+    public string LblTgProxyAirPill   => Strings.TgProxyOneTapAirPill(TgProxyPort);
 
 
         // Phase 2B (Wave 8, 2026-05-18) - Troubleshooting / About / Reset / Logs
@@ -4519,7 +4543,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 ? (IsRussian ? "Не удалось остановить (проверьте права)" : "Couldn't stop (check permissions)")
                 : (IsRussian ? "Остановлен" : "Stopped");
             TgProxyStats = "";
-            SaveSettings();
+            // v2.36.0-r7 (task #63 / MCP test r6 finding): wrap SaveSettings
+            // in try/catch. Pre-r7 a concurrent reader of config.yaml (AV scan,
+            // Dropbox sync, another shell briefly reading the file) would
+            // surface as an IOException here that propagated uncaught from
+            // this async-void path and fatally killed the GUI process. Crash
+            // report shipped 2026-05-24 18:16:14 reproduced this exact path.
+            // Settings save is best-effort: the in-memory state stays correct,
+            // next Save attempt (e.g. on app shutdown or next toggle) will
+            // persist. Logging surfaces the failure for diagnosis.
+            try { SaveSettings(); }
+            catch (System.IO.IOException ex)
+            {
+                _logger.Warning(ex, "[VM] TgProxy Stop: SaveSettings failed (file lock?), keeping in-memory state");
+            }
             return;
         }
 
@@ -4584,7 +4621,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     ? "Ошибка: tg-ws-proxy завершился сразу."
                     : "Error: tg-ws-proxy exited immediately.";
             }
-            SaveSettings();
+            // v2.36.0-r7 (task #63): same defensive wrap as the Stop branch
+            // above. The outer try/catch at line ~4605 would catch IOException
+            // here today, but routing it as "TgProxy start failed" is
+            // misleading — Start actually succeeded, only persistence didn't.
+            // Explicit narrow catch keeps the user's runtime state intact.
+            try { SaveSettings(); }
+            catch (System.IO.IOException ex)
+            {
+                _logger.Warning(ex, "[VM] TgProxy Start: SaveSettings failed (file lock?), keeping in-memory state");
+            }
         }
         catch (TgProxyPortConflictException portEx)
         {

@@ -540,6 +540,44 @@ public static class Strings
         ? "Шаг 3/3: Загрузка proxy source с GitHub..."
         : "Step 3/3: Downloading proxy source from GitHub...";
 
+    // v2.36.0-r7 — TgProxyOneTap design (per claude.ai/design handoff
+    // `TgProxyOneTap.html`, variant A "Centered stack"). Replaces the dense
+    // r3 grid layout (port + secret + buttons + setup hint always visible)
+    // with a hero stack: plane icon → title → lede → big magic button →
+    // 3 micro-step chips. Power-user controls collapse behind a "Тонкая
+    // настройка" expander. Strings here are the hero copy.
+    //
+    // Per chat transcripts: deliberately DON'T mention "один клик" / "one
+    // click" — the magic-button concept stays implicit in the layout, not
+    // restated in the copy.
+    public static string TgProxyOneTapTitleStopped => Ru
+        ? "Включить Telegram"
+        : "Activate Telegram";
+    public static string TgProxyOneTapTitleRunning => Ru
+        ? "Telegram через MTProto"
+        : "Telegram via MTProto";
+    public static string TgProxyOneTapLedeStopped => Ru
+        ? "Поднимем локальный MTProto, откроем ссылку и Telegram сам подцепит секрет. Дальше только Start / Stop."
+        : "We bring up a local MTProto proxy, open the t.me link and Telegram picks up the secret on its own. After that just Start / Stop.";
+    public static string TgProxyOneTapLedeRunning(int port) => Ru
+        ? $"Прокси работает локально на :{port}. Telegram уже подцепил секрет."
+        : $"Proxy is running locally on :{port}. Telegram has picked up the secret.";
+    public static string TgProxyOneTapStep1 => Ru
+        ? "поднимется локально"
+        : "starts locally";
+    public static string TgProxyOneTapStep2 => Ru
+        ? "откроется t.me / proxy"
+        : "opens t.me / proxy";
+    public static string TgProxyOneTapStep3 => Ru
+        ? "Telegram настроится сам"
+        : "Telegram configures itself";
+    public static string TgProxyOneTapTune => Ru
+        ? "Тонкая настройка"
+        : "Advanced settings";
+    public static string TgProxyOneTapAirPill(int port) => Ru
+        ? $"В эфире · :{port}"
+        : $"On the air · :{port}";
+
     public static string OpenFolder => Ru ? "Открыть папку" : "Open folder";
     public static string OpenGitHub => "GitHub";
 

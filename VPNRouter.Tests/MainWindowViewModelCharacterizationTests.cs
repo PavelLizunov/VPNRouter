@@ -66,8 +66,14 @@ public class MainWindowViewModelCharacterizationTests
     /// (<c>DismissTelegramSchemeWarning</c>), one new partial method
     /// (<c>OnTgProxyDownloadStepChanged</c>). Intentional drift.
     /// </summary>
+    // v2.36.0-r7 (2026-05-24 night): TgProxyOneTap design surface added.
+    // New getters: LblTgProxyHeroTitle, LblTgProxyHeroLede,
+    // L_TgProxyOneTapStep1/2/3, L_TgProxyOneTapTune, LblTgProxyAirPill.
+    // Plus NotifyPropertyChangedFor wiring on _tgProxyEnabled and
+    // _tgProxyPort for the hero re-narration. Surface drift is
+    // additive (no removals).
     private const string PinnedHashWindows =
-        "498a9748060e8e4a9a31fc0906175d52fd3b013b09dc297b843a0834a8d5b687";
+        "486cf13f1bd5ae25af11e99c1277e94fa7b7427b21bbe3676a72ec837a55aef7";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

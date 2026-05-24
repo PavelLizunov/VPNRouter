@@ -345,6 +345,17 @@ public static class Strings
     public static string TgProxyDownloadStep2Wheels => global::VPNRouter.Core.Localization.Strings.TgProxyDownloadStep2Wheels;
     public static string TgProxyDownloadStep3Source => global::VPNRouter.Core.Localization.Strings.TgProxyDownloadStep3Source;
 
+    // v2.36.0-r7 — TgProxyOneTap hero copy (variant A · Centered stack).
+    public static string TgProxyOneTapTitleStopped => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapTitleStopped;
+    public static string TgProxyOneTapTitleRunning => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapTitleRunning;
+    public static string TgProxyOneTapLedeStopped  => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapLedeStopped;
+    public static string TgProxyOneTapLedeRunning(int port) => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapLedeRunning(port);
+    public static string TgProxyOneTapStep1 => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapStep1;
+    public static string TgProxyOneTapStep2 => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapStep2;
+    public static string TgProxyOneTapStep3 => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapStep3;
+    public static string TgProxyOneTapTune  => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapTune;
+    public static string TgProxyOneTapAirPill(int port) => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapAirPill(port);
+
     public static string OpenFolder => global::VPNRouter.Core.Localization.Strings.OpenFolder;
     public static string OpenGitHub => global::VPNRouter.Core.Localization.Strings.OpenGitHub;
 

@@ -5,7 +5,7 @@
              xmlns:loc="using:VPNRouter.App.Localization"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="500"
+             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="560"
              x:Class="VPNRouter.App.Views.Pages.TelegramPage"
              x:CompileBindings="True"
              x:DataType="vm:MainWindowViewModel">
@@ -15,38 +15,48 @@
     </UserControl.Resources>
 
     <!--
-      v2.31.6-r3 — strict redo per `C:/tmp/vpnrouter-design/.../AdvancedMode.html`
-      cell 6 (Инструменты → TgProxy).
+      v2.36.0-r7 — TgProxyOneTap redesign per claude.ai/design handoff
+      `TgProxyOneTap.html`, variant A · Centered stack.
+      Bundle: C:/tmp/vpnrouter-design-tgproxy/vpnrouter-design-system/
+              project/TgProxyOneTap.html
 
-      Pre-r3 (v2.31.6-r1/r2 "Variant A"):
-        - I proposed and shipped a two-state cascade with onboarding CTA +
-          Advanced expander hiding port/secret/version/folder/GitHub.
-        - User reverse course: «ты не сверился с дизайном». Rule B4
-          violation — design has all controls visible, just better
-          organised.
+      User intent (chat5.md transcript): «дамай переделаем дизайн "6 ·
+      Инструменты → TgProxy" так чтоб была однокнопочный простой флов,
+      … нажал 1 кнопку и произошла магия». 2026-05-24 ship of v2.36.0-r6
+      MVP one-button flow (per-step download · port pre-check · scheme
+      banner · secret persistence) covered the *engine* side; this r7
+      delivers the matching UX surface.
 
-      r3 lays out exactly per the design handoff:
-        1. Description paragraph (italic small, text-secondary).
-        2. 2-column grid 120 px + 1fr:
-             Col 1 — ПОРТ caption (uppercase 9 px tracking-caps muted
-                     semibold) + centred Port input.
-             Col 2 — SECRET caption + (input | Copy | New) sub-grid.
-        3. Info banner: ⓘ + "PID … · v… · running on :…" status line
-           + ↻ Update button on the right.
-        4. 3-button row — Open in Telegram (primary blue), Open folder,
-           GitHub (secondary). Wrap so they reflow on narrow widths.
-        5. Note paragraph — bold "Setup in Telegram:" + the manual route
-           through Telegram Settings → Advanced → Connection type →
-           MTProto Proxy + the "click 'Open in Telegram' once" hint.
-        6. Footer toggle — secondary "Start/Stop Telegram Proxy" per
-           v2.25.6 design intent ("don't fight global Start/Stop VPN").
+      Layout (variant A from the 6-option exploration):
+        1. Soft accent radial-glow hero card.
+        2. Plane icon (paper-plane Path, 46×46, accent-border).
+        3. Title  — flips stopped/running via LblTgProxyHeroTitle.
+        4. Lede   — flips stopped/running via LblTgProxyHeroLede.
+        5. Magic button (big primary, accent-solid) — fires
+           TgProxyMainActionCommand (download → start → open-Telegram
+           on first run, Stop afterwards). Same command as the footer
+           button — by design (both surfaces drive the same flow; body
+           is the hero, footer is muscle-memory).
+        6. 3 step chips (1 локально / 2 t.me/proxy / 3 авто-настройка)
+           visible only when stopped. Disappear in running state.
+        7. Air-pill «В эфире · :1443» visible only when running.
 
-      The IsTgProxySetUp + SetupTgProxyAsync VM additions from r1 stay
-      wired internally — "Open in Telegram" button now drives the full
-      one-click setup chain (download → start → open) on first click,
-      and falls through to plain OpenTgProxyInTelegramCommand once the
-      proxy is up. Two-state cascade in the visual layout is dropped.
-    -->
+      Persistent panels (kept from r3+r6):
+        - Per-step download progress textblock (r6 MVP task A).
+        - Toast banner (r4 BUG#3 fix).
+        - Scheme-missing warning (r6 MVP task C).
+
+      Power-user controls (Port + Secret + Open folder + GitHub +
+      version banner + setup hint) collapse into the «Тонкая настройка»
+      Expander — hidden by default per chat:
+        «Порт / Secret / PID / GitHub / папка — спрятаны в свёрнутый
+         блок "Тонкая настройка" внизу. По умолчанию закрыт.»
+      No information loss vs r3 — same controls, just stowed behind one tap.
+
+      Don'ts (from chat5.md):
+        - Don't mention «один клик / one-click» in copy.
+        - Don't introduce destructive-red CTA for Stop — same accent toggle.
+      -->
 
     <Grid RowDefinitions="*,Auto">
 
@@ -54,87 +64,272 @@
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto"
                       AllowAutoHide="False"
-                      Padding="0,10,0,10">
+                      Padding="0,8,0,10">
             <Grid Margin="12,0,14,0">
                 <StackPanel Spacing="12">
 
-                    <!-- 1. Description (per design `desc` class). -->
-                    <TextBlock Text="{Binding LblTgProxyDescription}"
-                               TextWrapping="Wrap"
-                               FontSize="11"
-                               LineHeight="16"
-                               Opacity="0.7"
-                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <!-- ────────── 1 · Per-step download progress (r6 MVP).
+                         Sits above the hero so visibility doesn't shift the
+                         hero card position on first-run install. Hidden when
+                         download not in flight. -->
+                    <StackPanel IsVisible="{Binding IsTgProxyDownloading}" Spacing="6">
+                        <ProgressBar IsIndeterminate="True"
+                                     Height="3"
+                                     CornerRadius="{StaticResource RadiusXs}"
+                                     Foreground="{DynamicResource AccentSolidBrush}"/>
+                        <TextBlock IsVisible="{Binding HasTgProxyDownloadStep}"
+                                   Text="{Binding TgProxyDownloadStep}"
+                                   TextWrapping="Wrap"
+                                   FontSize="10"
+                                   Opacity="0.7"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    </StackPanel>
 
-                    <!-- 2. 2-column grid: Порт (120 px) | Secret (1fr). -->
-                    <Grid ColumnDefinitions="120,*" ColumnSpacing="12">
+                    <!-- ────────── 2 · Hero card — accent glow + centered stack.
+                         Outer Border is the rounded card with subtle border;
+                         inner Grid layers a soft RadialGradientBrush behind
+                         the content for the «marketing event» feel from
+                         design A. ZIndex via Grid layering: glow is bottom,
+                         StackPanel is top. -->
+                    <Border CornerRadius="{StaticResource RadiusLg}"
+                            Background="{DynamicResource SurfaceBaseBrush}"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                            BorderThickness="1"
+                            Padding="20,24,20,22"
+                            ClipToBounds="True">
+                        <Grid>
+                            <!-- Soft accent glow disc — RadialGradientBrush
+                                 from AccentBgSubtle to Transparent at 65 percent.
+                                 Design CSS source: radial-gradient(circle,
+                                 accent-bg-subtle 0 percent, transparent 65 percent)
+                                 with opacity .85 on a 280×280 area. We render
+                                 it via an Ellipse so the brush coordinates stay
+                                 anchored to the circular bounds. -->
+                            <Ellipse Width="320" Height="320"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center"
+                                     Opacity="0.65"
+                                     IsHitTestVisible="False">
+                                <Ellipse.Fill>
+                                    <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="0.5" RadiusY="0.5">
+                                        <GradientStop Offset="0.0"  Color="{DynamicResource AccentBgSubtle}"/>
+                                        <GradientStop Offset="0.65" Color="Transparent"/>
+                                    </RadialGradientBrush>
+                                </Ellipse.Fill>
+                            </Ellipse>
 
-                        <!-- Col 1: Порт -->
-                        <StackPanel Grid.Column="0" Spacing="3">
-                            <TextBlock Text="{Binding L_TgProxyPort}"
-                                       FontSize="9"
-                                       FontWeight="SemiBold"
-                                       Opacity="0.5"
-                                       Foreground="{DynamicResource TextMutedBrush}"
-                                       LetterSpacing="0.5"/>
-                            <TextBox Text="{Binding TgProxyPort}"
-                                     PlaceholderText="{Binding L_WmTgProxyPort}"
-                                     FontSize="11" Padding="6,4"
-                                     HorizontalContentAlignment="Center"
-                                     AutomationProperties.Name="{Binding L_TgProxyPort}"/>
-                        </StackPanel>
+                            <StackPanel Spacing="12" HorizontalAlignment="Center" MaxWidth="380">
 
-                        <!-- Col 2: Secret + Copy + New -->
-                        <StackPanel Grid.Column="1" Spacing="3">
-                            <TextBlock Text="{Binding L_TgProxySecret}"
-                                       FontSize="9"
-                                       FontWeight="SemiBold"
-                                       Opacity="0.5"
-                                       Foreground="{DynamicResource TextMutedBrush}"
-                                       LetterSpacing="0.5"/>
-                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
-                                <!-- v2.31.6-r9 — A11y: explicit AutomationProperties.Name
-                                     so screen readers announce «MTProto secret» rather
-                                     than the cryptic 32-char hex value the TextBox
-                                     reads otherwise. Name uses the same RU/EN string
-                                     that the visible caption above shows. -->
-                                <TextBox Grid.Column="0"
-                                         Text="{Binding TgProxySecret}"
-                                         PlaceholderText="{Binding L_WmTgProxySecret}"
-                                         FontSize="10" Padding="6,4"
-                                         FontFamily="Consolas,Courier New,monospace"
-                                         IsReadOnly="True"
-                                         AutomationProperties.Name="{Binding L_TgProxySecret}"/>
-                                <!-- A11y: «Copy» / «New» button labels are too short
-                                     for screen readers to disambiguate without context.
-                                     Name binds to fuller phrases via Strings. -->
-                                <Button Grid.Column="1"
-                                        Content="{Binding L_TgProxyCopy}"
-                                        Command="{Binding CopyTgProxySecretCommand}"
-                                        FontSize="10" Padding="8,4"
-                                        CornerRadius="{StaticResource RadiusSm}"
-                                        AutomationProperties.Name="{Binding L_TgProxyCopySecretA11y}"/>
-                                <Button Grid.Column="2"
-                                        Content="{Binding L_TgProxyRegenerate}"
-                                        Command="{Binding RegenerateTgProxySecretCommand}"
-                                        FontSize="10" Padding="8,4"
-                                        CornerRadius="{StaticResource RadiusSm}"
-                                        AutomationProperties.Name="{Binding L_TgProxyRegenerateSecretA11y}"/>
-                            </Grid>
-                        </StackPanel>
+                                <!-- Paper-plane icon (46×46 rounded square,
+                                     accent-border, subtle shadow). SVG path
+                                     from design: M21 3 11 13 → M21 3 14.5 21
+                                     -3.5 -8 L3 9.5 21 3z (Telegram-style
+                                     plane outline). -->
+                                <Border Width="46" Height="46"
+                                        CornerRadius="14"
+                                        Background="{DynamicResource SurfaceBaseBrush}"
+                                        BorderBrush="{DynamicResource AccentBorderBrush}"
+                                        BorderThickness="1"
+                                        BoxShadow="0 2 6 0 #14000000"
+                                        HorizontalAlignment="Center">
+                                    <Path Width="22" Height="22"
+                                          Stretch="Uniform"
+                                          Stroke="{DynamicResource AccentFgBrush}"
+                                          StrokeThickness="1.8"
+                                          StrokeLineCap="Round"
+                                          StrokeJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Data="M21,3 L11,13 M21,3 L14.5,21 L11,13 L3,9.5 z"/>
+                                </Border>
 
-                    </Grid>
+                                <!-- Title (flips with state). -->
+                                <TextBlock Text="{Binding LblTgProxyHeroTitle}"
+                                           FontSize="18"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap"
+                                           HorizontalAlignment="Center"/>
 
-                    <!-- v2.31.6-r4 (BUG #3 fix) transient toast.
-                         Pre-r4 the Copy/Update/Regenerate commands
-                         hijacked TgProxyStatus to show "Copied!" /
-                         "Installed v1.6.5" / etc., shadowing the real
-                         runtime status (Stopped / Running) until the
-                         next status mutation. Computer-use audit
-                         confirmed it never auto-reverted. r4 routes
-                         these confirmations through TgProxyToast
-                         (auto-clear after 2.5 s) and renders them
-                         here above the persistent status banner. -->
+                                <!-- Lede (flips with state). -->
+                                <TextBlock Text="{Binding LblTgProxyHeroLede}"
+                                           FontSize="12"
+                                           LineHeight="18"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap"
+                                           HorizontalAlignment="Center"
+                                           MaxWidth="340"/>
+
+                                <!-- The magic button — big primary accent.
+                                     Same command as the footer button.
+                                     Disabled during download to prevent
+                                     double-spawn. Min 240 px keeps the
+                                     hero feel even on narrow windows. -->
+                                <Button Command="{Binding TgProxyMainActionCommand}"
+                                        IsEnabled="{Binding !IsTgProxyDownloading}"
+                                        Background="{DynamicResource AccentSolidBrush}"
+                                        Foreground="{DynamicResource AccentOnSolidBrush}"
+                                        BorderThickness="0"
+                                        CornerRadius="{StaticResource RadiusMd}"
+                                        Padding="22,12"
+                                        MinWidth="240"
+                                        HorizontalAlignment="Center"
+                                        HorizontalContentAlignment="Center"
+                                        FontWeight="Bold"
+                                        FontSize="13"
+                                        AutomationProperties.Name="{Binding LblTgProxyMainAction}">
+                                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                        <!-- Inline play / stop glyph. The design
+                                             uses a circular bg with a play
+                                             triangle; we keep it lean with
+                                             just the triangle so the button
+                                             stays compact at narrow widths. -->
+                                        <Path Width="11" Height="11"
+                                              Stretch="Uniform"
+                                              Fill="{DynamicResource AccentOnSolidBrush}"
+                                              VerticalAlignment="Center"
+                                              IsVisible="{Binding !TgProxyEnabled}"
+                                              Data="M8,5 L8,19 L19,12 z"/>
+                                        <Border Width="10" Height="10"
+                                                CornerRadius="2"
+                                                Background="{DynamicResource AccentOnSolidBrush}"
+                                                VerticalAlignment="Center"
+                                                IsVisible="{Binding TgProxyEnabled}"/>
+                                        <TextBlock Text="{Binding LblTgProxyMainAction}"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- 3-step chips (only when stopped).
+                                     Each chip = number bubble + label
+                                     in a pill background. Wrap if narrow. -->
+                                <ItemsControl IsVisible="{Binding !TgProxyEnabled}"
+                                              HorizontalAlignment="Center">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel HorizontalAlignment="Center" ItemSpacing="6" LineSpacing="6"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <!-- Step 1 -->
+                                    <Border CornerRadius="{StaticResource RadiusPill}"
+                                            Background="{DynamicResource SurfaceBaseBrush}"
+                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                            BorderThickness="1"
+                                            Padding="10,5">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Border Width="14" Height="14"
+                                                    CornerRadius="7"
+                                                    Background="{DynamicResource AccentBgSubtleBrush}">
+                                                <TextBlock Text="1"
+                                                           FontSize="9"
+                                                           FontWeight="Bold"
+                                                           Foreground="{DynamicResource AccentFgBrush}"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+                                            <TextBlock Text="{Binding L_TgProxyOneTapStep1}"
+                                                       FontSize="10"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <!-- Step 2 -->
+                                    <Border CornerRadius="{StaticResource RadiusPill}"
+                                            Background="{DynamicResource SurfaceBaseBrush}"
+                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                            BorderThickness="1"
+                                            Padding="10,5">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Border Width="14" Height="14"
+                                                    CornerRadius="7"
+                                                    Background="{DynamicResource AccentBgSubtleBrush}">
+                                                <TextBlock Text="2"
+                                                           FontSize="9"
+                                                           FontWeight="Bold"
+                                                           Foreground="{DynamicResource AccentFgBrush}"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+                                            <TextBlock Text="{Binding L_TgProxyOneTapStep2}"
+                                                       FontSize="10"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <!-- Step 3 -->
+                                    <Border CornerRadius="{StaticResource RadiusPill}"
+                                            Background="{DynamicResource SurfaceBaseBrush}"
+                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                            BorderThickness="1"
+                                            Padding="10,5">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Border Width="14" Height="14"
+                                                    CornerRadius="7"
+                                                    Background="{DynamicResource AccentBgSubtleBrush}">
+                                                <TextBlock Text="3"
+                                                           FontSize="9"
+                                                           FontWeight="Bold"
+                                                           Foreground="{DynamicResource AccentFgBrush}"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+                                            <TextBlock Text="{Binding L_TgProxyOneTapStep3}"
+                                                       FontSize="10"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                </ItemsControl>
+
+                                <!-- Air-pill (only when running). Green
+                                     dot + «В эфире · :1443». Adds the
+                                     truncated secret + Copy link mini-row. -->
+                                <StackPanel IsVisible="{Binding TgProxyEnabled}"
+                                            Orientation="Horizontal"
+                                            Spacing="6"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center">
+                                    <Border CornerRadius="{StaticResource RadiusPill}"
+                                            Background="{DynamicResource SuccessBgBrush}"
+                                            BorderBrush="{DynamicResource SuccessBorderBrush}"
+                                            BorderThickness="1"
+                                            Padding="10,5">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                            <Ellipse Width="6" Height="6"
+                                                     Fill="{DynamicResource SuccessSolidBrush}"
+                                                     VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding LblTgProxyAirPill}"
+                                                       FontSize="10"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource SuccessFgBrush}"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <Button Command="{Binding CopyTgProxyLinkCommand}"
+                                            Content="{Binding L_TgProxyCopyLink}"
+                                            FontSize="10"
+                                            Padding="10,5"
+                                            CornerRadius="{StaticResource RadiusPill}"
+                                            Background="{DynamicResource SurfaceBaseBrush}"
+                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                            BorderThickness="1"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.Name="{Binding L_TgProxyCopyLink}"/>
+                                </StackPanel>
+
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- ────────── 3 · Toast banner (r4 BUG#3 fix).
+                         Auto-clears after 2.5 s, hosts «Copied!»,
+                         «New secret» etc. without overwriting runtime
+                         status. -->
                     <Border IsVisible="{Binding HasTgProxyToast}"
                             Padding="10,6"
                             CornerRadius="{StaticResource RadiusSm}"
@@ -147,83 +342,9 @@
                                    Foreground="{DynamicResource AccentFgBrush}"/>
                     </Border>
 
-                    <!-- 3. Info banner — status line + Update button.
-                         Per design `banner` class: surface-base bg with
-                         info icon + status text + ghost button on the
-                         right. We wire the ↻ icon button to UpdateTgProxy
-                         since the design's stale-version implication
-                         maps cleanly to "refresh binary". -->
-                    <Border Padding="10,8"
-                            CornerRadius="{StaticResource RadiusSm}"
-                            Background="{DynamicResource SurfaceBaseBrush}"
-                            BorderThickness="1"
-                            BorderBrush="{DynamicResource BorderSubtleBrush}">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                            <Ellipse Grid.Column="0"
-                                     Width="8" Height="8"
-                                     VerticalAlignment="Center"
-                                     Fill="{Binding TgProxyBadgeBrush}"/>
-                            <StackPanel Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        Spacing="6"
-                                        VerticalAlignment="Center">
-                                <TextBlock Text="{Binding TgProxyStatus}"
-                                           FontSize="11"
-                                           VerticalAlignment="Center"/>
-                                <TextBlock Text="·"
-                                           FontSize="11"
-                                           Opacity="0.5"
-                                           VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding TgProxyVersionText}"
-                                           FontSize="11"
-                                           Opacity="0.6"
-                                           VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <!-- v2.31.6-r9 A11y: Content already descriptive
-                                 («Update TgProxy») but adding explicit Name
-                                 ensures the icon-rendered ↻ glyph in some
-                                 themes doesn't strip the label. -->
-                            <Button Grid.Column="2"
-                                    Content="{Binding LblUpdateTgProxy}"
-                                    Command="{Binding UpdateTgProxyCommand}"
-                                    FontSize="10" Padding="8,3"
-                                    CornerRadius="{StaticResource RadiusSm}"
-                                    Background="Transparent"
-                                    BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                    BorderThickness="1"
-                                    IsEnabled="{Binding !IsTgProxyDownloading}"
-                                    VerticalAlignment="Center"
-                                    AutomationProperties.Name="{Binding LblUpdateTgProxy}"/>
-                        </Grid>
-                    </Border>
-
-                    <!-- Download progress (shown while UpdateTgProxy is
-                         in flight — banner above stays static so the
-                         layout doesn't jump). -->
-                    <ProgressBar IsVisible="{Binding IsTgProxyDownloading}"
-                                 IsIndeterminate="True"
-                                 Height="3"
-                                 CornerRadius="{StaticResource RadiusXs}"
-                                 Foreground="{DynamicResource AccentSolidBrush}"/>
-
-                    <!-- v2.36 (MVP one-button task A) — per-step download
-                         label. Visible while a download is in flight.
-                         TgProxyDownloadStep carries "Step N/3:" prefix
-                         from TgProxyUpdater.StatusChanged so user sees
-                         which substep (Python / wheels / source) is
-                         running. Hidden when download isn't active or
-                         when the prefix-stripped text would be empty. -->
-                    <TextBlock IsVisible="{Binding HasTgProxyDownloadStep}"
-                               Text="{Binding TgProxyDownloadStep}"
-                               TextWrapping="Wrap"
-                               FontSize="10"
-                               Opacity="0.7"
-                               Foreground="{DynamicResource TextSecondaryBrush}"/>
-
-                    <!-- v2.36 (MVP one-button task C) — non-blocking
-                         scheme-missing warning. Pops only when the
-                         tg:// URI scheme has no registered handler at
-                         start-time pre-flight. Proxy keeps running;
+                    <!-- ────────── 4 · Scheme-missing warning (r6 MVP).
+                         Pops only when tg:// scheme has no registered
+                         handler at start-time. Proxy keeps running;
                          banner offers Copy link + Dismiss fallbacks. -->
                     <Border IsVisible="{Binding IsTelegramSchemeWarningVisible}"
                             Padding="10,8"
@@ -252,95 +373,178 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- 4. 3-button row — v2.31.6-r5 (TG-2) demotion.
-                         Pre-r5 the body had a primary-blue «Open in Telegram»
-                         button that fired SetupTgProxyCommand (download +
-                         start + open). The user reported this conflicts
-                         with the footer «Start Telegram proxy» button —
-                         visually the two were ~300 px apart but conceptually
-                         a single first-run flow. r5 unifies the action in
-                         the footer and demotes this button to a secondary
-                         «re-pair» fallback used only after initial setup
-                         when Telegram client lost its proxy entry (e.g.
-                         user reset the client or switched device). When
-                         the proxy is stopped the button is disabled — the
-                         footer is the only correct entry point on first
-                         run, removing the two-step ambiguity.
-                         Open folder + GitHub remain secondary as before. -->
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Button Content="{Binding L_TgProxyReopenInTelegram}"
-                                Command="{Binding OpenTgProxyInTelegramCommand}"
-                                FontSize="10" Padding="10,5"
-                                CornerRadius="{StaticResource RadiusSm}"
-                                IsEnabled="{Binding TgProxyEnabled}"/>
-                        <Button Content="{Binding L_OpenFolder}"
-                                Command="{Binding OpenTgProxyFolderCommand}"
-                                FontSize="10" Padding="10,5"
-                                CornerRadius="{StaticResource RadiusSm}"/>
-                        <Button Content="{Binding L_OpenGitHub}"
-                                Command="{Binding OpenTgProxyGitHubCommand}"
-                                FontSize="10" Padding="10,5"
-                                CornerRadius="{StaticResource RadiusSm}"
-                                Foreground="{DynamicResource AccentSolidBrush}"/>
-                    </StackPanel>
+                    <!-- ────────── 5 · «Тонкая настройка» expander.
+                         All r3-era power-user controls live here, hidden
+                         by default per design transcript:
+                           «Порт / Secret / PID / GitHub / папка —
+                            спрятаны в свёрнутый блок "Тонкая настройка"
+                            внизу. По умолчанию закрыт.»
+                         The full Port + Secret + Update + Open folder +
+                         GitHub + setup hint stack is preserved as a
+                         single block — nothing removed, just stowed. -->
+                    <Expander Header="{Binding L_TgProxyOneTapTune}"
+                              FontSize="11"
+                              FontWeight="SemiBold"
+                              IsExpanded="False"
+                              Background="Transparent"
+                              BorderBrush="{DynamicResource BorderSubtleBrush}"
+                              BorderThickness="1"
+                              CornerRadius="{StaticResource RadiusSm}"
+                              Padding="10,6">
+                        <StackPanel Spacing="10" Margin="0,6,0,0">
 
-                    <!-- 5. Note paragraph (per design `note` class).
-                         Bold lead-in + manual setup path + click-once
-                         hint. Critical for users whose Telegram client
-                         doesn't accept the deep-link auto-add (custom
-                         distributions, web Telegram, some RU forks). -->
-                    <Border Padding="10,8"
-                            CornerRadius="{StaticResource RadiusSm}"
-                            Background="{DynamicResource SurfaceSunkenBrush}">
-                        <StackPanel Spacing="3">
-                            <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.7"
-                                       Text="{Binding LblTgProxySetupHint}"/>
-                            <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.5"
-                                       FontStyle="Italic"
-                                       Text="{Binding L_TgProxySetupOnce}"/>
+                            <!-- Description (kept as anchor copy). -->
+                            <TextBlock Text="{Binding LblTgProxyDescription}"
+                                       TextWrapping="Wrap"
+                                       FontSize="11"
+                                       LineHeight="16"
+                                       Opacity="0.7"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+                            <!-- 2-column grid: Порт (120 px) | Secret (1fr). -->
+                            <Grid ColumnDefinitions="120,*" ColumnSpacing="12">
+
+                                <!-- Col 1: Порт -->
+                                <StackPanel Grid.Column="0" Spacing="3">
+                                    <TextBlock Text="{Binding L_TgProxyPort}"
+                                               FontSize="9"
+                                               FontWeight="SemiBold"
+                                               Opacity="0.5"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               LetterSpacing="0.5"/>
+                                    <TextBox Text="{Binding TgProxyPort}"
+                                             PlaceholderText="{Binding L_WmTgProxyPort}"
+                                             FontSize="11" Padding="6,4"
+                                             HorizontalContentAlignment="Center"
+                                             AutomationProperties.Name="{Binding L_TgProxyPort}"/>
+                                </StackPanel>
+
+                                <!-- Col 2: Secret + Copy + New -->
+                                <StackPanel Grid.Column="1" Spacing="3">
+                                    <TextBlock Text="{Binding L_TgProxySecret}"
+                                               FontSize="9"
+                                               FontWeight="SemiBold"
+                                               Opacity="0.5"
+                                               Foreground="{DynamicResource TextMutedBrush}"
+                                               LetterSpacing="0.5"/>
+                                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
+                                        <TextBox Grid.Column="0"
+                                                 Text="{Binding TgProxySecret}"
+                                                 PlaceholderText="{Binding L_WmTgProxySecret}"
+                                                 FontSize="10" Padding="6,4"
+                                                 FontFamily="Consolas,Courier New,monospace"
+                                                 IsReadOnly="True"
+                                                 AutomationProperties.Name="{Binding L_TgProxySecret}"/>
+                                        <Button Grid.Column="1"
+                                                Content="{Binding L_TgProxyCopy}"
+                                                Command="{Binding CopyTgProxySecretCommand}"
+                                                FontSize="10" Padding="8,4"
+                                                CornerRadius="{StaticResource RadiusSm}"
+                                                AutomationProperties.Name="{Binding L_TgProxyCopySecretA11y}"/>
+                                        <Button Grid.Column="2"
+                                                Content="{Binding L_TgProxyRegenerate}"
+                                                Command="{Binding RegenerateTgProxySecretCommand}"
+                                                FontSize="10" Padding="8,4"
+                                                CornerRadius="{StaticResource RadiusSm}"
+                                                AutomationProperties.Name="{Binding L_TgProxyRegenerateSecretA11y}"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Version + Update banner. The body status
+                                 dot here is informational; runtime state
+                                 also surfaces in the footer indicator. -->
+                            <Border Padding="10,8"
+                                    CornerRadius="{StaticResource RadiusSm}"
+                                    Background="{DynamicResource SurfaceSunkenBrush}"
+                                    BorderThickness="1"
+                                    BorderBrush="{DynamicResource BorderSubtleBrush}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                    <Ellipse Grid.Column="0"
+                                             Width="8" Height="8"
+                                             VerticalAlignment="Center"
+                                             Fill="{Binding TgProxyBadgeBrush}"/>
+                                    <StackPanel Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                Spacing="6"
+                                                VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding TgProxyStatus}"
+                                                   FontSize="11"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="·"
+                                                   FontSize="11"
+                                                   Opacity="0.5"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding TgProxyVersionText}"
+                                                   FontSize="11"
+                                                   Opacity="0.6"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="2"
+                                            Content="{Binding LblUpdateTgProxy}"
+                                            Command="{Binding UpdateTgProxyCommand}"
+                                            FontSize="10" Padding="8,3"
+                                            CornerRadius="{StaticResource RadiusSm}"
+                                            Background="Transparent"
+                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                            BorderThickness="1"
+                                            IsEnabled="{Binding !IsTgProxyDownloading}"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.Name="{Binding LblUpdateTgProxy}"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Secondary action row — re-pair / folder / GitHub. -->
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Content="{Binding L_TgProxyReopenInTelegram}"
+                                        Command="{Binding OpenTgProxyInTelegramCommand}"
+                                        FontSize="10" Padding="10,5"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        IsEnabled="{Binding TgProxyEnabled}"/>
+                                <Button Content="{Binding L_OpenFolder}"
+                                        Command="{Binding OpenTgProxyFolderCommand}"
+                                        FontSize="10" Padding="10,5"
+                                        CornerRadius="{StaticResource RadiusSm}"/>
+                                <Button Content="{Binding L_OpenGitHub}"
+                                        Command="{Binding OpenTgProxyGitHubCommand}"
+                                        FontSize="10" Padding="10,5"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Foreground="{DynamicResource AccentSolidBrush}"/>
+                            </StackPanel>
+
+                            <!-- Manual setup hint (for clients without
+                                 working tg:// scheme — covers the long
+                                 tail of custom Telegram distros). -->
+                            <Border Padding="10,8"
+                                    CornerRadius="{StaticResource RadiusSm}"
+                                    Background="{DynamicResource SurfaceSunkenBrush}">
+                                <StackPanel Spacing="3">
+                                    <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.7"
+                                               Text="{Binding LblTgProxySetupHint}"/>
+                                    <TextBlock TextWrapping="Wrap" FontSize="10" Opacity="0.5"
+                                               FontStyle="Italic"
+                                               Text="{Binding L_TgProxySetupOnce}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Author credit. -->
+                            <TextBlock Text="Flowseal/tg-ws-proxy"
+                                       FontSize="9"
+                                       Opacity="0.4"
+                                       Foreground="{DynamicResource TextMutedBrush}"
+                                       HorizontalAlignment="Left"/>
+
                         </StackPanel>
-                    </Border>
-
-                    <!-- Author credit (low-emphasis, design has it as
-                         monospace fragment in 4-row's tail; we surface
-                         it as a separate footer line because the 3-button
-                         row above is already busier than the design's
-                         flex-wrap allows on narrow widths). -->
-                    <TextBlock Text="Flowseal/tg-ws-proxy"
-                               FontSize="9"
-                               Opacity="0.4"
-                               Foreground="{DynamicResource TextMutedBrush}"
-                               HorizontalAlignment="Left"/>
+                    </Expander>
 
                 </StackPanel>
             </Grid>
         </ScrollViewer>
 
-        <!-- 6. Footer — v2.31.6-r6 production-standard alignment.
-             Pre-r6 footer was a `Padding="10,8"` Border with no
-             background, hosting an oversized button (FontSize 11
-             Padding 14,7). The non-sunken bg made the divider
-             above look orphaned, and the button was wider than
-             NetworkPage's canonical Apply pattern.
-
-             r6 matches NetworkPage Apply bar styling exactly:
-             - Border: `Padding="14,7,14,8"` + `SurfaceSunkenBrush`
-               bg + `0,1,0,0` divider (canonical footer-bar look).
-             - Status indicator on left: color dot + TgProxyStatus
-               text. Mirrors NetworkPage's "✓ Auto-saved" hint and
-               surfaces the runtime state even on this page where
-               the body banner already shows it (footer indicator
-               stays visible if user scrolls past the banner on
-               narrow windows). Uses StatusColorConverter same as
-               body banner, plus TextSecondaryBrush text per the
-               Apply-bar pattern.
-             - Button compact right-aligned: `Padding="10,5"
-               FontSize="10" SemiBold`. Stays SECONDARY (white +
-               text-primary fg + border) per design cell 6 (`btn`
-               not `btn primary`) — TgProxy's footer is intentionally
-               not primary because the v2.25.6 design intent was
-               «не ещё один огромный синий» next to the global
-               Start VPN footer. -->
+        <!-- ────────── 6 · Footer — kept from r3+r6.
+             Page-specific status + Stop button. Same TgProxyMainAction
+             command as the hero button; lives here for muscle memory
+             and narrow-window cases where the hero scrolls off. -->
         <Border Grid.Row="1" Padding="14,7,14,8"
                 BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource BorderDefaultBrush}"
