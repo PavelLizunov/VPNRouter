@@ -129,6 +129,22 @@ public static class Strings
     // word, violating CLAUDE.md rule D1 (no English in RU UI).
     public static string Stopped => Ru ? "Остановлен" : "Stopped";
 
+    // v2.37.0-r17 — ServerTesting tab labels (Test all / Cancel /
+    // Deep verify / Stop) + progress text. Pre-r17 these were inline
+    // `IsRussian` ternaries in MainWindowViewModel.ServerTesting.cs
+    // partial. Moving them to Strings.cs makes the localization
+    // inventory greppable.
+    public static string ServerTestCancel => Ru ? "Отмена" : "Cancel";
+    public static string ServerTestAll => Ru ? "Проверить все" : "Test all";
+    public static string ServerDeepStop => Ru ? "Стоп" : "Stop";
+    public static string ServerDeepVerify => Ru ? "Глубокая проверка" : "Deep verify";
+    public static string ServerTestingManual => Ru ? "Проверка Manual-серверов" : "Testing Manual servers";
+    public static string ServerTestingSubscriptions => Ru ? "Проверка подписочных серверов" : "Testing subscription servers";
+    public static string ServerTestNoServers => Ru ? "Нет серверов" : "No servers";
+    public static string ServerTestCancelled => Ru ? "Отменено" : "Cancelled";
+    public static string ServerDeepVerifyManual => Ru ? "Глубокая проверка Manual" : "Deep verify Manual";
+    public static string ServerDeepVerifySubscription => Ru ? "Глубокая проверка подписки" : "Deep verify subscription";
+
     // v2.37.0-r16 — TgProxy stats labels (Active / Total prefixes).
     // ParseStatsShort returns "Active: N | Total: N | ↑bytes ↓bytes";
     // the up/down arrows are universal symbols (no localization needed)

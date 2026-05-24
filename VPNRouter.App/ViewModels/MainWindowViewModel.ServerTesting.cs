@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using VPNRouter.Core.Models;
 using VPNRouter.Core.Services;
+using VPNRouter.App.Localization;
 
 namespace VPNRouter.App.ViewModels;
 
@@ -48,8 +49,8 @@ public partial class MainWindowViewModel
 
     /// <summary>"Test all" vs "Cancel" based on IsTestingServers.</summary>
     public string ServerTestButtonText => IsTestingServers
-        ? (IsRussian ? "Отмена" : "Cancel")
-        : (IsRussian ? "Проверить все" : "Test all");
+        ? Strings.ServerTestCancel
+        : Strings.ServerTestAll;
 
     /// <summary>Progress text for deep verify passes (Manual VLESS).</summary>
     [ObservableProperty] private string _serverDeepProgressText = string.Empty;
@@ -79,8 +80,8 @@ public partial class MainWindowViewModel
     /// <summary>"Deep verify" vs "Stop" text for the button.</summary>
     /// v2.30.5-r1 (UX-24 fix): localize button label in Russian.
     public string ServerDeepButtonText => IsDeepTestingServers
-        ? (IsRussian ? "Стоп" : "Stop")
-        : (IsRussian ? "Глубокая проверка" : "Deep verify");
+        ? Strings.ServerDeepStop
+        : Strings.ServerDeepVerify;
 
     // ── Single-server test (invoked per row) ──────────────────────────────
 
@@ -128,7 +129,7 @@ public partial class MainWindowViewModel
         // v2.31.6-r15: per-tab progress + warning surfaces.
         await TestServerCollectionAsync(
             Servers.ToList(),
-            IsRussian ? "Проверка Manual-серверов" : "Testing Manual servers",
+            Strings.ServerTestingManual,
             setProgress: text => ServerTestProgressText = text,
             setWarning: text => ServerTestImplausibleWarning = text);
     }
@@ -146,7 +147,7 @@ public partial class MainWindowViewModel
 
         await TestServerCollectionAsync(
             SubscriptionServers.ToList(),
-            IsRussian ? "Проверка подписочных серверов" : "Testing subscription servers",
+            Strings.ServerTestingSubscriptions,
             setProgress: text => SubscriptionTestProgressText = text,
             setWarning: text => SubscriptionTestImplausibleWarning = text);
     }
@@ -163,7 +164,7 @@ public partial class MainWindowViewModel
         setWarning(string.Empty);
         if (servers.Count == 0)
         {
-            setProgress(IsRussian ? "Нет серверов" : "No servers");
+            setProgress(Strings.ServerTestNoServers);
             return;
         }
 
@@ -280,7 +281,7 @@ public partial class MainWindowViewModel
         }
         catch (OperationCanceledException)
         {
-            setProgress(IsRussian ? "Отменено" : "Cancelled");
+            setProgress(Strings.ServerTestCancelled);
             foreach (var s in servers) s.IsTesting = false;
         }
         finally
@@ -310,7 +311,7 @@ public partial class MainWindowViewModel
         // v2.31.6-r15: Manual / Subscribe progress isolated (iter#6).
         await DeepVerifyCollectionAsync(
             Servers.ToList(),
-            IsRussian ? "Deep verify Manual" : "Deep verify Manual",
+            Strings.ServerDeepVerifyManual,
             setProgress: text => ServerDeepProgressText = text);
     }
 
@@ -325,7 +326,7 @@ public partial class MainWindowViewModel
 
         await DeepVerifyCollectionAsync(
             SubscriptionServers.ToList(),
-            IsRussian ? "Deep verify подписки" : "Deep verify subscription",
+            Strings.ServerDeepVerifySubscription,
             setProgress: text => SubscriptionDeepProgressText = text);
     }
 
@@ -336,7 +337,7 @@ public partial class MainWindowViewModel
     {
         if (servers.Count == 0)
         {
-            setProgress(IsRussian ? "Нет серверов" : "No servers");
+            setProgress(Strings.ServerTestNoServers);
             return;
         }
 
@@ -401,7 +402,7 @@ public partial class MainWindowViewModel
         }
         catch (OperationCanceledException)
         {
-            setProgress(IsRussian ? "Отменено" : "Cancelled");
+            setProgress(Strings.ServerTestCancelled);
             foreach (var vm in servers)
             {
                 if (vm.IsDeepTesting) vm.IsDeepTesting = false;

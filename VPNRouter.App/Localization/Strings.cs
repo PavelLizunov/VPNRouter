@@ -100,6 +100,18 @@ public static class Strings
     // (RU "Остановлен" / EN "Stopped"). Used by Zapret + TgProxy status fields.
     public static string Stopped => global::VPNRouter.Core.Localization.Strings.Stopped;
 
+    // v2.37.0-r17 — ServerTesting label pass-throughs.
+    public static string ServerTestCancel => global::VPNRouter.Core.Localization.Strings.ServerTestCancel;
+    public static string ServerTestAll => global::VPNRouter.Core.Localization.Strings.ServerTestAll;
+    public static string ServerDeepStop => global::VPNRouter.Core.Localization.Strings.ServerDeepStop;
+    public static string ServerDeepVerify => global::VPNRouter.Core.Localization.Strings.ServerDeepVerify;
+    public static string ServerTestingManual => global::VPNRouter.Core.Localization.Strings.ServerTestingManual;
+    public static string ServerTestingSubscriptions => global::VPNRouter.Core.Localization.Strings.ServerTestingSubscriptions;
+    public static string ServerTestNoServers => global::VPNRouter.Core.Localization.Strings.ServerTestNoServers;
+    public static string ServerTestCancelled => global::VPNRouter.Core.Localization.Strings.ServerTestCancelled;
+    public static string ServerDeepVerifyManual => global::VPNRouter.Core.Localization.Strings.ServerDeepVerifyManual;
+    public static string ServerDeepVerifySubscription => global::VPNRouter.Core.Localization.Strings.ServerDeepVerifySubscription;
+
     // v2.37.0-r16 — TgProxy stats label pass-throughs.
     public static string TgProxyStatsActive => global::VPNRouter.Core.Localization.Strings.TgProxyStatsActive;
     public static string TgProxyStatsTotal => global::VPNRouter.Core.Localization.Strings.TgProxyStatsTotal;
