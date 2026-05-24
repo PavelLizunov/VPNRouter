@@ -129,6 +129,43 @@ public static class Strings
     // word, violating CLAUDE.md rule D1 (no English in RU UI).
     public static string Stopped => Ru ? "Остановлен" : "Stopped";
 
+    // v2.37.0-r9 — Custom Rules import/export localization. Pre-r9 every
+    // toast / validation message in `ImportCustomRulesAsync` +
+    // `ExportCustomRulesAsync` was hardcoded English, violating CLAUDE.md
+    // rule D1 (no English in RU UI). The feature has been live since
+    // v2.30.0-r3 (2026-04-30) but the validation-error slot stayed unilingual
+    // for ~25 days — RU users saw "Import failed: ..." in an otherwise-
+    // Russian sub-section. r9 closes the gap.
+    public static string RulesFilePickerOpenFailed => Ru
+        ? "Не удалось открыть диалог выбора файлов"
+        : "Could not open file picker";
+    public static string RulesImportDialogTitle => Ru ? "Импорт правил" : "Import rules";
+    public static string RulesExportDialogTitle => Ru ? "Экспорт правил" : "Export rules";
+    public static string RulesImportFailed(string warning) => Ru
+        ? $"Импорт не удался: {warning}"
+        : $"Import failed: {warning}";
+    public static string RulesImportNoRules => Ru
+        ? "Импорт: в файле нет правил"
+        : "Import: file contained no rules";
+    public static string RulesImported(int count, string format) => Ru
+        ? $"Импортировано {count} правил [{format}]"
+        : $"Imported {count} rule(s) [{format}]";
+    public static string RulesImportWithWarnings(int count) => Ru
+        ? $" — {count} предупреждение(й) (см. лог)"
+        : $" — {count} warning(s) (see app log)";
+    public static string RulesImportError(string err) => Ru
+        ? $"Ошибка импорта: {err}"
+        : $"Import error: {err}";
+    public static string RulesExportNothing => Ru
+        ? "Нечего экспортировать — список правил пуст"
+        : "Nothing to export — rule list is empty";
+    public static string RulesExported(int count, string filename) => Ru
+        ? $"Экспортировано {count} правил в {filename}"
+        : $"Exported {count} rule(s) to {filename}";
+    public static string RulesExportError(string err) => Ru
+        ? $"Ошибка экспорта: {err}"
+        : $"Export error: {err}";
+
     // ── Task #41 Stage 2 (PinkuDani 2026-05-21) — two-phase Start timer ──
     // Phase A diagnostic: sing-box never reported started within 60s.
     // Real hang at firewall / TUN cleanup / wintun launch.

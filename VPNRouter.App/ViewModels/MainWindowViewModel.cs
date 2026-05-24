@@ -1988,13 +1988,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var window = GetMainWindow();
             if (window == null)
             {
-                NewRuleValidationError = "Could not open file picker";
+                NewRuleValidationError = Strings.RulesFilePickerOpenFailed;
                 return;
             }
 
             var files = await window.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
             {
-                Title = "Import rules",
+                Title = Strings.RulesImportDialogTitle,
                 AllowMultiple = false,
                 FileTypeFilter = new[]
                 {
@@ -2020,8 +2020,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             if (result.Rules.Count == 0)
             {
                 NewRuleValidationError = result.Warnings.Count > 0
-                    ? "Import failed: " + result.Warnings[0]
-                    : "Import: file contained no rules";
+                    ? Strings.RulesImportFailed(result.Warnings[0])
+                    : Strings.RulesImportNoRules;
                 return;
             }
 
@@ -2036,9 +2036,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             FlushCustomRulesListToSettings();
 
             // Show success summary in the validation slot.
-            var msg = $"Imported {result.Rules.Count} rule(s) [{result.DetectedFormat}]";
+            var msg = Strings.RulesImported(result.Rules.Count, result.DetectedFormat.ToString());
             if (result.Warnings.Count > 0)
-                msg += $" — {result.Warnings.Count} warning(s) (see app log)";
+                msg += Strings.RulesImportWithWarnings(result.Warnings.Count);
             NewRuleValidationError = msg;
             foreach (var w in result.Warnings)
                 _logger.Information("[CustomRules import] {Warning}", w);
@@ -2046,7 +2046,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         catch (Exception ex)
         {
             _logger.Error(ex, "[VM] ImportCustomRules failed");
-            NewRuleValidationError = "Import error: " + ex.Message;
+            NewRuleValidationError = Strings.RulesImportError(ex.Message);
         }
     }
 
@@ -2063,19 +2063,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var window = GetMainWindow();
             if (window == null)
             {
-                NewRuleValidationError = "Could not open file picker";
+                NewRuleValidationError = Strings.RulesFilePickerOpenFailed;
                 return;
             }
 
             if (CustomRulesList.Count == 0)
             {
-                NewRuleValidationError = "Nothing to export — rule list is empty";
+                NewRuleValidationError = Strings.RulesExportNothing;
                 return;
             }
 
             var file = await window.StorageProvider.SaveFilePickerAsync(new Avalonia.Platform.Storage.FilePickerSaveOptions
             {
-                Title = "Export rules",
+                Title = Strings.RulesExportDialogTitle,
                 SuggestedFileName = $"vpnrouter-rules-{DateTime.Now:yyyyMMdd}",
                 DefaultExtension = "json",
                 FileTypeChoices = new[]
@@ -2110,12 +2110,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var content = VPNRouter.Core.Services.CustomRulesImportExport.ExportToText(rules, fmt);
             await File.WriteAllTextAsync(path, content);
 
-            NewRuleValidationError = $"Exported {rules.Count} rule(s) to {Path.GetFileName(path)}";
+            NewRuleValidationError = Strings.RulesExported(rules.Count, Path.GetFileName(path));
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "[VM] ExportCustomRules failed");
-            NewRuleValidationError = "Export error: " + ex.Message;
+            NewRuleValidationError = Strings.RulesExportError(ex.Message);
         }
     }
 

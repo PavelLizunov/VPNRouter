@@ -100,6 +100,19 @@ public static class Strings
     // (RU "Остановлен" / EN "Stopped"). Used by Zapret + TgProxy status fields.
     public static string Stopped => global::VPNRouter.Core.Localization.Strings.Stopped;
 
+    // v2.37.0-r9 — Custom Rules import/export pass-throughs.
+    public static string RulesFilePickerOpenFailed => global::VPNRouter.Core.Localization.Strings.RulesFilePickerOpenFailed;
+    public static string RulesImportDialogTitle => global::VPNRouter.Core.Localization.Strings.RulesImportDialogTitle;
+    public static string RulesExportDialogTitle => global::VPNRouter.Core.Localization.Strings.RulesExportDialogTitle;
+    public static string RulesImportFailed(string warning) => global::VPNRouter.Core.Localization.Strings.RulesImportFailed(warning);
+    public static string RulesImportNoRules => global::VPNRouter.Core.Localization.Strings.RulesImportNoRules;
+    public static string RulesImported(int count, string format) => global::VPNRouter.Core.Localization.Strings.RulesImported(count, format);
+    public static string RulesImportWithWarnings(int count) => global::VPNRouter.Core.Localization.Strings.RulesImportWithWarnings(count);
+    public static string RulesImportError(string err) => global::VPNRouter.Core.Localization.Strings.RulesImportError(err);
+    public static string RulesExportNothing => global::VPNRouter.Core.Localization.Strings.RulesExportNothing;
+    public static string RulesExported(int count, string filename) => global::VPNRouter.Core.Localization.Strings.RulesExported(count, filename);
+    public static string RulesExportError(string err) => global::VPNRouter.Core.Localization.Strings.RulesExportError(err);
+
     // Task #41 Stage 2 (PinkuDani 2026-05-21) — two-phase Start timer diagnostics.
     public static string StartTimeoutPhaseA => global::VPNRouter.Core.Localization.Strings.StartTimeoutPhaseA;
     public static string StartTimeoutPhaseB => global::VPNRouter.Core.Localization.Strings.StartTimeoutPhaseB;
