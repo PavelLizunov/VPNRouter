@@ -36,10 +36,16 @@ namespace VPNRouter.App.ViewModels;
 /// </summary>
 public partial class UpdateNotificationViewModel : ObservableObject
 {
+    // v2.37.0-r12 — magic-number + leak fix. Pre-r12 the manual check
+    // finally block fire-and-forgot a 3000ms reset. Named constant +
+    // CTS swap pattern (mirroring MVM.SetRulesToast VM-10 fix).
+    private const int CheckStateResetDelayMs = 3000;
+
     private readonly UpdateSettings _settings;
     private readonly ILogger _logger;
     private readonly UpdateChecker _updateChecker;
     private readonly IUpdateSource _updateSource;
+    private System.Threading.CancellationTokenSource? _resetCheckStateCts;
 
     [ObservableProperty] private bool _isVisible;
     [ObservableProperty] private string _message = string.Empty;
@@ -183,9 +189,30 @@ public partial class UpdateNotificationViewModel : ObservableObject
         finally
         {
             IsChecking = false;
-            // Reset link text after 3 seconds
-            _ = Task.Delay(3000).ContinueWith(_ =>
-                Dispatcher.UIThread.Post(() => CheckState = UpdateCheckState.Default));
+            // v2.37.0-r12 — cancel any prior pending reset before scheduling
+            // a new one. Pre-r12 every manual check fire-and-forgot a 3s
+            // delayed reset; if the user clicked Check 5× in quick
+            // succession, 5 timers raced for the last write. Worst case the
+            // CheckState would flicker UpToDate → Default → Failed → Default
+            // in a single second. Swap+dispose CTS pattern matches the same
+            // fix in MainWindowViewModel.SetRulesToast (v2.31.0-r3 VM-10).
+            var oldCts = _resetCheckStateCts;
+            _resetCheckStateCts = new System.Threading.CancellationTokenSource();
+            var token = _resetCheckStateCts.Token;
+            if (oldCts != null)
+            {
+                try { oldCts.Cancel(); } catch (ObjectDisposedException) { }
+                oldCts.Dispose();
+            }
+            _ = Task.Delay(CheckStateResetDelayMs, token).ContinueWith(t =>
+            {
+                if (t.IsCanceled) return;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!token.IsCancellationRequested)
+                        CheckState = UpdateCheckState.Default;
+                });
+            }, TaskScheduler.Default);
         }
     }
 
