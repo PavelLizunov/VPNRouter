@@ -18,9 +18,46 @@ Before bumping anything:
 3. Run regression tests:
    ```bash
    dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build \
-     --filter "FullyQualifiedName~VlessServersResolverTests|FullyQualifiedName~ConfigGeneratorEmptyServersGuardTests|FullyQualifiedName~FreeConfigAggregatorPreserveTests"
+     --filter "FullyQualifiedName~VlessServersResolverTests|FullyQualifiedName~ConfigGeneratorEmptyServersGuardTests|FullyQualifiedName~FreeConfigAggregatorPreserveTests|FullyQualifiedName~MainWindowViewModelCharacterizationTests"
    ```
    Expected: all pass.
+4. **If MainWindowViewModelCharacterizationTests failed with Windows hash drift**:
+   bump `PinnedHashWindows` in `VPNRouter.Tests/MainWindowViewModelCharacterizationTests.cs` BEFORE Step 2 commit. The actual hash appears in the test output as `Actual: <hex>`.
+
+## Post-push verification (MANDATORY — was the v2.36.0-r6→r9 lesson)
+
+After Step 2 push lands the commit, **the main-branch `dotnet test` job runs
+on Linux/macOS** with a DIFFERENT pinned hash (`PinnedHashLinux`). The
+Windows-side bump in pre-flight does NOT cover Linux because `MainWindowViewModel`
+has `#if PLATFORM_WINDOWS` blocks that change the conditional-stripped surface.
+
+**The recurring failure**: ship rN → Windows hash bumped locally → commit pushed →
+GitHub Releases page shows `vX.Y.Z-rN` with all assets green → declare success →
+but the commits page on main shows a RED X because Linux test failed with
+hash-drift, and that debt accumulates over r5→r6→r7→r8→r9 (real history).
+
+**Fix workflow** — after `git push`:
+
+```bash
+# 1. Wait for the dotnet test workflow on the new commit
+gh run watch $(gh run list --repo PavelLizunov/VPNRouter --workflow "dotnet test" --limit 1 --json databaseId --jq '.[0].databaseId') --repo PavelLizunov/VPNRouter --exit-status
+
+# 2. If it fails with Linux hash drift, capture the Actual hash:
+gh run view <RUN_ID> --repo PavelLizunov/VPNRouter --log-failed 2>&1 | grep "Actual:"
+
+# 3. Bump PinnedHashLinux to that value, commit, push as a follow-up "chore(tests)"
+#    commit. THIS COMMIT MUST LAND BEFORE you finalize the release as success.
+
+# 4. Re-verify after the follow-up push:
+gh api repos/PavelLizunov/VPNRouter/commits/HEAD/check-runs --jq '.check_runs[] | "\(.conclusion // .status)  \(.name)"' | sort -u
+```
+
+This is non-negotiable. The visible state on the commits page is what the user
+sees. Green tag assets + red commit-level test = bad ship UX even if functional.
+
+A clean ship has BOTH:
+- Tag release: 12-14 assets, prerelease=true, previous-stable Latest restored.
+- Latest main commit: all check-runs green (build, grep, publish, test, test-update, verify).
 
 ## Step 1 — bump AppVersion
 
