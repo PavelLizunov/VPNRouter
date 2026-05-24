@@ -111,9 +111,13 @@ public class MainWindowViewModelCharacterizationTests
     /// here. The added members are NOT inside #if PLATFORM_WINDOWS blocks
     /// (they're cross-platform observable properties + getters), so the
     /// Linux surface drifts in lock-step with Windows.</para>
+    ///
+    /// <para><b>v2.36.0-r7 (2026-05-24 night):</b> TgProxyOneTap design
+    /// surface (see PinnedHashWindows note). Same cross-platform getters,
+    /// Linux hash bumped here from CI run 26368644430 actual.</para>
     /// </summary>
     private const string PinnedHashLinux =
-        "d62f381b1dd25b96ca8beedf3d81dfdca727f64f618bdb8383c828e0764bf9be";
+        "5bd459a01e48f245b89661ad570a21d23b4d060c74d10e00e413dc75979ae6ac";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()
