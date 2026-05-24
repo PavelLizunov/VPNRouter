@@ -100,6 +100,14 @@ public static class Strings
     // (RU "Остановлен" / EN "Stopped"). Used by Zapret + TgProxy status fields.
     public static string Stopped => global::VPNRouter.Core.Localization.Strings.Stopped;
 
+    // v2.37.0-r14 — more inline-ternary localization pass-throughs.
+    public static string RuleParserMissingValue => global::VPNRouter.Core.Localization.Strings.RuleParserMissingValue;
+    public static string RuleParserUnknownType(string type) => global::VPNRouter.Core.Localization.Strings.RuleParserUnknownType(type);
+    public static string RulesAllDeleted => global::VPNRouter.Core.Localization.Strings.RulesAllDeleted;
+    public static string RulesAlreadySorted => global::VPNRouter.Core.Localization.Strings.RulesAlreadySorted;
+    public static string RulesEmptyValue => global::VPNRouter.Core.Localization.Strings.RulesEmptyValue;
+    public static string ClickToActivateConfig => global::VPNRouter.Core.Localization.Strings.ClickToActivateConfig;
+
     // v2.37.0-r13 — Custom Rules type-help pass-throughs (moved from
     // inline IsRussian-ternaries in MainWindowViewModel switch arms).
     public static string RuleActionHintDirect => global::VPNRouter.Core.Localization.Strings.RuleActionHintDirect;

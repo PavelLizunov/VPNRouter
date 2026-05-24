@@ -1643,14 +1643,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var secondTok = tokens.Length > 1 ? tokens[1] : string.Empty;
             if (!validTypes.Contains(secondTok))
             {
-                errors.Add((i + 1, IsRussian
-                    ? $"неизвестный type «{secondTok}»"
-                    : $"unknown type «{secondTok}»"));
+                errors.Add((i + 1, Strings.RuleParserUnknownType(secondTok)));
                 continue;
             }
             if (tokens.Length < 3)
             {
-                errors.Add((i + 1, IsRussian ? "нет value" : "missing value"));
+                errors.Add((i + 1, Strings.RuleParserMissingValue));
                 continue;
             }
             active++;
@@ -1807,7 +1805,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         FlushCustomRulesListToSettings();
         ClearAllConfirmPending = false;
         ClearAllConfirmText = string.Empty;
-        ShowRulesToast(IsRussian ? "✓ Удалено все правила" : "✓ All rules deleted");
+        ShowRulesToast(Strings.RulesAllDeleted);
     }
 
     /// <summary>v2.30.0-r18 — dismiss the confirm bar without deleting.</summary>
@@ -1886,7 +1884,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         ShowRulesToast(changed
             ? (IsRussian ? $"✓ Отсортировано по типу ({sorted.Count})"
                          : $"✓ Sorted by type ({sorted.Count})")
-            : (IsRussian ? "Уже отсортировано" : "Already sorted"));
+            : Strings.RulesAlreadySorted);
     }
 
     /// <summary>v2.30.0-r17 — transient toast string shown above the
@@ -2129,7 +2127,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (string.IsNullOrWhiteSpace(NewRuleValue))
         {
-            NewRuleValidationError = IsRussian ? "Пустое значение" : "Empty value";
+            NewRuleValidationError = Strings.RulesEmptyValue;
             return;
         }
         // v2.30.7 — also gate on the live type-regex validator that
@@ -2383,7 +2381,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string LblFieldShortId => Strings.FieldShortId;
     public string LblDoubleClickEditServer => Strings.DoubleClickEditServer;
     public string LblDoubleClickActiveConfig => Strings.DoubleClickActiveConfig;
-    public string LblClickToActivateConfig => IsRussian ? "Нажмите на конфиг для активации" : "Click a config to activate it";
+    public string LblClickToActivateConfig => Strings.ClickToActivateConfig;
     public string LblSubscribeMode => Strings.SubscribeMode;
     public string LblSubscriptionUrlHint => Strings.SubscriptionUrlHint;
     public string LblSyncButton => Strings.SyncButton;

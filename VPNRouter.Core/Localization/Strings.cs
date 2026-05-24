@@ -129,6 +129,21 @@ public static class Strings
     // word, violating CLAUDE.md rule D1 (no English in RU UI).
     public static string Stopped => Ru ? "Остановлен" : "Stopped";
 
+    // v2.37.0-r14 — short status / toast strings still inline in MVM.
+    // Sites swept: "нет value" (rule validation), "✓ Удалено все правила"
+    // (toast), "Уже отсортировано" (sort toast), "Пустое значение" (form
+    // validation), "Нажмите на конфиг для активации" (free-config hint).
+    public static string RuleParserMissingValue => Ru ? "нет value" : "missing value";
+    public static string RuleParserUnknownType(string type) => Ru
+        ? $"неизвестный тип «{type}»"
+        : $"unknown type «{type}»";
+    public static string RulesAllDeleted => Ru ? "✓ Удалено все правила" : "✓ All rules deleted";
+    public static string RulesAlreadySorted => Ru ? "Уже отсортировано" : "Already sorted";
+    public static string RulesEmptyValue => Ru ? "Пустое значение" : "Empty value";
+    public static string ClickToActivateConfig => Ru
+        ? "Нажмите на конфиг для активации"
+        : "Click a config to activate it";
+
     // v2.37.0-r13 — Custom Rules type-help text. Pre-r13 these lived as
     // inline IsRussian-ternaries in MainWindowViewModel.NewRuleActionHint
     // (lines 918-924) + NewRuleTypeHint (lines 930-944). Moving them into
