@@ -4529,10 +4529,28 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         try
         {
-            // Resolve candidate seeds against installed strategies. If a seed
-            // isn't in the parsed list, ZapretAutoStrategy silently skips it.
+            // v2.37.0-r2 (user feedback "странно что 3 не сработали если их
+            // 20 в dropdown"): iterate ALL parsed strategies in the order
+            // ZapretUpdater.ParseStrategies returned them (sort heuristic
+            // already pins ALT3 first / ALT2 / ALT4 / general / general (ALT)
+            // / etc., so happy path stays ~30s on the first attempt). Mirrors
+            // Flowseal's `service.bat 11 -> 2 -> 1` behavior — "Total configs:
+            // 20" — which is the canonical reference user mental model.
+            //
+            // Wall-time worst case: ~5-7 min if EVERY strategy fails. In
+            // practice the loop breaks on first Tier1+, typical happy path
+            // 22-44 s. User can click Stop in the footer to bail mid-probe.
+            //
+            // ZapretAutoStrategy.DefaultSeedOrder still exists as the
+            // documented "what to try first" but the orchestrator now
+            // accepts the full parsed list and trusts the sort order.
             var available = _parsedStrategies.Select(s => s.Name).ToList();
-            var seedOrder = VPNRouter.Core.Services.ZapretAutoStrategy.DefaultSeedOrder;
+            // Build candidate order: sort-pinned seeds (ALT3 first per
+            // ZapretUpdater.ParseStrategies line 681) followed by everything
+            // else. Built-in fallback names (multisplit, fake+multisplit) are
+            // NOT in _parsedStrategies — keep them as legacy ComboBox entries
+            // outside the auto-probe (user can pick manually in expander).
+            var seedOrder = available;
 
             // Wire substrate-agnostic start/stop/immediate-exit delegates.
             // ImmediateExit trigger uses a per-attempt TaskCompletionSource:

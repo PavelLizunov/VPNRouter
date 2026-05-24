@@ -613,8 +613,8 @@ public static class Strings
         ? "YouTube, Discord и другие заблокированные сервисы должны открываться через локальный bypass."
         : "YouTube, Discord and other blocked services should work via the local bypass.";
     public static string ZapretOneTapLedeFallback => Ru
-        ? "Все три стратегии не сработали. Открой «Тонкую настройку» — там полный список или диагностика."
-        : "All three strategies failed. Open \"Advanced settings\" for the full list or diagnostics.";
+        ? "Ни одна стратегия не подошла. Открой «Тонкую настройку» — там полный список + диагностика."
+        : "No strategy matched. Open \"Advanced settings\" for the full list and diagnostics.";
     public static string ZapretOneTapStep1 => Ru
         ? "скачаем zapret"
         : "download zapret";
