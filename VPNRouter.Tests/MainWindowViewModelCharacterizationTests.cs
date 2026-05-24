@@ -113,9 +113,21 @@ public class MainWindowViewModelCharacterizationTests
     /// <para><b>v2.36.0-r7 (2026-05-24 night):</b> TgProxyOneTap design
     /// surface (see PinnedHashWindows note). Same cross-platform getters,
     /// Linux hash bumped here from CI run 26368644430 actual.</para>
+    ///
+    /// <para><b>v2.36.0-r8 → v2.37.0-r1 catch-up (2026-05-24 night):</b>
+    /// ZapretOneTap r8 + cross-platform r9 fix + multi-target probe r1
+    /// surface accumulated 4 new cross-platform members that drifted Linux
+    /// across three rolling candidates. Linux pin was missed on each rN
+    /// commit (Windows pin updated locally but Linux deferred to CI first-
+    /// failure per workflow — and then never re-bumped). User flagged the
+    /// red-X commits on main page; this commit closes the debt by bumping
+    /// to the actual from CI run 26372238870 (d6f62ed). Going forward:
+    /// after each Windows-side pin bump, run the suite once on Linux CI,
+    /// capture the actual, and bump Linux in the SAME commit instead of
+    /// deferring — see ship-rolling-candidate skill update.</para>
     /// </summary>
     private const string PinnedHashLinux =
-        "5bd459a01e48f245b89661ad570a21d23b4d060c74d10e00e413dc75979ae6ac";
+        "e5733f54d3bfd5e45d309cfe7059660e1cdf9b21d27417f70a268d7abd2c4bf2";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()
