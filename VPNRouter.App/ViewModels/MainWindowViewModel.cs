@@ -4595,8 +4595,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                     // Score-only update — keep strategy + index, refresh score.
                     // Triggers ZapretOneTapLede recompute so the UI lede shows
                     // «Тестирую (5/20): general (ALT3) — 12/18 ok» live.
+                    //
+                    // r5 — log every 6th score update so post-sweep log review
+                    // can confirm the per-test parser is firing without
+                    // spamming the log (Flowseal emits ~99 status lines per
+                    // config × 20 configs = ~2000 events/sweep). Throttled
+                    // by simple modulo on TotalChecks since it's monotonic.
                     ZapretProbePassCount = p.OkCount;
                     ZapretProbeTotalCount = p.TotalChecks;
+                    if (p.TotalChecks % 6 == 0)
+                    {
+                        _logger.Information(
+                            "[VM] ZapretOneTap Flowseal score: {Ok}/{Total} on {Strategy}",
+                            p.OkCount, p.TotalChecks, ZapretProbeStrategy);
+                    }
                 }
             });
 
