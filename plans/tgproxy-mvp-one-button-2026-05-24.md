@@ -139,3 +139,14 @@ Modified files:
 - Polish phase (deferred per research §6): real progress bar with byte-count ETA; pre-download confirmation prompt for 25 MB; user-changeable port in settings UI with port-conflict retry.
 
 **Rollback**: `git revert <hash>` of this commit reverts cleanly — additive change with one optional-throw site (new pre-check in Start) and one optional-binding (new XAML Border with IsVisible=false default).
+
+**Commits**:
+- `8b7eb50` (feat) — MVP one-button UX implementation.
+- `15a44d3` (chore) — Linux pinned-hash bump for the MVM characterization
+  test (anticipated drift, captured from CI run 26363598512).
+
+**Pushed**: github + origin (Forgejo). Both commits delivered to both remotes.
+
+**Post-push CI verify**: `gh api .../check-runs` on `15a44d3` returned
+`success grep` + `success test`. Filter for `failure|cancelled|timed_out`
+returned empty.
