@@ -66,14 +66,18 @@ public class MainWindowViewModelCharacterizationTests
     /// (<c>DismissTelegramSchemeWarning</c>), one new partial method
     /// (<c>OnTgProxyDownloadStepChanged</c>). Intentional drift.
     /// </summary>
-    // v2.36.0-r7 (2026-05-24 night): TgProxyOneTap design surface added.
-    // New getters: LblTgProxyHeroTitle, LblTgProxyHeroLede,
-    // L_TgProxyOneTapStep1/2/3, L_TgProxyOneTapTune, LblTgProxyAirPill.
-    // Plus NotifyPropertyChangedFor wiring on _tgProxyEnabled and
-    // _tgProxyPort for the hero re-narration. Surface drift is
-    // additive (no removals).
+    // v2.36.0-r8 (2026-05-24 late night): ZapretOneTap design surface
+    // added — LblZapretHeroTitle, LblZapretHeroLede, LblZapretMagicButton,
+    // LblZapretAirPill, IsZapretMagicButtonEnabled, L_ZapretOneTapStep1/2/3,
+    // L_ZapretOneTapTune, ZapretOneClickCommand + 7 new ObservableProperties
+    // (_isZapretProbing, _zapretProbeIndex, _zapretProbeTotal,
+    // _zapretProbeStrategy, _zapretWinningStrategy, _isZapretFallback,
+    // _suppressZapretAvToast). Plus NotifyPropertyChangedFor wiring on
+    // _zapretEnabled / _isZapretDownloading. All cross-platform getters,
+    // so Linux drifts in lock-step (Linux bump deferred to CI first-failure
+    // per documented workflow).
     private const string PinnedHashWindows =
-        "486cf13f1bd5ae25af11e99c1277e94fa7b7427b21bbe3676a72ec837a55aef7";
+        "7bceb42caaaacc9fa839cf66190534b6570297cb68c9068ee7417c0d814d7634";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

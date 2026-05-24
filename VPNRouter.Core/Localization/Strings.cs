@@ -578,6 +578,73 @@ public static class Strings
         ? $"В эфире · :{port}"
         : $"On the air · :{port}";
 
+    // v2.36.0-r8 — ZapretOneTap design (per
+    // `plans/research-one-button-zapret-deep-2026-05-24.md`). Mirrors the
+    // TgProxyOneTap variant-A pattern: hero card with shield icon → title →
+    // lede → big magic button → 3 step chips, all r5-era controls stowed
+    // behind a "Тонкая настройка" Expander.
+    //
+    // The 4 hero states (Stopped, Probing, Running, Fallback) drive title
+    // and lede via VM property switches. Probe attempt strings parameterise
+    // index/total/name so the user sees real-time progression.
+    public static string ZapretOneTapTitleStopped => Ru
+        ? "Обход блокировок"
+        : "DPI bypass";
+    public static string ZapretOneTapTitleProbing => Ru
+        ? "Подбираю стратегию..."
+        : "Picking strategy...";
+    public static string ZapretOneTapTitleRunning(string strategy) => Ru
+        ? $"Активна стратегия: {strategy}"
+        : $"Active strategy: {strategy}";
+    public static string ZapretOneTapTitleFallback => Ru
+        ? "Стратегия не подобрана"
+        : "No strategy matched";
+    public static string ZapretOneTapLedeStopped => Ru
+        ? "Скачаем zapret, поставим Discord hosts, подберём рабочую стратегию автоматически."
+        : "We download zapret, install Discord hosts, and auto-pick a working strategy.";
+    public static string ZapretOneTapLedeProbing(int index, int total, string strategy) => Ru
+        ? $"Тестирую ({index}/{total}): {strategy} — пробую открыть youtube.com..."
+        : $"Probing ({index}/{total}): {strategy} — trying youtube.com...";
+    public static string ZapretOneTapLedeRunning => Ru
+        ? "YouTube, Discord и другие заблокированные сервисы должны открываться через локальный bypass."
+        : "YouTube, Discord and other blocked services should work via the local bypass.";
+    public static string ZapretOneTapLedeFallback => Ru
+        ? "Все три стратегии не сработали. Открой «Тонкую настройку» — там полный список или диагностика."
+        : "All three strategies failed. Open \"Advanced settings\" for the full list or diagnostics.";
+    public static string ZapretOneTapStep1 => Ru
+        ? "скачаем zapret"
+        : "download zapret";
+    public static string ZapretOneTapStep2 => Ru
+        ? "настроим Discord hosts"
+        : "configure Discord hosts";
+    public static string ZapretOneTapStep3 => Ru
+        ? "подберём стратегию"
+        : "pick strategy";
+    public static string ZapretOneTapTune => Ru
+        ? "Тонкая настройка"
+        : "Advanced settings";
+    public static string ZapretOneTapStartButton => Ru
+        ? "Включить обход блокировок"
+        : "Enable DPI bypass";
+    public static string ZapretOneTapStopButton => Ru
+        ? "Остановить обход"
+        : "Stop bypass";
+    public static string ZapretOneTapAirPill(string strategy, int pid) => Ru
+        ? $"В эфире · {strategy} · PID {pid}"
+        : $"On the air · {strategy} · PID {pid}";
+    public static string ZapretOneTapDownloading => Ru
+        ? "Скачивание zapret..."
+        : "Downloading zapret...";
+    public static string ZapretOneTapInstallingHosts => Ru
+        ? "Установка Discord hosts... (потребуется UAC)"
+        : "Installing Discord hosts... (UAC required)";
+    public static string ZapretOneTapAllFailedToast => Ru
+        ? "Авто-подбор не сработал. Открой «Тонкую настройку» и выбери стратегию вручную."
+        : "Auto-pick failed. Open \"Advanced settings\" to choose a strategy manually.";
+    public static string ZapretOneTapNoSignalToast => Ru
+        ? "Похоже, интернет недоступен. Проверь соединение и повтори."
+        : "Looks like no internet. Check the connection and retry.";
+
     public static string OpenFolder => Ru ? "Открыть папку" : "Open folder";
     public static string OpenGitHub => "GitHub";
 

@@ -1096,6 +1096,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private bool _autostartUi = false;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblDpiToggle))]
+    // v2.36.0-r8 — hero labels swap between Stopped/Running on this flag.
+    [NotifyPropertyChangedFor(nameof(LblZapretHeroTitle))]
+    [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
+    [NotifyPropertyChangedFor(nameof(LblZapretMagicButton))]
     private bool _zapretEnabled = false;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsCustomStrategy))]
@@ -1108,11 +1112,45 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(LblDiscordHosts))]
     private bool _discordHostsInstalled = false;
     [ObservableProperty] private string _zapretVersionText = "";
-    [ObservableProperty] private bool _isZapretDownloading = false;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsZapretMagicButtonEnabled))]
+    private bool _isZapretDownloading = false;
 
     [ObservableProperty] private System.Collections.ObjectModel.ObservableCollection<string> _zapretStrategies = new();
     private List<VPNRouter.Core.Services.ZapretStrategy> _parsedStrategies = new();
     [ObservableProperty] private bool _receivePrereleases = false;
+
+    // v2.36.0-r8 — ZapretOneTap design state. Three-axis state drives the
+    // hero card title/lede/chip visibility on DpiBypassPage:
+    //   _isZapretProbing  — true while ZapretAutoStrategy.ProbeAsync loops
+    //   _zapretProbeIndex / _zapretProbeTotal — for hero chip "Тестирую (i/N)"
+    //   _zapretProbeStrategy — current attempt name
+    //   _zapretWinningStrategy — set on Tier1 success; surfaces in air-pill
+    //   _isZapretFallback — set when all attempts fail; hero shows manual hint
+    // All flip together; NotifyPropertyChangedFor on the hero label
+    // computed properties picks up state transitions.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblZapretHeroTitle))]
+    [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
+    [NotifyPropertyChangedFor(nameof(IsZapretMagicButtonEnabled))]
+    private bool _isZapretProbing = false;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
+    private int _zapretProbeIndex = 0;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
+    private int _zapretProbeTotal = 0;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
+    private string _zapretProbeStrategy = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblZapretHeroTitle))]
+    [NotifyPropertyChangedFor(nameof(LblZapretAirPill))]
+    private string _zapretWinningStrategy = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblZapretHeroTitle))]
+    [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
+    private bool _isZapretFallback = false;
 
     // Bug-r9-G (2026-05-11) — Zapret AV-block toast. Set when
     // ZapretManager.ImmediateExitDetected fires (winws.exe exited within
@@ -1129,6 +1167,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private void OnZapretImmediateExit()
     {
+        // v2.36.0-r8: during ZapretOneTap probing, fast-exits are EXPECTED
+        // (we deliberately try strategies that may not work) so we suppress
+        // the AV-block toast which would otherwise flash up for each
+        // failed attempt. ZapretAutoStrategy.ProbeAsync routes the immediate
+        // exit through its own per-attempt TaskCompletionSource and uses it
+        // to short-circuit the doomed strategy fast.
+        if (_suppressZapretAvToast) return;
+
         // Marshal to UI thread — Process.Exited fires on a threadpool.
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
@@ -4290,6 +4336,279 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
 #endif
     }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // v2.36.0-r8 — ZapretOneTap orchestrator + hero label computed props
+    // ────────────────────────────────────────────────────────────────────────
+    //
+    // The hero card on DpiBypassPage binds to:
+    //   - LblZapretHeroTitle / LblZapretHeroLede  — state-driven title + lede
+    //   - LblZapretMagicButton                    — Start/Stop label
+    //   - LblZapretAirPill                        — running-state pill
+    //   - IsZapretMagicButtonEnabled              — disabled during probe/download
+    //   - ZapretOneClickCommand                   — the magic button itself
+    //
+    // The orchestrator runs three phases:
+    //   1. Optional download (UpdateZapretAsync if !IsInstalled)
+    //   2. Discord hosts ensure-installed (default ON)
+    //   3. Auto-probe loop via ZapretAutoStrategy.ProbeAsync — ALT3 → general → ALT
+    //
+    // On Tier1 win: winner stays running, ZapretWinningStrategy set, hero
+    // re-narrates to "Активна стратегия: …". On all-fail: IsZapretFallback=true,
+    // hero re-narrates to "Стратегия не подобрана", last-tried winws.exe is
+    // STOPPED (in contrast to the research doc — research left it running, but
+    // a not-working strategy running is noise; safer to leave clean).
+
+    /// <summary>Hero title — flips between Stopped, Probing, Running, Fallback states.</summary>
+    public string LblZapretHeroTitle
+    {
+        get
+        {
+            if (IsZapretProbing) return Strings.ZapretOneTapTitleProbing;
+            if (ZapretEnabled && !string.IsNullOrEmpty(ZapretWinningStrategy))
+                return Strings.ZapretOneTapTitleRunning(ZapretWinningStrategy);
+            if (IsZapretFallback) return Strings.ZapretOneTapTitleFallback;
+            return Strings.ZapretOneTapTitleStopped;
+        }
+    }
+
+    /// <summary>Hero lede — flips with the four states. Probing lede embeds
+    /// the live attempt index + name.</summary>
+    public string LblZapretHeroLede
+    {
+        get
+        {
+            if (IsZapretProbing && ZapretProbeTotal > 0)
+                return Strings.ZapretOneTapLedeProbing(
+                    ZapretProbeIndex + 1, ZapretProbeTotal,
+                    string.IsNullOrEmpty(ZapretProbeStrategy) ? "..." : ZapretProbeStrategy);
+            if (ZapretEnabled) return Strings.ZapretOneTapLedeRunning;
+            if (IsZapretFallback) return Strings.ZapretOneTapLedeFallback;
+            return Strings.ZapretOneTapLedeStopped;
+        }
+    }
+
+    /// <summary>Magic-button label — Start when stopped, Stop when running.</summary>
+    public string LblZapretMagicButton => ZapretEnabled
+        ? Strings.ZapretOneTapStopButton
+        : Strings.ZapretOneTapStartButton;
+
+    /// <summary>Disable button during download + probing to prevent double-spawn.</summary>
+    public bool IsZapretMagicButtonEnabled => !IsZapretDownloading && !IsZapretProbing;
+
+    /// <summary>Air pill text when running — "В эфире · strategy · PID 1234".</summary>
+    public string LblZapretAirPill
+    {
+        get
+        {
+            var pid = ZapretManager.WinwsPid ?? 0;
+            return Strings.ZapretOneTapAirPill(
+                string.IsNullOrEmpty(ZapretWinningStrategy) ? "..." : ZapretWinningStrategy,
+                pid);
+        }
+    }
+
+    /// <summary>L_ getter for the "Тонкая настройка" expander header.</summary>
+    public string L_ZapretOneTapTune => Strings.ZapretOneTapTune;
+
+    /// <summary>L_ getters for the 3-step chip labels in the hero card.</summary>
+    public string L_ZapretOneTapStep1 => Strings.ZapretOneTapStep1;
+    public string L_ZapretOneTapStep2 => Strings.ZapretOneTapStep2;
+    public string L_ZapretOneTapStep3 => Strings.ZapretOneTapStep3;
+
+    /// <summary>
+    /// One-button magic Zapret orchestrator. Runs on the magic button click
+    /// in the new DpiBypassPage hero card. Replaces ToggleZapretAsync for the
+    /// hero path; ToggleZapretAsync stays callable from the legacy footer and
+    /// for autostart bootstrap.
+    /// </summary>
+    [RelayCommand]
+    private async Task ZapretOneClickAsync()
+    {
+#if PLATFORM_WINDOWS
+        // Already running? → toggle Stop and reset hero state.
+        if (ZapretEnabled || IsZapretRunning())
+        {
+            KillAllZapret();
+            ZapretEnabled = false;
+            ZapretWinningStrategy = string.Empty;
+            IsZapretFallback = false;
+            ZapretStatus = IsRussian ? "Остановлен" : "Stopped";
+            SaveSettings();
+            return;
+        }
+
+        // Phase 1 — install if missing.
+        if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
+        {
+            ZapretStatus = Strings.ZapretOneTapDownloading;
+            await UpdateZapretAsync();
+            if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled()) return;
+        }
+
+        // Phase 2 — Discord hosts ensure-installed (default ON for one-tap).
+        // Skip if already installed to avoid UAC fatigue on returning users.
+        // ToggleDiscordHosts is INSTALL-if-not-installed (we gated above),
+        // and it's synchronous (writes hosts file + flushes DNS inline).
+        if (!DiscordHostsInstalled)
+        {
+            try
+            {
+                ZapretStatus = Strings.ZapretOneTapInstallingHosts;
+                ToggleDiscordHosts();
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[VM] OneTap: Discord hosts install failed (non-fatal, continuing to probe)");
+            }
+        }
+
+        // Phase 3 — auto-probe loop.
+        await ProbeAndStartZapretAsync();
+#endif
+    }
+
+#if PLATFORM_WINDOWS
+    /// <summary>
+    /// Run ZapretAutoStrategy probe loop. Stays in PROBING state while
+    /// iterating; on Tier1 success leaves the winner running and sets
+    /// ZapretWinningStrategy + ZapretEnabled. On all-fail sets
+    /// IsZapretFallback=true and stops cleanly.
+    /// </summary>
+    private async Task ProbeAndStartZapretAsync()
+    {
+        if (_zapret == null)
+        {
+            _zapret = new ZapretManager(_logger);
+            _zapret.ImmediateExitDetected += OnZapretImmediateExit;
+        }
+
+        IsZapretProbing = true;
+        IsZapretFallback = false;
+        ZapretWinningStrategy = string.Empty;
+        // Suppress Bug-r9-G AV toast during probing — the loop is supposed to
+        // try multiple strategies; fast-exits are EXPECTED, not user-facing
+        // alarms. Re-enable on probe completion.
+        _suppressZapretAvToast = true;
+
+        try
+        {
+            // Resolve candidate seeds against installed strategies. If a seed
+            // isn't in the parsed list, ZapretAutoStrategy silently skips it.
+            var available = _parsedStrategies.Select(s => s.Name).ToList();
+            var seedOrder = VPNRouter.Core.Services.ZapretAutoStrategy.DefaultSeedOrder;
+
+            // Wire substrate-agnostic start/stop/immediate-exit delegates.
+            // ImmediateExit trigger uses a per-attempt TaskCompletionSource:
+            // ProbeAsync races the soak vs the TCS, so when the AV-block event
+            // fires we abort the doomed attempt within ~500 ms.
+            TaskCompletionSource<bool>? currentImmediateTcs = null;
+            void OnImmediateExit() => currentImmediateTcs?.TrySetResult(true);
+
+            // We can't subscribe and unsubscribe per attempt because the
+            // ImmediateExitDetected event uses a +/- pattern; subscribe once,
+            // route via a closure that always points at the current TCS.
+            _zapret.ImmediateExitDetected -= OnImmediateExit; // idempotent
+            _zapret.ImmediateExitDetected += OnImmediateExit;
+
+            Func<string, Task> startStrategy = name =>
+            {
+                currentImmediateTcs = new TaskCompletionSource<bool>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == name);
+                if (parsed == null)
+                    throw new InvalidOperationException($"Strategy '{name}' not in parsed list");
+                if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
+                    _zapret!.StartFromBat(parsed.BatPath, parsed.Arguments);
+                else
+                    _zapret!.Start(parsed.Arguments);
+                return Task.CompletedTask;
+            };
+
+            Func<Task> stopStrategy = () =>
+            {
+                try { _zapret?.Stop(); } catch { /* defensive */ }
+                return Task.CompletedTask;
+            };
+
+            Func<Task> immediateExitTrigger = () => currentImmediateTcs?.Task ?? Task.Delay(Timeout.InfiniteTimeSpan);
+
+            // HTTP client for probe — fresh, short-lived, no proxy. The probe
+            // intentionally goes via the system route (no SOCKS/sing-box)
+            // because we want to test winws.exe's effect on direct egress.
+            using var http = new System.Net.Http.HttpClient(
+                new System.Net.Http.HttpClientHandler { UseProxy = false },
+                disposeHandler: true);
+            http.Timeout = TimeSpan.FromSeconds(8); // outer cap; ProbeOnceAsync also enforces 5s
+
+            // Progress reporter wires to VM properties so hero re-renders.
+            var progress = new Progress<VPNRouter.Core.Services.ZapretAutoStrategy.ProgressUpdate>(p =>
+            {
+                ZapretProbeIndex = p.AttemptIndex;
+                ZapretProbeTotal = p.TotalAttempts;
+                ZapretProbeStrategy = p.StrategyName;
+                _logger.Information("[VM] ZapretOneTap probe progress: {Index}/{Total} {Name} {Phase}",
+                    p.AttemptIndex + 1, p.TotalAttempts, p.StrategyName, p.Phase);
+            });
+
+            var sweep = await VPNRouter.Core.Services.ZapretAutoStrategy.ProbeAsync(
+                seedOrder, available, startStrategy, stopStrategy,
+                immediateExitTrigger, http, progress, _logger, CancellationToken.None);
+
+            // Unhook the probe-loop's immediate-exit handler — we re-subscribe
+            // the long-lived OnZapretImmediateExit below for steady-state.
+            _zapret.ImmediateExitDetected -= OnImmediateExit;
+
+            if (sweep.WinningStrategy != null)
+            {
+                // Tier1 — winner stays running.
+                ZapretWinningStrategy = sweep.WinningStrategy;
+                ZapretEnabled = true;
+                var pid = ZapretManager.WinwsPid ?? _zapret.Pid;
+                ZapretStatus = IsRussian
+                    ? $"Работает [{sweep.WinningStrategy}] (PID {pid})"
+                    : $"Running [{sweep.WinningStrategy}] (PID {pid})";
+
+                // Also persist as user's last strategy so legacy ToggleZapretAsync
+                // resumes correctly on autostart / Service handoff.
+                var idx = ZapretStrategies.IndexOf(sweep.WinningStrategy);
+                if (idx >= 0) ZapretStrategyIndex = idx;
+                SaveSettings();
+            }
+            else if (sweep.NoSignal)
+            {
+                IsZapretFallback = false;
+                ZapretEnabled = false;
+                ZapretStatus = Strings.ZapretOneTapNoSignalToast;
+            }
+            else
+            {
+                IsZapretFallback = true;
+                ZapretEnabled = false;
+                ZapretStatus = Strings.ZapretOneTapAllFailedToast;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] ZapretOneTap probe orchestrator failed");
+            ZapretEnabled = false;
+            IsZapretFallback = true;
+            ZapretStatus = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            IsZapretProbing = false;
+            _suppressZapretAvToast = false;
+            ZapretProbeIndex = 0;
+            ZapretProbeTotal = 0;
+            ZapretProbeStrategy = string.Empty;
+        }
+    }
+
+    // v2.36.0-r8 — suppress flag for Bug-r9-G AV toast. OnZapretImmediateExit
+    // checks this before raising the toast. Set true around ProbeAndStartZapretAsync.
+    private bool _suppressZapretAvToast = false;
+#endif
 
     // ── Zapret tools (diagnostics, Discord cache, hosts, service menu) ──
 

@@ -356,6 +356,27 @@ public static class Strings
     public static string TgProxyOneTapTune  => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapTune;
     public static string TgProxyOneTapAirPill(int port) => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapAirPill(port);
 
+    // v2.36.0-r8 — ZapretOneTap hero copy (variant A · Centered stack).
+    public static string ZapretOneTapTitleStopped => global::VPNRouter.Core.Localization.Strings.ZapretOneTapTitleStopped;
+    public static string ZapretOneTapTitleProbing => global::VPNRouter.Core.Localization.Strings.ZapretOneTapTitleProbing;
+    public static string ZapretOneTapTitleRunning(string strategy) => global::VPNRouter.Core.Localization.Strings.ZapretOneTapTitleRunning(strategy);
+    public static string ZapretOneTapTitleFallback => global::VPNRouter.Core.Localization.Strings.ZapretOneTapTitleFallback;
+    public static string ZapretOneTapLedeStopped => global::VPNRouter.Core.Localization.Strings.ZapretOneTapLedeStopped;
+    public static string ZapretOneTapLedeProbing(int i, int t, string s) => global::VPNRouter.Core.Localization.Strings.ZapretOneTapLedeProbing(i, t, s);
+    public static string ZapretOneTapLedeRunning => global::VPNRouter.Core.Localization.Strings.ZapretOneTapLedeRunning;
+    public static string ZapretOneTapLedeFallback => global::VPNRouter.Core.Localization.Strings.ZapretOneTapLedeFallback;
+    public static string ZapretOneTapStep1 => global::VPNRouter.Core.Localization.Strings.ZapretOneTapStep1;
+    public static string ZapretOneTapStep2 => global::VPNRouter.Core.Localization.Strings.ZapretOneTapStep2;
+    public static string ZapretOneTapStep3 => global::VPNRouter.Core.Localization.Strings.ZapretOneTapStep3;
+    public static string ZapretOneTapTune => global::VPNRouter.Core.Localization.Strings.ZapretOneTapTune;
+    public static string ZapretOneTapStartButton => global::VPNRouter.Core.Localization.Strings.ZapretOneTapStartButton;
+    public static string ZapretOneTapStopButton => global::VPNRouter.Core.Localization.Strings.ZapretOneTapStopButton;
+    public static string ZapretOneTapAirPill(string s, int p) => global::VPNRouter.Core.Localization.Strings.ZapretOneTapAirPill(s, p);
+    public static string ZapretOneTapDownloading => global::VPNRouter.Core.Localization.Strings.ZapretOneTapDownloading;
+    public static string ZapretOneTapInstallingHosts => global::VPNRouter.Core.Localization.Strings.ZapretOneTapInstallingHosts;
+    public static string ZapretOneTapAllFailedToast => global::VPNRouter.Core.Localization.Strings.ZapretOneTapAllFailedToast;
+    public static string ZapretOneTapNoSignalToast => global::VPNRouter.Core.Localization.Strings.ZapretOneTapNoSignalToast;
+
     public static string OpenFolder => global::VPNRouter.Core.Localization.Strings.OpenFolder;
     public static string OpenGitHub => global::VPNRouter.Core.Localization.Strings.OpenGitHub;
 
