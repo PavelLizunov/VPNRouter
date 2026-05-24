@@ -100,6 +100,13 @@ public static class Strings
     // (RU "Остановлен" / EN "Stopped"). Used by Zapret + TgProxy status fields.
     public static string Stopped => global::VPNRouter.Core.Localization.Strings.Stopped;
 
+    // v2.37.0-r10 — Zapret cache UI pass-throughs.
+    public static string ZapretForceFreshProbeButton => global::VPNRouter.Core.Localization.Strings.ZapretForceFreshProbeButton;
+    public static string ZapretClearCacheButton => global::VPNRouter.Core.Localization.Strings.ZapretClearCacheButton;
+    public static string ZapretCacheCleared => global::VPNRouter.Core.Localization.Strings.ZapretCacheCleared;
+    public static string ZapretCacheInfo(string strategy, int successCount) => global::VPNRouter.Core.Localization.Strings.ZapretCacheInfo(strategy, successCount);
+    public static string ZapretCacheEmpty => global::VPNRouter.Core.Localization.Strings.ZapretCacheEmpty;
+
     // v2.37.0-r9 — Custom Rules import/export pass-throughs.
     public static string RulesFilePickerOpenFailed => global::VPNRouter.Core.Localization.Strings.RulesFilePickerOpenFailed;
     public static string RulesImportDialogTitle => global::VPNRouter.Core.Localization.Strings.RulesImportDialogTitle;

@@ -4531,6 +4531,75 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
 #if PLATFORM_WINDOWS
+
+    // ── v2.37.0-r10 — Zapret probe-cache UI controls ───────────────────────
+    //
+    // r6 added the cache silently — it works for happy-path users but
+    // power users who want to re-probe after a network move or wipe the
+    // cache for testing had no surface. r10 adds:
+    //   - LblZapretCacheStatus: bilingual one-liner surfacing cache state
+    //   - ClearZapretCacheCommand: wipes the JSON file (idempotent)
+    //   - ForceFreshProbeCommand: sets _forceFreshProbe + runs probe
+    //   - _forceFreshProbe transient flag honored by ProbeAndStartZapretAsync
+
+    private bool _forceFreshProbe;
+
+    /// <summary>
+    /// One-liner surfacing the current Zapret probe cache state. Used in
+    /// the Tools expander as a hint near the Force-fresh / Clear-cache
+    /// buttons so the user knows what's persisted.
+    /// </summary>
+    public string LblZapretCacheStatus
+    {
+        get
+        {
+            var entry = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
+            if (entry == null || string.IsNullOrEmpty(entry.Strategy))
+                return Strings.ZapretCacheEmpty;
+            return Strings.ZapretCacheInfo(entry.Strategy, entry.SuccessRunCount);
+        }
+    }
+
+    [RelayCommand]
+    private void ClearZapretCache()
+    {
+        try
+        {
+            VPNRouter.Core.Services.ZapretProbeCache.Clear(_logger);
+            OnPropertyChanged(nameof(LblZapretCacheStatus));
+            ZapretStatus = Strings.ZapretCacheCleared;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[VM] ClearZapretCache failed");
+        }
+    }
+
+    [RelayCommand]
+    private async Task ForceFreshProbeAsync()
+    {
+        // Stop any running zapret first so the probe starts from clean state.
+        if (ZapretEnabled || IsZapretRunning())
+        {
+            KillAllZapret();
+            ZapretEnabled = false;
+            ZapretWinningStrategy = string.Empty;
+            ZapretProbePassCount = 0;
+            ZapretProbeTotalCount = 0;
+            await Task.Delay(500);
+        }
+        _forceFreshProbe = true;
+        try
+        {
+            await ProbeAndStartZapretAsync();
+        }
+        finally
+        {
+            _forceFreshProbe = false;
+            OnPropertyChanged(nameof(LblZapretCacheStatus));
+        }
+    }
+
     /// <summary>
     /// Run ZapretAutoStrategy probe loop. Stays in PROBING state while
     /// iterating; on Tier1 success leaves the winner running and sets
@@ -4606,7 +4675,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // with <3 consecutive failures, skip the 2-7 min Flowseal sweep
             // and apply the cached winner directly. On failure of cache hit,
             // fall through to the full sweep automatically.
-            var cached = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
+            //
+            // r10 — _forceFreshProbe (set by ForceFreshProbeCommand) bypasses
+            // the cache entirely. Used by the Tools-expander "Re-probe
+            // strategy" button when the user wants a fresh sweep regardless
+            // of cache state (e.g. after a network/ISP change).
+            var cached = _forceFreshProbe
+                ? null
+                : VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
             if (cached != null && cached.IsRecentAndReliable())
             {
                 _logger.Information(

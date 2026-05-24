@@ -129,6 +129,27 @@ public static class Strings
     // word, violating CLAUDE.md rule D1 (no English in RU UI).
     public static string Stopped => Ru ? "Остановлен" : "Stopped";
 
+    // v2.37.0-r10 — Zapret probe-cache UI controls (Tools expander).
+    // r6 added the cache silently; r10 surfaces user controls:
+    //   - "Найти заново (без кэша)" — bypasses cache, runs full sweep
+    //   - "Очистить кэш стратегий" — wipes cache file
+    //   - cache-hit info string in status when warm-start was used
+    public static string ZapretForceFreshProbeButton => Ru
+        ? "Найти стратегию заново"
+        : "Re-probe strategy";
+    public static string ZapretClearCacheButton => Ru
+        ? "Очистить кэш стратегий"
+        : "Clear strategy cache";
+    public static string ZapretCacheCleared => Ru
+        ? "Кэш стратегий очищен"
+        : "Strategy cache cleared";
+    public static string ZapretCacheInfo(string strategy, int successCount) => Ru
+        ? $"Кэш: {strategy} (успехов: {successCount})"
+        : $"Cache: {strategy} (successes: {successCount})";
+    public static string ZapretCacheEmpty => Ru
+        ? "Кэш пуст — следующая проверка будет полной"
+        : "Cache empty — next probe will be full";
+
     // v2.37.0-r9 — Custom Rules import/export localization. Pre-r9 every
     // toast / validation message in `ImportCustomRulesAsync` +
     // `ExportCustomRulesAsync` was hardcoded English, violating CLAUDE.md

@@ -77,8 +77,16 @@ public class MainWindowViewModelCharacterizationTests
     // is captured in the IL hash even though no public property signature
     // changed (the public ZapretStatus / TgProxyStatus getters/setters are
     // identical). Linux deferred to next CI failure per documented workflow.
+    //
+    // v2.37.0-r10 bump (same night shift): Zapret probe-cache UI surface —
+    // added 3 new public members:
+    //   - LblZapretCacheStatus (computed string property)
+    //   - ClearZapretCacheCommand (RelayCommand)
+    //   - ForceFreshProbeCommand (RelayCommand)
+    // This is intentional public-surface addition, not refactor drift.
+    // Linux deferred to next CI failure per documented workflow.
     private const string PinnedHashWindows =
-        "e13339c8e03074a5bcafc0e187c7d7d5a8d98c2e5a275b9d7a59a93b6ac85525";
+        "96b58e8386cfae77c556eaa28d462b070eb1528693dd6893e6c50570c7cf384d";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
