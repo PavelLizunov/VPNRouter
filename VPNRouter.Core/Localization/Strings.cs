@@ -129,6 +129,17 @@ public static class Strings
     // word, violating CLAUDE.md rule D1 (no English in RU UI).
     public static string Stopped => Ru ? "Остановлен" : "Stopped";
 
+    // v2.37.0-r18 — RuntimeStatus tooltips + Subscriptions status text.
+    // RuntimeStatus tooltips were inline `IsRussian ? "VPN" : "VPN"`
+    // ternaries with **identical** strings in both branches — pointless
+    // overhead. Translation only differs on the meaningful word in two of
+    // them; VPN stays "VPN" universally.
+    public static string BadgeTooltipVpn => "VPN";
+    public static string BadgeTooltipZapret => Ru ? "Zapret обход DPI" : "Zapret DPI bypass";
+    public static string BadgeTooltipTgProxy => Ru ? "Telegram прокси" : "Telegram proxy";
+    public static string SubscriptionEnterUrl => Ru ? "Введите URL подписки" : "Enter subscription URL";
+    public static string SubscriptionCleared => Ru ? "Подписка удалена" : "Subscription cleared";
+
     // v2.37.0-r17 — ServerTesting tab labels (Test all / Cancel /
     // Deep verify / Stop) + progress text. Pre-r17 these were inline
     // `IsRussian` ternaries in MainWindowViewModel.ServerTesting.cs

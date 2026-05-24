@@ -186,7 +186,7 @@ public partial class MainWindowViewModel
     {
         if (string.IsNullOrWhiteSpace(SubscriptionUrl))
         {
-            StatusText = IsRussian ? "Введите URL подписки" : "Enter subscription URL";
+            StatusText = Strings.SubscriptionEnterUrl;
             return;
         }
 
@@ -225,7 +225,7 @@ public partial class MainWindowViewModel
         SubscriptionUrl = string.Empty;
         SelectedSubscriptionServer = null;
         SaveSettings();
-        StatusText = IsRussian ? "Подписка удалена" : "Subscription cleared";
+        StatusText = Strings.SubscriptionCleared;
     }
 
     // ── Subscription auto-refresh ──

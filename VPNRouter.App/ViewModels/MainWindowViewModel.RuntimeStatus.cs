@@ -71,9 +71,11 @@ public partial class MainWindowViewModel
     public IBrush ZapretBadgeBrush  => BadgeBrush(ZapretRuntimeStatus);
     public IBrush TgProxyBadgeBrush => BadgeBrush(TgProxyRuntimeStatus);
 
-    public string VpnBadgeTooltip     => FormatTooltip(IsRussian ? "VPN" : "VPN", VpnRuntimeStatus);
-    public string ZapretBadgeTooltip  => FormatTooltip(IsRussian ? "Zapret DPI bypass" : "Zapret DPI bypass", ZapretRuntimeStatus);
-    public string TgProxyBadgeTooltip => FormatTooltip(IsRussian ? "Telegram proxy" : "Telegram proxy", TgProxyRuntimeStatus);
+    // v2.37.0-r18 — fixed silly inline ternaries that had identical RU/EN.
+    // VPN is universal; Zapret + TgProxy now properly localized via Strings.
+    public string VpnBadgeTooltip     => FormatTooltip(Strings.BadgeTooltipVpn, VpnRuntimeStatus);
+    public string ZapretBadgeTooltip  => FormatTooltip(Strings.BadgeTooltipZapret, ZapretRuntimeStatus);
+    public string TgProxyBadgeTooltip => FormatTooltip(Strings.BadgeTooltipTgProxy, TgProxyRuntimeStatus);
 
     // ── Lifecycle ─────────────────────────────────────────────────────────
 

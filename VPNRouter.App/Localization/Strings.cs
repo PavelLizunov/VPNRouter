@@ -100,6 +100,13 @@ public static class Strings
     // (RU "Остановлен" / EN "Stopped"). Used by Zapret + TgProxy status fields.
     public static string Stopped => global::VPNRouter.Core.Localization.Strings.Stopped;
 
+    // v2.37.0-r18 — RuntimeStatus tooltip + Subscriptions status pass-throughs.
+    public static string BadgeTooltipVpn => global::VPNRouter.Core.Localization.Strings.BadgeTooltipVpn;
+    public static string BadgeTooltipZapret => global::VPNRouter.Core.Localization.Strings.BadgeTooltipZapret;
+    public static string BadgeTooltipTgProxy => global::VPNRouter.Core.Localization.Strings.BadgeTooltipTgProxy;
+    public static string SubscriptionEnterUrl => global::VPNRouter.Core.Localization.Strings.SubscriptionEnterUrl;
+    public static string SubscriptionCleared => global::VPNRouter.Core.Localization.Strings.SubscriptionCleared;
+
     // v2.37.0-r17 — ServerTesting label pass-throughs.
     public static string ServerTestCancel => global::VPNRouter.Core.Localization.Strings.ServerTestCancel;
     public static string ServerTestAll => global::VPNRouter.Core.Localization.Strings.ServerTestAll;
