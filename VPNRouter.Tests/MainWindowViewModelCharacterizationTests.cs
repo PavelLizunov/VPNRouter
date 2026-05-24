@@ -91,8 +91,14 @@ public class MainWindowViewModelCharacterizationTests
     //   - L_ZapretForceFreshProbeButton
     //   - L_ZapretClearCacheButton
     // Plus DpiBypassPage.axaml change wiring the controls. Linux deferred.
+    //
+    // v2.37.0-r15 bump (same night shift): added HasTgProxyStats computed
+    // boolean property + NotifyPropertyChangedFor wiring on _tgProxyStats
+    // field. Closes the dead-plumbing gap by binding TgProxyStats text
+    // (was already populated by StatsUpdated event) into TelegramPage
+    // air-pill via IsVisible="{Binding HasTgProxyStats}". Linux deferred.
     private const string PinnedHashWindows =
-        "904209f4fdb0da108b2b515e8e2b8ed63956d95364e593c909f13c6f72db3ebf";
+        "e16f3c83918d32b8ad17d27b9f6a6f127f791b21ad9b8cf344029a10cfb3fe9a";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

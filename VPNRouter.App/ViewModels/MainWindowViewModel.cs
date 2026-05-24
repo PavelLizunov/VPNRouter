@@ -1298,7 +1298,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTgProxySetUp))]
     private bool _isTgProxyDownloading = false;
-    [ObservableProperty] private string _tgProxyStats = "";
+    // v2.37.0-r15 — TgProxyStats now surfaced in TelegramPage air-pill.
+    // HasTgProxyStats is a computed boolean (non-empty after first parse)
+    // that gates the inline TextBlock IsVisible binding. Pre-r15 the field
+    // existed but no XAML consumer — pure dead plumbing.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTgProxyStats))]
+    private string _tgProxyStats = "";
+
+    public bool HasTgProxyStats => !string.IsNullOrEmpty(TgProxyStats);
 
     /// <summary>
     /// v2.31.6-r4 (BUG #3 fix): transient toast banner shown above

@@ -308,6 +308,19 @@
                                                        FontWeight="SemiBold"
                                                        Foreground="{DynamicResource SuccessFgBrush}"
                                                        VerticalAlignment="Center"/>
+                                            <!-- v2.37.0-r15 — surface live TgProxy stats
+                                                 (Active / Total / ↑bytes ↓bytes) inside
+                                                 the air-pill. TgProxyStats is populated by
+                                                 the StatsUpdated event from TgProxyManager
+                                                 and refreshed on each parse cycle. Hidden
+                                                 until first stats arrive. -->
+                                            <TextBlock Text="{Binding TgProxyStats}"
+                                                       IsVisible="{Binding HasTgProxyStats}"
+                                                       FontSize="10"
+                                                       Opacity="0.85"
+                                                       Foreground="{DynamicResource SuccessFgBrush}"
+                                                       VerticalAlignment="Center"
+                                                       Margin="6,0,0,0"/>
                                         </StackPanel>
                                     </Border>
                                     <Button Command="{Binding CopyTgProxyLinkCommand}"
