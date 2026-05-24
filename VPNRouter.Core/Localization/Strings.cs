@@ -129,6 +129,13 @@ public static class Strings
     // word, violating CLAUDE.md rule D1 (no English in RU UI).
     public static string Stopped => Ru ? "Остановлен" : "Stopped";
 
+    // v2.37.0-r16 — TgProxy stats labels (Active / Total prefixes).
+    // ParseStatsShort returns "Active: N | Total: N | ↑bytes ↓bytes";
+    // the up/down arrows are universal symbols (no localization needed)
+    // but the textual prefixes were English-only. Now localized.
+    public static string TgProxyStatsActive => Ru ? "Активных" : "Active";
+    public static string TgProxyStatsTotal => Ru ? "Всего" : "Total";
+
     // v2.37.0-r14 — short status / toast strings still inline in MVM.
     // Sites swept: "нет value" (rule validation), "✓ Удалено все правила"
     // (toast), "Уже отсортировано" (sort toast), "Пустое значение" (form

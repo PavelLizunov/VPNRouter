@@ -5616,7 +5616,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>Parse stats line into short summary for UI display.</summary>
+    /// <summary>Parse stats line into short summary for UI display.
+    /// v2.37.0-r16 \u2014 localized "Active:" and "Total:" prefixes (were
+    /// hardcoded English pre-r16; mixed inside an otherwise-Russian
+    /// air-pill, violating CLAUDE.md D1).</summary>
     private static string ParseStatsShort(string statsLine)
     {
         // Input: "stats: total=10 active=2 ws=8 tcp_fb=1 cf=0 bad=1 ..."
@@ -5633,8 +5636,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         parts.TryGetValue("down", out var down);
 
         var sb = new System.Text.StringBuilder();
-        if (active != null) sb.Append($"Active: {active}");
-        if (total != null) sb.Append($" | Total: {total}");
+        if (active != null) sb.Append($"{Strings.TgProxyStatsActive}: {active}");
+        if (total != null) sb.Append($" | {Strings.TgProxyStatsTotal}: {total}");
         if (up != null) sb.Append($" | \u2191{up}");
         if (down != null) sb.Append($" \u2193{down}");
         return sb.ToString();
