@@ -100,16 +100,14 @@ public class MainWindowViewModelCharacterizationTests
     /// CI status must be checked after every ship (not just locally).</para>
     ///
     /// <para><b>v2.36 (2026-05-24):</b> MVP one-button TgProxy UX surface
-    /// added (see PinnedHashWindows summary). Linux hash will need to be
-    /// re-pinned from the next ubuntu-latest CI run's "Actual:" line.
-    /// Pre-existing pattern documented in r13 note above — Linux pin
-    /// drifts on every Windows-untracked MVM addition. The added members
-    /// are NOT inside #if PLATFORM_WINDOWS blocks (they're cross-platform
-    /// observable properties + getters), so the Linux surface drifts
-    /// in lock-step with Windows.</para>
+    /// added (see PinnedHashWindows summary). Linux hash captured from
+    /// ubuntu-latest CI run 26363598512 on the initial push, then bumped
+    /// here. The added members are NOT inside #if PLATFORM_WINDOWS blocks
+    /// (they're cross-platform observable properties + getters), so the
+    /// Linux surface drifts in lock-step with Windows.</para>
     /// </summary>
     private const string PinnedHashLinux =
-        "1d24dea2e2d97c83fc3b7a86335606288478184c7ebcfcb34958ef2d467acb18";
+        "d62f381b1dd25b96ca8beedf3d81dfdca727f64f618bdb8383c828e0764bf9be";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()
