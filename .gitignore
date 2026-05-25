@@ -40,6 +40,10 @@ tools/*
 !tools/VpnRouterTestMcp/**
 # v2.32.2: methodology self-checker — runs 10 meta-tests.
 !tools/check-methodology.sh
+# v2.37.0-r19: CI gate verifier (pre-push hook). Re-add per CLAUDE.md rule #11.
+!tools/verify-last-commit-ci.ps1
+# v2.37.0-r30: post-push CI watcher (closes Linux hash drift loop). Rule #15.
+!tools/watch-after-push.ps1
 # v2.32.2: Android dev bootstrap (toolchain installer, meta-test #8).
 !tools/android-bootstrap.ps1
 # v2.32.3: libbox.aar reproducible build script (Phase 1.1).

@@ -199,8 +199,12 @@ public class MainWindowViewModelCharacterizationTests
     // StartZapretWithSelectedStrategyCommand surface (the body is gated under
     // #if PLATFORM_WINDOWS but the command property is unconditional so XAML
     // binds resolve on Linux too). Captured from CI run 26389946061 (r22).
+    // v2.37.0-r30 (2026-05-25): bumped to absorb the r25..r29 accumulated
+    // surface delta on Linux side (every -rN bumped Windows hash but
+    // deferred Linux until CI fail captured it; this commit pays the
+    // accumulated debt). New value captured from r29 CI run 26408407641.
     private const string PinnedHashLinux =
-        "5ee369c43441c7c2ab611a9f400c2e031e49d4939a464b0d6827796c3afae544";
+        "94dae043424e7709f57e45513bff945011b68813a6f3ae2095b6c2572726f775";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()

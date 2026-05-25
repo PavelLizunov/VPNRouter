@@ -1,0 +1,47 @@
+#!/bin/bash
+# .githooks/post-push — v2.37.0-r30 — auto-monitor CI of just-pushed commit.
+#
+# Closes the loop on r25..r29's accumulated red Xs: each push left a red
+# `test` check (Linux MVM hash drift) and no one noticed for 5 ships
+# because nothing watched the OUTCOME of the push (only the GATE).
+#
+# This hook launches tools/watch-after-push.ps1 in background. The watcher
+# polls for ~10 min and writes .git-suggested-hash-bump.txt at repo root
+# if it finds a Linux hash drift. Next ship reads that file and bumps
+# the hash automatically.
+#
+# Activation (one-time per clone):
+#   git config core.hooksPath .githooks
+#
+# NOTE: git natively doesn't have a "post-push" hook. We invoke this
+# explicitly from a wrapper or by running it after `git push`. To make
+# it automatic, alias:
+#   git config alias.pushw '!git push "$@" && .githooks/post-push'
+# and use `git pushw github HEAD:main` instead of `git push github HEAD:main`.
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$REPO_ROOT" ]; then
+    exit 0
+fi
+
+SHA="$(git rev-parse HEAD 2>/dev/null)"
+if [ -z "$SHA" ]; then
+    exit 0
+fi
+
+SCRIPT="$REPO_ROOT/tools/watch-after-push.ps1"
+if [ ! -f "$SCRIPT" ]; then
+    exit 0
+fi
+
+# Launch in background so it doesn't block the shell.
+# Output goes to .git-watch.log at repo root for diagnostics.
+LOG="$REPO_ROOT/.git-watch.log"
+nohup powershell -ExecutionPolicy Bypass -File "$SCRIPT" -Sha "$SHA" \
+    > "$LOG" 2>&1 &
+
+echo "[post-push] CI watcher launched for $SHA (background, PID $!)."
+echo "[post-push] Tail $LOG for status; check .git-suggested-hash-bump.txt for fix."
+exit 0

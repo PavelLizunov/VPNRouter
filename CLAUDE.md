@@ -196,6 +196,33 @@ Open Tasks / Last session log.
     + что ждём. User видит remote main как single source of truth;
     локальные коммиты "не существуют" для него.
 
+15. **CI status hygiene — never accumulate red Xs** (added 2026-05-25
+    после "опять забыл проверку состояния git" от user'а, скриншот с
+    r24..r29 все red 4/6). Pattern of failure: каждый -rN ship'ался
+    с Linux MVM hash drift (red `test`), я pushил с TOLERATE_FAILURE,
+    дальше код и снова TOLERATE_FAILURE, и так 5 коммитов с red X на
+    главной странице commits. User notices — это плохой signal.
+
+    Mechanism (r30):
+    - `tools/watch-after-push.ps1` — background watcher polls CI ~10
+      min after push. If `test` fails with Linux hash drift → parses
+      "Actual:" hash from job log → writes `.git-suggested-hash-bump.txt`
+      at repo root.
+    - `.githooks/post-push` — launches the watcher (manual invoke
+      because git has no native post-push; alias `git pushw` chains).
+    - **NEW RITUAL**: at start of EVERY session AND before EVERY
+      ship-rolling-candidate, run:
+      ```
+      for sha in $(git log --pretty=format:'%h' -7); do
+        echo "=== $sha ==="
+        gh api repos/PavelLizunov/VPNRouter/commits/$sha/check-runs \
+          --jq '.check_runs[] | select(.conclusion=="failure") | .name'
+      done
+      ```
+      If ANY red is found, FIX it BEFORE any new code change. Check
+      `.git-suggested-hash-bump.txt` first — if present, apply that
+      bump to MainWindowViewModelCharacterizationTests.cs.
+
 ## Git safety
 
 - `main` — protected (никаких force-push без запроса). Заявленные fixes идут
