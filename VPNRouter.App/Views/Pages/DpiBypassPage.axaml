@@ -222,10 +222,43 @@
                                     </StackPanel>
                                 </Button>
 
-                                <!-- r31: 3 step chips REMOVED. They duplicated the tab
-                                     names below (Стратегия/Hosts/Фильтры/Дополнительно
-                                     already convey the same flow). Removal saves
-                                     ~70px height — Hero now fits without scroll. -->
+                                <!-- r34: Quick-strategy mini-row for power users.
+                                     ComboBox со списком стратегий + ▶ кнопка
+                                     запуска без probe. По дефолту главная
+                                     кнопка делает probe автоматически; эта
+                                     строка для тех кто знает свою стратегию
+                                     и не хочет ждать 2-7 мин probe.
+                                     Hidden during probe/running to avoid clutter. -->
+                                <Border IsVisible="{Binding HasZapretStrategiesForQuickStart}"
+                                        Background="{DynamicResource SurfaceSunkenBrush}"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Padding="6,4"
+                                        Margin="0,4,0,0"
+                                        MaxWidth="380"
+                                        HorizontalAlignment="Center">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                                        <ComboBox Grid.Column="0"
+                                                  ItemsSource="{Binding ZapretStrategies}"
+                                                  SelectedIndex="{Binding ZapretStrategyIndex}"
+                                                  FontSize="10"
+                                                  Padding="6,2"
+                                                  MinHeight="0"
+                                                  HorizontalAlignment="Stretch"
+                                                  ToolTip.Tip="{Binding L_ZapretStartSelectedStrategyHint}"/>
+                                        <Button Grid.Column="1"
+                                                Content="▶"
+                                                Command="{Binding StartZapretWithSelectedStrategyCommand}"
+                                                IsEnabled="{Binding !IsZapretProbing}"
+                                                ToolTip.Tip="{Binding L_ZapretStartSelectedStrategyHint}"
+                                                FontSize="10" Padding="10,2"
+                                                MinHeight="0"
+                                                CornerRadius="{StaticResource RadiusSm}"
+                                                Background="{DynamicResource AccentBgSubtleBrush}"
+                                                Foreground="{DynamicResource AccentFgBrush}"
+                                                BorderBrush="{DynamicResource AccentBorderBrush}"
+                                                BorderThickness="1"/>
+                                    </Grid>
+                                </Border>
 
                                 <!-- Probe progress bar (only during probing).
                                      r33: + Cancel button so user can abort the

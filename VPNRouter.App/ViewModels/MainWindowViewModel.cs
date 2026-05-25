@@ -1121,6 +1121,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(LblZapretHeroTitle))]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
     [NotifyPropertyChangedFor(nameof(LblZapretMagicButton))]
+    // r34 — Hero quick-strategy row visibility.
+    [NotifyPropertyChangedFor(nameof(HasZapretStrategiesForQuickStart))]
     private bool _zapretEnabled = false;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsCustomStrategy))]
@@ -1141,8 +1143,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsZapretMagicButtonEnabled))]
     private bool _isZapretDownloading = false;
 
-    [ObservableProperty] private System.Collections.ObjectModel.ObservableCollection<string> _zapretStrategies = new();
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasZapretStrategiesForQuickStart))]
+    private System.Collections.ObjectModel.ObservableCollection<string> _zapretStrategies = new();
     private List<VPNRouter.Core.Services.ZapretStrategy> _parsedStrategies = new();
+
+    /// <summary>r34 — controls visibility of the Hero quick-strategy
+    /// mini-row (ComboBox + ▶). Visible only when:
+    ///   - Strategies list is populated (Zapret installed and parsed)
+    ///   - Not currently probing (would be redundant during auto-probe)
+    ///   - Not currently running (already started)
+    /// Hidden when there's no quick-start to offer.</summary>
+    public bool HasZapretStrategiesForQuickStart =>
+        ZapretStrategies != null
+        && ZapretStrategies.Count > 0
+        && !IsZapretProbing
+        && !ZapretEnabled;
     [ObservableProperty] private bool _receivePrereleases = false;
 
     // v2.36.0-r8 (cross-platform field) — suppress flag for Bug-r9-G AV toast
@@ -1165,6 +1181,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(LblZapretHeroTitle))]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
     [NotifyPropertyChangedFor(nameof(IsZapretMagicButtonEnabled))]
+    // r34 — Hero quick-strategy row visibility.
+    [NotifyPropertyChangedFor(nameof(HasZapretStrategiesForQuickStart))]
     private bool _isZapretProbing = false;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
@@ -4557,7 +4575,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled()) return;
         }
 
-        // Phase 2 — Discord hosts ensure-installed (default ON for one-tap).
+        // Phase 2a — Discord hosts ensure-installed (default ON for one-tap).
         // Skip if already installed to avoid UAC fatigue on returning users.
         // ToggleDiscordHosts is INSTALL-if-not-installed (we gated above),
         // and it's synchronous (writes hosts file + flushes DNS inline).
@@ -4571,6 +4589,42 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             catch (Exception ex)
             {
                 _logger.Warning(ex, "[VM] OneTap: Discord hosts install failed (non-fatal, continuing to probe)");
+            }
+        }
+
+        // Phase 2b — r34: Flowseal hosts ensure-installed. User asked
+        // «проставляються хосты?» — previously only Discord hosts were
+        // auto-installed by magic. Flowseal hosts add YouTube + other
+        // Cloudflare overrides needed for full DPI bypass coverage.
+        if (!FlowsealHostsInstalled)
+        {
+            try
+            {
+                await ToggleFlowsealHostsAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[VM] OneTap: Flowseal hosts install failed (non-fatal, continuing to probe)");
+            }
+        }
+
+        // Phase 2c — r34: Set GameFilter=All on first-time magic if user
+        // hasn't configured it. Without this, the strategy works for
+        // browsers but UDP game traffic (1024-65535) bypasses DPI bypass
+        // → games connect-fail. All is safe default; power users can
+        // change in Тонкая настройка → Фильтры and that overrides
+        // (IsGameFilterConfigured becomes true → magic stops touching it).
+        if (!ZapretActions.IsGameFilterConfigured)
+        {
+            try
+            {
+                ZapretActions.SetGameFilterMode(ZapretActions.GameFilterMode.All);
+                GameFilterModeIndex = (int)ZapretActions.GameFilterMode.All;
+                _logger.Information("[VM] OneTap: Game filter set to All (first-time default — covers games on UDP)");
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "[VM] OneTap: Game filter default-set failed (non-fatal)");
             }
         }
 

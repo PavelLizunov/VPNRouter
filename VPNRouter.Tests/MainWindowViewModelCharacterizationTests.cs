@@ -136,8 +136,11 @@ public class MainWindowViewModelCharacterizationTests
     // v2.37.0-r33 (2026-05-25): added CancelZapretProbeCommand +
     // L_ZapretCancelProbeButton + _zapretProbeCts CTS field. Cross-platform —
     // Linux value lands via CI next.
+    //
+    // v2.37.0-r34 (2026-05-25): added HasZapretStrategiesForQuickStart
+    // computed bool getter (drives Hero quick-strategy mini-row visibility).
     private const string PinnedHashWindows =
-        "dbf12154611dcf72a884913576029bbc87d508948e52fd921154d058debe1c30";
+        "96e33fca74faa312731a873d1fa2f781f04401001e82e1b8c0a78658beb1218e";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

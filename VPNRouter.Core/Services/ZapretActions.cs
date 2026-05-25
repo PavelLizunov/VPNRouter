@@ -292,6 +292,11 @@ public static class ZapretActions
     private static string GameFilterFlagPath =>
         Path.Combine(ZapretUpdater.ZapretDir, "utils", "game_filter.enabled");
 
+    /// <summary>r34 — true if the user has explicitly set a Game Filter
+    /// mode (file exists). Used by magic-button flow to apply a sensible
+    /// default ONLY on first run, never overriding a user's choice.</summary>
+    public static bool IsGameFilterConfigured => File.Exists(GameFilterFlagPath);
+
     public static GameFilterMode GetGameFilterMode()
     {
         try
