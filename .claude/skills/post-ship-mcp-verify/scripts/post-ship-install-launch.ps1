@@ -121,13 +121,24 @@ Write-Host "Launching $exe..." -ForegroundColor Cyan
 $proc = Start-Process -FilePath $exe -PassThru
 Start-Sleep -Seconds 6
 
-$alive = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
-if (-not $alive) {
-    Write-Host "ERROR: process $($proc.Id) did not survive 6s. Probable crash." -ForegroundColor Red
+# VPNRouter.GUI.exe is a tiny launcher: it spawns VPNRouter.App.exe as a
+# child then exits cleanly. Don't check $proc.Id — by t+6s the launcher
+# has already exited (its job done). Check for VPNRouter.App.exe instead
+# (the actual long-lived Avalonia GUI process). If that's not running,
+# the launcher couldn't bootstrap or App.exe crashed during startup.
+$app = Get-Process -Name VPNRouter.App -ErrorAction SilentlyContinue
+if (-not $app) {
+    Write-Host "ERROR: VPNRouter.App.exe not running 6s after launching GUI.exe." -ForegroundColor Red
+    Write-Host "       Launcher PID was $($proc.Id) (already exited as expected)." -ForegroundColor Red
+    Write-Host "       Check %ProgramData%\VPNRouter\logs\ for startup crash trace." -ForegroundColor Red
     exit 4
 }
 
+# Multiple App.exe instances would be unusual but valid (e.g. user already
+# had one running). Report the first one we see — it's the one our launch
+# spawned if it was the only one before.
+$appProc = $app | Select-Object -First 1
 Write-Host ""
-Write-Host "LAUNCHED: PID $($proc.Id), $exe" -ForegroundColor Green
+Write-Host "LAUNCHED: VPNRouter.App.exe PID $($appProc.Id) (launcher GUI.exe PID $($proc.Id) already exited)." -ForegroundColor Green
 Write-Host "Next: take screenshot via mcp__vpnrouter-test__screenshot to confirm window." -ForegroundColor Cyan
 exit 0
