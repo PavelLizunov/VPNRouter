@@ -44,18 +44,21 @@
 
     <Grid RowDefinitions="*,Auto">
 
-        <ScrollViewer Grid.Row="0"
-                      HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Auto"
-                      AllowAutoHide="False"
-                      Padding="0,8,0,60">
-            <!-- v2.37.0-r21/r22 — bumped bottom padding from 10 → 24 (r21,
-                 not enough) → 60 (r22). The cache UI row at the bottom of
-                 the expanded "Тонкая настройка" was still clipped after r21.
-                 60 px gives the cache button row (~32 px tall) + comfortable
-                 margin above the fixed footer. -->
-            <Grid Margin="12,0,14,0">
-                <StackPanel Spacing="12">
+        <!-- r27: outer ScrollViewer REMOVED. r25 (Expander→TabControl) and
+             r26 (MaxHeight + inner per-tab ScrollViewer) both failed to
+             solve the user's complaint «не получается доскролить до низа
+             вкладки». Root cause: outer ScrollViewer gave TabControl
+             unbounded vertical space → Avalonia 11 TabControl's Carousel
+             clipped its content based on layout-slot height without
+             propagating actual measured height back to the parent. Inner
+             ScrollViewers never engaged because they never saw a bounded
+             parent.
+             r27 fixes this structurally: Grid with Auto/* rows where
+             TabControl is in a * row. Now TabControl has a real bounded
+             viewport, inner ScrollViewer in each TabItem engages
+             deterministically when content exceeds the bound. -->
+        <Grid Grid.Row="0" RowDefinitions="Auto,*" Margin="12,8,14,8">
+                <StackPanel Grid.Row="0" Spacing="12">
 
                     <!-- ════════ Download progress (visible while downloading
                          zapret or installing hosts via the magic button). -->
@@ -454,24 +457,21 @@
                         </Grid>
                     </Border>
 
-                    <!-- r26: explicit MaxHeight bounds the TabControl so the
-                         inner per-TabItem ScrollViewer (added in r26 alongside)
-                         has a known max for engagement. Without this, the
-                         outer ScrollViewer gives TabControl infinite vertical
-                         space → inner ScrollViewer never knows to engage →
-                         user can scroll outer to its end but tab content's
-                         tail stays clipped below TabControl's reported
-                         (and incorrect) measured height. With MaxHeight=420,
-                         inner ScrollViewer engages whenever the active tab
-                         content > 420 px, which covers the Tools tab
-                         (~480 px with diagnostics + cache controls). -->
-                    <TabControl SelectedIndex="{Binding ZapretActiveTabIndex, Mode=TwoWay}"
-                                Background="Transparent"
-                                BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                BorderThickness="1"
-                                CornerRadius="{StaticResource RadiusSm}"
-                                MaxHeight="420"
-                                Padding="10,6">
+                </StackPanel>
+
+                <!-- r27: TabControl in Grid.Row=1 (*) gets the remaining
+                     vertical space after the header StackPanel above. No
+                     more MaxHeight magic — bound comes from the Grid layout.
+                     Inner ScrollViewer in each TabItem engages reliably
+                     when tab content exceeds the available area. -->
+                <TabControl Grid.Row="1"
+                            SelectedIndex="{Binding ZapretActiveTabIndex, Mode=TwoWay}"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Margin="0,8,0,0"
+                            Padding="10,6">
 
                         <!-- ─── Tab 1: Strategy ─── -->
                         <!-- r26: each TabItem wraps content in its OWN ScrollViewer.
@@ -746,11 +746,8 @@
                             </ScrollViewer>
                         </TabItem>
 
-                    </TabControl>
-
-                </StackPanel>
-            </Grid>
-        </ScrollViewer>
+                </TabControl>
+        </Grid>
 
         <!-- ════════ Footer — same shape as TgProxyOneTap r7.
              Status dot + ZapretStatus + compact magic button. Footer bound

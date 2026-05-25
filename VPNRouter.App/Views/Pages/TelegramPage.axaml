@@ -60,13 +60,11 @@
 
     <Grid RowDefinitions="*,Auto">
 
-        <ScrollViewer Grid.Row="0"
-                      HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Auto"
-                      AllowAutoHide="False"
-                      Padding="0,8,0,10">
-            <Grid Margin="12,0,14,0">
-                <StackPanel Spacing="12">
+        <!-- r27: outer ScrollViewer removed (same pattern as DpiBypassPage r27).
+             Grid with Auto/* rows; TabControl in * row gets bounded viewport
+             so inner per-TabItem ScrollViewers engage reliably. -->
+        <Grid Grid.Row="0" RowDefinitions="Auto,*" Margin="12,8,14,8">
+                <StackPanel Grid.Row="0" Spacing="12">
 
                     <!-- ────────── 1 · Per-step download progress (r6 MVP).
                          Sits above the hero so visibility doesn't shift the
@@ -406,17 +404,17 @@
                                Foreground="{DynamicResource TextSecondaryBrush}"
                                Margin="0,4,0,0"/>
 
-                    <!-- r26: MaxHeight + per-TabItem ScrollViewer pattern (same
-                         as DpiBypassPage r26). Bounds the TabControl so the
-                         inner scrollers can engage when tab content overflows
-                         beyond the outer ScrollViewer's scrollable extent. -->
-                    <TabControl SelectedIndex="{Binding TgProxyActiveTabIndex, Mode=TwoWay}"
-                                Background="Transparent"
-                                BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                BorderThickness="1"
-                                CornerRadius="{StaticResource RadiusSm}"
-                                MaxHeight="380"
-                                Padding="10,6">
+                </StackPanel>
+
+                <!-- r27: TabControl in Grid.Row=1 (*) — bounded viewport. -->
+                <TabControl Grid.Row="1"
+                            SelectedIndex="{Binding TgProxyActiveTabIndex, Mode=TwoWay}"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusSm}"
+                            Margin="0,8,0,0"
+                            Padding="10,6">
 
                         <!-- ─── Tab 1: Настройки (Port + Secret) ─── -->
                         <TabItem Header="{Binding L_TgProxyTabSettings}" FontSize="11">
@@ -589,11 +587,8 @@
                             </ScrollViewer>
                         </TabItem>
 
-                    </TabControl>
-
-                </StackPanel>
-            </Grid>
-        </ScrollViewer>
+                </TabControl>
+        </Grid>
 
         <!-- ────────── 6 · Footer — kept from r3+r6.
              Page-specific status + Stop button. Same TgProxyMainAction
