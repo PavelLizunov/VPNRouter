@@ -167,14 +167,14 @@ public class MainWindowViewModelCharacterizationTests
     // Every Windows-side bump (r7, r10, r11, r15, r19) deferred Linux pin
     // "to next CI failure per workflow". The next CI failure landed when r19
     // un-gated cache UI members from #if PLATFORM_WINDOWS, exposing Linux's
-    // accumulated surface drift. New Linux hash captured from r19 CI run
-    // 26387715796 reflects all 5 Windows surface additions through the
-    // conditional-stripped Linux build: HasTgProxyStats (r15) +
-    // LblZapretCacheStatus + ClearZapretCacheCommand + ForceFreshProbeCommand
-    // (r10/r19 — now visible on Linux too) + L_ZapretForceFreshProbeButton
-    // + L_ZapretClearCacheButton (r11).
+    // accumulated surface drift. r22 added new cross-platform members:
+    // ZapretProbeElapsedSeconds (property + OnPropertyChanged'd notify-fors),
+    // LblZapretProbeElapsed, LblZapretHeroLede notify chain, plus the
+    // StartZapretWithSelectedStrategyCommand surface (the body is gated under
+    // #if PLATFORM_WINDOWS but the command property is unconditional so XAML
+    // binds resolve on Linux too). Captured from CI run 26389946061 (r22).
     private const string PinnedHashLinux =
-        "7502e41ad11f8c1502aa182a362ac5942370462a0081624bc993bfd83c54ef0c";
+        "5ee369c43441c7c2ab611a9f400c2e031e49d4939a464b0d6827796c3afae544";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()
