@@ -472,7 +472,39 @@ public static class ZapretAutoStrategy
             CreateNoWindow = true,
             UseShellExecute = false,
             WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
+            // r38: force UTF-8 decode of Flowseal stdout. Without this we
+            // default to the user's OEM codepage (often 866 on RU Windows),
+            // which can corrupt status lines and cause "false fails" because
+            // the parser can't match `status=OK` on garbled bytes.
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
+
+        // r38: per-probe persistent log file. Captures EVERY stdout/stderr
+        // line with a timestamp so the user can grep for "what did probe see
+        // for general (ALT3)" instead of relying on the swallowed FullOutput
+        // field. Path: %ProgramData%\VPNRouter\logs\zapret-probe-{stamp}.log
+        // Best-effort — never throws.
+        var probeLogPath = Path.Combine(AppPaths.LogsDir,
+            $"zapret-probe-{DateTime.UtcNow:yyyyMMdd-HHmmss}.log");
+        StreamWriter? probeLog = null;
+        try
+        {
+            Directory.CreateDirectory(AppPaths.LogsDir);
+            probeLog = new StreamWriter(probeLogPath, append: false,
+                new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false))
+            { AutoFlush = true };
+            probeLog.WriteLine($"# Zapret probe log started at {DateTime.UtcNow:O}");
+            probeLog.WriteLine($"# zapretInstallDir = {zapretInstallDir}");
+            probeLog.WriteLine($"# scriptPath       = {scriptPath}");
+            probeLog.WriteLine($"# VPNRouter        = {VPNRouter.Core.AppVersion.Version}");
+            logger?.Information("[ZapretAutoStrategy] Probe log → {Path}", probeLogPath);
+        }
+        catch (Exception ex)
+        {
+            logger?.Debug(ex, "[ZapretAutoStrategy] Failed to open probe log (continuing without)");
+        }
+        var probeLogLock = new object();
 
         using var proc = new System.Diagnostics.Process { StartInfo = psi };
         var outputBuilder = new System.Text.StringBuilder();
@@ -538,6 +570,19 @@ public static class ZapretAutoStrategy
             if (args.Data == null) return;
             var line = args.Data;
             outputBuilder.AppendLine(line);
+            // r38: also stream to the per-probe log file with a timestamp
+            // so the user has a grep'able record after probe ends.
+            if (probeLog != null)
+            {
+                try
+                {
+                    lock (probeLogLock)
+                    {
+                        probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} {line}");
+                    }
+                }
+                catch { /* best-effort */ }
+            }
 
             // Per-config progress: "  [12/20] general (ALT5).bat" — resets
             // the running OK/total counters for the new config.
@@ -581,18 +626,27 @@ public static class ZapretAutoStrategy
             }
 
             // Per-test status: "[YT_LIVE@0][HTTP] code=200 size=... status=OK"
-            // Each config has multiple targets × 3 test labels — we count
-            // status=OK as pass, everything else (FAIL/UNSUPPORTED/LIKELY_BLOCKED)
-            // as a fail for the running score.
+            // Each config has multiple targets × 3 test labels.
+            //
+            // r38: pass criteria expanded. Flowseal emits these status values:
+            //   - OK              → traffic flowed normally (pass)
+            //   - UNSUPPORTED     → endpoint doesn't speak this protocol — NOT a strategy fail
+            //                       (pre-r38 we counted as fail → false "конфиги не прошли"
+            //                       on machines where one of the probe targets is offline
+            //                       or doesn't implement HTTP/3)
+            //   - LIKELY_BLOCKED  → DPI partially fought back (TCP up, no response) → fail
+            //   - FAIL            → clear network/DPI failure → fail
             var s = statusLineRx.Match(line);
             if (s.Success)
             {
                 var status = s.Groups[1].Value;
+                bool isPass = status.Equals("OK", StringComparison.OrdinalIgnoreCase)
+                    || status.Equals("UNSUPPORTED", StringComparison.OrdinalIgnoreCase);
                 int snapOk, snapTotal, snapN, snapT;
                 lock (counterLock)
                 {
                     currentTotalChecks++;
-                    if (status.Equals("OK", StringComparison.OrdinalIgnoreCase))
+                    if (isPass)
                         currentOkCount++;
                     snapOk = currentOkCount;
                     snapTotal = currentTotalChecks;
@@ -608,7 +662,7 @@ public static class ZapretAutoStrategy
                 }
 
                 // r33: early-winner detection. If the current strategy has
-                // ALL checks pass (100% OK) AND we've gathered enough samples
+                // ALL checks pass (100%) AND we've gathered enough samples
                 // (>=16, typical strategy = 24 status lines: 8 targets × 3
                 // test labels HTTP/TLS1.2/TLS1.3), declare it the winner
                 // and kill the script. Saves user 2-7 min of waiting
@@ -623,6 +677,24 @@ public static class ZapretAutoStrategy
                     logger?.Information(
                         "[ZapretAutoStrategy] Early winner detected: {Strategy} ({Ok}/{Total}) — killing script",
                         winner, snapOk, snapTotal);
+                    // r38: also write to per-probe log so the user can grep
+                    // "Early winner" to understand why config N+1..N+M never ran.
+                    if (probeLog != null)
+                    {
+                        try
+                        {
+                            lock (probeLogLock)
+                            {
+                                probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} # EARLY-WINNER {currentStrategyName} ({snapOk}/{snapTotal}) — killing script, skipping remaining {snapT - snapN} configs");
+                            }
+                        }
+                        catch { }
+                    }
+                    // r38: emit progress with strategy name + score so the UI
+                    // can show "Winner found: general (ALT3) — 24/24" instead
+                    // of the score quietly disappearing when the script dies.
+                    progress?.Report(new FlowsealProgress(
+                        snapN, snapT, currentStrategyName, snapOk, snapTotal));
                     try { proc.Kill(entireProcessTree: true); }
                     catch (Exception ex)
                     {
@@ -655,8 +727,44 @@ public static class ZapretAutoStrategy
         proc.ErrorDataReceived += (sender, args) =>
         {
             if (!string.IsNullOrEmpty(args.Data))
+            {
                 logger?.Debug("[ZapretAutoStrategy] flowseal-stderr: {Line}", args.Data);
+                // r38: stderr also goes to the per-probe log
+                if (probeLog != null)
+                {
+                    try
+                    {
+                        lock (probeLogLock)
+                        {
+                            probeLog.WriteLine($"{DateTime.UtcNow:HH:mm:ss.fff} [STDERR] {args.Data}");
+                        }
+                    }
+                    catch { /* best-effort */ }
+                }
+            }
         };
+
+        // r38: snapshot winws.exe PIDs BEFORE spawning probe, so the
+        // post-probe orphan cleanup can distinguish "winws that existed
+        // before us" (user's already-running Zapret, leave alone) from
+        // "winws spawned by the probe" (clean up — Flowseal's
+        // `test zapret.ps1` mode 2 spawns winws to each strategy then
+        // doesn't always reap them on exit, leaving a phantom console
+        // window the user has to close manually).
+        var preExistingWinwsPids = new HashSet<int>();
+        try
+        {
+            foreach (var p in System.Diagnostics.Process.GetProcessesByName("winws"))
+            {
+                try { preExistingWinwsPids.Add(p.Id); } catch { }
+                p.Dispose();
+            }
+            logger?.Debug("[ZapretAutoStrategy] Pre-probe winws.exe PIDs: {N}", preExistingWinwsPids.Count);
+        }
+        catch (Exception ex)
+        {
+            logger?.Debug(ex, "[ZapretAutoStrategy] Pre-probe winws snapshot failed");
+        }
 
         logger?.Information("[ZapretAutoStrategy] Spawning Flowseal script: {Path}", scriptPath);
         proc.Start();
@@ -719,6 +827,9 @@ public static class ZapretAutoStrategy
                     logger?.Information("[ZapretAutoStrategy] Flowseal sweep canceled by user");
                     IReadOnlyList<string> errSnap;
                     lock (counterLock) { errSnap = errorLines.ToArray(); }
+                    // r38: clean up orphan winws.exe + close probe log
+                    CleanupOrphanWinws(preExistingWinwsPids, logger);
+                    CloseProbeLog(probeLog, probeLogLock, "canceled", null, logger);
                     return new FlowsealSweepResult(null, testedCount, totalCount, outputBuilder.ToString(),
                         Diagnostic: "canceled", ErrorLines: errSnap);
                 }
@@ -727,6 +838,16 @@ public static class ZapretAutoStrategy
 
         IReadOnlyList<string> finalErrors;
         lock (counterLock) { finalErrors = errorLines.ToArray(); }
+
+        // r38: orphan cleanup — Flowseal's test zapret.ps1 mode 2 spawns
+        // winws.exe per strategy to actively probe DPI. When we early-kill
+        // PowerShell (winner detected) or it hits the 10-min cap, those
+        // winws children sometimes outlive their parent because they were
+        // spawned via Start-Process (detached) rather than as child handles
+        // of the PS host. Result: phantom winws.exe + console window the
+        // user has to close with Alt+F4. We scan for NEW winws PIDs (not
+        // in the pre-spawn snapshot) and kill them.
+        CleanupOrphanWinws(preExistingWinwsPids, logger);
 
         // r37: finalize the very last strategy's result (the loop only
         // records previous strategies when a NEW configHeaderRx matches,
@@ -764,9 +885,76 @@ public static class ZapretAutoStrategy
             proc.HasExited ? proc.ExitCode : -1, testedCount, totalCount,
             winner ?? "<none>", finalErrors.Count, perStrategySnap.Count);
 
+        // r38: close the per-probe log with a summary footer.
+        CloseProbeLog(probeLog, probeLogLock,
+            outcome: winner != null ? "winner" : (timeoutDiagnostic ?? "no_winner"),
+            winner: winner,
+            logger: logger);
+
         return new FlowsealSweepResult(winner, testedCount, totalCount, outputBuilder.ToString(),
             Diagnostic: timeoutDiagnostic, ErrorLines: finalErrors,
             PerStrategyResults: perStrategySnap);
+    }
+
+    /// <summary>
+    /// r38 — kill any winws.exe instance that wasn't in the pre-spawn
+    /// snapshot. Flowseal's mode-2 DPI probe spawns winws.exe per strategy
+    /// and (in some failure modes — early-kill, timeout, OS signal race)
+    /// leaves them running after the PowerShell parent exits. Cleanup keeps
+    /// "no phantom console after probe" promise. Best-effort: failures are
+    /// logged at Debug and don't propagate.
+    /// </summary>
+    private static void CleanupOrphanWinws(HashSet<int> preExistingPids, Serilog.ILogger? logger)
+    {
+        int killed = 0;
+        try
+        {
+            foreach (var p in System.Diagnostics.Process.GetProcessesByName("winws"))
+            {
+                try
+                {
+                    if (!preExistingPids.Contains(p.Id))
+                    {
+                        logger?.Debug("[ZapretAutoStrategy] Killing orphan winws PID {Pid}", p.Id);
+                        p.Kill(entireProcessTree: true);
+                        killed++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.Debug(ex, "[ZapretAutoStrategy] orphan winws kill failed PID {Pid}", p.Id);
+                }
+                finally { p.Dispose(); }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.Debug(ex, "[ZapretAutoStrategy] CleanupOrphanWinws enumeration failed");
+        }
+        if (killed > 0)
+            logger?.Information("[ZapretAutoStrategy] Cleaned up {N} orphan winws.exe", killed);
+    }
+
+    /// <summary>
+    /// r38 — close the per-probe log file with an end-of-run summary.
+    /// Idempotent / null-tolerant — safe to call from any exit path.
+    /// </summary>
+    private static void CloseProbeLog(StreamWriter? probeLog, object probeLogLock,
+        string outcome, string? winner, Serilog.ILogger? logger)
+    {
+        if (probeLog == null) return;
+        try
+        {
+            lock (probeLogLock)
+            {
+                probeLog.WriteLine($"# Probe finished at {DateTime.UtcNow:O} — outcome={outcome}, winner={winner ?? "<none>"}");
+                probeLog.Dispose();
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.Debug(ex, "[ZapretAutoStrategy] probe-log close failed");
+        }
     }
 
     /// <summary>
