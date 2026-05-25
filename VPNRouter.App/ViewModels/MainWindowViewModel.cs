@@ -740,7 +740,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
-    [ObservableProperty] private bool _bypassRussianTraffic = true;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBadComboWarningVisible))]
+    private bool _bypassRussianTraffic = true;
 
     /// <summary>v2.30.0-r17 — when true, custom rules win over global
     /// toggles (BypassRussianTraffic + BlockAds). Default false (toggles
@@ -1104,7 +1106,44 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // change defaults the underlying setting to true for new installs and
     // false for upgrades via SettingsMigrator. See
     // plans/hotfix-dns-leak-firewall-lockdown-2026-05-19.md.
-    [ObservableProperty] private bool _isDnsLeakLockdownEnabled = true;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBadComboWarningVisible))]
+    private bool _isDnsLeakLockdownEnabled = true;
+
+    /// <summary>
+    /// v2.37.0-r36 — surface known-incompatible setting combos as a UI banner.
+    /// Currently a single combo: DnsLeakLockdown ∩ BypassRussianTraffic.
+    /// LeakProtection.CollectIncompatibleSettings has the canonical text +
+    /// rationale; the banner shows a short label + Disable buttons.
+    /// </summary>
+    public bool IsBadComboWarningVisible =>
+        BypassRussianTraffic && IsDnsLeakLockdownEnabled;
+
+    public string LblBadComboWarningTitle =>
+        IsRussian
+            ? "Несовместимые настройки могут ломать интернет"
+            : "Incompatible settings may break the internet";
+
+    public string LblBadComboWarningBody =>
+        IsRussian
+            ? "«Блокировать DNS вне VPN» + «Российский трафик через реальный IP» — RU-домены не будут резолвиться. Отключите одну."
+            : "\"Block DNS outside VPN\" + \"Russian traffic via real IP\" conflict — RU domains won't resolve. Disable one.";
+
+    public string LblBadComboDisableLockdown =>
+        IsRussian
+            ? "Отключить DNS-lockdown"
+            : "Disable DNS lockdown";
+
+    public string LblBadComboDisableRuBypass =>
+        IsRussian
+            ? "Отключить RU-bypass"
+            : "Disable RU bypass";
+
+    [RelayCommand]
+    private void DisableBadComboLockdown() => IsDnsLeakLockdownEnabled = false;
+
+    [RelayCommand]
+    private void DisableBadComboRuBypass() => BypassRussianTraffic = false;
 
     // Apply changes (hot-reload) UX state
     [ObservableProperty] private bool _hasPendingAppChanges;
@@ -1147,6 +1186,27 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(HasZapretStrategiesForQuickStart))]
     private System.Collections.ObjectModel.ObservableCollection<string> _zapretStrategies = new();
     private List<VPNRouter.Core.Services.ZapretStrategy> _parsedStrategies = new();
+
+    /// <summary>
+    /// v2.37.0-r36 — strategy name + verification status badge for the
+    /// Hero quick-strategy mini-row. 1:1 indexed with <see cref="ZapretStrategies"/>,
+    /// so selection (via <see cref="ZapretStrategyIndex"/>) stays in sync.
+    /// Raw names are still used for execution; this is display-only.
+    ///
+    /// <para>Format:</para>
+    /// <list type="bullet">
+    ///   <item>Cached winner with score: <c>"general (ALT3)  ✓ 5/5"</c></item>
+    ///   <item>Cached winner without score (legacy v1 cache): <c>"general (ALT3)  ✓"</c></item>
+    ///   <item>Stale cached winner: <c>"general (ALT3)  ⚠ устарело"</c></item>
+    ///   <item>Other strategies: just the name (no probe data per-strategy yet)</item>
+    /// </list>
+    ///
+    /// <para>Future r37+: extend <see cref="ZapretProbeCache"/> to track
+    /// per-strategy results (not just the winner) so every entry can carry
+    /// a verification badge. For r36 we surface only the cached winner.</para>
+    /// </summary>
+    [ObservableProperty]
+    private System.Collections.ObjectModel.ObservableCollection<string> _zapretStrategiesDisplay = new();
 
     /// <summary>r34 — controls visibility of the Hero quick-strategy
     /// mini-row (ComboBox + ▶). Visible only when:
@@ -4227,10 +4287,71 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         ZapretStrategies = new System.Collections.ObjectModel.ObservableCollection<string>(names);
 
+        // v2.37.0-r36 — build display variant with verification badges from
+        // ZapretProbeCache. Currently only the cached winner gets a badge;
+        // future r37+ will extend the cache to per-strategy results so every
+        // entry can carry verified/failed status.
+        RefreshZapretStrategiesDisplay();
+
         // Restore saved strategy index
         var saved = _settings.App.ZapretStrategy;
         var idx = names.IndexOf(saved);
         ZapretStrategyIndex = idx >= 0 ? idx : 0;
+    }
+
+    /// <summary>
+    /// v2.37.0-r36 — rebuild <see cref="ZapretStrategiesDisplay"/> from the
+    /// raw <see cref="ZapretStrategies"/> + the cached probe winner (if any).
+    /// Call after a probe finishes or when a fresh cache load happens, so
+    /// the Hero mini-row ComboBox shows the latest "✓ N/N" badge.
+    /// </summary>
+    private void RefreshZapretStrategiesDisplay()
+    {
+        var display = new System.Collections.ObjectModel.ObservableCollection<string>();
+        VPNRouter.Core.Services.ZapretProbeCacheEntry? cached = null;
+#if PLATFORM_WINDOWS
+        try { cached = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger); }
+        catch (Exception ex)
+        {
+            _logger?.Debug(ex, "[VM] RefreshZapretStrategiesDisplay: probe cache load failed");
+        }
+#endif
+
+        var winnerName = cached?.Strategy;
+        var winnerOk = cached?.IsRecentAndReliable() ?? false;
+        var winnerStale = cached?.IsStale() ?? false;
+        var hasScore = cached?.HasTargetScore() ?? false;
+        var passed = cached?.TargetsPassed ?? 0;
+        var total = cached?.TargetsTotal ?? 0;
+
+        foreach (var name in ZapretStrategies)
+        {
+            if (!string.IsNullOrEmpty(winnerName)
+                && string.Equals(name, winnerName, StringComparison.Ordinal))
+            {
+                if (winnerOk)
+                {
+                    display.Add(hasScore
+                        ? $"{name}  ✓ {passed}/{total}"
+                        : $"{name}  ✓");
+                }
+                else if (winnerStale)
+                {
+                    display.Add($"{name}  ⚠ устарело");
+                }
+                else
+                {
+                    display.Add(name);
+                }
+            }
+            else
+            {
+                // r36: no per-strategy data yet — show raw name.
+                // r37+: lookup from extended cache and append ✓/✗ score.
+                display.Add(name);
+            }
+        }
+        ZapretStrategiesDisplay = display;
     }
 
     [RelayCommand]
@@ -4766,6 +4887,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 ZapretStatus = Strings.ZapretRunningSelected(strategyName, pid);
                 // Persist as a cache success so warm-start kicks in next time.
                 VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(strategyName, _logger);
+                // r36: refresh display badges after manual start success.
+                RefreshZapretStrategiesDisplay();
                 SaveSettings();
             }
             else
@@ -5303,6 +5426,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                             ZapretProbePassCount,
                             ZapretProbeTotalCount,
                             _logger);
+                        // r36: refresh Hero ComboBox display so the ✓ N/M badge
+                        // shows up next to the just-verified winner immediately.
+                        RefreshZapretStrategiesDisplay();
+                        NotifyZapretSummaryChanged();
                         SaveSettings();
                     }
                     else

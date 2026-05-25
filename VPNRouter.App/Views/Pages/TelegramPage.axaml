@@ -90,11 +90,12 @@
                          the content for the «marketing event» feel from
                          design A. ZIndex via Grid layering: glow is bottom,
                          StackPanel is top. -->
+                    <!-- r36: padding 24/22 → 14 (match DpiBypass r31 compact) -->
                     <Border CornerRadius="{StaticResource RadiusLg}"
                             Background="{DynamicResource SurfaceBaseBrush}"
                             BorderBrush="{DynamicResource BorderSubtleBrush}"
                             BorderThickness="1"
-                            Padding="20,24,20,22"
+                            Padding="20,14,20,14"
                             ClipToBounds="True">
                         <Grid>
                             <!-- Soft accent glow disc — RadialGradientBrush
@@ -120,15 +121,12 @@
                                 </Ellipse.Fill>
                             </Ellipse>
 
-                            <StackPanel Spacing="12" HorizontalAlignment="Center" MaxWidth="380">
+                            <!-- r36: spacing 12 → 8 (match DpiBypass r31 compact) -->
+                            <StackPanel Spacing="8" HorizontalAlignment="Center" MaxWidth="380">
 
-                                <!-- Paper-plane icon (46×46 rounded square,
-                                     accent-border, subtle shadow). SVG path
-                                     from design: M21 3 11 13 → M21 3 14.5 21
-                                     -3.5 -8 L3 9.5 21 3z (Telegram-style
-                                     plane outline). -->
-                                <Border Width="46" Height="46"
-                                        CornerRadius="14"
+                                <!-- Paper-plane icon. r36: 46→38 (match DpiBypass r31 compact). -->
+                                <Border Width="38" Height="38"
+                                        CornerRadius="12"
                                         Background="{DynamicResource SurfaceBaseBrush}"
                                         BorderBrush="{DynamicResource AccentBorderBrush}"
                                         BorderThickness="1"
@@ -165,10 +163,8 @@
                                            MaxWidth="340"/>
 
                                 <!-- The magic button — big primary accent.
-                                     Same command as the footer button.
-                                     Disabled during download to prevent
-                                     double-spawn. Min 240 px keeps the
-                                     hero feel even on narrow windows. -->
+                                     r36: MinWidth 240→220 (still hero feel,
+                                     narrower windows benefit). -->
                                 <Button Command="{Binding TgProxyMainActionCommand}"
                                         IsEnabled="{Binding !IsTgProxyDownloading}"
                                         Background="{DynamicResource AccentSolidBrush}"
@@ -176,7 +172,7 @@
                                         BorderThickness="0"
                                         CornerRadius="{StaticResource RadiusMd}"
                                         Padding="22,12"
-                                        MinWidth="240"
+                                        MinWidth="220"
                                         HorizontalAlignment="Center"
                                         HorizontalContentAlignment="Center"
                                         FontWeight="Bold"
@@ -204,89 +200,9 @@
                                     </StackPanel>
                                 </Button>
 
-                                <!-- 3-step chips (only when stopped).
-                                     Each chip = number bubble + label
-                                     in a pill background. Wrap if narrow. -->
-                                <ItemsControl IsVisible="{Binding !TgProxyEnabled}"
-                                              HorizontalAlignment="Center">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel HorizontalAlignment="Center" ItemSpacing="6" LineSpacing="6"/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <!-- Step 1 -->
-                                    <Border CornerRadius="{StaticResource RadiusPill}"
-                                            Background="{DynamicResource SurfaceBaseBrush}"
-                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                            BorderThickness="1"
-                                            Padding="10,5">
-                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                            <Border Width="14" Height="14"
-                                                    CornerRadius="7"
-                                                    Background="{DynamicResource AccentBgSubtleBrush}">
-                                                <TextBlock Text="1"
-                                                           FontSize="9"
-                                                           FontWeight="Bold"
-                                                           Foreground="{DynamicResource AccentFgBrush}"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"/>
-                                            </Border>
-                                            <TextBlock Text="{Binding L_TgProxyOneTapStep1}"
-                                                       FontSize="10"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource TextSecondaryBrush}"
-                                                       VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Border>
-                                    <!-- Step 2 -->
-                                    <Border CornerRadius="{StaticResource RadiusPill}"
-                                            Background="{DynamicResource SurfaceBaseBrush}"
-                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                            BorderThickness="1"
-                                            Padding="10,5">
-                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                            <Border Width="14" Height="14"
-                                                    CornerRadius="7"
-                                                    Background="{DynamicResource AccentBgSubtleBrush}">
-                                                <TextBlock Text="2"
-                                                           FontSize="9"
-                                                           FontWeight="Bold"
-                                                           Foreground="{DynamicResource AccentFgBrush}"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"/>
-                                            </Border>
-                                            <TextBlock Text="{Binding L_TgProxyOneTapStep2}"
-                                                       FontSize="10"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource TextSecondaryBrush}"
-                                                       VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Border>
-                                    <!-- Step 3 -->
-                                    <Border CornerRadius="{StaticResource RadiusPill}"
-                                            Background="{DynamicResource SurfaceBaseBrush}"
-                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                            BorderThickness="1"
-                                            Padding="10,5">
-                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                            <Border Width="14" Height="14"
-                                                    CornerRadius="7"
-                                                    Background="{DynamicResource AccentBgSubtleBrush}">
-                                                <TextBlock Text="3"
-                                                           FontSize="9"
-                                                           FontWeight="Bold"
-                                                           Foreground="{DynamicResource AccentFgBrush}"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"/>
-                                            </Border>
-                                            <TextBlock Text="{Binding L_TgProxyOneTapStep3}"
-                                                       FontSize="10"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource TextSecondaryBrush}"
-                                                       VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Border>
-                                </ItemsControl>
+                                <!-- r36: 3-step chips REMOVED (consumed ~80px when stopped,
+                                     duplicated info from hero lede). Steps still
+                                     described in lede + tabs/Help section. -->
 
                                 <!-- Air-pill (only when running). Green
                                      dot + «В эфире · :1443». Adds the

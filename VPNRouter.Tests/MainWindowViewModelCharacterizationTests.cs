@@ -139,8 +139,14 @@ public class MainWindowViewModelCharacterizationTests
     //
     // v2.37.0-r34 (2026-05-25): added HasZapretStrategiesForQuickStart
     // computed bool getter (drives Hero quick-strategy mini-row visibility).
+    // v2.37.0-r36 (2026-05-25): added IsBadComboWarningVisible computed bool
+    // + 4 Lbl* localization strings + DisableBadComboLockdownCommand +
+    // DisableBadComboRuBypassCommand + ZapretStrategiesDisplay observable
+    // collection (Hero ComboBox display with ✓ N/M badge). 8 new public
+    // members. NotifyPropertyChangedFor on _bypassRussianTraffic +
+    // _isDnsLeakLockdownEnabled drives IsBadComboWarningVisible auto-refresh.
     private const string PinnedHashWindows =
-        "96e33fca74faa312731a873d1fa2f781f04401001e82e1b8c0a78658beb1218e";
+        "b3dde37b4541c0b0ba3d337c3369d5cd8f0a8a0bdd3253da55e4ccda8798981e";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

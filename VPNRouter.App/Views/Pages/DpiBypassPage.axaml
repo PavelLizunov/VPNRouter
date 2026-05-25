@@ -237,8 +237,11 @@
                                         MaxWidth="380"
                                         HorizontalAlignment="Center">
                                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                                        <!-- r36: bind to ZapretStrategiesDisplay (with ✓ N/M badges)
+                                             instead of raw ZapretStrategies. SelectedIndex still
+                                             drives ZapretStrategyIndex which is 1:1 with raw names. -->
                                         <ComboBox Grid.Column="0"
-                                                  ItemsSource="{Binding ZapretStrategies}"
+                                                  ItemsSource="{Binding ZapretStrategiesDisplay}"
                                                   SelectedIndex="{Binding ZapretStrategyIndex}"
                                                   FontSize="10"
                                                   Padding="6,2"

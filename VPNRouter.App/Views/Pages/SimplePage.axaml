@@ -72,6 +72,48 @@
                     </StackPanel>
                 </Border>
 
+                <!-- ═══ v2.37.0-r36 — Bad-combo warning banner ═══
+                     Surfaces when user has both DnsLeakLockdown and
+                     BypassRussianTraffic enabled. The two settings are
+                     architecturally incompatible (firewall blocks DNS on
+                     the physical NIC that RU-bypass needs) and routinely
+                     break user-perceived internet for RU domains. Banner
+                     offers 1-click disable for either side. -->
+                <Border IsVisible="{Binding IsBadComboWarningVisible}"
+                        BorderThickness="1"
+                        BorderBrush="{DynamicResource WarningBorderBrush}"
+                        Background="{DynamicResource WarningBgBrush}"
+                        CornerRadius="{StaticResource RadiusMd}"
+                        Padding="14,12">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="{Binding LblBadComboWarningTitle}"
+                                   FontWeight="Bold"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource WarningFgBrush}"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding LblBadComboWarningBody}"
+                                   FontSize="11"
+                                   LineHeight="16"
+                                   Foreground="{DynamicResource WarningFgBrush}"
+                                   TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Content="{Binding LblBadComboDisableLockdown}"
+                                    Command="{Binding DisableBadComboLockdownCommand}"
+                                    FontSize="11"
+                                    Padding="10,5"
+                                    CornerRadius="{StaticResource RadiusSm}"/>
+                            <Button Content="{Binding LblBadComboDisableRuBypass}"
+                                    Command="{Binding DisableBadComboRuBypassCommand}"
+                                    FontSize="11"
+                                    Padding="10,5"
+                                    CornerRadius="{StaticResource RadiusSm}"
+                                    Background="Transparent"
+                                    BorderBrush="{DynamicResource WarningBorderBrush}"
+                                    BorderThickness="1"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
                 <!-- ═══ Config row — tappable, opens the inline form ═══
                      v2.31.6-r9 A11y: same card-as-button pattern as the
                      Advanced settings card below. Bind Name to the
