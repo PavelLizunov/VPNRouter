@@ -412,21 +412,56 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- r27.1: TabControl in Grid.Row=1 (3*) — bounded 60% viewport. -->
-            <TabControl Grid.Row="1"
-                            SelectedIndex="{Binding TgProxyActiveTabIndex, Mode=TwoWay}"
-                            Background="Transparent"
-                            BorderBrush="{DynamicResource BorderSubtleBrush}"
-                            BorderThickness="1"
-                            CornerRadius="{StaticResource RadiusSm}"
-                            Margin="0,8,0,0"
-                            Padding="10,6">
+            <!-- r29: manual tab strip + Panel of per-tab ScrollViewers,
+                 same pattern as DpiBypassPage r29. Pure primitives —
+                 no Avalonia TabControl Carousel quirks. 3 tabs:
+                 Настройки / Версия / Помощь. -->
+            <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,8,0,0">
 
-                        <!-- ─── Tab 1: Настройки (Port + Secret) ─── -->
-                        <TabItem Header="{Binding L_TgProxyTabSettings}" FontSize="11">
-                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                          VerticalScrollBarVisibility="Auto"
-                                          Padding="0,6,4,12">
+                <UniformGrid Grid.Row="0" Rows="1" Columns="3" Margin="0,0,0,4">
+                    <RadioButton GroupName="TgProxyTabs"
+                                 IsChecked="{Binding IsTgProxyTab0}"
+                                 Command="{Binding SetTgProxyTabCommand}"
+                                 CommandParameter="0"
+                                 FontSize="11"
+                                 Padding="4,4"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center">
+                        <TextBlock Text="{Binding L_TgProxyTabSettings}" TextAlignment="Center"/>
+                    </RadioButton>
+                    <RadioButton GroupName="TgProxyTabs"
+                                 IsChecked="{Binding IsTgProxyTab1}"
+                                 Command="{Binding SetTgProxyTabCommand}"
+                                 CommandParameter="1"
+                                 FontSize="11"
+                                 Padding="4,4"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center">
+                        <TextBlock Text="{Binding L_TgProxyTabVersion}" TextAlignment="Center"/>
+                    </RadioButton>
+                    <RadioButton GroupName="TgProxyTabs"
+                                 IsChecked="{Binding IsTgProxyTab2}"
+                                 Command="{Binding SetTgProxyTabCommand}"
+                                 CommandParameter="2"
+                                 FontSize="11"
+                                 Padding="4,4"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center">
+                        <TextBlock Text="{Binding L_TgProxyTabHelp}" TextAlignment="Center"/>
+                    </RadioButton>
+                </UniformGrid>
+
+                <Border Grid.Row="1"
+                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        Padding="10,6">
+                    <Panel>
+
+                        <!-- ─── Tab 0: Настройки ─── -->
+                        <ScrollViewer IsVisible="{Binding IsTgProxyTab0}"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="10">
 
                             <!-- 2-column grid: Порт (120 px) | Secret (1fr). -->
@@ -479,14 +514,12 @@
                                 </StackPanel>
                             </Grid>
                             </StackPanel>
-                            </ScrollViewer>
-                        </TabItem>
+                        </ScrollViewer>
 
-                        <!-- ─── Tab 2: Версия (Update + Reopen + status) ─── -->
-                        <TabItem Header="{Binding L_TgProxyTabVersion}" FontSize="11">
-                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                          VerticalScrollBarVisibility="Auto"
-                                          Padding="0,6,4,12">
+                        <!-- ─── Tab 1: Версия ─── -->
+                        <ScrollViewer IsVisible="{Binding IsTgProxyTab1}"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="10">
 
                             <!-- Version + Update banner. The body status
@@ -544,14 +577,12 @@
                                     CornerRadius="{StaticResource RadiusSm}"
                                     IsEnabled="{Binding TgProxyEnabled}"/>
                             </StackPanel>
-                            </ScrollViewer>
-                        </TabItem>
+                        </ScrollViewer>
 
-                        <!-- ─── Tab 3: Помощь (Setup hint + Folder/GitHub + credit) ─── -->
-                        <TabItem Header="{Binding L_TgProxyTabHelp}" FontSize="11">
-                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                          VerticalScrollBarVisibility="Auto"
-                                          Padding="0,6,4,12">
+                        <!-- ─── Tab 2: Помощь ─── -->
+                        <ScrollViewer IsVisible="{Binding IsTgProxyTab2}"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="10">
 
                             <!-- Manual setup hint (for clients without
@@ -590,10 +621,11 @@
                                        HorizontalAlignment="Left"/>
 
                             </StackPanel>
-                            </ScrollViewer>
-                        </TabItem>
+                        </ScrollViewer>
 
-                </TabControl>
+                    </Panel>
+                </Border>
+            </Grid>
         </Grid>
 
         <!-- ────────── 6 · Footer — kept from r3+r6.

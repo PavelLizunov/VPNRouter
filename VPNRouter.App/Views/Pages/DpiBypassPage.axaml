@@ -468,33 +468,75 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- r27.1: TabControl in Grid.Row=1 (3*) gets 60% of page area.
-                 Header (Hero+Summary+Description+Warning) gets 40% with own
-                 scroll. Inner ScrollViewer in each TabItem engages reliably
-                 when tab content exceeds the 60% slot. -->
-            <TabControl Grid.Row="1"
-                            SelectedIndex="{Binding ZapretActiveTabIndex, Mode=TwoWay}"
-                            Background="Transparent"
-                            BorderBrush="{DynamicResource BorderSubtleBrush}"
-                            BorderThickness="1"
-                            CornerRadius="{StaticResource RadiusSm}"
-                            Margin="0,8,0,0"
-                            Padding="10,6">
+            <!-- r29: manual tab strip + Panel of per-tab ScrollViewers
+                 (replaces Avalonia TabControl which had Carousel quirks
+                 that prevented inner ScrollViewer from engaging — see
+                 r25..r28 thrash log). Pure primitives:
+                   - UniformGrid of RadioButtons = tab strip
+                   - Border with Panel = tab content area
+                   - Each ScrollViewer's IsVisible binds to IsZapretTabN
+                 ScrollViewer is given the full bounded * row height by
+                 Panel + Border, so vertical scroll engages deterministically
+                 when content overflows. -->
+            <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,8,0,0">
 
-                        <!-- ─── Tab 1: Strategy ─── -->
-                        <!-- r26: each TabItem wraps content in its OWN ScrollViewer.
-                             r25 hit a residual scroll bug — outer ScrollViewer's
-                             scrollable extent stopped short of the active TabItem's
-                             actual content height (Avalonia 11 TabControl Carousel
-                             measures the visible tab into the layout but doesn't
-                             always propagate the height delta back to the parent
-                             on tab switch). Per-tab ScrollViewer guarantees the
-                             bottom of any tab content is reachable even when the
-                             outer scroll can't extend further. -->
-                        <TabItem Header="{Binding L_ZapretSecStrategy}" FontSize="11">
-                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                          VerticalScrollBarVisibility="Auto"
-                                          Padding="0,6,4,12">
+                <!-- Tab strip -->
+                <UniformGrid Grid.Row="0" Rows="1" Columns="4" Margin="0,0,0,4">
+                    <RadioButton GroupName="ZapretTabs"
+                                 IsChecked="{Binding IsZapretTab0}"
+                                 Command="{Binding SetZapretTabCommand}"
+                                 CommandParameter="0"
+                                 FontSize="11"
+                                 Padding="4,4"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center">
+                        <TextBlock Text="{Binding L_ZapretSecStrategy}" TextAlignment="Center"/>
+                    </RadioButton>
+                    <RadioButton GroupName="ZapretTabs"
+                                 IsChecked="{Binding IsZapretTab1}"
+                                 Command="{Binding SetZapretTabCommand}"
+                                 CommandParameter="1"
+                                 FontSize="11"
+                                 Padding="4,4"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center">
+                        <TextBlock Text="{Binding L_ZapretSecHosts}" TextAlignment="Center"/>
+                    </RadioButton>
+                    <RadioButton GroupName="ZapretTabs"
+                                 IsChecked="{Binding IsZapretTab2}"
+                                 Command="{Binding SetZapretTabCommand}"
+                                 CommandParameter="2"
+                                 FontSize="11"
+                                 Padding="4,4"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center">
+                        <TextBlock Text="{Binding L_ZapretSecFilters}" TextAlignment="Center"/>
+                    </RadioButton>
+                    <RadioButton GroupName="ZapretTabs"
+                                 IsChecked="{Binding IsZapretTab3}"
+                                 Command="{Binding SetZapretTabCommand}"
+                                 CommandParameter="3"
+                                 FontSize="11"
+                                 Padding="4,4"
+                                 HorizontalAlignment="Stretch"
+                                 HorizontalContentAlignment="Center">
+                        <TextBlock Text="{Binding L_ZapretSecAdvanced}" TextAlignment="Center"/>
+                    </RadioButton>
+                </UniformGrid>
+
+                <!-- Tab content area — Panel hosts all 4 ScrollViewers,
+                     only one is IsVisible=true at a time. -->
+                <Border Grid.Row="1"
+                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        Padding="10,6">
+                    <Panel>
+
+                        <!-- ─── Tab 0: Strategy ─── -->
+                        <ScrollViewer IsVisible="{Binding IsZapretTab0}"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="6">
                                 <TextBlock Text="{Binding L_ZapretSecStrategyDesc}"
                                            TextWrapping="Wrap" FontSize="10"
@@ -555,14 +597,12 @@
                                                TextWrapping="Wrap" FontSize="10"/>
                                 </CheckBox>
                             </StackPanel>
-                            </ScrollViewer>
-                        </TabItem>
+                        </ScrollViewer>
 
-                        <!-- ─── Tab 2: Hosts ─── -->
-                        <TabItem Header="{Binding L_ZapretSecHosts}" FontSize="11">
-                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                          VerticalScrollBarVisibility="Auto"
-                                          Padding="0,6,4,12">
+                        <!-- ─── Tab 1: Hosts ─── -->
+                        <ScrollViewer IsVisible="{Binding IsZapretTab1}"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="6">
                                 <TextBlock Text="{Binding L_ZapretSecHostsDesc}"
                                            TextWrapping="Wrap" FontSize="10"
@@ -601,14 +641,12 @@
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
-                            </ScrollViewer>
-                        </TabItem>
+                        </ScrollViewer>
 
-                        <!-- ─── Tab 3: Filters ─── -->
-                        <TabItem Header="{Binding L_ZapretSecFilters}" FontSize="11">
-                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                          VerticalScrollBarVisibility="Auto"
-                                          Padding="0,6,4,12">
+                        <!-- ─── Tab 2: Filters ─── -->
+                        <ScrollViewer IsVisible="{Binding IsZapretTab2}"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="6">
                                 <TextBlock Text="{Binding L_ZapretSecFiltersDesc}"
                                            TextWrapping="Wrap" FontSize="10"
@@ -638,14 +676,12 @@
                                     </ComboBox>
                                 </StackPanel>
                             </StackPanel>
-                            </ScrollViewer>
-                        </TabItem>
+                        </ScrollViewer>
 
-                        <!-- ─── Tab 4: Tools (Diagnostics + Cache + Service) ─── -->
-                        <TabItem Header="{Binding L_ZapretSecAdvanced}" FontSize="11">
-                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                          VerticalScrollBarVisibility="Auto"
-                                          Padding="0,6,4,12">
+                        <!-- ─── Tab 3: Tools (Diagnostics + Cache + Service) ─── -->
+                        <ScrollViewer IsVisible="{Binding IsZapretTab3}"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
                             <StackPanel Spacing="6">
                                 <Button Content="{Binding L_RunDiagnostics}"
                                         Command="{Binding RunZapretDiagnosticsCommand}"
@@ -751,10 +787,11 @@
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
-                            </ScrollViewer>
-                        </TabItem>
+                        </ScrollViewer>
 
-                </TabControl>
+                    </Panel>
+                </Border>
+            </Grid>
         </Grid>
 
         <!-- ════════ Footer — same shape as TgProxyOneTap r7.

@@ -124,8 +124,17 @@ public class MainWindowViewModelCharacterizationTests
     //   - ADDED: _tgProxyActiveTabIndex int (drives 3-tab TgProxy view)
     //   - ADDED: L_TgProxyTab{Settings,Version,Help} L_ getters
     // Cross-platform; both hashes drift. Linux value will land via CI.
+    //
+    // v2.37.0-r29 bump (2026-05-25): replaced Avalonia TabControl with
+    // manual RadioButton+Panel implementation because TabControl Carousel
+    // wouldn't let inner ScrollViewer engage (proven in r25..r28). MVM
+    // surface ADDED:
+    //   - IsZapretTab0..3 / IsTgProxyTab0..2 bool computed getters
+    //   - SetZapretTabCommand / SetTgProxyTabCommand RelayCommands
+    //   - 7 [NotifyPropertyChangedFor] decorators on ActiveTabIndex fields
+    // Linux value will land via CI fail.
     private const string PinnedHashWindows =
-        "1cb60dc29d69060fb1b743caee85961b64c0aa42c7ec815ed89b59d72bf57b8c";
+        "45248ead6f5e044663a0f909ac7368a5d6c8d02effd4b00a9dd2568551a77fb6";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

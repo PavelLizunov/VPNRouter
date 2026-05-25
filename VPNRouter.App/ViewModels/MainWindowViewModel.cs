@@ -4504,10 +4504,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string L_TgProxyTabVersion  => Strings.TgProxyTabVersion;
     public string L_TgProxyTabHelp     => Strings.TgProxyTabHelp;
 
-    /// <summary>v2.37.0-r25 — drives the TgProxy page TabControl. Same
-    /// pattern as ZapretActiveTabIndex but with 3 tabs instead of 4.</summary>
+    /// <summary>v2.37.0-r25 — drives the TgProxy page tab swap. r29 reads
+    /// this to swap visible ScrollViewer in the manual tab strip + Panel
+    /// implementation. 3 tabs: 0=Settings, 1=Version, 2=Help.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTgProxyTab0))]
+    [NotifyPropertyChangedFor(nameof(IsTgProxyTab1))]
+    [NotifyPropertyChangedFor(nameof(IsTgProxyTab2))]
     private int _tgProxyActiveTabIndex;
+
+    public bool IsTgProxyTab0 => TgProxyActiveTabIndex == 0;
+    public bool IsTgProxyTab1 => TgProxyActiveTabIndex == 1;
+    public bool IsTgProxyTab2 => TgProxyActiveTabIndex == 2;
+
+    [RelayCommand]
+    private void SetTgProxyTab(string indexStr)
+    {
+        if (int.TryParse(indexStr, out var idx) && idx >= 0 && idx <= 2)
+            TgProxyActiveTabIndex = idx;
+    }
 
     /// <summary>
     /// One-button magic Zapret orchestrator. Runs on the magic button click
@@ -4887,16 +4902,40 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// r25 — replaces the r24 IsZapretTuneExpanded boolean. Drives the
-    /// TabControl that replaced the Тонкая настройка expander on the
-    /// DpiBypass page. Tabs are zero-indexed:
+    /// r25 — replaces the r24 IsZapretTuneExpanded boolean. r29 (manual
+    /// tab strip + Panel + per-tab ScrollViewer) reads this to swap
+    /// which ScrollViewer is visible. Tabs are zero-indexed:
     ///   0 — Strategy   (default — winner ComboBox + direct-start + IPSet)
     ///   1 — Hosts      (Discord + Flowseal hostfile installers)
     ///   2 — Filters    (Game filter + IPSet filter)
     ///   3 — Tools      (Diagnostics + cache + service + folder/GitHub)
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsZapretTab0))]
+    [NotifyPropertyChangedFor(nameof(IsZapretTab1))]
+    [NotifyPropertyChangedFor(nameof(IsZapretTab2))]
+    [NotifyPropertyChangedFor(nameof(IsZapretTab3))]
     private int _zapretActiveTabIndex;
+
+    /// <summary>r29 — per-tab IsChecked/IsVisible getters for the manual
+    /// tab strip (RadioButton group) + tab content Panel (ScrollViewers
+    /// gated by IsVisible). Drives both the active-tab highlight and
+    /// which scrollable content panel renders.</summary>
+    public bool IsZapretTab0 => ZapretActiveTabIndex == 0;
+    public bool IsZapretTab1 => ZapretActiveTabIndex == 1;
+    public bool IsZapretTab2 => ZapretActiveTabIndex == 2;
+    public bool IsZapretTab3 => ZapretActiveTabIndex == 3;
+
+    /// <summary>r29 — bound to each tab strip button via Command +
+    /// CommandParameter="0..3". Sets the active index; the
+    /// NotifyPropertyChangedFor on _zapretActiveTabIndex causes all
+    /// 4 IsZapretTabN getters to refresh, swapping visible content.</summary>
+    [RelayCommand]
+    private void SetZapretTab(string indexStr)
+    {
+        if (int.TryParse(indexStr, out var idx) && idx >= 0 && idx <= 3)
+            ZapretActiveTabIndex = idx;
+    }
 
     /// <summary>
     /// r25 — "Подробнее" button on the Hero summary card navigates to the
