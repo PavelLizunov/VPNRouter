@@ -454,16 +454,40 @@
                         </Grid>
                     </Border>
 
+                    <!-- r26: explicit MaxHeight bounds the TabControl so the
+                         inner per-TabItem ScrollViewer (added in r26 alongside)
+                         has a known max for engagement. Without this, the
+                         outer ScrollViewer gives TabControl infinite vertical
+                         space → inner ScrollViewer never knows to engage →
+                         user can scroll outer to its end but tab content's
+                         tail stays clipped below TabControl's reported
+                         (and incorrect) measured height. With MaxHeight=420,
+                         inner ScrollViewer engages whenever the active tab
+                         content > 420 px, which covers the Tools tab
+                         (~480 px with diagnostics + cache controls). -->
                     <TabControl SelectedIndex="{Binding ZapretActiveTabIndex, Mode=TwoWay}"
                                 Background="Transparent"
                                 BorderBrush="{DynamicResource BorderSubtleBrush}"
                                 BorderThickness="1"
                                 CornerRadius="{StaticResource RadiusSm}"
+                                MaxHeight="420"
                                 Padding="10,6">
 
                         <!-- ─── Tab 1: Strategy ─── -->
+                        <!-- r26: each TabItem wraps content in its OWN ScrollViewer.
+                             r25 hit a residual scroll bug — outer ScrollViewer's
+                             scrollable extent stopped short of the active TabItem's
+                             actual content height (Avalonia 11 TabControl Carousel
+                             measures the visible tab into the layout but doesn't
+                             always propagate the height delta back to the parent
+                             on tab switch). Per-tab ScrollViewer guarantees the
+                             bottom of any tab content is reachable even when the
+                             outer scroll can't extend further. -->
                         <TabItem Header="{Binding L_ZapretSecStrategy}" FontSize="11">
-                            <StackPanel Spacing="6" Margin="0,6,0,0">
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto"
+                                          Padding="0,6,4,12">
+                            <StackPanel Spacing="6">
                                 <TextBlock Text="{Binding L_ZapretSecStrategyDesc}"
                                            TextWrapping="Wrap" FontSize="10"
                                            Opacity="0.7"
@@ -523,11 +547,15 @@
                                                TextWrapping="Wrap" FontSize="10"/>
                                 </CheckBox>
                             </StackPanel>
+                            </ScrollViewer>
                         </TabItem>
 
                         <!-- ─── Tab 2: Hosts ─── -->
                         <TabItem Header="{Binding L_ZapretSecHosts}" FontSize="11">
-                            <StackPanel Spacing="6" Margin="0,6,0,0">
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto"
+                                          Padding="0,6,4,12">
+                            <StackPanel Spacing="6">
                                 <TextBlock Text="{Binding L_ZapretSecHostsDesc}"
                                            TextWrapping="Wrap" FontSize="10"
                                            Opacity="0.7"
@@ -565,11 +593,15 @@
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
+                            </ScrollViewer>
                         </TabItem>
 
                         <!-- ─── Tab 3: Filters ─── -->
                         <TabItem Header="{Binding L_ZapretSecFilters}" FontSize="11">
-                            <StackPanel Spacing="6" Margin="0,6,0,0">
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto"
+                                          Padding="0,6,4,12">
+                            <StackPanel Spacing="6">
                                 <TextBlock Text="{Binding L_ZapretSecFiltersDesc}"
                                            TextWrapping="Wrap" FontSize="10"
                                            Opacity="0.7"
@@ -598,11 +630,15 @@
                                     </ComboBox>
                                 </StackPanel>
                             </StackPanel>
+                            </ScrollViewer>
                         </TabItem>
 
                         <!-- ─── Tab 4: Tools (Diagnostics + Cache + Service) ─── -->
                         <TabItem Header="{Binding L_ZapretSecAdvanced}" FontSize="11">
-                            <StackPanel Spacing="6" Margin="0,6,0,0">
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto"
+                                          Padding="0,6,4,12">
+                            <StackPanel Spacing="6">
                                 <Button Content="{Binding L_RunDiagnostics}"
                                         Command="{Binding RunZapretDiagnosticsCommand}"
                                         IsEnabled="{Binding !IsZapretActionRunning}"
@@ -707,6 +743,7 @@
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
+                            </ScrollViewer>
                         </TabItem>
 
                     </TabControl>

@@ -406,16 +406,24 @@
                                Foreground="{DynamicResource TextSecondaryBrush}"
                                Margin="0,4,0,0"/>
 
+                    <!-- r26: MaxHeight + per-TabItem ScrollViewer pattern (same
+                         as DpiBypassPage r26). Bounds the TabControl so the
+                         inner scrollers can engage when tab content overflows
+                         beyond the outer ScrollViewer's scrollable extent. -->
                     <TabControl SelectedIndex="{Binding TgProxyActiveTabIndex, Mode=TwoWay}"
                                 Background="Transparent"
                                 BorderBrush="{DynamicResource BorderSubtleBrush}"
                                 BorderThickness="1"
                                 CornerRadius="{StaticResource RadiusSm}"
+                                MaxHeight="380"
                                 Padding="10,6">
 
                         <!-- ─── Tab 1: Настройки (Port + Secret) ─── -->
                         <TabItem Header="{Binding L_TgProxyTabSettings}" FontSize="11">
-                            <StackPanel Spacing="10" Margin="0,6,0,0">
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto"
+                                          Padding="0,6,4,12">
+                            <StackPanel Spacing="10">
 
                             <!-- 2-column grid: Порт (120 px) | Secret (1fr). -->
                             <Grid ColumnDefinitions="120,*" ColumnSpacing="12">
@@ -467,11 +475,15 @@
                                 </StackPanel>
                             </Grid>
                             </StackPanel>
+                            </ScrollViewer>
                         </TabItem>
 
                         <!-- ─── Tab 2: Версия (Update + Reopen + status) ─── -->
                         <TabItem Header="{Binding L_TgProxyTabVersion}" FontSize="11">
-                            <StackPanel Spacing="10" Margin="0,6,0,0">
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto"
+                                          Padding="0,6,4,12">
+                            <StackPanel Spacing="10">
 
                             <!-- Version + Update banner. The body status
                                  dot here is informational; runtime state
@@ -528,11 +540,15 @@
                                     CornerRadius="{StaticResource RadiusSm}"
                                     IsEnabled="{Binding TgProxyEnabled}"/>
                             </StackPanel>
+                            </ScrollViewer>
                         </TabItem>
 
                         <!-- ─── Tab 3: Помощь (Setup hint + Folder/GitHub + credit) ─── -->
                         <TabItem Header="{Binding L_TgProxyTabHelp}" FontSize="11">
-                            <StackPanel Spacing="10" Margin="0,6,0,0">
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto"
+                                          Padding="0,6,4,12">
+                            <StackPanel Spacing="10">
 
                             <!-- Manual setup hint (for clients without
                                  working tg:// scheme — covers the long
@@ -570,6 +586,7 @@
                                        HorizontalAlignment="Left"/>
 
                             </StackPanel>
+                            </ScrollViewer>
                         </TabItem>
 
                     </TabControl>
