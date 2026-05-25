@@ -107,8 +107,16 @@ public class MainWindowViewModelCharacterizationTests
     //   - StartZapretWithSelectedStrategyCommand (RelayCommand) — direct
     //     apply of selected strategy, skip auto-probe
     // Linux pin deferred to CI first-failure per documented workflow.
+    //
+    // v2.37.0-r24 bump (2026-05-25): Hero strategy summary card. Added MVM
+    // surface: IsZapretSummaryVisible, IsZapretCacheStale, LblZapretSummary
+    // {Header,Subtext}, IsZapretTuneExpanded ObservableProperty,
+    // ExpandZapretTuneSectionCommand, L_ZapretReverify{Button,Hint},
+    // L_ZapretSummary{DetailsButton,StaleHint}. All cross-platform (no
+    // PLATFORM_WINDOWS gates) so both Windows + Linux hashes drift.
+    // Linux value will land via next CI failure log.
     private const string PinnedHashWindows =
-        "13b174ddf8999cfe65e31a97d9112a5b39739ce8a335ae4a321e80312d695a0f";
+        "bea113fdf62f8276a99b2b64c684bd4e2762e1c36fa503e5006adb74db9197df";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

@@ -328,12 +328,104 @@
                         </Grid>
                     </Border>
 
+                    <!-- ════════ r24 — Hero strategy summary card.
+                         Sits between the main button and Тонкая настройка so
+                         the user sees "what's cached, how fresh, is it OK"
+                         at a glance without opening the expander.
+
+                         Hidden entirely when no cache exists (clean slate
+                         for first-time users — they just see the magic
+                         button without a confusing empty card).
+
+                         The 2 buttons:
+                           [Перепроверить] → ForceFreshProbeCommand
+                                              (full re-sweep, same as
+                                              "Найти стратегию заново")
+                           [Подробнее]     → ExpandZapretTuneSection
+                                              (programmatically opens the
+                                              expander below) -->
+                    <Border IsVisible="{Binding IsZapretSummaryVisible}"
+                            Background="{DynamicResource SurfaceBaseBrush}"
+                            BorderBrush="{DynamicResource BorderSubtleBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusMd}"
+                            Padding="14,10"
+                            Margin="0,8,0,0">
+                        <StackPanel Spacing="8">
+                            <!-- Status icon + header on one line.
+                                 Icon is text glyph so it scales with FontSize.
+                                 Switches ✓ → ⚠ via IsZapretCacheStale. -->
+                            <Grid ColumnDefinitions="Auto,*">
+                                <!-- Fresh icon (✓) -->
+                                <TextBlock Grid.Column="0"
+                                           Text="✓"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Margin="0,0,8,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource SuccessSolidBrush}"
+                                           IsVisible="{Binding !IsZapretCacheStale}"/>
+                                <!-- Stale icon (⚠) -->
+                                <TextBlock Grid.Column="0"
+                                           Text="⚠"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Margin="0,0,8,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource WarningSolidBrush}"
+                                           IsVisible="{Binding IsZapretCacheStale}"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding LblZapretSummaryHeader}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           TextWrapping="Wrap"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextPrimaryBrush}"/>
+                            </Grid>
+
+                            <!-- Subtext: "4 из 5 целей · проверено 12 мин назад" -->
+                            <TextBlock Text="{Binding LblZapretSummarySubtext}"
+                                       FontSize="11"
+                                       Opacity="0.75"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+                            <!-- Stale-only nudge: "Стратегия проверялась более 7 дней назад..." -->
+                            <TextBlock Text="{Binding L_ZapretSummaryStaleHint}"
+                                       FontSize="10"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource WarningFgBrush}"
+                                       IsVisible="{Binding IsZapretCacheStale}"/>
+
+                            <!-- Action buttons. WrapPanel so they reflow on
+                                 narrow windows instead of clipping. -->
+                            <WrapPanel ItemSpacing="6" LineSpacing="6">
+                                <Button Content="{Binding L_ZapretReverifyButton}"
+                                        Command="{Binding ForceFreshProbeCommand}"
+                                        IsEnabled="{Binding !IsZapretProbing}"
+                                        ToolTip.Tip="{Binding L_ZapretReverifyHint}"
+                                        FontSize="11" Padding="10,5"
+                                        CornerRadius="{StaticResource RadiusSm}"/>
+                                <Button Content="{Binding L_ZapretSummaryDetailsButton}"
+                                        Command="{Binding ExpandZapretTuneSectionCommand}"
+                                        FontSize="11" Padding="10,5"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Background="Transparent"
+                                        BorderBrush="{DynamicResource BorderDefaultBrush}"
+                                        BorderThickness="1"/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+
                     <!-- ════════ Тонкая настройка — all r5-era controls stowed,
-                         collapsed by default. No information loss. -->
+                         collapsed by default. No information loss.
+                         r24 — IsExpanded two-way bound to VM so the Hero
+                         card's "Подробнее" button can open this section
+                         programmatically. -->
                     <Expander Header="{Binding L_ZapretOneTapTune}"
                               FontSize="11"
                               FontWeight="SemiBold"
-                              IsExpanded="False"
+                              IsExpanded="{Binding IsZapretTuneExpanded, Mode=TwoWay}"
                               Background="Transparent"
                               BorderBrush="{DynamicResource BorderSubtleBrush}"
                               BorderThickness="1"

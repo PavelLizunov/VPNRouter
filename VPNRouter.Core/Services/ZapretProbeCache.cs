@@ -7,22 +7,34 @@
 //
 // Cache file: %ProgramData%\VPNRouter\cache\zapret_probe.json
 //
-// Schema:
+// Schema v2 (r24 — added score fields for Hero summary card):
 //   {
 //     "Strategy": "general (ALT3)",
 //     "LastSuccessAt": "2026-05-25T01:32:36Z",
 //     "LastSweepAt":   "2026-05-25T01:32:36Z",
 //     "SuccessRunCount": 3,
 //     "LastFailureCount": 0,
-//     "SchemaVersion": 1
+//     "TargetsPassed": 4,    // r24: how many DPI targets the winner passed
+//     "TargetsTotal":  5,    // r24: how many were probed
+//     "SchemaVersion": 2
 //   }
+//
+// Schema v1 entries (no Targets* fields) keep working — JSON deserializer
+// defaults the missing ints to 0 and the UI renders "N мин назад" without
+// the "X из Y" line. Next sweep upgrades them to v2.
 //
 // Eviction policy:
 //   - LastSweepAt > 7 days old → treat as stale, force full sweep.
 //   - SuccessRunCount = 0 → unreliable, force full sweep.
 //   - LastFailureCount >= 3 consecutive → demoted, force full sweep.
 //
-// On success → SuccessRunCount++, LastFailureCount = 0, refresh timestamps.
+// Freshness tier (for Hero card):
+//   - IsRecentAndReliable() → "✓ working"        (< 7 days, ≥1 success)
+//   - IsStale()             → "⚠ устарела"      (> 7 days but still has data)
+//   - else null entry       → "◌ не проверена"   (no cache file at all)
+//
+// On success → SuccessRunCount++, LastFailureCount = 0, refresh timestamps,
+//              store target score from the winning probe.
 // On failure → LastFailureCount++.
 //
 // All file ops are best-effort: cache corruption / IO errors silently degrade
@@ -43,7 +55,14 @@ public sealed class ZapretProbeCacheEntry
     public DateTime LastSweepAt { get; set; } = DateTime.MinValue;
     public int SuccessRunCount { get; set; }
     public int LastFailureCount { get; set; }
-    public int SchemaVersion { get; set; } = 1;
+
+    // r24 — score from the winning strategy's DPI target probe. v1 cache
+    // files don't carry these fields; deserializer defaults them to 0 and
+    // the UI just omits the "X из Y" line until the next sweep upgrades.
+    public int TargetsPassed { get; set; }
+    public int TargetsTotal { get; set; }
+
+    public int SchemaVersion { get; set; } = 2;
 
     /// <summary>
     /// True if this cache entry is recent (sweep within 7d) and reliable
@@ -54,6 +73,23 @@ public sealed class ZapretProbeCacheEntry
         && SuccessRunCount > 0
         && LastFailureCount < 3
         && (DateTime.UtcNow - LastSweepAt) < TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// r24 — true when we have a strategy on file but the last sweep was
+    /// more than 7 days ago. UI shows the entry with a "⚠ устарела" badge
+    /// and nudges the user toward re-verify, but never auto-runs the
+    /// 5-minute sweep on its own (the user explicitly chose manual-refresh
+    /// over background reprobes when picking this UX).
+    /// </summary>
+    public bool IsStale() =>
+        !string.IsNullOrWhiteSpace(Strategy)
+        && (DateTime.UtcNow - LastSweepAt) > TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// r24 — true when we have score data to display ("4 из 5 целей").
+    /// v1 cache files load with TargetsTotal=0 and we omit the score line.
+    /// </summary>
+    public bool HasTargetScore() => TargetsTotal > 0;
 }
 
 /// <summary>
@@ -101,7 +137,17 @@ public static class ZapretProbeCache
     /// matches the cached one, otherwise resets to 1 for the new strategy.
     /// Always resets LastFailureCount to 0 on success.
     /// </summary>
-    public static void RecordSuccess(string strategy, ILogger? logger = null)
+    /// <param name="strategy">Winning strategy name.</param>
+    /// <param name="targetsPassed">r24 — how many DPI targets the winner
+    /// passed in the verifying probe. 0 if not tracked (legacy callers).</param>
+    /// <param name="targetsTotal">r24 — how many DPI targets were probed.
+    /// 0 if not tracked. Cache renders the score line only when total > 0.</param>
+    /// <param name="logger">Diagnostic logger.</param>
+    public static void RecordSuccess(
+        string strategy,
+        int targetsPassed,
+        int targetsTotal,
+        ILogger? logger = null)
     {
         if (string.IsNullOrWhiteSpace(strategy)) return;
         try
@@ -119,18 +165,28 @@ public static class ZapretProbeCache
                     ? existing.SuccessRunCount + 1
                     : 1,
                 LastFailureCount = 0,
-                SchemaVersion = 1,
+                TargetsPassed = targetsPassed,
+                TargetsTotal = targetsTotal,
+                SchemaVersion = 2,
             };
             WriteAtomic(entry, logger);
             logger?.Information(
-                "[ZapretProbeCache] Recorded success: {Strategy} (run #{N})",
-                strategy, entry.SuccessRunCount);
+                "[ZapretProbeCache] Recorded success: {Strategy} (run #{N}, score {P}/{T})",
+                strategy, entry.SuccessRunCount, targetsPassed, targetsTotal);
         }
         catch (Exception ex)
         {
             logger?.Warning(ex, "[ZapretProbeCache] RecordSuccess failed");
         }
     }
+
+    /// <summary>
+    /// Backward-compat overload: pre-r24 callers that don't carry score
+    /// data. Persists the success without any score; the Hero card omits
+    /// the "X из Y" line for entries that came through this path.
+    /// </summary>
+    public static void RecordSuccess(string strategy, ILogger? logger = null)
+        => RecordSuccess(strategy, 0, 0, logger);
 
     /// <summary>
     /// Record a failure of the cached strategy. Bumps LastFailureCount; after

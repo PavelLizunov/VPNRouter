@@ -258,4 +258,106 @@ public sealed class ZapretProbeCacheTests : IDisposable
         ZapretProbeCache.Clear();
         ZapretProbeCache.Clear();
     }
+
+    // ── r24 — schema v2 score fields ────────────────────────────────────────
+
+    [Fact]
+    public void RecordSuccess_WithScore_PersistsTargetsFields()
+    {
+        ZapretProbeCache.RecordSuccess("general (ALT3)", targetsPassed: 4, targetsTotal: 5);
+        var loaded = ZapretProbeCache.TryLoad();
+        Assert.NotNull(loaded);
+        Assert.Equal(4, loaded!.TargetsPassed);
+        Assert.Equal(5, loaded.TargetsTotal);
+        Assert.Equal(2, loaded.SchemaVersion);
+        Assert.True(loaded.HasTargetScore());
+    }
+
+    [Fact]
+    public void RecordSuccess_NoScoreOverload_DoesNotSetTargets()
+    {
+        // Backward-compat overload must persist with targets=0 so the Hero
+        // card knows not to render the "X из Y" line for legacy paths.
+        ZapretProbeCache.RecordSuccess("general (ALT3)");
+        var loaded = ZapretProbeCache.TryLoad();
+        Assert.Equal(0, loaded!.TargetsPassed);
+        Assert.Equal(0, loaded.TargetsTotal);
+        Assert.False(loaded.HasTargetScore());
+    }
+
+    [Fact]
+    public void IsStale_OlderThanSevenDays_True()
+    {
+        var entry = new ZapretProbeCacheEntry
+        {
+            Strategy = "general (ALT3)",
+            LastSweepAt = DateTime.UtcNow.AddDays(-8),
+        };
+        Assert.True(entry.IsStale());
+    }
+
+    [Fact]
+    public void IsStale_FreshEntry_False()
+    {
+        var entry = new ZapretProbeCacheEntry
+        {
+            Strategy = "general (ALT3)",
+            LastSweepAt = DateTime.UtcNow.AddMinutes(-30),
+        };
+        Assert.False(entry.IsStale());
+    }
+
+    [Fact]
+    public void IsStale_EmptyStrategy_False()
+    {
+        // Empty entries don't trigger stale state — they're shown as
+        // "не проверена" with the ◌ icon, not "⚠ устарела".
+        var entry = new ZapretProbeCacheEntry
+        {
+            Strategy = "",
+            LastSweepAt = DateTime.UtcNow.AddDays(-30),
+        };
+        Assert.False(entry.IsStale());
+    }
+
+    [Fact]
+    public void HasTargetScore_TotalZero_False()
+    {
+        var entry = new ZapretProbeCacheEntry { TargetsPassed = 0, TargetsTotal = 0 };
+        Assert.False(entry.HasTargetScore());
+    }
+
+    [Fact]
+    public void HasTargetScore_AllTargetsFailed_StillTrue()
+    {
+        // 0/5 is a valid score — UI must render "0 из 5 целей" to show the
+        // strategy was probed but didn't work. Only TotalTargets=0 means
+        // "no score data" (e.g. legacy v1 cache).
+        var entry = new ZapretProbeCacheEntry { TargetsPassed = 0, TargetsTotal = 5 };
+        Assert.True(entry.HasTargetScore());
+    }
+
+    [Fact]
+    public void TryLoad_LegacyV1Json_DeserializesWithZeroTargets()
+    {
+        // Verify backward-compat: a v1 cache file (no Targets* fields) must
+        // load cleanly with both targets defaulting to 0. The HasTargetScore
+        // helper then correctly suppresses the "X из Y" line.
+        Directory.CreateDirectory(AppPaths.CacheDir);
+        var legacyJson = @"{
+            ""Strategy"":""general (ALT3)"",
+            ""LastSuccessAt"":""2026-05-20T12:00:00Z"",
+            ""LastSweepAt"":""2026-05-20T12:00:00Z"",
+            ""SuccessRunCount"":3,
+            ""LastFailureCount"":0,
+            ""SchemaVersion"":1
+        }";
+        File.WriteAllText(Path.Combine(AppPaths.CacheDir, "zapret_probe.json"), legacyJson);
+        var loaded = ZapretProbeCache.TryLoad();
+        Assert.NotNull(loaded);
+        Assert.Equal("general (ALT3)", loaded!.Strategy);
+        Assert.Equal(0, loaded.TargetsPassed);
+        Assert.Equal(0, loaded.TargetsTotal);
+        Assert.False(loaded.HasTargetScore());
+    }
 }

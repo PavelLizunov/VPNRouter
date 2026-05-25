@@ -253,6 +253,107 @@ public static class Strings
         ? "Кэш пуст — следующая проверка будет полной"
         : "Cache empty — next probe will be full";
 
+    // ───── v2.37.0-r24 — Hero strategy summary card copy ─────────────────
+    //
+    // Strings used by the new card under "Включить обход блокировок". Two
+    // header variants (fresh / stale) since the user picked the no-auto-
+    // probe UX — we never silently re-run; only nudge via the badge.
+
+    public static string ZapretSummaryHeaderFresh(string strategy) => Ru
+        ? $"Стратегия «{strategy}» работает"
+        : $"Strategy '{strategy}' is working";
+
+    public static string ZapretSummaryHeaderStale(string strategy) => Ru
+        ? $"Стратегия «{strategy}» устарела"
+        : $"Strategy '{strategy}' is stale";
+
+    /// <summary>
+    /// "4 из 5 целей · проверено 12 мин назад"
+    /// "4 of 5 targets · checked 12 min ago"
+    /// </summary>
+    public static string ZapretSummarySubtextWithScore(int passed, int total, string relativeTime) => Ru
+        ? $"{passed} из {total} целей · проверено {relativeTime}"
+        : $"{passed} of {total} targets · checked {relativeTime}";
+
+    /// <summary>
+    /// "проверено 12 мин назад" — used for legacy v1 cache entries
+    /// where target score wasn't recorded.
+    /// </summary>
+    public static string ZapretSummarySubtextNoScore(string relativeTime) => Ru
+        ? $"Проверено {relativeTime}"
+        : $"Checked {relativeTime}";
+
+    public static string ZapretReverifyButton => Ru
+        ? "Перепроверить"
+        : "Re-verify";
+
+    public static string ZapretReverifyHint => Ru
+        ? "Заново подберёт лучшую стратегию (полная проверка, 2–5 минут)"
+        : "Picks the best strategy again (full sweep, 2-5 minutes)";
+
+    public static string ZapretSummaryDetailsButton => Ru
+        ? "Подробнее"
+        : "Details";
+
+    public static string ZapretSummaryStaleHint => Ru
+        ? "Стратегия проверялась более 7 дней назад. Рекомендуем перепроверить."
+        : "Strategy hasn't been checked in over 7 days. Re-verify recommended.";
+
+    // Relative-time formatter outputs (used by FormatRelativeTime).
+    // "только что" / "12 минут назад" / "2 часа назад" / "3 дня назад" /
+    // "давно".
+    public static string RelativeTimeJustNow => Ru
+        ? "только что"
+        : "just now";
+
+    public static string RelativeTimeMinutes(int n) => Ru
+        ? $"{n} {RuMinutesWord(n)} назад"
+        : $"{n} min ago";
+
+    public static string RelativeTimeHours(int n) => Ru
+        ? $"{n} {RuHoursWord(n)} назад"
+        : (n == 1 ? "1 hour ago" : $"{n} hours ago");
+
+    public static string RelativeTimeDays(int n) => Ru
+        ? $"{n} {RuDaysWord(n)} назад"
+        : (n == 1 ? "1 day ago" : $"{n} days ago");
+
+    public static string RelativeTimeLongAgo => Ru
+        ? "давно"
+        : "long ago";
+
+    // Russian noun-declension helpers — Ru numerals trigger different word
+    // forms for 1, 2-4, and 5+. Keep these private to Strings.cs.
+    private static string RuMinutesWord(int n)
+    {
+        var mod10 = n % 10;
+        var mod100 = n % 100;
+        if (mod100 is >= 11 and <= 19) return "минут";
+        if (mod10 == 1) return "минуту";
+        if (mod10 is >= 2 and <= 4) return "минуты";
+        return "минут";
+    }
+
+    private static string RuHoursWord(int n)
+    {
+        var mod10 = n % 10;
+        var mod100 = n % 100;
+        if (mod100 is >= 11 and <= 19) return "часов";
+        if (mod10 == 1) return "час";
+        if (mod10 is >= 2 and <= 4) return "часа";
+        return "часов";
+    }
+
+    private static string RuDaysWord(int n)
+    {
+        var mod10 = n % 10;
+        var mod100 = n % 100;
+        if (mod100 is >= 11 and <= 19) return "дней";
+        if (mod10 == 1) return "день";
+        if (mod10 is >= 2 and <= 4) return "дня";
+        return "дней";
+    }
+
     // v2.37.0-r9 — Custom Rules import/export localization. Pre-r9 every
     // toast / validation message in `ImportCustomRulesAsync` +
     // `ExportCustomRulesAsync` was hardcoded English, violating CLAUDE.md

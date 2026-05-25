@@ -85,7 +85,7 @@ if [ -n "$core_touched" ]; then
   # Look for a phase brief from today or yesterday
   recent_briefs=$(ls plans/phase*-*-$(date +%Y-%m-%d).md plans/phase*-*-$(date -d "yesterday" +%Y-%m-%d 2>/dev/null || date +%Y-%m-%d).md 2>/dev/null | head -1 || true)
   if [ -z "$recent_briefs" ]; then
-    WARNINGS+=("Gate 3: Core service touched ($core_touched) but no plans/phase*-${DATE}.md brief found. Per methodology §2, create the brief BEFORE the implementation commit. Skipping HARD-fail because this might be a follow-up commit on an existing brief; if so, ignore. Otherwise: STOP and write the brief.")
+    WARNINGS+=("Gate 3: Core service touched ($core_touched) but no plans/phase*-$(date +%Y-%m-%d).md brief found. Per methodology §2, create the brief BEFORE the implementation commit. Skipping HARD-fail because this might be a follow-up commit on an existing brief; if so, ignore. Otherwise: STOP and write the brief.")
   fi
 fi
 

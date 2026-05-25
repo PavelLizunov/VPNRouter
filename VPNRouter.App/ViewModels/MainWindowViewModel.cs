@@ -4489,6 +4489,14 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string L_ZapretForceFreshProbeButton => Strings.ZapretForceFreshProbeButton;
     public string L_ZapretClearCacheButton => Strings.ZapretClearCacheButton;
 
+    /// <summary>v2.37.0-r24 — L_ getters for the Hero strategy summary card.
+    /// The card sits below the main "Включить обход блокировок" button and
+    /// shows what's currently cached + 2 action buttons.</summary>
+    public string L_ZapretReverifyButton => Strings.ZapretReverifyButton;
+    public string L_ZapretReverifyHint => Strings.ZapretReverifyHint;
+    public string L_ZapretSummaryDetailsButton => Strings.ZapretSummaryDetailsButton;
+    public string L_ZapretSummaryStaleHint => Strings.ZapretSummaryStaleHint;
+
     /// <summary>
     /// One-button magic Zapret orchestrator. Runs on the magic button click
     /// in the new DpiBypassPage hero card. Replaces ToggleZapretAsync for the
@@ -4690,7 +4698,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _logger.Error(ex, "[VM] StartZapretWithSelectedStrategy threw");
             ZapretStatus = Strings.ZapretSelectedStrategyFailed(strategyName) + " (" + ex.Message + ")";
         }
-        OnPropertyChanged(nameof(LblZapretCacheStatus));
+        NotifyZapretSummaryChanged();
 #else
         // Zapret is Windows-only. On Mac/Linux the button stays bound for
         // XAML compile but pressing it is a no-op.
@@ -4745,13 +4753,150 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         }
     }
 
+    // ───── r24 — Hero strategy summary card ──────────────────────────────
+    //
+    // Shown directly under the main "Включить обход блокировок" button so
+    // the user knows what's cached without opening Тонкую настройку:
+    //
+    //   ✓ Стратегия «general» работает
+    //   4 из 5 целей · проверено 12 мин назад
+    //   [Перепроверить эту] [Подробнее]
+    //
+    // States (driven by ZapretProbeCacheEntry):
+    //   - fresh + reliable   → "✓ работает" green
+    //   - stale (>7 days)    → "⚠ устарела" warning
+    //   - missing / empty    → "◌ не проверена" muted (card hidden,
+    //                          replaced by hint to run probe)
+    //
+    // All 4 properties are derived from a single TryLoad call cached in
+    // _zapretSummaryEntryCached so the file isn't re-read for each XAML
+    // binding. Call OnPropertyChanged(nameof(IsZapretSummaryVisible))
+    // (and friends) whenever the cache changes — see UpdateZapretSummary.
+
+    /// <summary>True when there's a cache entry to render. Card hidden when false.</summary>
+    public bool IsZapretSummaryVisible
+    {
+        get
+        {
+            var e = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
+            return e != null && !string.IsNullOrEmpty(e.Strategy);
+        }
+    }
+
+    /// <summary>
+    /// True when cache exists but is older than 7 days. Used to switch
+    /// the card icon ✓ → ⚠ and tint subtext warning-colored.
+    /// </summary>
+    public bool IsZapretCacheStale
+    {
+        get
+        {
+            var e = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
+            return e != null && e.IsStale();
+        }
+    }
+
+    /// <summary>
+    /// Localized header line, e.g. "Стратегия «general» работает".
+    /// Empty string when there's no cache (card hidden anyway).
+    /// </summary>
+    public string LblZapretSummaryHeader
+    {
+        get
+        {
+            var e = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
+            if (e == null || string.IsNullOrEmpty(e.Strategy)) return string.Empty;
+            return e.IsStale()
+                ? Strings.ZapretSummaryHeaderStale(e.Strategy)
+                : Strings.ZapretSummaryHeaderFresh(e.Strategy);
+        }
+    }
+
+    /// <summary>
+    /// Localized subtext line, e.g. "4 из 5 целей · проверено 12 мин назад".
+    /// Score part is omitted for v1 legacy cache entries (TargetsTotal=0);
+    /// the relative-time part is always present.
+    /// </summary>
+    public string LblZapretSummarySubtext
+    {
+        get
+        {
+            var e = VPNRouter.Core.Services.ZapretProbeCache.TryLoad(_logger);
+            if (e == null) return string.Empty;
+            var rel = FormatRelativeTime(e.LastSweepAt);
+            return e.HasTargetScore()
+                ? Strings.ZapretSummarySubtextWithScore(e.TargetsPassed, e.TargetsTotal, rel)
+                : Strings.ZapretSummarySubtextNoScore(rel);
+        }
+    }
+
+    /// <summary>
+    /// Convert a UTC timestamp to a short relative-time string in the
+    /// user's current language. Granularity: minutes for &lt;1h, hours
+    /// for &lt;24h, days for &lt;30d, weeks for &lt;52w, else "месяцы назад".
+    /// </summary>
+    private string FormatRelativeTime(DateTime utcWhen)
+    {
+        var delta = DateTime.UtcNow - utcWhen;
+        if (delta < TimeSpan.FromMinutes(1)) return Strings.RelativeTimeJustNow;
+        if (delta < TimeSpan.FromHours(1))
+        {
+            var m = Math.Max(1, (int)delta.TotalMinutes);
+            return Strings.RelativeTimeMinutes(m);
+        }
+        if (delta < TimeSpan.FromDays(1))
+        {
+            var h = Math.Max(1, (int)delta.TotalHours);
+            return Strings.RelativeTimeHours(h);
+        }
+        if (delta < TimeSpan.FromDays(30))
+        {
+            var d = Math.Max(1, (int)delta.TotalDays);
+            return Strings.RelativeTimeDays(d);
+        }
+        // Beyond 30 days we don't bother with weeks — by that point the
+        // user is already past the stale threshold (7d) and the card is
+        // showing the "⚠ устарела" badge anyway.
+        return Strings.RelativeTimeLongAgo;
+    }
+
+    /// <summary>
+    /// Fire OnPropertyChanged for every Hero-card property in one place
+    /// so cache mutations propagate to UI atomically. Called whenever
+    /// the cache file is written or cleared.
+    /// </summary>
+    private void NotifyZapretSummaryChanged()
+    {
+        OnPropertyChanged(nameof(IsZapretSummaryVisible));
+        OnPropertyChanged(nameof(IsZapretCacheStale));
+        OnPropertyChanged(nameof(LblZapretSummaryHeader));
+        OnPropertyChanged(nameof(LblZapretSummarySubtext));
+        OnPropertyChanged(nameof(LblZapretCacheStatus));
+    }
+
+    /// <summary>
+    /// r24 — bound to the "Подробнее" button on the Hero card. Opens the
+    /// existing "Тонкая настройка" expander on the DpiBypass page so the
+    /// user can see the full strategy list + cache controls in one click.
+    /// Bound to <see cref="IsZapretTuneExpanded"/> via two-way binding so
+    /// the expander state stays in sync if the user also toggles it manually.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isZapretTuneExpanded;
+
+    [RelayCommand]
+    private void ExpandZapretTuneSection()
+    {
+        IsZapretTuneExpanded = true;
+    }
+
     [RelayCommand]
     private void ClearZapretCache()
     {
         try
         {
             VPNRouter.Core.Services.ZapretProbeCache.Clear(_logger);
-            OnPropertyChanged(nameof(LblZapretCacheStatus));
+            NotifyZapretSummaryChanged();
             ZapretStatus = Strings.ZapretCacheCleared;
         }
         catch (Exception ex)
@@ -4782,7 +4927,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         finally
         {
             _forceFreshProbe = false;
-            OnPropertyChanged(nameof(LblZapretCacheStatus));
+            NotifyZapretSummaryChanged();
         }
 #else
         // Non-Windows: Zapret probe path doesn't exist — return cleanly so
@@ -4892,7 +5037,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 var hit = await TryApplyCachedWinnerAsync(cached.Strategy);
                 if (hit)
                 {
-                    VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(cached.Strategy, _logger);
+                    // r24 — preserve the existing score so the Hero card
+                    // keeps rendering "X из Y целей" across warm-start hits.
+                    // The score came from the most recent FULL sweep that
+                    // chose this strategy; warm-starts don't re-probe
+                    // targets so there's no new score to write.
+                    VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(
+                        cached.Strategy, cached.TargetsPassed, cached.TargetsTotal, _logger);
                     return;
                 }
                 else
@@ -4988,7 +5139,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                         var idx = ZapretStrategies.IndexOf(sweep.Winner);
                         if (idx >= 0) ZapretStrategyIndex = idx;
                         // r6 — persist this winner so the next probe warm-starts.
-                        VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(sweep.Winner, _logger);
+                        // r24 — also persist the target-pass score (captured
+                        // by the FlowsealProgress callback during the sweep).
+                        // The last score we saw belongs to the winner because
+                        // Flowseal returns on first qualifier and breaks.
+                        // If the score data is missing (parser failure /
+                        // sweep aborted just before pass-count update), the
+                        // overload defaults to 0/0 and the Hero card
+                        // gracefully omits the "X из Y" line.
+                        VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(
+                            sweep.Winner,
+                            ZapretProbePassCount,
+                            ZapretProbeTotalCount,
+                            _logger);
                         SaveSettings();
                     }
                     else

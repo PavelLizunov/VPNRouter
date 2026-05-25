@@ -163,6 +163,21 @@ public static class Strings
     public static string ZapretCacheInfo(string strategy, int successCount) => global::VPNRouter.Core.Localization.Strings.ZapretCacheInfo(strategy, successCount);
     public static string ZapretCacheEmpty => global::VPNRouter.Core.Localization.Strings.ZapretCacheEmpty;
 
+    // v2.37.0-r24 — Hero strategy summary card pass-throughs.
+    public static string ZapretSummaryHeaderFresh(string strategy) => global::VPNRouter.Core.Localization.Strings.ZapretSummaryHeaderFresh(strategy);
+    public static string ZapretSummaryHeaderStale(string strategy) => global::VPNRouter.Core.Localization.Strings.ZapretSummaryHeaderStale(strategy);
+    public static string ZapretSummarySubtextWithScore(int p, int t, string r) => global::VPNRouter.Core.Localization.Strings.ZapretSummarySubtextWithScore(p, t, r);
+    public static string ZapretSummarySubtextNoScore(string r) => global::VPNRouter.Core.Localization.Strings.ZapretSummarySubtextNoScore(r);
+    public static string ZapretReverifyButton => global::VPNRouter.Core.Localization.Strings.ZapretReverifyButton;
+    public static string ZapretReverifyHint => global::VPNRouter.Core.Localization.Strings.ZapretReverifyHint;
+    public static string ZapretSummaryDetailsButton => global::VPNRouter.Core.Localization.Strings.ZapretSummaryDetailsButton;
+    public static string ZapretSummaryStaleHint => global::VPNRouter.Core.Localization.Strings.ZapretSummaryStaleHint;
+    public static string RelativeTimeJustNow => global::VPNRouter.Core.Localization.Strings.RelativeTimeJustNow;
+    public static string RelativeTimeMinutes(int n) => global::VPNRouter.Core.Localization.Strings.RelativeTimeMinutes(n);
+    public static string RelativeTimeHours(int n) => global::VPNRouter.Core.Localization.Strings.RelativeTimeHours(n);
+    public static string RelativeTimeDays(int n) => global::VPNRouter.Core.Localization.Strings.RelativeTimeDays(n);
+    public static string RelativeTimeLongAgo => global::VPNRouter.Core.Localization.Strings.RelativeTimeLongAgo;
+
     // v2.37.0-r9 — Custom Rules import/export pass-throughs.
     public static string RulesFilePickerOpenFailed => global::VPNRouter.Core.Localization.Strings.RulesFilePickerOpenFailed;
     public static string RulesImportDialogTitle => global::VPNRouter.Core.Localization.Strings.RulesImportDialogTitle;
