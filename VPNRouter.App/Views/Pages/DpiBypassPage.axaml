@@ -57,8 +57,16 @@
              TabControl is in a * row. Now TabControl has a real bounded
              viewport, inner ScrollViewer in each TabItem engages
              deterministically when content exceeds the bound. -->
-        <Grid Grid.Row="0" RowDefinitions="Auto,*" Margin="12,8,14,8">
-                <StackPanel Grid.Row="0" Spacing="12">
+        <!-- r27.1: proportional 2*:3* rows. Auto+* didn't work because Hero
+             card alone is ~390 px and consumed the entire available height,
+             leaving 0 for TabControl. Proportional split guarantees TabControl
+             always gets 60% of the page area. Header section wraps in a
+             ScrollViewer so it can scroll if Hero exceeds its 40% slot. -->
+        <Grid Grid.Row="0" RowDefinitions="2*,3*" Margin="12,8,14,8">
+            <ScrollViewer Grid.Row="0"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="12">
 
                     <!-- ════════ Download progress (visible while downloading
                          zapret or installing hosts via the magic button). -->
@@ -458,13 +466,13 @@
                     </Border>
 
                 </StackPanel>
+            </ScrollViewer>
 
-                <!-- r27: TabControl in Grid.Row=1 (*) gets the remaining
-                     vertical space after the header StackPanel above. No
-                     more MaxHeight magic — bound comes from the Grid layout.
-                     Inner ScrollViewer in each TabItem engages reliably
-                     when tab content exceeds the available area. -->
-                <TabControl Grid.Row="1"
+            <!-- r27.1: TabControl in Grid.Row=1 (3*) gets 60% of page area.
+                 Header (Hero+Summary+Description+Warning) gets 40% with own
+                 scroll. Inner ScrollViewer in each TabItem engages reliably
+                 when tab content exceeds the 60% slot. -->
+            <TabControl Grid.Row="1"
                             SelectedIndex="{Binding ZapretActiveTabIndex, Mode=TwoWay}"
                             Background="Transparent"
                             BorderBrush="{DynamicResource BorderSubtleBrush}"

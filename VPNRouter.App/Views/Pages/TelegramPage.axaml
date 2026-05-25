@@ -60,11 +60,16 @@
 
     <Grid RowDefinitions="*,Auto">
 
-        <!-- r27: outer ScrollViewer removed (same pattern as DpiBypassPage r27).
-             Grid with Auto/* rows; TabControl in * row gets bounded viewport
-             so inner per-TabItem ScrollViewers engage reliably. -->
-        <Grid Grid.Row="0" RowDefinitions="Auto,*" Margin="12,8,14,8">
-                <StackPanel Grid.Row="0" Spacing="12">
+        <!-- r27.1: proportional 2*:3* rows (same as DpiBypassPage r27.1).
+             Auto+* didn't work because the Hero card alone consumed all
+             available height. Proportional split guarantees TabControl
+             always gets 60%. Header section in its own ScrollViewer to
+             handle Hero overflow on small windows. -->
+        <Grid Grid.Row="0" RowDefinitions="2*,3*" Margin="12,8,14,8">
+            <ScrollViewer Grid.Row="0"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="12">
 
                     <!-- ────────── 1 · Per-step download progress (r6 MVP).
                          Sits above the hero so visibility doesn't shift the
@@ -405,9 +410,10 @@
                                Margin="0,4,0,0"/>
 
                 </StackPanel>
+            </ScrollViewer>
 
-                <!-- r27: TabControl in Grid.Row=1 (*) — bounded viewport. -->
-                <TabControl Grid.Row="1"
+            <!-- r27.1: TabControl in Grid.Row=1 (3*) — bounded 60% viewport. -->
+            <TabControl Grid.Row="1"
                             SelectedIndex="{Binding TgProxyActiveTabIndex, Mode=TwoWay}"
                             Background="Transparent"
                             BorderBrush="{DynamicResource BorderSubtleBrush}"
