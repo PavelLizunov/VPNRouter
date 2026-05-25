@@ -31,5 +31,38 @@
 
     <Application.Styles>
         <FluentTheme />
+
+        <!-- v2.37.0-r31: ToggleButton styled as underline tab. Used by
+             DpiBypassPage + TelegramPage sub-tab strips. No radio glyph
+             (RadioButton in r29 looked like settings options per user
+             feedback). Inactive: muted text. Active: accent underline +
+             bolder text. Matches the main app's top tabs visual. -->
+        <Style Selector="ToggleButton.TabStripPill">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0,0,0,2"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style Selector="ToggleButton.TabStripPill:checked">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentSolidBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <Style Selector="ToggleButton.TabStripPill:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+
+        <Style Selector="ToggleButton.TabStripPill:checked /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
     </Application.Styles>
 </Application>

@@ -57,16 +57,14 @@
              TabControl is in a * row. Now TabControl has a real bounded
              viewport, inner ScrollViewer in each TabItem engages
              deterministically when content exceeds the bound. -->
-        <!-- r27.1: proportional 2*:3* rows. Auto+* didn't work because Hero
-             card alone is ~390 px and consumed the entire available height,
-             leaving 0 for TabControl. Proportional split guarantees TabControl
-             always gets 60% of the page area. Header section wraps in a
-             ScrollViewer so it can scroll if Hero exceeds its 40% slot. -->
-        <Grid Grid.Row="0" RowDefinitions="2*,3*" Margin="12,8,14,8">
-            <ScrollViewer Grid.Row="0"
-                          HorizontalScrollBarVisibility="Disabled"
-                          VerticalScrollBarVisibility="Auto">
-                <StackPanel Spacing="12">
+        <!-- r31: 4-row Grid. Hero card + TabStrip are ALWAYS VISIBLE
+             (Auto rows). TabContent gets remaining * row, scrolls inside
+             per-tab ScrollViewer if overflows. User rule: «магия одного
+             клика значит что кнопка всегда должна быть видна без скролла».
+             Compact Hero (r31: 3 step chips removed, padding 24→14)
+             keeps it under ~260 px so always fits. -->
+        <Grid Grid.Row="0" RowDefinitions="Auto,Auto,Auto,*" Margin="12,8,14,8">
+            <StackPanel Grid.Row="0" Spacing="8">
 
                     <!-- ════════ Download progress (visible while downloading
                          zapret or installing hosts via the magic button). -->
@@ -120,12 +118,15 @@
                         </Grid>
                     </Border>
 
-                    <!-- ════════ Hero card — accent glow + centered stack. -->
+                    <!-- ════════ Hero card — accent glow + centered stack.
+                         r31: Padding 24→14 + Spacing 12→8 + icon 46→38 → ~260 px
+                         total, fits in viewport without scroll (rule: one-click
+                         magic means user sees the button NO scroll needed). -->
                     <Border CornerRadius="{StaticResource RadiusLg}"
                             Background="{DynamicResource SurfaceBaseBrush}"
                             BorderBrush="{DynamicResource BorderSubtleBrush}"
                             BorderThickness="1"
-                            Padding="20,24,20,22"
+                            Padding="20,14,20,14"
                             ClipToBounds="True">
                         <Grid>
                             <!-- Soft accent glow disc behind the content. -->
@@ -218,81 +219,10 @@
                                     </StackPanel>
                                 </Button>
 
-                                <!-- 3-step chips (only when stopped + not probing). -->
-                                <ItemsControl HorizontalAlignment="Center">
-                                    <ItemsControl.IsVisible>
-                                        <MultiBinding Converter="{x:Static BoolConverters.And}">
-                                            <Binding Path="!ZapretEnabled"/>
-                                            <Binding Path="!IsZapretProbing"/>
-                                            <Binding Path="!IsZapretFallback"/>
-                                        </MultiBinding>
-                                    </ItemsControl.IsVisible>
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel HorizontalAlignment="Center" ItemSpacing="6" LineSpacing="6"/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <Border CornerRadius="{StaticResource RadiusPill}"
-                                            Background="{DynamicResource SurfaceBaseBrush}"
-                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                            BorderThickness="1"
-                                            Padding="10,5">
-                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                            <Border Width="14" Height="14"
-                                                    CornerRadius="7"
-                                                    Background="{DynamicResource AccentBgSubtleBrush}">
-                                                <TextBlock Text="1" FontSize="9" FontWeight="Bold"
-                                                           Foreground="{DynamicResource AccentFgBrush}"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"/>
-                                            </Border>
-                                            <TextBlock Text="{Binding L_ZapretOneTapStep1}"
-                                                       FontSize="10" FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource TextSecondaryBrush}"
-                                                       VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Border>
-                                    <Border CornerRadius="{StaticResource RadiusPill}"
-                                            Background="{DynamicResource SurfaceBaseBrush}"
-                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                            BorderThickness="1"
-                                            Padding="10,5">
-                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                            <Border Width="14" Height="14"
-                                                    CornerRadius="7"
-                                                    Background="{DynamicResource AccentBgSubtleBrush}">
-                                                <TextBlock Text="2" FontSize="9" FontWeight="Bold"
-                                                           Foreground="{DynamicResource AccentFgBrush}"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"/>
-                                            </Border>
-                                            <TextBlock Text="{Binding L_ZapretOneTapStep2}"
-                                                       FontSize="10" FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource TextSecondaryBrush}"
-                                                       VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Border>
-                                    <Border CornerRadius="{StaticResource RadiusPill}"
-                                            Background="{DynamicResource SurfaceBaseBrush}"
-                                            BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                            BorderThickness="1"
-                                            Padding="10,5">
-                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                                            <Border Width="14" Height="14"
-                                                    CornerRadius="7"
-                                                    Background="{DynamicResource AccentBgSubtleBrush}">
-                                                <TextBlock Text="3" FontSize="9" FontWeight="Bold"
-                                                           Foreground="{DynamicResource AccentFgBrush}"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"/>
-                                            </Border>
-                                            <TextBlock Text="{Binding L_ZapretOneTapStep3}"
-                                                       FontSize="10" FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource TextSecondaryBrush}"
-                                                       VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Border>
-                                </ItemsControl>
+                                <!-- r31: 3 step chips REMOVED. They duplicated the tab
+                                     names below (Стратегия/Hosts/Фильтры/Дополнительно
+                                     already convey the same flow). Removal saves
+                                     ~70px height — Hero now fits without scroll. -->
 
                                 <!-- Probe progress bar (only during probing). -->
                                 <StackPanel IsVisible="{Binding IsZapretProbing}"
@@ -465,73 +395,58 @@
                         </Grid>
                     </Border>
 
-                </StackPanel>
-            </ScrollViewer>
+            </StackPanel>
 
-            <!-- r29: manual tab strip + Panel of per-tab ScrollViewers
-                 (replaces Avalonia TabControl which had Carousel quirks
-                 that prevented inner ScrollViewer from engaging — see
-                 r25..r28 thrash log). Pure primitives:
-                   - UniformGrid of RadioButtons = tab strip
-                   - Border with Panel = tab content area
-                   - Each ScrollViewer's IsVisible binds to IsZapretTabN
-                 ScrollViewer is given the full bounded * row height by
-                 Panel + Border, so vertical scroll engages deterministically
-                 when content overflows. -->
-            <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,8,0,0">
+            <!-- r31 tab strip — ToggleButton with underline-active style,
+                 matching the main app's top tabs (Серверы/Подписка/etc.).
+                 No radio dot. Just text + accent underline on selected.
+                 r29 used RadioButton which user feedback flagged as
+                 «похоже на пубо настроки» — radio glyph wrong for tabs. -->
+            <UniformGrid Grid.Row="1" Rows="1" Columns="4" Margin="0,8,0,0">
+                <ToggleButton IsChecked="{Binding IsZapretTab0}"
+                              Command="{Binding SetZapretTabCommand}"
+                              CommandParameter="0"
+                              Classes="TabStripPill"
+                              Content="{Binding L_ZapretSecStrategy}"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Center"/>
+                <ToggleButton IsChecked="{Binding IsZapretTab1}"
+                              Command="{Binding SetZapretTabCommand}"
+                              CommandParameter="1"
+                              Classes="TabStripPill"
+                              Content="{Binding L_ZapretSecHosts}"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Center"/>
+                <ToggleButton IsChecked="{Binding IsZapretTab2}"
+                              Command="{Binding SetZapretTabCommand}"
+                              CommandParameter="2"
+                              Classes="TabStripPill"
+                              Content="{Binding L_ZapretSecFilters}"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Center"/>
+                <ToggleButton IsChecked="{Binding IsZapretTab3}"
+                              Command="{Binding SetZapretTabCommand}"
+                              CommandParameter="3"
+                              Classes="TabStripPill"
+                              Content="{Binding L_ZapretSecAdvanced}"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Center"/>
+            </UniformGrid>
 
-                <!-- Tab strip -->
-                <UniformGrid Grid.Row="0" Rows="1" Columns="4" Margin="0,0,0,4">
-                    <RadioButton GroupName="ZapretTabs"
-                                 IsChecked="{Binding IsZapretTab0}"
-                                 Command="{Binding SetZapretTabCommand}"
-                                 CommandParameter="0"
-                                 FontSize="11"
-                                 Padding="4,4"
-                                 HorizontalAlignment="Stretch"
-                                 HorizontalContentAlignment="Center">
-                        <TextBlock Text="{Binding L_ZapretSecStrategy}" TextAlignment="Center"/>
-                    </RadioButton>
-                    <RadioButton GroupName="ZapretTabs"
-                                 IsChecked="{Binding IsZapretTab1}"
-                                 Command="{Binding SetZapretTabCommand}"
-                                 CommandParameter="1"
-                                 FontSize="11"
-                                 Padding="4,4"
-                                 HorizontalAlignment="Stretch"
-                                 HorizontalContentAlignment="Center">
-                        <TextBlock Text="{Binding L_ZapretSecHosts}" TextAlignment="Center"/>
-                    </RadioButton>
-                    <RadioButton GroupName="ZapretTabs"
-                                 IsChecked="{Binding IsZapretTab2}"
-                                 Command="{Binding SetZapretTabCommand}"
-                                 CommandParameter="2"
-                                 FontSize="11"
-                                 Padding="4,4"
-                                 HorizontalAlignment="Stretch"
-                                 HorizontalContentAlignment="Center">
-                        <TextBlock Text="{Binding L_ZapretSecFilters}" TextAlignment="Center"/>
-                    </RadioButton>
-                    <RadioButton GroupName="ZapretTabs"
-                                 IsChecked="{Binding IsZapretTab3}"
-                                 Command="{Binding SetZapretTabCommand}"
-                                 CommandParameter="3"
-                                 FontSize="11"
-                                 Padding="4,4"
-                                 HorizontalAlignment="Stretch"
-                                 HorizontalContentAlignment="Center">
-                        <TextBlock Text="{Binding L_ZapretSecAdvanced}" TextAlignment="Center"/>
-                    </RadioButton>
-                </UniformGrid>
+            <!-- Optional thin divider between strip and content -->
+            <Border Grid.Row="2"
+                    Height="1"
+                    Background="{DynamicResource BorderSubtleBrush}"
+                    Margin="0,0,0,6"/>
 
-                <!-- Tab content area — Panel hosts all 4 ScrollViewers,
-                     only one is IsVisible=true at a time. -->
-                <Border Grid.Row="1"
-                        BorderBrush="{DynamicResource BorderSubtleBrush}"
-                        BorderThickness="1"
-                        CornerRadius="{StaticResource RadiusSm}"
-                        Padding="10,6">
-                    <Panel>
+            <!-- Tab content area (Grid.Row=3, gets * remaining space).
+                 Panel hosts all 4 ScrollViewers, only one visible. -->
+            <Border Grid.Row="3"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusSm}"
+                    Padding="10,6">
+                <Panel>
 
                         <!-- ─── Tab 0: Strategy ─── -->
                         <ScrollViewer IsVisible="{Binding IsZapretTab0}"
@@ -789,9 +704,8 @@
                             </StackPanel>
                         </ScrollViewer>
 
-                    </Panel>
-                </Border>
-            </Grid>
+                </Panel>
+            </Border>
         </Grid>
 
         <!-- ════════ Footer — same shape as TgProxyOneTap r7.

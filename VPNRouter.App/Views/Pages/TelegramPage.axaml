@@ -60,16 +60,12 @@
 
     <Grid RowDefinitions="*,Auto">
 
-        <!-- r27.1: proportional 2*:3* rows (same as DpiBypassPage r27.1).
-             Auto+* didn't work because the Hero card alone consumed all
-             available height. Proportional split guarantees TabControl
-             always gets 60%. Header section in its own ScrollViewer to
-             handle Hero overflow on small windows. -->
-        <Grid Grid.Row="0" RowDefinitions="2*,3*" Margin="12,8,14,8">
-            <ScrollViewer Grid.Row="0"
-                          HorizontalScrollBarVisibility="Disabled"
-                          VerticalScrollBarVisibility="Auto">
-                <StackPanel Spacing="12">
+        <!-- r31: 4-row Grid (same as DpiBypassPage r31). Hero + TabStrip
+             ALWAYS VISIBLE (Auto rows), TabContent gets remaining * row.
+             User rule: «магия одного клика — кнопка всегда видна без
+             скролла». Power-user details in tabs below. -->
+        <Grid Grid.Row="0" RowDefinitions="Auto,Auto,Auto,*" Margin="12,8,14,8">
+            <StackPanel Grid.Row="0" Spacing="8">
 
                     <!-- ────────── 1 · Per-step download progress (r6 MVP).
                          Sits above the hero so visibility doesn't shift the
@@ -409,54 +405,45 @@
                                Foreground="{DynamicResource TextSecondaryBrush}"
                                Margin="0,4,0,0"/>
 
-                </StackPanel>
-            </ScrollViewer>
+            </StackPanel>
 
-            <!-- r29: manual tab strip + Panel of per-tab ScrollViewers,
-                 same pattern as DpiBypassPage r29. Pure primitives —
-                 no Avalonia TabControl Carousel quirks. 3 tabs:
-                 Настройки / Версия / Помощь. -->
-            <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="0,8,0,0">
+            <!-- r31 tab strip — ToggleButton with underline-active style.
+                 3 tabs: Настройки / Версия / Помощь. -->
+            <UniformGrid Grid.Row="1" Rows="1" Columns="3" Margin="0,8,0,0">
+                <ToggleButton IsChecked="{Binding IsTgProxyTab0}"
+                              Command="{Binding SetTgProxyTabCommand}"
+                              CommandParameter="0"
+                              Classes="TabStripPill"
+                              Content="{Binding L_TgProxyTabSettings}"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Center"/>
+                <ToggleButton IsChecked="{Binding IsTgProxyTab1}"
+                              Command="{Binding SetTgProxyTabCommand}"
+                              CommandParameter="1"
+                              Classes="TabStripPill"
+                              Content="{Binding L_TgProxyTabVersion}"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Center"/>
+                <ToggleButton IsChecked="{Binding IsTgProxyTab2}"
+                              Command="{Binding SetTgProxyTabCommand}"
+                              CommandParameter="2"
+                              Classes="TabStripPill"
+                              Content="{Binding L_TgProxyTabHelp}"
+                              HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Center"/>
+            </UniformGrid>
 
-                <UniformGrid Grid.Row="0" Rows="1" Columns="3" Margin="0,0,0,4">
-                    <RadioButton GroupName="TgProxyTabs"
-                                 IsChecked="{Binding IsTgProxyTab0}"
-                                 Command="{Binding SetTgProxyTabCommand}"
-                                 CommandParameter="0"
-                                 FontSize="11"
-                                 Padding="4,4"
-                                 HorizontalAlignment="Stretch"
-                                 HorizontalContentAlignment="Center">
-                        <TextBlock Text="{Binding L_TgProxyTabSettings}" TextAlignment="Center"/>
-                    </RadioButton>
-                    <RadioButton GroupName="TgProxyTabs"
-                                 IsChecked="{Binding IsTgProxyTab1}"
-                                 Command="{Binding SetTgProxyTabCommand}"
-                                 CommandParameter="1"
-                                 FontSize="11"
-                                 Padding="4,4"
-                                 HorizontalAlignment="Stretch"
-                                 HorizontalContentAlignment="Center">
-                        <TextBlock Text="{Binding L_TgProxyTabVersion}" TextAlignment="Center"/>
-                    </RadioButton>
-                    <RadioButton GroupName="TgProxyTabs"
-                                 IsChecked="{Binding IsTgProxyTab2}"
-                                 Command="{Binding SetTgProxyTabCommand}"
-                                 CommandParameter="2"
-                                 FontSize="11"
-                                 Padding="4,4"
-                                 HorizontalAlignment="Stretch"
-                                 HorizontalContentAlignment="Center">
-                        <TextBlock Text="{Binding L_TgProxyTabHelp}" TextAlignment="Center"/>
-                    </RadioButton>
-                </UniformGrid>
+            <Border Grid.Row="2"
+                    Height="1"
+                    Background="{DynamicResource BorderSubtleBrush}"
+                    Margin="0,0,0,6"/>
 
-                <Border Grid.Row="1"
-                        BorderBrush="{DynamicResource BorderSubtleBrush}"
-                        BorderThickness="1"
-                        CornerRadius="{StaticResource RadiusSm}"
-                        Padding="10,6">
-                    <Panel>
+            <Border Grid.Row="3"
+                    BorderBrush="{DynamicResource BorderSubtleBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusSm}"
+                    Padding="10,6">
+                <Panel>
 
                         <!-- ─── Tab 0: Настройки ─── -->
                         <ScrollViewer IsVisible="{Binding IsTgProxyTab0}"
@@ -623,9 +610,8 @@
                             </StackPanel>
                         </ScrollViewer>
 
-                    </Panel>
-                </Border>
-            </Grid>
+                </Panel>
+            </Border>
         </Grid>
 
         <!-- ────────── 6 · Footer — kept from r3+r6.
