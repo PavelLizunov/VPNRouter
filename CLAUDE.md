@@ -151,6 +151,16 @@ Open Tasks / Last session log.
 10. **MEMORY.md в `~/.claude/projects/.../memory/` — auto-managed harness'ом**,
     не редактировать руками без причины. `.claude_handoff.md` в репо — это
     наш controlled file.
+11. **CI-gate перед каждым push** (added 2026-05-25 после r7..r18 red-CI streak).
+    После `git push` следующего commit'а — **MUST** запустить
+    `powershell -ExecutionPolicy Bypass -File tools/verify-last-commit-ci.ps1`
+    BEFORE next code change. Exit 0 = можно дальше, exit 1/2/3 = STOP. Также
+    установлен `.githooks/pre-push` hook (`git config core.hooksPath .githooks`)
+    который физически блокирует push если предыдущий commit красный. Bypass
+    через `--no-verify` только с явной user-командой. Урок: 12 ships подряд
+    (r7..r18) с красным commit-CI потому что я забывал проверять между
+    ships — единственный red-X X на главной странице commits — и tag-level
+    CI (build-mac/linux на тэге) скрывал что push-event CI красный.
 
 ## Git safety
 

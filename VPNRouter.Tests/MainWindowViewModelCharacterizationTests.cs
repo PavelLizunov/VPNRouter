@@ -153,8 +153,18 @@ public class MainWindowViewModelCharacterizationTests
     /// capture the actual, and bump Linux in the SAME commit instead of
     /// deferring — see ship-rolling-candidate skill update.</para>
     /// </summary>
+    // v2.37.0-r20 bump (2026-05-25 night shift): catch-up debt for r7 → r19.
+    // Every Windows-side bump (r7, r10, r11, r15, r19) deferred Linux pin
+    // "to next CI failure per workflow". The next CI failure landed when r19
+    // un-gated cache UI members from #if PLATFORM_WINDOWS, exposing Linux's
+    // accumulated surface drift. New Linux hash captured from r19 CI run
+    // 26387715796 reflects all 5 Windows surface additions through the
+    // conditional-stripped Linux build: HasTgProxyStats (r15) +
+    // LblZapretCacheStatus + ClearZapretCacheCommand + ForceFreshProbeCommand
+    // (r10/r19 — now visible on Linux too) + L_ZapretForceFreshProbeButton
+    // + L_ZapretClearCacheButton (r11).
     private const string PinnedHashLinux =
-        "e5733f54d3bfd5e45d309cfe7059660e1cdf9b21d27417f70a268d7abd2c4bf2";
+        "7502e41ad11f8c1502aa182a362ac5942370462a0081624bc993bfd83c54ef0c";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()

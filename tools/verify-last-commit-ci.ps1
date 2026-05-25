@@ -1,56 +1,40 @@
 # verify-last-commit-ci.ps1 - hard precondition for ship-rolling-candidate.
-#
-# v2.37.0-r19 lesson: shipped r7..r18 in one session without checking
-# commit-level CI on each push. Tag-level CI (build-mac, build-linux on
-# tag push) was green because the bug was a Linux-only Avalonia XAML
-# binding to a property gated by `#if PLATFORM_WINDOWS`. Commit-level
-# CI (Build Linux + Build macOS + dotnet test on push event) was red
-# the whole time. User caught it via screenshot of red-X commits column.
-#
-# This script enforces "previous commit must have GREEN commit-CI" as a
-# precondition for shipping the next -rN. Bail loudly if anything is
-# red, skipped (where unexpected), or in_progress.
-#
-# Usage (from ship-rolling-candidate skill, BEFORE bumping AppVersion):
-#   powershell -ExecutionPolicy Bypass -File tools/verify-last-commit-ci.ps1
-#
-# Exit codes:
-#   0 - previous commit CI green; safe to ship next -rN
-#   1 - previous commit CI red OR contains unexpected failures
-#   2 - previous commit CI still in_progress (wait + retry)
-#   3 - gh CLI missing or auth issue
+# See .githooks/pre-push + .claude/skills/ship-rolling-candidate/SKILL.md
+# for context. Bails (exit 1/2/3) if previous commit CI is not green.
 
 param(
-    [string]$Repo = $(if ($env:REPO) { $env:REPO } else { "PavelLizunov/VPNRouter" }),
-    [string]$IgnoreSkipped = $(if ($env:IGNORE_SKIPPED) { $env:IGNORE_SKIPPED } else { "Build Android APK" }),
-    [string]$TolerateFailure = $(if ($env:TOLERATE_FAILURE) { $env:TOLERATE_FAILURE } else { "" })
+    [string]$Repo,
+    [string]$IgnoreSkipped,
+    [string]$TolerateFailure,
+    [string]$Commit
 )
+
+if (-not $Repo) { $Repo = $env:REPO; if (-not $Repo) { $Repo = "PavelLizunov/VPNRouter" } }
+if (-not $IgnoreSkipped) { $IgnoreSkipped = $env:IGNORE_SKIPPED; if (-not $IgnoreSkipped) { $IgnoreSkipped = "Build Android APK" } }
+if (-not $TolerateFailure) { $TolerateFailure = $env:TOLERATE_FAILURE }
+if (-not $Commit) { $Commit = $env:COMMIT; if (-not $Commit) { $Commit = "HEAD" } }
 
 $ErrorActionPreference = "Stop"
 
-$head = (git rev-parse HEAD).Trim()
-if (-not $head) {
-    Write-Host "ERROR: could not resolve HEAD SHA" -ForegroundColor Red
-    exit 3
+$head = (git rev-parse $Commit 2>$null)
+if (-not $head -or $LASTEXITCODE -ne 0) {
+    Write-Host "INFO: could not resolve commit reference. Allowing." -ForegroundColor Yellow
+    exit 0
 }
-Write-Host ("Verifying CI for HEAD: " + $head) -ForegroundColor Cyan
+$head = $head.Trim()
+Write-Host "Verifying CI for $Commit : $head" -ForegroundColor Cyan
 
-try {
-    $null = (gh auth status 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: gh CLI not authenticated. Run 'gh auth login'." -ForegroundColor Red
-        exit 3
-    }
-}
-catch {
-    Write-Host "ERROR: gh CLI missing." -ForegroundColor Red
+$null = (gh auth status 2>&1)
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: gh CLI not authenticated." -ForegroundColor Red
     exit 3
 }
 
-$apiPath = "repos/" + $Repo + "/commits/" + $head + "/check-runs?per_page=30"
+$apiPath = "repos/$Repo/commits/$head/check-runs?per_page=30"
 $json = gh api $apiPath 2>&1
 if ($LASTEXITCODE -ne 0) {
-    Write-Host ("ERROR: gh api failed: " + $json) -ForegroundColor Red
+    Write-Host "ERROR: gh api failed." -ForegroundColor Red
+    Write-Host $json
     exit 3
 }
 
@@ -58,7 +42,7 @@ $data = $json | ConvertFrom-Json
 $checks = $data.check_runs
 
 if (-not $checks -or $checks.Count -eq 0) {
-    Write-Host "WARN: no check-runs returned. CI may not have fired yet (wait ~30s, retry)." -ForegroundColor Yellow
+    Write-Host "WARN: no check-runs yet. Wait 30s and retry." -ForegroundColor Yellow
     exit 2
 }
 
@@ -68,14 +52,16 @@ foreach ($n in $IgnoreSkipped.Split(',')) {
     if ($t) { $skipOk[$t] = $true }
 }
 $failOk = @{}
-foreach ($n in $TolerateFailure.Split(',')) {
-    $t = $n.Trim()
-    if ($t) { $failOk[$t] = $true }
+if ($TolerateFailure) {
+    foreach ($n in $TolerateFailure.Split(',')) {
+        $t = $n.Trim()
+        if ($t) { $failOk[$t] = $true }
+    }
 }
 
-$hardRed = @()
-$inProgress = @()
-$tolerated = @()
+$hardRed = New-Object System.Collections.ArrayList
+$inProgress = New-Object System.Collections.ArrayList
+$tolerated = New-Object System.Collections.ArrayList
 $green = 0
 foreach ($c in $checks) {
     $name = $c.name
@@ -83,7 +69,7 @@ foreach ($c in $checks) {
     $status = $c.status
 
     if ($status -ne "completed") {
-        $inProgress += ($name + " [" + $status + "]")
+        [void]$inProgress.Add("$name [$status]")
         continue
     }
 
@@ -92,45 +78,45 @@ foreach ($c in $checks) {
     }
     elseif ($conclusion -eq "skipped") {
         if ($skipOk.ContainsKey($name)) {
-            $tolerated += ($name + " (skipped, expected)")
+            [void]$tolerated.Add("$name [skipped, expected]")
         } else {
-            $tolerated += ($name + " (skipped, unexpected - review)")
+            [void]$tolerated.Add("$name [skipped, unexpected]")
         }
     }
     elseif ($conclusion -eq "failure") {
         if ($failOk.ContainsKey($name)) {
-            $tolerated += ($name + " (failure, tolerated)")
+            [void]$tolerated.Add("$name [failure, tolerated]")
         } else {
-            $hardRed += ($name + " [" + $c.html_url + "]")
+            [void]$hardRed.Add("$name $($c.html_url)")
         }
     }
     elseif ($conclusion -eq "cancelled") {
-        $tolerated += ($name + " (cancelled)")
+        [void]$tolerated.Add("$name [cancelled]")
     }
     else {
-        $hardRed += ($name + " [" + $conclusion + " - " + $c.html_url + "]")
+        [void]$hardRed.Add("$name [$conclusion] $($c.html_url)")
     }
 }
 
 Write-Host ""
 Write-Host "Summary:" -ForegroundColor Cyan
-Write-Host ("  Green:        " + $green) -ForegroundColor Green
-Write-Host ("  Tolerated:    " + $tolerated.Count) -ForegroundColor DarkGray
-foreach ($t in $tolerated) { Write-Host ("                  " + $t) -ForegroundColor DarkGray }
-Write-Host ("  In progress:  " + $inProgress.Count) -ForegroundColor Yellow
-foreach ($p in $inProgress) { Write-Host ("                  " + $p) -ForegroundColor Yellow }
-Write-Host ("  Hard red:     " + $hardRed.Count) -ForegroundColor Red
-foreach ($r in $hardRed) { Write-Host ("                  " + $r) -ForegroundColor Red }
+Write-Host "  Green:        $green" -ForegroundColor Green
+Write-Host "  Tolerated:    $($tolerated.Count)" -ForegroundColor DarkGray
+foreach ($t in $tolerated) { Write-Host "                  $t" -ForegroundColor DarkGray }
+Write-Host "  In progress:  $($inProgress.Count)" -ForegroundColor Yellow
+foreach ($p in $inProgress) { Write-Host "                  $p" -ForegroundColor Yellow }
+Write-Host "  Hard red:     $($hardRed.Count)" -ForegroundColor Red
+foreach ($r in $hardRed) { Write-Host "                  $r" -ForegroundColor Red }
 
 Write-Host ""
 if ($hardRed.Count -gt 0) {
-    Write-Host ("BLOCKED: " + $hardRed.Count + " red check(s) on the previous commit.") -ForegroundColor Red
-    Write-Host "Fix those before shipping the next -rN, or add to TOLERATE_FAILURE if intentional." -ForegroundColor Red
+    Write-Host "BLOCKED: $($hardRed.Count) red check(s) on the previous commit." -ForegroundColor Red
+    Write-Host "Fix those before shipping next candidate, or use TOLERATE_FAILURE env var." -ForegroundColor Red
     exit 1
 }
 if ($inProgress.Count -gt 0) {
-    Write-Host ("BLOCKED: " + $inProgress.Count + " check(s) still running. Wait + retry.") -ForegroundColor Yellow
+    Write-Host "BLOCKED: $($inProgress.Count) check(s) still running. Wait + retry." -ForegroundColor Yellow
     exit 2
 }
-Write-Host "OK - safe to ship the next -rN." -ForegroundColor Green
+Write-Host "OK: safe to ship the next candidate." -ForegroundColor Green
 exit 0

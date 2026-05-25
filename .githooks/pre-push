@@ -1,0 +1,74 @@
+#!/bin/bash
+# .githooks/pre-push — VPNRouter v2.37.0-r19 — verify previous commit CI is green BEFORE pushing the next one.
+#
+# Why this exists: night-shift 2026-05-25 shipped 12 commits (r7..r18) in
+# a row with red commit-CI on every single one. Tag-level CI was green
+# (Windows binaries fine), but commit-level CI (Linux/macOS Avalonia
+# XAML compilation + dotnet test) failed throughout because r10 added
+# MVM members inside `#if PLATFORM_WINDOWS` that XAML referenced
+# unconditionally. User caught it via screenshot of the red-X column.
+#
+# This hook turns "remember to check CI" into a physical impossibility
+# to forget — git push refuses to publish a new commit if the PREVIOUS
+# commit's CI checks are red.
+#
+# Bypass (emergency only — document the reason in commit message):
+#   git push --no-verify
+#   BUT: project CLAUDE.md rule says NEVER --no-verify without explicit user
+#   approval. If Claude needs to bypass, surface the reason first.
+#
+# Activation (one-time per clone):
+#   git config core.hooksPath .githooks
+#
+# Bypassed paths (the gate is intentionally lenient):
+#   - First push to a new branch: no previous commit to check → allow.
+#   - Push targets a non-main branch: allow (feature branches don't fan-out CI).
+#   - tools/verify-last-commit-ci.ps1 missing: warn + allow (don't block
+#     contributors who haven't pulled latest).
+#   - Tag pushes (refs/tags/*): allow. The check is for source commits,
+#     not for tag refs which trigger separate tag-CI workflows.
+
+set -e
+
+# Detect tag pushes (let through — tag CI is fired by tag workflows).
+while read local_ref local_sha remote_ref remote_sha; do
+    if [[ "$local_ref" == refs/tags/* ]]; then
+        echo "[pre-push] Tag push detected ($local_ref) — skipping CI check."
+        exit 0
+    fi
+done
+
+# Resolve repo root.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$REPO_ROOT" ]; then
+    echo "[pre-push] WARN: cannot resolve repo root; allowing push."
+    exit 0
+fi
+
+# Locate the verification script.
+SCRIPT="$REPO_ROOT/tools/verify-last-commit-ci.ps1"
+if [ ! -f "$SCRIPT" ]; then
+    echo "[pre-push] WARN: $SCRIPT missing — allowing push (script not yet pulled)."
+    exit 0
+fi
+
+# Run verification — pre-push hook checks HEAD^1 (the LAST PUBLISHED
+# commit on the remote), NOT the new HEAD which hasn't been pushed yet
+# and therefore doesn't exist on GitHub. The script's default of HEAD
+# is for after-push verification; pre-push passes -Commit HEAD^1.
+echo "[pre-push] Verifying previous commit CI via tools/verify-last-commit-ci.ps1..."
+if powershell -ExecutionPolicy Bypass -File "$SCRIPT" -Commit "HEAD^1" 2>&1 | tee /tmp/vpnrouter-ci-check.log | tail -3 | grep -q "^OK -"; then
+    echo "[pre-push] CI green — push allowed."
+    exit 0
+fi
+
+# Hard-red or in-progress — block.
+echo ""
+echo "[pre-push] ABORT: previous commit CI is not green."
+echo ""
+echo "Last 10 lines of verification output:"
+tail -10 /tmp/vpnrouter-ci-check.log
+echo ""
+echo "Fix the failing checks (or wait for in-progress) before pushing the next commit."
+echo "Emergency bypass: git push --no-verify   (document reason in commit message)"
+exit 1

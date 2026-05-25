@@ -10,6 +10,32 @@ VPNRouter ships iterations as `vX.Y.Z-r1`, `vX.Y.Z-r2`, etc. Only one
 prerelease visible at a time. Stable cut autonomous когда -rN passes
 verification gate (см. `cut-stable` skill).
 
+## HARD PRECONDITION (added 2026-05-25 after r7..r18 red-CI streak)
+
+**Before doing anything else, verify previous commit's CI is GREEN:**
+
+```bash
+powershell -ExecutionPolicy Bypass -File tools/verify-last-commit-ci.ps1
+```
+
+Exit 0 → safe to ship. Exit 1/2/3 → STOP, do not bump AppVersion, do
+not start the cycle. Investigate the red/in-progress check first.
+
+**Why this rule exists**: night-shift 2026-05-25 shipped r7→r18 (12
+candidates) in a row. Tag-level CI on each `vX.Y.Z-rN` tag was green
+because Windows binaries built fine. But commit-level CI on every
+`push` event was RED throughout — Linux/macOS Avalonia XAML
+compilation failed on `LblZapretCacheStatus` binding (introduced in r10
+inside `#if PLATFORM_WINDOWS` but referenced by cross-platform XAML).
+The bug propagated through 8 follow-up commits because nobody checked
+the commits page on main between ships. User caught it via screenshot
+of red-X column with 2/6 or 4/6 passing.
+
+The script enforces this check so the AI can't silently skip it. Even
+if you "remember to check" 95% of the time, the 5% miss is what
+caused the r7→r18 debt. Make the verification a hard gate, not a
+mental TODO.
+
 ## Pre-flight checks
 
 Before bumping anything:

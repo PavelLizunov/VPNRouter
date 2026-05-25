@@ -66,8 +66,13 @@ public class AndroidAppCharacterizationTests
     /// Pre-Phase 4 (Wave 9) hash was
     /// <c>98061071858cefdc384be4f69e109f0f4b3d31aaa4c0158d0386fd22a6bb219f</c>.
     /// </summary>
+    // v2.37.0-r20 bump (2026-05-25 night shift): r8 added MenuFeedbackDismissMs
+    // private const in AndroidApp.Notifications.cs (magic-number extraction).
+    // Source-surface hash includes const declarations, so the drift is
+    // intentional and matches the Wave 9 invariant: only bump on intentional
+    // surface change.
     private const string PinnedHash =
-        "a9a2a0a88c577f6933276702657a8ce755c60285e5c8ac29acd0f9b3fea32e03";
+        "9e459d5758f0e9d3a516ab1a55eccb3973e54853ab0259585fdf4b8f88c7e3e8";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()
