@@ -4543,8 +4543,6 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 #endif
     }
 
-#if PLATFORM_WINDOWS
-
     // ── v2.37.0-r10 — Zapret probe-cache UI controls ───────────────────────
     //
     // r6 added the cache silently — it works for happy-path users but
@@ -4554,13 +4552,24 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     //   - ClearZapretCacheCommand: wipes the JSON file (idempotent)
     //   - ForceFreshProbeCommand: sets _forceFreshProbe + runs probe
     //   - _forceFreshProbe transient flag honored by ProbeAndStartZapretAsync
+    //
+    // r19 (2026-05-25) — moved members OUTSIDE `#if PLATFORM_WINDOWS` because
+    // DpiBypassPage.axaml is compiled once (no per-platform XAML) and Avalonia
+    // resolves bindings via reflection on the type's full public surface.
+    // Pre-r19 the Linux/Mac builds (build-linux.yml, build-mac.yml on push)
+    // failed with `AVLN2000: Unable to resolve property or method of name
+    // 'LblZapretCacheStatus'`. Inner bodies still guarded by OS check where
+    // they touch Windows-only state (ZapretEnabled, IsZapretRunning, etc.).
+    // ZapretProbeCache itself is cross-platform (just JSON file in CacheDir).
 
     private bool _forceFreshProbe;
 
     /// <summary>
     /// One-liner surfacing the current Zapret probe cache state. Used in
     /// the Tools expander as a hint near the Force-fresh / Clear-cache
-    /// buttons so the user knows what's persisted.
+    /// buttons so the user knows what's persisted. Cross-platform — Zapret
+    /// cache file lives in the shared CacheDir on every OS, even though
+    /// the probe itself only runs on Windows today.
     /// </summary>
     public string LblZapretCacheStatus
     {
@@ -4591,6 +4600,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private async Task ForceFreshProbeAsync()
     {
+#if PLATFORM_WINDOWS
         // Stop any running zapret first so the probe starts from clean state.
         if (ZapretEnabled || IsZapretRunning())
         {
@@ -4611,7 +4621,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _forceFreshProbe = false;
             OnPropertyChanged(nameof(LblZapretCacheStatus));
         }
+#else
+        // Non-Windows: Zapret probe path doesn't exist — return cleanly so
+        // the binding stays callable but no-ops. The button stays visible
+        // because XAML can't conditionally include it, but pressing it
+        // does nothing meaningful on Mac/Linux (Zapret is Windows-only).
+        await Task.CompletedTask;
+#endif
     }
+#if PLATFORM_WINDOWS
 
     /// <summary>
     /// Run ZapretAutoStrategy probe loop. Stays in PROBING state while
