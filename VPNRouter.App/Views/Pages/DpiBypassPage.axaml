@@ -417,48 +417,53 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- ════════ Тонкая настройка — all r5-era controls stowed,
-                         collapsed by default. No information loss.
-                         r24 — IsExpanded two-way bound to VM so the Hero
-                         card's "Подробнее" button can open this section
-                         programmatically. -->
-                    <Expander Header="{Binding L_ZapretOneTapTune}"
-                              FontSize="11"
-                              FontWeight="SemiBold"
-                              IsExpanded="{Binding IsZapretTuneExpanded, Mode=TwoWay}"
-                              Background="Transparent"
-                              BorderBrush="{DynamicResource BorderSubtleBrush}"
-                              BorderThickness="1"
-                              CornerRadius="{StaticResource RadiusSm}"
-                              Padding="10,6">
-                        <StackPanel Spacing="14" Margin="0,6,0,0">
+                    <!-- ════════ r25 — Тонкая настройка as TabControl, not Expander.
+                         Historical bug we hit repeatedly r10..r22: an Expander
+                         inside the outer ScrollViewer wouldn't reliably scroll
+                         to the bottom of its expanded content. Padding bumps
+                         (10→24→60) were workarounds, not fixes — the underlying
+                         layout pathology stayed.
+                         TabControl makes each section its own viewport-sized
+                         page, so no nested scroll, no overflow ambiguity, and
+                         the chronic complaint ("не получается доскролить до
+                         самого низа") is structurally gone. Pattern matches
+                         the Apps page sidebar (different visual orientation —
+                         tabs are horizontal here for the narrower 520px
+                         default window). -->
 
-                            <!-- Description anchor copy (pre-r8 LblDpiDescription). -->
-                            <TextBlock TextWrapping="Wrap" FontSize="11" LineHeight="16" Opacity="0.7"
-                                       Foreground="{DynamicResource TextSecondaryBrush}"
-                                       Text="{Binding LblDpiDescription}"/>
+                    <!-- Description + warning banner stay OUTSIDE the TabControl
+                         so they're visible regardless of which tab is active. -->
+                    <TextBlock TextWrapping="Wrap" FontSize="11" LineHeight="16" Opacity="0.7"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               Text="{Binding LblDpiDescription}"
+                               Margin="0,4,0,0"/>
 
-                            <!-- Warning banner (Windows-only / coexists with VPN). -->
-                            <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
-                                    Background="{DynamicResource WarningBgBrush}"
-                                    BorderBrush="{DynamicResource WarningBorderBrush}"
-                                    BorderThickness="1">
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                                    <TextBlock Grid.Column="0" Text="!"
-                                               Foreground="{DynamicResource WarningFgBrush}"
-                                               FontSize="11" FontWeight="Bold"
-                                               VerticalAlignment="Top"/>
-                                    <TextBlock Grid.Column="1" TextWrapping="Wrap"
-                                               FontSize="10"
-                                               Foreground="{DynamicResource WarningFgBrush}"
-                                               Text="{Binding LblDpiWarning}"/>
-                                </Grid>
-                            </Border>
+                    <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
+                            Background="{DynamicResource WarningBgBrush}"
+                            BorderBrush="{DynamicResource WarningBorderBrush}"
+                            BorderThickness="1">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0" Text="!"
+                                       Foreground="{DynamicResource WarningFgBrush}"
+                                       FontSize="11" FontWeight="Bold"
+                                       VerticalAlignment="Top"/>
+                            <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                                       FontSize="10"
+                                       Foreground="{DynamicResource WarningFgBrush}"
+                                       Text="{Binding LblDpiWarning}"/>
+                        </Grid>
+                    </Border>
 
-                            <!-- ─── Strategy ─── -->
-                            <StackPanel Spacing="6">
-                                <TextBlock Text="{Binding L_ZapretSecStrategy}"
-                                           FontWeight="Bold" FontSize="11"/>
+                    <TabControl SelectedIndex="{Binding ZapretActiveTabIndex, Mode=TwoWay}"
+                                Background="Transparent"
+                                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusSm}"
+                                Padding="10,6">
+
+                        <!-- ─── Tab 1: Strategy ─── -->
+                        <TabItem Header="{Binding L_ZapretSecStrategy}" FontSize="11">
+                            <StackPanel Spacing="6" Margin="0,6,0,0">
                                 <TextBlock Text="{Binding L_ZapretSecStrategyDesc}"
                                            TextWrapping="Wrap" FontSize="10"
                                            Opacity="0.7"
@@ -518,11 +523,11 @@
                                                TextWrapping="Wrap" FontSize="10"/>
                                 </CheckBox>
                             </StackPanel>
+                        </TabItem>
 
-                            <!-- ─── Hosts ─── -->
-                            <StackPanel Spacing="6">
-                                <TextBlock Text="{Binding L_ZapretSecHosts}"
-                                           FontWeight="Bold" FontSize="11"/>
+                        <!-- ─── Tab 2: Hosts ─── -->
+                        <TabItem Header="{Binding L_ZapretSecHosts}" FontSize="11">
+                            <StackPanel Spacing="6" Margin="0,6,0,0">
                                 <TextBlock Text="{Binding L_ZapretSecHostsDesc}"
                                            TextWrapping="Wrap" FontSize="10"
                                            Opacity="0.7"
@@ -560,11 +565,11 @@
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
+                        </TabItem>
 
-                            <!-- ─── Filters ─── -->
-                            <StackPanel Spacing="6">
-                                <TextBlock Text="{Binding L_ZapretSecFilters}"
-                                           FontWeight="Bold" FontSize="11"/>
+                        <!-- ─── Tab 3: Filters ─── -->
+                        <TabItem Header="{Binding L_ZapretSecFilters}" FontSize="11">
+                            <StackPanel Spacing="6" Margin="0,6,0,0">
                                 <TextBlock Text="{Binding L_ZapretSecFiltersDesc}"
                                            TextWrapping="Wrap" FontSize="10"
                                            Opacity="0.7"
@@ -593,11 +598,11 @@
                                     </ComboBox>
                                 </StackPanel>
                             </StackPanel>
+                        </TabItem>
 
-                            <!-- ─── Diagnostics + Advanced actions ─── -->
-                            <StackPanel Spacing="6">
-                                <TextBlock Text="{Binding L_ZapretSecAdvanced}"
-                                           FontWeight="Bold" FontSize="11"/>
+                        <!-- ─── Tab 4: Tools (Diagnostics + Cache + Service) ─── -->
+                        <TabItem Header="{Binding L_ZapretSecAdvanced}" FontSize="11">
+                            <StackPanel Spacing="6" Margin="0,6,0,0">
                                 <Button Content="{Binding L_RunDiagnostics}"
                                         Command="{Binding RunZapretDiagnosticsCommand}"
                                         IsEnabled="{Binding !IsZapretActionRunning}"
@@ -673,31 +678,38 @@
                                            FontSize="9" Opacity="0.4"
                                            Foreground="{DynamicResource TextMutedBrush}"
                                            HorizontalAlignment="Left"/>
-                            </StackPanel>
 
-                            <!-- v2.37.0-r11 — Zapret probe cache controls (Tools sub-section).
-                                 r22: buttons moved ABOVE status text + WrapPanel for narrow
-                                 windows so last items always visible. -->
-                            <StackPanel Spacing="6" Margin="0,6,0,0">
-                                <WrapPanel ItemSpacing="6" LineSpacing="6">
-                                    <Button Content="{Binding L_ZapretForceFreshProbeButton}"
-                                            Command="{Binding ForceFreshProbeCommand}"
-                                            IsEnabled="{Binding !IsZapretProbing}"
-                                            FontSize="10" Padding="8,4"
-                                            CornerRadius="{StaticResource RadiusSm}"/>
-                                    <Button Content="{Binding L_ZapretClearCacheButton}"
-                                            Command="{Binding ClearZapretCacheCommand}"
-                                            FontSize="10" Padding="8,4"
-                                            CornerRadius="{StaticResource RadiusSm}"/>
-                                </WrapPanel>
-                                <TextBlock Text="{Binding LblZapretCacheStatus}"
-                                           FontSize="10" Opacity="0.6"
-                                           TextWrapping="Wrap"
-                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <!-- v2.37.0-r11 — Zapret probe cache controls — now
+                                     live INSIDE the Tools tab (was a sibling of the
+                                     Diagnostics section in the old Expander layout).
+                                     r25 — TabItem already gives this a clean viewport,
+                                     so no more padding-bump dance to keep the buttons
+                                     visible. Border-separated to group visually. -->
+                                <Border Margin="0,8,0,0" Padding="0,8,0,0"
+                                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                        BorderThickness="0,1,0,0">
+                                    <StackPanel Spacing="6">
+                                        <WrapPanel ItemSpacing="6" LineSpacing="6">
+                                            <Button Content="{Binding L_ZapretForceFreshProbeButton}"
+                                                    Command="{Binding ForceFreshProbeCommand}"
+                                                    IsEnabled="{Binding !IsZapretProbing}"
+                                                    FontSize="10" Padding="8,4"
+                                                    CornerRadius="{StaticResource RadiusSm}"/>
+                                            <Button Content="{Binding L_ZapretClearCacheButton}"
+                                                    Command="{Binding ClearZapretCacheCommand}"
+                                                    FontSize="10" Padding="8,4"
+                                                    CornerRadius="{StaticResource RadiusSm}"/>
+                                        </WrapPanel>
+                                        <TextBlock Text="{Binding LblZapretCacheStatus}"
+                                                   FontSize="10" Opacity="0.6"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
+                        </TabItem>
 
-                        </StackPanel>
-                    </Expander>
+                    </TabControl>
 
                 </StackPanel>
             </Grid>

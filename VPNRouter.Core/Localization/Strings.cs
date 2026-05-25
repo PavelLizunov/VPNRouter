@@ -847,6 +847,11 @@ public static class Strings
         ? $"В эфире · :{port}"
         : $"On the air · :{port}";
 
+    // ───── v2.37.0-r25 — TgProxy TabControl headers (replaces Expander) ─────
+    public static string TgProxyTabSettings => Ru ? "Настройки" : "Settings";
+    public static string TgProxyTabVersion  => Ru ? "Версия"    : "Version";
+    public static string TgProxyTabHelp     => Ru ? "Помощь"    : "Help";
+
     // v2.36.0-r8 — ZapretOneTap design (per
     // `plans/research-one-button-zapret-deep-2026-05-24.md`). Mirrors the
     // TgProxyOneTap variant-A pattern: hero card with shield icon → title →

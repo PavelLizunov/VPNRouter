@@ -4497,6 +4497,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string L_ZapretSummaryDetailsButton => Strings.ZapretSummaryDetailsButton;
     public string L_ZapretSummaryStaleHint => Strings.ZapretSummaryStaleHint;
 
+    /// <summary>v2.37.0-r25 — TabControl tab-header L_ getters for TgProxy
+    /// (Telegram-прокси) page. 3 tabs: Settings, Version, Help. Replaces
+    /// the prior "Тонкая настройка" Expander block.</summary>
+    public string L_TgProxyTabSettings => Strings.TgProxyTabSettings;
+    public string L_TgProxyTabVersion  => Strings.TgProxyTabVersion;
+    public string L_TgProxyTabHelp     => Strings.TgProxyTabHelp;
+
+    /// <summary>v2.37.0-r25 — drives the TgProxy page TabControl. Same
+    /// pattern as ZapretActiveTabIndex but with 3 tabs instead of 4.</summary>
+    [ObservableProperty]
+    private int _tgProxyActiveTabIndex;
+
     /// <summary>
     /// One-button magic Zapret orchestrator. Runs on the magic button click
     /// in the new DpiBypassPage hero card. Replaces ToggleZapretAsync for the
@@ -4875,19 +4887,28 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// r24 — bound to the "Подробнее" button on the Hero card. Opens the
-    /// existing "Тонкая настройка" expander on the DpiBypass page so the
-    /// user can see the full strategy list + cache controls in one click.
-    /// Bound to <see cref="IsZapretTuneExpanded"/> via two-way binding so
-    /// the expander state stays in sync if the user also toggles it manually.
+    /// r25 — replaces the r24 IsZapretTuneExpanded boolean. Drives the
+    /// TabControl that replaced the Тонкая настройка expander on the
+    /// DpiBypass page. Tabs are zero-indexed:
+    ///   0 — Strategy   (default — winner ComboBox + direct-start + IPSet)
+    ///   1 — Hosts      (Discord + Flowseal hostfile installers)
+    ///   2 — Filters    (Game filter + IPSet filter)
+    ///   3 — Tools      (Diagnostics + cache + service + folder/GitHub)
     /// </summary>
     [ObservableProperty]
-    private bool _isZapretTuneExpanded;
+    private int _zapretActiveTabIndex;
 
+    /// <summary>
+    /// r25 — "Подробнее" button on the Hero summary card navigates to the
+    /// Tools tab (index 3), where cache controls + diagnostics + service
+    /// management live. The Strategy tab is the default landing because
+    /// it's what most users will tweak; Tools is the deep-cuts surface
+    /// the Hero card explicitly invites the user into.
+    /// </summary>
     [RelayCommand]
     private void ExpandZapretTuneSection()
     {
-        IsZapretTuneExpanded = true;
+        ZapretActiveTabIndex = 3; // Tools
     }
 
     [RelayCommand]

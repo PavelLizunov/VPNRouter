@@ -115,8 +115,17 @@ public class MainWindowViewModelCharacterizationTests
     // L_ZapretSummary{DetailsButton,StaleHint}. All cross-platform (no
     // PLATFORM_WINDOWS gates) so both Windows + Linux hashes drift.
     // Linux value will land via next CI failure log.
+    //
+    // v2.37.0-r25 bump (2026-05-25): TabControl replaces Expander on
+    // Zapret + TgProxy pages (chronic "can't scroll to bottom" bug fix
+    // discussed with user). MVM surface delta:
+    //   - REMOVED: _isZapretTuneExpanded boolean (was r24's expander gate)
+    //   - ADDED: _zapretActiveTabIndex int (drives 4-tab Zapret view)
+    //   - ADDED: _tgProxyActiveTabIndex int (drives 3-tab TgProxy view)
+    //   - ADDED: L_TgProxyTab{Settings,Version,Help} L_ getters
+    // Cross-platform; both hashes drift. Linux value will land via CI.
     private const string PinnedHashWindows =
-        "bea113fdf62f8276a99b2b64c684bd4e2762e1c36fa503e5006adb74db9197df";
+        "1cb60dc29d69060fb1b743caee85961b64c0aa42c7ec815ed89b59d72bf57b8c";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

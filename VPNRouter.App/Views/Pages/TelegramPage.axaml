@@ -386,33 +386,36 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- ────────── 5 · «Тонкая настройка» expander.
-                         All r3-era power-user controls live here, hidden
-                         by default per design transcript:
-                           «Порт / Secret / PID / GitHub / папка —
-                            спрятаны в свёрнутый блок "Тонкая настройка"
-                            внизу. По умолчанию закрыт.»
-                         The full Port + Secret + Update + Open folder +
-                         GitHub + setup hint stack is preserved as a
-                         single block — nothing removed, just stowed. -->
-                    <Expander Header="{Binding L_TgProxyOneTapTune}"
-                              FontSize="11"
-                              FontWeight="SemiBold"
-                              IsExpanded="False"
-                              Background="Transparent"
-                              BorderBrush="{DynamicResource BorderSubtleBrush}"
-                              BorderThickness="1"
-                              CornerRadius="{StaticResource RadiusSm}"
-                              Padding="10,6">
-                        <StackPanel Spacing="10" Margin="0,6,0,0">
+                    <!-- ────────── 5 · r25 — Тонкая настройка as TabControl.
+                         Replaces the prior Expander block. Same rationale
+                         as DpiBypassPage r25 — Expander-in-ScrollViewer was
+                         the chronic source of "can't scroll to bottom"
+                         complaints. Tabs give each section its own viewport.
+                         3 tabs (less content than Zapret so fewer tabs):
+                           0 — Настройки  (Port + Secret + Regenerate)
+                           1 — Версия     (Version + Update + Reopen + status)
+                           2 — Помощь     (Setup hint + Folder + GitHub) -->
 
-                            <!-- Description (kept as anchor copy). -->
-                            <TextBlock Text="{Binding LblTgProxyDescription}"
-                                       TextWrapping="Wrap"
-                                       FontSize="11"
-                                       LineHeight="16"
-                                       Opacity="0.7"
-                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                    <!-- Description kept OUTSIDE the TabControl as an
+                         anchor copy — visible regardless of which tab. -->
+                    <TextBlock Text="{Binding LblTgProxyDescription}"
+                               TextWrapping="Wrap"
+                               FontSize="11"
+                               LineHeight="16"
+                               Opacity="0.7"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               Margin="0,4,0,0"/>
+
+                    <TabControl SelectedIndex="{Binding TgProxyActiveTabIndex, Mode=TwoWay}"
+                                Background="Transparent"
+                                BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource RadiusSm}"
+                                Padding="10,6">
+
+                        <!-- ─── Tab 1: Настройки (Port + Secret) ─── -->
+                        <TabItem Header="{Binding L_TgProxyTabSettings}" FontSize="11">
+                            <StackPanel Spacing="10" Margin="0,6,0,0">
 
                             <!-- 2-column grid: Порт (120 px) | Secret (1fr). -->
                             <Grid ColumnDefinitions="120,*" ColumnSpacing="12">
@@ -463,6 +466,12 @@
                                     </Grid>
                                 </StackPanel>
                             </Grid>
+                            </StackPanel>
+                        </TabItem>
+
+                        <!-- ─── Tab 2: Версия (Update + Reopen + status) ─── -->
+                        <TabItem Header="{Binding L_TgProxyTabVersion}" FontSize="11">
+                            <StackPanel Spacing="10" Margin="0,6,0,0">
 
                             <!-- Version + Update banner. The body status
                                  dot here is informational; runtime state
@@ -507,23 +516,23 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Secondary action row — re-pair / folder / GitHub. -->
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Button Content="{Binding L_TgProxyReopenInTelegram}"
-                                        Command="{Binding OpenTgProxyInTelegramCommand}"
-                                        FontSize="10" Padding="10,5"
-                                        CornerRadius="{StaticResource RadiusSm}"
-                                        IsEnabled="{Binding TgProxyEnabled}"/>
-                                <Button Content="{Binding L_OpenFolder}"
-                                        Command="{Binding OpenTgProxyFolderCommand}"
-                                        FontSize="10" Padding="10,5"
-                                        CornerRadius="{StaticResource RadiusSm}"/>
-                                <Button Content="{Binding L_OpenGitHub}"
-                                        Command="{Binding OpenTgProxyGitHubCommand}"
-                                        FontSize="10" Padding="10,5"
-                                        CornerRadius="{StaticResource RadiusSm}"
-                                        Foreground="{DynamicResource AccentSolidBrush}"/>
+                            <!-- Reopen-in-Telegram lives on the Версия tab
+                                 because it's an action tied to current
+                                 connection state, not to settings. Folder
+                                 + GitHub move to the Помощь tab. -->
+                            <Button Content="{Binding L_TgProxyReopenInTelegram}"
+                                    Command="{Binding OpenTgProxyInTelegramCommand}"
+                                    FontSize="10" Padding="10,5"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
+                                    CornerRadius="{StaticResource RadiusSm}"
+                                    IsEnabled="{Binding TgProxyEnabled}"/>
                             </StackPanel>
+                        </TabItem>
+
+                        <!-- ─── Tab 3: Помощь (Setup hint + Folder/GitHub + credit) ─── -->
+                        <TabItem Header="{Binding L_TgProxyTabHelp}" FontSize="11">
+                            <StackPanel Spacing="10" Margin="0,6,0,0">
 
                             <!-- Manual setup hint (for clients without
                                  working tg:// scheme — covers the long
@@ -540,6 +549,19 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- Folder + GitHub side by side. -->
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Button Content="{Binding L_OpenFolder}"
+                                        Command="{Binding OpenTgProxyFolderCommand}"
+                                        FontSize="10" Padding="10,5"
+                                        CornerRadius="{StaticResource RadiusSm}"/>
+                                <Button Content="{Binding L_OpenGitHub}"
+                                        Command="{Binding OpenTgProxyGitHubCommand}"
+                                        FontSize="10" Padding="10,5"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Foreground="{DynamicResource AccentSolidBrush}"/>
+                            </StackPanel>
+
                             <!-- Author credit. -->
                             <TextBlock Text="Flowseal/tg-ws-proxy"
                                        FontSize="9"
@@ -547,8 +569,10 @@
                                        Foreground="{DynamicResource TextMutedBrush}"
                                        HorizontalAlignment="Left"/>
 
-                        </StackPanel>
-                    </Expander>
+                            </StackPanel>
+                        </TabItem>
+
+                    </TabControl>
 
                 </StackPanel>
             </Grid>

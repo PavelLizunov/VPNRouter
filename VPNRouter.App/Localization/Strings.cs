@@ -450,6 +450,11 @@ public static class Strings
     public static string TgProxyOneTapTune  => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapTune;
     public static string TgProxyOneTapAirPill(int port) => global::VPNRouter.Core.Localization.Strings.TgProxyOneTapAirPill(port);
 
+    // v2.37.0-r25 — TgProxy TabControl tab-header pass-throughs.
+    public static string TgProxyTabSettings => global::VPNRouter.Core.Localization.Strings.TgProxyTabSettings;
+    public static string TgProxyTabVersion  => global::VPNRouter.Core.Localization.Strings.TgProxyTabVersion;
+    public static string TgProxyTabHelp     => global::VPNRouter.Core.Localization.Strings.TgProxyTabHelp;
+
     // v2.36.0-r8 — ZapretOneTap hero copy (variant A · Centered stack).
     public static string ZapretOneTapTitleStopped => global::VPNRouter.Core.Localization.Strings.ZapretOneTapTitleStopped;
     public static string ZapretOneTapTitleProbing => global::VPNRouter.Core.Localization.Strings.ZapretOneTapTitleProbing;
