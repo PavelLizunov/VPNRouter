@@ -209,8 +209,13 @@ public class MainWindowViewModelCharacterizationTests
     // surface delta on Linux side (every -rN bumped Windows hash but
     // deferred Linux until CI fail captured it; this commit pays the
     // accumulated debt). New value captured from r29 CI run 26408407641.
+    // v2.37.0-r35 (2026-05-25): bumped to capture r31..r34 cumulative surface
+    // (ToggleButton tabs ObservableProperties: ZapretActiveTabIndex /
+    // TgProxyActiveTabIndex / IsZapretTab0..3 / IsTgProxyTab0..2 /
+    // SetZapretTabCommand / SetTgProxyTabCommand / CancelZapretProbeCommand /
+    // HasZapretStrategiesForQuickStart). New value from r34 CI 26414771272.
     private const string PinnedHashLinux =
-        "94dae043424e7709f57e45513bff945011b68813a6f3ae2095b6c2572726f775";
+        "a1a6bc2d4c1f5a24f3c4bd53b947da9dd17e48f3711f24938d88fc2cc6481fa7";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()
