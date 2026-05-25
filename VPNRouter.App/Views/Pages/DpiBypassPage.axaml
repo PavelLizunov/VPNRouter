@@ -48,12 +48,12 @@
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto"
                       AllowAutoHide="False"
-                      Padding="0,8,0,24">
-            <!-- v2.37.0-r21 — bumped bottom padding from 10 to 24px to give the
-                 last items in the expanded "Тонкая настройка" section enough
-                 breathing room above the fixed footer. Pre-r21 the cache UI
-                 row at the bottom of the expander was clipped by the footer
-                 even after scrolling to the bottom. -->
+                      Padding="0,8,0,60">
+            <!-- v2.37.0-r21/r22 — bumped bottom padding from 10 → 24 (r21,
+                 not enough) → 60 (r22). The cache UI row at the bottom of
+                 the expanded "Тонкая настройка" was still clipped after r21.
+                 60 px gives the cache button row (~32 px tall) + comfortable
+                 margin above the fixed footer. -->
             <Grid Margin="12,0,14,0">
                 <StackPanel Spacing="12">
 
@@ -584,15 +584,10 @@
                             </StackPanel>
 
                             <!-- v2.37.0-r11 — Zapret probe cache controls (Tools sub-section).
-                                 Reads the cache state on every render via LblZapretCacheStatus,
-                                 exposes Force-fresh + Clear-cache commands so power users can
-                                 re-probe after a network change or wipe the cache for testing. -->
+                                 r22: buttons moved ABOVE status text + WrapPanel for narrow
+                                 windows so last items always visible. -->
                             <StackPanel Spacing="6" Margin="0,6,0,0">
-                                <TextBlock Text="{Binding LblZapretCacheStatus}"
-                                           FontSize="10" Opacity="0.6"
-                                           TextWrapping="Wrap"
-                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                <WrapPanel ItemSpacing="6" LineSpacing="6">
                                     <Button Content="{Binding L_ZapretForceFreshProbeButton}"
                                             Command="{Binding ForceFreshProbeCommand}"
                                             IsEnabled="{Binding !IsZapretProbing}"
@@ -602,7 +597,11 @@
                                             Command="{Binding ClearZapretCacheCommand}"
                                             FontSize="10" Padding="8,4"
                                             CornerRadius="{StaticResource RadiusSm}"/>
-                                </StackPanel>
+                                </WrapPanel>
+                                <TextBlock Text="{Binding LblZapretCacheStatus}"
+                                           FontSize="10" Opacity="0.6"
+                                           TextWrapping="Wrap"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
                             </StackPanel>
 
                         </StackPanel>

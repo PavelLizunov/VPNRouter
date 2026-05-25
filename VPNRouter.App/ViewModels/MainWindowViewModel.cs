@@ -4609,6 +4609,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [RelayCommand]
     private async Task StartZapretWithSelectedStrategyAsync()
     {
+#if PLATFORM_WINDOWS
         var idx = ZapretStrategyIndex;
         if (idx < 0 || idx >= ZapretStrategies.Count)
         {
@@ -4690,6 +4691,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             ZapretStatus = Strings.ZapretSelectedStrategyFailed(strategyName) + " (" + ex.Message + ")";
         }
         OnPropertyChanged(nameof(LblZapretCacheStatus));
+#else
+        // Zapret is Windows-only. On Mac/Linux the button stays bound for
+        // XAML compile but pressing it is a no-op.
+        await Task.CompletedTask;
+#endif
     }
 
     private void StartZapretProbeElapsedTimer()
