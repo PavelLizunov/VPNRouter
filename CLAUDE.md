@@ -75,6 +75,7 @@ gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json isPrerelease,assets
 | `audit-overflow-fix` | UI overflow / стилевое несоответствие на settings page |
 | `merge-design-handoff` | User шлёт `claude.ai/design` URL — fetch + extract + map tokens |
 | `update-readme-versions` | После каждого release бампим version examples в README |
+| `post-ship-mcp-verify` | **MUST** запускать после каждого ship-rolling-candidate (auto-chain). Download → install → launch → computer-use клики → log scan → PASS/FAIL report. v2.37.0-r21+. |
 
 ## Memory layer
 
@@ -161,6 +162,20 @@ Open Tasks / Last session log.
     (r7..r18) с красным commit-CI потому что я забывал проверять между
     ships — единственный red-X X на главной странице commits — и tag-level
     CI (build-mac/linux на тэге) скрывал что push-event CI красный.
+
+12. **Post-ship MCP verify обязательный** (added 2026-05-25, расширение
+    rule #1a). После каждого `ship-rolling-candidate` (-rN tag создан +
+    binary uploaded) — **MUST** запустить `post-ship-mcp-verify` skill.
+    Skill автоматически: download ZIP from GitHub release → install over
+    `C:/Program Files/VPNRouter/app/` → launch → walk через changed pages
+    via `mcp__vpnrouter-test__*` (clicks + screenshots) → tail
+    `vpnrouter*.log` for `[ERR]`/`Exception`/`FATAL` patterns → PASS/FAIL
+    report. Реализация: `.claude/skills/post-ship-mcp-verify/SKILL.md` +
+    `scripts/post-ship-install-launch.ps1` + per-feature checklists в
+    `references/checklist-{zapret,tgproxy,vpn-core,network-settings,
+    free-configs,localization}.md`. Урок: 12 ships в r7..r18 batch с
+    красным CI И БЕЗ local MCP test потому что я полагался на тэг-level
+    CI green. Combined с rule #11 теперь невозможно skip обе проверки.
 
 ## Git safety
 

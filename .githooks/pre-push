@@ -57,7 +57,7 @@ fi
 # and therefore doesn't exist on GitHub. The script's default of HEAD
 # is for after-push verification; pre-push passes -Commit HEAD^1.
 echo "[pre-push] Verifying previous commit CI via tools/verify-last-commit-ci.ps1..."
-if powershell -ExecutionPolicy Bypass -File "$SCRIPT" -Commit "HEAD^1" 2>&1 | tee /tmp/vpnrouter-ci-check.log | tail -3 | grep -q "^OK -"; then
+if powershell -ExecutionPolicy Bypass -File "$SCRIPT" -Commit "HEAD^1" 2>&1 | tee /tmp/vpnrouter-ci-check.log | tail -3 | grep -qE "^OK[: -]"; then
     echo "[pre-push] CI green — push allowed."
     exit 0
 fi
