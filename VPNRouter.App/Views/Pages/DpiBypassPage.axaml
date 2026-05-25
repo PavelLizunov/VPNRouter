@@ -129,8 +129,11 @@
                             Padding="20,14,20,14"
                             ClipToBounds="True">
                         <Grid>
-                            <!-- Soft accent glow disc behind the content. -->
-                            <Ellipse Width="320" Height="320"
+                            <!-- Soft accent glow disc behind the content.
+                                 r32: 320→180 to shrink Hero card minimum height.
+                                 Was forcing Hero to ~350px even after r31 padding
+                                 reduction; tabs got squeezed off-screen. -->
+                            <Ellipse Width="180" Height="180"
                                      HorizontalAlignment="Center"
                                      VerticalAlignment="Center"
                                      Opacity="0.65"
@@ -372,28 +375,14 @@
                          tabs are horizontal here for the narrower 520px
                          default window). -->
 
-                    <!-- Description + warning banner stay OUTSIDE the TabControl
-                         so they're visible regardless of which tab is active. -->
-                    <TextBlock TextWrapping="Wrap" FontSize="11" LineHeight="16" Opacity="0.7"
-                               Foreground="{DynamicResource TextSecondaryBrush}"
-                               Text="{Binding LblDpiDescription}"
-                               Margin="0,4,0,0"/>
-
-                    <Border Padding="10,8" CornerRadius="{StaticResource RadiusSm}"
-                            Background="{DynamicResource WarningBgBrush}"
-                            BorderBrush="{DynamicResource WarningBorderBrush}"
-                            BorderThickness="1">
-                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                            <TextBlock Grid.Column="0" Text="!"
-                                       Foreground="{DynamicResource WarningFgBrush}"
-                                       FontSize="11" FontWeight="Bold"
-                                       VerticalAlignment="Top"/>
-                            <TextBlock Grid.Column="1" TextWrapping="Wrap"
-                                       FontSize="10"
-                                       Foreground="{DynamicResource WarningFgBrush}"
-                                       Text="{Binding LblDpiWarning}"/>
-                        </Grid>
-                    </Border>
+                    <!-- r32: Description + Warning REMOVED from Row 0. They
+                         duplicated the Hero card's lede ("Скачаем zapret,
+                         поставим Discord hosts, подберём рабочую стратегию")
+                         and ate ~100px that pushed tabs off-screen. Warning
+                         "Только Windows" already conveyed by the platform-
+                         gated commands themselves (tabs are no-ops on
+                         Linux/macOS). User rule satisfied: main button
+                         always visible + tabs always visible. -->
 
             </StackPanel>
 

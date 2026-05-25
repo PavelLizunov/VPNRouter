@@ -104,7 +104,10 @@
                                  with opacity .85 on a 280×280 area. We render
                                  it via an Ellipse so the brush coordinates stay
                                  anchored to the circular bounds. -->
-                            <Ellipse Width="320" Height="320"
+                            <!-- r32: 320→180 (same fix as DpiBypassPage r32) — Ellipse
+                                 was setting Hero card min-height to ~350px,
+                                 squeezing tabs off-screen. Visual flair only. -->
+                            <Ellipse Width="180" Height="180"
                                      HorizontalAlignment="Center"
                                      VerticalAlignment="Center"
                                      Opacity="0.65"
@@ -395,15 +398,8 @@
                            1 — Версия     (Version + Update + Reopen + status)
                            2 — Помощь     (Setup hint + Folder + GitHub) -->
 
-                    <!-- Description kept OUTSIDE the TabControl as an
-                         anchor copy — visible regardless of which tab. -->
-                    <TextBlock Text="{Binding LblTgProxyDescription}"
-                               TextWrapping="Wrap"
-                               FontSize="11"
-                               LineHeight="16"
-                               Opacity="0.7"
-                               Foreground="{DynamicResource TextSecondaryBrush}"
-                               Margin="0,4,0,0"/>
+                    <!-- r32: Description REMOVED from Row 0 — duplicated
+                         Hero lede and ate space that pushed tabs off-screen. -->
 
             </StackPanel>
 
