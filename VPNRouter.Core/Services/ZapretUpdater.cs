@@ -45,6 +45,13 @@ public enum ZapretErrorCategory
 public class ZapretUpdater
 {
     private const string FlowsealRepo = "Flowseal/zapret-discord-youtube";
+
+    /// <summary>
+    /// r37 — exposed for the start-flow auto-update check. The MVM's
+    /// ZapretOneClickAsync uses <see cref="RemoteVersionChecker.GetLatestTagAsync"/>
+    /// with this repo string to detect newer upstream releases.
+    /// </summary>
+    public const string FlowsealRepoPublic = FlowsealRepo;
     private const string GitHubApiBase = "https://api.github.com/repos";
 
     /// <summary>Prevents concurrent downloads — double-click / rebind races.</summary>

@@ -48,6 +48,16 @@ using Serilog;
 
 namespace VPNRouter.Core.Services;
 
+public sealed class ZapretStrategyTestResult
+{
+    /// <summary>How many DPI test labels passed during the probe (status=OK).</summary>
+    public int Passed { get; set; }
+    /// <summary>Total DPI test labels run for the strategy.</summary>
+    public int Total { get; set; }
+    /// <summary>UTC timestamp when the strategy was tested.</summary>
+    public DateTime At { get; set; } = DateTime.UtcNow;
+}
+
 public sealed class ZapretProbeCacheEntry
 {
     public string Strategy { get; set; } = string.Empty;
@@ -62,7 +72,15 @@ public sealed class ZapretProbeCacheEntry
     public int TargetsPassed { get; set; }
     public int TargetsTotal { get; set; }
 
-    public int SchemaVersion { get; set; } = 2;
+    // r37 — per-strategy results from the last full sweep. Allows the Hero
+    // ComboBox to badge every probed strategy (✓ 5/5 / ⚠ 3/5 / ✗ 0/5),
+    // not just the winner. Keyed by strategy display name (matches the
+    // string Flowseal emits in "[N/T] strategy.bat" header line). Empty
+    // dict on v1/v2 cache entries — UI gracefully degrades to "no badge".
+    public Dictionary<string, ZapretStrategyTestResult> PerStrategyResults { get; set; }
+        = new Dictionary<string, ZapretStrategyTestResult>(StringComparer.Ordinal);
+
+    public int SchemaVersion { get; set; } = 3;
 
     /// <summary>
     /// True if this cache entry is recent (sweep within 7d) and reliable
@@ -187,6 +205,82 @@ public static class ZapretProbeCache
     /// </summary>
     public static void RecordSuccess(string strategy, ILogger? logger = null)
         => RecordSuccess(strategy, 0, 0, logger);
+
+    /// <summary>
+    /// r37 — persist the full per-strategy results of a sweep alongside the
+    /// winner. Each entry in <paramref name="perStrategyResults"/> records
+    /// how many DPI test labels passed for that strategy. Use this so the
+    /// Hero ComboBox can badge every probed strategy, not just the winner.
+    ///
+    /// <para>Called from <c>ZapretAutoStrategy.Sweep</c> at the end of a
+    /// full sweep (including early-exit when a winner aces enough targets
+    /// to be confident — the partial sweep's data is still useful for the
+    /// strategies that DID get tested).</para>
+    /// </summary>
+    /// <param name="winner">Winning strategy name (may be empty if the
+    /// sweep ended with no winner; results still get persisted).</param>
+    /// <param name="winnerPassed">Winner's pass count (0 if no winner).</param>
+    /// <param name="winnerTotal">Winner's probe total (0 if no winner).</param>
+    /// <param name="perStrategyResults">All strategies tested during this
+    /// sweep, keyed by display name. May be empty (probe failed before any
+    /// strategy completed).</param>
+    public static void RecordSweepResults(
+        string winner,
+        int winnerPassed,
+        int winnerTotal,
+        Dictionary<string, ZapretStrategyTestResult> perStrategyResults,
+        ILogger? logger = null)
+    {
+        try
+        {
+            Directory.CreateDirectory(AppPaths.CacheDir);
+            var existing = TryLoad(logger);
+            var now = DateTime.UtcNow;
+
+            // Merge per-strategy results — keep older results for strategies
+            // not in THIS sweep (e.g. user picked a quick-strategy that
+            // didn't run a full sweep). Newer results overwrite older.
+            var merged = (existing?.PerStrategyResults != null
+                ? new Dictionary<string, ZapretStrategyTestResult>(
+                    existing.PerStrategyResults, StringComparer.Ordinal)
+                : new Dictionary<string, ZapretStrategyTestResult>(StringComparer.Ordinal));
+
+            if (perStrategyResults != null)
+            {
+                foreach (var kv in perStrategyResults)
+                {
+                    merged[kv.Key] = kv.Value;
+                }
+            }
+
+            var hasWinner = !string.IsNullOrWhiteSpace(winner);
+            var entry = new ZapretProbeCacheEntry
+            {
+                Strategy = hasWinner ? winner : (existing?.Strategy ?? string.Empty),
+                LastSuccessAt = hasWinner ? now : (existing?.LastSuccessAt ?? DateTime.MinValue),
+                LastSweepAt = now,
+                SuccessRunCount = hasWinner
+                    ? ((existing != null
+                        && string.Equals(existing.Strategy, winner, StringComparison.Ordinal))
+                        ? existing.SuccessRunCount + 1
+                        : 1)
+                    : (existing?.SuccessRunCount ?? 0),
+                LastFailureCount = hasWinner ? 0 : (existing?.LastFailureCount ?? 0),
+                TargetsPassed = winnerPassed,
+                TargetsTotal = winnerTotal,
+                PerStrategyResults = merged,
+                SchemaVersion = 3,
+            };
+            WriteAtomic(entry, logger);
+            logger?.Information(
+                "[ZapretProbeCache] Recorded sweep results: winner={Winner} ({P}/{T}), perStrategy={N} entries",
+                hasWinner ? winner : "<none>", winnerPassed, winnerTotal, merged.Count);
+        }
+        catch (Exception ex)
+        {
+            logger?.Warning(ex, "[ZapretProbeCache] RecordSweepResults failed");
+        }
+    }
 
     /// <summary>
     /// Record a failure of the cached strategy. Bumps LastFailureCount; after

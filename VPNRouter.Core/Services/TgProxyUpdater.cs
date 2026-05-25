@@ -12,6 +12,14 @@ namespace VPNRouter.Core.Services;
 public class TgProxyUpdater
 {
     private const string ProxyRepo = "Flowseal/tg-ws-proxy";
+
+    /// <summary>
+    /// r37 — exposed for the start-flow auto-update check. The MVM's
+    /// ToggleTgProxyAsync uses <see cref="RemoteVersionChecker.GetLatestTagAsync"/>
+    /// with this repo string to detect newer upstream releases.
+    /// </summary>
+    public const string ProxyRepoPublic = ProxyRepo;
+
     private const string GitHubApiBase = "https://api.github.com/repos";
     private const string PythonVersion = "3.12.7";
     private const string PythonZipUrl = $"https://www.python.org/ftp/python/{PythonVersion}/python-{PythonVersion}-embed-amd64.zip";

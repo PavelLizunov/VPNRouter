@@ -4324,8 +4324,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var passed = cached?.TargetsPassed ?? 0;
         var total = cached?.TargetsTotal ?? 0;
 
+        // r37: pull per-strategy probe results (each strategy tested in
+        // the last sweep gets a ✓/⚠/✗ badge based on its pass rate).
+        var perStrategy = cached?.PerStrategyResults
+            ?? new System.Collections.Generic.Dictionary<string, VPNRouter.Core.Services.ZapretStrategyTestResult>(StringComparer.Ordinal);
+
         foreach (var name in ZapretStrategies)
         {
+            // Winner gets the most authoritative badge (✓/⚠ from main
+            // cache fields). Non-winners fall back to per-strategy probe
+            // data if we have it from the same sweep.
             if (!string.IsNullOrEmpty(winnerName)
                 && string.Equals(name, winnerName, StringComparison.Ordinal))
             {
@@ -4343,11 +4351,21 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 {
                     display.Add(name);
                 }
+                continue;
+            }
+
+            // r37: non-winner badging from per-strategy sweep results.
+            if (perStrategy.TryGetValue(name, out var result) && result.Total > 0)
+            {
+                if (result.Passed == result.Total)
+                    display.Add($"{name}  ✓ {result.Passed}/{result.Total}");
+                else if (result.Passed == 0)
+                    display.Add($"{name}  ✗ 0/{result.Total}");
+                else
+                    display.Add($"{name}  ⚠ {result.Passed}/{result.Total}");
             }
             else
             {
-                // r36: no per-strategy data yet — show raw name.
-                // r37+: lookup from extended cache and append ✓/✗ score.
                 display.Add(name);
             }
         }
@@ -4688,12 +4706,42 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // Phase 1 — install if missing.
+        // Phase 1 — install if missing OR if upstream has a newer release.
+        // r37: auto-update on every start. RemoteVersionChecker uses a 6-hour
+        // TTL cache so we don't hammer GitHub on rapid restarts. If the check
+        // fails (network down, rate-limit, etc.) we gracefully fall back to
+        // "install only if missing" — never breaks the start flow.
         if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled())
         {
             ZapretStatus = Strings.ZapretOneTapDownloading;
             await UpdateZapretAsync();
             if (!VPNRouter.Core.Services.ZapretUpdater.IsInstalled()) return;
+        }
+        else
+        {
+            try
+            {
+                var remoteTag = await VPNRouter.Core.Services.RemoteVersionChecker.GetLatestTagAsync(
+                    VPNRouter.Core.Services.ZapretUpdater.FlowsealRepoPublic,
+                    userAgent: $"VPNRouter/{VPNRouter.Core.AppVersion.Version}",
+                    _logger,
+                    System.Threading.CancellationToken.None);
+                var localTag = VPNRouter.Core.Services.ZapretUpdater.GetLocalVersion();
+                if (VPNRouter.Core.Services.RemoteVersionChecker.IsNewer(remoteTag, localTag))
+                {
+                    _logger.Information(
+                        "[VM] OneTap: Zapret update available {Local} → {Remote}, auto-applying",
+                        localTag, remoteTag);
+                    ZapretStatus = IsRussian
+                        ? $"Обновление Zapret до {remoteTag}…"
+                        : $"Updating Zapret to {remoteTag}…";
+                    await UpdateZapretAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "[VM] OneTap: Zapret remote version check failed (non-fatal)");
+            }
         }
 
         // Phase 2a — Discord hosts ensure-installed (default ON for one-tap).
@@ -5421,13 +5469,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                         // sweep aborted just before pass-count update), the
                         // overload defaults to 0/0 and the Hero card
                         // gracefully omits the "X из Y" line.
-                        VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(
+                        // r37: record ALL per-strategy results from the sweep
+                        // (not just the winner), so the Hero ComboBox can badge
+                        // every probed strategy with ✓/⚠/✗ from this run.
+                        var perStrategy = sweep.PerStrategyResults != null
+                            ? new System.Collections.Generic.Dictionary<string, VPNRouter.Core.Services.ZapretStrategyTestResult>(
+                                sweep.PerStrategyResults, StringComparer.Ordinal)
+                            : new System.Collections.Generic.Dictionary<string, VPNRouter.Core.Services.ZapretStrategyTestResult>(StringComparer.Ordinal);
+                        VPNRouter.Core.Services.ZapretProbeCache.RecordSweepResults(
                             sweep.Winner,
                             ZapretProbePassCount,
                             ZapretProbeTotalCount,
+                            perStrategy,
                             _logger);
                         // r36: refresh Hero ComboBox display so the ✓ N/M badge
                         // shows up next to the just-verified winner immediately.
+                        // r37: also picks up per-strategy badges from the same cache load.
                         RefreshZapretStrategiesDisplay();
                         NotifyZapretSummaryChanged();
                         SaveSettings();
@@ -5886,11 +5943,39 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // entry/decision logs in VPNRouterService.cs:331+ exactly.
         _logger.Information("[VM] ToggleTgProxyAsync: start path entered");
 
-        // Auto-download if not installed
+        // Auto-download if not installed.
+        // r37: auto-update on every start if installed but upstream newer.
+        // 6-hour TTL cache via RemoteVersionChecker keeps GitHub-API quiet.
         if (!TgProxyUpdater.IsInstalled(_logger))
         {
             await UpdateTgProxyAsync();
             if (!TgProxyUpdater.IsInstalled(_logger)) return;
+        }
+        else
+        {
+            try
+            {
+                var remoteTag = await VPNRouter.Core.Services.RemoteVersionChecker.GetLatestTagAsync(
+                    TgProxyUpdater.ProxyRepoPublic,
+                    userAgent: $"VPNRouter/{VPNRouter.Core.AppVersion.Version}",
+                    _logger,
+                    System.Threading.CancellationToken.None);
+                var localTag = TgProxyUpdater.GetLocalVersion();
+                if (VPNRouter.Core.Services.RemoteVersionChecker.IsNewer(remoteTag, localTag))
+                {
+                    _logger.Information(
+                        "[VM] TgProxy: update available {Local} → {Remote}, auto-applying",
+                        localTag, remoteTag);
+                    TgProxyStatus = IsRussian
+                        ? $"Обновление TgProxy до {remoteTag}…"
+                        : $"Updating TgProxy to {remoteTag}…";
+                    await UpdateTgProxyAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "[VM] TgProxy: remote version check failed (non-fatal)");
+            }
         }
 
         try

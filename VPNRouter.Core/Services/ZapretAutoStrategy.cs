@@ -407,7 +407,12 @@ public static class ZapretAutoStrategy
         int TotalCount,
         string FullOutput,
         string? Diagnostic = null,
-        IReadOnlyList<string>? ErrorLines = null);
+        IReadOnlyList<string>? ErrorLines = null,
+        // r37 — per-strategy results captured during the sweep. Each strategy
+        // that produced at least one status line ends up here. Allows the
+        // Hero ComboBox to badge every probed strategy, not just the winner.
+        // Null/empty when sweep failed before any strategy completed.
+        IReadOnlyDictionary<string, ZapretStrategyTestResult>? PerStrategyResults = null);
 
     /// <summary>
     /// Run Flowseal's `utils/test zapret.ps1` with auto-answers (mode=DPI,
@@ -499,6 +504,14 @@ public static class ZapretAutoStrategy
         string currentStrategyName = string.Empty;
         bool earlyWinnerKilled = false;
 
+        // r37: per-strategy results table. Filled out as each strategy
+        // completes (the NEXT configHeaderRx match closes out the
+        // previous one). Also finalized once after the loop ends to
+        // capture the very last strategy's score.
+        var perStrategyResults = new Dictionary<string, ZapretStrategyTestResult>(
+            StringComparer.Ordinal);
+        var perStrategyLock = new object();
+
         // r4 C.4 — error-line ring buffer. Captures the last 8 [ERROR]/
         // [WARN]/[WARNING] lines for surface to the user via toast when
         // sweep returns no winner. Bounded so a chatty script can't OOM.
@@ -533,13 +546,34 @@ public static class ZapretAutoStrategy
                 && int.TryParse(m.Groups[1].Value, out var n)
                 && int.TryParse(m.Groups[2].Value, out var t))
             {
+                // r37: finalize previous strategy's result BEFORE resetting
+                // counters. The very first configHeaderRx hit has empty
+                // currentStrategyName so this skips cleanly.
+                int prevOk, prevTotal;
+                string prevName;
                 lock (counterLock)
                 {
+                    prevOk = currentOkCount;
+                    prevTotal = currentTotalChecks;
+                    prevName = currentStrategyName;
                     currentOkCount = 0;
                     currentTotalChecks = 0;
                     testedCount = n;
                     totalCount = t;
                 }
+                if (!string.IsNullOrEmpty(prevName) && prevTotal > 0)
+                {
+                    lock (perStrategyLock)
+                    {
+                        perStrategyResults[prevName] = new ZapretStrategyTestResult
+                        {
+                            Passed = prevOk,
+                            Total = prevTotal,
+                            At = DateTime.UtcNow,
+                        };
+                    }
+                }
+
                 var strategy = m.Groups[3].Value.Trim();
                 currentStrategyName = strategy;  // r33: remember for early-winner
                 progress?.Report(new FlowsealProgress(n, t, strategy, 0, 0));
@@ -694,11 +728,45 @@ public static class ZapretAutoStrategy
         IReadOnlyList<string> finalErrors;
         lock (counterLock) { finalErrors = errorLines.ToArray(); }
 
-        logger?.Information("[ZapretAutoStrategy] Flowseal sweep exited code={Code}, tested={N}/{Total}, winner={W}, errs={E}",
-            proc.HasExited ? proc.ExitCode : -1, testedCount, totalCount, winner ?? "<none>", finalErrors.Count);
+        // r37: finalize the very last strategy's result (the loop only
+        // records previous strategies when a NEW configHeaderRx matches,
+        // so the last one — possibly the winner — needs an explicit close).
+        int lastOk, lastTotal;
+        string lastName;
+        lock (counterLock)
+        {
+            lastOk = currentOkCount;
+            lastTotal = currentTotalChecks;
+            lastName = currentStrategyName;
+        }
+        if (!string.IsNullOrEmpty(lastName) && lastTotal > 0)
+        {
+            lock (perStrategyLock)
+            {
+                perStrategyResults[lastName] = new ZapretStrategyTestResult
+                {
+                    Passed = lastOk,
+                    Total = lastTotal,
+                    At = DateTime.UtcNow,
+                };
+            }
+        }
+
+        IReadOnlyDictionary<string, ZapretStrategyTestResult> perStrategySnap;
+        lock (perStrategyLock)
+        {
+            perStrategySnap = new Dictionary<string, ZapretStrategyTestResult>(
+                perStrategyResults, StringComparer.Ordinal);
+        }
+
+        logger?.Information(
+            "[ZapretAutoStrategy] Flowseal sweep exited code={Code}, tested={N}/{Total}, winner={W}, errs={E}, perStrategy={S}",
+            proc.HasExited ? proc.ExitCode : -1, testedCount, totalCount,
+            winner ?? "<none>", finalErrors.Count, perStrategySnap.Count);
 
         return new FlowsealSweepResult(winner, testedCount, totalCount, outputBuilder.ToString(),
-            Diagnostic: timeoutDiagnostic, ErrorLines: finalErrors);
+            Diagnostic: timeoutDiagnostic, ErrorLines: finalErrors,
+            PerStrategyResults: perStrategySnap);
     }
 
     /// <summary>

@@ -220,8 +220,12 @@ public class MainWindowViewModelCharacterizationTests
     // TgProxyActiveTabIndex / IsZapretTab0..3 / IsTgProxyTab0..2 /
     // SetZapretTabCommand / SetTgProxyTabCommand / CancelZapretProbeCommand /
     // HasZapretStrategiesForQuickStart). New value from r34 CI 26414771272.
+    // v2.37.0-r37 (2026-05-25): bumped to capture r36 bad-combo + r36 strategy
+    // status surface (IsBadComboWarningVisible + 4 Lbl* strings +
+    // DisableBadComboLockdownCommand + DisableBadComboRuBypassCommand +
+    // ZapretStrategiesDisplay). New value from r36 CI job 77763204697.
     private const string PinnedHashLinux =
-        "a1a6bc2d4c1f5a24f3c4bd53b947da9dd17e48f3711f24938d88fc2cc6481fa7";
+        "cafc0b22164bbec176121369c6c38063d4d19fed75b910bd73f6ca51e3b146c8";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()
