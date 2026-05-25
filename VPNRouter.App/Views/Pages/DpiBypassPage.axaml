@@ -227,7 +227,9 @@
                                      already convey the same flow). Removal saves
                                      ~70px height — Hero now fits without scroll. -->
 
-                                <!-- Probe progress bar (only during probing). -->
+                                <!-- Probe progress bar (only during probing).
+                                     r33: + Cancel button so user can abort the
+                                     2-7 min sweep at any time. -->
                                 <StackPanel IsVisible="{Binding IsZapretProbing}"
                                             Spacing="6"
                                             HorizontalAlignment="Center">
@@ -246,6 +248,17 @@
                                                Foreground="{DynamicResource TextSecondaryBrush}"
                                                TextAlignment="Center"
                                                HorizontalAlignment="Center"/>
+                                    <!-- r33: Cancel button. Triggers cts.Cancel
+                                         in MVM → proc.Kill in ZapretAutoStrategy. -->
+                                    <Button Content="{Binding L_ZapretCancelProbeButton}"
+                                            Command="{Binding CancelZapretProbeCommand}"
+                                            FontSize="10" Padding="10,3"
+                                            CornerRadius="{StaticResource RadiusSm}"
+                                            HorizontalAlignment="Center"
+                                            Background="Transparent"
+                                            BorderBrush="{DynamicResource DangerBorderBrush}"
+                                            BorderThickness="1"
+                                            Foreground="{DynamicResource DangerSolidBrush}"/>
                                 </StackPanel>
 
                                 <!-- Air pill (only when running). -->

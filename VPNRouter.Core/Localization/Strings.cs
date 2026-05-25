@@ -299,6 +299,11 @@ public static class Strings
         ? "Стратегия проверялась более 7 дней назад. Рекомендуем перепроверить."
         : "Strategy hasn't been checked in over 7 days. Re-verify recommended.";
 
+    // r33: Cancel button shown during probe (Hero card).
+    public static string ZapretCancelProbeButton => Ru
+        ? "Отменить"
+        : "Cancel";
+
     // Relative-time formatter outputs (used by FormatRelativeTime).
     // "только что" / "12 минут назад" / "2 часа назад" / "3 дня назад" /
     // "давно".

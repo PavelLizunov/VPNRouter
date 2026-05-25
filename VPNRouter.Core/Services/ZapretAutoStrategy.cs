@@ -491,6 +491,14 @@ public static class ZapretAutoStrategy
         int currentTotalChecks = 0;
         var counterLock = new object();
 
+        // r33: track current strategy name so early-winner detection can
+        // record the winner. Flowseal's "Best config:" line comes at the
+        // very end after iterating EVERY strategy — that's the 2-7 min
+        // wait user complained about. Early-exit kills the script as
+        // soon as a strategy aces enough targets to be confident.
+        string currentStrategyName = string.Empty;
+        bool earlyWinnerKilled = false;
+
         // r4 C.4 — error-line ring buffer. Captures the last 8 [ERROR]/
         // [WARN]/[WARNING] lines for surface to the user via toast when
         // sweep returns no winner. Bounded so a chatty script can't OOM.
@@ -533,6 +541,7 @@ public static class ZapretAutoStrategy
                     totalCount = t;
                 }
                 var strategy = m.Groups[3].Value.Trim();
+                currentStrategyName = strategy;  // r33: remember for early-winner
                 progress?.Report(new FlowsealProgress(n, t, strategy, 0, 0));
                 return;
             }
@@ -562,6 +571,29 @@ public static class ZapretAutoStrategy
                     // ViewModel keeps last-known StrategyName so empty is fine.
                     // Use empty-string strategy to signal "score update only".
                     progress?.Report(new FlowsealProgress(snapN, snapT, string.Empty, snapOk, snapTotal));
+                }
+
+                // r33: early-winner detection. If the current strategy has
+                // ALL checks pass (100% OK) AND we've gathered enough samples
+                // (>=16, typical strategy = 24 status lines: 8 targets × 3
+                // test labels HTTP/TLS1.2/TLS1.3), declare it the winner
+                // and kill the script. Saves user 2-7 min of waiting
+                // through every remaining strategy that won't beat 100%.
+                if (!earlyWinnerKilled
+                    && snapOk == snapTotal
+                    && snapTotal >= 16
+                    && !string.IsNullOrEmpty(currentStrategyName))
+                {
+                    earlyWinnerKilled = true;
+                    winner = currentStrategyName;
+                    logger?.Information(
+                        "[ZapretAutoStrategy] Early winner detected: {Strategy} ({Ok}/{Total}) — killing script",
+                        winner, snapOk, snapTotal);
+                    try { proc.Kill(entireProcessTree: true); }
+                    catch (Exception ex)
+                    {
+                        logger?.Warning(ex, "[ZapretAutoStrategy] Early-kill threw (proc may already be dead)");
+                    }
                 }
                 return;
             }

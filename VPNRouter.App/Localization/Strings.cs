@@ -172,6 +172,7 @@ public static class Strings
     public static string ZapretReverifyHint => global::VPNRouter.Core.Localization.Strings.ZapretReverifyHint;
     public static string ZapretSummaryDetailsButton => global::VPNRouter.Core.Localization.Strings.ZapretSummaryDetailsButton;
     public static string ZapretSummaryStaleHint => global::VPNRouter.Core.Localization.Strings.ZapretSummaryStaleHint;
+    public static string ZapretCancelProbeButton => global::VPNRouter.Core.Localization.Strings.ZapretCancelProbeButton;
     public static string RelativeTimeJustNow => global::VPNRouter.Core.Localization.Strings.RelativeTimeJustNow;
     public static string RelativeTimeMinutes(int n) => global::VPNRouter.Core.Localization.Strings.RelativeTimeMinutes(n);
     public static string RelativeTimeHours(int n) => global::VPNRouter.Core.Localization.Strings.RelativeTimeHours(n);

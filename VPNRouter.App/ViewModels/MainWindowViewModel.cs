@@ -4496,6 +4496,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string L_ZapretReverifyHint => Strings.ZapretReverifyHint;
     public string L_ZapretSummaryDetailsButton => Strings.ZapretSummaryDetailsButton;
     public string L_ZapretSummaryStaleHint => Strings.ZapretSummaryStaleHint;
+    public string L_ZapretCancelProbeButton => Strings.ZapretCancelProbeButton;
 
     /// <summary>v2.37.0-r25 — TabControl tab-header L_ getters for TgProxy
     /// (Telegram-прокси) page. 3 tabs: Settings, Version, Help. Replaces
@@ -4917,6 +4918,28 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsZapretTab3))]
     private int _zapretActiveTabIndex;
 
+    // r33: Zapret probe cancellation. Created in ProbeAndStartZapretAsync,
+    // cancelled by CancelZapretProbeCommand (Cancel button on Hero card
+    // visible during IsZapretProbing). Also used by early-winner detection.
+    private CancellationTokenSource? _zapretProbeCts;
+
+    /// <summary>r33 — Cancel button on Hero card during probe. User can
+    /// stop the 2-7 min sweep at any time. Cancellation triggers
+    /// proc.Kill in ZapretAutoStrategy + restores ipset if needed.</summary>
+    [RelayCommand]
+    private void CancelZapretProbe()
+    {
+        try
+        {
+            _zapretProbeCts?.Cancel();
+            _logger.Information("[VM] Zapret probe cancellation requested by user");
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[VM] CancelZapretProbe failed");
+        }
+    }
+
     /// <summary>r29 — per-tab IsChecked/IsVisible getters for the manual
     /// tab strip (RadioButton group) + tab content Panel (ScrollViewers
     /// gated by IsVisible). Drives both the active-tab highlight and
@@ -5159,8 +5182,22 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 }
             });
 
-            var sweep = await VPNRouter.Core.Services.ZapretAutoStrategy.RunFlowsealProbeAsync(
-                zapretDir, flowsealProgress, _logger, CancellationToken.None);
+            // r33: cancellable probe via _zapretProbeCts. CancelZapretProbeCommand
+            // (Cancel button on Hero) triggers cts.Cancel(). Also used by
+            // early-winner detection inside ZapretAutoStrategy.
+            _zapretProbeCts?.Dispose();
+            _zapretProbeCts = new CancellationTokenSource();
+            ZapretAutoStrategy.FlowsealSweepResult sweep;
+            try
+            {
+                sweep = await VPNRouter.Core.Services.ZapretAutoStrategy.RunFlowsealProbeAsync(
+                    zapretDir, flowsealProgress, _logger, _zapretProbeCts.Token);
+            }
+            finally
+            {
+                _zapretProbeCts.Dispose();
+                _zapretProbeCts = null;
+            }
 
             if (sweep.Winner != null)
             {

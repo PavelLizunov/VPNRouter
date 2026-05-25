@@ -133,8 +133,11 @@ public class MainWindowViewModelCharacterizationTests
     //   - SetZapretTabCommand / SetTgProxyTabCommand RelayCommands
     //   - 7 [NotifyPropertyChangedFor] decorators on ActiveTabIndex fields
     // Linux value will land via CI fail.
+    // v2.37.0-r33 (2026-05-25): added CancelZapretProbeCommand +
+    // L_ZapretCancelProbeButton + _zapretProbeCts CTS field. Cross-platform —
+    // Linux value lands via CI next.
     private const string PinnedHashWindows =
-        "45248ead6f5e044663a0f909ac7368a5d6c8d02effd4b00a9dd2568551a77fb6";
+        "dbf12154611dcf72a884913576029bbc87d508948e52fd921154d058debe1c30";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

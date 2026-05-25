@@ -61,8 +61,27 @@
             <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         </Style>
 
+        <!-- r33: explicit TextElement.Foreground on :checked template/
+             ContentPresenter. FluentTheme's default :checked sets
+             TextElement.Foreground to SystemControlForegroundOnAccentBrush
+             (white), which appeared on light theme as unreadable. Our
+             Foreground setter on the ToggleButton itself was ignored
+             because the inner ContentPresenter has its own value. -->
         <Style Selector="ToggleButton.TabStripPill:checked /template/ ContentPresenter">
             <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+
+        <!-- Pressed state — keep readable in both themes -->
+        <Style Selector="ToggleButton.TabStripPill:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        </Style>
+
+        <!-- Checked + hovered combination — keep dark text on light bg -->
+        <Style Selector="ToggleButton.TabStripPill:checked:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentBgSubtleBrush}"/>
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         </Style>
     </Application.Styles>
 </Application>
