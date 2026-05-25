@@ -97,8 +97,18 @@ public class MainWindowViewModelCharacterizationTests
     // field. Closes the dead-plumbing gap by binding TgProxyStats text
     // (was already populated by StatsUpdated event) into TelegramPage
     // air-pill via IsVisible="{Binding HasTgProxyStats}". Linux deferred.
+    //
+    // v2.37.0-r21 bump (2026-05-25 day shift): UX fixes per user feedback
+    // («мало информативно при проверке; нет запуска со своими настройками;
+    // не умещаются последние в списке значения»). Added:
+    //   - ZapretProbeElapsedSeconds (ObservableProperty) — live tick counter
+    //   - LblZapretProbeElapsed computed — "Прошло 0:25 · осталось ~3:40"
+    //   - L_ZapretStartSelectedStrategyButton / Hint L_ getters
+    //   - StartZapretWithSelectedStrategyCommand (RelayCommand) — direct
+    //     apply of selected strategy, skip auto-probe
+    // Linux pin deferred to CI first-failure per documented workflow.
     private const string PinnedHashWindows =
-        "e16f3c83918d32b8ad17d27b9f6a6f127f791b21ad9b8cf344029a10cfb3fe9a";
+        "13b174ddf8999cfe65e31a97d9112a5b39739ce8a335ae4a321e80312d695a0f";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

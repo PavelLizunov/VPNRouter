@@ -48,7 +48,12 @@
                       HorizontalScrollBarVisibility="Disabled"
                       VerticalScrollBarVisibility="Auto"
                       AllowAutoHide="False"
-                      Padding="0,8,0,10">
+                      Padding="0,8,0,24">
+            <!-- v2.37.0-r21 — bumped bottom padding from 10 to 24px to give the
+                 last items in the expanded "Тонкая настройка" section enough
+                 breathing room above the fixed footer. Pre-r21 the cache UI
+                 row at the bottom of the expander was clipped by the footer
+                 even after scrolling to the bottom. -->
             <Grid Margin="12,0,14,0">
                 <StackPanel Spacing="12">
 
@@ -279,12 +284,25 @@
                                 </ItemsControl>
 
                                 <!-- Probe progress bar (only during probing). -->
-                                <ProgressBar IsVisible="{Binding IsZapretProbing}"
-                                             IsIndeterminate="True"
-                                             Height="3"
-                                             Width="240"
-                                             CornerRadius="{StaticResource RadiusXs}"
-                                             Foreground="{DynamicResource AccentSolidBrush}"/>
+                                <StackPanel IsVisible="{Binding IsZapretProbing}"
+                                            Spacing="6"
+                                            HorizontalAlignment="Center">
+                                    <ProgressBar IsIndeterminate="True"
+                                                 Height="3"
+                                                 Width="240"
+                                                 CornerRadius="{StaticResource RadiusXs}"
+                                                 Foreground="{DynamicResource AccentSolidBrush}"/>
+                                    <!-- r21 — live elapsed time + ETA estimate.
+                                         Surfaces "Прошло 0:25 · осталось ~3:40"
+                                         so users see the probe is actually
+                                         making progress (and how long left). -->
+                                    <TextBlock Text="{Binding LblZapretProbeElapsed}"
+                                               FontSize="10"
+                                               Opacity="0.7"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                               TextAlignment="Center"
+                                               HorizontalAlignment="Center"/>
+                                </StackPanel>
 
                                 <!-- Air pill (only when running). -->
                                 <Border IsVisible="{Binding ZapretEnabled}"
@@ -357,6 +375,27 @@
                                           SelectedIndex="{Binding ZapretStrategyIndex}"
                                           HorizontalAlignment="Stretch"
                                           Padding="8,4" FontSize="11"/>
+                                <!-- v2.37.0-r21 — direct-start path for power users.
+                                     "Запустить с этой стратегией" applies the
+                                     selected ComboBox strategy immediately,
+                                     skipping the 2-7min auto-probe. Cached as
+                                     a success so warm-start kicks in next time. -->
+                                <Button Content="{Binding L_ZapretStartSelectedStrategyButton}"
+                                        Command="{Binding StartZapretWithSelectedStrategyCommand}"
+                                        IsEnabled="{Binding !IsZapretProbing}"
+                                        ToolTip.Tip="{Binding L_ZapretStartSelectedStrategyHint}"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        FontSize="10" Padding="8,4"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Background="{DynamicResource AccentBgSubtleBrush}"
+                                        Foreground="{DynamicResource AccentFgBrush}"
+                                        BorderBrush="{DynamicResource AccentBorderBrush}"
+                                        BorderThickness="1"/>
+                                <TextBlock Text="{Binding L_ZapretStartSelectedStrategyHint}"
+                                           FontSize="9" Opacity="0.6"
+                                           TextWrapping="Wrap"
+                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock Text="{Binding ZapretVersionText}"
                                                FontSize="10" Opacity="0.5"

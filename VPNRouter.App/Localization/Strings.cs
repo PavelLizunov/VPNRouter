@@ -148,6 +148,14 @@ public static class Strings
     public static string RuleTypeHintGeosite => global::VPNRouter.Core.Localization.Strings.RuleTypeHintGeosite;
     public static string RuleTypeHintGeoip => global::VPNRouter.Core.Localization.Strings.RuleTypeHintGeoip;
 
+    // v2.37.0-r21 — probe info + direct-start pass-throughs.
+    public static string ZapretProbeElapsedAndEta(int elapsedSec, int? etaSec) => global::VPNRouter.Core.Localization.Strings.ZapretProbeElapsedAndEta(elapsedSec, etaSec);
+    public static string ZapretStartSelectedStrategyButton => global::VPNRouter.Core.Localization.Strings.ZapretStartSelectedStrategyButton;
+    public static string ZapretStartSelectedStrategyHint => global::VPNRouter.Core.Localization.Strings.ZapretStartSelectedStrategyHint;
+    public static string ZapretStartingSelected(string strategy) => global::VPNRouter.Core.Localization.Strings.ZapretStartingSelected(strategy);
+    public static string ZapretRunningSelected(string strategy, int pid) => global::VPNRouter.Core.Localization.Strings.ZapretRunningSelected(strategy, pid);
+    public static string ZapretSelectedStrategyFailed(string strategy) => global::VPNRouter.Core.Localization.Strings.ZapretSelectedStrategyFailed(strategy);
+
     // v2.37.0-r10 — Zapret cache UI pass-throughs.
     public static string ZapretForceFreshProbeButton => global::VPNRouter.Core.Localization.Strings.ZapretForceFreshProbeButton;
     public static string ZapretClearCacheButton => global::VPNRouter.Core.Localization.Strings.ZapretClearCacheButton;

@@ -202,6 +202,36 @@ public static class Strings
     public static string RuleTypeHintGeosite => Ru ? "тег geosite (cn, ads, …)" : "geosite tag (cn, ads, …)";
     public static string RuleTypeHintGeoip => Ru ? "тег geoip (cn, us, private)" : "geoip tag (cn, us, private)";
 
+    // v2.37.0-r21 — better probe progress info + direct-start path.
+    // User feedback: «мало информативно что происходит при проверке,
+    // нет запуска со своими настройками, чтоб если пользователь знает
+    // свою стратегию ему не приходилось ждать».
+    public static string ZapretProbeElapsedAndEta(int elapsedSec, int? etaSec)
+    {
+        var elapsed = $"{elapsedSec / 60}:{(elapsedSec % 60):D2}";
+        if (etaSec.HasValue && etaSec.Value > 0)
+        {
+            var eta = $"{etaSec.Value / 60}:{(etaSec.Value % 60):D2}";
+            return Ru ? $"Прошло {elapsed} · осталось ~{eta}" : $"Elapsed {elapsed} · ~{eta} left";
+        }
+        return Ru ? $"Прошло {elapsed}" : $"Elapsed {elapsed}";
+    }
+    public static string ZapretStartSelectedStrategyButton => Ru
+        ? "Запустить с этой стратегией"
+        : "Start with this strategy";
+    public static string ZapretStartSelectedStrategyHint => Ru
+        ? "Применит выбранную стратегию сразу, минуя авто-подбор (для пользователей которые знают свою рабочую стратегию)."
+        : "Apply selected strategy immediately, skipping auto-probe (for users who know their working strategy).";
+    public static string ZapretStartingSelected(string strategy) => Ru
+        ? $"Запуск стратегии: {strategy}..."
+        : $"Starting strategy: {strategy}...";
+    public static string ZapretRunningSelected(string strategy, int pid) => Ru
+        ? $"Работает [{strategy}] (PID {pid}, выбрано вручную)"
+        : $"Running [{strategy}] (PID {pid}, manual)";
+    public static string ZapretSelectedStrategyFailed(string strategy) => Ru
+        ? $"Стратегия {strategy} не запустилась — возможно AV блокирует winws.exe или нужен другой выбор."
+        : $"Strategy {strategy} failed to start — possibly AV blocking winws.exe or pick another.";
+
     // v2.37.0-r10 — Zapret probe-cache UI controls (Tools expander).
     // r6 added the cache silently; r10 surfaces user controls:
     //   - "Найти заново (без кэша)" — bypasses cache, runs full sweep

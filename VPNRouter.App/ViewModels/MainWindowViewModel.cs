@@ -4564,6 +4564,163 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
     private bool _forceFreshProbe;
 
+    // v2.37.0-r21 — probe progress info richness fix. User feedback:
+    // «мало информативно что происходит при проверке». Adds an elapsed
+    // counter that ticks every second + ETA estimate from elapsed/index.
+    // Wired into LblZapretHeroLede via NotifyPropertyChangedFor.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
+    [NotifyPropertyChangedFor(nameof(LblZapretProbeElapsed))]
+    private int _zapretProbeElapsedSeconds;
+
+    private DateTime _zapretProbeStartTime;
+    private System.Threading.Timer? _zapretProbeElapsedTimer;
+
+    /// <summary>v2.37.0-r21 — live elapsed/ETA chip shown under the
+    /// probe ProgressBar. Computes ETA only after at least 1 config has
+    /// completed (so the per-config ETA estimate is calibrated).</summary>
+    public string LblZapretProbeElapsed
+    {
+        get
+        {
+            if (!IsZapretProbing || ZapretProbeElapsedSeconds <= 0)
+                return string.Empty;
+            int? etaSec = null;
+            if (ZapretProbeIndex > 0 && ZapretProbeTotal > 0)
+            {
+                // Time-per-completed-config × remaining configs.
+                var perConfig = (double)ZapretProbeElapsedSeconds / Math.Max(1, ZapretProbeIndex);
+                var remaining = Math.Max(0, ZapretProbeTotal - ZapretProbeIndex);
+                etaSec = (int)(perConfig * remaining);
+            }
+            return Strings.ZapretProbeElapsedAndEta(ZapretProbeElapsedSeconds, etaSec);
+        }
+    }
+
+    /// <summary>L_ getter for the new "Start with this strategy" button.</summary>
+    public string L_ZapretStartSelectedStrategyButton => Strings.ZapretStartSelectedStrategyButton;
+    public string L_ZapretStartSelectedStrategyHint => Strings.ZapretStartSelectedStrategyHint;
+
+    /// <summary>v2.37.0-r21 — apply the strategy currently picked in the
+    /// "Тонкая настройка" ComboBox directly, without running the auto-probe.
+    /// For users who already know which strategy works on their ISP and
+    /// don't want to wait 2-7 minutes for the Flowseal sweep every restart.
+    /// </summary>
+    [RelayCommand]
+    private async Task StartZapretWithSelectedStrategyAsync()
+    {
+        var idx = ZapretStrategyIndex;
+        if (idx < 0 || idx >= ZapretStrategies.Count)
+        {
+            _logger.Warning("[VM] StartZapretWithSelectedStrategy: invalid index {Idx}", idx);
+            return;
+        }
+        var strategyName = ZapretStrategies[idx];
+        if (string.IsNullOrEmpty(strategyName))
+        {
+            _logger.Warning("[VM] StartZapretWithSelectedStrategy: empty name at {Idx}", idx);
+            return;
+        }
+
+        // Stop any running probe / zapret first.
+        if (IsZapretProbing)
+        {
+            _logger.Information("[VM] StartZapretWithSelectedStrategy: a probe is already running — refusing");
+            return;
+        }
+        if (ZapretEnabled || IsZapretRunning())
+        {
+            KillAllZapret();
+            ZapretEnabled = false;
+            ZapretWinningStrategy = string.Empty;
+            await Task.Delay(500);
+        }
+
+        if (_zapret == null)
+        {
+            _zapret = new ZapretManager(_logger);
+            _zapret.ImmediateExitDetected += OnZapretImmediateExit;
+        }
+
+        ZapretStatus = Strings.ZapretStartingSelected(strategyName);
+
+        try
+        {
+            // Resolve to parsed strategy entry (BatPath + Arguments).
+            var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == strategyName);
+            if (parsed == null)
+            {
+                _logger.Warning("[VM] Selected strategy {Name} not in parsed list — using custom args path", strategyName);
+                _zapret!.Start(ZapretCustomArgs);
+            }
+            else if (!string.IsNullOrEmpty(parsed.BatPath) && File.Exists(parsed.BatPath))
+            {
+                _zapret!.StartFromBat(parsed.BatPath, parsed.Arguments);
+            }
+            else
+            {
+                _zapret!.Start(parsed.Arguments);
+            }
+
+            await Task.Delay(1500);
+            var winwsPid = ZapretManager.WinwsPid;
+            if (_zapret.IsRunning || winwsPid != null)
+            {
+                ZapretEnabled = true;
+                ZapretWinningStrategy = strategyName;
+                ZapretProbePassCount = 0;
+                ZapretProbeTotalCount = 0;
+                IsZapretFallback = false;
+                var pid = winwsPid ?? _zapret.Pid ?? 0;
+                ZapretStatus = Strings.ZapretRunningSelected(strategyName, pid);
+                // Persist as a cache success so warm-start kicks in next time.
+                VPNRouter.Core.Services.ZapretProbeCache.RecordSuccess(strategyName, _logger);
+                SaveSettings();
+            }
+            else
+            {
+                ZapretEnabled = false;
+                IsZapretFallback = true;
+                ZapretStatus = Strings.ZapretSelectedStrategyFailed(strategyName);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "[VM] StartZapretWithSelectedStrategy threw");
+            ZapretStatus = Strings.ZapretSelectedStrategyFailed(strategyName) + " (" + ex.Message + ")";
+        }
+        OnPropertyChanged(nameof(LblZapretCacheStatus));
+    }
+
+    private void StartZapretProbeElapsedTimer()
+    {
+        _zapretProbeStartTime = DateTime.UtcNow;
+        ZapretProbeElapsedSeconds = 0;
+        _zapretProbeElapsedTimer?.Dispose();
+        _zapretProbeElapsedTimer = new System.Threading.Timer(_ =>
+        {
+            try
+            {
+                var elapsed = (int)(DateTime.UtcNow - _zapretProbeStartTime).TotalSeconds;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    ZapretProbeElapsedSeconds = elapsed;
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug(ex, "[VM] Probe elapsed tick failed");
+            }
+        }, null, dueTime: TimeSpan.FromSeconds(1), period: TimeSpan.FromSeconds(1));
+    }
+
+    private void StopZapretProbeElapsedTimer()
+    {
+        _zapretProbeElapsedTimer?.Dispose();
+        _zapretProbeElapsedTimer = null;
+        ZapretProbeElapsedSeconds = 0;
+    }
+
     /// <summary>
     /// One-liner surfacing the current Zapret probe cache state. Used in
     /// the Tools expander as a hint near the Force-fresh / Clear-cache
@@ -4652,6 +4809,9 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // try multiple strategies; fast-exits are EXPECTED, not user-facing
         // alarms. Re-enable on probe completion.
         _suppressZapretAvToast = true;
+        // r21 — start the live elapsed-time ticker so the hero shows
+        // "Прошло 0:25 · осталось ~3:40" under the progress bar.
+        StartZapretProbeElapsedTimer();
 
         try
         {
@@ -4909,6 +5069,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             ZapretProbeIndex = 0;
             ZapretProbeTotal = 0;
             ZapretProbeStrategy = string.Empty;
+            // r21 — stop the live elapsed-time ticker.
+            StopZapretProbeElapsedTimer();
             // Don't clear ZapretProbePass/TotalCount here — they're the
             // persisted score for the winning strategy and must survive
             // the orchestrator's cleanup so the air-pill keeps showing
