@@ -177,6 +177,25 @@ Open Tasks / Last session log.
     красным CI И БЕЗ local MCP test потому что я полагался на тэг-level
     CI green. Combined с rule #11 теперь невозможно skip обе проверки.
 
+13. **MCP verify должен ВЕСТИ к user-сценарию end-to-end, не остановиться
+    на "tab rendered"** (added 2026-05-25 после r25..r28 scroll-bug
+    thrash). Если фикс касается UI — verify должен пройти ВЕСЬ flow до
+    конечного элемента который user reported. Пример: r25..r28 я
+    shipал и claim'ил "tabs render" — но не доходил до scroll внутри
+    активной вкладки → user видел тот же bug что и до фикса 4 раза.
+    Чеклист: (a) клик целевого элемента, (b) check ВСЕ interactive
+    elements в его scope, (c) screenshot bottom of viewport, (d)
+    confirm exact strings user мог искать.
+
+14. **Git push reminder pattern** (added 2026-05-25 после второго
+    "ты опять забыл git" от user'а). После каждого commit IMMEDIATELY
+    выполняй `git push github HEAD:main && git push origin HEAD:main`
+    (или с TOLERATE_FAILURE если gate блокирует). Не задерживай push
+    "пока build идёт" — commit и push должны быть атомарной парой.
+    Если push заблокирован gate'ом — сразу info user'у текущий state
+    + что ждём. User видит remote main как single source of truth;
+    локальные коммиты "не существуют" для него.
+
 ## Git safety
 
 - `main` — protected (никаких force-push без запроса). Заявленные fixes идут

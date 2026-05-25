@@ -33,6 +33,7 @@ AppVersion.cs   единая версия — обновлять перед ка
 | `ProfileManager.cs` | GitHub > Local > Built-in source priority. Merging multiple profiles (union processes, strictest DNS wins). |
 | `SettingsLoader.cs` | YAML load/save через YamlDotNet. Auto-create defaults. |
 | `SettingsMigrator.cs` | Schema migrations (legacy → current). |
+| `ZapretProbeCache.cs` | v2.37.0-r6 introduced, **r24 bumped to schema v2** with `TargetsPassed` + `TargetsTotal` int fields for Hero strategy summary card score line. v1 entries deserialize cleanly (0/0 defaults). `IsRecentAndReliable()` < 7d + reliable. `IsStale()` > 7d + has data. `HasTargetScore()` → render "X из Y целей" line only when total > 0. JSON at `%ProgramData%\VPNRouter\cache\zapret_probe.json`. |
 
 ## FreeConfigs/
 

@@ -1,8 +1,8 @@
 # VPNRouter.App
 
-Avalonia GUI. Кросс-платформа (Windows / macOS / Linux), `net8.0` (App.csproj
-без `-windows` суффикса — иначе не собирается на других платформах). Платформ-
-специфичные ветки через `#if PLATFORM_WINDOWS`.
+Avalonia **12.0.3** GUI (не 11). Кросс-платформа (Windows / macOS / Linux),
+`net8.0` (App.csproj без `-windows` суффикса — иначе не собирается на других
+платформах). Платформ-специфичные ветки через `#if PLATFORM_WINDOWS`.
 
 ## Layout
 
@@ -35,8 +35,8 @@ Views/
     NetworkPage.axaml              ← settings (routing/leak/content/updates/autostart)
     ApplicationsPage.axaml         ← список приложений
     ToolsPage.axaml                ← Zapret + Telegram proxy
-    DpiBypassPage.axaml            ← Zapret detail
-    TelegramPage.axaml             ← TgProxy detail
+    DpiBypassPage.axaml            ← Zapret detail (r29: Hero + manual RadioButton tab strip + Panel of per-tab ScrollViewers; r24 Hero summary card)
+    TelegramPage.axaml             ← TgProxy detail (r29: Hero + manual 3-tab strip; same pattern as DpiBypass)
     FreeConfigsPage.axaml          ← Free Configs (master-detail 6 sections)
 ```
 
@@ -91,6 +91,53 @@ diff what changed. Полная семантика — в комментария
 `MainWindowViewModel.Localization.cs` getter.
 
 ## Critical gotchas
+
+### Avalonia 12 TabControl + inner ScrollViewer = SCROLL BUG (v2.37.0-r29)
+
+**Не использовать `<TabControl>` если контент вкладки может overflow.**
+TabControl в Avalonia 12 рендерит content через Carousel-like presenter
+который НЕ propagateит bounded parent height обратно ScrollViewer'у
+внутри TabItem. Inner scrollbar никогда не engageit'ся, и user не
+может доскролить до низа длинной вкладки.
+
+История попыток (r25..r28 thrash):
+- r25: Expander → TabControl ❌
+- r26: + MaxHeight + inner ScrollViewer ❌
+- r27: убрать outer ScrollViewer, Grid Auto+* ❌ (broke layout)
+- r28: Grid proportional 2*:3* ❌
+- **r29: replaced TabControl entirely → manual primitives ✅**
+
+**Working pattern (DpiBypassPage.axaml + TelegramPage.axaml r29):**
+```xml
+<!-- Tab strip -->
+<UniformGrid Rows="1" Columns="4">
+  <RadioButton GroupName="ZapretTabs"
+               IsChecked="{Binding IsZapretTab0}"
+               Command="{Binding SetZapretTabCommand}"
+               CommandParameter="0">
+    <TextBlock Text="..."/>
+  </RadioButton>
+  ...
+</UniformGrid>
+
+<!-- Content area in Grid * row → bounded -->
+<Border Grid.Row="1">
+  <Panel>
+    <ScrollViewer IsVisible="{Binding IsZapretTab0}">
+      <StackPanel>tab 0 content</StackPanel>
+    </ScrollViewer>
+    ...
+  </Panel>
+</Border>
+```
+
+VM needs:
+- `[ObservableProperty] [NotifyPropertyChangedFor(IsXxxTabN)] private int _activeTabIndex;`
+- `public bool IsXxxTab0 => ActiveTabIndex == 0;` (one per tab)
+- `[RelayCommand] private void SetXxxTab(string idx) { ... }`
+
+Panel в Grid * row даёт bounded высоту → ScrollViewer внутри engageit'ся
+надёжно когда content > viewport. Это обходит весь Carousel quirk.
 
 ### CheckBox.Content overflow на узких окнах
 **Не использовать `Content="{Binding XLabel}"`** — bare-string Content
