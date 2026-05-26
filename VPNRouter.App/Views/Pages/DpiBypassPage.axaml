@@ -38,6 +38,9 @@
         </Style>
         <Style Selector="TextBlock.zglyph-muted">
             <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <!-- r49: bold matches success/warning/danger/stale glyphs so the
+                 prefix column has uniform vertical rhythm in the dropdown. -->
+            <Setter Property="FontWeight" Value="Bold"/>
         </Style>
     </UserControl.Styles>
 
@@ -581,10 +584,34 @@
                                            TextWrapping="Wrap" FontSize="10"
                                            Opacity="0.7"
                                            Foreground="{DynamicResource TextSecondaryBrush}"/>
-                                <ComboBox ItemsSource="{Binding ZapretStrategies}"
+                                <!-- r49: parity with Hero ComboBox — bind to
+                                     ZapretStrategiesDisplay (colored badges)
+                                     instead of raw ZapretStrategies. User
+                                     was seeing two different visual treatments
+                                     for the same data ('◌ general (ALT3)' in
+                                     Hero vs bare 'general (ALT3)' here). -->
+                                <ComboBox ItemsSource="{Binding ZapretStrategiesDisplay}"
                                           SelectedIndex="{Binding ZapretStrategyIndex}"
                                           HorizontalAlignment="Stretch"
-                                          Padding="8,4" FontSize="11"/>
+                                          Padding="8,4" FontSize="11">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate DataType="vm:ZapretStrategyDisplayItem">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="{Binding Glyph}"
+                                                           FontSize="11"
+                                                           MinWidth="44"
+                                                           Classes.zglyph-success="{Binding IsSuccess}"
+                                                           Classes.zglyph-warning="{Binding IsWarning}"
+                                                           Classes.zglyph-danger="{Binding IsDanger}"
+                                                           Classes.zglyph-muted="{Binding IsMuted}"
+                                                           Classes.zglyph-stale="{Binding IsStale}"/>
+                                                <TextBlock Text="{Binding NameText}"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                                 <!-- v2.37.0-r21 — direct-start path for power users.
                                      "Запустить с этой стратегией" applies the
                                      selected ComboBox strategy immediately,
