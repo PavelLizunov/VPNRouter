@@ -4321,9 +4321,21 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             ZapretVersionText = IsRussian ? "Не установлен" : "Not installed";
         }
 #endif
-        // Always add legacy + custom
-        names.Add("multisplit");
-        names.Add("fake+multisplit");
+        // r43: only add legacy stubs ("multisplit", "fake+multisplit") when
+        // there are NO parsed .bat strategies (i.e. Zapret not installed or
+        // freshly-empty install dir). These stubs have no .bat + no args, so
+        // picking them when a real strategy is available leads to:
+        //   "multisplit not in parsed list — using custom args path"
+        //   "Zapret Args: " (empty)
+        //   "Process exited (exit code: 1)"
+        // — surfaced as a false-positive AV warning. Removing them when real
+        // strategies exist forces the picker to a working option.
+        if (_parsedStrategies.Count == 0)
+        {
+            names.Add("multisplit");
+            names.Add("fake+multisplit");
+        }
+        // "custom" stays — represents the user's own args path (ZapretCustomArgs).
         names.Add("custom");
 
         ZapretStrategies = new System.Collections.ObjectModel.ObservableCollection<string>(names);
@@ -4340,9 +4352,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // in the current session). Best-effort.
         TryRestoreLastProbeLog();
 
-        // Restore saved strategy index
+        // Restore saved strategy index.
+        // r43: if saved value points to a now-removed stub ("multisplit" /
+        // "fake+multisplit") AND we have real parsed strategies — auto-migrate
+        // to the first parsed entry (typically "general" or similar). Users
+        // upgrading from a pre-r43 install where multisplit was a stub get
+        // a working pick on first run instead of a dropdown that skips them
+        // to "custom" (empty args).
         var saved = _settings.App.ZapretStrategy;
         var idx = names.IndexOf(saved);
+        if (idx < 0
+            && _parsedStrategies.Count > 0
+            && (string.Equals(saved, "multisplit", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(saved, "fake+multisplit", StringComparison.OrdinalIgnoreCase)))
+        {
+            _logger?.Information(
+                "[VM] Migrating saved ZapretStrategy '{Old}' (stub, no longer listed) → '{New}'",
+                saved, _parsedStrategies[0].Name);
+            idx = names.IndexOf(_parsedStrategies[0].Name);
+        }
         ZapretStrategyIndex = idx >= 0 ? idx : 0;
     }
 
