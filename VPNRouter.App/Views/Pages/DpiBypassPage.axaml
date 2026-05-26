@@ -323,10 +323,38 @@
                                     </Grid>
                                 </Border>
 
-                                <!-- r50: floating legend REMOVED — moved into
-                                     ComboBox tooltip (LblStrategyBadgeLegend).
-                                     Was disconnected from dropdown visually
-                                     and ate ~20px of Hero. -->
+                                <!-- r51: legend restored as compact visible row
+                                     (user feedback: tooltip-only too hidden).
+                                     Smaller font (8) + tighter ItemSpacing so
+                                     it sits right below ComboBox like a
+                                     caption strip. Still attached to dropdown
+                                     by tight Margin top=0. -->
+                                <WrapPanel IsVisible="{Binding HasZapretStrategiesForQuickStart}"
+                                           HorizontalAlignment="Center"
+                                           ItemSpacing="6"
+                                           Margin="0,2,0,0"
+                                           MaxWidth="380">
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <TextBlock Text="✓" FontSize="8" Classes="zglyph-success"/>
+                                        <TextBlock Text="{Binding LblLegendWorking}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <TextBlock Text="⚠" FontSize="8" Classes="zglyph-warning"/>
+                                        <TextBlock Text="{Binding LblLegendPartial}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <TextBlock Text="✗" FontSize="8" Classes="zglyph-danger"/>
+                                        <TextBlock Text="{Binding LblLegendFailed}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <TextBlock Text="◌" FontSize="8" Classes="zglyph-muted"/>
+                                        <TextBlock Text="{Binding LblLegendUntested}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <TextBlock Text="⏱" FontSize="8" Classes="zglyph-stale"/>
+                                        <TextBlock Text="{Binding LblLegendStale}" FontSize="8" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    </StackPanel>
+                                </WrapPanel>
 
                                 <!-- r47: "Open probe log" button MOVED out of Hero
                                      to Дополнительно tab — Hero was getting too
@@ -822,7 +850,15 @@
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
+                <!-- r51 — footer CTA button REMOVED. User design feedback:
+                     "Footer 'Включить обход блокировок' дублирует Hero
+                     magic button." Hero ALREADY has a big magic button
+                     at the top of the page, prominent and always visible.
+                     Footer now shows ONLY status (dot + text), no button.
+                     Saves visual noise + eliminates the "which one do I
+                     click?" confusion. -->
                 <Button Grid.Column="1"
+                        IsVisible="False"
                         Content="{Binding LblZapretMagicButton}"
                         Command="{Binding ZapretOneClickCommand}"
                         IsEnabled="{Binding IsZapretMagicButtonEnabled}"

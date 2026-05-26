@@ -545,7 +545,11 @@
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
+                <!-- r51: footer CTA button removed (same as DpiBypass).
+                     Hero already has the magic button at top of page.
+                     Footer keeps only status dot + text. -->
                 <Button Grid.Column="1"
+                        IsVisible="False"
                         Content="{Binding LblTgProxyMainAction}"
                         Command="{Binding TgProxyMainActionCommand}"
                         FontSize="10" FontWeight="SemiBold"
