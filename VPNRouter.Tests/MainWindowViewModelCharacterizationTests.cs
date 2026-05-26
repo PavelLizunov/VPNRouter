@@ -154,8 +154,12 @@ public class MainWindowViewModelCharacterizationTests
     // visible signature change due to NotifyPropertyChangedFor wiring updates).
     // v2.37.0-r45 (2026-05-26): added LblStrategyBadgeLegend (string property)
     // for the strategy ComboBox glyph legend.
+    // v2.37.0-r46 (2026-05-26): ZapretStrategiesDisplay type changed from
+    // ObservableCollection<string> to ObservableCollection<ZapretStrategyDisplayItem>
+    // for colored badges in the ComboBox ItemTemplate. Also added 5 per-label
+    // legend strings (LblLegend{Working,Partial,Failed,Untested,Stale}).
     private const string PinnedHashWindows =
-        "2477a57fdbc47105595f58f2894164eea41faa579824d4349b0c40eea09dd456";
+        "8ff2e3ecf555ae661ee3b0c349453af2c2f5167783a7361e40f25ac4253fdae9";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

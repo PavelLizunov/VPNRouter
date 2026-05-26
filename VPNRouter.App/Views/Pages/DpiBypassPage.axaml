@@ -14,6 +14,33 @@
         <conv:BoolToStatusColorConverter x:Key="StatusColorConverter"/>
     </UserControl.Resources>
 
+    <!-- r46 — colored status badges in the strategy ComboBox.
+         TextBlock.zglyph-* classes drive Foreground via DynamicResource brushes
+         (theme-safe: light/dark switch repaints without reload).
+         Used by ComboBox.ItemTemplate AND inline in legend below dropdown. -->
+    <UserControl.Styles>
+        <Style Selector="TextBlock.zglyph-success">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessSolidBrush}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style Selector="TextBlock.zglyph-warning">
+            <Setter Property="Foreground" Value="{DynamicResource WarningSolidBrush}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style Selector="TextBlock.zglyph-danger">
+            <Setter Property="Foreground" Value="{DynamicResource DangerSolidBrush}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style Selector="TextBlock.zglyph-stale">
+            <!-- WarningSolidBrush — stale is orange/amber per design system -->
+            <Setter Property="Foreground" Value="{DynamicResource WarningSolidBrush}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style Selector="TextBlock.zglyph-muted">
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        </Style>
+    </UserControl.Styles>
+
     <!--
       v2.36.0-r8 — Zapret OneTap redesign per
       `plans/research-one-button-zapret-deep-2026-05-24.md` (variant A
@@ -239,7 +266,10 @@
                                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                                         <!-- r36: bind to ZapretStrategiesDisplay (with ✓ N/M badges)
                                              instead of raw ZapretStrategies. SelectedIndex still
-                                             drives ZapretStrategyIndex which is 1:1 with raw names. -->
+                                             drives ZapretStrategyIndex which is 1:1 with raw names.
+                                             r46: ItemTemplate splits glyph (colored) + name (default
+                                             text). Classes.zglyph-* bindings drive Foreground via
+                                             the styles above. -->
                                         <ComboBox Grid.Column="0"
                                                   ItemsSource="{Binding ZapretStrategiesDisplay}"
                                                   SelectedIndex="{Binding ZapretStrategyIndex}"
@@ -247,7 +277,25 @@
                                                   Padding="6,2"
                                                   MinHeight="0"
                                                   HorizontalAlignment="Stretch"
-                                                  ToolTip.Tip="{Binding L_ZapretStartSelectedStrategyHint}"/>
+                                                  ToolTip.Tip="{Binding L_ZapretStartSelectedStrategyHint}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate DataType="vm:ZapretStrategyDisplayItem">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Text="{Binding Glyph}"
+                                                                   FontSize="10"
+                                                                   MinWidth="40"
+                                                                   Classes.zglyph-success="{Binding IsSuccess}"
+                                                                   Classes.zglyph-warning="{Binding IsWarning}"
+                                                                   Classes.zglyph-danger="{Binding IsDanger}"
+                                                                   Classes.zglyph-muted="{Binding IsMuted}"
+                                                                   Classes.zglyph-stale="{Binding IsStale}"/>
+                                                        <TextBlock Text="{Binding NameText}"
+                                                                   FontSize="10"
+                                                                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
                                         <Button Grid.Column="1"
                                                 Content="▶"
                                                 Command="{Binding StartZapretWithSelectedStrategyCommand}"
@@ -263,20 +311,38 @@
                                     </Grid>
                                 </Border>
 
-                                <!-- r45 — Legend for the strategy badge glyphs.
-                                     Without this users can't decode the ✓/⚠/✗/◌/⏱
-                                     prefixes in the ComboBox dropdown. Shown
-                                     only when the dropdown is meaningful (i.e.
-                                     real strategies parsed from .bat files). -->
-                                <TextBlock IsVisible="{Binding HasZapretStrategiesForQuickStart}"
-                                           Text="{Binding LblStrategyBadgeLegend}"
-                                           FontSize="9"
+                                <!-- r45/r46 — Legend for strategy badge glyphs.
+                                     r46: each glyph gets the same color as it
+                                     does in the dropdown via zglyph-* classes,
+                                     so the legend is a true visual key. Built
+                                     as inline WrapPanel of mini-pairs (glyph +
+                                     short label) instead of a single TextBlock. -->
+                                <WrapPanel IsVisible="{Binding HasZapretStrategiesForQuickStart}"
                                            HorizontalAlignment="Center"
-                                           TextAlignment="Center"
-                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           ItemSpacing="8"
                                            Margin="0,2,0,0"
-                                           TextWrapping="Wrap"
-                                           MaxWidth="380"/>
+                                           MaxWidth="380">
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <TextBlock Text="✓" FontSize="9" Classes="zglyph-success"/>
+                                        <TextBlock Text="{Binding LblLegendWorking}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <TextBlock Text="⚠" FontSize="9" Classes="zglyph-warning"/>
+                                        <TextBlock Text="{Binding LblLegendPartial}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <TextBlock Text="✗" FontSize="9" Classes="zglyph-danger"/>
+                                        <TextBlock Text="{Binding LblLegendFailed}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <TextBlock Text="◌" FontSize="9" Classes="zglyph-muted"/>
+                                        <TextBlock Text="{Binding LblLegendUntested}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                        <TextBlock Text="⏱" FontSize="9" Classes="zglyph-stale"/>
+                                        <TextBlock Text="{Binding LblLegendStale}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
+                                    </StackPanel>
+                                </WrapPanel>
 
                                 <!-- r39 — "Open probe log" link. Only shows after
                                      a probe has completed AND wrote its log to

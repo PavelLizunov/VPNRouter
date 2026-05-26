@@ -1205,8 +1205,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// per-strategy results (not just the winner) so every entry can carry
     /// a verification badge. For r36 we surface only the cached winner.</para>
     /// </summary>
+    // r46 — changed element type from `string` to `ZapretStrategyDisplayItem`
+    // so the ComboBox ItemTemplate can color the glyph independently of the
+    // strategy name. Pre-r46 a single string carried "✓ general (ALT3)" and
+    // there was no way to color just "✓" green without inline RichText parsing.
     [ObservableProperty]
-    private System.Collections.ObjectModel.ObservableCollection<string> _zapretStrategiesDisplay = new();
+    private System.Collections.ObjectModel.ObservableCollection<ZapretStrategyDisplayItem> _zapretStrategiesDisplay = new();
 
     /// <summary>r34 — controls visibility of the Hero quick-strategy
     /// mini-row (ComboBox + ▶). Visible only when:
@@ -1288,11 +1292,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// r45 — legend for the strategy-badge glyphs in the Hero ComboBox.
     /// Static localized string. Lives below the dropdown so users can
     /// decode ✓/⚠/✗/◌/⏱ without hovering each item.
+    /// Kept for compatibility — r46+ uses per-label LblLegend* below
+    /// with colored mini-blocks instead of single line.
     /// </summary>
     public string LblStrategyBadgeLegend =>
         IsRussian
             ? "✓ работает   ⚠ частично   ✗ не работает   ◌ не проверена   ⏱ устарело"
             : "✓ working   ⚠ partial   ✗ failed   ◌ untested   ⏱ stale";
+
+    // r46 — per-label legend strings for the colored WrapPanel legend.
+    public string LblLegendWorking  => IsRussian ? "работает"     : "working";
+    public string LblLegendPartial  => IsRussian ? "частично"     : "partial";
+    public string LblLegendFailed   => IsRussian ? "не работает"  : "failed";
+    public string LblLegendUntested => IsRussian ? "не проверена" : "untested";
+    public string LblLegendStale    => IsRussian ? "устарело"     : "stale";
 
     [RelayCommand]
     private void OpenProbeLog()
@@ -4456,18 +4469,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var perStrategy = cached?.PerStrategyResults
             ?? new System.Collections.Generic.Dictionary<string, VPNRouter.Core.Services.ZapretStrategyTestResult>(StringComparer.Ordinal);
 
-        // r45: glyph + name layout — badge BEFORE the strategy name so the
-        // dropdown lines up visually as a column of indicators on the left
-        // and names on the right. Pre-r45 format `{name}  ✓ N/M` made the
-        // glyph drift right with name length (ALT11 vs FAKE TLS AUTO ALT3
-        // varied 5..18 chars), so user couldn't scan status at a glance.
+        // r46 — build a list of ZapretStrategyDisplayItem so the ComboBox
+        // ItemTemplate can color glyph and name independently. Glyph + score
+        // get a status-coloured Foreground (green/yellow/red/gray/orange) via
+        // style selectors; name stays default text colour.
         //
-        // Glyph vocabulary (legend lives in DpiBypassPage):
-        //   ✓ — strategy passed verification (winner-or-via-sweep with 100%)
-        //   ⚠ — strategy partially passed (some targets failed; might work)
-        //   ✗ — strategy failed verification (zero targets passed)
-        //   ◌ — strategy never tested (no probe data in cache for this name)
-        //   ⏱ — winner data is stale (>7 days old)
+        // Glyph vocabulary (legend in DpiBypassPage):
+        //   ✓ green   — strategy passed verification
+        //   ⚠ yellow  — strategy partially passed (some targets failed)
+        //   ✗ red     — strategy failed verification (zero targets passed)
+        //   ◌ muted   — strategy never tested (no probe data)
+        //   ⏱ orange  — winner data is stale (>7 days old)
+        var newDisplay = new System.Collections.ObjectModel.ObservableCollection<ZapretStrategyDisplayItem>();
         foreach (var name in ZapretStrategies)
         {
             // Winner gets the most authoritative badge (✓/⏱ from main
@@ -4478,17 +4491,30 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 if (winnerOk)
                 {
-                    display.Add(hasScore
-                        ? $"✓ {passed}/{total}  {name}"
-                        : $"✓  {name}");
+                    newDisplay.Add(new ZapretStrategyDisplayItem
+                    {
+                        Glyph = hasScore ? $"✓ {passed}/{total}" : "✓",
+                        NameText = name,
+                        Kind = ZapretStrategyDisplayKind.Success,
+                    });
                 }
                 else if (winnerStale)
                 {
-                    display.Add($"⏱  {name}");
+                    newDisplay.Add(new ZapretStrategyDisplayItem
+                    {
+                        Glyph = "⏱",
+                        NameText = name,
+                        Kind = ZapretStrategyDisplayKind.Stale,
+                    });
                 }
                 else
                 {
-                    display.Add($"◌  {name}");
+                    newDisplay.Add(new ZapretStrategyDisplayItem
+                    {
+                        Glyph = "◌",
+                        NameText = name,
+                        Kind = ZapretStrategyDisplayKind.Muted,
+                    });
                 }
                 continue;
             }
@@ -4496,22 +4522,44 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // r37: non-winner badging from per-strategy sweep results.
             if (perStrategy.TryGetValue(name, out var result) && result.Total > 0)
             {
+                ZapretStrategyDisplayKind kind;
+                string glyph;
                 if (result.Passed == result.Total)
-                    display.Add($"✓ {result.Passed}/{result.Total}  {name}");
+                {
+                    kind = ZapretStrategyDisplayKind.Success;
+                    glyph = $"✓ {result.Passed}/{result.Total}";
+                }
                 else if (result.Passed == 0)
-                    display.Add($"✗ 0/{result.Total}  {name}");
+                {
+                    kind = ZapretStrategyDisplayKind.Danger;
+                    glyph = $"✗ 0/{result.Total}";
+                }
                 else
-                    display.Add($"⚠ {result.Passed}/{result.Total}  {name}");
+                {
+                    kind = ZapretStrategyDisplayKind.Warning;
+                    glyph = $"⚠ {result.Passed}/{result.Total}";
+                }
+                newDisplay.Add(new ZapretStrategyDisplayItem
+                {
+                    Glyph = glyph,
+                    NameText = name,
+                    Kind = kind,
+                });
             }
             else
             {
                 // r45: "not tested" glyph (was bare name) — makes it obvious
                 // that probe simply hasn't reached this strategy yet vs.
                 // tested-and-passed.
-                display.Add($"◌  {name}");
+                newDisplay.Add(new ZapretStrategyDisplayItem
+                {
+                    Glyph = "◌",
+                    NameText = name,
+                    Kind = ZapretStrategyDisplayKind.Muted,
+                });
             }
         }
-        ZapretStrategiesDisplay = display;
+        ZapretStrategiesDisplay = newDisplay;
     }
 
     [RelayCommand]
