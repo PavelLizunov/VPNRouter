@@ -344,23 +344,11 @@
                                     </StackPanel>
                                 </WrapPanel>
 
-                                <!-- r39 — "Open probe log" link. Only shows after
-                                     a probe has completed AND wrote its log to
-                                     disk. Clicking opens the log in notepad so
-                                     users can attach it to bug reports without
-                                     digging through %ProgramData%. -->
-                                <Button IsVisible="{Binding HasLastProbeLog}"
-                                        Command="{Binding OpenProbeLogCommand}"
-                                        Content="{Binding LblOpenProbeLog}"
-                                        FontSize="10"
-                                        Padding="8,3"
-                                        Margin="0,4,0,0"
-                                        HorizontalAlignment="Center"
-                                        Background="Transparent"
-                                        BorderBrush="{DynamicResource BorderSubtleBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="{StaticResource RadiusSm}"
-                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <!-- r47: "Open probe log" button MOVED out of Hero
+                                     to Дополнительно tab — Hero was getting too
+                                     tall after r45/r46 added legend + colored
+                                     badges, pushing the tab strip below the
+                                     520x680 default window viewport. -->
 
                                 <!-- Probe progress bar (only during probing).
                                      r33: + Cancel button so user can abort the
@@ -436,77 +424,71 @@
                            [Подробнее]     → ExpandZapretTuneSection
                                               (programmatically opens the
                                               expander below) -->
+                    <!-- r47: compact summary card. Pre-r47 was 3-line StackPanel
+                         (icon+title row, subtext row, buttons row) with 14,10
+                         padding + 8 spacing = ~120 px. After legend + colored
+                         badges in r45/r46 the Hero grew enough that Strategy/
+                         Hosts tabs were below the viewport on default window.
+                         r47 collapses to single horizontal row: icon + title +
+                         subtext + Re-verify button. "Подробнее" button removed
+                         (the tabs ARE the details — strategy picker is the
+                         very next thing below). -->
                     <Border IsVisible="{Binding IsZapretSummaryVisible}"
                             Background="{DynamicResource SurfaceBaseBrush}"
                             BorderBrush="{DynamicResource BorderSubtleBrush}"
                             BorderThickness="1"
                             CornerRadius="{StaticResource RadiusMd}"
-                            Padding="14,10"
-                            Margin="0,8,0,0">
-                        <StackPanel Spacing="8">
-                            <!-- Status icon + header on one line.
-                                 Icon is text glyph so it scales with FontSize.
-                                 Switches ✓ → ⚠ via IsZapretCacheStale. -->
-                            <Grid ColumnDefinitions="Auto,*">
-                                <!-- Fresh icon (✓) -->
-                                <TextBlock Grid.Column="0"
-                                           Text="✓"
-                                           FontSize="14"
-                                           FontWeight="Bold"
-                                           Margin="0,0,8,0"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource SuccessSolidBrush}"
-                                           IsVisible="{Binding !IsZapretCacheStale}"/>
-                                <!-- Stale icon (⚠) -->
-                                <TextBlock Grid.Column="0"
-                                           Text="⚠"
-                                           FontSize="14"
-                                           FontWeight="Bold"
-                                           Margin="0,0,8,0"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource WarningSolidBrush}"
-                                           IsVisible="{Binding IsZapretCacheStale}"/>
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding LblZapretSummaryHeader}"
-                                           FontSize="12"
-                                           FontWeight="SemiBold"
-                                           TextWrapping="Wrap"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource TextPrimaryBrush}"/>
-                            </Grid>
-
-                            <!-- Subtext: "4 из 5 целей · проверено 12 мин назад" -->
-                            <TextBlock Text="{Binding LblZapretSummarySubtext}"
-                                       FontSize="11"
-                                       Opacity="0.75"
-                                       TextWrapping="Wrap"
-                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
-
-                            <!-- Stale-only nudge: "Стратегия проверялась более 7 дней назад..." -->
-                            <TextBlock Text="{Binding L_ZapretSummaryStaleHint}"
-                                       FontSize="10"
-                                       TextWrapping="Wrap"
-                                       Foreground="{DynamicResource WarningFgBrush}"
+                            Padding="10,6"
+                            Margin="0,6,0,0">
+                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+                            <!-- Status icon (✓/⚠) — col 0, spans both rows -->
+                            <TextBlock Grid.Column="0" Grid.RowSpan="2"
+                                       Text="✓"
+                                       FontSize="14"
+                                       FontWeight="Bold"
+                                       Margin="0,0,8,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource SuccessSolidBrush}"
+                                       IsVisible="{Binding !IsZapretCacheStale}"/>
+                            <TextBlock Grid.Column="0" Grid.RowSpan="2"
+                                       Text="⚠"
+                                       FontSize="14"
+                                       FontWeight="Bold"
+                                       Margin="0,0,8,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource WarningSolidBrush}"
                                        IsVisible="{Binding IsZapretCacheStale}"/>
 
-                            <!-- Action buttons. WrapPanel so they reflow on
-                                 narrow windows instead of clipping. -->
-                            <WrapPanel ItemSpacing="6" LineSpacing="6">
-                                <Button Content="{Binding L_ZapretReverifyButton}"
-                                        Command="{Binding ForceFreshProbeCommand}"
-                                        IsEnabled="{Binding !IsZapretProbing}"
-                                        ToolTip.Tip="{Binding L_ZapretReverifyHint}"
-                                        FontSize="11" Padding="10,5"
-                                        CornerRadius="{StaticResource RadiusSm}"/>
-                                <Button Content="{Binding L_ZapretSummaryDetailsButton}"
-                                        Command="{Binding ExpandZapretTuneSectionCommand}"
-                                        FontSize="11" Padding="10,5"
-                                        CornerRadius="{StaticResource RadiusSm}"
-                                        Background="Transparent"
-                                        BorderBrush="{DynamicResource BorderDefaultBrush}"
-                                        BorderThickness="1"/>
-                            </WrapPanel>
-                        </StackPanel>
+                            <!-- Header row 0: title -->
+                            <TextBlock Grid.Column="1" Grid.Row="0"
+                                       Text="{Binding LblZapretSummaryHeader}"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
+
+                            <!-- Subtext row 1: age + score -->
+                            <TextBlock Grid.Column="1" Grid.Row="1"
+                                       Text="{Binding LblZapretSummarySubtext}"
+                                       FontSize="10"
+                                       Opacity="0.7"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+                            <!-- Re-verify button on right, spans both rows -->
+                            <Button Grid.Column="2" Grid.RowSpan="2"
+                                    Content="{Binding L_ZapretReverifyButton}"
+                                    Command="{Binding ForceFreshProbeCommand}"
+                                    IsEnabled="{Binding !IsZapretProbing}"
+                                    ToolTip.Tip="{Binding L_ZapretReverifyHint}"
+                                    FontSize="10" Padding="8,4"
+                                    CornerRadius="{StaticResource RadiusSm}"
+                                    VerticalAlignment="Center"
+                                    Margin="8,0,0,0"/>
+                        </Grid>
                     </Border>
 
                     <!-- ════════ r25 — Тонкая настройка as TabControl, not Expander.
@@ -788,6 +770,18 @@
                                         FontSize="10" Padding="8,4"
                                         CornerRadius="{StaticResource RadiusSm}"
                                         Foreground="{DynamicResource DangerSolidBrush}"/>
+                                <!-- r47: "Open probe log" — moved here from Hero.
+                                     Was in the magic-button card pre-r47 but
+                                     contributed to Hero overflow. Lives in
+                                     Дополнительно tab now so it doesn't push
+                                     Strategy/Hosts tabs below the viewport. -->
+                                <Button Content="{Binding LblOpenProbeLog}"
+                                        Command="{Binding OpenProbeLogCommand}"
+                                        IsVisible="{Binding HasLastProbeLog}"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        FontSize="10" Padding="8,4"
+                                        CornerRadius="{StaticResource RadiusSm}"/>
                                 <Button Content="{Binding L_OpenServiceMenu}"
                                         Command="{Binding OpenZapretServiceMenuCommand}"
                                         ToolTip.Tip="{Binding L_TipOpenServiceMenu}"
