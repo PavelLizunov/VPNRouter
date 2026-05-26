@@ -112,8 +112,15 @@ public class ZapretManager : IDisposable
             $"set \"BIN={binDir}{Path.DirectorySeparatorChar}\"\r\n" +
             $"set \"LISTS={listsDir}{Path.DirectorySeparatorChar}\"\r\n" +
             "cd /d \"%BIN%\"\r\n" +
+            // r41: explicit "%BIN%winws.exe" instead of bare "winws.exe".
+            // Win11 + some Win10 hardened-PATH configs do NOT search current
+            // directory for executables (security feature), so even after
+            // `cd /d "%BIN%"` a bare `winws.exe` fails with "is not recognized"
+            // (exit 9009) — silently from the user's POV because the wrapper
+            // window is hidden. Surfaced as "AV blocking winws.exe" toast.
+            // Full path avoids the search entirely.
             // No `start` — winws runs as child of hidden cmd, no separate window
-            $"winws.exe {parsedArgs}\r\n";
+            $"\"%BIN%winws.exe\" {parsedArgs}\r\n";
         File.WriteAllText(wrapperPath, wrapper);
 
         _logger.Information("[Zapret] Launching silent wrapper: {Path}", wrapperPath);
@@ -283,7 +290,8 @@ public class ZapretManager : IDisposable
             $"set \"BIN={binDir}{Path.DirectorySeparatorChar}\"\r\n" +
             $"set \"LISTS={listsDir}{Path.DirectorySeparatorChar}\"\r\n" +
             "cd /d \"%BIN%\"\r\n" +
-            $"winws.exe {args}\r\n";
+            // r41: explicit full path (see StartFromBat for rationale).
+            $"\"%BIN%winws.exe\" {args}\r\n";
     }
 
     /// <summary>Build arguments for legacy built-in strategies (no Flowseal needed).</summary>
