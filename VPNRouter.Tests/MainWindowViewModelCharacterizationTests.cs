@@ -158,8 +158,10 @@ public class MainWindowViewModelCharacterizationTests
     // ObservableCollection<string> to ObservableCollection<ZapretStrategyDisplayItem>
     // for colored badges in the ComboBox ItemTemplate. Also added 5 per-label
     // legend strings (LblLegend{Working,Partial,Failed,Untested,Stale}).
+    // v2.37.0-r50 (2026-05-26): added LblZapretRunSelected string (label
+    // for the Hero ▶ → "Запустить" / "Run", was unlabeled glyph).
     private const string PinnedHashWindows =
-        "8ff2e3ecf555ae661ee3b0c349453af2c2f5167783a7361e40f25ac4253fdae9";
+        "12965556a320b7454dd115217cde9897649f97b772555166ebf39d34a0d1baba";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

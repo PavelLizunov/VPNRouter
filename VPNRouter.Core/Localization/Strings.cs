@@ -878,9 +878,13 @@ public static class Strings
     public static string ZapretOneTapTitleFallback => Ru
         ? "Стратегия не подобрана"
         : "No strategy matched";
+    // r50: benefit-focused lede (was implementation-focused). User feedback
+    // pointed out the lede listed *what we do* ("Скачаем zapret, поставим
+    // Discord hosts...") instead of *what user gets*. Updated to mirror
+    // TgProxyOneTap pattern which focuses on outcome.
     public static string ZapretOneTapLedeStopped => Ru
-        ? "Скачаем zapret, поставим Discord hosts, подберём рабочую стратегию автоматически."
-        : "We download zapret, install Discord hosts, and auto-pick a working strategy.";
+        ? "Откроем заблокированные сайты — Discord, YouTube и другие. Один клик — всё настроим автоматически."
+        : "Unblock sites your ISP filters — Discord, YouTube and more. One click, fully automatic.";
     public static string ZapretOneTapLedeProbing(int index, int total, string strategy) => Ru
         ? $"Тестирую ({index}/{total}): {strategy} — проверяю Discord и YouTube..."
         : $"Probing ({index}/{total}): {strategy} — checking Discord and YouTube...";

@@ -1301,11 +1301,19 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             : "✓ working   ⚠ partial   ✗ failed   ◌ untested   ⏱ stale";
 
     // r46 — per-label legend strings for the colored WrapPanel legend.
+    // (r50: legend now lives in ComboBox tooltip — see LblStrategyBadgeLegend
+    // above — but per-label strings kept for any future inline use.)
     public string LblLegendWorking  => IsRussian ? "работает"     : "working";
     public string LblLegendPartial  => IsRussian ? "частично"     : "partial";
     public string LblLegendFailed   => IsRussian ? "не работает"  : "failed";
     public string LblLegendUntested => IsRussian ? "не проверена" : "untested";
     public string LblLegendStale    => IsRussian ? "устарело"     : "stale";
+
+    // r50 — label for the Hero quick-strategy ▶ button. Pre-r50 was just
+    // a bare ▶ glyph; user feedback flagged it as an unlabeled fourth
+    // action without context.
+    public string LblZapretRunSelected =>
+        IsRussian ? "Запустить" : "Run";
 
     [RelayCommand]
     private void OpenProbeLog()

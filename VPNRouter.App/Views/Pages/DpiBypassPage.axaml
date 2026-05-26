@@ -264,20 +264,19 @@
                                      строка для тех кто знает свою стратегию
                                      и не хочет ждать 2-7 мин probe.
                                      Hidden during probe/running to avoid clutter. -->
+                                <!-- r50: Hero quick-strategy row reworked per design review.
+                                     - Mini ▶ replaced with explicit label "Запустить"
+                                       (user said unlabeled icon was unclear).
+                                     - Legend MOVED INTO ComboBox tooltip (was free-
+                                       floating below, disconnected from dropdown).
+                                     - ComboBox + button grid kept; sunken bg dropped
+                                       for cleaner card-on-card hierarchy. -->
                                 <Border IsVisible="{Binding HasZapretStrategiesForQuickStart}"
-                                        Background="{DynamicResource SurfaceSunkenBrush}"
-                                        CornerRadius="{StaticResource RadiusSm}"
-                                        Padding="6,4"
+                                        Padding="0"
                                         Margin="0,4,0,0"
                                         MaxWidth="380"
-                                        HorizontalAlignment="Center">
-                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                                        <!-- r36: bind to ZapretStrategiesDisplay (with ✓ N/M badges)
-                                             instead of raw ZapretStrategies. SelectedIndex still
-                                             drives ZapretStrategyIndex which is 1:1 with raw names.
-                                             r46: ItemTemplate splits glyph (colored) + name (default
-                                             text). Classes.zglyph-* bindings drive Foreground via
-                                             the styles above. -->
+                                        HorizontalAlignment="Stretch">
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
                                         <ComboBox Grid.Column="0"
                                                   ItemsSource="{Binding ZapretStrategiesDisplay}"
                                                   SelectedIndex="{Binding ZapretStrategyIndex}"
@@ -285,7 +284,7 @@
                                                   Padding="6,2"
                                                   MinHeight="0"
                                                   HorizontalAlignment="Stretch"
-                                                  ToolTip.Tip="{Binding L_ZapretStartSelectedStrategyHint}">
+                                                  ToolTip.Tip="{Binding LblStrategyBadgeLegend}">
                                             <ComboBox.ItemTemplate>
                                                 <DataTemplate DataType="vm:ZapretStrategyDisplayItem">
                                                     <StackPanel Orientation="Horizontal" Spacing="6">
@@ -304,8 +303,8 @@
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
+                                        <!-- r50: explicit label "Запустить" instead of bare ▶ glyph -->
                                         <Button Grid.Column="1"
-                                                Content="▶"
                                                 Command="{Binding StartZapretWithSelectedStrategyCommand}"
                                                 IsEnabled="{Binding !IsZapretProbing}"
                                                 ToolTip.Tip="{Binding L_ZapretStartSelectedStrategyHint}"
@@ -315,42 +314,19 @@
                                                 Background="{DynamicResource AccentBgSubtleBrush}"
                                                 Foreground="{DynamicResource AccentFgBrush}"
                                                 BorderBrush="{DynamicResource AccentBorderBrush}"
-                                                BorderThickness="1"/>
+                                                BorderThickness="1">
+                                            <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                                                <TextBlock Text="▶" FontSize="9" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding LblZapretRunSelected}" FontSize="10" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
                                     </Grid>
                                 </Border>
 
-                                <!-- r45/r46 — Legend for strategy badge glyphs.
-                                     r46: each glyph gets the same color as it
-                                     does in the dropdown via zglyph-* classes,
-                                     so the legend is a true visual key. Built
-                                     as inline WrapPanel of mini-pairs (glyph +
-                                     short label) instead of a single TextBlock. -->
-                                <WrapPanel IsVisible="{Binding HasZapretStrategiesForQuickStart}"
-                                           HorizontalAlignment="Center"
-                                           ItemSpacing="8"
-                                           Margin="0,2,0,0"
-                                           MaxWidth="380">
-                                    <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock Text="✓" FontSize="9" Classes="zglyph-success"/>
-                                        <TextBlock Text="{Binding LblLegendWorking}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock Text="⚠" FontSize="9" Classes="zglyph-warning"/>
-                                        <TextBlock Text="{Binding LblLegendPartial}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock Text="✗" FontSize="9" Classes="zglyph-danger"/>
-                                        <TextBlock Text="{Binding LblLegendFailed}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock Text="◌" FontSize="9" Classes="zglyph-muted"/>
-                                        <TextBlock Text="{Binding LblLegendUntested}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Spacing="2">
-                                        <TextBlock Text="⏱" FontSize="9" Classes="zglyph-stale"/>
-                                        <TextBlock Text="{Binding LblLegendStale}" FontSize="9" Foreground="{DynamicResource TextMutedBrush}"/>
-                                    </StackPanel>
-                                </WrapPanel>
+                                <!-- r50: floating legend REMOVED — moved into
+                                     ComboBox tooltip (LblStrategyBadgeLegend).
+                                     Was disconnected from dropdown visually
+                                     and ate ~20px of Hero. -->
 
                                 <!-- r47: "Open probe log" button MOVED out of Hero
                                      to Дополнительно tab — Hero was getting too
@@ -432,72 +408,38 @@
                            [Подробнее]     → ExpandZapretTuneSection
                                               (programmatically opens the
                                               expander below) -->
-                    <!-- r47: compact summary card. Pre-r47 was 3-line StackPanel
-                         (icon+title row, subtext row, buttons row) with 14,10
-                         padding + 8 spacing = ~120 px. After legend + colored
-                         badges in r45/r46 the Hero grew enough that Strategy/
-                         Hosts tabs were below the viewport on default window.
-                         r47 collapses to single horizontal row: icon + title +
-                         subtext + Re-verify button. "Подробнее" button removed
-                         (the tabs ARE the details — strategy picker is the
-                         very next thing below). -->
-                    <Border IsVisible="{Binding IsZapretSummaryVisible}"
-                            Background="{DynamicResource SurfaceBaseBrush}"
-                            BorderBrush="{DynamicResource BorderSubtleBrush}"
-                            BorderThickness="1"
-                            CornerRadius="{StaticResource RadiusMd}"
-                            Padding="10,6"
-                            Margin="0,6,0,0">
-                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
-                            <!-- Status icon (✓/⚠) — col 0, spans both rows -->
-                            <TextBlock Grid.Column="0" Grid.RowSpan="2"
-                                       Text="✓"
-                                       FontSize="14"
-                                       FontWeight="Bold"
-                                       Margin="0,0,8,0"
-                                       VerticalAlignment="Center"
-                                       Foreground="{DynamicResource SuccessSolidBrush}"
-                                       IsVisible="{Binding !IsZapretCacheStale}"/>
-                            <TextBlock Grid.Column="0" Grid.RowSpan="2"
-                                       Text="⚠"
-                                       FontSize="14"
-                                       FontWeight="Bold"
-                                       Margin="0,0,8,0"
-                                       VerticalAlignment="Center"
-                                       Foreground="{DynamicResource WarningSolidBrush}"
-                                       IsVisible="{Binding IsZapretCacheStale}"/>
-
-                            <!-- Header row 0: title -->
-                            <TextBlock Grid.Column="1" Grid.Row="0"
-                                       Text="{Binding LblZapretSummaryHeader}"
-                                       FontSize="11"
-                                       FontWeight="SemiBold"
-                                       TextWrapping="NoWrap"
-                                       TextTrimming="CharacterEllipsis"
-                                       VerticalAlignment="Center"
-                                       Foreground="{DynamicResource TextPrimaryBrush}"/>
-
-                            <!-- Subtext row 1: age + score -->
-                            <TextBlock Grid.Column="1" Grid.Row="1"
-                                       Text="{Binding LblZapretSummarySubtext}"
-                                       FontSize="10"
-                                       Opacity="0.7"
-                                       TextWrapping="NoWrap"
-                                       TextTrimming="CharacterEllipsis"
-                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
-
-                            <!-- Re-verify button on right, spans both rows -->
-                            <Button Grid.Column="2" Grid.RowSpan="2"
-                                    Content="{Binding L_ZapretReverifyButton}"
-                                    Command="{Binding ForceFreshProbeCommand}"
-                                    IsEnabled="{Binding !IsZapretProbing}"
-                                    ToolTip.Tip="{Binding L_ZapretReverifyHint}"
-                                    FontSize="10" Padding="8,4"
-                                    CornerRadius="{StaticResource RadiusSm}"
-                                    VerticalAlignment="Center"
-                                    Margin="8,0,0,0"/>
-                        </Grid>
-                    </Border>
+                    <!-- r50: minimal summary strip. Pre-r50 had big card with
+                         redundant "Стратегия XXX работает" title that
+                         duplicated the ComboBox ✓ badge. User design feedback:
+                         "блок 'Стратегия "general (ALT3)" работает' + футер
+                         дублируют информацию о текущей стратегии". Reduced
+                         to a single line: only the cache-age + Re-verify
+                         button. No card border, no big icon — just a status
+                         hint that ties to the ComboBox above. -->
+                    <Grid IsVisible="{Binding IsZapretSummaryVisible}"
+                          ColumnDefinitions="*,Auto"
+                          Margin="0,4,0,0">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding LblZapretSummarySubtext}"
+                                   FontSize="10"
+                                   Opacity="0.7"
+                                   TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"/>
+                        <Button Grid.Column="1"
+                                Content="{Binding L_ZapretReverifyButton}"
+                                Command="{Binding ForceFreshProbeCommand}"
+                                IsEnabled="{Binding !IsZapretProbing}"
+                                ToolTip.Tip="{Binding L_ZapretReverifyHint}"
+                                FontSize="10" Padding="8,3"
+                                CornerRadius="{StaticResource RadiusSm}"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource AccentBgSubtleBrush}"
+                                Foreground="{DynamicResource AccentFgBrush}"
+                                BorderBrush="{DynamicResource AccentBorderBrush}"
+                                BorderThickness="1"/>
+                    </Grid>
 
                     <!-- ════════ r25 — Тонкая настройка as TabControl, not Expander.
                          Historical bug we hit repeatedly r10..r22: an Expander
@@ -612,27 +554,13 @@
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
-                                <!-- v2.37.0-r21 — direct-start path for power users.
-                                     "Запустить с этой стратегией" applies the
-                                     selected ComboBox strategy immediately,
-                                     skipping the 2-7min auto-probe. Cached as
-                                     a success so warm-start kicks in next time. -->
-                                <Button Content="{Binding L_ZapretStartSelectedStrategyButton}"
-                                        Command="{Binding StartZapretWithSelectedStrategyCommand}"
-                                        IsEnabled="{Binding !IsZapretProbing}"
-                                        ToolTip.Tip="{Binding L_ZapretStartSelectedStrategyHint}"
-                                        HorizontalAlignment="Stretch"
-                                        HorizontalContentAlignment="Left"
-                                        FontSize="10" Padding="8,4"
-                                        CornerRadius="{StaticResource RadiusSm}"
-                                        Background="{DynamicResource AccentBgSubtleBrush}"
-                                        Foreground="{DynamicResource AccentFgBrush}"
-                                        BorderBrush="{DynamicResource AccentBorderBrush}"
-                                        BorderThickness="1"/>
-                                <TextBlock Text="{Binding L_ZapretStartSelectedStrategyHint}"
-                                           FontSize="9" Opacity="0.6"
-                                           TextWrapping="Wrap"
-                                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                <!-- r50 — REMOVED "Запустить с этой стратегией"
+                                     button + help-text per design review:
+                                     duplicate CTA. Hero magic button + Hero
+                                     mini ▶ cover both "auto-pick" and
+                                     "use selected" intents already. Strategy
+                                     tab is now a pure setting (which strategy
+                                     to use), not a third action. -->
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock Text="{Binding ZapretVersionText}"
                                                FontSize="10" Opacity="0.5"
