@@ -90,28 +90,21 @@
                          the content for the «marketing event» feel from
                          design A. ZIndex via Grid layering: glow is bottom,
                          StackPanel is top. -->
-                    <!-- r36: padding 24/22 → 14 (match DpiBypass r31 compact) -->
+                    <!-- r48: padding tightened + icon-LEFT layout for parity with DpiBypass -->
                     <Border CornerRadius="{StaticResource RadiusLg}"
                             Background="{DynamicResource SurfaceBaseBrush}"
                             BorderBrush="{DynamicResource BorderSubtleBrush}"
                             BorderThickness="1"
-                            Padding="20,14,20,14"
+                            Padding="16,10,16,12"
                             ClipToBounds="True">
                         <Grid>
-                            <!-- Soft accent glow disc — RadialGradientBrush
-                                 from AccentBgSubtle to Transparent at 65 percent.
-                                 Design CSS source: radial-gradient(circle,
-                                 accent-bg-subtle 0 percent, transparent 65 percent)
-                                 with opacity .85 on a 280×280 area. We render
-                                 it via an Ellipse so the brush coordinates stay
-                                 anchored to the circular bounds. -->
-                            <!-- r32: 320→180 (same fix as DpiBypassPage r32) — Ellipse
-                                 was setting Hero card min-height to ~350px,
-                                 squeezing tabs off-screen. Visual flair only. -->
-                            <Ellipse Width="180" Height="180"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center"
-                                     Opacity="0.65"
+                            <!-- r48: glow disc anchored top-right to leave the
+                                 text column visually clean. Was centered/large
+                                 pre-r48 which clashed with new icon-left layout. -->
+                            <Ellipse Width="140" Height="140"
+                                     HorizontalAlignment="Right"
+                                     VerticalAlignment="Top"
+                                     Opacity="0.5"
                                      IsHitTestVisible="False">
                                 <Ellipse.Fill>
                                     <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="0.5" RadiusY="0.5">
@@ -121,46 +114,49 @@
                                 </Ellipse.Fill>
                             </Ellipse>
 
-                            <!-- r36: spacing 12 → 8 (match DpiBypass r31 compact) -->
-                            <StackPanel Spacing="8" HorizontalAlignment="Center" MaxWidth="380">
+                            <StackPanel Spacing="10" HorizontalAlignment="Stretch" MaxWidth="420">
 
-                                <!-- Paper-plane icon. r36: 46→38 (match DpiBypass r31 compact). -->
-                                <Border Width="38" Height="38"
-                                        CornerRadius="12"
-                                        Background="{DynamicResource SurfaceBaseBrush}"
-                                        BorderBrush="{DynamicResource AccentBorderBrush}"
-                                        BorderThickness="1"
-                                        BoxShadow="0 2 6 0 #14000000"
-                                        HorizontalAlignment="Center">
-                                    <Path Width="22" Height="22"
-                                          Stretch="Uniform"
-                                          Stroke="{DynamicResource AccentFgBrush}"
-                                          StrokeThickness="1.8"
-                                          StrokeLineCap="Round"
-                                          StrokeJoin="Round"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          Data="M21,3 L11,13 M21,3 L14.5,21 L11,13 L3,9.5 z"/>
-                                </Border>
+                                <!-- r48: icon-LEFT header (same pattern as
+                                     DpiBypassPage r48). Saves ~40px of vertical
+                                     space by placing icon col 0 + title/lede
+                                     col 1 side-by-side instead of stacking. -->
+                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                                    <Border Grid.Column="0" Grid.RowSpan="2"
+                                            Width="36" Height="36"
+                                            CornerRadius="10"
+                                            Background="{DynamicResource SurfaceBaseBrush}"
+                                            BorderBrush="{DynamicResource AccentBorderBrush}"
+                                            BorderThickness="1"
+                                            BoxShadow="0 2 6 0 #14000000"
+                                            VerticalAlignment="Top"
+                                            Margin="0,2,12,0">
+                                        <Path Width="20" Height="20"
+                                              Stretch="Uniform"
+                                              Stroke="{DynamicResource AccentFgBrush}"
+                                              StrokeThickness="1.8"
+                                              StrokeLineCap="Round"
+                                              StrokeJoin="Round"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Data="M21,3 L11,13 M21,3 L14.5,21 L11,13 L3,9.5 z"/>
+                                    </Border>
 
-                                <!-- Title (flips with state). -->
-                                <TextBlock Text="{Binding LblTgProxyHeroTitle}"
-                                           FontSize="18"
-                                           FontWeight="Bold"
-                                           Foreground="{DynamicResource TextPrimaryBrush}"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"
-                                           HorizontalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="0"
+                                               Text="{Binding LblTgProxyHeroTitle}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Top"/>
 
-                                <!-- Lede (flips with state). -->
-                                <TextBlock Text="{Binding LblTgProxyHeroLede}"
-                                           FontSize="12"
-                                           LineHeight="18"
-                                           Foreground="{DynamicResource TextSecondaryBrush}"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"
-                                           HorizontalAlignment="Center"
-                                           MaxWidth="340"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="1"
+                                               Text="{Binding LblTgProxyHeroLede}"
+                                               FontSize="11"
+                                               LineHeight="15"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,3,0,0"/>
+                                </Grid>
 
                                 <!-- The magic button — big primary accent.
                                      r36: MinWidth 240→220 (still hero feel,

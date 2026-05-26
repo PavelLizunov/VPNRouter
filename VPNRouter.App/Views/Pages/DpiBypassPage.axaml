@@ -153,17 +153,15 @@
                             Background="{DynamicResource SurfaceBaseBrush}"
                             BorderBrush="{DynamicResource BorderSubtleBrush}"
                             BorderThickness="1"
-                            Padding="20,14,20,14"
+                            Padding="16,10,16,12"
                             ClipToBounds="True">
                         <Grid>
-                            <!-- Soft accent glow disc behind the content.
-                                 r32: 320→180 to shrink Hero card minimum height.
-                                 Was forcing Hero to ~350px even after r31 padding
-                                 reduction; tabs got squeezed off-screen. -->
-                            <Ellipse Width="180" Height="180"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center"
-                                     Opacity="0.65"
+                            <!-- Soft accent glow disc — smaller after r48 layout
+                                 change (icon-left instead of icon-top). -->
+                            <Ellipse Width="140" Height="140"
+                                     HorizontalAlignment="Right"
+                                     VerticalAlignment="Top"
+                                     Opacity="0.5"
                                      IsHitTestVisible="False">
                                 <Ellipse.Fill>
                                     <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="0.5" RadiusY="0.5">
@@ -173,47 +171,54 @@
                                 </Ellipse.Fill>
                             </Ellipse>
 
-                            <StackPanel Spacing="12" HorizontalAlignment="Center" MaxWidth="380">
+                            <StackPanel Spacing="10" HorizontalAlignment="Stretch" MaxWidth="420">
 
-                                <!-- Shield-with-bolt icon: a Path that draws
-                                     the shield outline + lightning bolt. 46x46
-                                     rounded container mirrors TgProxyOneTap. -->
-                                <Border Width="46" Height="46"
-                                        CornerRadius="14"
-                                        Background="{DynamicResource SurfaceBaseBrush}"
-                                        BorderBrush="{DynamicResource AccentBorderBrush}"
-                                        BorderThickness="1"
-                                        BoxShadow="0 2 6 0 #14000000"
-                                        HorizontalAlignment="Center">
-                                    <Path Width="22" Height="22"
-                                          Stretch="Uniform"
-                                          Stroke="{DynamicResource AccentFgBrush}"
-                                          StrokeThickness="1.8"
-                                          StrokeLineCap="Round"
-                                          StrokeJoin="Round"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          Data="M12,2 L4,5 L4,11 C4,16 7.5,20 12,22 C16.5,20 20,16 20,11 L20,5 z M13,7 L9,13 L12,13 L11,17 L15,11 L12,11 z"/>
-                                </Border>
+                                <!-- r48: icon-LEFT header. Pre-r48 icon was
+                                     centered on top, then title + lede stacked
+                                     below — vertical scan, ~110px just for
+                                     icon+title. r48 puts icon col 0 + title/
+                                     lede col 1 side-by-side, saving ~40px and
+                                     surfacing the title at the very top of the
+                                     Hero (visible without scroll on narrow
+                                     windows). Icon shrunk 46→36 to match the
+                                     more compact rhythm. -->
+                                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto">
+                                    <Border Grid.Column="0" Grid.RowSpan="2"
+                                            Width="36" Height="36"
+                                            CornerRadius="10"
+                                            Background="{DynamicResource SurfaceBaseBrush}"
+                                            BorderBrush="{DynamicResource AccentBorderBrush}"
+                                            BorderThickness="1"
+                                            BoxShadow="0 2 6 0 #14000000"
+                                            VerticalAlignment="Top"
+                                            Margin="0,2,12,0">
+                                        <Path Width="20" Height="20"
+                                              Stretch="Uniform"
+                                              Stroke="{DynamicResource AccentFgBrush}"
+                                              StrokeThickness="1.8"
+                                              StrokeLineCap="Round"
+                                              StrokeJoin="Round"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Data="M12,2 L4,5 L4,11 C4,16 7.5,20 12,22 C16.5,20 20,16 20,11 L20,5 z M13,7 L9,13 L12,13 L11,17 L15,11 L12,11 z"/>
+                                    </Border>
 
-                                <!-- Title (state-driven). -->
-                                <TextBlock Text="{Binding LblZapretHeroTitle}"
-                                           FontSize="18"
-                                           FontWeight="Bold"
-                                           Foreground="{DynamicResource TextPrimaryBrush}"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"
-                                           HorizontalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="0"
+                                               Text="{Binding LblZapretHeroTitle}"
+                                               FontSize="15"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Top"/>
 
-                                <!-- Lede (state-driven, embeds live probe index). -->
-                                <TextBlock Text="{Binding LblZapretHeroLede}"
-                                           FontSize="12"
-                                           LineHeight="18"
-                                           Foreground="{DynamicResource TextSecondaryBrush}"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap"
-                                           HorizontalAlignment="Center"
-                                           MaxWidth="340"/>
+                                    <TextBlock Grid.Column="1" Grid.Row="1"
+                                               Text="{Binding LblZapretHeroLede}"
+                                               FontSize="11"
+                                               LineHeight="15"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,3,0,0"/>
+                                </Grid>
 
                                 <!-- Magic button — fires ZapretOneClickCommand
                                      which orchestrates the whole flow. Same
