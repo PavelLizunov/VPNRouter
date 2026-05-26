@@ -1284,6 +1284,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public string LblOpenProbeLog =>
         IsRussian ? "Открыть лог проверки" : "Open probe log";
 
+    /// <summary>
+    /// r45 — legend for the strategy-badge glyphs in the Hero ComboBox.
+    /// Static localized string. Lives below the dropdown so users can
+    /// decode ✓/⚠/✗/◌/⏱ without hovering each item.
+    /// </summary>
+    public string LblStrategyBadgeLegend =>
+        IsRussian
+            ? "✓ работает   ⚠ частично   ✗ не работает   ◌ не проверена   ⏱ устарело"
+            : "✓ working   ⚠ partial   ✗ failed   ◌ untested   ⏱ stale";
+
     [RelayCommand]
     private void OpenProbeLog()
     {
@@ -4446,9 +4456,21 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var perStrategy = cached?.PerStrategyResults
             ?? new System.Collections.Generic.Dictionary<string, VPNRouter.Core.Services.ZapretStrategyTestResult>(StringComparer.Ordinal);
 
+        // r45: glyph + name layout — badge BEFORE the strategy name so the
+        // dropdown lines up visually as a column of indicators on the left
+        // and names on the right. Pre-r45 format `{name}  ✓ N/M` made the
+        // glyph drift right with name length (ALT11 vs FAKE TLS AUTO ALT3
+        // varied 5..18 chars), so user couldn't scan status at a glance.
+        //
+        // Glyph vocabulary (legend lives in DpiBypassPage):
+        //   ✓ — strategy passed verification (winner-or-via-sweep with 100%)
+        //   ⚠ — strategy partially passed (some targets failed; might work)
+        //   ✗ — strategy failed verification (zero targets passed)
+        //   ◌ — strategy never tested (no probe data in cache for this name)
+        //   ⏱ — winner data is stale (>7 days old)
         foreach (var name in ZapretStrategies)
         {
-            // Winner gets the most authoritative badge (✓/⚠ from main
+            // Winner gets the most authoritative badge (✓/⏱ from main
             // cache fields). Non-winners fall back to per-strategy probe
             // data if we have it from the same sweep.
             if (!string.IsNullOrEmpty(winnerName)
@@ -4457,16 +4479,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 if (winnerOk)
                 {
                     display.Add(hasScore
-                        ? $"{name}  ✓ {passed}/{total}"
-                        : $"{name}  ✓");
+                        ? $"✓ {passed}/{total}  {name}"
+                        : $"✓  {name}");
                 }
                 else if (winnerStale)
                 {
-                    display.Add($"{name}  ⚠ устарело");
+                    display.Add($"⏱  {name}");
                 }
                 else
                 {
-                    display.Add(name);
+                    display.Add($"◌  {name}");
                 }
                 continue;
             }
@@ -4475,15 +4497,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             if (perStrategy.TryGetValue(name, out var result) && result.Total > 0)
             {
                 if (result.Passed == result.Total)
-                    display.Add($"{name}  ✓ {result.Passed}/{result.Total}");
+                    display.Add($"✓ {result.Passed}/{result.Total}  {name}");
                 else if (result.Passed == 0)
-                    display.Add($"{name}  ✗ 0/{result.Total}");
+                    display.Add($"✗ 0/{result.Total}  {name}");
                 else
-                    display.Add($"{name}  ⚠ {result.Passed}/{result.Total}");
+                    display.Add($"⚠ {result.Passed}/{result.Total}  {name}");
             }
             else
             {
-                display.Add(name);
+                // r45: "not tested" glyph (was bare name) — makes it obvious
+                // that probe simply hasn't reached this strategy yet vs.
+                // tested-and-passed.
+                display.Add($"◌  {name}");
             }
         }
         ZapretStrategiesDisplay = display;

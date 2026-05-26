@@ -152,8 +152,10 @@ public class MainWindowViewModelCharacterizationTests
     // v2.37.0-r40 (2026-05-26): added TryRestoreLastProbeLog method (private,
     // but generated `OnLastProbeLogPathChanged` partial method became a reflection-
     // visible signature change due to NotifyPropertyChangedFor wiring updates).
+    // v2.37.0-r45 (2026-05-26): added LblStrategyBadgeLegend (string property)
+    // for the strategy ComboBox glyph legend.
     private const string PinnedHashWindows =
-        "a463d87473eb4d393713358ab1cfd0fb781695ebc26207758a79c6f1fa4dd57f";
+        "2477a57fdbc47105595f58f2894164eea41faa579824d4349b0c40eea09dd456";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

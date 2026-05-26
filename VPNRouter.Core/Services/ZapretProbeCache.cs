@@ -134,8 +134,40 @@ public static class ZapretProbeCache
                 logger?.Debug("[ZapretProbeCache] No cache at {Path}", CachePath);
                 return null;
             }
-            var json = File.ReadAllText(CachePath);
-            var entry = JsonSerializer.Deserialize<ZapretProbeCacheEntry>(json);
+            string json;
+            try { json = File.ReadAllText(CachePath); }
+            catch (Exception ioEx)
+            {
+                // r45 — distinguish IO failure (file locked, permissions, etc)
+                // from JSON corruption so future UI surface can offer the right
+                // action ("retry" vs "clear cache"). Log at Warning since this
+                // means we can't read a file that exists.
+                logger?.Warning(ioEx,
+                    "[ZapretProbeCache] IO error reading cache at {Path} (will redo sweep)",
+                    CachePath);
+                return null;
+            }
+
+            ZapretProbeCacheEntry? entry;
+            try
+            {
+                entry = JsonSerializer.Deserialize<ZapretProbeCacheEntry>(json);
+            }
+            catch (JsonException jsonEx)
+            {
+                // r45 — JSON corruption: file content is bad. Log at Warning
+                // with first 100 chars of the offending content so we can grep
+                // for the corrupted state. Distinguished from "file missing"
+                // (Debug) so it stands out in vpnrouter*.log.
+                var preview = json.Length > 100 ? json.Substring(0, 100) + "…" : json;
+                logger?.Warning(jsonEx,
+                    "[ZapretProbeCache] CORRUPTED JSON at {Path}: {Preview}",
+                    CachePath, preview);
+                // Don't auto-delete — preserve file for diagnostic. Next sweep
+                // will overwrite via WriteAtomic.
+                return null;
+            }
+
             if (entry == null || string.IsNullOrWhiteSpace(entry.Strategy))
             {
                 logger?.Debug("[ZapretProbeCache] Cache deserialized to null/empty");
@@ -145,7 +177,8 @@ public static class ZapretProbeCache
         }
         catch (Exception ex)
         {
-            logger?.Debug(ex, "[ZapretProbeCache] Failed to load cache (will redo sweep)");
+            // Defensive catch-all — caller never throws into UI.
+            logger?.Warning(ex, "[ZapretProbeCache] Unexpected load failure (will redo sweep)");
             return null;
         }
     }

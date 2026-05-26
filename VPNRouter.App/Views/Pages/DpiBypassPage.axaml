@@ -263,6 +263,21 @@
                                     </Grid>
                                 </Border>
 
+                                <!-- r45 — Legend for the strategy badge glyphs.
+                                     Without this users can't decode the ✓/⚠/✗/◌/⏱
+                                     prefixes in the ComboBox dropdown. Shown
+                                     only when the dropdown is meaningful (i.e.
+                                     real strategies parsed from .bat files). -->
+                                <TextBlock IsVisible="{Binding HasZapretStrategiesForQuickStart}"
+                                           Text="{Binding LblStrategyBadgeLegend}"
+                                           FontSize="9"
+                                           HorizontalAlignment="Center"
+                                           TextAlignment="Center"
+                                           Foreground="{DynamicResource TextMutedBrush}"
+                                           Margin="0,2,0,0"
+                                           TextWrapping="Wrap"
+                                           MaxWidth="380"/>
+
                                 <!-- r39 — "Open probe log" link. Only shows after
                                      a probe has completed AND wrote its log to
                                      disk. Clicking opens the log in notepad so
