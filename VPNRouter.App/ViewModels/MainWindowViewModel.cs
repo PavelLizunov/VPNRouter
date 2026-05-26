@@ -4330,10 +4330,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         //   "Process exited (exit code: 1)"
         // — surfaced as a false-positive AV warning. Removing them when real
         // strategies exist forces the picker to a working option.
-        if (_parsedStrategies.Count == 0)
+        //
+        // r44 extension: also DON'T add stubs when Zapret IS installed but
+        // _parsedStrategies is still empty (install corrupted, .bat files
+        // missing/unreadable). Stubs would only mislead the user; instead
+        // log a diagnostic so we can surface "reinstall Zapret" toast later.
+#if PLATFORM_WINDOWS
+        var zapretActuallyInstalled = VPNRouter.Core.Services.ZapretUpdater.IsInstalled();
+#else
+        var zapretActuallyInstalled = false;
+#endif
+        if (_parsedStrategies.Count == 0 && !zapretActuallyInstalled)
         {
             names.Add("multisplit");
             names.Add("fake+multisplit");
+        }
+        else if (_parsedStrategies.Count == 0 && zapretActuallyInstalled)
+        {
+            _logger?.Warning(
+                "[VM] LoadZapretStrategies: Zapret install dir exists but ParseStrategies returned 0 — likely install corruption");
         }
         // "custom" stays — represents the user's own args path (ZapretCustomArgs).
         names.Add("custom");
@@ -4990,9 +5005,15 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             _logger.Information("[VM] StartZapretWithSelectedStrategy: a probe is already running — refusing");
             return;
         }
+        // r44 — unconditional reap. Pre-r44 we only KillAllZapret when
+        // `ZapretEnabled || IsZapretRunning()` was true. But if a recent probe
+        // left orphan winws.exe processes (which CleanupOrphanWinws couldn't
+        // reach because it was canceled / crashed mid-probe), they'd survive
+        // and conflict with the new winws we're about to spawn (port collision,
+        // duplicate filter rules). Always kill before spawn.
+        KillAllZapret();
         if (ZapretEnabled || IsZapretRunning())
         {
-            KillAllZapret();
             ZapretEnabled = false;
             ZapretWinningStrategy = string.Empty;
             await Task.Delay(500);
@@ -5012,6 +5033,20 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == strategyName);
             if (parsed == null)
             {
+                // r44 — same class as r43 stub fix: if user picked "custom"
+                // (or any non-parsed name) AND ZapretCustomArgs is empty,
+                // we'd spawn winws with no args and it would exit 1 → false
+                // AV warning. Guard explicitly and surface a clear status.
+                if (string.IsNullOrWhiteSpace(ZapretCustomArgs))
+                {
+                    _logger.Warning(
+                        "[VM] Selected strategy {Name} not in parsed list AND ZapretCustomArgs is empty — refusing to spawn winws with no args",
+                        strategyName);
+                    ZapretStatus = IsRussian
+                        ? $"Стратегия «{strategyName}» не настроена (пустые аргументы). Выбери другую."
+                        : $"Strategy '{strategyName}' is not configured (empty arguments). Pick another.";
+                    return;
+                }
                 _logger.Warning("[VM] Selected strategy {Name} not in parsed list — using custom args path", strategyName);
                 _zapret!.Start(ZapretCustomArgs);
             }
