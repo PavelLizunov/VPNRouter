@@ -103,6 +103,43 @@ public class SingBoxManager : IDisposable
     private readonly object _capturedStderrLock = new();
 
     /// <summary>
+    /// v2.37.0-r52 (ekko 2026-05-25 forced-restart crash suppression):
+    /// set TRUE while <see cref="Restart"/> is in flight; <see cref="OnProcessExited"/>
+    /// uses it to differentiate intentional Stop-during-Restart (exit code -1
+    /// from Windows TerminateProcess) from a real sing-box FATAL.
+    ///
+    /// <para><b>Why this exists despite <c>SuppressExitedEvent</c>:</b> ekko's
+    /// 25 May logs show 25+ "[ERR] sing-box crashed (exit code: -1)" lines
+    /// during user-initiated routing_mode flips (split↔full). Each flip triggers
+    /// <see cref="VpnEngine.ApplyAsync"/> → forceRestart=true →
+    /// <see cref="ReloadConfigJson"/> → <see cref="Restart"/> →
+    /// <see cref="StopInternal"/>(releaseLock:false). Although StopInternal
+    /// calls <c>_handle.SuppressExitedEvent()</c> before <c>Kill()</c>, the
+    /// OS-level event delivery still wins the race in ~30ms windows
+    /// (brat-2026-05-24 logged 14ms, ekko 33ms) — the Exited callback is
+    /// already in the dispatcher queue when SuppressExitedEvent breaks the
+    /// subscription. Result: <c>OnProcessExited</c> fires, logs "crashed",
+    /// flips State to Failed, and <see cref="HealthMonitor"/> sees the
+    /// Crashed event → backoff restart loop kicks in (5s/10s/20s) on top of
+    /// the explicit Restart already happening, causing 10-15s outage during
+    /// what should be a 1-2s flip.</para>
+    ///
+    /// <para><b>Belt-and-braces:</b> this flag is the second line of defence.
+    /// SuppressExitedEvent stays — it works in the majority of cases. When it
+    /// loses the race, this flag catches the late callback and converts the
+    /// ERR log into an INF "expected exit during restart" line + suppresses
+    /// the Crashed event so HealthMonitor doesn't double-restart. Doesn't
+    /// touch the genuine-crash path (different exit codes, or Stop() not in
+    /// flight).</para>
+    ///
+    /// <para>Set true at top of <see cref="Restart"/>, cleared in finally at
+    /// the end of <see cref="Restart"/> (after LaunchProcess returns or
+    /// throws). Volatile so OnProcessExited (which runs on the ThreadPool
+    /// dispatcher thread) sees the latest value without lock contention.</para>
+    /// </summary>
+    private volatile bool _restartInProgress;
+
+    /// <summary>
     /// PinkuDani Fix #3 (2026-05-21): true if the most recent sing-box exit
     /// was caused by a TUN configuration conflict — specifically the
     /// <c>configure tun interface: Cannot create a file when that file
@@ -537,33 +574,48 @@ public class SingBoxManager : IDisposable
     {
         _logger.Information("[SingBoxManager] Restarting sing-box");
         State = SingBoxState.Restarting;
-        // Keep the TUN lock across restart so another instance can't slip in
-        // during the brief window between Stop and LaunchProcess.
-        StopInternal(releaseLock: false);
 
-        // v2.31.9-r4 — give Windows a beat to tear down the wintun handle
-        // before the next sing-box tries to open it. brat-2026-05-05 logged
-        // a FATAL "configure tun interface: The device is not ready for
-        // use" 16 seconds after a Restart() launched the new process; the
-        // crash tail showed `inbound/tun[tun-in]: open interface take too
-        // much time to finish!` — a kernel-level wintun teardown that
-        // hadn't settled by the time the new process tried to claim the
-        // device. The pre-existing
-        // <see cref="TunAdapterDiagnostics.DisableOrphanedAdapter"/> r5
-        // commentary cites a ~22 s lag between netsh disable and Windows
-        // releasing the handle. We don't wait that long here (would
-        // freeze the UI on every restart) but a small settle delay +
-        // the LaunchProcess pre-enable below cover the common case.
-        // Linux/macOS: no wintun, no race.
-        if (OperatingSystem.IsWindows())
+        // v2.37.0-r52 (ekko 2026-05-25): set the intentional-restart flag
+        // BEFORE StopInternal so any late OS Exited event that wins the race
+        // against SuppressExitedEvent gets caught by OnProcessExited's
+        // flag-check and doesn't propagate as a false Crashed event. Clear
+        // it in finally so genuine crashes during LaunchProcess (e.g. TUN
+        // init FATAL) still surface normally.
+        _restartInProgress = true;
+        try
         {
-            try { Thread.Sleep(750); } catch { }
-        }
+            // Keep the TUN lock across restart so another instance can't slip in
+            // during the brief window between Stop and LaunchProcess.
+            StopInternal(releaseLock: false);
 
-        var exePath = OperatingSystem.IsWindows()
-            ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
-            : AppPaths.SingBoxExePath;
-        LaunchProcess(exePath);
+            // v2.31.9-r4 — give Windows a beat to tear down the wintun handle
+            // before the next sing-box tries to open it. brat-2026-05-05 logged
+            // a FATAL "configure tun interface: The device is not ready for
+            // use" 16 seconds after a Restart() launched the new process; the
+            // crash tail showed `inbound/tun[tun-in]: open interface take too
+            // much time to finish!` — a kernel-level wintun teardown that
+            // hadn't settled by the time the new process tried to claim the
+            // device. The pre-existing
+            // <see cref="TunAdapterDiagnostics.DisableOrphanedAdapter"/> r5
+            // commentary cites a ~22 s lag between netsh disable and Windows
+            // releasing the handle. We don't wait that long here (would
+            // freeze the UI on every restart) but a small settle delay +
+            // the LaunchProcess pre-enable below cover the common case.
+            // Linux/macOS: no wintun, no race.
+            if (OperatingSystem.IsWindows())
+            {
+                try { Thread.Sleep(750); } catch { }
+            }
+
+            var exePath = OperatingSystem.IsWindows()
+                ? Environment.ExpandEnvironmentVariables(_settings.ExecutablePath)
+                : AppPaths.SingBoxExePath;
+            LaunchProcess(exePath);
+        }
+        finally
+        {
+            _restartInProgress = false;
+        }
     }
 
     public void ReloadConfig(SingBoxConfig config, bool forceRestart = false) =>
@@ -1065,6 +1117,35 @@ public class SingBoxManager : IDisposable
         catch (Exception ex)
         {
             exitCodeError = ex;
+        }
+
+        // v2.37.0-r52 (ekko 2026-05-25 routing-flip suppression): if Restart
+        // is in flight AND the exit code is the Windows-Kill signal (-1) or
+        // SIGKILL (137) or SIGTERM (143), the OS Exited callback just lost
+        // the race against SuppressExitedEvent. Don't fire Crashed — that
+        // would trigger HealthMonitor's backoff restart loop on top of the
+        // explicit Restart we're already doing, which is the source of
+        // ekko's "10-15 seconds of no internet during routing_mode flip"
+        // symptom. Log as INF so the suppression is auditable.
+        //
+        // Genuine sing-box FATALs (TUN-orphan, bad config) exit with code
+        // 1, NOT -1/137/143 — those still flow through the Crashed event
+        // normally and get the HealthMonitor recovery treatment (see today's
+        // ekko log 2026-05-26 08:37 where exit code 1 + AutoFailover did
+        // its job correctly).
+        if (_restartInProgress && (exitCode == -1 || exitCode == 137 || exitCode == 143))
+        {
+            _logger.Information(
+                "[SingBoxManager] Expected exit during Restart (exit code: {Code}) — suppressing Crashed event, late OS callback after SuppressExitedEvent",
+                exitCode);
+            // Still need to clean up handle state — fall through to the
+            // existing _capturedStderr scan + TunOrphan detection (those
+            // are safe no-ops on intentional exit), but skip Crashed.Invoke
+            // and the post-crash adapter cleanup below (Restart() does its
+            // own LaunchProcess which handles that).
+            LogSingBoxCrashTail();
+            DetectTunOrphanCrashSignature();
+            return;
         }
 
         if (exitCode == 0)
