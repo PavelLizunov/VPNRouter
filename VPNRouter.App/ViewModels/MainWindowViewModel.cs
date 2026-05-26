@@ -1270,6 +1270,47 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
     [NotifyPropertyChangedFor(nameof(LblZapretAirPill))]
     private int _zapretProbeTotalCount = 0;
+
+    // r39 — last probe's log file path, surfaced in DpiBypassPage as a
+    // clickable "Open probe log" link. Lets users attach the log to bug
+    // reports without needing to know %ProgramData% / dig for the file.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasLastProbeLog))]
+    private string? _lastProbeLogPath = null;
+
+    /// <summary>r39 — drives visibility of the "Open probe log" link.</summary>
+    public bool HasLastProbeLog => !string.IsNullOrEmpty(LastProbeLogPath);
+
+    public string LblOpenProbeLog =>
+        IsRussian ? "Открыть лог проверки" : "Open probe log";
+
+    [RelayCommand]
+    private void OpenProbeLog()
+    {
+        var path = LastProbeLogPath;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+        {
+            _logger?.Information("[VM] OpenProbeLog: no log path or file missing ({Path})", path);
+            return;
+        }
+        try
+        {
+            // Open in default text editor (notepad) — `explorer "<path>"`
+            // would open the folder; `start "" "<path>"` via cmd uses the
+            // default text handler.
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "notepad.exe",
+                Arguments = $"\"{path}\"",
+                UseShellExecute = false,
+                CreateNoWindow = false,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger?.Warning(ex, "[VM] OpenProbeLog failed for {Path}", path);
+        }
+    }
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroTitle))]
     [NotifyPropertyChangedFor(nameof(LblZapretHeroLede))]
@@ -5422,6 +5463,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             {
                 _zapretProbeCts.Dispose();
                 _zapretProbeCts = null;
+            }
+
+            // r39 — surface the probe log path so the UI can offer
+            // "Open probe log" click-through. Also log explicit
+            // early-winner status so users understand why sweep stopped.
+            LastProbeLogPath = sweep.ProbeLogPath;
+            if (sweep.EarlyWinner)
+            {
+                _logger.Information(
+                    "[VM] Probe early-exit: winner {Name} at config {N}/{T} — skipped remaining {M}",
+                    sweep.Winner, sweep.TestedCount, sweep.TotalCount,
+                    sweep.TotalCount - sweep.TestedCount);
             }
 
             if (sweep.Winner != null)

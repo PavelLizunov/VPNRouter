@@ -263,6 +263,24 @@
                                     </Grid>
                                 </Border>
 
+                                <!-- r39 — "Open probe log" link. Only shows after
+                                     a probe has completed AND wrote its log to
+                                     disk. Clicking opens the log in notepad so
+                                     users can attach it to bug reports without
+                                     digging through %ProgramData%. -->
+                                <Button IsVisible="{Binding HasLastProbeLog}"
+                                        Command="{Binding OpenProbeLogCommand}"
+                                        Content="{Binding LblOpenProbeLog}"
+                                        FontSize="10"
+                                        Padding="8,3"
+                                        Margin="0,4,0,0"
+                                        HorizontalAlignment="Center"
+                                        Background="Transparent"
+                                        BorderBrush="{DynamicResource BorderSubtleBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusSm}"
+                                        Foreground="{DynamicResource TextSecondaryBrush}"/>
+
                                 <!-- Probe progress bar (only during probing).
                                      r33: + Cancel button so user can abort the
                                      2-7 min sweep at any time. -->

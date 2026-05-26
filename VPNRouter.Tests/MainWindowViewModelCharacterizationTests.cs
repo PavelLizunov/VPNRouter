@@ -145,8 +145,11 @@ public class MainWindowViewModelCharacterizationTests
     // collection (Hero ComboBox display with ✓ N/M badge). 8 new public
     // members. NotifyPropertyChangedFor on _bypassRussianTraffic +
     // _isDnsLeakLockdownEnabled drives IsBadComboWarningVisible auto-refresh.
+    // v2.37.0-r39 (2026-05-26): added LastProbeLogPath + HasLastProbeLog
+    // computed bool + LblOpenProbeLog + OpenProbeLogCommand (UI surface for
+    // r38's per-probe log file). 4 new public members.
     private const string PinnedHashWindows =
-        "b3dde37b4541c0b0ba3d337c3369d5cd8f0a8a0bdd3253da55e4ccda8798981e";
+        "ce5d00f3556ff7c5a0974c2d64dca9e97f20ee8bca5ffaf0a40ae0ebf7f3207d";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

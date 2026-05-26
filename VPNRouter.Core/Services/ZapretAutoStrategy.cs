@@ -412,7 +412,17 @@ public static class ZapretAutoStrategy
         // that produced at least one status line ends up here. Allows the
         // Hero ComboBox to badge every probed strategy, not just the winner.
         // Null/empty when sweep failed before any strategy completed.
-        IReadOnlyDictionary<string, ZapretStrategyTestResult>? PerStrategyResults = null);
+        IReadOnlyDictionary<string, ZapretStrategyTestResult>? PerStrategyResults = null,
+        // r39 — path to the per-probe log file (%ProgramData%\VPNRouter\logs\
+        // zapret-probe-{timestamp}.log) so the UI can surface a "Open log"
+        // button next to the result. Null if log file couldn't be created
+        // (disk permissions, etc.) — UI hides the link in that case.
+        string? ProbeLogPath = null,
+        // r39 — true if the sweep was killed early because a winner aced
+        // enough targets. UI uses this to show "Winner found at config N —
+        // remaining M skipped (faster)" instead of letting the user think
+        // the sweep stopped due to a problem.
+        bool EarlyWinner = false);
 
     /// <summary>
     /// Run Flowseal's `utils/test zapret.ps1` with auto-answers (mode=DPI,
@@ -831,7 +841,9 @@ public static class ZapretAutoStrategy
                     CleanupOrphanWinws(preExistingWinwsPids, logger);
                     CloseProbeLog(probeLog, probeLogLock, "canceled", null, logger);
                     return new FlowsealSweepResult(null, testedCount, totalCount, outputBuilder.ToString(),
-                        Diagnostic: "canceled", ErrorLines: errSnap);
+                        Diagnostic: "canceled", ErrorLines: errSnap,
+                        ProbeLogPath: probeLog != null ? probeLogPath : null,
+                        EarlyWinner: false);
                 }
             }
         }
@@ -893,7 +905,9 @@ public static class ZapretAutoStrategy
 
         return new FlowsealSweepResult(winner, testedCount, totalCount, outputBuilder.ToString(),
             Diagnostic: timeoutDiagnostic, ErrorLines: finalErrors,
-            PerStrategyResults: perStrategySnap);
+            PerStrategyResults: perStrategySnap,
+            ProbeLogPath: probeLog != null ? probeLogPath : null,
+            EarlyWinner: earlyWinnerKilled);
     }
 
     /// <summary>
