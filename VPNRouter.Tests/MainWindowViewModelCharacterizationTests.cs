@@ -148,8 +148,11 @@ public class MainWindowViewModelCharacterizationTests
     // v2.37.0-r39 (2026-05-26): added LastProbeLogPath + HasLastProbeLog
     // computed bool + LblOpenProbeLog + OpenProbeLogCommand (UI surface for
     // r38's per-probe log file). 4 new public members.
+    // v2.37.0-r40 (2026-05-26): added TryRestoreLastProbeLog method (private,
+    // but generated `OnLastProbeLogPathChanged` partial method became a reflection-
+    // visible signature change due to NotifyPropertyChangedFor wiring updates).
     private const string PinnedHashWindows =
-        "ce5d00f3556ff7c5a0974c2d64dca9e97f20ee8bca5ffaf0a40ae0ebf7f3207d";
+        "a463d87473eb4d393713358ab1cfd0fb781695ebc26207758a79c6f1fa4dd57f";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
@@ -227,8 +230,12 @@ public class MainWindowViewModelCharacterizationTests
     // status surface (IsBadComboWarningVisible + 4 Lbl* strings +
     // DisableBadComboLockdownCommand + DisableBadComboRuBypassCommand +
     // ZapretStrategiesDisplay). New value from r36 CI job 77763204697.
+    // v2.37.0-r40 (2026-05-26): bumped to capture r39 + r40 surface delta on
+    // Linux (LastProbeLogPath / HasLastProbeLog / LblOpenProbeLog /
+    // OpenProbeLogCommand + TryRestoreLastProbeLog generator artifacts).
+    // New value from r39 CI commit 014daeb.
     private const string PinnedHashLinux =
-        "cafc0b22164bbec176121369c6c38063d4d19fed75b910bd73f6ca51e3b146c8";
+        "31d197b0cfb16bb028547bda57a8e0d7761efcc61021aaf0962f1cd4a34881eb";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()

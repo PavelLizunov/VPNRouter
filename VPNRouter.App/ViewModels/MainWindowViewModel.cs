@@ -4334,10 +4334,43 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // entry can carry verified/failed status.
         RefreshZapretStrategiesDisplay();
 
+        // r39 follow-up — find the most-recent zapret-probe-*.log on disk
+        // and surface it as LastProbeLogPath so the "Open probe log" button
+        // shows up even on fresh app launch (not only after running a probe
+        // in the current session). Best-effort.
+        TryRestoreLastProbeLog();
+
         // Restore saved strategy index
         var saved = _settings.App.ZapretStrategy;
         var idx = names.IndexOf(saved);
         ZapretStrategyIndex = idx >= 0 ? idx : 0;
+    }
+
+    /// <summary>
+    /// r39 follow-up — scan %ProgramData%\VPNRouter\logs\ for the most-recent
+    /// zapret-probe-*.log and surface its path so the "Open probe log" button
+    /// shows up on fresh app launch. Best-effort: any IO error → leave
+    /// LastProbeLogPath as null (button hidden).
+    /// </summary>
+    private void TryRestoreLastProbeLog()
+    {
+        try
+        {
+            var logsDir = VPNRouter.Core.AppPaths.LogsDir;
+            if (!Directory.Exists(logsDir)) return;
+            var newest = Directory.GetFiles(logsDir, "zapret-probe-*.log")
+                .OrderByDescending(p => File.GetLastWriteTimeUtc(p))
+                .FirstOrDefault();
+            if (!string.IsNullOrEmpty(newest))
+            {
+                LastProbeLogPath = newest;
+                _logger?.Debug("[VM] TryRestoreLastProbeLog: {Path}", newest);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.Debug(ex, "[VM] TryRestoreLastProbeLog failed (non-fatal)");
+        }
     }
 
     /// <summary>
