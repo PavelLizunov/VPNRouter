@@ -54,6 +54,12 @@ public static class SingleInstance
     // running instance resolves + adds it to RoutingAppsInclude + toasts.
     private const byte SignalRouteApp = 0x02;
 
+    // 0x03 = "remove this app from VPN routing" (Explorer context-menu verb,
+    // v2.38.0-r5). Wire format: [0x03][int32 little-endian length][UTF-8 path].
+    // Mirrors 0x02 (path only — no category); the running instance resolves +
+    // removes it from RoutingAppsInclude + custom groups.
+    private const byte SignalUnrouteApp = 0x03;
+
     // Sanity cap on the path payload so a malformed/hostile client can't make
     // us allocate an arbitrary buffer. MAX_PATH-era paths are <260 chars;
     // long-path UNC can reach ~32k chars → 64 KB UTF-8 is comfortably above.
@@ -77,6 +83,15 @@ public static class SingleInstance
     /// the split-tunnel list and toasts. v2.38.0.
     /// </summary>
     public static event Action<string, string?>? RouteAppRequested;
+
+    /// <summary>
+    /// Fired (on the Avalonia UI thread) when a second-instance launch invoked
+    /// <c>--unroute-app "&lt;path&gt;"</c> (the Explorer "remove from VPN"
+    /// context-menu verb). The argument is the raw <c>%1</c> path; the handler
+    /// resolves it to a process-name and removes it from the split-tunnel list.
+    /// v2.38.0-r5.
+    /// </summary>
+    public static event Action<string>? UnrouteAppRequested;
 
     /// <summary>
     /// Try to claim the single-instance slot. Call this BEFORE any
@@ -229,6 +244,34 @@ public static class SingleInstance
         }
     }
 
+    /// <summary>
+    /// Hand an unroute-app request to an already-running instance via the pipe
+    /// (v2.38.0-r5). Wire format: [0x03][int32 len][UTF-8 path] — no category.
+    /// </summary>
+    /// <returns><c>true</c> if a running instance received it (caller should
+    /// exit); <c>false</c> if no instance is listening (caller is/will be the
+    /// first instance and must process the path itself after startup).</returns>
+    public static bool TrySendUnrouteAppToRunningInstance(string path, ILogger? logger = null)
+    {
+        try
+        {
+            using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
+            client.Connect(2000);
+            var bytes = Encoding.UTF8.GetBytes(path ?? string.Empty);
+            client.WriteByte(SignalUnrouteApp);
+            client.Write(BitConverter.GetBytes(bytes.Length), 0, 4);
+            client.Write(bytes, 0, bytes.Length);
+            client.Flush();
+            logger?.Information("[SingleInstance] unroute-app handed to running instance: {Path}", path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger?.Debug(ex, "[SingleInstance] no running instance for unroute-app (processing locally)");
+            return false;
+        }
+    }
+
     /// <summary>Read exactly <paramref name="count"/> bytes or return false.</summary>
     private static bool ReadExact(Stream s, byte[] buf, int count)
     {
@@ -309,6 +352,32 @@ public static class SingleInstance
                         else
                         {
                             logger?.Warning("[SingleInstance] route-app payload length {Len} out of range — ignoring", len);
+                        }
+                    }
+                }
+                else if (verb == SignalUnrouteApp)
+                {
+                    // [0x03][int32 len][UTF-8 path] — path only (no category).
+                    var lenBuf = new byte[4];
+                    if (ReadExact(server, lenBuf, 4))
+                    {
+                        int len = BitConverter.ToInt32(lenBuf, 0);
+                        if (len > 0 && len <= MaxRouteAppPayloadBytes)
+                        {
+                            var pathBuf = new byte[len];
+                            if (ReadExact(server, pathBuf, len))
+                            {
+                                var path = Encoding.UTF8.GetString(pathBuf);
+                                Dispatcher.UIThread.Post(() =>
+                                {
+                                    try { UnrouteAppRequested?.Invoke(path); }
+                                    catch (Exception ex) { logger?.Warning(ex, "[SingleInstance] unroute-app handler threw"); }
+                                });
+                            }
+                        }
+                        else
+                        {
+                            logger?.Warning("[SingleInstance] unroute-app payload length {Len} out of range — ignoring", len);
                         }
                     }
                 }

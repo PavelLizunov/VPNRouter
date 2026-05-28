@@ -43,6 +43,11 @@ sealed class Program
     /// default "Custom Apps" group.</summary>
     internal static string? PendingRouteAppCategory { get; set; }
 
+    /// <summary>v2.38.0-r5 — when this (first) instance was launched by the
+    /// Explorer "remove from VPN" context-menu verb (<c>--unroute-app
+    /// "&lt;path&gt;"</c>) with no other instance to hand it to. Cleared after.</summary>
+    internal static string? PendingUnrouteAppPath { get; set; }
+
     /// <summary>Extract the value following <paramref name="flag"/>, if present.</summary>
     private static string? TryGetArgValue(string[] args, string flag)
     {
@@ -374,6 +379,15 @@ sealed class Program
                 return; // running instance received it — nothing more to do
             PendingRouteAppPath = routeAppPath; // we'll be the first instance
             PendingRouteAppCategory = routeAppCategory;
+        }
+
+        // v2.38.0-r5 — Explorer "remove from VPN" verb (--unroute-app "<path>").
+        var unrouteAppPath = TryGetArgValue(args, "--unroute-app");
+        if (unrouteAppPath != null)
+        {
+            if (VPNRouter.App.Services.SingleInstance.TrySendUnrouteAppToRunningInstance(unrouteAppPath, Serilog.Log.Logger))
+                return; // running instance received it
+            PendingUnrouteAppPath = unrouteAppPath; // we'll be the first instance
         }
 
         if (!VPNRouter.App.Services.SingleInstance.TryAcquireOrSignal(Serilog.Log.Logger))

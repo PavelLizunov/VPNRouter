@@ -118,4 +118,86 @@ public sealed class RoutingAppListEditorTests
         RoutingAppListEditor.TryAddProcessName(s, "EpicGamesLauncher.exe");
         Assert.Equal("EpicGamesLauncher.exe", s.App.RoutingAppsInclude[0]);
     }
+
+    // ── TryRemoveProcessName (v2.38.0-r5 "remove from VPN" verb) ──
+
+    [Fact]
+    public void RemoveExisting_Removes_ReturnsRemovedTrue()
+    {
+        var s = Fresh();
+        RoutingAppListEditor.TryAddProcessName(s, "Discord.exe");
+        var (removed, normalized) = RoutingAppListEditor.TryRemoveProcessName(s, "Discord.exe");
+        Assert.True(removed);
+        Assert.Equal("Discord.exe", normalized);
+        Assert.Empty(s.App.RoutingAppsInclude);
+    }
+
+    [Fact]
+    public void RemoveDifferentCase_StillRemoves()
+    {
+        // Removal matches case-insensitively (dedup semantics) even though
+        // we never lowercase on Add.
+        var s = Fresh();
+        RoutingAppListEditor.TryAddProcessName(s, "Discord.exe");
+        var (removed, normalized) = RoutingAppListEditor.TryRemoveProcessName(s, "discord.EXE");
+        Assert.True(removed);
+        Assert.Equal("discord.EXE", normalized);
+        Assert.Empty(s.App.RoutingAppsInclude);
+    }
+
+    [Fact]
+    public void RemoveFullPath_ReducesToBasename()
+    {
+        var s = Fresh();
+        RoutingAppListEditor.TryAddProcessName(s, "Game.exe");
+        var (removed, _) = RoutingAppListEditor.TryRemoveProcessName(
+            s, @"C:\Program Files\App\Game.exe");
+        Assert.True(removed);
+        Assert.Empty(s.App.RoutingAppsInclude);
+    }
+
+    [Fact]
+    public void RemoveNotPresent_ReturnsFalse_KeepsList()
+    {
+        var s = Fresh();
+        RoutingAppListEditor.TryAddProcessName(s, "Discord.exe");
+        var (removed, normalized) = RoutingAppListEditor.TryRemoveProcessName(s, "NotThere.exe");
+        Assert.False(removed);
+        Assert.Equal("NotThere.exe", normalized);   // valid input, just absent
+        Assert.Single(s.App.RoutingAppsInclude);     // Discord untouched
+    }
+
+    [Fact]
+    public void RemoveLeavesOtherEntries_OnlyTargetGone()
+    {
+        var s = Fresh();
+        RoutingAppListEditor.TryAddProcessName(s, "Discord.exe");
+        RoutingAppListEditor.TryAddProcessName(s, "Telegram.exe");
+        var (removed, _) = RoutingAppListEditor.TryRemoveProcessName(s, "Discord.exe");
+        Assert.True(removed);
+        Assert.Equal(new[] { "Telegram.exe" }, s.App.RoutingAppsInclude);
+    }
+
+    [Theory]
+    [InlineData("readme.txt")]
+    [InlineData("shortcut.lnk")]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void RemoveNonExeOrBlank_Rejected(string? input)
+    {
+        var s = Fresh();
+        RoutingAppListEditor.TryAddProcessName(s, "Discord.exe");
+        var (removed, _) = RoutingAppListEditor.TryRemoveProcessName(s, input);
+        Assert.False(removed);
+        Assert.Single(s.App.RoutingAppsInclude);     // list untouched
+    }
+
+    [Fact]
+    public void RemoveNullSettings_NoThrow_ReturnsFalseNull()
+    {
+        var (removed, normalized) = RoutingAppListEditor.TryRemoveProcessName(null, "Discord.exe");
+        Assert.False(removed);
+        Assert.Null(normalized);
+    }
 }

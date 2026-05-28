@@ -27,6 +27,13 @@ public static class Strings
     public static string ShellMenuParentLabel =>
         Ru ? "Добавить в VPNRouter" : "Add to VPNRouter";
 
+    /// <summary>v2.38.0-r5 — Explorer "remove from VPN" context-menu verb
+    /// (separate flat verb alongside the Add verb; always visible — no COM
+    /// conditional display — so it no-ops with a toast if the app wasn't
+    /// routed).</summary>
+    public static string ShellMenuUnrouteLabel =>
+        Ru ? "Убрать из VPNRouter" : "Remove from VPNRouter";
+
     // v2.29.0: dynamic OS name shown in user-facing autostart copy. Mac
     // users were seeing "Windows" hardcoded in Simple-mode autostart card
     // and Network → Autostart labels (reported 2026-04-29). Now Strings

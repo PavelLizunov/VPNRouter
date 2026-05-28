@@ -571,6 +571,74 @@ public partial class MainWindowViewModel
             ? (IsRussian ? $"{exeName} → через VPN ({landed})" : $"{exeName} → routed via VPN ({landed})")
             : (IsRussian ? $"{exeName} → через VPN" : $"{exeName} → routed via VPN"));
     }
+
+    /// <summary>
+    /// v2.38.0-r5 — remove an app from the split-tunnel list via the Explorer
+    /// "remove from VPN" context-menu verb (<c>--unroute-app "%1"</c>).
+    /// Windows-only (<c>#if PLATFORM_WINDOWS</c> keeps the Linux/Mac
+    /// MainWindowViewModel surface hash unchanged). Resolves the path (.exe or
+    /// .lnk) to a process-name, then unwinds it from EVERY place it lives:
+    /// the bridged AppItem (<c>IsChecked=false</c> fires WriteMode → removes it
+    /// from <c>RoutingAppsInclude</c>), its group (UI + custom_apps /
+    /// custom_group_apps on save), and a defensive direct
+    /// <see cref="RoutingAppListEditor.TryRemoveProcessName"/> scrub. No COM →
+    /// the verb is always visible, so this no-ops with a toast if the app
+    /// wasn't routed. Invoked from App.axaml.cs on UnrouteAppRequested /
+    /// PendingUnrouteAppPath.
+    /// </summary>
+    internal void UnrouteAppFromShell(string? rawPath)
+    {
+        var exeName = OperatingSystem.IsWindows()
+            ? Services.ShortcutResolver.ResolveToExeName(rawPath, _logger)
+            : null;
+
+        if (string.IsNullOrWhiteSpace(exeName))
+        {
+            _logger.Warning("[ShellRemove] could not resolve a routable .exe from {Path}", rawPath);
+            ShowRulesToast(IsRussian ? "Не удалось распознать приложение" : "Couldn't resolve the app");
+            return;
+        }
+
+        // Was it routed at all? RoutingAppsInclude is the authoritative list.
+        var routed = _settings.App.RoutingAppsInclude ?? new List<string>();
+        bool wasRouted = routed.Any(e => string.Equals(e, exeName, StringComparison.OrdinalIgnoreCase));
+
+        // 1) Uncheck + drop the bridged AppItem across all groups. Setting
+        //    IsChecked=false fires WriteMode → removes it from RoutingAppsInclude;
+        //    removing the item drops it from custom_apps / custom_group_apps on
+        //    the next SaveSettings.
+        bool removedItem = false;
+        foreach (var group in AppGroups)
+        {
+            var item = group.Apps.FirstOrDefault(
+                a => string.Equals(a.ProcessName, exeName, StringComparison.OrdinalIgnoreCase));
+            if (item != null)
+            {
+                try { item.IsChecked = false; } catch { }
+                group.Apps.Remove(item);
+                removedItem = true;
+                break;
+            }
+        }
+
+        // 2) Defensive direct scrub of RoutingAppsInclude — covers an entry that
+        //    was routed but never surfaced as an AppItem (e.g. added by a prior
+        //    --route-app into a since-deleted category).
+        VPNRouter.Core.Services.RoutingAppListEditor.TryRemoveProcessName(_settings, exeName);
+
+        SaveSettings();
+
+        if (wasRouted || removedItem)
+        {
+            _logger.Information("[ShellRemove] {Exe} removed from VPN routing", exeName);
+            ShowRulesToast(IsRussian ? $"{exeName} убрано из VPN" : $"{exeName} removed from VPN");
+        }
+        else
+        {
+            _logger.Information("[ShellRemove] {Exe} was not routed — no-op", exeName);
+            ShowRulesToast(IsRussian ? $"{exeName} не было в списке VPN" : $"{exeName} wasn't routed");
+        }
+    }
 #endif
 
     [RelayCommand]

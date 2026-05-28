@@ -74,4 +74,46 @@ public static class RoutingAppListEditor
         list.Add(name);
         return (true, name);
     }
+
+    /// <summary>
+    /// Remove an executable's process-name from the split-tunnel include list.
+    /// Mirror of <see cref="TryAddProcessName"/> for the Explorer "remove from
+    /// VPN" context-menu verb (v2.38.0-r5). Case-insensitive match; removes
+    /// every duplicate of the basename.
+    /// </summary>
+    /// <param name="settings">Settings to mutate in place.</param>
+    /// <param name="exeNameOrPath">An <c>.exe</c> filename or full path. A full
+    /// path is reduced to its filename (OS-independent on both <c>\</c> and
+    /// <c>/</c> — same contract as <see cref="TryAddProcessName"/>).</param>
+    /// <returns>
+    /// <c>Removed</c> = <c>true</c> when at least one entry was removed;
+    /// <c>false</c> when the input was invalid (null/blank/non-exe) or the
+    /// entry wasn't present. <c>Normalized</c> = the basename used, or
+    /// <c>null</c> when the input was invalid.
+    /// </returns>
+    public static (bool Removed, string? Normalized) TryRemoveProcessName(
+        AppSettings? settings, string? exeNameOrPath)
+    {
+        if (settings?.App == null) return (false, null);
+        if (string.IsNullOrWhiteSpace(exeNameOrPath)) return (false, null);
+
+        // Same basename reduction as TryAddProcessName — split on BOTH
+        // separators so a Windows path passed on a Linux test runner still
+        // reduces correctly (LastIndexOfAny is OS-independent).
+        var name = exeNameOrPath.Trim().Trim('"').Trim();
+        int lastSep = name.LastIndexOfAny(new[] { '\\', '/' });
+        if (lastSep >= 0 && lastSep < name.Length - 1)
+            name = name.Substring(lastSep + 1);
+        if (string.IsNullOrWhiteSpace(name)) return (false, null);
+
+        if (!name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            return (false, null);
+
+        var list = settings.App.RoutingAppsInclude;
+        if (list == null || list.Count == 0) return (false, name);
+
+        int removed = list.RemoveAll(
+            e => string.Equals(e, name, StringComparison.OrdinalIgnoreCase));
+        return (removed > 0, name);
+    }
 }

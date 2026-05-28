@@ -26,6 +26,9 @@ namespace VPNRouter.App.Services;
 public static class ShellMenuRegistrar
 {
     private const string VerbKey = "VPNRouterRoute";
+    // r5: separate "remove from VPN" verb (always a flat verb alongside the
+    // Add verb). Kept as its own key so Unregister/uninstall can drop both.
+    private const string UnverbKey = "VPNRouterUnroute";
     private static readonly string[] FileClasses = { "exefile", "lnkfile" };
 
     private static string MenuLabel =>
@@ -34,6 +37,10 @@ public static class ShellMenuRegistrar
     // r4: parent label for the cascading submenu (multi-category case).
     private static string ParentLabel =>
         VPNRouter.Core.Localization.Strings.ShellMenuParentLabel;
+
+    // r5: "Remove from VPNRouter" verb label.
+    private static string UnrouteLabel =>
+        VPNRouter.Core.Localization.Strings.ShellMenuUnrouteLabel;
 
     // r3: after writing/removing the verb, tell Explorer that file
     // associations changed so the RUNNING shell re-reads the verb (label +
@@ -139,9 +146,33 @@ public static class ShellMenuRegistrar
                     }
                 }
             }
+
+            // r5: separate flat "Remove from VPNRouter" verb (always present,
+            // both classes). No COM → can't conditionally hide, so it's always
+            // visible and no-ops with a toast if the app wasn't routed. Own
+            // foreach so the Add-verb loop's `continue`s never skip it.
+            foreach (var cls in FileClasses)
+            {
+                try
+                {
+                    Registry.CurrentUser.DeleteSubKeyTree(
+                        $@"Software\Classes\{cls}\shell\{UnverbKey}",
+                        throwOnMissingSubKey: false);
+                }
+                catch { /* best-effort */ }
+
+                using var un = Registry.CurrentUser.CreateSubKey(
+                    $@"Software\Classes\{cls}\shell\{UnverbKey}");
+                if (un == null) continue;
+                un.SetValue(null, UnrouteLabel);
+                un.SetValue("Icon", icon);
+                using var uncmd = un.CreateSubKey("command");
+                uncmd?.SetValue(null, $"\"{gui}\" --unroute-app \"%1\"");
+            }
+
             NotifyShellAssocChanged();
-            logger?.Information("[ShellMenu] registered verb ({Mode}) on exefile + lnkfile",
-                submenu ? $"submenu, {cats.Count} categories" : "flat");
+            logger?.Information("[ShellMenu] registered verbs (route={Mode} + unroute) on exefile + lnkfile",
+                submenu ? $"submenu/{cats.Count}" : "flat");
         }
         catch (Exception ex)
         {
@@ -155,18 +186,21 @@ public static class ShellMenuRegistrar
         if (!OperatingSystem.IsWindows()) return;
         foreach (var cls in FileClasses)
         {
-            try
+            foreach (var key in new[] { VerbKey, UnverbKey })
             {
-                Registry.CurrentUser.DeleteSubKeyTree(
-                    $@"Software\Classes\{cls}\shell\{VerbKey}",
-                    throwOnMissingSubKey: false);
-            }
-            catch (Exception ex)
-            {
-                logger?.Debug(ex, "[ShellMenu] unregister {Class} failed", cls);
+                try
+                {
+                    Registry.CurrentUser.DeleteSubKeyTree(
+                        $@"Software\Classes\{cls}\shell\{key}",
+                        throwOnMissingSubKey: false);
+                }
+                catch (Exception ex)
+                {
+                    logger?.Debug(ex, "[ShellMenu] unregister {Class}\\{Key} failed", cls, key);
+                }
             }
         }
         NotifyShellAssocChanged();
-        logger?.Information("[ShellMenu] unregistered context-menu verb");
+        logger?.Information("[ShellMenu] unregistered context-menu verbs");
     }
 }

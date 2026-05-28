@@ -169,8 +169,12 @@ public class MainWindowViewModelCharacterizationTests
     // (string? category) for the per-category cascading submenu, so the
     // Windows surface drifted again. Still #if PLATFORM_WINDOWS → Linux pin
     // untouched. Prior Windows hash: 2f9fd36c…58427a6c.
+    // v2.38.0-r5 (2026-05-28): added the Windows-only internal
+    // UnrouteAppFromShell(string) method for the Explorer "remove from VPN"
+    // verb. Still #if PLATFORM_WINDOWS → Linux pin untouched. Prior Windows
+    // hash: 4c4f4d6e…071ca24e.
     private const string PinnedHashWindows =
-        "4c4f4d6e301c79aeffbf5839130573d94fff663664edec0296ea3c47071ca24e";
+        "406d6826ab6ec148b0a9bf84744d15d2ae05a99bc5b225508bf0b19fa41895f9";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

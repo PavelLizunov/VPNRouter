@@ -185,9 +185,11 @@ try {
 
     foreach ($sid in ($sids | Select-Object -Unique)) {
         foreach ($cls in @("exefile", "lnkfile")) {
-            $vk = "Registry::HKEY_USERS\$sid\Software\Classes\$cls\shell\VPNRouterRoute"
-            if (Test-Path $vk) {
-                Remove-Item $vk -Recurse -Force -ErrorAction SilentlyContinue
+            foreach ($verb in @("VPNRouterRoute", "VPNRouterUnroute")) {
+                $vk = "Registry::HKEY_USERS\$sid\Software\Classes\$cls\shell\$verb"
+                if (Test-Path $vk) {
+                    Remove-Item $vk -Recurse -Force -ErrorAction SilentlyContinue
+                }
             }
         }
     }

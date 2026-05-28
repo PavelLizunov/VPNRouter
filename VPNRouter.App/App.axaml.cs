@@ -170,6 +170,13 @@ public partial class App : Application
                 try { _viewModel?.RouteAppFromShell(path, category); } catch { }
                 VPNRouter.App.Services.WindowForegroundHelper.BringToFront(desktop.MainWindow);
             };
+
+            // v2.38.0-r5 — "remove from VPN" verb (--unroute-app) piped here.
+            VPNRouter.App.Services.SingleInstance.UnrouteAppRequested += path =>
+            {
+                try { _viewModel?.UnrouteAppFromShell(path); } catch { }
+                VPNRouter.App.Services.WindowForegroundHelper.BringToFront(desktop.MainWindow);
+            };
 #endif
 
             // Release the single-instance Mutex on graceful shutdown so
@@ -196,6 +203,15 @@ public partial class App : Application
                 Program.PendingRouteAppPath = null;
                 Program.PendingRouteAppCategory = null;
                 try { _viewModel?.RouteAppFromShell(pending, pendingCat); } catch { }
+            }
+
+            // v2.38.0-r5 — drain a pending "remove from VPN" request (this
+            // instance was launched by --unroute-app with no other instance).
+            if (!string.IsNullOrEmpty(Program.PendingUnrouteAppPath))
+            {
+                var pendingUn = Program.PendingUnrouteAppPath;
+                Program.PendingUnrouteAppPath = null;
+                try { _viewModel?.UnrouteAppFromShell(pendingUn); } catch { }
             }
 #endif
         }
