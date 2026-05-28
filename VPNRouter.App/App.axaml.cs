@@ -1,3 +1,4 @@
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -111,7 +112,19 @@ public partial class App : Application
             // CA1416 platform analyzer happy — it tracks runtime guards, not
             // preprocessor symbols. Always true inside the Windows-only block.
             if (OperatingSystem.IsWindows())
-                try { VPNRouter.App.Services.ShellMenuRegistrar.Register(Serilog.Log.Logger); } catch { }
+                try
+                {
+                    // r4: pass the user's custom app-categories so the registrar
+                    // shows a cascading "VPNRouter ▸" submenu when there's more
+                    // than one (Custom Apps + named categories). ≤1 → flat verb,
+                    // exactly as before (no regression for the common case).
+                    var cats = _viewModel.AppGroups
+                        .Where(g => g.IsCustomGroup || g.IsCustomCategory)
+                        .Select(g => g.Name)
+                        .ToList();
+                    VPNRouter.App.Services.ShellMenuRegistrar.Register(cats, Serilog.Log.Logger);
+                }
+                catch { }
 #endif
 
             desktop.MainWindow = mainWindow;
@@ -152,9 +165,9 @@ public partial class App : Application
             // second launch with --route-app pipes the path here; resolve +
             // add to Custom Apps + toast in this running instance, then
             // surface the window so the user sees the result.
-            VPNRouter.App.Services.SingleInstance.RouteAppRequested += path =>
+            VPNRouter.App.Services.SingleInstance.RouteAppRequested += (path, category) =>
             {
-                try { _viewModel?.RouteAppFromShell(path); } catch { }
+                try { _viewModel?.RouteAppFromShell(path, category); } catch { }
                 VPNRouter.App.Services.WindowForegroundHelper.BringToFront(desktop.MainWindow);
             };
 #endif
@@ -179,8 +192,10 @@ public partial class App : Application
             if (!string.IsNullOrEmpty(Program.PendingRouteAppPath))
             {
                 var pending = Program.PendingRouteAppPath;
+                var pendingCat = Program.PendingRouteAppCategory;
                 Program.PendingRouteAppPath = null;
-                try { _viewModel?.RouteAppFromShell(pending); } catch { }
+                Program.PendingRouteAppCategory = null;
+                try { _viewModel?.RouteAppFromShell(pending, pendingCat); } catch { }
             }
 #endif
         }

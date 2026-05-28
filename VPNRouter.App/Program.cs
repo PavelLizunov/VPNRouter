@@ -38,11 +38,16 @@ sealed class Program
     /// </summary>
     internal static string? PendingRouteAppPath { get; set; }
 
-    /// <summary>Extract the <c>--route-app &lt;path&gt;</c> argument, if present.</summary>
-    private static string? TryGetRouteAppArg(string[] args)
+    /// <summary>v2.38.0-r4 — optional target category for the pending route-app
+    /// request (the cascading "VPNRouter ▸" submenu picks a category). Null =
+    /// default "Custom Apps" group.</summary>
+    internal static string? PendingRouteAppCategory { get; set; }
+
+    /// <summary>Extract the value following <paramref name="flag"/>, if present.</summary>
+    private static string? TryGetArgValue(string[] args, string flag)
     {
         for (int i = 0; i + 1 < args.Length; i++)
-            if (string.Equals(args[i], "--route-app", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(args[i], flag, StringComparison.OrdinalIgnoreCase))
                 return args[i + 1];
         return null;
     }
@@ -361,12 +366,14 @@ sealed class Program
         // with --route-app "<path>", hand it to an already-running instance and
         // exit; otherwise stash it so this (first) instance processes it once
         // the ViewModel is up (App.OnFrameworkInitializationCompleted).
-        var routeAppPath = TryGetRouteAppArg(args);
+        var routeAppPath = TryGetArgValue(args, "--route-app");
         if (routeAppPath != null)
         {
-            if (VPNRouter.App.Services.SingleInstance.TrySendRouteAppToRunningInstance(routeAppPath, Serilog.Log.Logger))
+            var routeAppCategory = TryGetArgValue(args, "--category"); // r4: optional target category
+            if (VPNRouter.App.Services.SingleInstance.TrySendRouteAppToRunningInstance(routeAppPath, routeAppCategory, Serilog.Log.Logger))
                 return; // running instance received it — nothing more to do
             PendingRouteAppPath = routeAppPath; // we'll be the first instance
+            PendingRouteAppCategory = routeAppCategory;
         }
 
         if (!VPNRouter.App.Services.SingleInstance.TryAcquireOrSignal(Serilog.Log.Logger))

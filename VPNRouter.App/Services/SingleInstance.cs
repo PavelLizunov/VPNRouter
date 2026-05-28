@@ -76,7 +76,7 @@ public static class SingleInstance
     /// <c>.lnk</c>); the handler resolves it to a process-name, adds it to
     /// the split-tunnel list and toasts. v2.38.0.
     /// </summary>
-    public static event Action<string>? RouteAppRequested;
+    public static event Action<string, string?>? RouteAppRequested;
 
     /// <summary>
     /// Try to claim the single-instance slot. Call this BEFORE any
@@ -200,7 +200,7 @@ public static class SingleInstance
     /// <returns><c>true</c> if a running instance received it (caller should
     /// exit); <c>false</c> if no instance is listening (caller is/will be the
     /// first instance and must process the path itself after startup).</returns>
-    public static bool TrySendRouteAppToRunningInstance(string path, ILogger? logger = null)
+    public static bool TrySendRouteAppToRunningInstance(string path, string? category = null, ILogger? logger = null)
     {
         try
         {
@@ -210,8 +210,16 @@ public static class SingleInstance
             client.WriteByte(SignalRouteApp);
             client.Write(BitConverter.GetBytes(bytes.Length), 0, 4);
             client.Write(bytes, 0, bytes.Length);
+            // r4: optional category payload — [int32 len][UTF-8 name]. Omitted
+            // when routing to the default group; the server reads it as null.
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                var catBytes = Encoding.UTF8.GetBytes(category);
+                client.Write(BitConverter.GetBytes(catBytes.Length), 0, 4);
+                client.Write(catBytes, 0, catBytes.Length);
+            }
             client.Flush();
-            logger?.Information("[SingleInstance] route-app handed to running instance: {Path}", path);
+            logger?.Information("[SingleInstance] route-app handed to running instance: {Path} (cat={Cat})", path, category ?? "<default>");
             return true;
         }
         catch (Exception ex)
@@ -263,7 +271,9 @@ public static class SingleInstance
                 }
                 else if (verb == SignalRouteApp)
                 {
-                    // [0x02][int32 len][UTF-8 path] — read the path payload.
+                    // [0x02][int32 len][UTF-8 path] then OPTIONALLY
+                    // [int32 len][UTF-8 category] (r4). No category bytes (older
+                    // shell verb / default group) → the stream ends → null.
                     var lenBuf = new byte[4];
                     if (ReadExact(server, lenBuf, 4))
                     {
@@ -274,9 +284,24 @@ public static class SingleInstance
                             if (ReadExact(server, pathBuf, len))
                             {
                                 var path = Encoding.UTF8.GetString(pathBuf);
+
+                                // Optional trailing category payload.
+                                string? category = null;
+                                var catLenBuf = new byte[4];
+                                if (ReadExact(server, catLenBuf, 4))
+                                {
+                                    int catLen = BitConverter.ToInt32(catLenBuf, 0);
+                                    if (catLen > 0 && catLen <= MaxRouteAppPayloadBytes)
+                                    {
+                                        var catBuf = new byte[catLen];
+                                        if (ReadExact(server, catBuf, catLen))
+                                            category = Encoding.UTF8.GetString(catBuf);
+                                    }
+                                }
+
                                 Dispatcher.UIThread.Post(() =>
                                 {
-                                    try { RouteAppRequested?.Invoke(path); }
+                                    try { RouteAppRequested?.Invoke(path, category); }
                                     catch (Exception ex) { logger?.Warning(ex, "[SingleInstance] route-app handler threw"); }
                                 });
                             }

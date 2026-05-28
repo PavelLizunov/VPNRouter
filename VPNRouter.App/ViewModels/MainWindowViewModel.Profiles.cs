@@ -526,7 +526,7 @@ public partial class MainWindowViewModel
     /// next connect). Invoked from App.axaml.cs on RouteAppRequested /
     /// PendingRouteAppPath. See plans/feature-shell-context-menu-add-app.md.
     /// </summary>
-    internal void RouteAppFromShell(string? rawPath)
+    internal void RouteAppFromShell(string? rawPath, string? category = null)
     {
         var exeName = OperatingSystem.IsWindows()
             ? Services.ShortcutResolver.ResolveToExeName(rawPath, _logger)
@@ -548,16 +548,28 @@ public partial class MainWindowViewModel
             return;
         }
 
-        // Force the "Custom Apps" group (deterministic — ignore any stale UI
-        // selection), then add exactly like the manual Add button: lands in
-        // Custom Apps, checked, bridged into RoutingAppsInclude, saved.
+        // r4: pick the target group. With the cascading submenu the user picks a
+        // category by name (--category "<name>"); match it. Otherwise (flat verb
+        // or a category that was deleted since the verb was registered) fall back
+        // to the default "Custom Apps" group. Then add exactly like the manual
+        // Add button: lands in the group, checked, bridged into
+        // RoutingAppsInclude, saved (AddCustomApp uses SelectedAppGroup).
+        var target = !string.IsNullOrWhiteSpace(category)
+            ? AppGroups.FirstOrDefault(g => g.Name.Equals(category, StringComparison.OrdinalIgnoreCase))
+            : null;
+        target ??= AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
+
         var prevSelected = SelectedAppGroup;
-        SelectedAppGroup = AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
+        SelectedAppGroup = target;
         try { AddCustomApp(exeName); }
         finally { SelectedAppGroup = prevSelected; }
 
-        _logger.Information("[ShellAdd] {Exe} added to Custom Apps + routed via VPN", exeName);
-        ShowRulesToast(IsRussian ? $"{exeName} → через VPN" : $"{exeName} → routed via VPN");
+        var landed = target?.Name ?? "Custom Apps";
+        bool namedCategory = !string.Equals(landed, "Custom Apps", StringComparison.OrdinalIgnoreCase);
+        _logger.Information("[ShellAdd] {Exe} added to '{Group}' + routed via VPN", exeName, landed);
+        ShowRulesToast(namedCategory
+            ? (IsRussian ? $"{exeName} → через VPN ({landed})" : $"{exeName} → routed via VPN ({landed})")
+            : (IsRussian ? $"{exeName} → через VPN" : $"{exeName} → routed via VPN"));
     }
 #endif
 

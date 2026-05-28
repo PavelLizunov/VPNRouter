@@ -165,8 +165,12 @@ public class MainWindowViewModelCharacterizationTests
     // context-menu feature. Guarded by #if PLATFORM_WINDOWS, so ONLY the
     // Windows surface changed — PinnedHashLinux below is intentionally
     // untouched. Prior Windows hash: 12965556…a0d1baba.
+    // v2.38.0-r4 (2026-05-28): RouteAppFromShell gained a second param
+    // (string? category) for the per-category cascading submenu, so the
+    // Windows surface drifted again. Still #if PLATFORM_WINDOWS → Linux pin
+    // untouched. Prior Windows hash: 2f9fd36c…58427a6c.
     private const string PinnedHashWindows =
-        "2f9fd36c6da1a58ccd541d655021fcf49258307bcab85e0a4bd6183958427a6c";
+        "4c4f4d6e301c79aeffbf5839130573d94fff663664edec0296ea3c47071ca24e";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

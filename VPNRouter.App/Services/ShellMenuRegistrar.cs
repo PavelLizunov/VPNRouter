@@ -1,6 +1,8 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
@@ -29,6 +31,10 @@ public static class ShellMenuRegistrar
     private static string MenuLabel =>
         VPNRouter.Core.Localization.Strings.ShellMenuRouteLabel;
 
+    // r4: parent label for the cascading submenu (multi-category case).
+    private static string ParentLabel =>
+        VPNRouter.Core.Localization.Strings.ShellMenuParentLabel;
+
     // r3: after writing/removing the verb, tell Explorer that file
     // associations changed so the RUNNING shell re-reads the verb (label +
     // icon) on the spot instead of serving the stale MUI verb-name cache
@@ -54,7 +60,7 @@ public static class ShellMenuRegistrar
     /// startup. Best-effort: never throws (a locked-down HKCU just means the
     /// menu entry won't appear; the app still runs).
     /// </summary>
-    public static void Register(ILogger? logger = null)
+    public static void Register(IReadOnlyList<string>? categories = null, ILogger? logger = null)
     {
         if (!OperatingSystem.IsWindows()) return;
         try
@@ -75,21 +81,67 @@ public static class ShellMenuRegistrar
             // launches GUI.exe (the stub IS the entry point).
             var appExe = Path.Combine(dir, "VPNRouter.App.exe");
             var iconSource = File.Exists(appExe) ? appExe : gui;
-
-            var command = $"\"{gui}\" --route-app \"%1\"";
             var icon = $"\"{iconSource}\",0";
+
+            // r4: normalize the category list. A '"' in a name would break the
+            // command string, so drop those defensively. Distinct, order-preserved.
+            // ≤1 category → keep the flat one-click verb (common case, no
+            // regression). >1 → cascading "VPNRouter ▸" submenu, one item per cat.
+            var cats = (categories ?? Array.Empty<string>())
+                .Where(c => !string.IsNullOrWhiteSpace(c) && !c.Contains('"'))
+                .Select(c => c.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            bool submenu = cats.Count > 1;
+
             foreach (var cls in FileClasses)
             {
+                // Delete any prior structure first so flat<->submenu transitions
+                // are clean (CreateSubKey alone leaves stale child keys behind).
+                try
+                {
+                    Registry.CurrentUser.DeleteSubKeyTree(
+                        $@"Software\Classes\{cls}\shell\{VerbKey}",
+                        throwOnMissingSubKey: false);
+                }
+                catch { /* best-effort */ }
+
                 using var verb = Registry.CurrentUser.CreateSubKey(
                     $@"Software\Classes\{cls}\shell\{VerbKey}");
                 if (verb == null) continue;
-                verb.SetValue(null, MenuLabel);
                 verb.SetValue("Icon", icon);
-                using var cmd = verb.CreateSubKey("command");
-                cmd?.SetValue(null, command);
+
+                if (!submenu)
+                {
+                    // Flat single verb (common case — 0 or 1 custom category).
+                    verb.SetValue(null, MenuLabel);
+                    using var cmd = verb.CreateSubKey("command");
+                    cmd?.SetValue(null, $"\"{gui}\" --route-app \"%1\"");
+                }
+                else
+                {
+                    // Cascading "VPNRouter ▸" submenu: one child per category.
+                    // Empty SubCommands + a nested `shell` subkey is the documented
+                    // per-user cascade pattern (no COM / no package needed).
+                    verb.SetValue("MUIVerb", ParentLabel);
+                    verb.SetValue("SubCommands", string.Empty);
+                    using var shell = verb.CreateSubKey("shell");
+                    if (shell == null) continue;
+                    for (int i = 0; i < cats.Count; i++)
+                    {
+                        using var child = shell.CreateSubKey($"cmd{i:D2}");
+                        if (child == null) continue;
+                        child.SetValue(null, cats[i]);   // menu item label = category name
+                        child.SetValue("Icon", icon);
+                        using var ccmd = child.CreateSubKey("command");
+                        ccmd?.SetValue(null,
+                            $"\"{gui}\" --route-app \"%1\" --category \"{cats[i]}\"");
+                    }
+                }
             }
             NotifyShellAssocChanged();
-            logger?.Information("[ShellMenu] registered verb on exefile + lnkfile → {Cmd}", command);
+            logger?.Information("[ShellMenu] registered verb ({Mode}) on exefile + lnkfile",
+                submenu ? $"submenu, {cats.Count} categories" : "flat");
         }
         catch (Exception ex)
         {

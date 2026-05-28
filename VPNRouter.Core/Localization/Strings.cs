@@ -20,6 +20,13 @@ public static class Strings
     public static string ShellMenuRouteLabel =>
         Ru ? "Добавить в VPNRouter (через VPN)" : "Add to VPNRouter (route through VPN)";
 
+    /// <summary>v2.38.0-r4 — parent label for the cascading "VPNRouter ▸"
+    /// submenu shown only when the user has more than one app-category
+    /// (the submenu items are the category names). Single-category users
+    /// keep the flat <see cref="ShellMenuRouteLabel"/> verb (no submenu).</summary>
+    public static string ShellMenuParentLabel =>
+        Ru ? "Добавить в VPNRouter" : "Add to VPNRouter";
+
     // v2.29.0: dynamic OS name shown in user-facing autostart copy. Mac
     // users were seeing "Windows" hardcoded in Simple-mode autostart card
     // and Network → Autostart labels (reported 2026-04-29). Now Strings
