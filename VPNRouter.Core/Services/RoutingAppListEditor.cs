@@ -47,9 +47,16 @@ public static class RoutingAppListEditor
 
         // Reduce to a bare filename — accept a full path or a quoted path
         // defensively (the shell verb passes "%1" which can be either).
+        //
+        // Split on BOTH '\' and '/' explicitly — NOT Path.GetFileName, which
+        // only treats the HOST OS separator as a delimiter. The shell verb
+        // always hands us a Windows path, so on a Linux test runner
+        // Path.GetFileName(@"C:\…\Game.exe") returns the whole string and the
+        // .exe-basename contract breaks. LastIndexOfAny is OS-independent.
         var name = exeNameOrPath.Trim().Trim('"').Trim();
-        try { name = Path.GetFileName(name); }
-        catch { return (false, null); } // invalid path chars
+        int lastSep = name.LastIndexOfAny(new[] { '\\', '/' });
+        if (lastSep >= 0 && lastSep < name.Length - 1)
+            name = name.Substring(lastSep + 1);
         if (string.IsNullOrWhiteSpace(name)) return (false, null);
 
         // process_name routing only matches executables.
