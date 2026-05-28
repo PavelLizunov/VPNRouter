@@ -39,6 +39,22 @@ name: Verify Release Integrity
 # release is currently a draft AND notes already carry the FAILED marker,
 # we skip).
 #
+# Draft only on a real version mismatch (since v2.37.0, 2026-05-28): the
+# ONLY hard failures that draft the release are a Windows embedded-AppVersion
+# mismatch (the fake-tag class) and a sha256 CONTENT mismatch (both files
+# present, hashes differ). Transient mid-upload states — an orphaned .sha256
+# whose binary is still uploading, a DMG/AppImage extraction hiccup — are
+# SOFT warnings, never drafts. Why: this workflow runs on every
+# `release: edited`, so it fires DURING the parallel Mac/Linux uploads.
+# `gh release upload` pushes assets concurrently, so a 65-byte sidecar lands
+# seconds before its ~80 MB binary; verify triggered in that window used to
+# hard-fail on the orphaned sidecar and draft the release. That drafted
+# v2.37.0 stable: the still-uploading Mac/Linux binaries then attached to a
+# DRAFT release (untagged-<hash> asset URLs), the tagged download/vX.Y.Z/
+# URLs 404'd, and the Homebrew Cask auto-bump failed 6× on those 404s.
+# Windows assets are uploaded atomically by build.ps1 BEFORE
+# `release: published`, so the Win AppVersion check is race-free.
+#
 # See plans/vpnrouter-release-strategy.md "Release integrity gate" for
 # rationale + escalation path. CLAUDE.local.md "Урок v2.25.0-r1→r2" has
 # adjacent context (AppVersion suffix mismatch).
@@ -280,7 +296,10 @@ jobs:
               verify_dll "$DLL" "$(basename $MAC_DMG)" "soft"
             else
               tail -20 /tmp/7z.log
-              ERRORS+=("$(basename $MAC_DMG): 7z extraction failed (see logs)")
+              # Soft, not hard: an extraction hiccup gives no AppVersion
+              # signal (Mac is AOT-trimmed → soft anyway) and a partially
+              # uploaded DMG must not draft the release. See header note.
+              WARNINGS+=("$(basename $MAC_DMG): 7z extraction failed (see logs)")
             fi
           fi
 
@@ -323,7 +342,7 @@ jobs:
             ABS_APP="$(realpath "$APPIMG")"
             # --appimage-extract dumps to ./squashfs-root by default.
             ( cd /tmp/appimg-ext && "$ABS_APP" --appimage-extract >/tmp/appimg.log 2>&1 ) \
-              || { tail -10 /tmp/appimg.log; ERRORS+=("$(basename $APPIMG): --appimage-extract failed"); }
+              || { tail -10 /tmp/appimg.log; WARNINGS+=("$(basename $APPIMG): --appimage-extract failed (soft — see header note)"); }
             DLL=$(find /tmp/appimg-ext -name "VPNRouter.Core.dll" -type f | head -1)
             verify_dll "$DLL" "$(basename $APPIMG)" "soft"
           fi
@@ -379,7 +398,14 @@ jobs:
             [ -f "$sha" ] || continue
             target="${sha%.sha256}"
             if [ ! -f "$target" ]; then
-              ERRORS+=("$(basename $sha): no matching binary $(basename $target) found")
+              # Soft, not hard: an orphaned sidecar is the concurrent-upload
+              # race, not corruption. `gh release upload` pushes assets in
+              # parallel, so a sidecar can be visible before its binary. The
+              # `release: edited` from the completed sidecar triggers this
+              # workflow mid-upload. Hard-failing here drafted v2.37.0 stable
+              # (2026-05-28) → untagged-<hash> URLs + Homebrew 404s. An
+              # orphaned sidecar is never the fake-tag signal we draft for.
+              WARNINGS+=("$(basename $sha): no matching binary $(basename $target) found (likely mid-upload — parallel CI)")
               continue
             fi
             EXPECTED_HASH=$(awk '{print $1; exit}' "$sha" | tr -d '\r\n ')

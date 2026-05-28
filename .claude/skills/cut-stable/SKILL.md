@@ -175,6 +175,57 @@ gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json assets --jq '.assets
 ```
 Должно быть **12**.
 
+## Step 5.5 — post-publish draft + download-URL gate (mandatory)
+
+**Why this exists**: `verify-release-integrity.yml` runs on every
+`release: edited`, so it fires DURING the parallel Mac/Linux uploads. Before
+the v2.37.0 fix (2026-05-28) it could hard-fail on a mid-upload orphaned
+`.sha256` sidecar and run `gh release edit --draft=true`, drafting the
+release. The still-uploading binaries then attached to a DRAFT (getting
+`untagged-<hash>` asset URLs), the tagged `download/vX.Y.Z/...` URLs 404'd,
+and the Homebrew Cask auto-bump failed 6× on those 404s. The workflow fix
+makes that false-positive impossible; **this gate is the belt-and-suspenders
+that catches ANY future draft toggle before we walk away from the cut.**
+
+**When**: после Step 5 (assets present), перед Step 6.
+
+a) **Release must be published, not draft**:
+   ```bash
+   gh api repos/PavelLizunov/VPNRouter/releases/tags/vX.Y.Z --jq '.draft'
+   ```
+   Must print `false`. If `true` → self-heal + investigate:
+   ```bash
+   gh release edit vX.Y.Z --repo PavelLizunov/VPNRouter --draft=false --latest
+   gh run list --repo PavelLizunov/VPNRouter \
+     --workflow="Verify Release Integrity" --limit 5
+   ```
+   Open the failed run's log — if the cause is anything OTHER than a real
+   Windows AppVersion mismatch / sha256 content mismatch, the workflow fix
+   regressed; fix before continuing.
+
+b) **Tagged download URLs must resolve (200, not 404)** — the `untagged-<hash>`
+   signature surfaces here as a 404 on the canonical tagged path:
+   ```bash
+   for asset in \
+     "VPNRouter-vX.Y.Z-mac.dmg" \
+     "VPNRouter-vX.Y.Z-linux-amd64.deb" \
+     "VPNRouter-vX.Y.Z-win.zip"; do
+     code=$(curl -sIL -o /dev/null -w "%{http_code}" \
+       "https://github.com/PavelLizunov/VPNRouter/releases/download/vX.Y.Z/$asset")
+     echo "$code  $asset"
+   done
+   ```
+   All must be `200`. A `404` = asset attached while draft (untagged URL);
+   un-drafting in (a) republishes and rewrites URLs to the tagged path —
+   re-run this loop to confirm 200.
+
+c) **If you had to un-draft in (a)**: the Homebrew Cask bump (Step 8) almost
+   certainly 404'd during the draft window. After URLs are 200, re-trigger it
+   — re-run `build-mac.yml` (its Trigger Homebrew Cask step re-dispatches) or
+   dispatch the tap directly, then verify per Step 8.
+
+Only after **draft=false + all URLs 200** → continue to Step 6.
+
 ## Step 6 — write proper stable notes
 
 `plans/release-notes-vX.Y.Z.md` — собирает фиксы со всех `-r1..-rN`:
