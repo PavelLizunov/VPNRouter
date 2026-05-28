@@ -30,6 +30,23 @@ sealed class Program
     /// </summary>
     public static bool SafeMode { get; private set; }
 
+    /// <summary>
+    /// v2.38.0 — when this (first) instance was launched by the Explorer
+    /// "route through VPN" context-menu verb (<c>--route-app "&lt;path&gt;"</c>)
+    /// and no other instance was running to hand it to, the path is stashed
+    /// here for the App to process once the ViewModel is up. Cleared after.
+    /// </summary>
+    internal static string? PendingRouteAppPath { get; set; }
+
+    /// <summary>Extract the <c>--route-app &lt;path&gt;</c> argument, if present.</summary>
+    private static string? TryGetRouteAppArg(string[] args)
+    {
+        for (int i = 0; i + 1 < args.Length; i++)
+            if (string.Equals(args[i], "--route-app", StringComparison.OrdinalIgnoreCase))
+                return args[i + 1];
+        return null;
+    }
+
     [STAThread]
     public static void Main(string[] args)
     {
@@ -340,6 +357,18 @@ sealed class Program
         // the kill-and-restart cycle interacting badly with Windows
         // ForegroundLockTimeout — the fresh window often didn't reach
         // foreground.
+        // v2.38.0 — Explorer "route through VPN" context-menu verb. If invoked
+        // with --route-app "<path>", hand it to an already-running instance and
+        // exit; otherwise stash it so this (first) instance processes it once
+        // the ViewModel is up (App.OnFrameworkInitializationCompleted).
+        var routeAppPath = TryGetRouteAppArg(args);
+        if (routeAppPath != null)
+        {
+            if (VPNRouter.App.Services.SingleInstance.TrySendRouteAppToRunningInstance(routeAppPath, Serilog.Log.Logger))
+                return; // running instance received it — nothing more to do
+            PendingRouteAppPath = routeAppPath; // we'll be the first instance
+        }
+
         if (!VPNRouter.App.Services.SingleInstance.TryAcquireOrSignal(Serilog.Log.Logger))
             return;
 
