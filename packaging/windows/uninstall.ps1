@@ -164,6 +164,38 @@ if (Test-Path $UninstallKey) {
     Ok "Removed Add/Remove Programs entry"
 }
 
+# == Remove per-user Explorer context-menu verb (v2.38.0) ================
+# The "route through VPN" verb is registered per-user (HKCU) by the app on
+# every launch (ShellMenuRegistrar.Register). We run ELEVATED here, so the
+# process HKCU is the admin's hive - NOT the user who installed. Resolve the
+# interactive console user's SID and clean their hive via HKEY_USERS, with a
+# fallback to the current process hive (covers a non-elevated direct run).
+# Best-effort: a leftover verb is only a dead menu entry, never fatal.
+Say "Removing Explorer context-menu entry..."
+try {
+    $sids = New-Object System.Collections.Generic.List[string]
+    $consoleUser = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).UserName
+    if ($consoleUser) {
+        try {
+            $sids.Add((New-Object Security.Principal.NTAccount($consoleUser)
+                ).Translate([Security.Principal.SecurityIdentifier]).Value)
+        } catch {}
+    }
+    try { $sids.Add([Security.Principal.WindowsIdentity]::GetCurrent().User.Value) } catch {}
+
+    foreach ($sid in ($sids | Select-Object -Unique)) {
+        foreach ($cls in @("exefile", "lnkfile")) {
+            $vk = "Registry::HKEY_USERS\$sid\Software\Classes\$cls\shell\VPNRouterRoute"
+            if (Test-Path $vk) {
+                Remove-Item $vk -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    Ok "Removed Explorer context-menu entry (where present)"
+} catch {
+    Warn "Could not remove context-menu entry: $_"
+}
+
 # == Optional: purge user data ===========================================
 if ($Purge) {
     if (Test-Path $DataRoot) {
