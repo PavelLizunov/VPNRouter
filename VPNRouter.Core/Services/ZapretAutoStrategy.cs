@@ -424,6 +424,152 @@ public static class ZapretAutoStrategy
         // the sweep stopped due to a problem.
         bool EarlyWinner = false);
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Flowseal stdout parser — shared regexes + pure transcript parser.
+    //
+    // r53 (2026-05-28): the status-line regex previously required a
+    // two-bracket "[TargetId][HTTP] … status=OK" shape. Flowseal's current
+    // `test zapret.ps1` mode-2 output moved the target id onto a separate
+    //   === [flag][provider] TARGET ===
+    // header line, so the per-test lines are now a BARE single bracket:
+    //   [HTTP]   code=405 … status=OK
+    //   [TLS1.2] code=405 … status=OK
+    //   [TLS1.3] code=405 … status=OK
+    // The old regex never matched → every strategy scored 0/0 → early-winner
+    // never fired, perStrategyResults stayed empty, and the winner fell
+    // through to "no strategy / стратегия не найдена" even though ALT3
+    // (45/108) and ALT9 (75/108) clearly passed (user report Z:\zapret
+    // 2026-05-28). The leading target-id bracket is now OPTIONAL so BOTH the
+    // historical two-bracket and the current single-bracket formats parse.
+    // ─────────────────────────────────────────────────────────────────────
+
+    internal static readonly System.Text.RegularExpressions.Regex ConfigHeaderRx =
+        new(@"\[(\d+)/(\d+)\]\s+(.+?)(?:\.bat)?\s*$",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    internal static readonly System.Text.RegularExpressions.Regex StatusLineRx =
+        new(@"^\s*(?:\[[^\]]+\])?\[(?:HTTP|TLS1\.[23])\]\s.*?\bstatus=(\w+)\s*$",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    internal static readonly System.Text.RegularExpressions.Regex WinnerRx =
+        new(@"Best config:\s*(.+?)(?:\.bat)?\s*$",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    internal static readonly System.Text.RegularExpressions.Regex ErrorLineRx =
+        new(@"^\s*\[(?:ERROR|WARN|WARNING)\]",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// Pure, testable parse of a full Flowseal sweep transcript. Returns the
+    /// winner strategy name plus a per-strategy pass/total table.
+    /// <para>
+    /// Winner selection is empirical: the strategy with the most passing
+    /// labels wins (tie-break by pass ratio). This is authoritative because
+    /// it avoids the "last <c>Best config:</c> line wins" ordering bug when
+    /// each strategy is probed in its own <c>[1/1]</c> run, and it agrees
+    /// with Flowseal's own verdict in a single multi-strategy sweep. The
+    /// explicit <c>Best config:</c> line is used only as a fallback when no
+    /// status lines were parseable at all.
+    /// </para>
+    /// </summary>
+    internal static (string? Winner,
+                     Dictionary<string, ZapretStrategyTestResult> PerStrategy)
+        ParseFlowsealTranscript(string? transcript)
+    {
+        var perStrategy = new Dictionary<string, ZapretStrategyTestResult>(StringComparer.Ordinal);
+        string? explicitWinner = null;
+        string current = string.Empty;
+        int ok = 0, total = 0;
+
+        void Flush()
+        {
+            if (!string.IsNullOrEmpty(current) && total > 0)
+            {
+                // Last writer wins if a strategy name repeats across runs —
+                // a fresh probe of the same strategy supersedes the older one.
+                perStrategy[current] = new ZapretStrategyTestResult
+                {
+                    Passed = ok,
+                    Total = total,
+                    At = DateTime.UtcNow,
+                };
+            }
+        }
+
+        if (!string.IsNullOrEmpty(transcript))
+        {
+            foreach (var raw in transcript.Split('\n'))
+            {
+                var line = raw.TrimEnd('\r');
+
+                var hdr = ConfigHeaderRx.Match(line);
+                if (hdr.Success)
+                {
+                    Flush();
+                    current = hdr.Groups[3].Value.Trim();
+                    ok = 0;
+                    total = 0;
+                    continue;
+                }
+
+                var st = StatusLineRx.Match(line);
+                if (st.Success)
+                {
+                    total++;
+                    var status = st.Groups[1].Value;
+                    // UNSUPPORTED = endpoint doesn't speak this protocol, NOT
+                    // a strategy failure — counts as pass (see r38 rationale).
+                    if (status.Equals("OK", StringComparison.OrdinalIgnoreCase)
+                        || status.Equals("UNSUPPORTED", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ok++;
+                    }
+                    continue;
+                }
+
+                var w = WinnerRx.Match(line);
+                if (w.Success)
+                    explicitWinner = w.Groups[1].Value.Trim();
+            }
+        }
+        Flush();
+
+        // scoreWinner (empirical best, preferred — avoids the per-[1/1]
+        // ordering bug) wins; explicit "Best config:" is the degenerate-case
+        // fallback (no parseable status lines but a summary line present).
+        var scoreWinner = BestStrategyByScore(perStrategy);
+        var winner = !string.IsNullOrEmpty(scoreWinner) ? scoreWinner : explicitWinner;
+        return (winner, perStrategy);
+    }
+
+    /// <summary>
+    /// Pick the strategy with the most passing labels (tie-break by pass
+    /// ratio). Returns null when the table is empty or no strategy passed a
+    /// single label. Shared by <see cref="ParseFlowsealTranscript"/> and the
+    /// live-probe post-exit winner fallback so both agree.
+    /// </summary>
+    internal static string? BestStrategyByScore(
+        IReadOnlyDictionary<string, ZapretStrategyTestResult> perStrategy)
+    {
+        string? best = null;
+        int bestPassed = 0;
+        double bestRatio = -1;
+        foreach (var kv in perStrategy)
+        {
+            if (kv.Value.Passed <= 0) continue;
+            double ratio = kv.Value.Total > 0
+                ? (double)kv.Value.Passed / kv.Value.Total : 0;
+            if (kv.Value.Passed > bestPassed
+                || (kv.Value.Passed == bestPassed && ratio > bestRatio))
+            {
+                best = kv.Key;
+                bestPassed = kv.Value.Passed;
+                bestRatio = ratio;
+            }
+        }
+        return best;
+    }
+
     /// <summary>
     /// Run Flowseal's `utils/test zapret.ps1` with auto-answers (mode=DPI,
     /// configs=all), parse stdout for per-config progress + final winner.
@@ -559,19 +705,14 @@ public static class ZapretAutoStrategy
         // sweep returns no winner. Bounded so a chatty script can't OOM.
         var errorLines = new List<string>(capacity: 8);
 
-        // Pre-compiled regex hot path — these fire on every stdout line.
-        var configHeaderRx = new System.Text.RegularExpressions.Regex(
-            @"\[(\d+)/(\d+)\]\s+(.+?)(?:\.bat)?\s*$",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
-        var statusLineRx = new System.Text.RegularExpressions.Regex(
-            @"^\s*\[[^\]]+\]\[(?:HTTP|TLS1\.[23])\]\s.*?\bstatus=(\w+)\s*$",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
-        var winnerRx = new System.Text.RegularExpressions.Regex(
-            @"Best config:\s*(.+?)(?:\.bat)?\s*$",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
-        var errorLineRx = new System.Text.RegularExpressions.Regex(
-            @"^\s*\[(?:ERROR|WARN|WARNING)\]",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
+        // r53: pre-compiled regexes are now shared static fields (single
+        // source of truth with the pure ParseFlowsealTranscript parser).
+        // statusLineRx now tolerates the current single-bracket "[HTTP] …
+        // status=OK" format AND the historical "[TargetId][HTTP] …" form.
+        var configHeaderRx = ConfigHeaderRx;
+        var statusLineRx = StatusLineRx;
+        var winnerRx = WinnerRx;
+        var errorLineRx = ErrorLineRx;
 
         // Per-line stdout handler. Script writes via Write-Host so we get
         // each Write-Host invocation as one line on stdout.
@@ -890,6 +1031,26 @@ public static class ZapretAutoStrategy
         {
             perStrategySnap = new Dictionary<string, ZapretStrategyTestResult>(
                 perStrategyResults, StringComparer.Ordinal);
+        }
+
+        // r53: winner fallback. The live inline path only sets `winner` when
+        // either (a) early-winner fired (a strategy aced 100%) or (b) a
+        // "Best config:" line matched. If neither happened but we DID score
+        // strategies (e.g. no strategy hit 100% and Flowseal's summary line
+        // format drifted), promote the empirical best-scoring strategy so the
+        // probe still yields a usable winner instead of "стратегия не найдена"
+        // — the exact symptom from the Z:\zapret 2026-05-28 report where ALT9
+        // scored 75/108 yet the app reported no winner.
+        if (string.IsNullOrEmpty(winner))
+        {
+            var fallback = BestStrategyByScore(perStrategySnap);
+            if (!string.IsNullOrEmpty(fallback))
+            {
+                winner = fallback;
+                logger?.Information(
+                    "[ZapretAutoStrategy] No explicit winner line — promoting best-scoring strategy {Strategy} ({Ok}/{Total})",
+                    fallback, perStrategySnap[fallback].Passed, perStrategySnap[fallback].Total);
+            }
         }
 
         logger?.Information(

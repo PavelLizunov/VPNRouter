@@ -5657,7 +5657,18 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             if (sweep.Winner != null)
             {
                 // Apply the winning strategy.
-                var parsed = _parsedStrategies.FirstOrDefault(s => s.Name == sweep.Winner);
+                // r53: tolerant match. The winner string comes from Flowseal
+                // stdout ("Best config: general (ALT9).bat" → "general (ALT9)")
+                // and could differ from the parsed-catalogue name by trailing
+                // whitespace, casing, or a stray ".bat" suffix. Exact `==`
+                // matching produced false "Winner X not found in strategy
+                // list" reports (Z:\zapret 2026-05-28). Normalise both sides.
+                static string NormStrategy(string? s) =>
+                    (s ?? string.Empty).Trim().TrimEnd().Replace(".bat", "",
+                        StringComparison.OrdinalIgnoreCase).Trim();
+                var winnerNorm = NormStrategy(sweep.Winner);
+                var parsed = _parsedStrategies.FirstOrDefault(s =>
+                        string.Equals(NormStrategy(s.Name), winnerNorm, StringComparison.OrdinalIgnoreCase));
                 if (parsed != null)
                 {
                     try
