@@ -98,6 +98,22 @@ public partial class App : Application
             _viewModel = new MainWindowViewModel();
             var mainWindow = new MainWindow { DataContext = _viewModel };
 
+#if PLATFORM_WINDOWS
+            // v2.38.0-r2 — register the Explorer "route through VPN" context-menu
+            // verb HERE, after the ViewModel constructor has run LoadSettingsIntoUI
+            // (which sets Strings.Lang from the saved/OS language). r1 registered
+            // it in Program.cs before settings load, so the verb label was pinned
+            // to English even for RU users (user report 2026-05-28). Idempotent +
+            // refreshed every launch → self-heals after an install-dir move or a
+            // manual registry cleanup, and now picks up a language change on the
+            // next launch too.
+            // OperatingSystem.IsWindows() (in addition to the #if) keeps the
+            // CA1416 platform analyzer happy — it tracks runtime guards, not
+            // preprocessor symbols. Always true inside the Windows-only block.
+            if (OperatingSystem.IsWindows())
+                try { VPNRouter.App.Services.ShellMenuRegistrar.Register(Serilog.Log.Logger); } catch { }
+#endif
+
             desktop.MainWindow = mainWindow;
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 

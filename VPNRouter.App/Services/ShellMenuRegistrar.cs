@@ -38,15 +38,25 @@ public static class ShellMenuRegistrar
         if (!OperatingSystem.IsWindows()) return;
         try
         {
-            var gui = Path.Combine(AppContext.BaseDirectory.TrimEnd('\\'), "VPNRouter.GUI.exe");
+            var dir = AppContext.BaseDirectory.TrimEnd('\\');
+            var gui = Path.Combine(dir, "VPNRouter.GUI.exe");
             if (!File.Exists(gui))
             {
                 logger?.Debug("[ShellMenu] GUI exe not at {Path} — skip register", gui);
                 return;
             }
 
+            // r2: the icon MUST come from VPNRouter.App.exe (the .NET app, which
+            // carries the penguin Win32 icon resource), NOT VPNRouter.GUI.exe —
+            // the Go stub launcher has no icon resource, so "GUI.exe,0" rendered
+            // a blank/default icon in the context menu (user report 2026-05-28).
+            // Same lesson as ShortcutSelfHeal's IconLocation. Command still
+            // launches GUI.exe (the stub IS the entry point).
+            var appExe = Path.Combine(dir, "VPNRouter.App.exe");
+            var iconSource = File.Exists(appExe) ? appExe : gui;
+
             var command = $"\"{gui}\" --route-app \"%1\"";
-            var icon = $"\"{gui}\",0";
+            var icon = $"\"{iconSource}\",0";
             foreach (var cls in FileClasses)
             {
                 using var verb = Registry.CurrentUser.CreateSubKey(

@@ -390,10 +390,11 @@ sealed class Program
         }
         catch { }
 
-        // v2.38.0 — register the Explorer "route through VPN" context-menu
-        // verb (per-user HKCU). Idempotent + refreshed every launch so it
-        // self-heals after an install-dir move or a manual registry cleanup.
-        try { VPNRouter.App.Services.ShellMenuRegistrar.Register(Serilog.Log.Logger); } catch { }
+        // v2.38.0 — the Explorer "route through VPN" context-menu verb is
+        // registered in App.axaml.cs AFTER the ViewModel loads settings, so
+        // Strings.Lang is already "ru"/"en" and the menu label is localized
+        // correctly. (r1 registered it here, before settings load, which
+        // pinned the English label even for RU users — user report 2026-05-28.)
 #endif
 
 #if PLATFORM_WINDOWS
