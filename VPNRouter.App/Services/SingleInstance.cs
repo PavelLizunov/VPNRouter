@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.IO.Pipes;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -46,6 +48,17 @@ public static class SingleInstance
     // wire protocol.
     private const byte SignalShowWindow = 0x01;
 
+    // 0x02 = "route this app through VPN" (Explorer context-menu verb,
+    // v2.38.0). Wire format: [0x02][int32 little-endian length][UTF-8 path].
+    // The path is the "%1" the shell verb hands us (an .exe or .lnk); the
+    // running instance resolves + adds it to RoutingAppsInclude + toasts.
+    private const byte SignalRouteApp = 0x02;
+
+    // Sanity cap on the path payload so a malformed/hostile client can't make
+    // us allocate an arbitrary buffer. MAX_PATH-era paths are <260 chars;
+    // long-path UNC can reach ~32k chars → 64 KB UTF-8 is comfortably above.
+    private const int MaxRouteAppPayloadBytes = 64 * 1024;
+
     private static Mutex? _mutex;
     private static CancellationTokenSource? _serverCts;
 
@@ -55,6 +68,15 @@ public static class SingleInstance
     /// from <c>App.OnFrameworkInitializationCompleted</c>.
     /// </summary>
     public static event Action? ShowWindowRequested;
+
+    /// <summary>
+    /// Fired (on the Avalonia UI thread) when a second-instance launch
+    /// invoked <c>--route-app "&lt;path&gt;"</c> (the Explorer context-menu
+    /// verb). The argument is the raw <c>%1</c> path (an <c>.exe</c> or
+    /// <c>.lnk</c>); the handler resolves it to a process-name, adds it to
+    /// the split-tunnel list and toasts. v2.38.0.
+    /// </summary>
+    public static event Action<string>? RouteAppRequested;
 
     /// <summary>
     /// Try to claim the single-instance slot. Call this BEFORE any
@@ -172,6 +194,46 @@ public static class SingleInstance
         }
     }
 
+    /// <summary>
+    /// Hand a route-app request to an already-running instance via the pipe.
+    /// </summary>
+    /// <returns><c>true</c> if a running instance received it (caller should
+    /// exit); <c>false</c> if no instance is listening (caller is/will be the
+    /// first instance and must process the path itself after startup).</returns>
+    public static bool TrySendRouteAppToRunningInstance(string path, ILogger? logger = null)
+    {
+        try
+        {
+            using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
+            client.Connect(2000);
+            var bytes = Encoding.UTF8.GetBytes(path ?? string.Empty);
+            client.WriteByte(SignalRouteApp);
+            client.Write(BitConverter.GetBytes(bytes.Length), 0, 4);
+            client.Write(bytes, 0, bytes.Length);
+            client.Flush();
+            logger?.Information("[SingleInstance] route-app handed to running instance: {Path}", path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger?.Debug(ex, "[SingleInstance] no running instance for route-app (processing locally)");
+            return false;
+        }
+    }
+
+    /// <summary>Read exactly <paramref name="count"/> bytes or return false.</summary>
+    private static bool ReadExact(Stream s, byte[] buf, int count)
+    {
+        int read = 0;
+        while (read < count)
+        {
+            int n = s.Read(buf, read, count - read);
+            if (n <= 0) return false;
+            read += n;
+        }
+        return true;
+    }
+
     private static void RunPipeServerLoop(CancellationToken ct, ILogger? logger)
     {
         while (!ct.IsCancellationRequested)
@@ -198,6 +260,32 @@ public static class SingleInstance
                         try { ShowWindowRequested?.Invoke(); }
                         catch (Exception ex) { logger?.Warning(ex, "[SingleInstance] show-window handler threw"); }
                     });
+                }
+                else if (verb == SignalRouteApp)
+                {
+                    // [0x02][int32 len][UTF-8 path] — read the path payload.
+                    var lenBuf = new byte[4];
+                    if (ReadExact(server, lenBuf, 4))
+                    {
+                        int len = BitConverter.ToInt32(lenBuf, 0);
+                        if (len > 0 && len <= MaxRouteAppPayloadBytes)
+                        {
+                            var pathBuf = new byte[len];
+                            if (ReadExact(server, pathBuf, len))
+                            {
+                                var path = Encoding.UTF8.GetString(pathBuf);
+                                Dispatcher.UIThread.Post(() =>
+                                {
+                                    try { RouteAppRequested?.Invoke(path); }
+                                    catch (Exception ex) { logger?.Warning(ex, "[SingleInstance] route-app handler threw"); }
+                                });
+                            }
+                        }
+                        else
+                        {
+                            logger?.Warning("[SingleInstance] route-app payload length {Len} out of range — ignoring", len);
+                        }
+                    }
                 }
                 // Unknown verbs: silently ignored. Future-proofing for
                 // protocol additions.
