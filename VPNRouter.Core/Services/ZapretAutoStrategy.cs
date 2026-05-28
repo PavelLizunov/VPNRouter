@@ -459,6 +459,24 @@ public static class ZapretAutoStrategy
         new(@"^\s*\[(?:ERROR|WARN|WARNING)\]",
             System.Text.RegularExpressions.RegexOptions.Compiled);
 
+    // r54 (2026-05-28): Flowseal's `test zapret.ps1` enumerates EVERY *.bat
+    // (line 376: Get-ChildItem -Filter "*.bat" excludes only "service*"), so
+    // the all-configs sweep also tests VPNRouter's own runtime wrapper
+    // "_vpnrouter_silent.bat" (created by ZapretManager when a strategy is
+    // started). That wrapper runs the SAME args as the currently-active
+    // strategy, so it scores as high as the best real one — and best-by-score
+    // would then return "_vpnrouter_silent", which has NO catalogue entry →
+    // the UI reports "Winner _vpnrouter_silent not found in strategy list"
+    // → "стратегия не найдена" recurs even after the r53 regex fix. The
+    // wrapper is an ephemeral internal artifact, never a user-selectable
+    // strategy, so it is excluded from BOTH the per-strategy table and the
+    // winner candidates. Match is on the catalogue name (".bat" already
+    // stripped by ConfigHeaderRx / WinnerRx).
+    internal const string SilentWrapperStrategyName = "_vpnrouter_silent";
+
+    private static bool IsSilentWrapper(string? name) =>
+        string.Equals(name?.Trim(), SilentWrapperStrategyName, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// Pure, testable parse of a full Flowseal sweep transcript. Returns the
     /// winner strategy name plus a per-strategy pass/total table.
@@ -483,7 +501,9 @@ public static class ZapretAutoStrategy
 
         void Flush()
         {
-            if (!string.IsNullOrEmpty(current) && total > 0)
+            // r54: never record the runtime wrapper as a strategy result —
+            // it is not user-selectable and must not win or show a badge.
+            if (!string.IsNullOrEmpty(current) && total > 0 && !IsSilentWrapper(current))
             {
                 // Last writer wins if a strategy name repeats across runs —
                 // a fresh probe of the same strategy supersedes the older one.
@@ -529,7 +549,13 @@ public static class ZapretAutoStrategy
 
                 var w = WinnerRx.Match(line);
                 if (w.Success)
-                    explicitWinner = w.Groups[1].Value.Trim();
+                {
+                    var cand = w.Groups[1].Value.Trim();
+                    // r54: ignore "Best config: _vpnrouter_silent" — the runtime
+                    // wrapper is not a user-selectable catalogue strategy.
+                    if (!IsSilentWrapper(cand))
+                        explicitWinner = cand;
+                }
             }
         }
         Flush();

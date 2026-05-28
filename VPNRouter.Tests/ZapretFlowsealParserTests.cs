@@ -218,6 +218,58 @@ Best config: s.bat
         Assert.Equal(2, perStrategy["dead"].Total);
     }
 
+    // ── r54: _vpnrouter_silent wrapper exclusion ────────────────────────────
+
+    [Fact]
+    public void ParseTranscript_SilentWrapperScoresHighest_ExcludedFromWinner()
+    {
+        // Flowseal's all-configs sweep tests every *.bat including VPNRouter's
+        // own runtime wrapper "_vpnrouter_silent.bat", which scores as high as
+        // the active strategy. It must NOT win (no catalogue entry → would
+        // recur "стратегия не найдена") nor appear in the per-strategy table.
+        const string transcript = @"
+  [1/2] _vpnrouter_silent.bat
+=== T1 ===
+[HTTP] code=200 ... status=OK
+[TLS1.2] code=200 ... status=OK
+[TLS1.3] code=200 ... status=OK
+=== T2 ===
+[HTTP] code=403 ... status=OK
+[TLS1.2] code=403 ... status=OK
+[TLS1.3] code=403 ... status=OK
+  [2/2] general (ALT9).bat
+=== T1 ===
+[HTTP] code=200 ... status=OK
+[TLS1.2] code=200 ... status=OK
+[TLS1.3] code=000 ... status=FAIL
+Best config: _vpnrouter_silent.bat
+";
+        var (winner, perStrategy) = ZapretAutoStrategy.ParseFlowsealTranscript(transcript);
+
+        // Wrapper scored 6/6 (vs ALT9 2/3) and is even named in "Best config:",
+        // yet the winner must be the real catalogue strategy.
+        Assert.Equal("general (ALT9)", winner);
+        Assert.False(perStrategy.ContainsKey("_vpnrouter_silent"));
+        Assert.True(perStrategy.ContainsKey("general (ALT9)"));
+    }
+
+    [Fact]
+    public void ParseTranscript_OnlySilentWrapper_NoWinner()
+    {
+        // If the wrapper is the ONLY thing probed, there's no usable catalogue
+        // winner — must return null, not "_vpnrouter_silent".
+        const string transcript = @"
+  [1/1] _vpnrouter_silent.bat
+=== T1 ===
+[HTTP] code=200 ... status=OK
+[TLS1.2] code=200 ... status=OK
+Best config: _vpnrouter_silent.bat
+";
+        var (winner, perStrategy) = ZapretAutoStrategy.ParseFlowsealTranscript(transcript);
+        Assert.Null(winner);
+        Assert.Empty(perStrategy);
+    }
+
     // ── BestStrategyByScore unit ────────────────────────────────────────────
 
     [Fact]
