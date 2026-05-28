@@ -389,6 +389,11 @@ sealed class Program
             }
         }
         catch { }
+
+        // v2.38.0 — register the Explorer "route through VPN" context-menu
+        // verb (per-user HKCU). Idempotent + refreshed every launch so it
+        // self-heals after an install-dir move or a manual registry cleanup.
+        try { VPNRouter.App.Services.ShellMenuRegistrar.Register(Serilog.Log.Logger); } catch { }
 #endif
 
 #if PLATFORM_WINDOWS

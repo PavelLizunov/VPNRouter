@@ -14,6 +14,12 @@ public static class Strings
     public static string Lang { get; set; } = "en";
     internal static bool Ru => Lang.Equals("ru", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>v2.38.0 — Explorer "route through VPN" context-menu verb label
+    /// (used by ShellMenuRegistrar; public so VPNRouter.App can read it since
+    /// <see cref="Ru"/> is internal to Core).</summary>
+    public static string ShellMenuRouteLabel =>
+        Ru ? "Добавить в VPNRouter (через VPN)" : "Add to VPNRouter (route through VPN)";
+
     // v2.29.0: dynamic OS name shown in user-facing autostart copy. Mac
     // users were seeing "Windows" hardcoded in Simple-mode autostart card
     // and Network → Autostart labels (reported 2026-04-29). Now Strings
