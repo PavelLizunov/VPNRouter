@@ -1,12 +1,12 @@
 # VPNRouter.Android
 
-Android port. Same Avalonia 11.3 UI engine as desktop App, different
+Android port. Same Avalonia 12.0.3 UI engine as desktop App, different
 SingBox runtime path (libbox.aar via gomobile-bound JNI, not the
 desktop's spawned `sing-box.exe`).
 
 ## Target framework
 
-`net8.0-android` (`<PLATFORM_ANDROID>` define). Source-links
+`net10.0-android36.0` (`<PLATFORM_ANDROID>` define). Source-links
 `VPNRouter.Core` directly (no ProjectReference — Core ships as
 `net8.0` and the RID-restored multi-target deadlock made
 ProjectReference fragile pre-Phase 1.E). Core's `#if PLATFORM_ANDROID`
