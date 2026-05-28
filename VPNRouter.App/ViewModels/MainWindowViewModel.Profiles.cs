@@ -512,6 +512,55 @@ public partial class MainWindowViewModel
         SaveSettings();
     }
 
+#if PLATFORM_WINDOWS
+    /// <summary>
+    /// v2.38.0 — add an app to the split-tunnel list from the Explorer
+    /// "route through VPN" context-menu verb (<c>--route-app "%1"</c>).
+    /// Windows-only (matches the shell-verb feature surface); the
+    /// <c>#if PLATFORM_WINDOWS</c> guard keeps the Linux/Mac
+    /// MainWindowViewModel public-surface hash unchanged.
+    /// Resolves the path (.exe or .lnk) to a process-name, then routes it
+    /// through the SAME path as the manual Add button so it lands in the
+    /// "Custom Apps" group (visible + checked) AND is bridged into
+    /// <c>RoutingAppsInclude</c>. No reconnect (locked design — applies on
+    /// next connect). Invoked from App.axaml.cs on RouteAppRequested /
+    /// PendingRouteAppPath. See plans/feature-shell-context-menu-add-app.md.
+    /// </summary>
+    internal void RouteAppFromShell(string? rawPath)
+    {
+        var exeName = OperatingSystem.IsWindows()
+            ? Services.ShortcutResolver.ResolveToExeName(rawPath, _logger)
+            : null;
+
+        if (string.IsNullOrWhiteSpace(exeName))
+        {
+            _logger.Warning("[ShellAdd] could not resolve a routable .exe from {Path}", rawPath);
+            ShowRulesToast(IsRussian ? "Не удалось распознать приложение" : "Couldn't resolve the app");
+            return;
+        }
+
+        // RoutingAppsInclude is the authoritative routed list — dedup there.
+        var routed = _settings.App.RoutingAppsInclude ?? new List<string>();
+        if (routed.Any(e => string.Equals(e, exeName, StringComparison.OrdinalIgnoreCase)))
+        {
+            _logger.Information("[ShellAdd] {Exe} already routed — no-op", exeName);
+            ShowRulesToast(IsRussian ? $"{exeName} уже в списке VPN" : $"{exeName} already routed");
+            return;
+        }
+
+        // Force the "Custom Apps" group (deterministic — ignore any stale UI
+        // selection), then add exactly like the manual Add button: lands in
+        // Custom Apps, checked, bridged into RoutingAppsInclude, saved.
+        var prevSelected = SelectedAppGroup;
+        SelectedAppGroup = AppGroups.FirstOrDefault(g => g.Name == "Custom Apps");
+        try { AddCustomApp(exeName); }
+        finally { SelectedAppGroup = prevSelected; }
+
+        _logger.Information("[ShellAdd] {Exe} added to Custom Apps + routed via VPN", exeName);
+        ShowRulesToast(IsRussian ? $"{exeName} → через VPN" : $"{exeName} → routed via VPN");
+    }
+#endif
+
     [RelayCommand]
     private void RemoveCustomApps()
     {

@@ -131,6 +131,18 @@ public partial class App : Application
                 VPNRouter.App.Services.WindowForegroundHelper.BringToFront(desktop.MainWindow);
             };
 
+#if PLATFORM_WINDOWS
+            // v2.38.0 — Explorer "route through VPN" context-menu verb. A
+            // second launch with --route-app pipes the path here; resolve +
+            // add to Custom Apps + toast in this running instance, then
+            // surface the window so the user sees the result.
+            VPNRouter.App.Services.SingleInstance.RouteAppRequested += path =>
+            {
+                try { _viewModel?.RouteAppFromShell(path); } catch { }
+                VPNRouter.App.Services.WindowForegroundHelper.BringToFront(desktop.MainWindow);
+            };
+#endif
+
             // Release the single-instance Mutex on graceful shutdown so
             // the next launch sees a clean slot and can claim it.
             desktop.Exit += (_, _) =>
@@ -143,6 +155,18 @@ public partial class App : Application
                 mainWindow.Hide();
             else
                 mainWindow.Show();
+
+#if PLATFORM_WINDOWS
+            // v2.38.0 — if THIS instance was launched by the context-menu verb
+            // (--route-app) with no other instance running, process the stashed
+            // path now that the ViewModel + window are up.
+            if (!string.IsNullOrEmpty(Program.PendingRouteAppPath))
+            {
+                var pending = Program.PendingRouteAppPath;
+                Program.PendingRouteAppPath = null;
+                try { _viewModel?.RouteAppFromShell(pending); } catch { }
+            }
+#endif
         }
 
         base.OnFrameworkInitializationCompleted();

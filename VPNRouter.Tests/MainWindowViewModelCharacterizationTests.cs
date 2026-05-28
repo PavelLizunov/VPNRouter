@@ -160,8 +160,13 @@ public class MainWindowViewModelCharacterizationTests
     // legend strings (LblLegend{Working,Partial,Failed,Untested,Stale}).
     // v2.37.0-r50 (2026-05-26): added LblZapretRunSelected string (label
     // for the Hero ▶ → "Запустить" / "Run", was unlabeled glyph).
+    // v2.38.0 (2026-05-28): added the Windows-only internal
+    // RouteAppFromShell(string) method for the Explorer "route through VPN"
+    // context-menu feature. Guarded by #if PLATFORM_WINDOWS, so ONLY the
+    // Windows surface changed — PinnedHashLinux below is intentionally
+    // untouched. Prior Windows hash: 12965556…a0d1baba.
     private const string PinnedHashWindows =
-        "12965556a320b7454dd115217cde9897649f97b772555166ebf39d34a0d1baba";
+        "2f9fd36c6da1a58ccd541d655021fcf49258307bcab85e0a4bd6183958427a6c";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
