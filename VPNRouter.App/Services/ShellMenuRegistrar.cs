@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
 using Serilog;
@@ -27,6 +28,26 @@ public static class ShellMenuRegistrar
 
     private static string MenuLabel =>
         VPNRouter.Core.Localization.Strings.ShellMenuRouteLabel;
+
+    // r3: after writing/removing the verb, tell Explorer that file
+    // associations changed so the RUNNING shell re-reads the verb (label +
+    // icon) on the spot instead of serving the stale MUI verb-name cache
+    // until the next reboot. r2 fixed WHAT we write (App.exe icon + localized
+    // label); without this notify the label can lag for a RU user upgrading
+    // from an r1 that wrote the English label. SHCNE_ASSOCCHANGED is the
+    // documented signal for "shell associations were added/changed/removed".
+    private const int SHCNE_ASSOCCHANGED = 0x08000000;
+    private const uint SHCNF_IDLIST = 0x0000;
+
+    [DllImport("shell32.dll")]
+    private static extern void SHChangeNotify(
+        int wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
+    private static void NotifyShellAssocChanged()
+    {
+        try { SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero); }
+        catch { /* best-effort: a failed notify just means a slightly stale menu */ }
+    }
 
     /// <summary>
     /// Register (or refresh) the verb. Idempotent — safe to call on every
@@ -67,6 +88,7 @@ public static class ShellMenuRegistrar
                 using var cmd = verb.CreateSubKey("command");
                 cmd?.SetValue(null, command);
             }
+            NotifyShellAssocChanged();
             logger?.Information("[ShellMenu] registered verb on exefile + lnkfile → {Cmd}", command);
         }
         catch (Exception ex)
@@ -92,6 +114,7 @@ public static class ShellMenuRegistrar
                 logger?.Debug(ex, "[ShellMenu] unregister {Class} failed", cls);
             }
         }
+        NotifyShellAssocChanged();
         logger?.Information("[ShellMenu] unregistered context-menu verb");
     }
 }
