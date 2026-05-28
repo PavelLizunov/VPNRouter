@@ -86,8 +86,9 @@ _process.Kill(entireProcessTree: true);
 
 ## Тестирование
 
-`VPNRouter.Tests/UnitTest1.cs` ~4900 строк, 80+ unit-тестов в ~25 классах
-плюс headless Avalonia tests в отдельных файлах. Полный inventory с
+`UnitTest1.cs` удалён (Phase 2E extraction 2026-05-17) — тесты разбиты на
+per-class файлы (~171 `.cs` в `VPNRouter.Tests/`), плюс headless Avalonia
+tests в отдельных файлах. Полный inventory с
 покрытием — `VPNRouter.Tests/CLAUDE.md` "Test classes" таблица.
 
 Headline классы по Core (не исчерпывающе):

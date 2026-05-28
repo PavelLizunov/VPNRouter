@@ -11,7 +11,7 @@ App.axaml                          ← глобальные ресурсы + The
 Styles/Tokens.axaml                ← дизайн-токены: цвета, отступы, радиусы. Использовать СЕМАНТИЧЕСКИЕ имена
 Localization/Strings.cs            ← вся локализация. Bilingual (Ru/En). Static getters L_FieldName.
 ViewModels/
-  MainWindowViewModel.cs                  ← основная VM (~5300 строк, partial — split across 10 files after Phase 2B 2026-05-18)
+  MainWindowViewModel.cs                  ← основная VM (~7250 строк god-file, partial — 10 sibling-файлов выделено; дальнейший split — открытый Phase 2B hygiene)
   MainWindowViewModel.AutostartBootstrap.cs
   MainWindowViewModel.FreeConfigs.cs      ← Phase 2B Wave 8: ApplyFreeConfigAsync + ShowFreeConfigSecurityWarningAsync
   MainWindowViewModel.Localization.cs
@@ -74,7 +74,10 @@ private async Task ConnectAsync() { ... }
 2026-05-18) чтоб не плодить 6750-строчный god-object. Каждый partial — одна
 тематика (Localization / RuntimeStatus / ServerTesting / SimpleMode / Wgturn /
 AutostartBootstrap + Phase 2B: Profiles / Subscriptions / FreeConfigs /
-Settings). Главный `MainWindowViewModel.cs` уменьшился с 6753 до ~5300 строк
+Settings). Главный `MainWindowViewModel.cs` — **~7250 строк** (вырос обратно
+в v2.37.0 cycle из-за большой ZapretOneClick-оркестрации; дальнейший split
+Connection/CustomRules/Recovery — открытый Phase 2B hygiene, безопасен т.к.
+public-surface запинен characterization-хэшем)
 (constructor + cross-concern orchestration: LoadSettingsIntoUI / SaveSettings /
 ToggleConnectionAsync / Reconnect / Zapret + TgProxy commands / OnEngineStatus
 event handler / Quit / Dispose остаются в нём).
