@@ -90,12 +90,17 @@ public static class ShellMenuRegistrar
             var iconSource = File.Exists(appExe) ? appExe : gui;
             var icon = $"\"{iconSource}\",0";
 
-            // r4: normalize the category list. A '"' in a name would break the
-            // command string, so drop those defensively. Distinct, order-preserved.
-            // ≤1 category → keep the flat one-click verb (common case, no
-            // regression). >1 → cascading "VPNRouter ▸" submenu, one item per cat.
+            // r4/r6: normalize the category list. A name embedded into the
+            // submenu command (--category "<name>") must be shell-safe: '"'
+            // breaks the arg, '\' (esp. trailing) escapes the closing quote,
+            // and '%' is Explorer-token-expanded (audit finding #5). AddCategory
+            // strips these at the source; this is the backstop for any
+            // legacy-persisted name. Distinct, order-preserved. ≤1 category →
+            // flat one-click verb (common case, no regression). >1 → cascading
+            // "VPNRouter ▸" submenu, one item per category.
             var cats = (categories ?? Array.Empty<string>())
-                .Where(c => !string.IsNullOrWhiteSpace(c) && !c.Contains('"'))
+                .Where(c => !string.IsNullOrWhiteSpace(c)
+                    && !c.Contains('"') && !c.Contains('%') && !c.Contains('\\'))
                 .Select(c => c.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();

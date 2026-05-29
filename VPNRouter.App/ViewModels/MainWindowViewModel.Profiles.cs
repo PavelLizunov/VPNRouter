@@ -458,6 +458,15 @@ public partial class MainWindowViewModel
     {
         var name = NewCategoryName?.Trim();
         if (string.IsNullOrWhiteSpace(name)) return;
+        // r6 (audit finding #5): a category name is later embedded verbatim into
+        // the Explorer submenu command (--category "<name>"). '%' is token-
+        // expanded by Explorer, '\' / trailing-'\' escapes the closing quote
+        // (argv rules), and '"' breaks it outright — all corrupt the verb and
+        // make the shell "add" silently fall back to the default group. Strip
+        // these shell-unsafe chars at the source so the persisted name is always
+        // safe (they carry no meaning in a category label).
+        name = new string(name.Where(c => c != '%' && c != '\\' && c != '/' && c != '"').ToArray()).Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
         if (AppGroups.Any(g => g.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) return;
 
         var group = new AppGroupViewModel(name!, "", isChecked: true) { IsCustomCategory = true };
@@ -539,7 +548,22 @@ public partial class MainWindowViewModel
             return;
         }
 
-        // RoutingAppsInclude is the authoritative routed list — dedup there.
+        // r6 (audit finding #1): the shell verb assumes INCLUDE semantics
+        // ("add = route this app through VPN"). In the Apps "exclude" mode the
+        // AppItem bridge writes to RoutingAppsExclude instead — which would make
+        // the app BYPASS the VPN, the exact OPPOSITE of the verb's label (a
+        // silent leak). Rather than implement full mode-aware semantics in this
+        // fiddly bridge, refuse cleanly and point the user at the in-app list.
+        if (string.Equals(_settings.App.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.Information("[ShellAdd] exclude apps-mode active — refusing shell add for {Exe}", exeName);
+            ShowRulesToast(IsRussian
+                ? "Режим «исключения»: управляйте приложениями в окне VPNRouter"
+                : "Exclude mode: manage apps in the VPNRouter window");
+            return;
+        }
+
+        // RoutingAppsInclude is the authoritative routed list (include mode) — dedup there.
         var routed = _settings.App.RoutingAppsInclude ?? new List<string>();
         if (routed.Any(e => string.Equals(e, exeName, StringComparison.OrdinalIgnoreCase)))
         {
@@ -561,8 +585,32 @@ public partial class MainWindowViewModel
 
         var prevSelected = SelectedAppGroup;
         SelectedAppGroup = target;
-        try { AddCustomApp(exeName); }
+        try
+        {
+            AddCustomApp(exeName);
+            // r6 (audit finding #2): AddCustomApp early-returns if the target
+            // group ALREADY holds the app (even unchecked) — it bails BEFORE
+            // setting IsChecked=true, so nothing gets routed and the toast would
+            // lie. Force the landed item checked so the verb's promise holds.
+            var landedItem = target?.Apps.FirstOrDefault(
+                a => string.Equals(a.ProcessName, exeName, StringComparison.OrdinalIgnoreCase));
+            landedItem ??= AppGroups.SelectMany(g => g.Apps).FirstOrDefault(
+                a => string.Equals(a.ProcessName, exeName, StringComparison.OrdinalIgnoreCase));
+            if (landedItem != null && !landedItem.IsChecked)
+                landedItem.IsChecked = true; // bridge → RoutingAppsInclude
+        }
         finally { SelectedAppGroup = prevSelected; }
+
+        // r6 (audit finding #2): base the toast on the ACTUAL post-state — never
+        // claim "routed" if the write didn't take.
+        bool nowRouted = (_settings.App.RoutingAppsInclude ?? new List<string>())
+            .Any(e => string.Equals(e, exeName, StringComparison.OrdinalIgnoreCase));
+        if (!nowRouted)
+        {
+            _logger.Warning("[ShellAdd] {Exe} did not end up routed (unexpected) — reporting failure", exeName);
+            ShowRulesToast(IsRussian ? $"Не удалось добавить {exeName}" : $"Couldn't add {exeName}");
+            return;
+        }
 
         var landed = target?.Name ?? "Custom Apps";
         bool namedCategory = !string.Equals(landed, "Custom Apps", StringComparison.OrdinalIgnoreCase);
@@ -599,27 +647,44 @@ public partial class MainWindowViewModel
             return;
         }
 
+        // r6 (audit finding #1): in exclude apps-mode the bridge would ADD the
+        // app to the bypass (exclude) list — i.e. it would START routing it
+        // through the VPN, the opposite of "remove from VPN". Refuse cleanly,
+        // same as the add verb.
+        if (string.Equals(_settings.App.RoutingAppsMode, "exclude", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.Information("[ShellRemove] exclude apps-mode active — refusing shell remove for {Exe}", exeName);
+            ShowRulesToast(IsRussian
+                ? "Режим «исключения»: управляйте приложениями в окне VPNRouter"
+                : "Exclude mode: manage apps in the VPNRouter window");
+            return;
+        }
+
         // Was it routed at all? RoutingAppsInclude is the authoritative list.
         var routed = _settings.App.RoutingAppsInclude ?? new List<string>();
         bool wasRouted = routed.Any(e => string.Equals(e, exeName, StringComparison.OrdinalIgnoreCase));
 
-        // 1) Uncheck + drop the bridged AppItem across all groups. Setting
-        //    IsChecked=false fires WriteMode → removes it from RoutingAppsInclude;
-        //    removing the item drops it from custom_apps / custom_group_apps on
-        //    the next SaveSettings.
-        bool removedItem = false;
+        // 1) Uncheck + drop the bridged AppItem from EVERY group it lives in.
+        //    r6 (audit finding #3): the same process name can exist as separate
+        //    AppItem instances across multiple groups (Custom Apps + a named
+        //    category — LoadApps dedups only WITHIN a group). The old code
+        //    removed only the FIRST match (break) and SaveSettings re-persisted
+        //    the leftover from the surviving group, which could re-route when
+        //    that group's master checkbox was later toggled. Collect ALL matches
+        //    first (avoid mutating mid-iterate), then uncheck + remove each.
+        //    IsChecked=false fires WriteMode → removes from RoutingAppsInclude.
+        var matches = new List<(AppGroupViewModel Group, AppItemViewModel Item)>();
         foreach (var group in AppGroups)
+            foreach (var item in group.Apps)
+                if (string.Equals(item.ProcessName, exeName, StringComparison.OrdinalIgnoreCase))
+                    matches.Add((group, item));
+
+        foreach (var (group, item) in matches)
         {
-            var item = group.Apps.FirstOrDefault(
-                a => string.Equals(a.ProcessName, exeName, StringComparison.OrdinalIgnoreCase));
-            if (item != null)
-            {
-                try { item.IsChecked = false; } catch { }
-                group.Apps.Remove(item);
-                removedItem = true;
-                break;
-            }
+            try { item.IsChecked = false; } catch { }
+            group.Apps.Remove(item);
         }
+        bool removedItem = matches.Count > 0;
 
         // 2) Defensive direct scrub of RoutingAppsInclude — covers an entry that
         //    was routed but never surfaced as an AppItem (e.g. added by a prior
@@ -630,7 +695,7 @@ public partial class MainWindowViewModel
 
         if (wasRouted || removedItem)
         {
-            _logger.Information("[ShellRemove] {Exe} removed from VPN routing", exeName);
+            _logger.Information("[ShellRemove] {Exe} removed from VPN routing ({N} group instance(s))", exeName, matches.Count);
             ShowRulesToast(IsRussian ? $"{exeName} убрано из VPN" : $"{exeName} removed from VPN");
         }
         else

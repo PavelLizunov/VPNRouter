@@ -65,6 +65,14 @@ public static class SingleInstance
     // long-path UNC can reach ~32k chars → 64 KB UTF-8 is comfortably above.
     private const int MaxRouteAppPayloadBytes = 64 * 1024;
 
+    // r6 (audit finding #4): the route/unroute probes run on the COLD path
+    // (first right-click after boot — no instance listening) BEFORE this launch
+    // proceeds to start the app. A 2 s connect timeout there stalls the launch
+    // by ~2 s. A LIVE instance accepts the pipe instantly, so a short probe
+    // suffices; on the cold path we fail fast and fall through to normal
+    // startup. (TrySignalShow keeps 2 s — it's not on a latency-critical path.)
+    private const int RouteProbeConnectMs = 400;
+
     private static Mutex? _mutex;
     private static CancellationTokenSource? _serverCts;
 
@@ -220,7 +228,7 @@ public static class SingleInstance
         try
         {
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
-            client.Connect(2000);
+            client.Connect(RouteProbeConnectMs); // r6 #4: fast cold-path probe
             var bytes = Encoding.UTF8.GetBytes(path ?? string.Empty);
             client.WriteByte(SignalRouteApp);
             client.Write(BitConverter.GetBytes(bytes.Length), 0, 4);
@@ -256,7 +264,7 @@ public static class SingleInstance
         try
         {
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
-            client.Connect(2000);
+            client.Connect(RouteProbeConnectMs); // r6 #4: fast cold-path probe
             var bytes = Encoding.UTF8.GetBytes(path ?? string.Empty);
             client.WriteByte(SignalUnrouteApp);
             client.Write(BitConverter.GetBytes(bytes.Length), 0, 4);
@@ -285,14 +293,52 @@ public static class SingleInstance
         return true;
     }
 
+    /// <summary>
+    /// r6 (audit finding #6): create the pipe server with a DACL scoped to the
+    /// current user on Windows. The mutating verbs 0x02/0x03 change the split-
+    /// tunnel routing set + drive .lnk COM parsing inside the (elevated) first
+    /// instance, so the IPC channel is a real trust boundary now — the pre-v2.38
+    /// pipe carried only the harmless 0x01 show-window verb. A current-user-only
+    /// ACL drops any broader default grant; the elevated instance's default
+    /// high-integrity mandatory label already blocks lower-integrity writers
+    /// (no-write-up). On non-Windows, PipeSecurity is unsupported — use the
+    /// plain constructor. Best-effort: any failure falls back to the default
+    /// DACL (worst case = pre-r6 behaviour).
+    /// </summary>
+    private static NamedPipeServerStream CreateServerStream(ILogger? logger)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                var sid = System.Security.Principal.WindowsIdentity.GetCurrent().User;
+                if (sid != null)
+                {
+                    var ps = new PipeSecurity();
+                    ps.AddAccessRule(new PipeAccessRule(
+                        sid, PipeAccessRights.FullControl,
+                        System.Security.AccessControl.AccessControlType.Allow));
+                    return NamedPipeServerStreamAcl.Create(
+                        PipeName, PipeDirection.In, maxNumberOfServerInstances: 1,
+                        PipeTransmissionMode.Byte, PipeOptions.None,
+                        inBufferSize: 0, outBufferSize: 0, pipeSecurity: ps);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.Debug(ex, "[SingleInstance] current-user pipe ACL setup failed — falling back to default DACL");
+            }
+        }
+        return new NamedPipeServerStream(PipeName, PipeDirection.In, maxNumberOfServerInstances: 1);
+    }
+
     private static void RunPipeServerLoop(CancellationToken ct, ILogger? logger)
     {
         while (!ct.IsCancellationRequested)
         {
             try
             {
-                using var server = new NamedPipeServerStream(
-                    PipeName, PipeDirection.In, maxNumberOfServerInstances: 1);
+                using var server = CreateServerStream(logger);
 
                 // WaitForConnectionAsync respects the cancellation token —
                 // graceful shutdown via Release().
