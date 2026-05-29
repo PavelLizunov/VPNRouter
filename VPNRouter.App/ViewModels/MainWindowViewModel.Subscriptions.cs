@@ -126,12 +126,19 @@ public partial class MainWindowViewModel
         {
             var count = await SubscriptionFetcher.RefreshEntryAsync(
                 sub.UnderlyingEntry, _logger, CancellationToken.None);
-            sub.LastServerCount = count;
+            // r7: count==0 = fetch failed/empty. RefreshEntryAsync KEEPS the
+            // cached servers, so show the real cache count + flag the failure
+            // (honest "couldn't refresh — showing cached" badge) instead of
+            // dropping the card to "0s" (which read as "configs lost / banned").
+            sub.LastRefreshFailed = count == 0;
+            sub.LastServerCount = count > 0 ? count : (sub.UnderlyingEntry.Servers?.Count ?? 0);
             sub.LastRefreshedAt = sub.UnderlyingEntry.LastRefreshedAt;
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "[VM] RefreshSubscription failed for {Url}", sub.Url);
+            sub.LastRefreshFailed = true;
+            sub.LastServerCount = sub.UnderlyingEntry.Servers?.Count ?? 0;
         }
         finally
         {
@@ -161,12 +168,15 @@ public partial class MainWindowViewModel
                 {
                     var count = await SubscriptionFetcher.RefreshEntryAsync(
                         s.UnderlyingEntry, _logger, CancellationToken.None);
-                    s.LastServerCount = count;
+                    s.LastRefreshFailed = count == 0;       // r7: cache kept on empty
+                    s.LastServerCount = count > 0 ? count : (s.UnderlyingEntry.Servers?.Count ?? 0);
                     s.LastRefreshedAt = s.UnderlyingEntry.LastRefreshedAt;
                 }
                 catch (Exception ex)
                 {
                     _logger.Warning(ex, "[VM] Refresh of {Url} failed", s.Url);
+                    s.LastRefreshFailed = true;
+                    s.LastServerCount = s.UnderlyingEntry.Servers?.Count ?? 0;
                 }
             }));
         }
@@ -288,12 +298,15 @@ public partial class MainWindowViewModel
                 try
                 {
                     var count = await SubscriptionFetcher.RefreshEntryAsync(s.UnderlyingEntry, _logger, ct);
-                    s.LastServerCount = count;
+                    s.LastRefreshFailed = count == 0;       // r7: cache kept on empty
+                    s.LastServerCount = count > 0 ? count : (s.UnderlyingEntry.Servers?.Count ?? 0);
                     s.LastRefreshedAt = s.UnderlyingEntry.LastRefreshedAt;
                 }
                 catch (Exception ex)
                 {
                     _logger.Warning(ex, "[SubRefresh] Failed for {Url}", s.Url);
+                    s.LastRefreshFailed = true;
+                    s.LastServerCount = s.UnderlyingEntry.Servers?.Count ?? 0;
                 }
             }));
 

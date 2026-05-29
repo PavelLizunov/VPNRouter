@@ -305,6 +305,15 @@
                       </MultiBinding>
                     </TextBlock.Text>
                   </TextBlock>
+                  <!-- v2.38.0-r7: honest "couldn't refresh — showing cached"
+                       badge. Visible only when the last fetch failed, so a
+                       provider DPI-flap reads as a transient refresh failure
+                       (cache preserved) instead of "configs lost / banned". -->
+                  <TextBlock Text="{Binding StatusBadge}"
+                             IsVisible="{Binding LastRefreshFailed}"
+                             FontSize="10"
+                             TextWrapping="Wrap"
+                             Foreground="{DynamicResource WarningFgBrush}"/>
                 </StackPanel>
 
                 <ProgressBar Grid.Column="2" IsVisible="{Binding IsRefreshing}"

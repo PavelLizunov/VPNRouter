@@ -22,6 +22,28 @@ public partial class SubscriptionViewModel : ObservableObject
     [ObservableProperty] private int _lastServerCount;
     [ObservableProperty] private bool _isRefreshing;
 
+    // v2.38.0-r7 — set true when the most recent refresh fetch failed / returned
+    // 0 (network down, provider DPI-blocked, transient). The cached servers are
+    // preserved (RefreshEntryAsync keeps them on empty), so this drives an honest
+    // "couldn't refresh — showing cached" badge instead of letting the card read
+    // as "configs lost / banned". See Z:\surito 2026-05-29.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusBadge))]
+    private bool _lastRefreshFailed;
+
+    /// <summary>The actually-cached server count (survives a failed refresh +
+    /// app restart — persisted via SubscriptionEntry.Servers YAML alias).</summary>
+    public int CachedServerCount => _entry.Servers?.Count ?? 0;
+
+    /// <summary>v2.38.0-r7 — honest one-line badge for the card. Empty on the
+    /// happy path (the normal "URL · Ns · time" line shows). On a failed refresh
+    /// it explains WHY (cached vs provider-unreachable) so a DPI-flap doesn't
+    /// look like data loss.</summary>
+    public string StatusBadge =>
+        !LastRefreshFailed ? string.Empty
+        : CachedServerCount > 0 ? VPNRouter.Core.Localization.Strings.SubRefreshFailedCached
+        : VPNRouter.Core.Localization.Strings.SubRefreshFailedEmpty;
+
     public string LastRefreshedDisplay
     {
         get

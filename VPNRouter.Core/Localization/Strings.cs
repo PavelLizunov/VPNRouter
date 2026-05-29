@@ -34,6 +34,23 @@ public static class Strings
     public static string ShellMenuUnrouteLabel =>
         Ru ? "Убрать из VPNRouter" : "Remove from VPNRouter";
 
+    /// <summary>v2.38.0-r7 — subscription card badge when the last refresh
+    /// failed but cached servers are preserved. Turns the bare "0s · —" (which
+    /// reads as "configs lost / banned") into an honest "couldn't refresh,
+    /// servers are still cached" signal. See Z:\surito diagnosis 2026-05-29
+    /// (provider DPI-flap → fetch failed → list looked empty/lost).</summary>
+    public static string SubRefreshFailedCached =>
+        Ru ? "⚠ не обновилось — показаны кэшированные серверы"
+           : "⚠ refresh failed — showing cached servers";
+
+    /// <summary>v2.38.0-r7 — subscription card badge when the last refresh
+    /// failed AND there are no cached servers to fall back on (provider
+    /// unreachable / blocked). Distinguishes a network/block failure from
+    /// genuine "empty subscription".</summary>
+    public static string SubRefreshFailedEmpty =>
+        Ru ? "⚠ не удалось загрузить — провайдер недоступен (проверьте сеть/Zapret)"
+           : "⚠ couldn't load — provider unreachable (check network/Zapret)";
+
     // v2.29.0: dynamic OS name shown in user-facing autostart copy. Mac
     // users were seeing "Windows" hardcoded in Simple-mode autostart card
     // and Network → Autostart labels (reported 2026-04-29). Now Strings
