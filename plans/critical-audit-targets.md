@@ -48,6 +48,19 @@ AF-2 / AF-1 land first** (`plans/architecture-hardening-v2.39.md`) — the invar
 becomes unrepresentable, so the sweep only checks shape, not "did we forget".
 
 ### W1.1 — Proxy-outbound presence + Resolve-before-Generate + route.final
+> **SCOUTED 2026-05-29 → CLOSED (no fan-out needed).** All 3 prod callers of
+> `ConfigGenerator.Generate` resolve first: `ConfigPipeline.cs:97`
+> (`VlessServersResolver.Resolve`) · CLI `StartCommand.cs:84`
+> (`SubscriptionResolver.ResolveAsync`) · Android adds the server explicitly
+> (`AndroidConfigBuilder.cs:114`). `route.final` polarity correct on all 4 combos
+> (`ConfigGenerator.cs:1349-1355`). Proxy-presence DOUBLE-guarded
+> (`ConfigPipeline:104` + `ConfigGenerator:948`, both throw). Hard-guard turns any
+> future skip into a loud throw, never a silent leak. Tests:
+> `ConfigGeneratorIncludeModeTests` / `ConfigGeneratorExcludeModeTests` /
+> `ConfigGeneratorEmptyServersGuardTests`. **One out-of-scope finding**: Android
+> bypasses `ConfigPipeline` → no `LeakProtection.ValidateConfig` (→ AF-2 (b) +
+> backlog). Fan-out skipped — scout extracted the only finding at ~0 tokens.
+
 **The cardinal silent-leak core (v2.28.1).** Scope: `ConfigGenerator.cs` outbound
 generation + hard-guard + `route.final`; `VlessServersResolver.cs` + the 3
 call-sites (`StartAsync` / `Apply` / `HealthMonitor`). Lenses (3): proxy-outbound
@@ -56,6 +69,20 @@ Resolve-before-Generate at every caller. **Est: ~2-4M · ~15-25 agents · ~15-20
 Maps to **AF-2**.
 
 ### W1.2 — include↔exclude polarity
+> **SCOUTED 2026-05-29 → CLOSED (no fan-out).** Polarity SOUND end-to-end. The VM
+> bridge (`GetActiveAppList` MVM:712) and the Core consumer
+> (`ConfigGenerator.cs:51-77`) both key off the SAME `RoutingAppsMode == "exclude"`
+> and select the SAME list: exclude → `RoutingAppsExclude` → routed direct +
+> final proxy; include → `RoutingAppsInclude` (or legacy resolved) → routed proxy
+> + final direct. Read/write symmetric (both via `GetActiveAppList`); idempotent
+> toggle (`AppItemViewModel.IsChecked`); `RefreshAppCheckboxes` on flip; two
+> independent lists (no cross-contamination); legacy `ExcludedApps` sweep correctly
+> skipped in exclude mode (`SaveSettings` :3847). r6 shell-verb inversion already
+> fixed. **Two non-leak findings:** (1) stale comment `ConfigGenerator.cs:45-50`
+> claims mode is INFERRED from list population — the code doesn't (reads
+> `RoutingAppsMode` directly); cosmetic, fold into AF-1. (2) `== "exclude"`
+> re-derived in ~5 scattered sites — exactly the scatter AF-1's enum collapses.
+
 **The r6 zone.** Scope: apps include/exclude bridge (`GetActiveAppList` /
 `SetAppCheckedInCurrentMode` / SaveSettings re-derive in `MainWindowViewModel.cs`)
 + the exclude-mode `ConfigGenerator` path. Lens (1, deep): can an app in

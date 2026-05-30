@@ -45,6 +45,15 @@ Past fixes patched symptoms; the type makes the symptom unrepresentable.
 **Where.** `AppSettings.cs:276/:219`, `Profile.cs:30`, `MainWindowViewModel.SaveSettings`
 + `Is*Mode` booleans, `AppSettingsSane.cs`. **Cross-ref audit stage W1.2.**
 
+**SCOUT UPDATE (W1.2, 2026-05-29).** Confirmed the scatter — `RoutingAppsMode ==
+"exclude"` is independently re-derived in ~5 sites: `GetActiveAppList` (MVM:715),
+`ConfigGenerator` (:53), SaveSettings legacy sweep (:3847),
+`OnRoutingAppsModeChanged`, `IsRoutingAppsModeExclude` (:630). Consistent today
+(no bug — W1.2 polarity is sound), but this is the exact fragility the enum
+collapses into one place. Also found a stale comment (`ConfigGenerator.cs:45-50`)
+describing a list-population mode-inference the code does NOT do — fold a
+one-line comment fix into this item when it lands.
+
 **Risk.** MEDIUM — touches SaveSettings + YAML schema; needs a migration for
 existing string values (trivial: parse string → enum on load). Characterization
 hash will move (mode booleans are part of MVM surface) — re-pin.
@@ -60,11 +69,20 @@ hash will move (mode booleans are part of MVM surface) — re-pin.
 `LeakProtection` backstop. Three callers (`StartAsync`, `Apply`, `HealthMonitor`)
 must each remember. Nothing stops calling Generate with unresolved servers.
 
-**Fix strategy.**
-- Make `Generate` consume a type produced ONLY by `Resolve`
-  (`Generate(ResolvedServers s)`, ctor internal to the resolver), OR
-- Funnel all generation through a single `VpnEngine` method — one call-site, not
-  three.
+**Fix strategy (RE-SCOPED after W1.1 scout, 2026-05-29).** The funnel ALREADY
+EXISTS for desktop: `ConfigPipeline.Generate` (Phase 2F) couples
+`VlessServersResolver.Resolve` (:97) → empty-guard (:104) →
+`ConfigGenerator.Generate` (:115) → `LeakProtection.ValidateConfig` (:123). GUI +
+HealthMonitor go through it; CLI resolves via `SubscriptionResolver.ResolveAsync`
+(`StartCommand.cs:84`) first; the hard-guard (`ConfigGenerator.cs:948`) turns any
+future skip into a LOUD throw, never a silent leak. The "3 callers" framing was
+stale — the real prod callers are ConfigPipeline + CLI + Android. So AF-2 shrinks
+to two cheap moves:
+- (a) make `ConfigGenerator.Generate` `internal` + an `[Obsolete]`/guard note (or
+  require a `ResolvedServers` token) so a raw call is hard to write by accident;
+- (b) route `AndroidConfigBuilder.cs:129` through `ConfigPipeline` (or add the
+  missing `LeakProtection.ValidateConfig`) — it currently bypasses it, the one
+  finding the W1.1 scout surfaced.
 
 **Why.** A missed Resolve = silent traffic leak = cardinal sin. Convention +
 guard caught it only AFTER it shipped; a type catches it at compile time. This
