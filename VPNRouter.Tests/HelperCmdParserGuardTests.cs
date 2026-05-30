@@ -168,12 +168,27 @@ public sealed class HelperCmdParserGuardTests
             new Regex(@"if\s+!SVC_TRIES!\s+gtr\s+\d+", RegexOptions.IgnoreCase),
             emittedSrc);
 
-        // Each timeout block must contain a goto that exits the loop
-        // (`goto parentgone` and `goto svcgone` are the two anchors).
-        // Pinning the goto labels guarantees the helper actually
-        // escapes the loop, not just logs a message and re-enters.
+        // Each timeout block must contain a goto that exits the loop, so a
+        // future refactor can't leave the helper logging a message and then
+        // re-entering the loop forever.
+        //
+        // Parent-wait is an inline loop that escapes by jumping past itself
+        // to `:parentgone`. Service-stop was refactored in v2.38.2-r3 (W3-a)
+        // out of an inline labels-in-block loop (the old `:svcstoploop` /
+        // `:svcgone` pair — a CMD anti-pattern: a `goto` out of a
+        // parenthesised block) into the top-level `:wait_service_stop`
+        // subroutine. Its SVC_TRIES-timeout block now RETURNS to the caller
+        // via the block-safe built-in `goto :eof` instead of `goto svcgone`
+        // (the `:svcgone` label no longer exists). Pin the subroutine label
+        // AND that the SVC_TRIES bound is immediately followed by a
+        // `goto :eof` escape — strictly stronger than the old "label exists
+        // somewhere" check.
         Assert.Contains("goto parentgone", emittedSrc);
-        Assert.Contains("goto svcgone", emittedSrc);
+        Assert.Contains(":wait_service_stop", emittedSrc);
+        Assert.Matches(
+            new Regex(@"if\s+!SVC_TRIES!\s+gtr\s+\d+\s*\(.*?goto :eof",
+                      RegexOptions.IgnoreCase | RegexOptions.Singleline),
+            emittedSrc);
     }
 
     /// <summary>
