@@ -245,9 +245,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Pin to a specific tooling release to make sing-box upgrades
-          # explicit. Bump when libbox.aar is rebuilt against a new
-          # sing-box version. See block comment above for rotation.
+          # explicit. When libbox.aar is rebuilt against a new sing-box
+          # version, bump BOTH of these together — the release tag AND the
+          # expected SHA256 below. A stale hash is a HARD failure (see the
+          # integrity gate in the run block), so they can't silently drift.
+          # See block comment above for the full rotation procedure.
           LIBBOX_RELEASE_TAG: "tooling-libbox-singbox-1.13.10"
+          # Expected SHA256 of the pinned libbox.aar asset. Authoritative
+          # source: `sha256sum` of the asset attached to LIBBOX_RELEASE_TAG
+          # (tools/build-libbox-aar.sh also emits it as `aar_sha256` in its
+          # version.json fingerprint). That script is the committed build
+          # recipe — sing-box version, build tags, Go + sagernet/gomobile +
+          # NDK pins — for reproducing this exact artifact.
+          LIBBOX_AAR_SHA256: "239c4101465edcc270de75182764fb7566efd5fd284fbce35720fe70fd69f1a6"
         run: |
           set -euo pipefail
           mkdir -p VPNRouter.Android/Lib
@@ -268,7 +278,22 @@ jobs:
           # non-zero size; a torn download or wrong-name asset would
           # produce a 0-byte file here.
           test -s VPNRouter.Android/Lib/libbox.aar
-          echo "libbox.aar provisioned: $(stat -c '%s bytes' VPNRouter.Android/Lib/libbox.aar) from release $LIBBOX_RELEASE_TAG"
+          # Supply-chain integrity gate: the downloaded AAR must match the
+          # pinned SHA256 exactly. A mismatch means the tooling-release
+          # asset changed out from under the pin (re-upload, corruption, or
+          # tampering) — fail CLOSED rather than build a native runtime we
+          # can't vouch for. This is intentionally a HARD failure, NOT the
+          # graceful skip above: the skip handles "asset absent" (fresh
+          # fork); a present-but-WRONG asset must stop the build loudly.
+          ACTUAL_SHA="$(sha256sum VPNRouter.Android/Lib/libbox.aar | awk '{print $1}')"
+          if [ "$ACTUAL_SHA" != "$LIBBOX_AAR_SHA256" ]; then
+            echo "::error::libbox.aar SHA256 mismatch on release $LIBBOX_RELEASE_TAG"
+            echo "  expected: $LIBBOX_AAR_SHA256"
+            echo "  actual:   $ACTUAL_SHA"
+            echo "  If you intentionally rebuilt libbox.aar, bump LIBBOX_AAR_SHA256 and LIBBOX_RELEASE_TAG together. See .github/SECRETS.md."
+            exit 1
+          fi
+          echo "libbox.aar provisioned + SHA256 verified ($(stat -c '%s bytes' VPNRouter.Android/Lib/libbox.aar)) from release $LIBBOX_RELEASE_TAG"
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
       # ── Build signed APK ───────────────────────────────────────────────
