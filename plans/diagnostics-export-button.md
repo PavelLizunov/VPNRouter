@@ -46,14 +46,23 @@ redact it):
 
 ## Output options (tiered)
 
-- **MVP**: collect → redact → ZIP to Desktop → open folder + a one-liner "review,
-  then attach this to your support message." No backend, no upload, no consent
-  flow beyond "here's what's inside."
-- **+**: a pre-export preview ("this bundle contains X, credentials removed —
-  open before sharing?"), the geo-health + reachability summary baked in.
-- **Future**: one-click upload to a paste/support endpoint returning a short code
-  (needs a backend, an explicit consent checkbox, and a retention/expiry policy —
-  bigger surface; defer).
+**DESTINATION DECIDED (2026-05-30, user): Variant 0 — we host NOTHING.** The
+button collects → redacts → writes a ZIP to Desktop → opens the folder. The user
+attaches it wherever they already get support (Discord / Telegram / GitHub issue).
+Rationale: zero new infra, zero data-processor / retention liability, zero
+privacy exposure beyond what the user explicitly chooses to share. "Куда
+принимаем логи" → туда, где уже идёт саппорт; ничего не хостим.
+
+- **MVP (the decision)**: collect → redact → ZIP to Desktop → open folder + a
+  one-liner "review, then attach this to your support message."
+- **+ later**: a pre-export preview ("this bundle contains X, credentials removed
+  — open before sharing?"), the geo-health + reachability summary baked in.
+- **Deferred upload path (only if support volume justifies)**: one-click upload
+  via a **Cloudflare Worker + R2** drop (RU-reachable, free tier, no server to
+  run, TTL-expiry you control, front via a `ninitux.com` subdomain) → returns a
+  short code the user shares. NOT a Discord webhook / TG bot token in the client
+  (abusable/leaks) and NOT a public paste service (privacy + often RU-blocked).
+  Requires explicit consent + auto-expiry. Park until needed.
 
 ## Placement
 
@@ -83,6 +92,9 @@ Settings → a small "Поддержка / Diagnostics" section, next to the exi
 
 ---
 
-**Decision: park it here.** Revisit when support volume justifies the redaction
-work, or bundle with the next support-UX pass. The surito-B case is the concrete
-motivator; if it recurs, this jumps priority.
+**Decision (2026-05-30): destination SETTLED = Variant 0 (local ZIP, no backend).**
+Implementation timing still parked — revisit when support volume justifies the
+redaction work, or bundle with the next support-UX pass. When built, it's a
+self-contained App feature (collector + redactor + ZIP + Settings button); no
+infra ticket. The surito-B case is the concrete motivator; if it recurs, this
+jumps priority.
