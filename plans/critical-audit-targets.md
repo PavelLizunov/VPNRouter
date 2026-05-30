@@ -139,6 +139,20 @@ type, `dns-direct`, geosite/geoip strip, `route.final`). **Est: ~3-4M · ~20-30
 agents · ~20-25m.**
 
 ### W1.5 — LeakProtection backstop completeness  (run last)
+> **SCOUTED 2026-05-29 → CLOSED. Backstop STRONG, 2 blind spots.** Catches:
+> proxy-outbound existence (:235 ERROR), custom-mode proxy (:494), hijack-dns
+> presence (:245), per-process DNS rule (:219), `dns.strategy=ipv4_only` (:188),
+> `strict_route=false` + TUN addr (:192), placeholder/shadow-IP cross-check (:185),
+> per-protocol outbound shape (VLESS/Hy2/TUIC/SS :249). **GAP-1 (LOW): route.final
+> direction NOT validated** — only INFERRED (`isFullTunnel = Final=="proxy"` :226)
+> to pick the DNS check; a wrong final for the mode wouldn't be flagged. **GAP-2
+> (LOW, = CLAUDE.md #5): no exclude-mode awareness** — per-process DNS check (:203
+> `Outbound=="proxy" || Action=="route"`) assumes include semantics; exclude-mode
+> rules are action=route→outbound=direct, so it mis-fires (spurious "DNS may leak"
+> on excluded apps) AND skips the exclude invariant. Both are "backstop won't
+> catch a FUTURE regression", not live leaks. → fixable: tighten the proxy-routed
+> predicate to `Outbound in {proxy,proxy-udp}` + add a route.final-vs-mode check.
+
 **The net under W1.1–W1.4.** Scope: `LeakProtection.cs` (680). Meta-lens: for each
 leak class surfaced by W1.1–W1.4, does `ValidateConfig` / `ValidateAppSettings`
 actually catch it? List coverage gaps (e.g. smart-mode false-warning, CLAUDE.md
