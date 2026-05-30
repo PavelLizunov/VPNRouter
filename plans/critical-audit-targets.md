@@ -91,6 +91,21 @@ UI toggle, shell verb, migration, apply-reload. **Est: ~2-3M · ~15-20 agents ·
 ~15m.** Maps to **AF-1**.
 
 ### W1.3 — DNS-leak
+> **SCOUTED 2026-05-29 → CLOSED (no fan-out).** All 4 lenses sound:
+> (1) `hijack-dns` ALWAYS emitted — `BuildRoute:1276` adds `{Protocol:dns,
+> Action:hijack-dns}` unconditionally as rule #2 (+ `LeakProtection:245` backstop).
+> (2) smart vs vpn_only correct — vpn-dns `Detour=proxy`; local-dns is Cloudflare
+> **DoH** (`type:https`, NOT `type:local` → no getaddrinfo/ISP leak even on the
+> direct path) `Detour=dns-direct` (`BuildDns:827-844`); per-process rule
+> smart→local-dns / vpn_only→vpn-dns (:877). (3) dns-direct gotcha handled —
+> local-dns points at the non-empty `dns-direct` outbound (`udp_fragment:true`
+> :980), never bare `direct` (the 1.13.3 FATAL). (4) per-process coverage correct
+> in all 3 modes (full→Final vpn-dns · exclude→listed local-dns · include→routed
+> vpn-dns/local-dns) + `LeakProtection:210-222` warns on gaps. **One intentional
+> nuance** (not a bug): smart mode resolves a tunneled app's domains via DoH
+> OUTSIDE the tunnel — documented (CLAUDE.md #5) + warned; default vpn_only routes
+> DNS through proxy = safe.
+
 Scope: `ConfigGenerator.cs` DNS section + `LeakProtection.cs` DNS checks. Lenses
 (4): hijack-dns rule presence · smart vs vpn_only routing (local-dns vs vpn-dns
 detour) · `detour:"dns-direct"` empty-direct gotcha · per-routed-process DNS-rule
