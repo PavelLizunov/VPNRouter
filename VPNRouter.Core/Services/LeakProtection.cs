@@ -200,9 +200,13 @@ public static class LeakProtection
         }
 
         // 4. Every process in route rules must have a DNS rule (sing-box 1.12+ action format)
+        // W1.5 GAP-2 fix: only count processes routed TO the proxy. The old
+        // predicate (`Action == "route"`) also matched exclude-mode rules
+        // (action=route → outbound=direct), producing a spurious "DNS may
+        // leak" warning for apps the user deliberately keeps OUT of the tunnel.
         var processesInRouteRules = config.Route.Rules
             .Where(r => r.ProcessName != null && r.ProcessName.Count > 0
-                     && (r.Outbound == "proxy" || r.Action == "route"))
+                     && (r.Outbound == "proxy" || r.Outbound == "proxy-udp"))
             .SelectMany(r => r.ProcessName!)
             .Distinct()
             .ToList();
@@ -229,6 +233,26 @@ public static class LeakProtection
             // In full tunnel, DNS final should be vpn-dns
             if (config.Dns.Final != "vpn-dns")
                 warnings.Add("Full tunnel mode: DNS final is not 'vpn-dns' — DNS may bypass VPN");
+        }
+
+        // 4c. W1.5 GAP-1: validate route.final direction against the configured
+        // mode (generated/subscribe only — custom configs carry user-controlled
+        // routing). full OR exclude → "proxy"; include split → "direct". The
+        // generator sets this correctly today; this guard catches a FUTURE
+        // polarity regression — a silent inversion is the worst kind of leak.
+        if (settings != null
+            && !string.Equals(settings.App.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase))
+        {
+            var routingMode = (settings.App.RoutingMode ?? "split").ToLowerInvariant();
+            var isFull = routingMode == "full";
+            var isExclude = string.Equals(settings.App.RoutingAppsMode, "exclude",
+                StringComparison.OrdinalIgnoreCase);
+            var expectedFinal = (isFull || isExclude) ? "proxy" : "direct";
+            if (config.Route.Final != expectedFinal)
+                warnings.Add(
+                    $"route.final is '{config.Route.Final}' but mode " +
+                    $"({routingMode}/{(isExclude ? "exclude" : "include")}) expects " +
+                    $"'{expectedFinal}' — possible routing inversion (traffic/DNS may leak)");
         }
 
         // 5. Proxy outbound must exist

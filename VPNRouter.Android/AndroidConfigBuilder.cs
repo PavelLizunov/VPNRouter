@@ -128,6 +128,26 @@ public static class AndroidConfigBuilder
         var processNames = System.Array.Empty<string>();
         var sbConfig = ConfigGenerator.Generate(profile, processNames, settings);
 
+        // W1.1 scout fix: AndroidConfigBuilder calls ConfigGenerator.Generate
+        // directly, bypassing ConfigPipeline — so it never ran LeakProtection.
+        // Run it here as a warn-only diagnostic backstop. Android per-app routing
+        // is enforced at the VpnService.Builder layer (not via sing-box rules),
+        // so a leak warning here is informational rather than fatal.
+        try
+        {
+            var leakCheck = LeakProtection.ValidateConfig(sbConfig, settings);
+            foreach (var w in leakCheck.Warnings)
+                Serilog.Log.Logger.Warning("[AndroidConfigBuilder] LeakProtection: {Warn}", w);
+            if (!leakCheck.IsValid)
+                Serilog.Log.Logger.Warning(
+                    "[AndroidConfigBuilder] LeakProtection errors: {Errors}",
+                    string.Join("; ", leakCheck.Errors));
+        }
+        catch (System.Exception ex)
+        {
+            Serilog.Log.Logger.Warning(ex, "[AndroidConfigBuilder] LeakProtection.ValidateConfig threw");
+        }
+
         var json = ConfigGenerator.Serialize(sbConfig);
 
         // v3.0 Android Phase 1.G+ (2026-05-04) — strip the desktop log path

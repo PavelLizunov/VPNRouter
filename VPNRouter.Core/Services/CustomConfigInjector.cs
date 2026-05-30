@@ -470,8 +470,18 @@ public static class CustomConfigInjector
             route["rules"] = rules;
         }
 
-        // Remove any previously injected process_name rules (idempotent re-injection)
-        RemoveInjectedProcessRules(rules);
+        // Remove any pre-existing process_name rules. Inject() always starts
+        // from the user's pristine JSON, so these are the user's OWN rules — in
+        // custom mode VPNRouter manages per-app routing, so they're replaced by
+        // our injected list. W1.4-a: warn so the override is never silent (a
+        // power-user's hand-written process_name rule would otherwise vanish
+        // without trace, and any app it covered that we don't would fall to
+        // route.final).
+        var replacedUserRules = RemoveInjectedProcessRules(rules);
+        if (replacedUserRules > 0)
+            Serilog.Log.Logger.Warning(
+                "Custom Config Mode: replaced {Count} user-defined process_name route rule(s) — " +
+                "VPNRouter manages per-app routing in custom mode.", replacedUserRules);
 
         var insertIndex = FindRouteInsertIndex(rules, isActionBased);
         bool hasSplit = udpTag != null && udpTag != tcpTag;
@@ -1344,12 +1354,25 @@ public static class CustomConfigInjector
     /// Removes any route rules that have process_name (our injected rules).
     /// This makes re-injection idempotent — safe to call multiple times.
     /// </summary>
-    private static void RemoveInjectedProcessRules(JsonArray rules)
+    /// <summary>
+    /// Removes every route rule carrying a <c>process_name</c> field and returns
+    /// how many were removed. In custom mode VPNRouter OWNS per-app routing:
+    /// <see cref="Inject"/> always starts from the user's pristine JSON, so any
+    /// process_name rules present are the user's own and are intentionally
+    /// replaced by our injected list. The returned count lets the caller warn
+    /// (W1.4-a) so the override is never silent.
+    /// </summary>
+    internal static int RemoveInjectedProcessRules(JsonArray rules)
     {
+        int removed = 0;
         for (int i = rules.Count - 1; i >= 0; i--)
         {
             if (rules[i] is JsonObject rj && rj["process_name"] != null)
+            {
                 rules.RemoveAt(i);
+                removed++;
+            }
         }
+        return removed;
     }
 }

@@ -42,12 +42,11 @@ public static class ConfigGenerator
         //    ExcludedApps; we keep using that list so the legacy profile
         //    system stays intact.
         //
-        // Backward-compat: when RoutingAppsExclude is populated but
-        // RoutingAppsInclude is empty the user is in exclude mode and we
-        // honour their list verbatim. When both are empty (clean
-        // install, never opened Apps tab) we fall through to the legacy
-        // resolvedProcessNames path with mode=include — no surprise
-        // empty config.
+        // Mode is read DIRECTLY from RoutingAppsMode below (NOT inferred from
+        // which list happens to be populated). "exclude" → RoutingAppsExclude;
+        // anything else → the include path. When the include list is empty
+        // (clean install, never opened the Apps tab) we fall through to the
+        // legacy resolvedProcessNames path — no surprise empty config.
         var routingAppsMode = (settings.App.RoutingAppsMode ?? "include")
             .ToLowerInvariant();
         var isExcludeMode = routingAppsMode == "exclude";
