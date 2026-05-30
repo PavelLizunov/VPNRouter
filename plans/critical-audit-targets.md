@@ -130,7 +130,9 @@ coverage. **Est: ~2-3M · ~15-20 agents · ~15-20m.**
 > LOC) NOT exhaustively scouted** — 22+ `CustomConfigInjectorTests` + sing-box-check
 > cover it, but arbitrary/malformed user-JSON migration is the real mini-workflow
 > target (feed adversarial configs → assert valid + non-leaky). Unlike W1.1-1.3, a
-> fan-out here earns its tokens.
+> fan-out here earns its tokens. **DEFERRED 2026-05-30 (remember, don't drop):**
+> narrow audience — only custom-config power-users (subscribe/generated majority
+> unaffected); lower priority than W3/W4. Pick up if custom-config usage grows.
 
 **Self-contained (custom path).** Scope: `CustomConfigInjector.cs` (1355) +
 `StripUnsupportedFeatures`. Lenses (3): inject idempotency (re-inject removes old
@@ -162,6 +164,27 @@ actually catch it? List coverage gaps (e.g. smart-mode false-warning, CLAUDE.md
 **Locks:** silent traffic leak — the worst thing a VPN can do.
 
 ## W2 — Firewall + DnsLeakLockdown  ★ PRIORITY 2 (lock-out / data loss)
+> **SCOUTED 2026-05-30 → CLOSED (no fan-out). All 5 lenses sound; the most
+> battle-tested subsystem (CO-5 + brat r9-r18 drove the hardening).**
+> (1) netsh parse + locale — `FindRulesByPrefix` (:374) is block-aware: inspects
+> only the FIRST colon-line of each blank-line block (= rule name, ASCII,
+> locale-independent), so a user rule whose *Description* starts with the prefix
+> can't match (the exact CO-5 bug, fixed). (2) rule-leak when VPN fails — correct
+> polarity: rules created DISABLED at start, `EnableBlockRules` on crash
+> (HealthMonitor:373), `DisableBlockRules` on restart (:472), `DeleteAllRules` on
+> clean stop (VpnEngine:392). (3) lockdown-breaks-internet — BR-9
+> `ComputeBlockExclusionRange` (:855) scopes the block to the COMPLEMENT of the
+> TUN /30 (verified: 172.19.0.0/30 → `0.0.0.0-172.18.255.255,172.19.0.4-255...`),
+> loopback-53 allow first, 5s timeout, non-fatal. (4) data-loss — prefix-scoped
+> name-only matching = same guarantee as (1). (5) cleanup — `CleanupOrphanedRules`
+> on boot + before create; `DeleteAllRules`+`Dispose` on stop;
+> `DisableDnsLockdownAsync` removes the 4 lockdown rules. Tests:
+> FirewallManagerLocalizedNetshTests / FirewallManagerTunAllowTests (IP math) /
+> FirewallManagerProcessRunnerWireShapeTests / VpnEngineDnsLockdownLifecycleTests.
+> **One by-design note (LOW, NOT a bug)**: block_on_vpn_fail is REACTIVE (enabled
+> on crash-detect) → a ms-window between sing-box death and `EnableBlockRules`
+> where traffic could leak direct; inherent to the "TUN-while-up, block-on-fail"
+> model (a proactive always-block design would close it but is a bigger change).
 
 **Scope (~1.5k LOC):** `FirewallManager.cs` (944) + the netsh parser,
 `block_on_vpn_fail`, DnsLeakLockdown enable/disable.
