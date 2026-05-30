@@ -43,7 +43,7 @@
          publisher. Version pinned to match the main YamlDotNet 15.1.2 pin
          above. `PrivateAssets=all` keeps the analyzer out of downstream
          consumers (App / Service / CLI / Tests). -->
-    <PackageReference Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="15.1.2">
+    <PackageReference Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.0.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
