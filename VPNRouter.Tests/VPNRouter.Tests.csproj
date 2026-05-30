@@ -34,7 +34,7 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <!-- Wave 12 Phase 3 (2026-05-18) — xUnit v2.5.3 -> xUnit.v3 3.2.x.
          Required by Avalonia.Headless.XUnit 12 which depends on
          xunit.v3.extensibility.core (>= 3.2.2). The v3 package is
@@ -48,8 +48,8 @@
          drive them from xUnit without a display. Required for dev-loop GUI
          testing on CI and in the VM shell. Bumped to 12.0.3 in lockstep
          with App + Android. -->
-    <PackageReference Include="Avalonia.Headless" Version="12.0.3" />
-    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.0.3" />
+    <PackageReference Include="Avalonia.Headless" Version="12.0.4" />
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.0.4" />
   </ItemGroup>
 
   <ItemGroup>
