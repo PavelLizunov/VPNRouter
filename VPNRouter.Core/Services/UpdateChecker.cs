@@ -588,18 +588,13 @@ public class UpdateChecker : IDesktopInstaller
             "    echo [%TIME%] disabling Service failure recovery during update >>\"%LOG%\"",
             "    sc failure VPNRouter reset= 0 actions= \"\" >>\"%LOG%\" 2>&1",
             "    sc stop VPNRouter >>\"%LOG%\" 2>&1",
-            "    set /a SVC_TRIES=0",
-            "    :svcstoploop",
-            "    sc query VPNRouter | find \"STOPPED\" >nul",
-            "    if not errorlevel 1 goto svcgone",
-            "    set /a SVC_TRIES+=1",
-            "    if !SVC_TRIES! gtr 20 (",
-            "      echo [%TIME%] Service still not STOPPED after 10 s, proceeding anyway >>\"%LOG%\"",
-            "      goto svcgone",
-            "    )",
-            "    ping -n 1 -w 500 127.0.0.1 >nul",
-            "    goto svcstoploop",
-            "    :svcgone",
+            // v2.38.2-r3 (W3-a fix): the poll loop's labels (:svcstoploop /
+            // :svcgone) + goto used to live INSIDE this parenthesised else(...)
+            // block — a CMD anti-pattern (goto breaks the block, the stray ')'
+            // emitted harmless "not recognized" noise and only worked by luck —
+            // same class as the v2.31.7 100%-break). Moved to a TOP-LEVEL
+            // :wait_service_stop subroutine (labels outside any block).
+            "    call :wait_service_stop",
             "    echo [%TIME%] Service stop confirmed >>\"%LOG%\"",
             "  )",
             ")",
@@ -648,6 +643,24 @@ public class UpdateChecker : IDesktopInstaller
             "echo [%TIME%] helper done >>\"%LOG%\"",
             "del /Q \"%~f0\" >nul 2>&1",
             "exit /b 0",
+            // W3-a subroutine: poll for Service STOP with labels at TOP LEVEL
+            // (not inside a parenthesised block) so CMD parses cleanly.
+            // `goto :eof` (built-in, block-safe) returns to the `call` site.
+            // Reached only via the earlier `call :wait_service_stop`, before
+            // the self-delete above runs — physical position after exit/b is fine.
+            "",
+            ":wait_service_stop",
+            "set /a SVC_TRIES=0",
+            ":svcstoploop",
+            "sc query VPNRouter | find \"STOPPED\" >nul",
+            "if not errorlevel 1 goto :eof",
+            "set /a SVC_TRIES+=1",
+            "if !SVC_TRIES! gtr 20 (",
+            "  echo [%TIME%] Service still not STOPPED after 10 s, proceeding anyway >>\"%LOG%\"",
+            "  goto :eof",
+            ")",
+            "ping -n 1 -w 500 127.0.0.1 >nul",
+            "goto svcstoploop",
         });
 
         File.WriteAllText(helperPath, cmd);
