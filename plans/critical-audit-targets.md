@@ -198,6 +198,28 @@ data-loss on pre-existing user rules · cleanup-on-exit completeness.
 **Locks:** wiping the user's firewall / locking them out of the internet.
 
 ## W3 — Update / install path  ★ PRIORITY 3 (blast = 100% of users)
+> **SCOUTED 2026-05-30 → mostly sound; 1 finding (W3-a).**
+> **semver/-rN compare SOUND** — `SemVer.CompareTo` (UpdateChecker:1311) is correct
+> standard semver (Core, then stable > any -rN, then rN numeric); `TryParseSemVer`
+> (:1328) accepts only `-rN`, rejects `-mac`/`-beta` so legacy platform tags can't
+> poison the flow. The v2.25 bug was an AppVersion-EMBEDDING discipline issue
+> (rule #5), NOT a compare bug. **helper.cmd variable-expansion (the v2.31.7
+> 100%-break) FULLY fixed** — r10's `setlocal EnableDelayedExpansion` + `!VAR!`
+> applied to every block-set var (TRIES, SVC_WAS_RUNNING, SVC_TRIES, XCOPY_EXIT
+> verified :539-626). **xcopy integrity well-defended** (/E/Y/Q/R/I + `.update-failed`
+> marker → RestoreSnapshot snapshot).
+> **FINDING W3-a (LOW-MED): labels + `goto` inside a parenthesised `else (...)`
+> block.** Service-stop loop (`:svcstoploop`/`:svcgone` + goto, UpdateChecker:592-602)
+> sits INSIDE the `else (` block (:574-604). CMD labels-in-blocks is an
+> anti-pattern: `goto` breaks out, leaving stray `)` (:604-605) that emit harmless
+> "not recognized" errors but work by luck. Same incident CLASS as v2.31.7, and
+> **UNTESTED by the live-update gate** (which runs with NO Service installed →
+> takes the `if errorlevel 1` branch :568, never enters this block). Only
+> manifests for SERVICE-MODE installs being updated. NOT a live 100%-break (ships
+> since v2.31.7-r1, service updates work) — a fragility + untested-path finding.
+> Fix: refactor the loop to `call :subroutine` (labels at top level) + extend the
+> live-update gate to cover a service-mode install. Migration (SettingsMigrator) +
+> channel lenses not deeply scouted (lower incident history) — could cheap-scout later.
 
 **Scope (~2.7k LOC + scripts):** `UpdateChecker.cs` (1360),
 `packaging/windows/install.ps1` (367), embedded `helper.cmd`, SelfRepair,
