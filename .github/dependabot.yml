@@ -6,9 +6,19 @@
 # is hard-gated in build-android.yml).
 version: 2
 updates:
-  # .NET / NuGet across the whole solution.
+  # .NET / NuGet. Scoped to the desktop + core projects via `directories`.
+  # VPNRouter.Android targets a .NET preview (net10.0-android) whose runtime
+  # packs live on the dnceng preview feed, not public NuGet — Dependabot's
+  # restore can't resolve them (the same NU1102 root that gates Android CI), so
+  # including it fails the whole nuget job. Re-add the Android project here once
+  # it moves to a GA .NET.
   - package-ecosystem: "nuget"
-    directory: "/"
+    directories:
+      - "/VPNRouter.Core"
+      - "/VPNRouter.App"
+      - "/VPNRouter.CLI"
+      - "/VPNRouter.Service"
+      - "/VPNRouter.Tests"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5

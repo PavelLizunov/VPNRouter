@@ -254,6 +254,12 @@ Medium. Packaging failures often bypass unit tests.
 
 ## P2 - Public trust documents
 
+**STATUS 2026-05-30: DONE in commit 05adb26.** Added `SECURITY.md` (private
+disclosure via GitHub Security Advisories, not public issues), `PRIVACY.md`
+(no-telemetry + exact local storage / network egress), `CONTRIBUTING.md`, and
+`NOTICE.md` (third-party attribution; sing-box/libbox GPL-3.0, Zapret,
+tg-ws-proxy, NuGet licenses).
+
 ### Observation
 
 README files state that VPNRouter has no telemetry and provide a brief security
@@ -286,6 +292,12 @@ Low implementation risk, meaningful trust value.
 
 ## P2 - Dependency update automation and supply-chain hygiene
 
+**STATUS 2026-05-30: DONE in commit 05adb26.** Added `.github/dependabot.yml`
+(weekly grouped NuGet + github-actions updates; minor/patch grouped, majors
+individual) and `tools/native-deps.md` (native runtime inventory + bump
+procedure, libbox.aar SHA256 hard-gated). SBOM (CycloneDX/SPDX) emission
+deferred.
+
 ### Observation
 
 The repository has pinned package versions and GitHub Actions pinned to commit
@@ -311,6 +323,13 @@ SHAs, which is good. There is no visible Dependabot or Renovate configuration.
 Low.
 
 ## P2 - README and state-document drift
+
+**STATUS 2026-05-30: DONE in commit 05adb26.** Added `CURRENT_STATE.md` (one
+canonical doc for live release/platform/limitations facts) and corrected the
+README.md + README.ru.md "all platforms built automatically via GitHub Actions"
+claim (Windows ZIP + Android APK are built locally; only Mac+Linux are CI).
+Automated pre-release consistency check (version examples / artifact counts)
+deferred.
 
 ### Observation
 
