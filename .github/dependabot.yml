@@ -1,0 +1,36 @@
+# Dependabot — keep dependencies current with grouped, low-noise PRs.
+#
+# Native runtime deps (sing-box, Zapret, tg-ws-proxy, libbox.aar) are NOT
+# managed here — they are downloaded artifacts pinned in code/CI. See
+# tools/native-deps.md for their manual bump procedure (the libbox.aar SHA256
+# is hard-gated in build-android.yml).
+version: 2
+updates:
+  # .NET / NuGet across the whole solution.
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build"
+    groups:
+      # One PR for routine minor/patch bumps to cut review noise; majors stay
+      # individual so they get scrutiny.
+      nuget-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions pinned in the workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions-all:
+        patterns:
+          - "*"

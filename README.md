@@ -192,7 +192,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.32.0"
 # locally: dotnet publish -c Release -r linux-x64 --self-contained -o out/
 ```
 
-All three platforms (Win ZIP, Mac DMG, Linux .deb/.AppImage/.tar.gz) are built automatically via GitHub Actions on every `v*` tag push — see `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/publish-apt.yml` (APT repo), and `.github/workflows/build-free-pool.yml` (rolling Free Configs pool).
+**macOS (DMG)** and **Linux** (.deb/.AppImage/.tar.gz) are built automatically by GitHub Actions on every `v*` tag push — see `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/publish-apt.yml` (APT repo), and `.github/workflows/build-free-pool.yml` (rolling Free Configs pool). The **Windows** ZIPs are produced locally by `build.ps1 -Upload` and attached to the same release (not built in CI). Android APKs are likewise built locally — `build-android.yml` is `workflow_dispatch`-only while a .NET preview runtime-pack issue (NU1102) blocks CI. See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the live build/platform matrix.
 
 ## Architecture
 
@@ -244,7 +244,7 @@ This is a VPN client — you should verify the code before trusting it.
 - **Reproducible.** Build from source with the commands above. Compare the binary hash with your own build to verify.
 - **Open license.** GPL-3.0 — any fork that distributes a binary must also publish its source.
 
-Found a security issue? Open an issue or email the author (see profile).
+Found a security issue? Please report it **privately** — see [`SECURITY.md`](SECURITY.md). Don't open a public issue for security problems.
 
 ## Credits
 

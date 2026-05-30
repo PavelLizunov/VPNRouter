@@ -191,7 +191,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1 -Version "2.32.0"
 # локально: dotnet publish -c Release -r linux-x64 --self-contained -o out/
 ```
 
-Все три платформы (Win ZIP, Mac DMG, Linux .deb/.AppImage/.tar.gz) собираются автоматически через GitHub Actions на каждый `v*` push тега — см. `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/publish-apt.yml` (APT-репозиторий), `.github/workflows/build-free-pool.yml` (обновляющийся Free Configs пул).
+**macOS (DMG)** и **Linux** (.deb/.AppImage/.tar.gz) собираются автоматически через GitHub Actions на каждый `v*` push тега — см. `.github/workflows/build-mac.yml`, `.github/workflows/build-linux.yml`, `.github/workflows/publish-apt.yml` (APT-репозиторий), `.github/workflows/build-free-pool.yml` (обновляющийся Free Configs пул). **Windows** ZIP'ы собираются локально через `build.ps1 -Upload` и прикладываются к тому же релизу (не в CI). Android APK тоже собирается локально — `build-android.yml` только `workflow_dispatch`, пока CI блокирует .NET preview runtime-pack issue (NU1102). Актуальная матрица сборки/платформ — [`CURRENT_STATE.md`](CURRENT_STATE.md).
 
 ## Архитектура
 
@@ -243,7 +243,7 @@ Core-сервисы живут в `VPNRouter.Core/Services/` — `VpnEngine` (VP
 - **Воспроизводимо.** Собирайте из исходников командами выше. Сравните хеш бинарника с вашим билдом для проверки.
 - **Открытая лицензия.** GPL-3.0 — любой форк, распространяющий бинарник, должен также публиковать исходники.
 
-Нашли security-issue? Откройте issue или напишите автору (см. профиль).
+Нашли security-issue? Сообщите **приватно** — см. [`SECURITY.md`](SECURITY.md). Не открывайте публичный issue по security-проблемам.
 
 ## Благодарности
 
