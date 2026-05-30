@@ -91,6 +91,11 @@ public partial class MainWindowViewModel
         if (server == null) return;
         if (server.IsTesting) return;
 
+        // v2.38.2 (surito Bug A): skip the probe while connected — it would
+        // route through the active TUN and overwrite a good cached latency with
+        // the tunnel RTT. See TestServerCollectionAsync for the full rationale.
+        if (IsConnected) return;
+
         server.IsTesting = true;
         try
         {
@@ -162,6 +167,17 @@ public partial class MainWindowViewModel
     {
         // Reset warning at start of every run.
         setWarning(string.Empty);
+
+        // v2.38.2 (surito Bug A): refuse to probe while connected. The TCP/TLS
+        // probe is a plain socket from this process; under an active TUN
+        // (especially full tunnel) it routes through the proxy, so every server
+        // measures the SAME tunnel RTT instead of its own — "пинг везде такой".
+        if (IsConnected)
+        {
+            setWarning(Strings.PingUnavailableWhenConnected);
+            return;
+        }
+
         if (servers.Count == 0)
         {
             setProgress(Strings.ServerTestNoServers);

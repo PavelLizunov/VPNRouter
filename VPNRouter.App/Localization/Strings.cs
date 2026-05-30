@@ -116,6 +116,7 @@ public static class Strings
     public static string ServerTestingSubscriptions => global::VPNRouter.Core.Localization.Strings.ServerTestingSubscriptions;
     public static string ServerTestNoServers => global::VPNRouter.Core.Localization.Strings.ServerTestNoServers;
     public static string ServerTestCancelled => global::VPNRouter.Core.Localization.Strings.ServerTestCancelled;
+    public static string PingUnavailableWhenConnected => global::VPNRouter.Core.Localization.Strings.PingUnavailableWhenConnected;
     public static string ServerDeepVerifyManual => global::VPNRouter.Core.Localization.Strings.ServerDeepVerifyManual;
     public static string ServerDeepVerifySubscription => global::VPNRouter.Core.Localization.Strings.ServerDeepVerifySubscription;
 

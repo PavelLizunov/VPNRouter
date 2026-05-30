@@ -190,6 +190,13 @@ public static class Strings
     public static string ServerTestingSubscriptions => Ru ? "Проверка подписочных серверов" : "Testing subscription servers";
     public static string ServerTestNoServers => Ru ? "Нет серверов" : "No servers";
     public static string ServerTestCancelled => Ru ? "Отменено" : "Cancelled";
+
+    // v2.38.2 (surito Bug A) — the ping probe is a plain socket from this
+    // process; under an active TUN (especially full tunnel) it routes through
+    // the proxy, so every server measures the SAME tunnel RTT, not its own.
+    public static string PingUnavailableWhenConnected => Ru
+        ? "Пинг измеряется только при отключённом VPN — через тоннель он показывает RTT тоннеля, а не сервера"
+        : "Ping is measured only while the VPN is disconnected — through the tunnel it shows the tunnel's RTT, not the server's";
     public static string ServerDeepVerifyManual => Ru ? "Глубокая проверка Manual" : "Deep verify Manual";
     public static string ServerDeepVerifySubscription => Ru ? "Глубокая проверка подписки" : "Deep verify subscription";
 
