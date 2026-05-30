@@ -218,8 +218,13 @@ data-loss on pre-existing user rules · cleanup-on-exit completeness.
 > manifests for SERVICE-MODE installs being updated. NOT a live 100%-break (ships
 > since v2.31.7-r1, service updates work) — a fragility + untested-path finding.
 > Fix: refactor the loop to `call :subroutine` (labels at top level) + extend the
-> live-update gate to cover a service-mode install. Migration (SettingsMigrator) +
-> channel lenses not deeply scouted (lower incident history) — could cheap-scout later.
+> live-update gate to cover a service-mode install. **Migration + channel NOW
+> scouted (2026-05-30 recon): both SOUND** — `SettingsMigrator.Migrate` is a
+> forward-only step chain that THROWS on newer-than-app schema (no silent
+> downgrade corruption), `RemoveAll` = targeted placeholder/orphan cleanup
+> (PlaceholderGuardTests), not blanket loss; channel = `IsExperimental ? non-draft
+> : non-draft-non-prerelease` (`GitHubReleaseSource:123`, same in Sideload). → W3
+> fully scouted; only **W3-a** stands (LOW-MED, service-mode-only fragility).
 
 **Scope (~2.7k LOC + scripts):** `UpdateChecker.cs` (1360),
 `packaging/windows/install.ps1` (367), embedded `helper.cmd`, SelfRepair,
@@ -235,6 +240,27 @@ xcopy integrity / partial-update · migration data-loss · update-channel
 **Locks:** a broken updater that can't fix itself (the highest blast radius).
 
 ## W4 — sing-box lifecycle + close B3  ★ PRIORITY 4 (connection reliability)
+> **READ-RECON 2026-05-30 (scout-only; a read CAN'T prove race-freedom — that's
+> the fan-out's job). Lifecycle is explicitly state-machined; B1-B4 mostly closed.**
+> `enum SingBoxState {Stopped,Starting,Running,Restarting,Failed}` with `State` set
+> at every transition (`SingBoxManager.cs:9,247,357,1067,1182`). **B2 (concurrent
+> Stop): FIXED** — `Interlocked.CompareExchange(ref _stopState)` (:281) lets only
+> one StopInternal run teardown. **B3 (Restart TUN-lock race): FIXED** (Task #53) —
+> `releaseLock` param threads through: `Restart`→StopInternal(false) HOLDS the lock
+> across the bounce, `Stop`→(true) releases; `TunOwnershipLock` singleton prevents
+> two-instance TUN ownership (:225 TryAcquire / :358 Release). **B4 (State unsync):
+> explicit** single private setter at each transition. **B1 (ProcessExit dual-hook):
+> mitigated + DOCUMENTED residual** — `SuppressExitedEvent` before Kill (:326), but
+> a 14-33 ms window (brat/ekko logs) where the Exited callback is already queued →
+> `OnProcessExited` can emit a spurious "crashed" log/Crashed event; an in-flight
+> flag (:107) stops it being ACTED on during Restart. TUN-orphan cleanup on Stop
+> (DisableOrphanedAdapter + async remove → avoids WintunCreateAdapter
+> ERROR_FILE_EXISTS, alicemoren1991). Tests: SingBoxManager state-machine + VpnEngine
+> lifecycle suites. **No NEW finding** (B1 residual already documented). **VERDICT:
+> the obvious races are guarded; the residual concurrency surface (exact
+> Stop/Restart/Exited/Dispose interleavings + the B1 window) is UN-PROVABLE by
+> reading → this is THE genuine fan-out target** (multi-skeptic interleaving / a
+> stress-test suite), as flagged earlier. Recon done; fan-out deferred to budget.
 
 **Scope (~4.3k LOC):** `SingBoxManager.cs` (1562), `HealthMonitor.cs` (766),
 `TunAdapterDiagnostics.cs` (920), `VpnEngine.cs` (1027).
