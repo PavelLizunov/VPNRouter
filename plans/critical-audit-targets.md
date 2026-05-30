@@ -112,6 +112,26 @@ detour) · `detour:"dns-direct"` empty-direct gotcha · per-routed-process DNS-r
 coverage. **Est: ~2-3M · ~15-20 agents · ~15-20m.**
 
 ### W1.4 — Custom-config inject + 1.11→1.13 migration
+> **SCOUTED 2026-05-29 → injection core SOUND (1 finding); migration = fan-out
+> candidate.** Proxy-tag selection sound — `FindProxyOutboundTag` (:333)
+> selector→urltest→first-proxy, and `ResolveOrAssignProxyTag` (:371) MUTATES an
+> untagged outbound's tag so injected rules always reference a real tag (they
+> explicitly handle "rule→missing tag→silent fall-through", :367-369). Format
+> dispatch sound (`DetectActionFormat` :391; both branches add `action:route`
+> correctly). `route.final` forced `direct` in split (`Inject` :139). **FINDING
+> (LOW-MED) W1.4-a:** `RemoveInjectedProcessRules` (:1347) deletes EVERY route
+> rule carrying a `process_name` field, not just VPNRouter-injected ones —
+> idempotent re-inject works, but a user-authored `process_name` rule in the
+> custom JSON is silently wiped; if VPNRouter's list doesn't cover that app it
+> falls to `route.final` (direct in split) = leak-from-intent. "By design"
+> (custom-mode contract: VPNRouter owns process_name rules) but undocumented
+> footgun. Fix: marker-tag injected rules + remove only marked, OR Validate-warn
+> on pre-existing process_name rules. **`StripUnsupportedFeatures` (985-1346, 361
+> LOC) NOT exhaustively scouted** — 22+ `CustomConfigInjectorTests` + sing-box-check
+> cover it, but arbitrary/malformed user-JSON migration is the real mini-workflow
+> target (feed adversarial configs → assert valid + non-leaky). Unlike W1.1-1.3, a
+> fan-out here earns its tokens.
+
 **Self-contained (custom path).** Scope: `CustomConfigInjector.cs` (1355) +
 `StripUnsupportedFeatures`. Lenses (3): inject idempotency (re-inject removes old
 process rules) · action-vs-legacy format dispatch · migration completeness (DNS
