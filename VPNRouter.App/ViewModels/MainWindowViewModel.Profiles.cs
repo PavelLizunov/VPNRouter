@@ -544,7 +544,9 @@ public partial class MainWindowViewModel
         if (string.IsNullOrWhiteSpace(exeName))
         {
             _logger.Warning("[ShellAdd] could not resolve a routable .exe from {Path}", rawPath);
-            ShowRulesToast(IsRussian ? "Не удалось распознать приложение" : "Couldn't resolve the app");
+            ShowRulesToast(IsRussian
+                ? "Это Steam/Store-ярлык — процесс не определить. Запусти приложение и добавь его в разделе «Приложения»."
+                : "This is a Steam/Store shortcut — no process to read. Launch the app, then add it in the Apps section.");
             return;
         }
 
@@ -643,7 +645,9 @@ public partial class MainWindowViewModel
         if (string.IsNullOrWhiteSpace(exeName))
         {
             _logger.Warning("[ShellRemove] could not resolve a routable .exe from {Path}", rawPath);
-            ShowRulesToast(IsRussian ? "Не удалось распознать приложение" : "Couldn't resolve the app");
+            ShowRulesToast(IsRussian
+                ? "Это Steam/Store-ярлык — процесс не определить. Запусти приложение и добавь его в разделе «Приложения»."
+                : "This is a Steam/Store shortcut — no process to read. Launch the app, then add it in the Apps section.");
             return;
         }
 
