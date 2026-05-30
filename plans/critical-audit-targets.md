@@ -40,22 +40,49 @@ loop+verify pattern is ~10× heavier than first guessed). Treat as ±40% ranges.
 
 ## W1 — Leak path  ★ PRIORITY 1 (the product's cardinal risk)
 
-**Scope (~5k core LOC, reads ~8-10 files):**
-- `VPNRouter.Core/Services/ConfigGenerator.cs` (1395)
-- `VPNRouter.Core/Services/LeakProtection.cs` (680)
-- `VPNRouter.Core/Services/CustomConfigInjector.cs` (1355)
-- `VPNRouter.Core/Services/VlessServersResolver.cs`
-- apps include/exclude bridge: `GetActiveAppList` / `SetAppCheckedInCurrentMode`
-  / SaveSettings re-derive in `MainWindowViewModel.cs` + the exclude-mode
-  `ConfigGenerator` path
+**Now staged into W1.1–W1.5** (2026-05-29). Each stage is independently runnable,
+~2-4M tokens / ~15-30 agents / ~15-25 min, so it fits a single budget-window. Run
+in order; stop after any stage. Same harness per stage (multi-lens find →
+loop-until-dry → 3-skeptic verify → synth + critic). **W1.1 / W1.2 shrink hard if
+AF-2 / AF-1 land first** (`plans/architecture-hardening-v2.39.md`) — the invariant
+becomes unrepresentable, so the sweep only checks shape, not "did we forget".
 
-**Lenses (6):** route-rule correctness · proxy-outbound presence (v2.28.1 silent
-leak) · DNS-leak (hijack-dns / smart vs vpn_only / detour) · include↔exclude
-polarity (r6 was here) · 1.11→1.13 migration (StripUnsupportedFeatures) ·
-`route.final` direction.
+### W1.1 — Proxy-outbound presence + Resolve-before-Generate + route.final
+**The cardinal silent-leak core (v2.28.1).** Scope: `ConfigGenerator.cs` outbound
+generation + hard-guard + `route.final`; `VlessServersResolver.cs` + the 3
+call-sites (`StartAsync` / `Apply` / `HealthMonitor`). Lenses (3): proxy-outbound
+presence · `route.final` direction (split=direct / full=proxy) ·
+Resolve-before-Generate at every caller. **Est: ~2-4M · ~15-25 agents · ~15-20m.**
+Maps to **AF-2**.
 
-**Find:** 2 rounds (dense/critical). **Verify:** 3 skeptics. **Synth:** + critic.
-**Est: ~10-15M tokens · ~60-90 agents · ~40-50 min.**
+### W1.2 — include↔exclude polarity
+**The r6 zone.** Scope: apps include/exclude bridge (`GetActiveAppList` /
+`SetAppCheckedInCurrentMode` / SaveSettings re-derive in `MainWindowViewModel.cs`)
++ the exclude-mode `ConfigGenerator` path. Lens (1, deep): can an app in
+exclude-mode ever land routed-instead-of-bypassed (or vice-versa) on ANY path —
+UI toggle, shell verb, migration, apply-reload. **Est: ~2-3M · ~15-20 agents ·
+~15m.** Maps to **AF-1**.
+
+### W1.3 — DNS-leak
+Scope: `ConfigGenerator.cs` DNS section + `LeakProtection.cs` DNS checks. Lenses
+(4): hijack-dns rule presence · smart vs vpn_only routing (local-dns vs vpn-dns
+detour) · `detour:"dns-direct"` empty-direct gotcha · per-routed-process DNS-rule
+coverage. **Est: ~2-3M · ~15-20 agents · ~15-20m.**
+
+### W1.4 — Custom-config inject + 1.11→1.13 migration
+**Self-contained (custom path).** Scope: `CustomConfigInjector.cs` (1355) +
+`StripUnsupportedFeatures`. Lenses (3): inject idempotency (re-inject removes old
+process rules) · action-vs-legacy format dispatch · migration completeness (DNS
+type, `dns-direct`, geosite/geoip strip, `route.final`). **Est: ~3-4M · ~20-30
+agents · ~20-25m.**
+
+### W1.5 — LeakProtection backstop completeness  (run last)
+**The net under W1.1–W1.4.** Scope: `LeakProtection.cs` (680). Meta-lens: for each
+leak class surfaced by W1.1–W1.4, does `ValidateConfig` / `ValidateAppSettings`
+actually catch it? List coverage gaps (e.g. smart-mode false-warning, CLAUDE.md
+#5; exclude-mode polarity currently unvalidated). **Est: ~2M · ~12-15 agents · ~12m.**
+
+**Staged total ≈ 11-16M (same ballpark; 5 independent pieces).**
 **Locks:** silent traffic leak — the worst thing a VPN can do.
 
 ## W2 — Firewall + DnsLeakLockdown  ★ PRIORITY 2 (lock-out / data loss)
@@ -108,7 +135,12 @@ to finally close B3 with a dedicated test suite.
 
 | | Tokens | Agents | Wall |
 |---|---|---|---|
-| W1 Leak | 10-15M | 60-90 | ~45m |
+| W1 Leak (W1.1–W1.5, piecewise) | 11-16M | 75-110 | 5× ~15-25m |
+| · W1.1 outbound/resolve/final | 2-4M | 15-25 | ~15-20m |
+| · W1.2 include↔exclude polarity | 2-3M | 15-20 | ~15m |
+| · W1.3 DNS-leak | 2-3M | 15-20 | ~15-20m |
+| · W1.4 custom inject + migration | 3-4M | 20-30 | ~20-25m |
+| · W1.5 LeakProtection backstop | 2M | 12-15 | ~12m |
 | W2 Firewall | 4-6M | 30-45 | ~30m |
 | W3 Update | 6-9M | 40-60 | ~35m |
 | W4 Lifecycle | 8-12M | 50-80 | ~45m |
