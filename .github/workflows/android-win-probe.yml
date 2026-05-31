@@ -1,0 +1,27 @@
+# THROWAWAY probe (2026-06-01): does a COLD windows-latest runner hit the
+# NU1102 host-Mono-pack failure that ubuntu-latest does? Local Windows build
+# works (cached); this checks a fresh runner. Deliberately minimal: no libbox,
+# no JDK, no Android SDK platform — NU1102 triggers at NuGet restore (early),
+# before those matter. Read the log:
+#   - dies with NU1102  -> cold windows ALSO blocked; stick with local build.
+#   - dies LATER (missing libbox.aar / JNI / aapt / JDK) -> got PAST restore,
+#     so NU1102 is ubuntu-only and a full windows-latest job is worth building.
+# Delete this file once the question is answered.
+name: android-win-probe
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.100
+      - name: Install Android workload
+        run: dotnet workload install android --skip-manifest-update
+      - name: Restore + build (NU1102 gate; libbox/JDK intentionally absent)
+        run: dotnet publish VPNRouter.Android/VPNRouter.Android.csproj -c Release -p:AndroidKeyStore=false
