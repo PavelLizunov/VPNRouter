@@ -410,19 +410,25 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             // re-test first (lowest cost; mostly retain status). Existing-
             // verified-not-in-fresh-pool are also surfaced via FetchPoolAsync's
             // internal MergeWithCache.
+            // v2.39.0 (audit #7): apply the RU-exclusion to BOTH queue halves.
+            // Previously only the "fresh" half was filtered, so a cached RU
+            // Verified row was prepended and bypassed the user's ExcludeRu opt-in
+            // (an ordinary repeated-search path, not a rare edge case).
+            bool CountryAllowed(FreeConfigEntry c) =>
+                !ExcludeRu || !string.Equals(
+                    c.CountryCode, "RU", StringComparison.OrdinalIgnoreCase);
+
             var cachedVerified = pool
                 .Where(c => c.Status == FreeConfigStatus.Verified)
+                .Where(CountryAllowed)
                 .ToList();
             var cachedVerifiedIds = new HashSet<string>(
                 cachedVerified.Select(c => c.Id), StringComparer.OrdinalIgnoreCase);
 
-            // Build the ordered queue: cached Verified first, then everything
-            // else, with RU exclusion applied if the user opted in.
+            // Build the ordered queue: cached Verified first, then everything else.
             var queue = cachedVerified
                 .Concat(pool.Where(c =>
-                    !cachedVerifiedIds.Contains(c.Id) &&
-                    (!ExcludeRu || !string.Equals(
-                        c.CountryCode, "RU", StringComparison.OrdinalIgnoreCase))))
+                    !cachedVerifiedIds.Contains(c.Id) && CountryAllowed(c)))
                 .ToList();
 
             // v2.28.5-r4: progress bar tracks "found / target" instead of
@@ -1817,6 +1823,15 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 .Where(c => c.Status == FreeConfigStatus.Verified);
             if (!string.Equals(SelectedCountry, "All", StringComparison.OrdinalIgnoreCase))
                 q = q.Where(c => string.Equals(c.CountryCode, SelectedCountry, StringComparison.OrdinalIgnoreCase));
+
+            // v2.39.0 (audit #7): re-apply the RU exclusion at the display
+            // boundary as a safety net. A cached/stale RU Verified row already
+            // sitting in _allConfigs (e.g. from a search before the user opted
+            // in) must never be shown or made a Connect candidate when ExcludeRu
+            // is on. The queue builder already drops RU from processing; this is
+            // belt-and-suspenders at the visible/apply boundary.
+            if (ExcludeRu)
+                q = q.Where(c => !string.Equals(c.CountryCode, "RU", StringComparison.OrdinalIgnoreCase));
 
             // v2.28.3-r4 — also honour the max-ping setting in the displayed
             // list. User report: "ищу с пингом 50, приложение пишет нашло, а
