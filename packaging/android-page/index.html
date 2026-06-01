@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VPNRouter для Android</title>
+<style>
+  :root{
+    --bg:#f4f7fb; --card:#ffffff; --ink:#1d2733; --muted:#5b6b7b;
+    --accent:#1f7ae0; --accent-ink:#ffffff; --border:#e2e9f1;
+    --ok:#1f9d55; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+       background:var(--bg);color:var(--ink)}
+  main{max-width:520px;margin:0 auto;padding:28px 18px 64px}
+  .brand{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+  .brand .dot{width:40px;height:40px;border-radius:12px;background:var(--accent);
+       display:grid;place-items:center;color:#fff;font-weight:700;font-size:20px}
+  .brand h1{font-size:20px;margin:0}
+  .brand p{margin:2px 0 0;color:var(--muted);font-size:13px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+       padding:20px;margin:14px 0;box-shadow:0 1px 2px rgba(20,40,70,.04)}
+  .dl{display:block;text-align:center;text-decoration:none;background:var(--accent);
+       color:var(--accent-ink);font-weight:600;font-size:17px;padding:16px;
+       border-radius:var(--radius);transition:opacity .15s}
+  .dl:hover{opacity:.92}
+  .dl.disabled{background:#9fb3c6;pointer-events:none}
+  .meta{text-align:center;color:var(--muted);font-size:13px;margin-top:10px}
+  h2{font-size:15px;margin:0 0 12px}
+  ol{margin:0;padding-left:20px} li{margin:7px 0}
+  .note{color:var(--muted);font-size:13px}
+  code{background:#eef3f8;padding:1px 6px;border-radius:5px;font-size:13px}
+  a{color:var(--accent)}
+  footer{color:var(--muted);font-size:12px;text-align:center;margin-top:28px}
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <div class="dot">V</div>
+    <div>
+      <h1>VPNRouter для Android</h1>
+      <p>Обход блокировок: VLESS+Reality, подписки, free configs</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <a id="dl" class="dl disabled" href="#">Загрузка…</a>
+    <div class="meta" id="meta">Определяем последнюю версию…</div>
+  </div>
+
+  <div class="card">
+    <h2>Установка (1 минута)</h2>
+    <ol>
+      <li>Нажмите <b>«Скачать APK»</b> выше.</li>
+      <li>Откройте скачанный файл. Android спросит про
+          <b>«Установка из неизвестных источников»</b> — разрешите для браузера
+          (это одноразово).</li>
+      <li>Подтвердите установку и откройте приложение.</li>
+    </ol>
+    <p class="note">Обновления приложение проверяет само (Настройки →
+       «Проверить обновления»). Можно поставить и через F-Droid-репозиторий —
+       см. ссылку внизу, если он уже настроен.</p>
+  </div>
+
+  <div class="card">
+    <h2>Приватность</h2>
+    <p class="note">Никакой телеметрии. APK подписан; рядом с ним лежит
+       <code>.sha256</code> для проверки целостности. Подробности —
+       <a href="https://github.com/PavelLizunov/VPNRouter/blob/main/PRIVACY.md">PRIVACY.md</a>.</p>
+  </div>
+
+  <footer>
+    <a href="https://github.com/PavelLizunov/VPNRouter">GitHub</a> ·
+    <a href="https://github.com/PavelLizunov/VPNRouter/releases">Все релизы</a> ·
+    Windows / macOS / Linux: <a href="https://vpn.ninitux.com/">vpn.ninitux.com</a>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var REPO = "PavelLizunov/VPNRouter";
+  var dl = document.getElementById("dl");
+  var meta = document.getElementById("meta");
+
+  function fallback(msg) {
+    dl.classList.remove("disabled");
+    dl.textContent = "Открыть страницу релизов";
+    dl.href = "https://github.com/" + REPO + "/releases/latest";
+    meta.textContent = msg;
+  }
+
+  fetch("https://api.github.com/repos/" + REPO + "/releases/latest", {
+    headers: { "Accept": "application/vnd.github+json" }
+  })
+    .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
+    .then(function (rel) {
+      var assets = rel.assets || [];
+      var apk = assets.filter(function (a) {
+        return /VPNRouter-v.*-android\.apk$/.test(a.name);
+      })[0];
+      if (!apk) {
+        fallback("Android-сборка ещё не приложена к последнему релизу — загляните чуть позже.");
+        return;
+      }
+      var mb = Math.round(apk.size / 1048576);
+      dl.classList.remove("disabled");
+      dl.textContent = "Скачать APK";
+      dl.href = apk.browser_download_url;
+      dl.setAttribute("download", apk.name);
+      meta.innerHTML = (rel.tag_name || "") + " · " + mb + " МБ · Android 6.0+";
+    })
+    .catch(function () {
+      fallback("Не удалось определить версию автоматически — откройте релизы вручную.");
+    });
+})();
+</script>
+</body>
+</html>

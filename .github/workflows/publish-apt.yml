@@ -307,6 +307,12 @@ jobs:
           # deterministic byte content on GitHub Pages.
           sed 's/\r$//' packaging/windows/install.ps1   > gh-pages-dir/install.ps1
           sed 's/\r$//' packaging/windows/uninstall.ps1 > gh-pages-dir/uninstall.ps1
+
+          # Android download / install page at /android. Client-side JS
+          # resolves the latest VPNRouter-v*-android.apk from the GitHub API
+          # (graceful fallback to the releases page if no APK is attached yet).
+          mkdir -p gh-pages-dir/android
+          cp packaging/android-page/index.html gh-pages-dir/android/index.html
           # v2.31.8-r8: repair.cmd is a self-contained recovery tool for
           # users with broken installs (mixed-version DLLs, app crashes
           # at launch, "did not take effect" loop). Browser-downloadable;
