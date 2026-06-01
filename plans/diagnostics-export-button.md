@@ -1,7 +1,14 @@
 # "Send diagnostics" button — design note (NOT scheduled, just thinking)
 
-**Status**: idea only (2026-05-30, after surito's ping + RU-bypass cases needed
-manual PowerShell file collection twice in one session). Do NOT implement yet.
+**Status**: IMPLEMENTED + SHIPPED v2.39.0-r2 (2026-06-02 overnight). Variant 0
+built as designed — Core `DiagnosticsRedactor` (allowlist, fail-closed) +
+`DiagnosticsExporter` (ZIP to Desktop) + Settings > Updates > Support button.
+11 tests; live MCP-verified on a real machine config (0 secrets leaked, routing
+app list kept, version/health present). Original design note preserved below.
+
+---
+(original idea note, 2026-05-30, after surito's ping + RU-bypass cases needed
+manual PowerShell file collection twice in one session.)
 
 ## Why
 

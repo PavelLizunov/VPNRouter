@@ -169,6 +169,10 @@ Low implementation risk, high leverage.
 
 ## P1 - One-click local diagnostics export
 
+> **STATUS 2026-06-02: SHIPPED v2.39.0-r2.** Variant 0 (local ZIP, fail-closed
+> allowlist redaction) built + 11 tests + live MCP-verified (0 secrets leaked on
+> a real config). See `plans/diagnostics-export-button.md`.
+
 ### Observation
 
 Support diagnosis still often starts with asking users for `config.yaml`,
