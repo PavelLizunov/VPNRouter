@@ -1947,6 +1947,30 @@
                       VerticalAlignment="Center"/>
             </Grid>
           </Border>
+
+          <!-- v2.39.0 Support / Diagnostics — appended under Updates rather than
+               a 6th settings sub-tab (avoids narrow-window tab-strip overflow). -->
+          <Border BorderThickness="0,1,0,0" BorderBrush="{DynamicResource BorderSubtleBrush}"
+                  Padding="0,10,0,0" Margin="0,2,0,0">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding L_DiagSupportHeader}" FontWeight="SemiBold" FontSize="12"/>
+              <TextBlock Text="{Binding L_DiagExportHint}" Classes="card-sub"
+                         TextWrapping="Wrap" Opacity="0.8"/>
+              <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Button Content="{Binding L_DiagExportButton}"
+                        Command="{Binding ExportDiagnosticsCommand}"
+                        IsEnabled="{Binding !IsExportingDiagnostics}"
+                        FontSize="11" Padding="12,6" MinHeight="0"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        Background="{DynamicResource SurfaceRaisedBrush}"
+                        BorderBrush="{DynamicResource BorderDefaultBrush}" BorderThickness="1"
+                        AutomationProperties.Name="{Binding L_DiagExportButton}"/>
+                <TextBlock Text="{Binding L_DiagExporting}"
+                           IsVisible="{Binding IsExportingDiagnostics}"
+                           VerticalAlignment="Center" Opacity="0.7" FontSize="11"/>
+              </StackPanel>
+            </StackPanel>
+          </Border>
         </StackPanel>
 
         <!-- ═══ Autostart (v2.27 Bug C redesign) ═══

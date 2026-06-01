@@ -227,6 +227,10 @@ public partial class MainWindowViewModel
     public string L_SmpMenuDiagnosticsSection => Strings.SmpMenuDiagnosticsSection;
     public string L_SmpMenuHealthCheck => Strings.SmpMenuHealthCheck;
     public string L_SmpMenuOpenLogs => Strings.SmpMenuOpenLogs;
+    public string L_DiagSupportHeader => Strings.DiagSupportHeader;
+    public string L_DiagExportButton => Strings.DiagExportButton;
+    public string L_DiagExporting => Strings.DiagExporting;
+    public string L_DiagExportHint => Strings.DiagExportHint;
     public string L_SmpMenuSafeMode => Strings.SmpMenuSafeMode;
     public string L_SmpMenuTroubleshootingSection => Strings.SmpMenuTroubleshootingSection;
     public string L_SmpMenuViewSection => Strings.SmpMenuViewSection;

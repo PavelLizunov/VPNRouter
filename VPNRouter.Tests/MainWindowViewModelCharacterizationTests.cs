@@ -173,8 +173,11 @@ public class MainWindowViewModelCharacterizationTests
     // UnrouteAppFromShell(string) method for the Explorer "remove from VPN"
     // verb. Still #if PLATFORM_WINDOWS → Linux pin untouched. Prior Windows
     // hash: 4c4f4d6e…071ca24e.
+    // v2.39.0 (2026-06-02 overnight): diagnostics-export surface added —
+    // IsExportingDiagnostics (ObservableProperty) + ExportDiagnosticsCommand
+    // (RelayCommand) + 4 L_Diag* localization getters. Intentional drift.
     private const string PinnedHashWindows =
-        "406d6826ab6ec148b0a9bf84744d15d2ae05a99bc5b225508bf0b19fa41895f9";
+        "77d474575900432f644feb95bc1834f4c013137b3809b6aa10bb01e767bfa613";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
@@ -256,8 +259,12 @@ public class MainWindowViewModelCharacterizationTests
     // Linux (LastProbeLogPath / HasLastProbeLog / LblOpenProbeLog /
     // OpenProbeLogCommand + TryRestoreLastProbeLog generator artifacts).
     // New value from r39 CI commit 014daeb.
+    // v2.39.0 (2026-06-02 overnight): same diagnostics-export surface delta as
+    // the Windows pin. Linux value computed locally by building App+Tests with
+    // PLATFORM_WINDOWS forced off (both csproj conditions flipped, reverted
+    // after capture) — so CI is green on first push, no deferred-bump red.
     private const string PinnedHashLinux =
-        "31d197b0cfb16bb028547bda57a8e0d7761efcc61021aaf0962f1cd4a34881eb";
+        "d935b740cc42e84550b1da825f24c043a91fc125a7dbd15ac7bdc50b9ed6570c";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()

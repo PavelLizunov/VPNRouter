@@ -12,6 +12,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using VPNRouter.App.Localization;
+using VPNRouter.Core.Services.Diagnostics;
 using VPNRouter.Core;
 
 namespace VPNRouter.App.ViewModels;
@@ -357,6 +358,73 @@ public partial class MainWindowViewModel
             System.Diagnostics.Process.Start(psi);
         }
         catch { /* best-effort */ }
+    }
+
+    // ── Diagnostics export (v2.39.0) ──
+    // Collects a redacted bundle (config + sing-box config + bounded log tails
+    // + env/health summary + geo manifest) into one ZIP on the Desktop, so a
+    // support request is a one-click attachment. Variant 0: nothing is
+    // uploaded; all secrets are stripped by DiagnosticsRedactor before zipping.
+
+    [ObservableProperty]
+    private bool _isExportingDiagnostics;
+
+    [RelayCommand]
+    private async Task ExportDiagnosticsAsync()
+    {
+        if (IsExportingDiagnostics) return;
+        IsExportingDiagnostics = true;
+        try
+        {
+            var connected = IsConnected;
+            var now = DateTime.Now;
+            var result = await Task.Run(() => DiagnosticsExporter.Export(now, connected));
+            var name = Path.GetFileName(result.ZipPath);
+            ShowRulesToast(IsRussian
+                ? $"Диагностика сохранена на рабочий стол: {name}"
+                : $"Diagnostics saved to Desktop: {name}");
+            _logger?.Information("[VM] Diagnostics exported: {Path} ({Entries} entries, {Warnings} warnings)",
+                result.ZipPath, result.Entries.Count, result.Warnings.Count);
+            RevealInFileManager(result.ZipPath);
+        }
+        catch (Exception ex)
+        {
+            _logger?.Error(ex, "[VM] Diagnostics export failed");
+            ShowRulesToast(IsRussian ? "Не удалось собрать диагностику" : "Diagnostics export failed");
+        }
+        finally
+        {
+            IsExportingDiagnostics = false;
+        }
+    }
+
+    /// <summary>Open the OS file manager with the given file selected/revealed.</summary>
+    private static void RevealInFileManager(string filePath)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                System.Diagnostics.Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{filePath}\"",
+                    UseShellExecute = true,
+                });
+            }
+            else
+            {
+                var dir = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(dir))
+                    System.Diagnostics.Process.Start(new ProcessStartInfo
+                    {
+                        FileName = OperatingSystem.IsMacOS() ? "/usr/bin/open" : "/usr/bin/xdg-open",
+                        Arguments = $"\"{dir}\"",
+                        UseShellExecute = false,
+                    });
+            }
+        }
+        catch { /* best-effort reveal */ }
     }
 
     // ── Theme / Language / UI mode / Settings commands ──

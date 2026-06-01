@@ -1937,6 +1937,13 @@ public static class Strings
     public static string SmpMenuCheckLeaks    => Ru ? "Проверить утечку IP"    : "Check IP leak";
     public static string SmpMenuCheckUpdates  => Ru ? "Проверить обновления"   : "Check for updates";
     public static string SmpMenuSwitchToAdv   => Ru ? "Перейти в Advanced"     : "Switch to Advanced";
+    // v2.39.0 — one-click diagnostics export (Settings -> Updates -> Support)
+    public static string DiagSupportHeader    => Ru ? "Поддержка"              : "Support";
+    public static string DiagExportButton     => Ru ? "Собрать диагностику"    : "Export diagnostics";
+    public static string DiagExporting        => Ru ? "Собираю…"               : "Collecting…";
+    public static string DiagExportHint       => Ru
+        ? "Соберёт логи и настройки в один ZIP на рабочем столе. Пароли, ключи и токены удаляются. Проверьте архив перед отправкой."
+        : "Collects your logs and settings into one ZIP on the Desktop. Passwords, keys and tokens are removed. Review the archive before sharing.";
     // v2.24.4 troubleshooting items (Level 2/3 self-healing)
     public static string SmpMenuHealthCheck   => Ru ? "Проверить состояние"    : "Run Health Check";
     // v2.30.5-r1 (UX-68 fix): localize "Safe Mode" in Russian.

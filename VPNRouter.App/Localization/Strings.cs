@@ -1094,6 +1094,10 @@ public static class Strings
     public static string SmpMenuCheckLeaks => global::VPNRouter.Core.Localization.Strings.SmpMenuCheckLeaks;
     public static string SmpMenuCheckUpdates => global::VPNRouter.Core.Localization.Strings.SmpMenuCheckUpdates;
     public static string SmpMenuSwitchToAdv => global::VPNRouter.Core.Localization.Strings.SmpMenuSwitchToAdv;
+    public static string DiagSupportHeader => global::VPNRouter.Core.Localization.Strings.DiagSupportHeader;
+    public static string DiagExportButton => global::VPNRouter.Core.Localization.Strings.DiagExportButton;
+    public static string DiagExporting => global::VPNRouter.Core.Localization.Strings.DiagExporting;
+    public static string DiagExportHint => global::VPNRouter.Core.Localization.Strings.DiagExportHint;
     // v2.24.4 troubleshooting items (Level 2/3 self-healing)
     public static string SmpMenuHealthCheck => global::VPNRouter.Core.Localization.Strings.SmpMenuHealthCheck;
     // v2.30.5-r1 (UX-68 fix): localize "Safe Mode" in Russian.
