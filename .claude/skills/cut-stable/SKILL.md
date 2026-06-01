@@ -1,7 +1,7 @@
 ---
 name: cut-stable
 description: Promote a rolling -rN candidate to stable vX.Y.Z (no suffix). Bumps AppVersion, creates fresh tag without suffix, full rebuild + Mac/Linux CI, restores Latest, deletes -rN.
-when: Latest -rN passed full verification gate (build + tests + Mac/Linux CI green + 12 assets + MCP-verify + **mandatory pre-cut live update gate**) AND user gave explicit "cut" / "ok" / "promote" command (rule 6 в `CLAUDE.md`, lessons v2.31.2 / v2.31.7). Cut НЕ autonomous.
+when: Latest -rN passed full verification gate (build + tests + Mac/Linux CI green + 14 desktop assets, 16 with Android after Step 5.6 + MCP-verify + **mandatory pre-cut live update gate**) AND user gave explicit "cut" / "ok" / "promote" command (rule 6 в `CLAUDE.md`, lessons v2.31.2 / v2.31.7). Cut НЕ autonomous.
 ---
 
 # Cut a stable release
@@ -17,7 +17,8 @@ prerelease flag.
 2. Regression tests зелёные (`VlessServersResolverTests`, `ConfigGeneratorEmptyServersGuardTests`, `FreeConfigAggregatorPreserveTests`)
 3. Mac CI на последнем -rN — `success`
 4. Linux CI на последнем -rN — `success`
-5. `gh release view vX.Y.Z-rN --json assets --jq '.assets|length'` → `12`
+5. `gh release view vX.Y.Z-rN --json assets --jq '.assets|length'` → `14`
+   (4 Win + 4 Mac + 6 Linux; Android is added only at stable cut, Step 5.6 → `16`)
 6. **Live update gate PASS** (см. секцию ниже) — обязательная mandatory.
 7. (soft) No user-reported regressions за ~24h после shipping последнего -rN
 
@@ -169,11 +170,47 @@ git push origin vX.Y.Z          # mirror в Forgejo
 
 ## Step 5 — Mac + Linux CI (auto-triggered tag push)
 
-Wait for both runs. Verify 12 assets:
+Wait for both runs. Verify the desktop assets:
 ```bash
 gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json assets --jq '.assets | length'
 ```
-Должно быть **12**.
+**14** desktop assets (4 Win + 4 Mac + 6 Linux). After Step 5.6 (Android) it's
+**16**.
+
+## Step 5.6 — build + sign + attach the Android APK (stable only)
+
+The full Android build can't run on hosted CI (NU1102). Build it unsigned
+locally (warm NuGet cache) and sign it in CI with the keystore secret:
+
+```bash
+# 1. build the UNSIGNED apk on this VM (versionCode derives from the version)
+dotnet publish VPNRouter.Android/VPNRouter.Android.csproj -c Release \
+  -p:VpnRouterVersion=X.Y.Z -p:EnableAndroidTarget=true \
+  -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME"
+# the unsigned apk is com.ninitux.vpnrouter.apk under bin/Release/net*-android*/
+
+# 2. upload it to the release as the UNSIGNED staging asset (the install-page
+#    regex VPNRouter-v.*-android\.apk$ deliberately does NOT match -UNSIGNED)
+cp .../com.ninitux.vpnrouter.apk publish/android/VPNRouter-vX.Y.Z-android-UNSIGNED.apk
+gh release upload vX.Y.Z publish/android/VPNRouter-vX.Y.Z-android-UNSIGNED.apk --clobber
+
+# 3. sign in CI (zipalign + apksigner, no .NET -> no NU1102). It uploads the
+#    signed VPNRouter-vX.Y.Z-android.apk + .sha256 and removes the UNSIGNED asset.
+gh workflow run "Sign Android APK" -f version=X.Y.Z
+gh run watch <run-id> --exit-status
+
+# 4. verify: signed, versionCode preserved, sha256 matches
+gh release download vX.Y.Z --pattern "VPNRouter-vX.Y.Z-android.apk*"
+"$ANDROID_HOME/build-tools/<v>/apksigner.bat" verify --print-certs VPNRouter-vX.Y.Z-android.apk
+"$ANDROID_HOME/build-tools/<v>/aapt2.exe" dump badging VPNRouter-vX.Y.Z-android.apk | grep "^package:"
+```
+
+Optional but recommended: `adb install -r` on the attached phone via the Mac
+(`ssh slovn@192.168.0.246`, adb at `/opt/homebrew/bin/adb`) and confirm
+launch + no crash. After this, the asset count is **16**.
+
+Background: `plans/android-ci-distribution-roadmap-2026-05-31.md`,
+`.github/workflows/sign-android.yml`, `build-android.ps1`.
 
 ## Step 5.5 — post-publish draft + download-URL gate (mandatory)
 
