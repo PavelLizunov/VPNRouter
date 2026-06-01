@@ -1,0 +1,110 @@
+name: Sign Android APK
+
+# Why this exists:
+#   The full Android build (build-android.yml) is upstream-blocked by NU1102 —
+#   .NET 10 withdrew the host Mono runtime pack for every hosted-runner OS, so a
+#   clean runner can't `dotnet restore` the Android project. The signed APK is
+#   therefore built UNSIGNED locally (warm NuGet cache) and signed HERE, where
+#   no .NET is involved at all: signing is just `zipalign` + `apksigner` against
+#   the ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD secrets that already
+#   sign our APKs. This reuses the exact signing identity, so installed users
+#   keep getting in-place updates.
+#
+# Flow:
+#   1. locally: build unsigned APK, upload to release vX.Y.Z as
+#      `VPNRouter-vX.Y.Z-android-UNSIGNED.apk` (the install page regex
+#      `VPNRouter-v.*-android\.apk$` does NOT match the -UNSIGNED suffix).
+#   2. run this workflow with input `version: X.Y.Z`.
+#   3. it downloads the unsigned asset, signs -> `VPNRouter-vX.Y.Z-android.apk`
+#      + .sha256, uploads them, and removes the UNSIGNED staging asset.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version without leading v (e.g. 2.38.2). Release vX.Y.Z must already hold VPNRouter-vX.Y.Z-android-UNSIGNED.apk.'
+        required: true
+      key_alias:
+        description: 'Keystore key alias'
+        required: false
+        default: 'vpnrouter'
+
+permissions:
+  contents: write
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ inputs.version }}
+      KEY_ALIAS: ${{ inputs.key_alias }}
+    steps:
+      - name: Decode signing keystore
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "${KS_B64:-}" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is empty — cannot sign."
+            exit 1
+          fi
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/vpnrouter.keystore"
+          sz=$(stat -c%s "$RUNNER_TEMP/vpnrouter.keystore")
+          echo "Keystore decoded ($sz bytes)."
+          if [ "$sz" -lt 1000 ]; then
+            echo "::error::Decoded keystore looks too small ($sz bytes) — secret likely corrupt."
+            exit 1
+          fi
+
+      - name: Download unsigned APK from release
+        run: |
+          set -euo pipefail
+          UNSIGNED="VPNRouter-v${VERSION}-android-UNSIGNED.apk"
+          echo "Fetching $UNSIGNED from release v${VERSION} ..."
+          gh release download "v${VERSION}" \
+            --repo "${{ github.repository }}" \
+            --pattern "$UNSIGNED" \
+            --output "$RUNNER_TEMP/unsigned.apk"
+          ls -la "$RUNNER_TEMP/unsigned.apk"
+
+      - name: Locate Android build-tools
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          BT="$(ls -d "$SDK"/build-tools/* | sort -V | tail -1)"
+          echo "Using build-tools: $BT"
+          echo "BUILD_TOOLS=$BT" >> "$GITHUB_ENV"
+
+      - name: Align + sign + verify
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          SIGNED="VPNRouter-v${VERSION}-android.apk"
+          "$BUILD_TOOLS/zipalign" -p -f 4 "$RUNNER_TEMP/unsigned.apk" "$RUNNER_TEMP/aligned.apk"
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$RUNNER_TEMP/vpnrouter.keystore" \
+            --ks-pass "pass:${KS_PASS}" \
+            --ks-key-alias "${KEY_ALIAS}" \
+            --key-pass "pass:${KS_PASS}" \
+            --out "$RUNNER_TEMP/$SIGNED" \
+            "$RUNNER_TEMP/aligned.apk"
+          echo "=== apksigner verify ==="
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/$SIGNED"
+          ( cd "$RUNNER_TEMP" && sha256sum "$SIGNED" > "$SIGNED.sha256" )
+          echo "=== signed artifacts ==="
+          ls -la "$RUNNER_TEMP/$SIGNED" "$RUNNER_TEMP/$SIGNED.sha256"
+
+      - name: Upload signed APK to release + remove unsigned staging asset
+        run: |
+          set -euo pipefail
+          SIGNED="VPNRouter-v${VERSION}-android.apk"
+          UNSIGNED="VPNRouter-v${VERSION}-android-UNSIGNED.apk"
+          gh release upload "v${VERSION}" \
+            "$RUNNER_TEMP/$SIGNED" "$RUNNER_TEMP/$SIGNED.sha256" \
+            --repo "${{ github.repository }}" --clobber
+          echo "Signed APK uploaded to release v${VERSION}."
+          # remove the unsigned staging asset so only the signed APK remains
+          gh release delete-asset "v${VERSION}" "$UNSIGNED" \
+            --repo "${{ github.repository }}" --yes || \
+            echo "(unsigned staging asset already gone)"
