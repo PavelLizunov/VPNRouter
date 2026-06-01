@@ -23,8 +23,18 @@
     <SupportedOSPlatformVersion>23.0</SupportedOSPlatformVersion>
     <OutputType>Exe</OutputType>
     <ApplicationId>com.ninitux.vpnrouter</ApplicationId>
-    <ApplicationVersion>1</ApplicationVersion>
-    <ApplicationDisplayVersion>3.0.0-android-alpha</ApplicationDisplayVersion>
+    <!-- Android version derives from a single $(VpnRouterVersion) so the
+         versionCode increases monotonically EVERY release. Android (and
+         F-Droid) refuse to install an APK whose versionCode is <= the
+         installed one, so the old hardcoded "1" silently blocked ALL in-app
+         updates. build-android.ps1 passes -p:VpnRouterVersion=X.Y.Z; the
+         default tracks the current desktop AppVersion so manual builds stay
+         installable. versionCode = Major*1000000 + Minor*1000 + Patch
+         (e.g. 2.38.2 -> 2038002); versionName = the full version string. -->
+    <VpnRouterVersion Condition="'$(VpnRouterVersion)' == ''">2.38.2</VpnRouterVersion>
+    <_VpnVerCore>$([System.Text.RegularExpressions.Regex]::Replace($(VpnRouterVersion), '-.*$', ''))</_VpnVerCore>
+    <ApplicationDisplayVersion>$(VpnRouterVersion)</ApplicationDisplayVersion>
+    <ApplicationVersion>$([MSBuild]::Add($([MSBuild]::Add($([MSBuild]::Multiply($([System.Version]::Parse($(_VpnVerCore)).Major), 1000000)), $([MSBuild]::Multiply($([System.Version]::Parse($(_VpnVerCore)).Minor), 1000)))), $([System.Version]::Parse($(_VpnVerCore)).Build)))</ApplicationVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
