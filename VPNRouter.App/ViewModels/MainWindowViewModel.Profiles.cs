@@ -480,10 +480,31 @@ public partial class MainWindowViewModel
     private void RemoveCategory(AppGroupViewModel? group)
     {
         if (group == null || !group.IsCustomCategory) return;
+        // audit (apps-page "removed apps remain in routing policy"): scrub the
+        // category's apps from RoutingAppsInclude/Exclude before dropping the
+        // group, or invisible rules survive (leak-from-intent in Exclude mode,
+        // an unwanted route in Include mode).
+        foreach (var item in group.Apps.ToList())
+            ScrubRoutingForApp(item);
         AppGroups.Remove(group);
         if (SelectedAppGroup == group)
             SelectedAppGroup = AppGroups.FirstOrDefault();
         SaveSettings();
+    }
+
+    /// <summary>
+    /// Remove a process from the active routing lists when its AppItem is
+    /// removed from the UI. Mirrors the Explorer shell-verb removal path:
+    /// uncheck (fires WriteMode -> drops from RoutingAppsInclude/Exclude) plus a
+    /// defensive direct scrub (covers an entry that was routed but never surfaced
+    /// as an AppItem). Idempotent + safe on an already-unrouted item.
+    /// </summary>
+    private void ScrubRoutingForApp(AppItemViewModel item)
+    {
+        if (item == null) return;
+        try { item.IsChecked = false; } catch { }
+        try { VPNRouter.Core.Services.RoutingAppListEditor.TryRemoveProcessName(_settings, item.ProcessName); }
+        catch { }
     }
 
     [RelayCommand]
@@ -718,7 +739,10 @@ public partial class MainWindowViewModel
 
         var toRemove = customGroup.Apps.Where(a => a.IsChecked).ToList();
         foreach (var app in toRemove)
+        {
+            ScrubRoutingForApp(app);   // also drop from RoutingAppsInclude/Exclude
             customGroup.Apps.Remove(app);
+        }
         SaveSettings();
     }
 
@@ -729,8 +753,10 @@ public partial class MainWindowViewModel
         // Search ALL groups — user can add custom apps to any group now
         foreach (var group in AppGroups)
         {
-            if (group.Apps.Remove(app))
+            if (group.Apps.Contains(app))
             {
+                ScrubRoutingForApp(app);   // also drop from RoutingAppsInclude/Exclude
+                group.Apps.Remove(app);
                 SaveSettings();
                 return;
             }

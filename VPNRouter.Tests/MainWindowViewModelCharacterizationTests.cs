@@ -176,8 +176,10 @@ public class MainWindowViewModelCharacterizationTests
     // v2.39.0 (2026-06-02 overnight): diagnostics-export surface added —
     // IsExportingDiagnostics (ObservableProperty) + ExportDiagnosticsCommand
     // (RelayCommand) + 4 L_Diag* localization getters. Intentional drift.
+    // v2.39.0-r6: + private ScrubRoutingForApp helper (apps-page audit
+    // "removed apps remain in routing policy" fix). Intentional drift.
     private const string PinnedHashWindows =
-        "77d474575900432f644feb95bc1834f4c013137b3809b6aa10bb01e767bfa613";
+        "6a849fc0ad32fb1e3edb33a0a4112c2580c69ef25febe1687aba5eab428cadd0";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the
@@ -263,8 +265,9 @@ public class MainWindowViewModelCharacterizationTests
     // the Windows pin. Linux value computed locally by building App+Tests with
     // PLATFORM_WINDOWS forced off (both csproj conditions flipped, reverted
     // after capture) — so CI is green on first push, no deferred-bump red.
+    // v2.39.0-r6: + ScrubRoutingForApp helper (same delta as Windows pin).
     private const string PinnedHashLinux =
-        "d935b740cc42e84550b1da825f24c043a91fc125a7dbd15ac7bdc50b9ed6570c";
+        "0957f87818ec399f865fd78e1a3d1d409b867e89568659c8f11ad81ccdb1b706";
 
     [Fact]
     public void MainWindowViewModel_PublicSurface_MatchesPinnedHash()
