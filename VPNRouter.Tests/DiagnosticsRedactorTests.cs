@@ -76,6 +76,24 @@ vless:
         Assert.Contains("ninitux.com", outp);           // url host kept (token dropped)
     }
 
+    [Fact]
+    public void Yaml_KeepsRoutingAppList_TheCoreSplitTunnelDiagnostic()
+    {
+        const string yaml = @"
+app:
+  routing_apps_mode: include
+  routing_apps_include:
+    - Discord.exe
+    - chrome.exe
+  routing_mode: split
+  uuid: " + Uuid;
+        var outp = DiagnosticsRedactor.RedactConfigYaml(yaml);
+        Assert.Contains("include", outp);          // mode kept
+        Assert.Contains("Discord.exe", outp);      // app list kept (diagnostic, non-secret)
+        Assert.Contains("chrome.exe", outp);
+        Assert.DoesNotContain(Uuid, outp);         // sibling secret still redacted
+    }
+
     // ── JSON ──
 
     [Fact]

@@ -76,6 +76,10 @@ public static class DiagnosticsRedactor
         "level", "output", "timestamp",
         // config.yaml (AppSettings) scalar flags / modes
         "schema_version", "config_mode", "routing_mode", "dns_mode",
+        // split-tunnel routing config — non-secret app identifiers (basenames),
+        // and the core diagnostic for "why isn't my app routed?" cases.
+        "routing_apps_mode", "routing_apps_include", "routing_apps_exclude",
+        "custom_rules_priority", "force_ipv4_only", "strict_mode", "strict_dns",
         "log_level", "bypass_russian_traffic", "bypassrussiantraffic",
         "block_on_vpn_fail", "include_children", "channel", "auto_update",
         "autostart", "boot_autostart", "start_on_boot", "dns_leak_lockdown",
