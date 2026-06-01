@@ -102,6 +102,17 @@ public static class DiagnosticsRedactor
     private static readonly Regex _numberLike = new(
         @"^-?\d+(\.\d+)?$", RegexOptions.Compiled);
 
+    // Log lines have no key structure, so the allowlist can't apply. The base
+    // CrashReporter.ScrubSecrets catches secret-SHAPED values (proxy URIs,
+    // UUIDs, long base64). This second pass catches SHORT secrets that ride in
+    // a `key=value` / `key: value` shape (e.g. `password=hunter2`,
+    // `short_id: abcd`) which the shape-based scrubber would miss. Keeps the
+    // key + separator, redacts the value. `key`/`pass` kept narrow to avoid
+    // over-matching benign log text (private_key / api_key, not bare key).
+    private static readonly Regex _logKeyValueSecret = new(
+        @"(?i)\b(password|passwd|pass|secret|token|uuid|short[_-]?id|private[_-]?key|api[_-]?key|psk|auth|credential)\b(\s*[=:]\s*)(""?)([^\s""',]+)",
+        RegexOptions.Compiled);
+
     /// <summary>
     /// Redact the main settings YAML. Returns redacted YAML, or an omission
     /// placeholder if it cannot be parsed (never the raw input).
@@ -155,7 +166,11 @@ public static class DiagnosticsRedactor
         if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
         var lines = text.Replace("\r\n", "\n").Split('\n');
         for (int i = 0; i < lines.Length; i++)
-            lines[i] = CrashReporter.ScrubSecrets(lines[i]);
+        {
+            var scrubbed = CrashReporter.ScrubSecrets(lines[i]);
+            lines[i] = _logKeyValueSecret.Replace(scrubbed,
+                m => $"{m.Groups[1].Value}{m.Groups[2].Value}{m.Groups[3].Value}{Redacted}");
+        }
         return string.Join(Environment.NewLine, lines);
     }
 

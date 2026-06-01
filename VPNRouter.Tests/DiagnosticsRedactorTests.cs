@@ -164,4 +164,18 @@ app:
         Assert.DoesNotContain(Uuid, outp);
         Assert.Contains("vless://[redacted]", outp);
     }
+
+    [Fact]
+    public void Logs_RedactKeyValueSecrets_TheShapeScrubberMisses()
+    {
+        // short secrets in a key=value / key: value shape that ScrubSecrets
+        // (uri/uuid/base64 only) would not catch.
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] auth password=hunter2 ok\n[DBG] reality short_id: abcd1234 set\n[INF] token=ZsecretTok99");
+        Assert.DoesNotContain("hunter2", outp);
+        Assert.DoesNotContain("abcd1234", outp);
+        Assert.DoesNotContain("ZsecretTok99", outp);
+        Assert.Contains("password=", outp);  // key kept for context
+        Assert.Contains(DiagnosticsRedactor.Redacted, outp);
+    }
 }
