@@ -214,14 +214,28 @@ public static class CustomConfigInjector
         if (dnsServersForFinal != null && dnsServersForFinal.Count > 0)
         {
             var wantRemoteDns = isFullTunnel || isExcludeMode || settings.App.StrictDns;
-            var dnsFinalTag = wantRemoteDns
-                ? FindRemoteDnsTag(dnsServersForFinal)
-                : FindLocalDnsTag(dnsServersForFinal);
-            // Only override when we actually resolved a tag of the wanted
-            // direction; otherwise leave Strip's assignment (the user's config
-            // may not carry a remote DNS server to route through).
-            if (!string.IsNullOrEmpty(dnsFinalTag))
-                dnsForFinal["final"] = dnsFinalTag;
+            if (wantRemoteDns)
+            {
+                // v2.40.0 (review H1 — fail-CLOSED): everything-else is tunnelled,
+                // so its DNS MUST resolve through the proxy. Prefer an existing
+                // proxy-detour DNS server; if the custom config has none (after
+                // Strip its DNS servers are all local / dns-direct), SYNTHESIZE
+                // one (Cloudflare DoH via the proxy outbound) instead of leaving
+                // Strip's local assignment — otherwise route.final=proxy tunnels
+                // traffic while dns.final resolves on the real NIC = DNS leak.
+                // Mirrors ConfigGenerator.BuildDns which always carries vpn-dns.
+                var remoteTag = FindRemoteDnsTag(dnsServersForFinal)
+                                ?? EnsureSynthesizedRemoteDns(dnsServersForFinal, proxyTag);
+                if (!string.IsNullOrEmpty(remoteTag))
+                    dnsForFinal["final"] = remoteTag;
+            }
+            else
+            {
+                // Include split: everything-else goes direct → local resolver.
+                var localTag = FindLocalDnsTag(dnsServersForFinal);
+                if (!string.IsNullOrEmpty(localTag))
+                    dnsForFinal["final"] = localTag;
+            }
         }
 
         EnsureDefaultDomainResolver(config);
@@ -753,10 +767,46 @@ public static class CustomConfigInjector
         {
             if (server is not JsonObject sObj) continue;
             var detour = StjNodeHelpers.AsString(sObj["detour"]);
-            if (!string.IsNullOrEmpty(detour) && detour != "direct")
+            // v2.40.0 (review H1): "dns-direct" is the LOCAL real-NIC shim that
+            // StripUnsupportedFeatures assigns to detour-less servers — it must
+            // NOT be treated as a remote (through-proxy) resolver, or the
+            // fail-closed dns.final synthesis below would never trigger.
+            if (!string.IsNullOrEmpty(detour) && detour != "direct" && detour != "dns-direct")
                 return StjNodeHelpers.AsString(sObj["tag"]);
         }
         return null;
+    }
+
+    /// <summary>
+    /// v2.40.0 (review H1): idempotently append a remote DoH DNS server
+    /// (Cloudflare 1.1.1.1 routed through <paramref name="proxyTag"/>) so
+    /// full-tunnel / exclude / StrictDns mode can point <c>dns.final</c> at a
+    /// resolver that runs INSIDE the tunnel. Without this, a custom config whose
+    /// DNS servers all became <c>dns-direct</c> after Strip would leave
+    /// <c>dns.final</c> on the real NIC = DNS leak while traffic is tunnelled.
+    /// Server 1.1.1.1 is an IP literal, so there is no bootstrap resolution
+    /// dependency. Returns the synthesized server's tag.
+    /// </summary>
+    private static string EnsureSynthesizedRemoteDns(JsonArray servers, string proxyTag)
+    {
+        const string synthTag = "vpnrouter-vpn-dns";
+        foreach (var server in servers)
+            if (server is JsonObject so && StjNodeHelpers.AsString(so["tag"]) == synthTag)
+                return synthTag; // already added — idempotent re-injection
+
+        servers.Add(new JsonObject
+        {
+            ["tag"] = synthTag,
+            ["type"] = "https",
+            ["server"] = "1.1.1.1",
+            ["path"] = "/dns-query",
+            ["detour"] = proxyTag,
+        });
+        Serilog.Log.Logger.Information(
+            "Custom Config Mode: synthesized remote DNS '{Tag}' (Cloudflare DoH via '{Proxy}') for " +
+            "full/exclude/strict mode — closes the DNS leak when the config has no proxy-detour DNS server.",
+            synthTag, proxyTag);
+        return synthTag;
     }
 
     /// <summary>First DNS server that resolves locally (direct/dns-direct detour,

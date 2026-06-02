@@ -251,6 +251,12 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _selectedCountry = "All";
     partial void OnSelectedCountryChanged(string value) => ApplyFiltersAndStats();
 
+    // v2.40.0 (review L3): re-filter the displayed Search list the moment the user
+    // toggles ExcludeRu, mirroring OnSelectedCountryChanged. Without this, RU rows
+    // surfaced by a search run before the user opted in stayed visible + selectable
+    // until the next search / country change.
+    partial void OnExcludeRuChanged(bool value) => ApplyFiltersAndStats();
+
     /// <summary>How many Verified configs to hunt for in a deep-verify session.
     /// v2.30.7-r2 (VM-6 audit fix): switched from int to int? to be NumericUpDown-safe
     /// per CLAUDE.md "NumericUpDown bind to int" gotcha. The field isn't currently
@@ -1022,6 +1028,14 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                 // Quick: TCP-only, ~500 ms - 1.5 s typical.
                 await _aggregator.Tester.TcpPingOnlyAsync(entry, ct);
                 await _deepVerifier.VerifyOneAsync(entry, ct);
+                // v2.40.0 (review M4): VerifyOneAsync SWALLOWS the user-cancel OCE
+                // internally (its catch has no `when` filter + doesn't rethrow), so
+                // a cancel during the multi-second deep-verify would otherwise fall
+                // through to MergeRecheckResult and — because no fresh
+                // LastDeepVerifyAt was stamped — be recorded as a spurious
+                // "failed last check". Re-detect the cancel here so the catch below
+                // runs RestorePriorState instead (cancel != failure).
+                ct.ThrowIfCancellationRequested();
                 FreeConfigFreshness.MergeRecheckResult(entry, prior, DateTime.UtcNow);
                 _logger.Information("[Recheck] {host}:{port} → {result} ({ping} ms)",
                     entry.Host, entry.Port,
@@ -1118,6 +1132,10 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
                     // so LatencyMs is raw network RTT, not HTTP RTT.
                     await _aggregator.Tester.TcpPingOnlyAsync(cfg, ct);
                     await _deepVerifier.VerifyOneAsync(cfg, ct);
+                    // v2.40.0 (review M4): re-detect a cancel swallowed inside
+                    // VerifyOneAsync so the catch runs RestorePriorState instead of
+                    // recording a spurious "failed last check" via the merge.
+                    ct.ThrowIfCancellationRequested();
                     FreeConfigFreshness.MergeRecheckResult(cfg, prior, DateTime.UtcNow);
                     if (cfg.LastVerifyFailedAt.HasValue) Interlocked.Increment(ref failed);
                     else Interlocked.Increment(ref verified);
@@ -1843,9 +1861,11 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             // v2.39.0 (audit #7): re-apply the RU exclusion at the display
             // boundary as a safety net. A cached/stale RU Verified row already
             // sitting in _allConfigs (e.g. from a search before the user opted
-            // in) must never be shown or made a Connect candidate when ExcludeRu
-            // is on. The queue builder already drops RU from processing; this is
-            // belt-and-suspenders at the visible/apply boundary.
+            // in) must not appear in the SEARCH list when ExcludeRu is on.
+            // NOTE (review L6): this scopes the SEARCH tab only — the Saved tab is
+            // a user-curated list and is intentionally NOT RU-filtered, so a saved
+            // RU row stays connectable. The queue builder already drops RU from
+            // processing; this is belt-and-suspenders at the Search visible boundary.
             if (ExcludeRu)
                 q = q.Where(c => !string.Equals(c.CountryCode, "RU", StringComparison.OrdinalIgnoreCase));
 
@@ -1859,7 +1879,10 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             // OnlyWorking is implicit.
             if (UseLatencyGoal && LatencyGoalMaxPingMs.HasValue)
             {
-                var maxPing = LatencyGoalMaxPingMs.Value;
+                // v2.40.0 (review L4): clamp to the same [50,2000] bound the search
+                // gate uses, so the displayed list and the search honour one
+                // threshold (no "found N but list shows fewer" divergence).
+                var maxPing = Math.Clamp(LatencyGoalMaxPingMs.Value, 50, 2000);
                 q = q.Where(c => c.LatencyMs > 0 && c.LatencyMs <= maxPing);
             }
 

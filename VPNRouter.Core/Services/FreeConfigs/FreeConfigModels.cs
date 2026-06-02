@@ -97,9 +97,13 @@ public sealed class FreeConfigEntry
 
     /// <summary>
     /// v2.29.0 Phase 3C: timestamp of the last successful Deep Verify pass
-    /// (real HTTP round-trip through sing-box, not just TCP+TLS). Set by
-    /// FreeConfigDeepVerifier on Verified result, cleared on subsequent
-    /// non-Verified re-test.
+    /// (real HTTP round-trip through sing-box, not just TCP+TLS). Set ONLY on a
+    /// passed deep verify (FreeConfigDeepVerifier / AndroidFreeConfigDeepVerifier);
+    /// never cleared — it monotonically advances. v2.40.0 (review L1): corrected
+    /// from the prior "cleared on non-Verified re-test" wording, which was false
+    /// and dangerous: FreeConfigFreshness.MergeRecheckResult (the #146 fix) keys
+    /// recheck success SOLELY on a freshly-advanced stamp, so a clear-on-failure
+    /// path would silently reintroduce the false-success P0. Do NOT add one.
     ///
     /// <para>Used by the batched search loop to skip re-verifying entries
     /// that were Deep-Verified within the last 6 hours — saves 5-15 s

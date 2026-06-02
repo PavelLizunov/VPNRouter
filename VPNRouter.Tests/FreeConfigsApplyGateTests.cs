@@ -35,6 +35,10 @@ public class FreeConfigsApplyGateTests
     [InlineData(FreeConfigStatus.TlsFailed)]
     [InlineData(FreeConfigStatus.Timeout)]
     [InlineData(FreeConfigStatus.Unknown)]
+    [InlineData(FreeConfigStatus.Slow)]
+    [InlineData(FreeConfigStatus.Implausible)]
+    [InlineData(FreeConfigStatus.Unreachable)]
+    [InlineData(FreeConfigStatus.ParseError)]
     public async Task ApplySelected_NonVerified_RejectedWithoutApply(FreeConfigStatus status)
     {
         var vm = MakeVm(out var applyCalled);
@@ -61,5 +65,22 @@ public class FreeConfigsApplyGateTests
         await vm.ApplySelectedCommand.ExecuteAsync(null);
 
         Assert.True(applyCalled[0]); // verified row passes the gate
+    }
+
+    // v2.40.0 (review L5): pin F1 (B1) — Apply is a no-op while a search/recheck
+    // owns the operation (IsBusy), even for an otherwise-connectable Verified row.
+    [Fact]
+    public async Task ApplySelected_WhileBusy_DoesNotInvokeApply()
+    {
+        var vm = MakeVm(out var applyCalled);
+        vm.SelectedItem = new FreeConfigItemViewModel(new FreeConfigEntry
+        {
+            Status = FreeConfigStatus.Verified, Host = "1.2.3.4", Port = 443, Uuid = "u",
+        });
+        vm.IsBusy = true; // a search/recheck is in flight
+
+        await vm.ApplySelectedCommand.ExecuteAsync(null);
+
+        Assert.False(applyCalled[0]); // B1: blocked during an active operation
     }
 }

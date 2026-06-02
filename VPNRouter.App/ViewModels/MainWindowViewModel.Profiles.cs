@@ -505,6 +505,27 @@ public partial class MainWindowViewModel
         try { item.IsChecked = false; } catch { }
         try { VPNRouter.Core.Services.RoutingAppListEditor.TryRemoveProcessName(_settings, item.ProcessName); }
         catch { }
+        // v2.40.0 (review M5): TryRemoveProcessName only scrubs RoutingAppsInclude
+        // (and no-ops off-Windows), and the active-list uncheck above can't touch
+        // the INACTIVE list. So a row removed while in the other mode left a stale
+        // entry in the unscrubbed list that reappeared + bypassed the VPN on a
+        // mode flip (leak-from-intent). Removing a UI row must drop the app from
+        // EVERY routing list regardless of current mode. Match both the stored
+        // name and its .exe-stripped form for cross-platform safety.
+        try
+        {
+            var name = item.ProcessName;
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                var bare = StripExe(name);
+                bool Match(string p) =>
+                    string.Equals(p, name, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(p, bare, StringComparison.OrdinalIgnoreCase);
+                _settings.App.RoutingAppsInclude?.RemoveAll(Match);
+                _settings.App.RoutingAppsExclude?.RemoveAll(Match);
+            }
+        }
+        catch { }
     }
 
     [RelayCommand]

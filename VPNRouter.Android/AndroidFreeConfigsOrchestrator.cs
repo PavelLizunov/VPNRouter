@@ -195,17 +195,19 @@ internal sealed class AndroidFreeConfigsOrchestrator
             var queue = head.Concat(tail).ToList();
 
             OnStatus?.Invoke(string.Format(Localization.FcStatusPoolLoaded,
-                pool.Count, Math.Min(queue.Count, batchSize * 4)));
+                pool.Count, queue.Count));
             OnProgress?.Invoke(0, target);
 
-            // IP-dedupe at display time so two entries on the same host
-            // don't both count toward the user's target.
+            // Host-dedupe: at most one VERIFIED config per host counts toward the
+            // target. v2.40.0 (review L2): a host is claimed only AFTER one of its
+            // candidates deep-verifies (see the loop below), not at surface time.
             var foundHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             var processed = 0;
-            // Hard cap at queue.Count entries to test, but we expect to
-            // hit `target` long before. Even at 200 entries × 1.5 s avg
-            // per probe / 80 concurrent ≈ 4 s wall clock.
+            // v2.40.0 (review N1): the loop tests batches until `target` VERIFIED
+            // entries are found, the queue is exhausted, or the user cancels —
+            // there is no fixed cap. We expect to hit `target` long before
+            // exhausting a large pool.
             for (int i = 0; i < queue.Count; i += batchSize)
             {
                 if (ct.IsCancellationRequested) break;
@@ -242,7 +244,11 @@ internal sealed class AndroidFreeConfigsOrchestrator
                                 c.LatencyMs > 0 &&
                                 c.LatencyMs <= maxPingMs)
                     .OrderBy(c => c.LatencyMs)
-                    .Where(c => foundHosts.Add(c.Host))
+                    // Skip only hosts ALREADY verified in a prior batch. Within
+                    // this batch the host is claimed in the verify loop on success
+                    // (review L2) — so distinct candidates on one host stay
+                    // eligible until one of them actually deep-verifies.
+                    .Where(c => !foundHosts.Contains(c.Host))
                     .ToList();
 
                 foreach (var cand in candidates)
@@ -264,6 +270,9 @@ internal sealed class AndroidFreeConfigsOrchestrator
                 {
                     if (ct.IsCancellationRequested) break;
                     if (verifiedThisRun.Count >= target) break;
+                    // review L2: a sibling candidate on this host already verified
+                    // earlier in this batch — skip the dup (one Verified per host).
+                    if (foundHosts.Contains(cand.Host)) continue;
 
                     OnStatus?.Invoke(string.Format(Localization.FcStatusDeepVerifying,
                         verifiedThisRun.Count, target));
@@ -280,6 +289,7 @@ internal sealed class AndroidFreeConfigsOrchestrator
 
                     if (cand.Status == FreeConfigStatus.Verified)
                     {
+                        foundHosts.Add(cand.Host);      // claim host only on success (review L2)
                         verifiedThisRun.Add(cand);
                         UpsertSaved(cand);              // persist ONLY verified
                         OnEntryUpgraded?.Invoke(cand);  // upgrades badge, enables Connect

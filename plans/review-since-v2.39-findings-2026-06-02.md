@@ -9,6 +9,34 @@ fixing means a `v2.39.0-r8` (restart soak). **[branch]** = on the
 `claude/v2.40-fc-interaction-gates` branch → folds into v2.40.0-r1.
 **[pre-existing]** = predates v2.39.
 
+## Resolution — v2.40.0-r1 (2026-06-02)
+
+User command "Исправляй все": **all 15 confirmed findings fixed** (the v2.40
+branch merged into main, so the [main]/[branch] split dissolved — everything
+ships in one combined `v2.40.0-r1`). Status:
+
+| # | Sev | Status | Where fixed |
+|---|---|---|---|
+| H1 | HIGH | ✓ FIXED | `CustomConfigInjector` fail-CLOSED dns.final + `EnsureSynthesizedRemoteDns` + `FindRemoteDnsTag` excludes `dns-direct`; +Theory (sing-box check verifies synth) |
+| M1 | MED | ✓ FIXED | `DiagnosticsRedactor` SecretKeys += `obfs_password`/`obfs-password`/`plugin_opts`; +test |
+| M2 | MED | ✓ FIXED | `_urlKeepHost` drops `userinfo@`; +test |
+| M3 | MED | ✓ FIXED | `_logKeyValueSecret` += authorization/proxy-authorization keywords + scheme-word skip; +test |
+| M4 | MED | ✓ FIXED | `ct.ThrowIfCancellationRequested()` between VerifyOne and MergeRecheckResult (both recheck paths) |
+| M5 | MED | ✓ FIXED | `ScrubRoutingForApp` scrubs BOTH Include+Exclude lists (name + bare) |
+| L1 | LOW | ✓ FIXED | `FreeConfigModels` doc corrected to "set on success only, never cleared" |
+| L2 | LOW | ✓ FIXED | Android dedup by checking `foundHosts.Contains` + add only in Verified branch |
+| L3 | LOW | ✓ FIXED | `OnExcludeRuChanged` → ApplyFiltersAndStats |
+| L4 | LOW | ✓ FIXED | max-ping clamp [50,2000] at display site too |
+| L5 | LOW | ✓ FIXED | gate tests broadened to 8 statuses + busy-guard test |
+| L6 | LOW | ✓ FIXED | audit-#7 comment scoped to Search tab |
+| N1 | NIT | ✓ FIXED | Android status text = `pool.Count` (real loop bound) |
+| N2 | NIT | DEFERRED | sub-ms redundant SaveSettings writes — documented perf nit, backlog |
+| N3 | NIT | ✓ FIXED | forward-facing v2.40 brief/FC-contract wording corrected (in-method `if (IsBusy) return` is the real Apply block, not the button binding) |
+
+All 8 adversarially-refuted items remain non-bugs (no action). Verification:
+desktop build 0 errors, affected suites 105/105 green (incl. the H1 sing-box
+check on the synthesized DNS server), Android build 0 errors.
+
 ## HIGH (1)
 
 ### H1 [main] Residual DNS leak in custom-JSON full-tunnel / exclude mode

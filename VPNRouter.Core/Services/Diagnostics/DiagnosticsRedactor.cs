@@ -109,10 +109,19 @@ public static class DiagnosticsRedactor
         "uuid", "password", "passwd", "pass", "secret", "token",
         "short_id", "shortid", "private_key", "privatekey", "api_key", "apikey",
         "psk", "pre_shared_key", "preshared_key", "auth", "credential", "key",
+        // v2.40.0 (review M1): flat config.yaml secret aliases the original set
+        // missed. obfs_password is the Hysteria2 Salamander passphrase (flat YAML
+        // alias, not nested under `password`); plugin_opts can carry a ShadowTLS
+        // password. Both can be all-digit user-chosen values → must skip the
+        // numeric fast-path.
+        "obfs_password", "obfs-password", "plugin_opts",
     };
 
+    // v2.40.0 (review M2): authority class excludes `@` and an optional
+    // `userinfo@` is dropped, so `https://user:pass@host/path` keeps only
+    // `https://host` (basic-auth credentials never survive).
     private static readonly Regex _urlKeepHost = new(
-        @"^(\w+://[^/?#\s]+).*$", RegexOptions.Compiled);
+        @"^(\w+://)(?:[^@/?#\s]+@)?([^/?#\s]+).*$", RegexOptions.Compiled);
 
     private static readonly Regex _numberLike = new(
         @"^-?\d+(\.\d+)?$", RegexOptions.Compiled);
@@ -124,8 +133,13 @@ public static class DiagnosticsRedactor
     // `short_id: abcd`) which the shape-based scrubber would miss. Keeps the
     // key + separator, redacts the value. `key`/`pass` kept narrow to avoid
     // over-matching benign log text (private_key / api_key, not bare key).
+    // v2.40.0 (review M3): added `authorization`/`proxy-authorization`
+    // (the bare `auth` alternative can't match inside "Authorization" because of
+    // the trailing \b) and `obfs[_-]?password`; and a non-capturing
+    // `(?:Bearer|Basic|...)\s+` is consumed BEFORE the value group so the actual
+    // token after the scheme word — not just the word "Bearer" — is redacted.
     private static readonly Regex _logKeyValueSecret = new(
-        @"(?i)\b(password|passwd|pass|secret|token|uuid|short[_-]?id|private[_-]?key|api[_-]?key|psk|auth|credential)\b(\s*[=:]\s*)(""?)([^\s""',]+)",
+        @"(?i)\b(password|passwd|pass|secret|token|uuid|short[_-]?id|private[_-]?key|api[_-]?key|psk|auth|authorization|proxy[-_]?authorization|credential|obfs[_-]?password)\b(\s*[=:]\s*)(""?)(?:(?:bearer|basic|token|digest|negotiate)\s+)?([^\s""',]+)",
         RegexOptions.Compiled);
 
     /// <summary>
@@ -281,7 +295,8 @@ public static class DiagnosticsRedactor
 
     private static string RedactUrlKeepHost(string value)
     {
+        // Group 1 = scheme:// , Group 2 = host[:port] (userinfo dropped, M2).
         var m = _urlKeepHost.Match(value);
-        return m.Success ? $"{m.Groups[1].Value}/{Redacted}" : Redacted;
+        return m.Success ? $"{m.Groups[1].Value}{m.Groups[2].Value}/{Redacted}" : Redacted;
     }
 }

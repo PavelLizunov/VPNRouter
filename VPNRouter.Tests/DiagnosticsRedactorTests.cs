@@ -194,4 +194,41 @@ app:
         Assert.Contains("password=", outp);  // key kept for context
         Assert.Contains(DiagnosticsRedactor.Redacted, outp);
     }
+
+    // ── v2.40.0 review fixes (M1/M2/M3) ──
+
+    [Fact]
+    public void Yaml_NumericObfsPassword_IsRedacted()
+    {
+        // M1: obfs_password (Hysteria2 Salamander, flat YAML alias) can be an
+        // all-digit passphrase. It must NOT take the numeric fast-path.
+        var outp = DiagnosticsRedactor.RedactConfigYaml(
+            "vless:\n  servers:\n  - server: 1.2.3.4\n    obfs_password: 86753099\n    plugin_opts: 12345678\n");
+        Assert.DoesNotContain("86753099", outp);
+        Assert.DoesNotContain("12345678", outp);
+        Assert.Contains("1.2.3.4", outp);              // host kept (diagnostic)
+    }
+
+    [Fact]
+    public void Url_WithUserInfo_DropsCredentials()
+    {
+        // M2: basic-auth userinfo in a subscription URL must not survive.
+        var outp = DiagnosticsRedactor.RedactSingboxJson(
+            @"{ ""url"": ""https://user:p4ssw0rd@ninitux.com/api/v1/config/abc"" }");
+        Assert.DoesNotContain("p4ssw0rd", outp);
+        Assert.DoesNotContain("user:", outp);
+        Assert.Contains("ninitux.com", outp);          // host still kept
+    }
+
+    [Fact]
+    public void Logs_RedactAuthorizationHeaderTokens()
+    {
+        // M3: the token AFTER the scheme word (Bearer/Basic) must be redacted,
+        // and `Authorization:` itself must be caught (the bare \bauth\b can't).
+        var outp = DiagnosticsRedactor.RedactLogText(
+            "[DBG] Authorization: Bearer mySecretValue123 sent\n" +
+            "[DBG] proxy-authorization: Basic dXNlcjpwYXNzd29yZA== ok");
+        Assert.DoesNotContain("mySecretValue123", outp);
+        Assert.DoesNotContain("dXNlcjpwYXNzd29yZA==", outp);
+    }
 }
