@@ -173,6 +173,21 @@ public class HealthMonitor : IDisposable
 
     public void Start(Profile profile, AppSettings appSettings, ScanResult? initialScan = null)
     {
+        // v2.40.0 (audit P2, plans/bug-responsiveness-memory-audit-targets):
+        // idempotent Start. If a prior Start didn't go through Stop (a lifecycle
+        // slip, or a re-arm after a fault), the old _healthTimer +
+        // _powerListener would be silently overwritten below — the Timer leaks
+        // and, worse, the PowerEventListener keeps its Windows SystemEvents
+        // subscription alive for the life of the process. Tear the prior run
+        // down first. No-op on the normal first Start (both fields null), so
+        // the common path is unaffected.
+        if (_healthTimer != null || _powerListener != null)
+        {
+            _logger.Warning("[HealthMonitor] Start() called while already running — " +
+                "restarting cleanly to avoid orphaning the prior timer + power listener");
+            Stop();
+        }
+
         _activeProfile = profile;
         _appSettings = appSettings;
         _restartAttempts = 0;

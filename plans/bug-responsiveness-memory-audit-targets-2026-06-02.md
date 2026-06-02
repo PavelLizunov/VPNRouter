@@ -215,6 +215,28 @@ reload, старые экземпляры могут удерживаться д
   через profiler;
 - отдельно проверить Android recreation.
 
+**Ownership-trace (2026-06-02):** инстанцирование —
+`FreeConfigsPageViewModel` ctor → один `FreeConfigAggregator` → владеет
+`FreeConfigFetcher` + `FreeConfigPoolFetcher` (desktop); `AndroidFreeConfigsOrchestrator`
+ctor → свой `FreeConfigPoolFetcher` (Android). Оба `HttpClient` — instance-owned,
+живут пока жив владелец. Утечка материализуется ТОЛЬКО при recreation владельца
+(пересоздание окна desktop / `AndroidApp`/orchestrator Android), что редко. При
+одном долгоживущем экземпляре — не авария (как и сказано выше).
+
+**Почему не чинится мимоходом / unsupervised:** есть design-развилка и footgun:
+(1) `FreeConfigPoolFetcher` требует `AutomaticDecompression=None` (ручной gzip
+для `pool.json.gz`), поэтому не может просто шарить `PolicyHttpClient.Shared`;
+(2) его ctor принимает inject-able `HttpClientHandler` (test-seam) — static
+shared client ломает этот seam; (3) частый `Dispose()` HttpClient → socket
+exhaustion (классический .NET footgun), поэтому "добавить IDisposable +
+dispose-per-use" неверно. Корректные варианты: **(A)** `private static readonly
+HttpClient` на класс (reuse, без churn) с сохранением test-seam через отдельный
+internal-ctor; **(B)** IDisposable-цепочка `Aggregator`/`Orchestrator` →
+fetchers, с dispose ТОЛЬКО на teardown владельца (VM teardown уже снимает
+события — туда же повесить dispose). Решение + выбор A/B принять с user'ом
+(нужна валидация lifecycle + test-seam). LOW priority до подтверждённого
+recreation-сценария на профайле.
+
 ### P1. `AppIconCache` ограничен по количеству, но требует проверки native teardown
 
 `VPNRouter.Android/AppIconCache.cs` ограничивает кеш 200 bitmap-объектами, что
@@ -418,6 +440,14 @@ precondition. Если нет, старые timer/listener могут сохра
 - resume/unlock storm;
 - зафиксировать контракт: либо repeated Start запрещен и защищен guard, либо
   идемпотентен.
+
+**Статус (2026-06-02): исправлено — выбран идемпотентный контракт.** `Start()`
+теперь при `_healthTimer != null || _powerListener != null` логирует warning и
+вызывает идемпотентный `Stop()` перед ре-инициализацией, чтобы не оставить
+осиротевшими старый `Timer` и (важнее) `PowerEventListener` с его подпиской на
+Windows `SystemEvents`. Покрыто `HealthMonitorStartIdempotencyTests`
+(discriminating: старый listener `_disposed==true` после 2-го Start + source-pin
+на guard). Обычный первый Start (оба поля null) не задет.
 
 ### P2. Большие внешние ответы и локальные импорты требуют общего лимита
 
