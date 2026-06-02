@@ -2697,6 +2697,13 @@ public static class Strings
         ? "Дождитесь проверки конфига (✓✓) перед подключением."
         : "Wait for the config to be verified (✓✓) before connecting.";
 
+    // v2.40.0 (contracts B1 #5): shown when Connect is tapped while a search /
+    // recheck is still running — adopting a config stops+starts the VPN and
+    // would race the verifier; wait until the search finishes.
+    public static string FcConnectBusySearch => Ru
+        ? "Дождитесь окончания поиска перед подключением."
+        : "Wait for the search to finish before connecting.";
+
     public static string MenuItemSettings => Ru ? "Настройки" : "Settings";
 
     public static string SettingsTitle => Ru ? "Настройки" : "Settings";

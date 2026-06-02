@@ -1089,6 +1089,14 @@ public partial class AndroidApp
 
         var entry = _fcSelectedEntry;
         if (entry is null) return;
+        // v2.40.0 (contracts B1 #5): don't adopt+connect while a search/recheck
+        // owns the orchestrator — Apply stops+starts the VPN, racing the verifier
+        // processes (libbox) + the TUN lifecycle. Wait until the search is idle.
+        if (_fcOrchestrator?.IsBusy == true)
+        {
+            ShowMenuFeedback(Localization.FcConnectBusySearch);
+            return;
+        }
         // v2.39.0 (audit P1) backstop for the Verified-only Connect gate: never
         // connect to a public config that hasn't passed deep verify, even if a
         // UI path re-enabled the button. The button should already be disabled

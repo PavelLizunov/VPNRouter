@@ -750,6 +750,7 @@ public static class Strings
     public static string FcStatusEmpty => global::VPNRouter.Core.Localization.Strings.FcStatusEmpty;
     public static string FcStatusCancelled => global::VPNRouter.Core.Localization.Strings.FcStatusCancelled;
     public static string FcStatusApplyFailed => global::VPNRouter.Core.Localization.Strings.FcStatusApplyFailed;
+    public static string FcConnectNeedsVerify => global::VPNRouter.Core.Localization.Strings.FcConnectNeedsVerify;
     public static string FcStatusCacheAge(string age) => global::VPNRouter.Core.Localization.Strings.FcStatusCacheAge(age);
     public static string FcStatusRefreshed(int n) => global::VPNRouter.Core.Localization.Strings.FcStatusRefreshed(n);
     public static string FcStatusTested(int n) => global::VPNRouter.Core.Localization.Strings.FcStatusTested(n);
