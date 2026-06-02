@@ -105,16 +105,20 @@ public static class FreeConfigFreshness
     public readonly record struct RecheckSnapshot(
         int LatencyMs,
         int? MeasuredBandwidthMbps,
-        System.DateTime? LastTestedAt)
+        System.DateTime? LastTestedAt,
+        // v2.39.0 (audit P0): capture the prior deep-verify success stamp so the
+        // merge can tell a real fresh success from a residual Verified status.
+        System.DateTime? LastDeepVerifyAt)
     {
         /// <summary>Capture a snapshot from the entry's current state.</summary>
         public static RecheckSnapshot Capture(FreeConfigEntry entry)
         {
-            if (entry == null) return new RecheckSnapshot(0, null, null);
+            if (entry == null) return new RecheckSnapshot(0, null, null, null);
             return new RecheckSnapshot(
                 entry.LatencyMs,
                 entry.MeasuredBandwidthMbps,
-                entry.LastTestedAt);
+                entry.LastTestedAt,
+                entry.LastDeepVerifyAt);
         }
     }
 
@@ -153,14 +157,32 @@ public static class FreeConfigFreshness
         System.DateTime nowUtc)
     {
         if (entry == null) return;
-        if (entry.Status == FreeConfigStatus.Verified)
+
+        // v2.39.0 (public-configs audit P0): a deep verify SUCCEEDED iff it
+        // freshly stamped LastDeepVerifyAt — the verifier sets that field ONLY
+        // on a passed HTTP-through-proxy probe. Keying success on
+        // Status==Verified was wrong: the verifier does NOT downgrade a
+        // previously-Verified Saved entry when its bind/HTTP/timeout fails, so a
+        // dead config kept Status=Verified and was misread as a successful
+        // recheck — the failure marker was even cleared. Use the stamp instead.
+        bool verifySucceeded =
+            entry.LastDeepVerifyAt.HasValue &&
+            (!prior.LastDeepVerifyAt.HasValue ||
+             entry.LastDeepVerifyAt.Value > prior.LastDeepVerifyAt.Value);
+
+        if (verifySucceeded)
         {
+            entry.Status = FreeConfigStatus.Verified;
             entry.LastVerifyFailedAt = null;
             // Verifier already updated LatencyMs/Bw/LastTestedAt to the
             // fresh successful values; leave them.
         }
         else
         {
+            // Failed (or infrastructure-unavailable) re-verify: keep the row in
+            // the Saved list (Status=Verified so the retention filter doesn't
+            // drop it), restore the last-good numbers, and layer the
+            // failed-last-check marker on top.
             entry.Status = FreeConfigStatus.Verified;
             entry.LatencyMs = prior.LatencyMs;
             entry.MeasuredBandwidthMbps = prior.MeasuredBandwidthMbps;

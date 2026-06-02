@@ -214,8 +214,14 @@ public sealed class FreeConfigDeepVerifier
             }
             else
             {
-                // Don't clobber a working TCP+TLS status — only downgrade if it was Ok.
-                if (cfg.Status == FreeConfigStatus.Ok || cfg.Status == FreeConfigStatus.Slow)
+                // v2.39.0 (audit P0): also downgrade Verified on a failed HTTP
+                // probe — a previously-Verified entry that now fails must not
+                // keep showing Verified to non-merge callers (live search).
+                // The Saved-recheck merge separately restores Verified + a
+                // failed-last-check marker via LastDeepVerifyAt; this covers the
+                // paths that don't run the merge.
+                if (cfg.Status == FreeConfigStatus.Ok || cfg.Status == FreeConfigStatus.Slow
+                    || cfg.Status == FreeConfigStatus.Verified)
                     cfg.Status = FreeConfigStatus.TlsFailed;
                 cfg.LastError = httpErr ?? "http failed";
 

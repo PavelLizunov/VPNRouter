@@ -22,15 +22,17 @@ public class FreeConfigRecheckMergeTests
             LatencyMs = 50,
             MeasuredBandwidthMbps = 25,
             LastTestedAt = Now.AddDays(-2),
+            LastDeepVerifyAt = Now.AddDays(-2),
             LastVerifyFailedAt = Now.AddDays(-1),
         };
         var prior = VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.RecheckSnapshot.Capture(entry);
 
-        // Simulate verifier mutation on success.
+        // Simulate verifier mutation on success — it stamps a FRESH LastDeepVerifyAt.
         entry.LatencyMs = 30;
         entry.MeasuredBandwidthMbps = 60;
         entry.LastTestedAt = Now;
         entry.Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified;
+        entry.LastDeepVerifyAt = Now;
 
         VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.MergeRecheckResult(entry, prior, Now);
 
@@ -51,13 +53,16 @@ public class FreeConfigRecheckMergeTests
             LatencyMs = 50,
             MeasuredBandwidthMbps = 25,
             LastTestedAt = Now.AddDays(-1),
+            LastDeepVerifyAt = Now.AddDays(-1),
             LastVerifyFailedAt = null,
         };
         var prior = VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.RecheckSnapshot.Capture(entry);
 
-        // Simulate verifier mutation on failure (e.g. TLS handshake failed).
-        entry.Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.TlsFailed;
-        entry.LatencyMs = 9999;          // junk value verifier might leave
+        // Simulate the REAL bug class: the verifier's bind/timeout/exception
+        // paths do NOT downgrade a previously-Verified entry and do NOT stamp a
+        // fresh LastDeepVerifyAt. Status stays Verified; only LastTestedAt
+        // updates. Pre-fix this was misread as success (marker cleared); the
+        // merge must now treat the absent fresh stamp as a failed recheck.
         entry.LastTestedAt = Now;        // verifier always updates this
 
         VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.MergeRecheckResult(entry, prior, Now);
@@ -84,23 +89,24 @@ public class FreeConfigRecheckMergeTests
             LatencyMs = 50,
             MeasuredBandwidthMbps = 25,
             LastTestedAt = Now.AddDays(-1),
+            LastDeepVerifyAt = Now.AddDays(-1),
         };
 
-        // First recheck: fails.
+        // First recheck: fails (Status stays Verified, no fresh deep-verify stamp).
         var snap1 = VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.RecheckSnapshot.Capture(entry);
-        entry.Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Timeout;
         entry.LastTestedAt = Now;
         VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.MergeRecheckResult(entry, snap1, Now);
         Assert.Equal(Now, entry.LastVerifyFailedAt);
         Assert.Equal(50, entry.LatencyMs);
 
-        // Second recheck: succeeds.
+        // Second recheck: succeeds — verifier stamps a fresh LastDeepVerifyAt.
         var later = Now.AddMinutes(10);
         var snap2 = VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.RecheckSnapshot.Capture(entry);
         entry.Status = VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified;
         entry.LatencyMs = 35;
         entry.MeasuredBandwidthMbps = 80;
         entry.LastTestedAt = later;
+        entry.LastDeepVerifyAt = later;
         VPNRouter.Core.Services.FreeConfigs.FreeConfigFreshness.MergeRecheckResult(entry, snap2, later);
 
         Assert.Equal(VPNRouter.Core.Services.FreeConfigs.FreeConfigStatus.Verified, entry.Status);
