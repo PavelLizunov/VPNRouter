@@ -190,6 +190,14 @@ reload, старые экземпляры могут удерживаться д
 Вероятное направление будущей доработки: named handler + unsubscribe в
 `Dispose()`, либо один статический coordinator без захвата экземпляра.
 
+**Статус (2026-06-02): исправлено.** Анонимная lambda заменена на named
+`OnAppDomainProcessExit`, `Dispose()` делает
+`AppDomain.CurrentDomain.ProcessExit -= OnAppDomainProcessExit`. Поведение
+сохранено (gate на `_disposed` тот же). Покрыто
+`SingBoxManagerProcessExitLeakTests` (WeakReference: 25 create/dispose → все
+собраны GC + source-pin на unsubscribe). Существующие B1 source-pins
+(`SingBoxManagerCleanupPathTests`) не задеты.
+
 ### P1. Владелец `HttpClient` у Public Configs не выражен teardown-контрактом
 
 `FreeConfigPoolFetcher`, `FreeConfigFetcher` и связанные агрегаторы создают

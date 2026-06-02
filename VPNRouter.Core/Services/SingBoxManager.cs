@@ -197,11 +197,28 @@ public class SingBoxManager : IDisposable
         // TunOwnershipLock.Dispose is idempotent so no crash, but the
         // dual-path pattern was muddled. See
         // plans/singbox-lifecycle-hardening-v2.36.md.
-        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
-        {
-            if (Volatile.Read(ref _disposed) == 0)
-                _tunLock.Dispose();
-        };
+        // v2.40.0 (audit P1, plans/bug-responsiveness-memory-audit-targets):
+        // use a NAMED handler (not a capturing lambda) so Dispose() can
+        // unsubscribe it. Pre-fix the anonymous lambda captured `this` and
+        // could never be removed, keeping every disposed SingBoxManager alive
+        // on AppDomain.ProcessExit's invocation list until process exit —
+        // harmless for the usual one-manager-per-process case, but a leak when
+        // a test harness / future host-reload recreates the manager.
+        AppDomain.CurrentDomain.ProcessExit += OnAppDomainProcessExit;
+    }
+
+    /// <summary>
+    /// Last-resort TUN-lock release on abrupt process termination
+    /// (<c>Environment.Exit</c> / OOM-kill / Ctrl+C without graceful
+    /// shutdown). No-ops when <see cref="Dispose"/> has already run (gated on
+    /// <c>_disposed</c>); <see cref="Dispose"/> unsubscribes it so a
+    /// normally-disposed instance isn't retained. See the ctor comment +
+    /// plans/singbox-lifecycle-hardening-v2.36.md.
+    /// </summary>
+    private void OnAppDomainProcessExit(object? sender, EventArgs e)
+    {
+        if (Volatile.Read(ref _disposed) == 0)
+            _tunLock.Dispose();
     }
 
     // ─── Public API ───────────────────────────────────────────────────────────
@@ -1404,6 +1421,11 @@ public class SingBoxManager : IDisposable
         // an unprotected check-then-set, which had a theoretical
         // race (concurrent Dispose from finalizer + manual call).
         if (Interlocked.CompareExchange(ref _disposed, 1, 0) != 0) return;
+        // v2.40.0 (audit P1): drop the ProcessExit subscription so this
+        // disposed instance is no longer retained by the AppDomain hook. Safe
+        // ordering — _disposed is already 1, so even a ProcessExit firing
+        // mid-Dispose no-ops; this unsubscribe just releases the reference.
+        AppDomain.CurrentDomain.ProcessExit -= OnAppDomainProcessExit;
         // PinkuDani Fix #3 (2026-05-21): clear the TUN-orphan flag on
         // teardown so a Dispose-then-rebuild path (uncommon but possible
         // in long-lived services) doesn't carry stale state.
