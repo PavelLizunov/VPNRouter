@@ -49,6 +49,30 @@ Before bumping anything:
    Expected: all pass.
 4. **If MainWindowViewModelCharacterizationTests failed with Windows hash drift**:
    bump `PinnedHashWindows` in `VPNRouter.Tests/MainWindowViewModelCharacterizationTests.cs` BEFORE Step 2 commit. The actual hash appears in the test output as `Actual: <hex>`.
+5. **Visual-diff gate (Windows-only — CI can't run this).** `VisualDiffTests`
+   has an `OperatingSystem.IsWindows()` skip guard, so the Linux/macOS CI
+   runners never execute the pixel-diff layer. Baseline drift therefore goes
+   INVISIBLE in CI — it slipped from v2.37 → v2.38 (DpiBypass/Telegram/Tools
+   redesign) and was only caught by a manual run on 2026-06-02. This dev-VM
+   pre-flight is the only place the diff actually runs, so it must run here:
+   ```bash
+   dotnet test VPNRouter.Tests/VPNRouter.Tests.csproj -c Release --no-build \
+     --filter "FullyQualifiedName~VisualDiffTests"
+   ```
+   Expected: 3/3 pass (DpiBypass / Telegram / Tools). Run it as its OWN
+   command (not folded into the step-3 filter) — it's `[AvaloniaFact]` and the
+   dispatcher-thread shutdown is cleaner when isolated.
+   - **Green** → proceed.
+   - **Red AND this ship intentionally restyled those pages** → the baseline is
+     stale, not the code. Refresh per `VPNRouter.Tests/CLAUDE.md` "Refresh
+     workflow когда страница интенционально меняется": run `PageScreenshotTests`,
+     **EYEBALL** the 3 fresh PNGs in `VPNRouter.Tests/screenshots/` (confirm no
+     clipped controls / overflow), `copy` each over
+     `VPNRouter.Tests/screenshots/baseline/`, re-run this gate until green, and
+     stage the refreshed baseline PNGs in THIS ship's Step-2 commit.
+   - **Red AND you did NOT touch those pages** → real visual regression
+     (control removed, theme inverted, layout shifted >~2 px). STOP and fix the
+     code before shipping; do NOT re-pin to hide it.
 
 ## Post-push verification (MANDATORY — was the v2.36.0-r6→r9 lesson)
 

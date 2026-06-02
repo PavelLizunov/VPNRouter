@@ -174,6 +174,14 @@ guard). Headless Skia рендерит чуть иначе на разных OS 
 проверяют view-tree assembly + bindings) работают на всех 3 платформах
 и покрывают cross-platform layer.
 
+**Следствие — drift невидим в CI.** Раз CI крутится на Linux, pixel-diff
+слой там НИКОГДА не выполняется. Baseline drift проскользнул v2.37 → v2.38
+(redesign DpiBypass/Telegram/Tools) и был пойман только ручным прогоном
+2026-06-02. Поэтому VisualDiffTests завязан как **pre-ship gate** на dev-VM:
+`ship-rolling-candidate` skill, Pre-flight step 5 — единственное место где
+diff реально гоняется. Если меняешь эти 3 страницы интенционально —
+refresh baseline в том же ship-commit (workflow выше).
+
 ## Roadmap
 
 - Расширить `VisualDiffTests` на Subscribe page, когда найдём способ
