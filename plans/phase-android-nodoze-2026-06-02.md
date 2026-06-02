@@ -66,6 +66,39 @@ not Play, so policy is moot anyway).
   - swipe from Recents → tunnel recovers (logcat shows the scheduled restart).
 - [ ] Gate 3 docs: VPNRouter.Android/CLAUDE.md no-doze note updated.
 
+## Outcome (device-verified 2026-06-02, A101BM / Android 12)
+
+Built clean APK (0 errors), installed + launched clean on the real phone (0 crashes
+through ~25 interactions). 1558 tests green, characterization hash re-pinned.
+
+**FIX#1 — PROVEN end-to-end.** The identical exemption intent presents the
+"Let app always run in background?" dialog; ALLOW adds the package to the
+`deviceidle` whitelist (`user,com.ninitux.vpnrouter,10367`), persists across
+force-stop. Once exempt, the FGS start is `SYSTEM_ALLOW_LISTED` (the exemption
+is exactly what allow-lists the background FGS start on Android 12).
+
+**Doze survival — PROVEN.** Tunnel up (tun0 `172.19.0.1/30`, `isForeground=true`)
+→ `dumpsys battery unplug` + `dumpsys deviceidle force-idle` → state `IDLE` →
+FGS still `isForeground=true`, tun0 still `POINTOPOINT,UP`, zero teardown logged.
+This is the user's core "выключается раз в несколько минут-часов" symptom,
+proven fixed when exempt.
+
+**FIX#2 onTaskRemoved — FIRES, and device-testing caught a real bug.** Swiping
+the app from Recents fired `AND-NODOZE: onTaskRemoved — tunnel active +
+battery-exempt; scheduled restart in 1.5s`. BUT this OEM (KYOCERA/BALMUDA)
+KEEPS the FGS alive on swipe (`isForeground=true` after swipe) — it does not
+`stopService`. The unconditional `ACTION_RESTART` then fired ~5s later and
+redundantly re-ran `startTunnel` (loaded last-good config, re-acquired the
+connect wake-lock), orphaning the live `boxService`/pfd and causing a spurious
+tunnel re-establish on every swipe.
+
+**Guard fix (added post-discovery):** `onStartCommand`'s restart/Always-on branch
+now no-ops when `boxService != null` ("tunnel already running — no-op (service
+survived the swipe)"). The recovery restart only rebuilds in a genuinely
+fresh/killed process (`boxService == null`), so OEMs that stopService still
+recover while OEMs that keep the FGS no longer suffer the redundant restart.
+Rebuilt + re-deployed + re-tested on device.
+
 ## Risk / rollback
 
 MEDIUM — touches the FGS start path. Mitigation: startForeground guard is

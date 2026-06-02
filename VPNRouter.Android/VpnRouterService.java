@@ -313,7 +313,18 @@ public final class VpnRouterService extends VpnService {
             // tunnel never actually established at boot.
             Log.i(LOG_TAG, "AND-NETRES: system-initiated start (action=" + action
                     + ") — attempting last-good config restore");
-            if (loadLastGoodConfig()) {
+            // v2.40.0 AND-NODOZE — guard against a redundant restart. The
+            // onTaskRemoved swipe-recovery schedules an ACTION_RESTART
+            // unconditionally (it can't know whether the OEM will actually
+            // stopService us on swipe). If the foreground service in fact
+            // survived, boxService is still live — re-running startTunnel here
+            // would orphan the old BoxService + ParcelFileDescriptor and cause
+            // a spurious ~2s tunnel re-establish on every swipe-away. Only
+            // restore in a genuinely fresh/killed process (boxService == null).
+            if (boxService != null) {
+                Log.i(LOG_TAG, "AND-NODOZE: restart/always-on intent but tunnel "
+                        + "already running — no-op (service survived the swipe)");
+            } else if (loadLastGoodConfig()) {
                 startTunnel();
             } else {
                 Log.w(LOG_TAG, "AND-NETRES: no last-good config saved; "

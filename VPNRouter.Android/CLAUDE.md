@@ -106,7 +106,12 @@ whitelist) and a swipe-away `stopService` had no recovery:
   (`ACTION_RESTART` → last-good-config restore branch). `START_STICKY` only
   covers a memory-pressure kill, not an OEM's explicit `stopService` on swipe.
   Gated on the exemption because a background FGS start is otherwise refused
-  on Android 12+ — so the prompt and the recovery are synergistic.
+  on Android 12+ — so the prompt and the recovery are synergistic. The restore
+  branch **no-ops when `boxService` is already live** ("service survived the
+  swipe") — device-found on A101BM, which keeps the FGS alive on swipe, so the
+  unconditional restart would otherwise redundantly re-establish the tunnel +
+  orphan the old `BoxService`/pfd. Recovery still rebuilds in a genuinely
+  killed/fresh process (`boxService == null`).
 - **`startForeground` guard** — wrapped in try/catch so a refused
   background-FGS-start (`ForegroundServiceStartNotAllowedException`) broadcasts
   `foreground-start-blocked` + `stopSelf` instead of crashing via the
