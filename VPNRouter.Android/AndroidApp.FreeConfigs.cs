@@ -1296,11 +1296,15 @@ public partial class AndroidApp
             }
 
             // v2.39.0 (audit P1): a row just became connectable (✓✓). If the
-            // user has nothing selected yet, auto-select this freshly verified
-            // row so the Connect CTA lights up without a manual tap; otherwise
-            // just re-evaluate the gate (it enables iff the selected row is the
-            // one that upgraded).
-            if (_fcSelectedEntry is null && _fcSearchList is not null &&
+            // user has no CONNECTABLE row selected yet — nothing selected, OR the
+            // selection is still a non-verified candidate (OnFcFound auto-selects
+            // the lowest-latency Ok row, and THAT one can fail deep verify while a
+            // later one passes) — promote selection to this freshly verified row
+            // so the Connect CTA lights up without a manual tap. We never steal a
+            // selection that is already Verified.
+            var selectedIsConnectable = _fcSelectedEntry is { } sel &&
+                                        sel.Status == FreeConfigStatus.Verified;
+            if (!selectedIsConnectable && _fcSearchList is not null &&
                 _fcSearchResults.Contains(entry))
                 _fcSearchList.SelectedItem = entry; // fires SelectionChanged -> gate
             else

@@ -660,6 +660,11 @@ public class CustomConfigInjectorTests
             .FirstOrDefault(r => r!["process_name"] != null) as JsonObject;
         Assert.NotNull(dnsRule);
         Assert.Equal("local-dns", dnsRule!["server"]?.ToString());
+
+        // ...but the DEFAULT dns.final must point at the REMOTE/proxy DNS server
+        // (vpn-dns), because the unmatched majority is tunnelled — otherwise
+        // their DNS leaks to the local resolver (audit DNS-leak follow-up).
+        Assert.Equal("vpn-dns", StjNodeHelpers.SelectToken(json, "dns.final")?.ToString());
     }
 
     [Fact]
@@ -689,6 +694,10 @@ public class CustomConfigInjectorTests
             .FirstOrDefault(r => r!["process_name"] != null) as JsonObject;
         Assert.NotNull(dnsRule);
         Assert.Equal("vpn-dns", dnsRule!["server"]?.ToString());
+
+        // Include split: the unmatched majority goes DIRECT, so dns.final stays
+        // on the local resolver (only the routed apps use vpn-dns above).
+        Assert.Equal("local-dns", StjNodeHelpers.SelectToken(json, "dns.final")?.ToString());
     }
 
     [Fact]
@@ -728,6 +737,10 @@ public class CustomConfigInjectorTests
 
         // The leak fix: final flips from the user's "direct" to the proxy tag.
         Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
+
+        // Full tunnel: ALL DNS must resolve through the remote/proxy server too,
+        // not the local resolver (DNS-leak follow-up).
+        Assert.Equal("vpn-dns", StjNodeHelpers.SelectToken(json, "dns.final")?.ToString());
     }
 
     [Fact]

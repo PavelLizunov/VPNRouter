@@ -135,6 +135,22 @@ app:
     }
 
     [Fact]
+    public void Json_NumericSecretValues_AreRedacted_NotPassedThroughAsNumbers()
+    {
+        // Regression (v2.39.0 audit): a Reality short_id is hex and can be ALL
+        // digits ("01234567"), and a Trojan/SS/TUIC password can be a numeric
+        // PIN. The _numberLike fast-path must NOT pass these string values
+        // through as "just a number" — they are credentials. A legitimate
+        // numeric port under a non-secret key must still survive.
+        var outp = DiagnosticsRedactor.RedactSingboxJson(
+            @"{ ""short_id"": ""01234567"", ""password"": ""86753099"", ""server_port"": 443 }");
+        Assert.DoesNotContain("01234567", outp);   // numeric short_id redacted
+        Assert.DoesNotContain("86753099", outp);   // numeric password redacted
+        Assert.Contains("443", outp);              // legitimate numeric port kept
+        Assert.Contains(DiagnosticsRedactor.Redacted, outp);
+    }
+
+    [Fact]
     public void Json_UrlKey_KeepsHostDropsToken()
     {
         var outp = DiagnosticsRedactor.RedactSingboxJson(

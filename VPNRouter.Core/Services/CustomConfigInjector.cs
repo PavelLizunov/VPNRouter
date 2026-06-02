@@ -201,6 +201,29 @@ public static class CustomConfigInjector
         }
         route["final"] = (isFullTunnel || isExcludeMode) ? proxyTag : "direct";
 
+        // Align dns.final with the routing policy too. StripUnsupportedFeatures
+        // above forces dns.final to the LOCAL resolver by default, which LEAKS
+        // DNS in full-tunnel / exclude mode: route.final = proxy tunnels the
+        // traffic, but every DNS query for it would still resolve through the
+        // direct/local resolver. Mirror ConfigGenerator.BuildDns exactly — full
+        // tunnel OR exclude mode OR StrictDns => resolve through the remote/proxy
+        // DNS server (vpn-dns); include split keeps the local resolver. Runs
+        // AFTER Strip so it wins over Strip's default-local assignment.
+        var dnsForFinal = config["dns"] as JsonObject;
+        var dnsServersForFinal = dnsForFinal?["servers"] as JsonArray;
+        if (dnsServersForFinal != null && dnsServersForFinal.Count > 0)
+        {
+            var wantRemoteDns = isFullTunnel || isExcludeMode || settings.App.StrictDns;
+            var dnsFinalTag = wantRemoteDns
+                ? FindRemoteDnsTag(dnsServersForFinal)
+                : FindLocalDnsTag(dnsServersForFinal);
+            // Only override when we actually resolved a tag of the wanted
+            // direction; otherwise leave Strip's assignment (the user's config
+            // may not carry a remote DNS server to route through).
+            if (!string.IsNullOrEmpty(dnsFinalTag))
+                dnsForFinal["final"] = dnsFinalTag;
+        }
+
         EnsureDefaultDomainResolver(config);
         EnsureClashApi(config, settings.SingBox.ClashApi);
         EnsureUrltest(config);

@@ -96,6 +96,21 @@ public static class DiagnosticsRedactor
         "wgturn_url", "endpoint", "source", "remote",
     };
 
+    // Credential-bearing keys whose value must NEVER survive as "just a number".
+    // A Reality short_id is hex (can be entirely digits, e.g. "01234567") and a
+    // Trojan/Shadowsocks/Hysteria/TUIC password can be an all-digit PIN — without
+    // this set the _numberLike fast-path in RedactScalar would pass such values
+    // through verbatim, leaking a credential into the exported bundle. These keys
+    // are absent from SafeKeys, so skipping the numeric/bool short-circuit makes
+    // them fall through to the *** redaction. NOTE: public_key / pbk are PUBLIC
+    // (Reality public key is public-by-design) and intentionally NOT here.
+    private static readonly HashSet<string> SecretKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "uuid", "password", "passwd", "pass", "secret", "token",
+        "short_id", "shortid", "private_key", "privatekey", "api_key", "apikey",
+        "psk", "pre_shared_key", "preshared_key", "auth", "credential", "key",
+    };
+
     private static readonly Regex _urlKeepHost = new(
         @"^(\w+://[^/?#\s]+).*$", RegexOptions.Compiled);
 
@@ -241,9 +256,18 @@ public static class DiagnosticsRedactor
     private static string RedactScalar(string? key, string value)
     {
         if (string.IsNullOrEmpty(value)) return value;
-        // Numbers / booleans are never credentials — keep regardless of key.
-        if (_numberLike.IsMatch(value)) return value;
-        if (value is "true" or "false" or "True" or "False") return value;
+
+        // Credential keys must NEVER take the numeric/bool fast-path below — a
+        // Reality short_id or a numeric password is all-digits yet still secret.
+        // They fall straight through to the allowlist, which redacts them (these
+        // keys are deliberately not in SafeKeys).
+        bool isSecretKey = key != null && SecretKeys.Contains(key);
+        if (!isSecretKey)
+        {
+            // Numbers / booleans are never credentials — keep regardless of key.
+            if (_numberLike.IsMatch(value)) return value;
+            if (value is "true" or "false" or "True" or "False") return value;
+        }
 
         if (key != null && UrlKeys.Contains(key))
             return RedactUrlKeepHost(value);
