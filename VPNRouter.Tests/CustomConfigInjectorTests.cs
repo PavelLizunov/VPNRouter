@@ -335,6 +335,48 @@ public class CustomConfigInjectorTests
     }
     """;
 
+    // ── Like RealWorldConfig but with REAL crypto material (valid x25519
+    //    Reality key, valid UUID, hex short_id) so `sing-box check` accepts
+    //    it. The placeholder-keyed RealWorldConfig is fine for structural
+    //    assertions but fails `check` on "invalid public_key". ──
+    private const string CheckableConfig = """
+    {
+      "dns": {
+        "servers": [
+          {"tag": "remote", "address": "tls://1.1.1.1", "detour": "proxy"},
+          {"tag": "local", "address": "223.5.5.5", "detour": "direct"}
+        ],
+        "rules": [],
+        "final": "remote",
+        "strategy": "prefer_ipv4"
+      },
+      "inbounds": [{
+        "type": "tun", "auto_route": true, "strict_route": true,
+        "address": ["172.19.0.1/30"]
+      }],
+      "outbounds": [
+        {"tag": "proxy", "type": "selector", "outbounds": ["vless-reality", "tuic-v5"]},
+        {"tag": "vless-reality", "type": "vless", "server": "1.2.3.4", "server_port": 443,
+         "uuid": "c947ffd3-d5eb-4888-a54e-ba8fa05ff667", "flow": "xtls-rprx-vision",
+         "tls": {"enabled": true, "server_name": "yahoo.com", "utls": {"enabled": true, "fingerprint": "chrome"},
+                 "reality": {"enabled": true, "public_key": "hAk-08Tup5L1rQXLL7JwMCGYAM3tytE4S_3iOWD4lmE", "short_id": "0123456789abcdef"}}},
+        {"tag": "tuic-v5", "type": "tuic", "server": "1.2.3.4", "server_port": 443,
+         "uuid": "c947ffd3-d5eb-4888-a54e-ba8fa05ff667", "password": "testpass",
+         "tls": {"enabled": true, "server_name": "yahoo.com"}},
+        {"tag": "direct", "type": "direct"},
+        {"tag": "dns-out", "type": "dns"}
+      ],
+      "route": {
+        "rules": [
+          {"protocol": "dns", "outbound": "dns-out"},
+          {"ip_is_private": true, "outbound": "direct"}
+        ],
+        "final": "proxy",
+        "auto_detect_interface": true
+      }
+    }
+    """;
+
     [Fact]
     public void Inject_RealWorldConfig_DnsOptimized()
     {
@@ -576,5 +618,179 @@ public class CustomConfigInjectorTests
         var processRule = routeRules!.FirstOrDefault(r => r["process_name"] != null);
         Assert.NotNull(processRule);
         Assert.Equal("custom-proxy", processRule!["outbound"]?.ToString());
+    }
+
+    // ─── v2.39.0 audit P0 #147 — Apps Include/Exclude + Full Tunnel policy ──
+    //
+    // Custom-JSON mode must honour the SAME per-app routing policy as
+    // generated mode (ConfigGenerator.BuildRoute). Before the fix, Inject
+    // always routed the scanner list THROUGH the proxy and never forced
+    // final=proxy for full tunnel, so EXCLUDE mode was inverted (the apps the
+    // user wanted KEPT OUT of the VPN were the only ones tunnelled) and FULL
+    // tunnel leaked everything direct when the user's JSON carried
+    // final=direct. These tests pin the corrected contract.
+
+    [Fact]
+    public void Inject_ExcludeMode_Split_ListedAppDirect_FinalProxy()
+    {
+        var settings = CreateSettings();
+        settings.App.RoutingAppsMode = "exclude";
+        settings.App.RoutingAppsExclude = new List<string> { "Steam.exe" };
+
+        // The scanner list is passed but must be IGNORED in exclude mode —
+        // RoutingAppsExclude is the source of truth.
+        var result = CustomConfigInjector.Inject(ActionConfig, new[] { "Discord.exe" }, settings);
+        var json = (JsonNode.Parse(result) as JsonObject)!;
+        var rules = StjNodeHelpers.SelectToken(json, "route.rules") as JsonArray;
+
+        // The excluded app is pinned to "direct" (bypasses the VPN), NOT proxy.
+        var procRule = rules!.FirstOrDefault(r => r!["process_name"] != null) as JsonObject;
+        Assert.NotNull(procRule);
+        Assert.Equal("direct", procRule!["outbound"]?.ToString());
+        var names = (procRule["process_name"] as JsonArray)!.Select(t => t!.ToString()).ToList();
+        Assert.Contains("Steam.exe", names);
+        Assert.DoesNotContain("Discord.exe", names); // scanner list ignored
+
+        // Everything ELSE flows through the proxy — route.final = proxy tag,
+        // NOT "direct". This is the inversion fix.
+        Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
+
+        // The excluded app's DNS resolves locally (matches its direct traffic).
+        var dnsRule = (StjNodeHelpers.SelectToken(json, "dns.rules") as JsonArray)!
+            .FirstOrDefault(r => r!["process_name"] != null) as JsonObject;
+        Assert.NotNull(dnsRule);
+        Assert.Equal("local-dns", dnsRule!["server"]?.ToString());
+    }
+
+    [Fact]
+    public void Inject_IncludeMode_ExplicitList_OverridesScannerList()
+    {
+        var settings = CreateSettings();
+        settings.App.RoutingAppsMode = "include";
+        settings.App.RoutingAppsInclude = new List<string> { "Firefox.exe" };
+
+        var result = CustomConfigInjector.Inject(ActionConfig, new[] { "Discord.exe" }, settings);
+        var json = (JsonNode.Parse(result) as JsonObject)!;
+        var rules = StjNodeHelpers.SelectToken(json, "route.rules") as JsonArray;
+
+        var procRule = rules!.FirstOrDefault(r => r!["process_name"] != null) as JsonObject;
+        Assert.NotNull(procRule);
+        // Include mode routes the listed apps THROUGH the proxy.
+        Assert.Equal("proxy", procRule!["outbound"]?.ToString());
+        var names = (procRule["process_name"] as JsonArray)!.Select(t => t!.ToString()).ToList();
+        Assert.Contains("Firefox.exe", names);      // explicit include honoured
+        Assert.DoesNotContain("Discord.exe", names); // scanner list overridden
+
+        // Split include → everything else direct.
+        Assert.Equal("direct", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
+
+        // Include DNS resolves through the remote/proxy DNS server.
+        var dnsRule = (StjNodeHelpers.SelectToken(json, "dns.rules") as JsonArray)!
+            .FirstOrDefault(r => r!["process_name"] != null) as JsonObject;
+        Assert.NotNull(dnsRule);
+        Assert.Equal("vpn-dns", dnsRule!["server"]?.ToString());
+    }
+
+    [Fact]
+    public void Inject_IncludeMode_EmptyExplicitList_FallsBackToScannerList()
+    {
+        // The override path must NOT regress users who never opened the Apps
+        // tab: empty RoutingAppsInclude → use the legacy scanner list verbatim.
+        var settings = CreateSettings();
+        settings.App.RoutingAppsMode = "include";
+        settings.App.RoutingAppsInclude = new List<string>(); // empty
+
+        var result = CustomConfigInjector.Inject(ActionConfig, new[] { "Discord.exe" }, settings);
+        var json = (JsonNode.Parse(result) as JsonObject)!;
+        var rules = StjNodeHelpers.SelectToken(json, "route.rules") as JsonArray;
+
+        var procRule = rules!.FirstOrDefault(r => r!["process_name"] != null) as JsonObject;
+        Assert.NotNull(procRule);
+        var names = (procRule!["process_name"] as JsonArray)!.Select(t => t!.ToString()).ToList();
+        Assert.Contains("Discord.exe", names);
+        Assert.Equal("proxy", procRule["outbound"]?.ToString());
+        Assert.Equal("direct", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
+    }
+
+    [Fact]
+    public void Inject_FullTunnel_NoProcessRules_FinalProxy()
+    {
+        var settings = CreateSettings();
+        settings.App.RoutingMode = "full";
+
+        // ActionConfig's original route.final is "direct" — the pre-fix leak.
+        var result = CustomConfigInjector.Inject(ActionConfig, new[] { "Discord.exe" }, settings);
+        var json = (JsonNode.Parse(result) as JsonObject)!;
+        var rules = StjNodeHelpers.SelectToken(json, "route.rules") as JsonArray;
+
+        // Full tunnel: NO per-app process rules (everything via final).
+        Assert.DoesNotContain(rules!, r => r!["process_name"] != null);
+
+        // The leak fix: final flips from the user's "direct" to the proxy tag.
+        Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
+    }
+
+    [Fact]
+    public void Inject_FullTunnel_OverridesUserFinalDirect_Selector()
+    {
+        // LegacyConfig uses a SELECTOR tagged "proxy" and route.final "proxy".
+        // Flip the user's JSON to a leaky final=direct, then assert full tunnel
+        // restores final to the selector tag regardless.
+        var leaky = LegacyConfig.Replace("\"final\": \"proxy\"", "\"final\": \"direct\"");
+        var settings = CreateSettings();
+        settings.App.RoutingMode = "full";
+
+        var result = CustomConfigInjector.Inject(leaky, Array.Empty<string>(), settings);
+        var json = (JsonNode.Parse(result) as JsonObject)!;
+
+        Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
+    }
+
+    // ── Integration: generated mode-configs must pass `sing-box check` ──
+
+    [Theory]
+    [InlineData("exclude", "split")]
+    [InlineData("include", "split")]
+    [InlineData("include", "full")]
+    public void Inject_ModePolicies_PassSingBoxCheck(string appsMode, string routingMode)
+    {
+        var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
+        if (!File.Exists(singBoxPath))
+            return; // CI without the binary — skip
+
+        var settings = CreateSettings();
+        settings.App.RoutingAppsMode = appsMode;
+        settings.App.RoutingMode = routingMode;
+        if (appsMode == "exclude")
+            settings.App.RoutingAppsExclude = new List<string> { "Steam.exe" };
+        else
+            settings.App.RoutingAppsInclude = new List<string> { "Firefox.exe" };
+
+        var result = CustomConfigInjector.Inject(CheckableConfig, new[] { "chrome.exe" }, settings);
+
+        var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-mode-{appsMode}-{routingMode}-{Guid.NewGuid()}.json");
+        try
+        {
+            File.WriteAllText(tempPath, result);
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = singBoxPath,
+                Arguments = $"check -c \"{tempPath}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi)!;
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(10000);
+            Assert.True(proc.ExitCode == 0,
+                $"sing-box check failed for {appsMode}/{routingMode} (exit {proc.ExitCode}):\n{stderr}\n\nConfig:\n{result}");
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+        }
     }
 }

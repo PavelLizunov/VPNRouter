@@ -97,23 +97,79 @@ public static class CustomConfigInjector
 
         // Filter wildcards — sing-box process_name doesn't support globs.
         // Preserve original case — sing-box matching is case-sensitive.
-        var processes = processNames
+        var scannerProcesses = processNames
             .Where(p => !p.Contains('*') && !p.Contains('?'))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        // v2.39.0 (apps/public-configs audit P0 #147): custom-JSON mode must
+        // honour the SAME Apps Include/Exclude + Full-Tunnel policy as generated
+        // mode (ConfigGenerator.BuildRoute). Before this, Inject ALWAYS routed
+        // the scanner list THROUGH the proxy and never forced final=proxy for
+        // full tunnel, so two leaks were possible:
+        //   (a) EXCLUDE mode was inverted — the apps the user explicitly wanted
+        //       KEPT OUT of the VPN were the only ones tunnelled, and everything
+        //       else (which should have been tunnelled) fell to final=direct.
+        //   (b) FULL tunnel leaked everything direct whenever the user's JSON
+        //       carried final=direct (or omitted final).
+        // The block below mirrors ConfigGenerator exactly.
+        var routingAppsMode = (settings.App.RoutingAppsMode ?? "include")
+            .ToLowerInvariant();
+        var isExcludeMode = routingAppsMode == "exclude";
+        var isFullTunnel = (settings.App.RoutingMode ?? "split")
+            .Equals("full", StringComparison.OrdinalIgnoreCase);
+
+        // Resolve the effective per-app list the SAME way ConfigGenerator does:
+        // exclude → RoutingAppsExclude; include → explicit RoutingAppsInclude
+        // when the user populated it, else the legacy scanner list (keeps users
+        // who never opened the Apps tab byte-for-byte on their old behaviour).
+        List<string> processes;
+        if (isExcludeMode)
+        {
+            processes = (settings.App.RoutingAppsExclude ?? new List<string>())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Where(p => !p.Contains('*') && !p.Contains('?'))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        else
+        {
+            var explicitInclude = (settings.App.RoutingAppsInclude ?? new List<string>())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Where(p => !p.Contains('*') && !p.Contains('?'))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            processes = explicitInclude.Count > 0 ? explicitInclude : scannerProcesses;
+        }
+
         bool isActionBased = DetectActionFormat(config);
 
-        if (processes.Count > 0)
+        // Resolve the proxy outbound tag ONCE — both the per-app route rules and
+        // route.final reference it. A custom config keeps its OWN selector tag,
+        // so we can't hard-code "proxy" the way ConfigGenerator (which builds the
+        // outbounds itself) does.
+        var proxyTag = FindProxyOutboundTag(config);
+
+        // Per-app routing applies ONLY in split tunnel. Full tunnel sends every
+        // process through route.final = proxy below, so no per-app rules needed.
+        if (!isFullTunnel && processes.Count > 0)
         {
-            var proxyTag = FindProxyOutboundTag(config);
-
-            // Auto-detect TCP/UDP split: if selector has both VLESS and QUIC-based
-            // (TUIC/Hysteria2) outbounds, route TCP→VLESS, UDP→QUIC for optimal performance
-            var (tcpTag, udpTag) = DetectTcpUdpSplit(config, proxyTag);
-
-            InjectRouteRules(config, processes, tcpTag, udpTag, isActionBased);
-            InjectDnsRules(config, processes, isActionBased);
+            if (isExcludeMode)
+            {
+                // Exclude: the listed apps BYPASS the VPN (→ direct). Their DNS
+                // resolves locally too, matching their direct traffic path.
+                InjectRouteRules(config, processes, "direct", null, isActionBased);
+                InjectDnsRules(config, processes, isActionBased, useRemoteDns: false);
+            }
+            else
+            {
+                // Include: the listed apps go THROUGH the proxy. Auto-detect a
+                // TCP/UDP split (VLESS for TCP, TUIC/Hysteria2 for UDP) when the
+                // selector carries both, for optimal voice/video performance.
+                var (tcpTag, udpTag) = DetectTcpUdpSplit(config, proxyTag);
+                InjectRouteRules(config, processes, tcpTag, udpTag, isActionBased);
+                InjectDnsRules(config, processes, isActionBased, useRemoteDns: true);
+            }
         }
 
         // Inject Russian geo bypass — RU sites/IPs go direct (real IP),
@@ -127,17 +183,23 @@ public static class CustomConfigInjector
         // Migrate legacy features to sing-box 1.13+ format
         StripUnsupportedFeatures(config, settings.Tun.RouteExcludeAddress, settings.App.ForceIpv4Only, settings.App.StrictDns);
 
-        // Align route.final with routing_mode setting
-        var isSplitTunnel = !(settings.App.RoutingMode ?? "split")
-            .Equals("full", StringComparison.OrdinalIgnoreCase);
-        if (isSplitTunnel)
+        // Align route.final with the routing policy — mirrors
+        // ConfigGenerator.BuildRoute's finalOutbound: full tunnel OR exclude
+        // mode send everything-else through the proxy; include split sends
+        // everything-else direct. This is the backstop that closes the
+        // full-tunnel leak (unmatched traffic could otherwise fall to a
+        // user-supplied final=direct) AND completes the exclude-mode flip
+        // (listed apps pinned to direct above, everything else → proxy here).
+        // Fail-closed: create the route section if the custom config omits it,
+        // so a full-tunnel config without a route block still pins final=proxy
+        // instead of leaking on sing-box's implicit default.
+        var route = config["route"] as JsonObject;
+        if (route == null)
         {
-            // Split tunnel: only matched processes go through VPN, everything else direct.
-            // User config may have "final":"proxy" (full tunnel) — override to "direct".
-            var route = config["route"] as JsonObject;
-            if (route != null)
-                route["final"] = "direct";
+            route = new JsonObject { ["rules"] = new JsonArray() };
+            config["route"] = route;
         }
+        route["final"] = (isFullTunnel || isExcludeMode) ? proxyTag : "direct";
 
         EnsureDefaultDomainResolver(config);
         EnsureClashApi(config, settings.SingBox.ClashApi);
@@ -600,7 +662,7 @@ public static class CustomConfigInjector
 
     // ─── Private: Inject DNS rules ───────────────────────────────────────────
 
-    private static void InjectDnsRules(JsonObject config, List<string> processes, bool isActionBased)
+    private static void InjectDnsRules(JsonObject config, List<string> processes, bool isActionBased, bool useRemoteDns)
     {
         var dns = config["dns"] as JsonObject;
         if (dns == null) return; // no DNS config → user handles DNS externally
@@ -608,24 +670,20 @@ public static class CustomConfigInjector
         var servers = dns["servers"] as JsonArray;
         if (servers == null || servers.Count == 0) return;
 
-        // Find the remote DNS server tag: first server with a proxy detour
-        string? remoteTag = null;
-        foreach (var server in servers)
-        {
-            if (server is not JsonObject sObj) continue;
-            var detour = StjNodeHelpers.AsString(sObj["detour"]);
-            if (!string.IsNullOrEmpty(detour) && detour != "direct")
-            {
-                remoteTag = StjNodeHelpers.AsString(sObj["tag"]);
-                break;
-            }
-        }
+        // Pick the DNS server the listed processes resolve through.
+        //   Include mode (useRemoteDns) → the remote/proxy DNS server so the
+        //     tunnelled apps don't leak their DNS queries to the ISP.
+        //   Exclude mode → a LOCAL server so the bypassed apps resolve direct,
+        //     matching their direct traffic path (set by InjectRouteRules above).
+        var targetTag = useRemoteDns
+            ? FindRemoteDnsTag(servers)
+            : FindLocalDnsTag(servers);
 
         // Fallback: first server
-        if (string.IsNullOrEmpty(remoteTag))
-            remoteTag = StjNodeHelpers.AsString((servers[0] as JsonObject)?["tag"]);
+        if (string.IsNullOrEmpty(targetTag))
+            targetTag = StjNodeHelpers.AsString((servers[0] as JsonObject)?["tag"]);
 
-        if (string.IsNullOrEmpty(remoteTag)) return;
+        if (string.IsNullOrEmpty(targetTag)) return;
 
         var rules = dns["rules"] as JsonArray;
         if (rules == null)
@@ -649,7 +707,7 @@ public static class CustomConfigInjector
             {
                 ["process_name"] = BuildProcessNameArray(processes),
                 ["action"] = "route",
-                ["server"] = remoteTag
+                ["server"] = targetTag
             };
         }
         else
@@ -657,11 +715,42 @@ public static class CustomConfigInjector
             dnsRule = new JsonObject
             {
                 ["process_name"] = BuildProcessNameArray(processes),
-                ["server"] = remoteTag
+                ["server"] = targetTag
             };
         }
 
         rules.Insert(0, dnsRule);
+    }
+
+    /// <summary>First DNS server routed through the proxy (non-empty detour
+    /// other than "direct"). Returns null when every server is local.</summary>
+    private static string? FindRemoteDnsTag(JsonArray servers)
+    {
+        foreach (var server in servers)
+        {
+            if (server is not JsonObject sObj) continue;
+            var detour = StjNodeHelpers.AsString(sObj["detour"]);
+            if (!string.IsNullOrEmpty(detour) && detour != "direct")
+                return StjNodeHelpers.AsString(sObj["tag"]);
+        }
+        return null;
+    }
+
+    /// <summary>First DNS server that resolves locally (direct/dns-direct detour,
+    /// or a local-type server with no detour). Shared with
+    /// <see cref="EnsureDefaultDomainResolver"/> so the two stay in sync.</summary>
+    private static string? FindLocalDnsTag(JsonArray servers)
+    {
+        foreach (var server in servers)
+        {
+            if (server is not JsonObject sObj) continue;
+            var detour = StjNodeHelpers.AsString(sObj["detour"]);
+            var type = StjNodeHelpers.AsString(sObj["type"]);
+            if (detour == "direct" || detour == "dns-direct" ||
+                string.IsNullOrEmpty(detour) && (type == "local" || type == "udp" || type == "dhcp"))
+                return StjNodeHelpers.AsString(sObj["tag"]);
+        }
+        return null;
     }
 
     // ─── Private: Inject Russian geo bypass ───────────────────────────────
@@ -936,19 +1025,7 @@ public static class CustomConfigInjector
         var servers = StjNodeHelpers.SelectToken(config, "dns.servers") as JsonArray;
         if (servers == null || servers.Count == 0) return;
 
-        string? localTag = null;
-        foreach (var server in servers)
-        {
-            if (server is not JsonObject sObj) continue;
-            var detour = StjNodeHelpers.AsString(sObj["detour"]);
-            var type = StjNodeHelpers.AsString(sObj["type"]);
-            if (detour == "direct" || detour == "dns-direct" ||
-                string.IsNullOrEmpty(detour) && (type == "local" || type == "udp" || type == "dhcp"))
-            {
-                localTag = StjNodeHelpers.AsString(sObj["tag"]);
-                break;
-            }
-        }
+        var localTag = FindLocalDnsTag(servers);
 
         // Fallback: first server
         if (string.IsNullOrEmpty(localTag))
