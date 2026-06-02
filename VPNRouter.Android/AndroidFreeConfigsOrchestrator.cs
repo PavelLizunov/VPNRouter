@@ -131,9 +131,19 @@ internal sealed class AndroidFreeConfigsOrchestrator
     /// 2) Filter by ExcludeRu and IP-dedupe;
     /// 3) Test TCP+TLS in <paramref name="batchSize"/>-entry batches
     ///    (parallel within batch, capped via FreeConfigTester.MaxConcurrency)
-    ///    — surface successful entries as they land via <see cref="OnFound"/>;
-    /// 4) Stop early when <paramref name="target"/> Ok entries collected
-    ///    OR when the user cancels.
+    ///    — surface candidates as they land via <see cref="OnFound"/>;
+    /// 4) Deep-verify candidates (real HTTP through libbox) and stop when
+    ///    <paramref name="target"/> entries pass DEEP verify, the queue is
+    ///    exhausted, or the user cancels.
+    ///
+    /// <para>v2.39.0 (public-configs audit P1): the target counts VERIFIED
+    /// entries, not TCP/TLS candidates. Pre-fix the run stopped once
+    /// <paramref name="target"/> Ok candidates were collected and only then
+    /// deep-verified them — if several failed deep verify the user was left
+    /// with fewer than <paramref name="target"/> connectable configs and the
+    /// search never back-filled from the remaining pool. Now deep verify is
+    /// interleaved per batch and only Verified entries count toward the target
+    /// and are persisted to the durable Saved list.</para>
     /// </summary>
     public async Task FindAsync(
         int target,
@@ -223,73 +233,65 @@ internal sealed class AndroidFreeConfigsOrchestrator
 
                 processed += slice.Count;
 
-                // Pluck Ok entries that meet the ping threshold + new host.
-                foreach (var cfg in slice
+                // TCP/TLS candidates from this batch (ping threshold + new
+                // host), best latency first. They surface immediately as
+                // single-check rows so the user sees progress, but the UI keeps
+                // Connect DISABLED until deep verify upgrades a row to Verified.
+                var candidates = slice
                     .Where(c => c.Status == FreeConfigStatus.Ok &&
                                 c.LatencyMs > 0 &&
                                 c.LatencyMs <= maxPingMs)
-                    .OrderBy(c => c.LatencyMs))
-                {
-                    if (verifiedThisRun.Count >= target) break;
-                    if (!foundHosts.Add(cfg.Host)) continue;
+                    .OrderBy(c => c.LatencyMs)
+                    .Where(c => foundHosts.Add(c.Host))
+                    .ToList();
 
-                    verifiedThisRun.Add(cfg);
-                    UpsertSaved(cfg);
-                    OnFound?.Invoke(cfg);
-                    OnProgress?.Invoke(verifiedThisRun.Count, target);
-                    OnStatus?.Invoke(string.Format(Localization.FcStatusFound,
-                        verifiedThisRun.Count, target));
-                }
-            }
+                foreach (var cand in candidates)
+                    OnFound?.Invoke(cand);
 
-            // Bug #1 (2026-05-11): Deep Verify pass on the entries we just
-            // surfaced. Runs sequentially — libbox concurrent-instance
-            // behavior is uncharted (sing-box.Service was designed for one
-            // active instance per process; SagerNet's reference Android
-            // app never tested otherwise). Cost is ~3-5 s per entry on
-            // this hardware, so 10 entries ≈ 30-50 s tail latency after
-            // the user already sees them as single&#x202F;✓.
-            //
-            // Failure modes are all isolated by AndroidFreeConfigDeepVerifier:
-            // bridge unavailable → returns silently; libbox throws →
-            // logged + entry stays Ok (single ✓); per-config timeout →
-            // entry stays Ok. None of these abort the pass — we always
-            // continue to the next entry.
-            if (verifiedThisRun.Count > 0)
-            {
-                OnStatus?.Invoke(string.Format(Localization.FcStatusDeepVerifying,
-                    0, verifiedThisRun.Count));
-                int deepOk = 0;
-                for (int dvi = 0; dvi < verifiedThisRun.Count; dvi++)
+                // Deep-verify candidates (sequential - libbox runs one box at a
+                // time; concurrent-instance behavior is uncharted) until we
+                // reach the target VERIFIED count or this batch's candidates
+                // drain. Only Verified entries count toward the target and get
+                // persisted to the durable Saved list - a candidate that fails
+                // deep verify stays a single-check row and the loop pulls more
+                // from later batches.
+                //
+                // Failure modes are isolated by AndroidFreeConfigDeepVerifier:
+                // bridge unavailable -> returns silently; libbox throws ->
+                // logged + entry stays Ok; per-config timeout -> entry stays Ok.
+                // None abort the pass - we always continue to the next entry.
+                foreach (var cand in candidates)
                 {
                     if (ct.IsCancellationRequested) break;
-                    var entry = verifiedThisRun[dvi];
+                    if (verifiedThisRun.Count >= target) break;
+
+                    OnStatus?.Invoke(string.Format(Localization.FcStatusDeepVerifying,
+                        verifiedThisRun.Count, target));
                     try
                     {
-                        await _deepVerifier.VerifyOneAsync(entry, ct);
+                        await _deepVerifier.VerifyOneAsync(cand, ct);
                     }
                     catch (OperationCanceledException) { throw; }
                     catch (Exception ex)
                     {
                         _logger.Warning(ex, "[Android.FreeConfigs] deep verify threw for {host}:{port}",
-                            entry.Host, entry.Port);
+                            cand.Host, cand.Port);
                     }
 
-                    if (entry.Status == FreeConfigStatus.Verified)
+                    if (cand.Status == FreeConfigStatus.Verified)
                     {
-                        deepOk++;
-                        // Persist the upgraded entry back into the saved
-                        // snapshot so a re-open shows ✓✓ for it without
-                        // re-running the verify pass.
-                        UpsertSaved(entry);
-                        OnEntryUpgraded?.Invoke(entry);
+                        verifiedThisRun.Add(cand);
+                        UpsertSaved(cand);              // persist ONLY verified
+                        OnEntryUpgraded?.Invoke(cand);  // upgrades badge, enables Connect
+                        OnProgress?.Invoke(verifiedThisRun.Count, target);
+                        OnStatus?.Invoke(string.Format(Localization.FcStatusFound,
+                            verifiedThisRun.Count, target));
                     }
-                    OnStatus?.Invoke(string.Format(Localization.FcStatusDeepVerifying,
-                        dvi + 1, verifiedThisRun.Count));
                 }
-                _logger.Information("[Android.FreeConfigs] deep verify: {ok}/{total} upgraded to ✓✓",
-                    deepOk, verifiedThisRun.Count);
             }
+
+            _logger.Information("[Android.FreeConfigs] find complete: {n}/{target} verified",
+                verifiedThisRun.Count, target);
 
             // Persist cumulative saved set + emit final status.
             try

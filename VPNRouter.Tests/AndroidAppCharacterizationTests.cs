@@ -71,8 +71,10 @@ public class AndroidAppCharacterizationTests
     // Source-surface hash includes const declarations, so the drift is
     // intentional and matches the Wave 9 invariant: only bump on intentional
     // surface change.
+    // v2.39.0 bump (public-configs audit P1): added ApplyFcConnectGate private
+    // method in AndroidApp.FreeConfigs.cs (Verified-only Connect gate).
     private const string PinnedHash =
-        "9e459d5758f0e9d3a516ab1a55eccb3973e54853ab0259585fdf4b8f88c7e3e8";
+        "3006ccd7e2afd2b31734d24519b09e86220a30818e5e682ad5bfd5d0e872945b";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()

@@ -2690,6 +2690,13 @@ public static class Strings
         ? "Не удалось применить конфиг — список серверов не тронут"
         : "Couldn't apply config — your server list is unchanged";
 
+    // v2.39.0 (public-configs audit P1): backstop message if a public config
+    // that hasn't passed deep verify is somehow tapped — Connect is gated on
+    // Verified (✓✓) status; a single-✓ TCP/TLS candidate is not connectable.
+    public static string FcConnectNeedsVerify => Ru
+        ? "Дождитесь проверки конфига (✓✓) перед подключением."
+        : "Wait for the config to be verified (✓✓) before connecting.";
+
     public static string MenuItemSettings => Ru ? "Настройки" : "Settings";
 
     public static string SettingsTitle => Ru ? "Настройки" : "Settings";

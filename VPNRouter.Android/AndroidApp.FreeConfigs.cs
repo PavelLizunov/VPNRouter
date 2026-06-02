@@ -1040,6 +1040,22 @@ public partial class AndroidApp
 
     // ── Selection + Use ───────────────────────────────────────────────────
 
+    /// <summary>
+    /// v2.39.0 (public-configs audit P1): the Connect CTA is enabled ONLY for a
+    /// deep-verified (✓✓) public config. A TCP/TLS candidate (single ✓) can be
+    /// selected to inspect it, but Connect stays disabled until deep verify
+    /// confirms real connectivity. Saved-tab rows are persisted Verified-only so
+    /// they pass; a legacy Ok row from an older cache stays gated until it is
+    /// re-verified. Returns the resulting enabled state.
+    /// </summary>
+    private bool ApplyFcConnectGate()
+    {
+        var verified = _fcSelectedEntry is { } e &&
+                       e.Status == FreeConfigStatus.Verified;
+        if (_fcUseButton is not null) _fcUseButton.IsEnabled = verified;
+        return verified;
+    }
+
     private void OnFreeConfigsSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         // Remember which list the selection came from so the other one's
@@ -1047,7 +1063,9 @@ public partial class AndroidApp
         if (sender is ListBox box && box.SelectedItem is FreeConfigEntry entry)
         {
             _fcSelectedEntry = entry;
-            if (_fcUseButton is not null) _fcUseButton.IsEnabled = true;
+            // Gate Connect on deep-verify status (audit P1) instead of
+            // enabling on any selection.
+            ApplyFcConnectGate();
 
             if (ReferenceEquals(box, _fcSearchList) && _fcSavedList is not null)
                 _fcSavedList.SelectedItem = null;
@@ -1071,6 +1089,15 @@ public partial class AndroidApp
 
         var entry = _fcSelectedEntry;
         if (entry is null) return;
+        // v2.39.0 (audit P1) backstop for the Verified-only Connect gate: never
+        // connect to a public config that hasn't passed deep verify, even if a
+        // UI path re-enabled the button. The button should already be disabled
+        // for non-verified rows (ApplyFcConnectGate), this is defence-in-depth.
+        if (entry.Status != FreeConfigStatus.Verified)
+        {
+            ShowMenuFeedback(Localization.FcConnectNeedsVerify);
+            return;
+        }
         if (string.IsNullOrEmpty(entry.RawUri)) return;
 
         // Bug-AND-021 (2026-05-17, user-reported "после подключения не
@@ -1267,6 +1294,17 @@ public partial class AndroidApp
                     break;
                 }
             }
+
+            // v2.39.0 (audit P1): a row just became connectable (✓✓). If the
+            // user has nothing selected yet, auto-select this freshly verified
+            // row so the Connect CTA lights up without a manual tap; otherwise
+            // just re-evaluate the gate (it enables iff the selected row is the
+            // one that upgraded).
+            if (_fcSelectedEntry is null && _fcSearchList is not null &&
+                _fcSearchResults.Contains(entry))
+                _fcSearchList.SelectedItem = entry; // fires SelectionChanged -> gate
+            else
+                ApplyFcConnectGate();
         });
     }
 

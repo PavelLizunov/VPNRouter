@@ -825,6 +825,7 @@ internal static class Localization
     public static string FcUseSelected => global::VPNRouter.Core.Localization.Strings.FcUseSelected;
     public static string FcUsedToast => global::VPNRouter.Core.Localization.Strings.FcUsedToast;
     public static string FcApplyFailed => global::VPNRouter.Core.Localization.Strings.FcApplyFailed;
+    public static string FcConnectNeedsVerify => global::VPNRouter.Core.Localization.Strings.FcConnectNeedsVerify;
     public static string MenuItemSettings => global::VPNRouter.Core.Localization.Strings.MenuItemSettings;
     public static string SettingsTitle => global::VPNRouter.Core.Localization.Strings.SettingsTitle;
     public static string SettingsSectionRouting => global::VPNRouter.Core.Localization.Strings.SettingsSectionRouting;
