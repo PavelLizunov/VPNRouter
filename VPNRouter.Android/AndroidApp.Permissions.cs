@@ -75,31 +75,92 @@ public partial class AndroidApp
         {
             var activity = MainActivity.Instance;
             if (activity is null) return;
-            bool isExempt = IsIgnoringBatteryOptimizations(activity);
-            global::Android.Content.Intent intent;
-            if (isExempt)
+            if (IsIgnoringBatteryOptimizations(activity))
             {
                 // Open the system list view so the user can revoke the
                 // exclusion if they want. ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
                 // is API 23+; we already gate the whole feature at
                 // SDK 23 minimum (csproj SupportedOSPlatformVersion=23).
-                intent = new global::Android.Content.Intent(
+                var intent = new global::Android.Content.Intent(
                     global::Android.Provider.Settings.ActionIgnoreBatteryOptimizationSettings);
+                intent.AddFlags(global::Android.Content.ActivityFlags.NewTask);
+                activity.StartActivity(intent);
             }
             else
             {
-                intent = new global::Android.Content.Intent(
-                    global::Android.Provider.Settings.ActionRequestIgnoreBatteryOptimizations);
-                intent.SetData(global::Android.Net.Uri.Parse(
-                    $"package:{activity.PackageName}"));
+                RequestBatteryOptimizationExemption(activity);
             }
-            intent.AddFlags(global::Android.Content.ActivityFlags.NewTask);
-            activity.StartActivity(intent);
         }
         catch (Exception ex)
         {
             global::Android.Util.Log.Warn("VpnRouter",
                 $"AND-NETRES: battery opt deep-link failed — {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// v2.40.0 AND-NODOZE (2026-06-02) — fire the native battery-optimization
+    /// exemption grant dialog (<c>ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS</c>
+    /// with our <c>package:</c> URI). Shared by the explicit Settings →
+    /// Reliability button (when currently optimized) and the proactive
+    /// first-connect prompt (<see cref="MaybePromptBatteryOptimizationExemption"/>).
+    /// The user must confirm the system dialog — we never auto-grant ourselves
+    /// anything; this only surfaces the request.
+    /// </summary>
+    private static void RequestBatteryOptimizationExemption(global::Android.App.Activity activity)
+    {
+        var intent = new global::Android.Content.Intent(
+            global::Android.Provider.Settings.ActionRequestIgnoreBatteryOptimizations);
+        intent.SetData(global::Android.Net.Uri.Parse($"package:{activity.PackageName}"));
+        intent.AddFlags(global::Android.Content.ActivityFlags.NewTask);
+        activity.StartActivity(intent);
+    }
+
+    /// <summary>
+    /// v2.40.0 AND-NODOZE — proactive exemption prompt, called from
+    /// <c>UpdateConnectionState(connected: true)</c> at the first successful
+    /// connect. Fires the native grant dialog exactly once (gated by the
+    /// <c>battery_opt_prompt_shown</c> flag) when the app isn't already exempt.
+    ///
+    /// <para><strong>Why first-connect</strong>: it's the highest-intent
+    /// moment — the user has a working tunnel and wants it to stay alive. The
+    /// read-only device probe (KYOCERA A101BM / Android 12, 2026-06-02)
+    /// confirmed the package is NOT in the <c>deviceidle</c> whitelist by
+    /// default, so without this nudge the Doze bucket caches + kills the
+    /// foreground service — exactly the "выключается раз в несколько
+    /// минут-часов" symptom. The request was previously reachable only via
+    /// Settings → Reliability (two taps into Advanced), so a normal user
+    /// never granted it.</para>
+    ///
+    /// <para>Best-effort + heavily guarded: a thrown <c>StartActivity</c> (no
+    /// Settings activity to resolve, OEM quirk, etc.) must never bubble into
+    /// the connect UI path. The "shown" flag is set BEFORE launching so a
+    /// re-entrant connect can't double-fire the dialog.</para>
+    /// </summary>
+    private void MaybePromptBatteryOptimizationExemption()
+    {
+        try
+        {
+            if (AndroidStorage.GetBatteryOptPromptShown()) return;
+            var activity = MainActivity.Instance;
+            if (activity is null) return;
+            if (IsIgnoringBatteryOptimizations(activity))
+            {
+                // Already granted (Settings, a prior install, or an OEM that
+                // exempts VPNs) — record that there's nothing to ask so we
+                // don't re-check PowerManager on every connect.
+                AndroidStorage.SetBatteryOptPromptShown(true);
+                return;
+            }
+            AndroidStorage.SetBatteryOptPromptShown(true);
+            RequestBatteryOptimizationExemption(activity);
+            global::Android.Util.Log.Info("VpnRouter",
+                "AND-NODOZE: proactive battery-opt exemption prompt fired (first connect)");
+        }
+        catch (Exception ex)
+        {
+            global::Android.Util.Log.Warn("VpnRouter",
+                $"AND-NODOZE: proactive battery-opt prompt failed — {ex.GetType().Name}: {ex.Message}");
         }
     }
 

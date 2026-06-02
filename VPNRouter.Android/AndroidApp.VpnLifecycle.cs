@@ -162,6 +162,14 @@ public partial class AndroidApp
             // status card respond to their tap, instead of waiting up to
             // 30 s for the first probe.
             ApplyHealthCheckDisplay();
+
+            // v2.40.0 AND-NODOZE (2026-06-02) — the first successful connect
+            // is the highest-intent moment to ask for the battery-optimization
+            // exemption that keeps this foreground service out of the Doze
+            // bucket. Fires the native grant dialog exactly once; no-op if
+            // already exempt or already asked. Self-guarded — can't throw into
+            // this UI path.
+            MaybePromptBatteryOptimizationExemption();
         }
         else
         {

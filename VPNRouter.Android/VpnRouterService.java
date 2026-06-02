@@ -58,6 +58,7 @@
 package com.ninitux.vpnrouter;
 
 import android.annotation.SuppressLint;
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -78,6 +79,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.system.OsConstants;
 import android.util.Base64;
 import android.util.Log;
@@ -113,6 +115,12 @@ public final class VpnRouterService extends VpnService {
 
     public static final String ACTION_START = "com.ninitux.vpnrouter.START";
     public static final String ACTION_STOP = "com.ninitux.vpnrouter.STOP";
+    // v2.40.0 AND-NODOZE (2026-06-02) — self-restart trigger fired from
+    // onTaskRemoved via AlarmManager when an aggressive OEM stopService's us
+    // on swipe-away. Carries no config; falls through to the last-good-config
+    // restore branch in onStartCommand (same path as the Always-on null-action
+    // restart), so the tunnel rebuilds from SharedPreferences.
+    public static final String ACTION_RESTART = "com.ninitux.vpnrouter.RESTART";
     public static final String EXTRA_CONFIG_JSON = "config_json";
     // v3.0 Phase 7.5 (2026-05-04) — per-app filter (handbook §5.5).
     // EXTRA_PER_APP_MODE: "off" / "include" / "exclude". When "include",
@@ -333,11 +341,34 @@ public final class VpnRouterService extends VpnService {
         // works today via manifest declaration but is fragile under
         // future ANR enforcement; the explicit form is the documented
         // best practice for VPN services on API 34+.
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, buildNotification(),
-                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED);
-        } else {
-            startForeground(NOTIFICATION_ID, buildNotification());
+        // v2.40.0 AND-NODOZE (2026-06-02) — wrap startForeground. On Android
+        // 12+ (API 31) a background-initiated foreground-service start can be
+        // refused with ForegroundServiceStartNotAllowedException — e.g. the
+        // onTaskRemoved AlarmManager restart on a device where the user later
+        // revoked the battery-opt exemption. Pre-fix that threw straight into
+        // the AND-CRASH-HOOK uncaught handler (process death + a crash report
+        // for what is really a benign "can't run in background" condition).
+        // Now we broadcast a tunnel error and stop cleanly. The happy path
+        // (Connect from a visible Activity, or restart while battery-exempt)
+        // is unaffected.
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, buildNotification(),
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED);
+            } else {
+                startForeground(NOTIFICATION_ID, buildNotification());
+            }
+        } catch (Exception e) {
+            Log.e(LOG_TAG, "AND-NODOZE: startForeground refused ("
+                    + e.getClass().getSimpleName() + ": " + e.getMessage()
+                    + ") — likely a background-FGS-start restriction. Stopping cleanly.");
+            try {
+                Intent err = new Intent(ACTION_TUNNEL_ERROR).setPackage(getPackageName());
+                err.putExtra(EXTRA_ERROR_MESSAGE, "foreground-start-blocked");
+                sendBroadcast(err);
+            } catch (Exception ignored) { }
+            stopSelf();
+            return;
         }
 
         // AND-NETRES: hold a partial wake-lock during the ~5 s connect-init
@@ -576,6 +607,71 @@ public final class VpnRouterService extends VpnService {
     public void onDestroy() {
         stopTunnel();
         super.onDestroy();
+    }
+
+    /**
+     * v2.40.0 AND-NODOZE (2026-06-02) — swipe-away recovery. Aggressive OEMs
+     * (KYOCERA/BALMUDA, Xiaomi, Huawei, ...) call stopService when the user
+     * swipes the app from Recents — even for a foreground service. START_STICKY
+     * only covers a system memory-pressure kill, NOT an explicit stopService,
+     * so without this the tunnel silently dies on swipe-away with no recovery.
+     *
+     * <p>If the tunnel is active AND we're battery-opt exempt (so a background
+     * foreground-service start is permitted on Android 12+), schedule a
+     * near-immediate self-restart that rebuilds from last-good config via the
+     * ACTION_RESTART → restore branch in onStartCommand. When NOT exempt we
+     * can't legally restart from the background — log it and rely on the
+     * proactive battery-opt prompt (AndroidApp.Permissions) to unlock reliable
+     * recovery next time. The exemption is the same lever that lets the
+     * scheduled restart's startForeground succeed, so FIX#1 and FIX#2 are
+     * intentionally synergistic.</p>
+     *
+     * <p>Inexact AlarmManager.set is used deliberately: we only need to
+     * reappear, not hit a precise deadline, and exact alarms would require the
+     * SCHEDULE_EXACT_ALARM permission on Android 12+. A battery-opt-exempt app
+     * is exempt from the inexact-alarm Doze deferral anyway, so ~1.5s holds.</p>
+     */
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        try {
+            if (boxService != null && isIgnoringBatteryOptimizations()) {
+                Intent restart = new Intent(getApplicationContext(), VpnRouterService.class)
+                        .setAction(ACTION_RESTART);
+                PendingIntent pi = PendingIntent.getService(
+                        this, 1, restart,
+                        PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE);
+                AlarmManager am = (AlarmManager) getSystemService(ALARM_SERVICE);
+                if (am != null && pi != null) {
+                    am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                            SystemClock.elapsedRealtime() + 1500L, pi);
+                    Log.i(LOG_TAG, "AND-NODOZE: onTaskRemoved — tunnel active + "
+                            + "battery-exempt; scheduled restart in 1.5s");
+                }
+            } else if (boxService != null) {
+                Log.w(LOG_TAG, "AND-NODOZE: onTaskRemoved — tunnel active but NOT "
+                        + "battery-exempt; cannot safely restart from background. "
+                        + "Grant battery exemption for swipe-away recovery.");
+            }
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "AND-NODOZE: onTaskRemoved restart-schedule threw: " + e.getMessage());
+        }
+        super.onTaskRemoved(rootIntent);
+    }
+
+    /**
+     * v2.40.0 AND-NODOZE — live battery-optimization-exemption read. Mirrors
+     * the C#-side AndroidApp.Permissions.IsIgnoringBatteryOptimizations so the
+     * service can decide whether a background self-restart is permitted.
+     * Returns false on any error (fail-safe: don't attempt a restart that
+     * would throw).
+     */
+    private boolean isIgnoringBatteryOptimizations() {
+        try {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            return pm != null && pm.isIgnoringBatteryOptimizations(getPackageName());
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private Notification buildNotification() {

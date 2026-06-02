@@ -73,8 +73,11 @@ public class AndroidAppCharacterizationTests
     // surface change.
     // v2.39.0 bump (public-configs audit P1): added ApplyFcConnectGate private
     // method in AndroidApp.FreeConfigs.cs (Verified-only Connect gate).
+    // v2.40.0 AND-NODOZE bump (2026-06-02): added RequestBatteryOptimizationExemption
+    // + MaybePromptBatteryOptimizationExemption private methods in
+    // AndroidApp.Permissions.cs (proactive first-connect battery-opt prompt).
     private const string PinnedHash =
-        "3006ccd7e2afd2b31734d24519b09e86220a30818e5e682ad5bfd5d0e872945b";
+        "7048b00d341d1377e291b6601fb89d99522e1f2b7d883569d579b60834451c2a";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()

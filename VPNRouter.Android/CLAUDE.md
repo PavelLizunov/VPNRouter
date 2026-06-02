@@ -90,6 +90,30 @@ on API 34+, and a 60s-fail-safe connect `WakeLock` held for the tunnel
 lifetime. The matching battery-optimization-exemption request lives in
 `AndroidApp.Permissions.cs`.
 
+**v2.40.0 AND-NODOZE (2026-06-02)** closed the two real-world gaps a device
+probe (KYOCERA A101BM / Android 12) surfaced — the foundations were present
+but the exemption was never *granted* (package absent from the `deviceidle`
+whitelist) and a swipe-away `stopService` had no recovery:
+
+- **Proactive battery-opt prompt** — `AndroidApp.MaybePromptBatteryOptimizationExemption()`
+  fires the native exemption dialog once, at the first successful connect
+  (`UpdateConnectionState(true)`), gated by the `battery_opt_prompt_shown`
+  flag (`AndroidStorage`). The request was previously buried two taps deep in
+  Settings → Reliability (`OnReliabilityBatteryClicked`), now extracted into
+  the shared `RequestBatteryOptimizationExemption(activity)`.
+- **`onTaskRemoved` swipe-away recovery** — when the tunnel is active AND the
+  app is battery-opt exempt, schedules a ~1.5s `AlarmManager` self-restart
+  (`ACTION_RESTART` → last-good-config restore branch). `START_STICKY` only
+  covers a memory-pressure kill, not an OEM's explicit `stopService` on swipe.
+  Gated on the exemption because a background FGS start is otherwise refused
+  on Android 12+ — so the prompt and the recovery are synergistic.
+- **`startForeground` guard** — wrapped in try/catch so a refused
+  background-FGS-start (`ForegroundServiceStartNotAllowedException`) broadcasts
+  `foreground-start-blocked` + `stopSelf` instead of crashing via the
+  AND-CRASH-HOOK uncaught handler.
+
+Brief: `plans/phase-android-nodoze-2026-06-02.md`.
+
 ## Build (when libbox.aar is present)
 
 ```powershell

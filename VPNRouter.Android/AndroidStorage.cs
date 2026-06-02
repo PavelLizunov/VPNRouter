@@ -824,6 +824,14 @@ public static class AndroidStorage
     // updates to bind upstream sockets correctly on Wi-Fi ↔ cellular handoff.
     private const string KeyAutoReconnectOnNetworkChange = "auto_reconnect_on_network_change";
 
+    // v2.40.0 AND-NODOZE (2026-06-02) — proactive battery-optimization prompt.
+    // Set true once we've shown the user the native exemption dialog at their
+    // first successful connect, so we ask exactly once and never nag. A user
+    // who declines (or revokes later) can still grant from Settings →
+    // Reliability. Pure C#-side flag — the Java service reads the live
+    // PowerManager state, not this, so it doesn't need to stay in sync.
+    private const string KeyBatteryOptPromptShown = "battery_opt_prompt_shown";
+
     // v2.32.0 SR-1 — semantic validation. Each enum getter normalises the
     // raw stored value through ValidateOrDefault, so a typoed / older /
     // hand-edited preference can't surface as an unsupported string deep
@@ -918,6 +926,14 @@ public static class AndroidStorage
         GetBool(KeyAutoReconnectOnNetworkChange, defaultValue: true);
     public static bool SetAutoReconnectOnNetworkChange(bool value) =>
         SetBool(KeyAutoReconnectOnNetworkChange, value);
+
+    // v2.40.0 AND-NODOZE — has the proactive battery-opt exemption dialog
+    // been shown at least once? Default false so the first successful connect
+    // triggers it.
+    public static bool GetBatteryOptPromptShown() =>
+        GetBool(KeyBatteryOptPromptShown, defaultValue: false);
+    public static bool SetBatteryOptPromptShown(bool value) =>
+        SetBool(KeyBatteryOptPromptShown, value);
 
     // ── AND-ADV-TOOLS-PUBLIC (2026-05-10) — Phase E persistence ─────────
     //
