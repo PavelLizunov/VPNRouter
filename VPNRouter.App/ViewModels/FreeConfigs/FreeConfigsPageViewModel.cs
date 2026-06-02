@@ -378,9 +378,13 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         var ct = _refreshCts.Token;
 
         // Defaults pulled out so they're consistent for the whole run.
-        var target = LatencyGoalTarget ?? 10;
+        // v2.40.0 (contracts G5 #7): clamp to the documented bounds — target
+        // [1,50] (>50 deep-verifies ~forever), user max-ping [50,2000] ms.
+        // Matches the Android click-handler clamp; the "no cap" sentinel branch
+        // (UseLatencyGoal off) is intentionally left uncapped.
+        var target = Math.Clamp(LatencyGoalTarget ?? 10, 1, 50);
         var maxPing = (UseLatencyGoal && LatencyGoalMaxPingMs.HasValue)
-            ? LatencyGoalMaxPingMs.Value
+            ? Math.Clamp(LatencyGoalMaxPingMs.Value, 50, 2000)
             : 1000; // sentinel: no real ping cap
 
         // Verified list is the only thing surviving the search. Build it up
@@ -1753,6 +1757,18 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
         var sel = SelectedItem;
         if (sel == null) return;
         if (IsBusy) return;
+
+        // v2.40.0 (contracts B4 #4): connectable ⇔ Status==Verified. A public
+        // config that only passed the weaker TCP/TLS gate (or whose last check
+        // failed) is not connectable until deep verify confirms it. Mirrors the
+        // Android ApplyFcConnectGate. The Search list is Verified-filtered and
+        // Saved retains only Verified, so this is normally unreachable — it's
+        // the explicit guard layer (UI → VM → Core) the framework requires.
+        if (sel.Entry.Status != FreeConfigStatus.Verified)
+        {
+            StatusText = Strings.FcConnectNeedsVerify;
+            return;
+        }
 
         IsBusy = true;
         StatusText = Strings.FcStatusApplying(sel.Endpoint);

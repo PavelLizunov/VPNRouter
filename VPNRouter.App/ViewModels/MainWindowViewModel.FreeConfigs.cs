@@ -49,6 +49,18 @@ public partial class MainWindowViewModel
     {
         try
         {
+            // v2.40.0 (contracts B4 #4) — defensive backstop: never adopt a
+            // public config that hasn't passed deep verify, even if a caller
+            // bypassed the FreeConfigsPageViewModel.ApplySelected gate. This is
+            // the Core-adjacent guard layer (UI → VM → here); connecting to an
+            // unverified/dead endpoint would route the user's traffic to it.
+            if (entry.Status != FreeConfigStatus.Verified)
+            {
+                _logger.Warning("[VM] ApplyFreeConfig rejected: entry not Verified (status={Status}, {Host}:{Port})",
+                    entry.Status, entry.Host, entry.Port);
+                return false;
+            }
+
             // v2.13.19 — one-time privacy warning before first-ever Free Config Connect.
             // User can dismiss once via the dialog's confirm button; reset via Settings.
             if (!_settings.App.FreeConfigSecurityWarningAcked)
