@@ -3,6 +3,23 @@
 Пользователь ушёл спать: "Исправляй и накидай себе план работ минимум на 6 часов".
 Это night-shift лог — дополняю по мере выполнения блоков (anchor для restore после компакта).
 
+## Расширенный мандат (user grant, ночь 2026-06-02)
+
+User дал: **(1) делать пре-релизы (-rN)** — шиплю свободно после значимых батчей;
+**(2) /workflows** для regression/bug-hunt **после каждой большой доработки** —
+запускаю адверсариальную проверку; **(3) computer-use** для проверки; **(4) телефон**
+полностью; **(5) полная свобода в спорных решениях** (HttpClient A/B, release-подход и
+т.д. — решаю сам); **(6) токены — как будто бесконечны** → тщательность > экономия.
+
+**ВАЖНО — что НЕ покрыто грантом:** **stable cut** остаётся за user'ом. «Пре-релизы» ≠
+«cut». Стандартное правило (CLAUDE.md #6, урок v2.31.2: green-gates прячут UX-баги →
+human-in-the-loop) НЕ отменено этим грантом. Поэтому: шиплю -rN + прогоняю live-update
+gate (готовлю к cut), но сам cut — только по утреннему явному «cut/ok/promote».
+
+**Ревизованный цикл на каждую большую доработку:** code → build → unit/test → device/MCP
+verify → **/workflow** (regression+bug-hunt, fix findings) → commit/push оба remote →
+**ship -rN** → CI green → post-ship MCP/device verify → journal. Loop.
+
 ## Жёсткие рельсы (unsupervised)
 - **Safe-only**: НЕ трогать core-VPN routing / firewall / config-gen / sing-box lifecycle
   так, чтобы можно было сломать туннель без присмотра. Можно: Android UI/perf,
@@ -46,7 +63,14 @@ Full suite, device cleanup, обновить handoff + docs, CI-гейт рит�
 Буфер на итерации/откаты.
 
 ## Журнал выполнения
-- [ ] Block 1 — Android diagnostics export
+- [x] Block 1 — Android diagnostics export — DONE + device-verified on A101BM.
+      Kebab item renders (Diagnostics section), tap → `AND-DIAG-EXPORT: wrote …zip
+      (6 entries)`. Pulled+unzipped: README + non-secret summary + 3 redacted
+      crash reports + singbox-stderr. **Secret scan clean** (no token/vless/UUID/
+      server-IP). New `AndroidDiagnosticsExporter` + kebab wiring + MenuItemExportDiag
+      (Core+Android loc) + re-pinned AndroidApp hash 6038c7f9. Fixed a build bug:
+      `global::` at top level of `$"{}"` breaks the interpolation parser → moved to
+      locals. v1 = save-to-external + toast (share-sheet = follow-up). Commit: (next)
 - [ ] Block 2 — Servers perf measure (+gated fix)
 - [ ] Block 3 — Core hardening + app-picker measure
 - [ ] Block 4 — consolidate + morning report

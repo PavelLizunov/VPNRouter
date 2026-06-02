@@ -2267,6 +2267,7 @@ public static class Strings
 
     // Diagnostics items
     public static string MenuItemOpenLogs => Ru ? "Открыть лог" : "Open log";
+    public static string MenuItemExportDiag => Ru ? "Экспорт диагностики" : "Export diagnostics";
 
     public static string MenuItemCopyLogPath => Ru ? "Скопировать путь к логу" : "Copy log path";
 

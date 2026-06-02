@@ -76,8 +76,10 @@ public class AndroidAppCharacterizationTests
     // v2.40.0 AND-NODOZE bump (2026-06-02): added RequestBatteryOptimizationExemption
     // + MaybePromptBatteryOptimizationExemption private methods in
     // AndroidApp.Permissions.cs (proactive first-connect battery-opt prompt).
+    // v2.40.0 night-shift bump (2026-06-02): added _menuExportDiagItem field +
+    // OnMenuExportDiagClicked handler (Android diagnostics-export kebab parity).
     private const string PinnedHash =
-        "7048b00d341d1377e291b6601fb89d99522e1f2b7d883569d579b60834451c2a";
+        "6038c7f9f7cf02be936688ba592ac42fe738a23068766003200a83e7bb324f25";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()

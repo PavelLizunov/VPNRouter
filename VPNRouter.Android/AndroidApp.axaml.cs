@@ -218,6 +218,7 @@ public partial class AndroidApp : Avalonia.Application
     private Avalonia.Controls.Button? _menuThemeDark;
     // Phase 7.2 — additional menu items (Diagnostics + Troubleshooting + About)
     private Avalonia.Controls.Button? _menuOpenLogItem;
+    private Avalonia.Controls.Button? _menuExportDiagItem;
     private Avalonia.Controls.Button? _menuCopyLogPathItem;
     // v2.32.0 (AND-CRASH-HOOK, 2026-05-08) — Diagnostics → "View crash log".
     // Reuses the singbox-log overlay; the click handler swaps the title
@@ -753,6 +754,9 @@ public partial class AndroidApp : Avalonia.Application
         _menuSettingsItem = null;
         _menuOpenLogItem  = MakeMenuItem(Localization.MenuItemOpenLogs,
                                          "TextPrimaryBrush", OnMenuOpenLogClicked);
+        // v2.40.0 night-shift — Android parity for desktop "Export diagnostics".
+        _menuExportDiagItem = MakeMenuItem(Localization.MenuItemExportDiag,
+                                           "TextPrimaryBrush", OnMenuExportDiagClicked);
         _menuCopyLogPathItem = null;
         _menuViewCrashLogItem = null;
         _menuUpdateCheckItem = MakeMenuItem(Localization.MenuItemUpdateCheck,
@@ -836,7 +840,7 @@ public partial class AndroidApp : Avalonia.Application
         // path, View crash log, Export/Import config) were post-v2.32.0
         // additions and are removed.
         AppendMenuSection(menuStack, Localization.MenuSectionDiagnostics,
-                          new[] { _menuOpenLogItem, _menuCheckLeaksItem,
+                          new[] { _menuOpenLogItem, _menuExportDiagItem, _menuCheckLeaksItem,
                                   _menuUpdateCheckItem });
         // v2.32.0 desktop parity (2026-05-10): Troubleshooting = Run Health
         // Check + Restart in Safe Mode + Reset settings (3 items, matches
@@ -4829,6 +4833,7 @@ public partial class AndroidApp : Avalonia.Application
         // Phase 7.2 menu items
         if (_menuSettingsItem is not null) _menuSettingsItem.Content = Localization.MenuItemSettings;
         if (_menuOpenLogItem is not null) _menuOpenLogItem.Content = Localization.MenuItemOpenLogs;
+        if (_menuExportDiagItem is not null) _menuExportDiagItem.Content = Localization.MenuItemExportDiag;
         if (_menuCopyLogPathItem is not null) _menuCopyLogPathItem.Content = Localization.MenuItemCopyLogPath;
         if (_menuViewCrashLogItem is not null) _menuViewCrashLogItem.Content = Localization.MenuItemViewCrashLog;
         if (_menuUpdateCheckItem is not null) _menuUpdateCheckItem.Content = Localization.MenuItemUpdateCheck;

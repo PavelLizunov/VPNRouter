@@ -688,6 +688,7 @@ internal static class Localization
     public static string MenuSectionTroubleshooting => global::VPNRouter.Core.Localization.Strings.MenuSectionTroubleshooting;
     public static string MenuSectionAbout => global::VPNRouter.Core.Localization.Strings.MenuSectionAbout;
     public static string MenuItemOpenLogs => global::VPNRouter.Core.Localization.Strings.MenuItemOpenLogs;
+    public static string MenuItemExportDiag => global::VPNRouter.Core.Localization.Strings.MenuItemExportDiag;
     public static string MenuItemCopyLogPath => global::VPNRouter.Core.Localization.Strings.MenuItemCopyLogPath;
     public static string MenuItemViewCrashLog => global::VPNRouter.Core.Localization.Strings.MenuItemViewCrashLog;
     public static string CrashLogEmpty => global::VPNRouter.Core.Localization.Strings.CrashLogEmpty;

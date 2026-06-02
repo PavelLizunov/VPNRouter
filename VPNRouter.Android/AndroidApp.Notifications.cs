@@ -218,6 +218,50 @@ public partial class AndroidApp
         ShowLogViewer();
     }
 
+    /// <summary>
+    /// v2.40.0 night-shift (2026-06-02) — Diagnostics → "Export diagnostics".
+    /// Android parity for the desktop one-click support bundle. Gathers
+    /// redacted logs + crash reports + a NON-SECRET summary into a ZIP via
+    /// <see cref="AndroidDiagnosticsExporter"/> (nothing uploaded; subscription
+    /// URL + server list themselves are NOT included). Surfaces the result
+    /// through the kebab toast. Fully self-guarded — a failure can never crash
+    /// the app or touch the tunnel.
+    /// </summary>
+    private void OnMenuExportDiagClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
+        try
+        {
+            var connected = MainActivity.IntendedConnected;
+            var configMode = AndroidStorage.GetConfigMode();
+            int serverCount;
+            try { serverCount = AndroidStorage.GetServers()?.Count ?? 0; } catch { serverCount = 0; }
+
+            var result = AndroidDiagnosticsExporter.Export(
+                System.DateTime.Now, connected, configMode, serverCount);
+
+            if (result.ZipPath is not null)
+            {
+                var name = System.IO.Path.GetFileName(result.ZipPath);
+                ShowMenuFeedback($"{result.Entries.Count} files → {name}");
+                global::Android.Util.Log.Info("VpnRouter",
+                    $"AND-DIAG-EXPORT: wrote {result.ZipPath} ({result.Entries.Count} entries, {result.Warnings.Count} warnings)");
+            }
+            else
+            {
+                ShowMenuFeedback("Diagnostics export failed");
+                global::Android.Util.Log.Warn("VpnRouter",
+                    $"AND-DIAG-EXPORT: failed — {string.Join("; ", result.Warnings)}");
+            }
+        }
+        catch (System.Exception ex)
+        {
+            ShowMenuFeedback("Diagnostics export error");
+            global::Android.Util.Log.Warn("VpnRouter",
+                $"AND-DIAG-EXPORT: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
     private void ShowLogViewer()
     {
         if (_logOverlay is null) return;
