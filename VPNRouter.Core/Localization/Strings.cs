@@ -2684,6 +2684,12 @@ public static class Strings
         ? "Сервер сохранён. Подключаюсь…"
         : "Server saved. Connecting…";
 
+    // v2.39.0 (apps-page audit): shown when applying a public config fails —
+    // the user's existing Servers list is explicitly left untouched.
+    public static string FcApplyFailed => Ru
+        ? "Не удалось применить конфиг — список серверов не тронут"
+        : "Couldn't apply config — your server list is unchanged";
+
     public static string MenuItemSettings => Ru ? "Настройки" : "Settings";
 
     public static string SettingsTitle => Ru ? "Настройки" : "Settings";

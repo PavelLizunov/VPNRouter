@@ -1117,12 +1117,15 @@ public partial class AndroidApp
         }
         catch (System.Exception ex)
         {
-            // Parse / persist failed — fall back to the legacy
-            // single-URI path so the user still gets a Connect attempt.
+            // applications-page-audit P0: NEVER wipe the user's curated Servers
+            // list on a parse/persist failure — that fallback was more
+            // destructive than the failed operation itself. Leave ALL prior
+            // settings untouched, surface an error, and abort the apply (a URI
+            // that failed to parse must not be routed).
             global::Android.Util.Log.Warn("VpnRouter.FC",
-                $"Bug-AND-021: persist into Servers failed — {ex.GetType().Name}: {ex.Message}");
-            AndroidStorage.SetServers(null);
-            AndroidStorage.SetSelectedServerName(null);
+                $"Apply public config failed — {ex.GetType().Name}: {ex.Message}; servers left unchanged");
+            ShowMenuFeedback(Localization.FcApplyFailed);
+            return;
         }
         // Manual mode stores the raw URI as legacy fallback. The new
         // active-server resolver (GetActiveServer) reads the Servers
