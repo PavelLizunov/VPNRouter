@@ -117,4 +117,28 @@ bounded log tail (workflow-found). 6 commits (cd196d2→644d1ea), both remotes, 
 Remaining for user: stable cut (their call), Android-APK-attach (runbook above), HttpClient
 A/B, dep PRs, Block 2 Android perf (needs 500-server synth), STATS phases.
 
+### Workflow #2 — leak-safety bug-hunt (post-r5 diff + CustomConfigInjector/leak surface)
+Adversarial leak-hunt over the custom-config + DNS-final surface. **1 confirmed MEDIUM,
+~10 false-positives correctly refuted** (route.final override, EnsureSynthesizedRemoteDns
+idempotency, per-app DNS synth, etc. — all already fail-closed).
+- CONFIRMED MEDIUM: `CustomConfigInjector.Inject` — a custom config that OMITS the `dns`
+  section entirely skipped the fail-closed `dns.final` block in full-tunnel / exclude /
+  StrictDns mode. Old guard required `dns.servers != null && Count>0`, so route.final=proxy
+  tunnelled all traffic while DNS resolved on the real NIC = **DNS leak**. Latent edge case
+  (custom mode is experimental; no-dns-key shape uncommon), but real.
+  **FIXED** (lines ~212-243): when `wantRemoteDns`, CREATE `config["dns"]` + `servers` array
+  when absent, then `FindRemoteDnsTag ?? EnsureSynthesizedRemoteDns(servers, proxyTag)` and
+  set `dns.final` to a proxy-routed DoH resolver. New regression Theory
+  `Inject_NoDnsSection_FullOrExclude_SynthesizesRemoteDns_NoLeak` (full+exclude, asserts
+  route.final=proxy + dns section created + dns.final detour=proxy + sing-box check passes).
+  CustomConfigInjectorTests 37/37 green; LeakProtection+VlessServersResolver+EmptyGuard 57/57.
+  → folds into the r6 batch.
+
+### v2.40.0-r6 — leak-hunt DNS-leak backstop (shipping)
+AppVersion 2.40.0-r5 → 2.40.0-r6. Single Core fix (CustomConfigInjector no-dns-section
+fail-closed dns.final) + 1 regression test. **Core-only / no UI surface** — post-ship verify
+is build+test+sing-box-check (no MCP click path). Shipping r6 (not leaving on main) so the
+LATEST -rN carries the fix — stable is cut FROM the latest candidate, so a verified leak fix
+must live in the prerelease the user would promote. r5 deleted per rolling policy.
+
 (дополняется по ходу)

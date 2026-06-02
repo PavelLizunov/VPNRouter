@@ -915,6 +915,76 @@ public class CustomConfigInjectorTests
         finally { if (File.Exists(tempPath)) File.Delete(tempPath); }
     }
 
+    // v2.40.0-r6 (night-shift leak-hunt, Workflow #2 confirmed MEDIUM): a custom
+    // config can omit the dns section ENTIRELY (sing-box then falls back to its
+    // implicit system resolver). In full-tunnel / exclude mode route.final=proxy
+    // tunnels every connection, but with no dns.final the lookups resolve on the
+    // real NIC = DNS leak. The old guard required `dns.servers != null && Count>0`,
+    // so it skipped the whole fail-closed block for such configs. The fix CREATES
+    // the dns section + servers and synthesizes a proxy-routed DoH resolver.
+    private const string NoDnsSectionConfig = """
+    {
+      "outbounds": [
+        {"type": "vless", "tag": "proxy", "server": "1.2.3.4", "server_port": 443, "uuid": "test"},
+        {"type": "direct", "tag": "direct"}
+      ],
+      "route": { "rules": [], "final": "direct" }
+    }
+    """;
+
+    [Theory]
+    [InlineData("full", "include")]
+    [InlineData("split", "exclude")]
+    public void Inject_NoDnsSection_FullOrExclude_SynthesizesRemoteDns_NoLeak(string routingMode, string appsMode)
+    {
+        var settings = CreateSettings();
+        settings.App.RoutingMode = routingMode;
+        settings.App.RoutingAppsMode = appsMode;
+        if (appsMode == "exclude")
+            settings.App.RoutingAppsExclude = new List<string> { "Steam.exe" };
+
+        var result = CustomConfigInjector.Inject(NoDnsSectionConfig, new[] { "Discord.exe" }, settings);
+        var json = (JsonNode.Parse(result) as JsonObject)!;
+
+        // route.final tunnels everything through the proxy in both modes.
+        Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
+
+        // The dns section + servers must have been CREATED (the input had none).
+        var servers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
+        Assert.NotNull(servers);
+        Assert.NotEmpty(servers!);
+
+        // dns.final must point at a synthesized server that resolves THROUGH the
+        // proxy outbound — never left unset (which would leak to the system resolver).
+        var dnsFinal = StjNodeHelpers.SelectToken(json, "dns.final")?.ToString();
+        Assert.False(string.IsNullOrEmpty(dnsFinal));
+        var finalServer = servers!.OfType<JsonObject>()
+            .FirstOrDefault(s => s["tag"]?.ToString() == dnsFinal);
+        Assert.NotNull(finalServer);
+        Assert.Equal("proxy", finalServer!["detour"]?.ToString());
+
+        // The synthesized config must still be valid sing-box (no malformed startup).
+        var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
+        if (!File.Exists(singBoxPath)) return; // CI without the binary — skip
+        var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-nodns-{routingMode}-{appsMode}-{Guid.NewGuid()}.json");
+        try
+        {
+            File.WriteAllText(tempPath, result);
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = singBoxPath, Arguments = $"check -c \"{tempPath}\"",
+                RedirectStandardOutput = true, RedirectStandardError = true,
+                UseShellExecute = false, CreateNoWindow = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi)!;
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(10000);
+            Assert.True(proc.ExitCode == 0,
+                $"sing-box check failed for synthesized DNS ({routingMode}/{appsMode}, exit {proc.ExitCode}):\n{stderr}\n\nConfig:\n{result}");
+        }
+        finally { if (File.Exists(tempPath)) File.Delete(tempPath); }
+    }
+
     [Fact]
     public void Inject_FullTunnel_OverridesUserFinalDirect_Selector()
     {

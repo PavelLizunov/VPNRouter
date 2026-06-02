@@ -209,33 +209,45 @@ public static class CustomConfigInjector
         // tunnel OR exclude mode OR StrictDns => resolve through the remote/proxy
         // DNS server (vpn-dns); include split keeps the local resolver. Runs
         // AFTER Strip so it wins over Strip's default-local assignment.
+        var wantRemoteDns = isFullTunnel || isExcludeMode || settings.App.StrictDns;
         var dnsForFinal = config["dns"] as JsonObject;
         var dnsServersForFinal = dnsForFinal?["servers"] as JsonArray;
-        if (dnsServersForFinal != null && dnsServersForFinal.Count > 0)
+        if (wantRemoteDns)
         {
-            var wantRemoteDns = isFullTunnel || isExcludeMode || settings.App.StrictDns;
-            if (wantRemoteDns)
+            // v2.40.0 (review H1 — fail-CLOSED) + night-shift leak-hunt: everything-else
+            // is tunnelled, so its DNS MUST resolve through the proxy. Prefer an existing
+            // proxy-detour DNS server; if the custom config has none (after Strip its DNS
+            // servers are all local / dns-direct), SYNTHESIZE one (Cloudflare DoH via the
+            // proxy outbound) — otherwise route.final=proxy tunnels traffic while dns.final
+            // resolves on the real NIC = DNS leak. Mirrors ConfigGenerator.BuildDns.
+            //
+            // The night-shift gap: a custom config can omit the dns section ENTIRELY
+            // (sing-box then uses defaults). The old guard `dnsServers != null && Count>0`
+            // skipped the whole block for such configs → no dns.final in full/exclude/strict
+            // → leak. Fail-closed now CREATES the dns section + servers when absent so the
+            // synthesized proxy resolver + dns.final always apply.
+            if (dnsForFinal == null)
             {
-                // v2.40.0 (review H1 — fail-CLOSED): everything-else is tunnelled,
-                // so its DNS MUST resolve through the proxy. Prefer an existing
-                // proxy-detour DNS server; if the custom config has none (after
-                // Strip its DNS servers are all local / dns-direct), SYNTHESIZE
-                // one (Cloudflare DoH via the proxy outbound) instead of leaving
-                // Strip's local assignment — otherwise route.final=proxy tunnels
-                // traffic while dns.final resolves on the real NIC = DNS leak.
-                // Mirrors ConfigGenerator.BuildDns which always carries vpn-dns.
-                var remoteTag = FindRemoteDnsTag(dnsServersForFinal)
-                                ?? EnsureSynthesizedRemoteDns(dnsServersForFinal, proxyTag);
-                if (!string.IsNullOrEmpty(remoteTag))
-                    dnsForFinal["final"] = remoteTag;
+                dnsForFinal = new JsonObject();
+                config["dns"] = dnsForFinal;
             }
-            else
+            if (dnsServersForFinal == null)
             {
-                // Include split: everything-else goes direct → local resolver.
-                var localTag = FindLocalDnsTag(dnsServersForFinal);
-                if (!string.IsNullOrEmpty(localTag))
-                    dnsForFinal["final"] = localTag;
+                dnsServersForFinal = new JsonArray();
+                dnsForFinal["servers"] = dnsServersForFinal;
             }
+            var remoteTag = FindRemoteDnsTag(dnsServersForFinal)
+                            ?? EnsureSynthesizedRemoteDns(dnsServersForFinal, proxyTag);
+            if (!string.IsNullOrEmpty(remoteTag))
+                dnsForFinal["final"] = remoteTag;
+        }
+        else if (dnsServersForFinal != null && dnsServersForFinal.Count > 0)
+        {
+            // Include split: everything-else goes direct → local resolver (only when the
+            // custom config actually carries a dns section to point at).
+            var localTag = FindLocalDnsTag(dnsServersForFinal);
+            if (!string.IsNullOrEmpty(localTag))
+                dnsForFinal["final"] = localTag;
         }
 
         EnsureDefaultDomainResolver(config);
