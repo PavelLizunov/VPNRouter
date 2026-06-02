@@ -611,6 +611,17 @@
                                             Command="{Binding OpenLogsCommand}"
                                             Content="{Binding L_SmpMenuOpenLogs}"
                                             ToolTip.Tip="{Binding L_TipOpenLogs}"/>
+                                    <!-- v2.40.0-r4: Export diagnostics promoted into the ⋯ menu.
+                                         Was reachable ONLY via Settings → Updates → Support
+                                         (Advanced mode), so a Simple-mode user couldn't collect a
+                                         support bundle at all. Reuses the NetworkPage strings +
+                                         IsExportingDiagnostics disable; ExportDiagnosticsAsync toasts +
+                                         reveals the ZIP, so it works fine from the transient flyout. -->
+                                    <Button Classes="menu-item"
+                                            Command="{Binding ExportDiagnosticsCommand}"
+                                            IsEnabled="{Binding !IsExportingDiagnostics}"
+                                            Content="{Binding L_DiagExportButton}"
+                                            ToolTip.Tip="{Binding L_DiagExportHint}"/>
                                     <Button Classes="menu-item"
                                             Command="{Binding OpenLeakTestCommand}"
                                             Content="{Binding L_SmpMenuCheckLeaks}"

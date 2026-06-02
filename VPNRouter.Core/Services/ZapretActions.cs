@@ -51,9 +51,13 @@ public static class ZapretActions
         yield return "=== Clear Discord cache ===";
 
         var running = Process.GetProcessesByName("Discord");
-        // v2.40.0-r3 (audit P0 handle-leak sweep): dispose the Process[] — the
-        // foreach killed each process but never released the array's kernel
-        // handles. yield-return inside try/finally (no catch) is legal in C#.
+        // v2.40.0-r3 (audit P0 handle-leak sweep): KillProcessLine disposes each
+        // process it actually kills, but if the consumer stops enumerating early
+        // the unreached Process handles in `running` would leak. This finally
+        // disposes the WHOLE array on enumerator teardown — double-disposing the
+        // already-killed ones (Dispose is idempotent) while covering the early-exit
+        // and empty/Length==0 paths. yield-return inside try/finally (no catch) is
+        // legal in C#.
         try
         {
             if (running.Length == 0)
