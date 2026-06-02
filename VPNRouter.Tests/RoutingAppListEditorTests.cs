@@ -200,4 +200,55 @@ public sealed class RoutingAppListEditorTests
         Assert.False(removed);
         Assert.Null(normalized);
     }
+
+    // ── IsStillRoutedByAnother (v2.40.0-r2 regression review #1) ──
+    // Guards ScrubRoutingForApp from over-removing a process name that another
+    // surviving checked AppItem (a different group) still routes. Without the
+    // guard, removing one of two groups sharing "Discord.exe" silently un-routes
+    // the app the user keeps checked elsewhere (SaveSettings never rebuilds the
+    // routing lists), re-introducing leak-from-intent in reverse.
+
+    [Fact]
+    public void StillRouted_AnotherGroupHasSameName_True()
+    {
+        // Two groups share Discord.exe; removing one must NOT scrub the name.
+        Assert.True(RoutingAppListEditor.IsStillRoutedByAnother(
+            "Discord.exe", new[] { "Chrome.exe", "Discord.exe" }));
+    }
+
+    [Fact]
+    public void StillRouted_NoOtherReference_False()
+    {
+        // The only AppItem holding the name is gone → safe to scrub.
+        Assert.False(RoutingAppListEditor.IsStillRoutedByAnother(
+            "Discord.exe", new[] { "Chrome.exe", "Telegram.exe" }));
+    }
+
+    [Theory]
+    [InlineData("Discord.exe", "discord")]     // survivor stored without .exe
+    [InlineData("Discord", "Discord.exe")]     // target stored without .exe
+    [InlineData("Discord.exe", "DISCORD.EXE")] // case-insensitive
+    public void StillRouted_ExeSuffixAndCaseInsensitive_True(string target, string survivor)
+    {
+        Assert.True(RoutingAppListEditor.IsStillRoutedByAnother(
+            target, new[] { survivor }));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void StillRouted_BlankTarget_False(string? target)
+    {
+        Assert.False(RoutingAppListEditor.IsStillRoutedByAnother(target, new[] { "Discord.exe" }));
+    }
+
+    [Fact]
+    public void StillRouted_NullOrEmptySurvivors_False()
+    {
+        Assert.False(RoutingAppListEditor.IsStillRoutedByAnother("Discord.exe", null));
+        Assert.False(RoutingAppListEditor.IsStillRoutedByAnother("Discord.exe", System.Array.Empty<string?>()));
+        // blank survivor entries are ignored, not matched
+        Assert.False(RoutingAppListEditor.IsStillRoutedByAnother("Discord.exe", new string?[] { null, "", "  " }));
+    }
 }

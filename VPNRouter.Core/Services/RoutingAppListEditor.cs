@@ -116,4 +116,44 @@ public static class RoutingAppListEditor
             e => string.Equals(e, name, StringComparison.OrdinalIgnoreCase));
         return (removed > 0, name);
     }
+
+    /// <summary>
+    /// v2.40.0-r2 (regression review #1): <c>true</c> when another surviving
+    /// checked app still routes <paramref name="processName"/>, so the UI scrub
+    /// (<c>MainWindowViewModel.ScrubRoutingForApp</c>) must NOT strip that name
+    /// from <see cref="AppConfig.RoutingAppsInclude"/> / <c>RoutingAppsExclude</c>.
+    ///
+    /// <para>The same process name can live as separate AppItems across groups
+    /// (the shell-verb add and a profile group both reference <c>Discord.exe</c>;
+    /// dedup is within-group only), and <c>SaveSettings</c> never rebuilds the
+    /// routing lists from VM state — so an unconditional <c>RemoveAll</c> on one
+    /// group's removal silently un-routes an app the user keeps checked elsewhere
+    /// (leak-from-intent in reverse: a wanted route is dropped, or an exclude entry
+    /// the user still wants is removed). The caller passes the names of all OTHER
+    /// still-checked AppItems; we keep the entry if any of them matches.</para>
+    ///
+    /// <para>Case-insensitive, matching the raw name and its <c>.exe</c>-stripped
+    /// form so a cross-platform mix (<c>Discord</c> vs <c>Discord.exe</c>) still
+    /// counts as the same app.</para>
+    /// </summary>
+    public static bool IsStillRoutedByAnother(
+        string? processName, IEnumerable<string?>? survivingCheckedNames)
+    {
+        if (string.IsNullOrWhiteSpace(processName) || survivingCheckedNames == null)
+            return false;
+
+        static string Bare(string n) =>
+            n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? n.Substring(0, n.Length - 4) : n;
+
+        var name = processName!;
+        var bare = Bare(name);
+        foreach (var p in survivingCheckedNames)
+        {
+            if (string.IsNullOrWhiteSpace(p)) continue;
+            if (string.Equals(p, name, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(Bare(p!), bare, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
 }

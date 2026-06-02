@@ -159,7 +159,7 @@ public static class CustomConfigInjector
                 // Exclude: the listed apps BYPASS the VPN (→ direct). Their DNS
                 // resolves locally too, matching their direct traffic path.
                 InjectRouteRules(config, processes, "direct", null, isActionBased);
-                InjectDnsRules(config, processes, isActionBased, useRemoteDns: false);
+                InjectDnsRules(config, processes, isActionBased, useRemoteDns: false, proxyTag);
             }
             else
             {
@@ -168,7 +168,7 @@ public static class CustomConfigInjector
                 // selector carries both, for optimal voice/video performance.
                 var (tcpTag, udpTag) = DetectTcpUdpSplit(config, proxyTag);
                 InjectRouteRules(config, processes, tcpTag, udpTag, isActionBased);
-                InjectDnsRules(config, processes, isActionBased, useRemoteDns: true);
+                InjectDnsRules(config, processes, isActionBased, useRemoteDns: true, proxyTag);
             }
         }
 
@@ -699,7 +699,7 @@ public static class CustomConfigInjector
 
     // ─── Private: Inject DNS rules ───────────────────────────────────────────
 
-    private static void InjectDnsRules(JsonObject config, List<string> processes, bool isActionBased, bool useRemoteDns)
+    private static void InjectDnsRules(JsonObject config, List<string> processes, bool isActionBased, bool useRemoteDns, string proxyTag)
     {
         var dns = config["dns"] as JsonObject;
         if (dns == null) return; // no DNS config → user handles DNS externally
@@ -716,7 +716,15 @@ public static class CustomConfigInjector
             ? FindRemoteDnsTag(servers)
             : FindLocalDnsTag(servers);
 
-        // Fallback: first server
+        // v2.40.0-r2 (regression review #2): include-split tunnels the listed apps,
+        // so their DNS MUST resolve through the proxy. When the custom config carries
+        // no proxy-detour DNS server, synthesize one (the same Cloudflare DoH server
+        // the H1 dns.final path uses) instead of falling back to servers[0] — a
+        // local/real-NIC resolver that would leak the tunnelled apps' DNS queries.
+        if (useRemoteDns && string.IsNullOrEmpty(targetTag) && !string.IsNullOrEmpty(proxyTag))
+            targetTag = EnsureSynthesizedRemoteDns(servers, proxyTag);
+
+        // Fallback: first server (exclude mode, or no proxy outbound to route through)
         if (string.IsNullOrEmpty(targetTag))
             targetTag = StjNodeHelpers.AsString((servers[0] as JsonObject)?["tag"]);
 
@@ -790,23 +798,60 @@ public static class CustomConfigInjector
     private static string EnsureSynthesizedRemoteDns(JsonArray servers, string proxyTag)
     {
         const string synthTag = "vpnrouter-vpn-dns";
-        foreach (var server in servers)
-            if (server is JsonObject so && StjNodeHelpers.AsString(so["tag"]) == synthTag)
-                return synthTag; // already added — idempotent re-injection
 
-        servers.Add(new JsonObject
+        // Defense-in-depth (review follow-up): a server already carrying our
+        // RESERVED tag counts as "already synthesized — idempotent" ONLY when
+        // its detour already routes through the proxy (i.e. our own prior
+        // injection). A hand-authored custom config could legitimately reuse
+        // "vpnrouter-vpn-dns" with a LOCAL detour (direct / dns-direct / none —
+        // the latter two being what StripUnsupportedFeatures leaves behind for a
+        // detour-less or direct-detour server). Short-circuiting on the tag
+        // ALONE would then pin dns.final to a real-NIC resolver while route.final
+        // tunnels traffic = DNS leak in full/exclude/strict mode. So when the
+        // detour is NOT the proxy, COERCE the server back into the canonical
+        // Cloudflare-DoH-via-proxy shape rather than trusting it.
+        foreach (var server in servers)
         {
-            ["tag"] = synthTag,
-            ["type"] = "https",
-            ["server"] = "1.1.1.1",
-            ["path"] = "/dns-query",
-            ["detour"] = proxyTag,
-        });
+            if (server is not JsonObject so || StjNodeHelpers.AsString(so["tag"]) != synthTag)
+                continue;
+
+            if (StjNodeHelpers.AsString(so["detour"]) == proxyTag)
+                return synthTag; // our own prior injection — truly idempotent
+
+            var oldDetour = StjNodeHelpers.AsString(so["detour"]) ?? "(none)";
+            StampCloudflareDohViaProxy(so, proxyTag);
+            Serilog.Log.Logger.Information(
+                "Custom Config Mode: re-pointed reserved DNS '{Tag}' to Cloudflare DoH via '{Proxy}' " +
+                "(detour was '{Old}', a local resolver) — closes a DNS leak in full/exclude/strict mode.",
+                synthTag, proxyTag, oldDetour);
+            return synthTag;
+        }
+
+        var synth = new JsonObject { ["tag"] = synthTag };
+        StampCloudflareDohViaProxy(synth, proxyTag);
+        servers.Add(synth);
         Serilog.Log.Logger.Information(
             "Custom Config Mode: synthesized remote DNS '{Tag}' (Cloudflare DoH via '{Proxy}') for " +
             "full/exclude/strict mode — closes the DNS leak when the config has no proxy-detour DNS server.",
             synthTag, proxyTag);
         return synthTag;
+    }
+
+    /// <summary>Stamps the canonical Cloudflare-DoH-via-<paramref name="proxyTag"/>
+    /// shape onto a DNS server node (type=https, server=1.1.1.1, path=/dns-query,
+    /// detour=proxy) and clears the legacy <c>address</c>/<c>server_port</c> fields
+    /// that would otherwise make the typed server invalid. 1.1.1.1 is an IP
+    /// literal, so there is no bootstrap-resolution dependency. Shared by the
+    /// synthesize-new and coerce-existing paths in
+    /// <see cref="EnsureSynthesizedRemoteDns"/> so both emit an identical server.</summary>
+    private static void StampCloudflareDohViaProxy(JsonObject server, string proxyTag)
+    {
+        server.Remove("address");      // legacy field — invalid alongside a typed server
+        server.Remove("server_port");  // 1.1.1.1 DoH uses the default 443
+        server["type"] = "https";
+        server["server"] = "1.1.1.1";
+        server["path"] = "/dns-query";
+        server["detour"] = proxyTag;
     }
 
     /// <summary>First DNS server that resolves locally (direct/dns-direct detour,

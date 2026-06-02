@@ -521,8 +521,23 @@ public partial class MainWindowViewModel
                 bool Match(string p) =>
                     string.Equals(p, name, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(p, bare, StringComparison.OrdinalIgnoreCase);
-                _settings.App.RoutingAppsInclude?.RemoveAll(Match);
-                _settings.App.RoutingAppsExclude?.RemoveAll(Match);
+                // v2.40.0-r2 (regression review #1): guard the RemoveAll — only
+                // strip the name when NO OTHER surviving checked AppItem still
+                // routes it. The same process name can live as separate AppItems
+                // across groups (shell-verb add + a profile group; dedup is
+                // within-group only), and SaveSettings never rebuilds these lists,
+                // so an unconditional RemoveAll silently un-routes an app the user
+                // keeps checked elsewhere. item.IsChecked was set false above, so
+                // it is excluded by the IsChecked filter.
+                var survivors = AppGroups
+                    .SelectMany(g => g.Apps)
+                    .Where(a => !ReferenceEquals(a, item) && a.IsChecked)
+                    .Select(a => a.ProcessName);
+                if (!VPNRouter.Core.Services.RoutingAppListEditor.IsStillRoutedByAnother(name, survivors))
+                {
+                    _settings.App.RoutingAppsInclude?.RemoveAll(Match);
+                    _settings.App.RoutingAppsExclude?.RemoveAll(Match);
+                }
             }
         }
         catch { }

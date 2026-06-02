@@ -809,6 +809,113 @@ public class CustomConfigInjectorTests
     }
 
     [Fact]
+    public void Inject_IncludeSplit_NoProxyDns_PerAppDnsRuleResolvesThroughProxy()
+    {
+        // v2.40.0-r2 (regression review #2): in include-split the LISTED apps are
+        // tunnelled, so their per-app DNS rule must resolve THROUGH the proxy. When
+        // the custom config carries no proxy-detour DNS server, InjectDnsRules must
+        // synthesize one instead of falling back to servers[0] (the local/dns-direct
+        // resolver) — otherwise the tunnelled apps' DNS queries leak to the ISP.
+        var settings = CreateSettings();
+        settings.App.RoutingMode = "split";
+        settings.App.RoutingAppsMode = "include";
+        settings.App.RoutingAppsInclude = new List<string> { "Discord.exe" };
+
+        var result = CustomConfigInjector.Inject(NoProxyDnsConfig, new[] { "Discord.exe" }, settings);
+        var json = (JsonNode.Parse(result) as JsonObject)!;
+
+        // Find the injected process_name DNS rule and resolve its server tag.
+        var rules = StjNodeHelpers.SelectToken(json, "dns.rules") as JsonArray;
+        Assert.NotNull(rules);
+        var appRule = rules!.OfType<JsonObject>().FirstOrDefault(r => r["process_name"] != null);
+        Assert.NotNull(appRule); // the listed app got a per-app DNS rule
+        var ruleServerTag = appRule!["server"]?.ToString();
+        Assert.False(string.IsNullOrEmpty(ruleServerTag));
+
+        var servers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
+        var ruleServer = servers!.OfType<JsonObject>().FirstOrDefault(s => s["tag"]?.ToString() == ruleServerTag);
+        Assert.NotNull(ruleServer);
+        // The per-app resolver must run inside the tunnel — NOT a local/dns-direct one.
+        Assert.Equal("proxy", ruleServer!["detour"]?.ToString());
+    }
+
+    // v2.40.0 (review H1 — defense-in-depth follow-up): a hand-authored custom
+    // config that REUSES our reserved DNS tag "vpnrouter-vpn-dns" with a LOCAL
+    // detour must NOT short-circuit EnsureSynthesizedRemoteDns's idempotency
+    // guard. Before the fix the guard returned the tag on a tag-only match, so
+    // in full tunnel dns.final was pinned to that real-NIC resolver while
+    // route.final tunnels traffic = DNS leak. The fix coerces the reserved-tag
+    // server back to a proxy-routed DoH resolver. (Strip rewrites the authored
+    // detour:"direct" to "dns-direct" before the dns.final path runs — that is
+    // exactly the local-detour state that must still be coerced.)
+    private const string ReservedTagLocalDetourConfig = """
+    {
+      "dns": {
+        "servers": [ {"tag": "vpnrouter-vpn-dns", "detour": "direct"} ],
+        "rules": []
+      },
+      "outbounds": [
+        {"type": "vless", "tag": "proxy", "server": "1.2.3.4", "server_port": 443, "uuid": "test"},
+        {"type": "direct", "tag": "direct"}
+      ],
+      "route": { "rules": [], "final": "direct" }
+    }
+    """;
+
+    [Fact]
+    public void Inject_ReservedDnsTag_LocalDetour_FullTunnel_CoercedToProxy_NoLeak()
+    {
+        var settings = CreateSettings();
+        settings.App.RoutingMode = "full";
+
+        var result = CustomConfigInjector.Inject(ReservedTagLocalDetourConfig, Array.Empty<string>(), settings);
+        var json = (JsonNode.Parse(result) as JsonObject)!;
+
+        // Full tunnel: route.final tunnels everything through the proxy.
+        Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
+
+        // dns.final must resolve THROUGH the proxy — it must point at a server
+        // whose detour equals the proxy outbound tag, NOT the local "direct" /
+        // "dns-direct" detour the config was authored with.
+        var dnsFinal = StjNodeHelpers.SelectToken(json, "dns.final")?.ToString();
+        Assert.False(string.IsNullOrEmpty(dnsFinal));
+        var servers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
+        var finalServer = servers!.OfType<JsonObject>()
+            .FirstOrDefault(s => s["tag"]?.ToString() == dnsFinal);
+        Assert.NotNull(finalServer);
+        Assert.Equal("proxy", finalServer!["detour"]?.ToString());
+
+        // The reserved-tag server itself must have been coerced in place to the
+        // canonical proxy-routed DoH shape (no local detour left behind).
+        var reserved = servers!.OfType<JsonObject>()
+            .FirstOrDefault(s => s["tag"]?.ToString() == "vpnrouter-vpn-dns");
+        Assert.NotNull(reserved);
+        Assert.Equal("proxy", reserved!["detour"]?.ToString());
+        Assert.Equal("https", reserved["type"]?.ToString());
+
+        // The coerced config must still be valid sing-box (no malformed startup).
+        var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
+        if (!File.Exists(singBoxPath)) return; // CI without the binary — skip
+        var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-h1-reserved-{Guid.NewGuid()}.json");
+        try
+        {
+            File.WriteAllText(tempPath, result);
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = singBoxPath, Arguments = $"check -c \"{tempPath}\"",
+                RedirectStandardOutput = true, RedirectStandardError = true,
+                UseShellExecute = false, CreateNoWindow = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi)!;
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(10000);
+            Assert.True(proc.ExitCode == 0,
+                $"sing-box check failed for coerced reserved-tag DNS (exit {proc.ExitCode}):\n{stderr}\n\nConfig:\n{result}");
+        }
+        finally { if (File.Exists(tempPath)) File.Delete(tempPath); }
+    }
+
+    [Fact]
     public void Inject_FullTunnel_OverridesUserFinalDirect_Selector()
     {
         // LegacyConfig uses a SELECTOR tagged "proxy" and route.final "proxy".
