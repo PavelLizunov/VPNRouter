@@ -75,4 +75,14 @@ Full suite, device cleanup, обновить handoff + docs, CI-гейт рит�
 - [ ] Block 3 — Core hardening + app-picker measure
 - [ ] Block 4 — consolidate + morning report
 
+### Workflow #1 — regression-review-since-r4 (15 agents, ~1.1M tokens)
+Adversarial review of the post-r4 diff (no-doze + SingBoxManager/HealthMonitor leaks +
+diagnostics export + page-subs). **1 confirmed MEDIUM, 8 false-positives** (verifier
+correctly refuted: TOCTOU prompt race, boxService null-check race, catch-breadth, etc.).
+- CONFIRMED: `DiagnosticsExporter.TailLines` (desktop + Android) read the WHOLE log into
+  memory before tailing 800 lines → corrupt/runaway multi-GB log OOMs the bundle. Latent
+  (not a regression), but real. **FIXED**: bounded seek-read (last 2 MB) in both;
+  `DiagnosticsExporterTailBoundedTests` (huge-file bounded + small-file). Desktop 17/17.
+  → folded into the r5 batch.
+
 (дополняется по ходу)

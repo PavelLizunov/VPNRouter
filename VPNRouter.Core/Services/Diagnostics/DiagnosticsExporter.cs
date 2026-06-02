@@ -22,6 +22,15 @@ public static class DiagnosticsExporter
     /// <summary>Max number of log lines kept per log file (bounded bundle size).</summary>
     public const int LogTailLines = 800;
 
+    /// <summary>
+    /// Hard cap on bytes read when tailing a log (audit MEDIUM, 2026-06-02).
+    /// `TailLines` only ever needs the END of the file, so we seek to the last
+    /// <c>MaxTailReadBytes</c> instead of reading the whole thing — a corrupt or
+    /// runaway multi-GB log can no longer OOM the bundle. 2 MB comfortably holds
+    /// far more than <see cref="LogTailLines"/> lines of normal log output.
+    /// </summary>
+    public const long MaxTailReadBytes = 2L * 1024 * 1024;
+
     public sealed record Result(
         string ZipPath,
         IReadOnlyList<string> Entries,
@@ -239,10 +248,24 @@ public static class DiagnosticsExporter
         return sr.ReadToEnd();
     }
 
-    /// <summary>Return the last <paramref name="maxLines"/> lines of a file (share-read).</summary>
-    private static string TailLines(string path, int maxLines)
+    /// <summary>
+    /// Return the last <paramref name="maxLines"/> lines of a file (share-read),
+    /// bounded to the last <see cref="MaxTailReadBytes"/> so a huge/corrupt log
+    /// can't OOM the bundle (audit MEDIUM, 2026-06-02). When the file exceeds the
+    /// cap we seek to EOF − cap and drop the (likely partial) first line.
+    /// <c>internal</c> for direct unit testing.
+    /// </summary>
+    internal static string TailLines(string path, int maxLines)
     {
-        var all = ReadAllTextShared(path).Replace("\r\n", "\n").Split('\n');
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        bool seeked = fs.Length > MaxTailReadBytes;
+        if (seeked) fs.Seek(-MaxTailReadBytes, SeekOrigin.End);
+        using var sr = new StreamReader(fs);
+        var text = sr.ReadToEnd();
+        var all = text.Replace("\r\n", "\n").Split('\n');
+        // If we seeked into the middle of the file, the first element is a
+        // partial line — drop it so the tail starts on a clean boundary.
+        if (seeked && all.Length > 1) all = all.Skip(1).ToArray();
         if (all.Length <= maxLines) return string.Join(Environment.NewLine, all);
         return string.Join(Environment.NewLine, all.Skip(all.Length - maxLines));
     }

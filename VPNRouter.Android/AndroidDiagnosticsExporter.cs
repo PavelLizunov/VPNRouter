@@ -52,6 +52,13 @@ internal static class AndroidDiagnosticsExporter
     /// <summary>Max recent crash files included.</summary>
     private const int MaxCrashFiles = 3;
 
+    /// <summary>
+    /// Hard cap on bytes read when tailing a log (audit MEDIUM, 2026-06-02):
+    /// only the END of the file is needed, so seek to the last 2 MB instead of
+    /// reading the whole thing — a corrupt/runaway multi-GB log can't OOM.
+    /// </summary>
+    private const long MaxTailReadBytes = 2L * 1024 * 1024;
+
     public sealed record Result(string? ZipPath, IReadOnlyList<string> Entries, IReadOnlyList<string> Warnings);
 
     /// <summary>
@@ -259,7 +266,13 @@ internal static class AndroidDiagnosticsExporter
 
     private static string TailLines(string path, int maxLines)
     {
-        var all = ReadAllTextShared(path).Replace("\r\n", "\n").Split('\n');
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        bool seeked = fs.Length > MaxTailReadBytes;
+        if (seeked) fs.Seek(-MaxTailReadBytes, SeekOrigin.End);
+        using var sr = new StreamReader(fs);
+        var all = sr.ReadToEnd().Replace("\r\n", "\n").Split('\n');
+        // Seeked mid-file → drop the partial first line.
+        if (seeked && all.Length > 1) all = all.Skip(1).ToArray();
         if (all.Length <= maxLines) return string.Join("\n", all);
         return string.Join("\n", all.Skip(all.Length - maxLines));
     }
