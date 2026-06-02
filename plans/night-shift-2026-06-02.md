@@ -85,4 +85,36 @@ correctly refuted: TOCTOU prompt race, boxService null-check race, catch-breadth
   `DiagnosticsExporterTailBoundedTests` (huge-file bounded + small-file). Desktop 17/17.
   → folded into the r5 batch.
 
+### v2.40.0-r5 — SHIPPED (desktop)
+build.ps1 (2nd run after freeing disk — 1st failed: C: was 0 GB free from the night's
+builds). 14 assets (4 Win + 6 Linux + 4 Mac), prerelease, v2.38.2 restored Latest, r4
+deleted, tag mirrored to Forgejo. Mac+Linux CI SUCCESS, Windows auto-update integration
+test SUCCESS, Verify Release Integrity SUCCESS. "Build Android APK" CI = skipped (known
+NU1102). Recent commits all CI-clean (rule #15). Desktop post-ship = Core/leak-only label
+(no new desktop UI; covered by 1562 tests + CI; Android UI device-verified separately).
+
+### Android signed-APK attach — DEFERRED (runbook for morning / fresh context)
+The no-doze + diagnostics are device-verified + on main + in r5 notes, but NOT yet in a
+shipped Android APK. To deliver to Android users:
+1. Free disk (clean bin/obj). Build UNSIGNED APK with the right version:
+   the release APK MUST be release-key-signed (debug-signed won't update users' 2.38.2 —
+   signature mismatch). `build-android.ps1` signs locally but needs the keystore (a
+   write-only CI secret, NOT on the VM) → can't use it here.
+   So: produce an unsigned/aligned APK (verify the exact `dotnet build` invocation — likely
+   `/p:AndroidKeyStore=false /p:VpnRouterVersion=2.40.0-r5`), versionCode = 2040000 (core
+   2.40.0, > installed 2038002 ✓).
+2. `gh release upload v2.40.0-r5 <apk> --clobber` named `VPNRouter-v2.40.0-r5-android-UNSIGNED.apk`.
+3. `gh workflow run sign-android.yml -f version=2.40.0-r5` → CI zipalign+apksigner with the
+   release keystore → uploads `VPNRouter-v2.40.0-r5-android.apk` + .sha256, removes UNSIGNED.
+4. Verify the signed asset + device-test the in-app update path (2.38.2 → signed r5) on A101BM.
+DEFER reason: distinct release + signature-correctness risk + no local keystore + disk/context
+edge — do it fresh + verified, not forced unsupervised at ~1 AM.
+
+### Night summary (so far)
+Shipped v2.40.0-r5 folding: page-subs leak, SingBoxManager ProcessExit leak, HealthMonitor
+idempotency, Android no-doze (device-verified), Android diagnostics export (device-verified),
+bounded log tail (workflow-found). 6 commits (cd196d2→644d1ea), both remotes, all CI green.
+Remaining for user: stable cut (their call), Android-APK-attach (runbook above), HttpClient
+A/B, dep PRs, Block 2 Android perf (needs 500-server synth), STATS phases.
+
 (дополняется по ходу)
