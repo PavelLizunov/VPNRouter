@@ -1,7 +1,8 @@
 # .github/workflows/
 
-CI pipelines. 4 workflow'а — каждый делает что-то специфичное и триггерится
-независимо.
+CI pipelines. 11 workflow-файлов (плюс GitHub-managed `pages-build-deployment`) —
+каждый делает что-то специфичное и триггерится независимо. 5 build/release
+workflow'ов + 5 gate/test workflow'ов + APT publish.
 
 ## Workflows
 
@@ -9,9 +10,14 @@ CI pipelines. 4 workflow'а — каждый делает что-то специ
 |---|---|---|
 | `build-mac.yml` | `push` tag `v*` + `workflow_dispatch` | Собирает macOS DMG + ZIP на mac-runner. Уплоадит на release. Дисптачит Homebrew Cask update (только stable, prerelease skip). |
 | `build-linux.yml` | `push` tag `v*` + `workflow_dispatch` | Linux .deb (postinst setcap для passwordless TUN) + AppImage + .tar.gz + 4 sha256. Уплоадит на release. |
-| `build-android.yml` | `workflow_dispatch` only (Wave 32b deferred since r16) | Android APK (arm64, signed). Phase 6 Wave 26 (2026-05-18) бампнул на .NET 10 + Android API 36 + Avalonia 12 + provision libbox.aar из `LIBBOX_AAR_BASE64` secret. **r16 (2026-05-20)**: tag-push trigger gated behind `if: github.event_name == 'workflow_dispatch'` because `.NET 10 preview SDK 10.0.300` workload manifest references a Mono runtime pack (`Microsoft.NETCore.App.Runtime.Mono.linux-x64 = 10.0.8`) that isn't on any public NuGet feed — `NU1102` on every restore. Run manually via `gh workflow run "Build Android APK"` to probe NU1102 status. Remove the `if:` gate when SDK ships GA or pack lands publicly. |
+| `build-android.yml` | `workflow_dispatch` only (Wave 32b deferred since r16) | Android APK (arm64). Phase 6 Wave 26 (2026-05-18) бампнул на .NET 10 + Android API 36 + Avalonia 12. libbox.aar теперь provision'ится из internal tooling release `tooling-libbox-singbox-1.13.10` (SHA256-pinned) через `gh release download` (НЕ из retired `LIBBOX_AAR_BASE64`). **r16 (2026-05-20)**: tag-push trigger gated behind `if: github.event_name == 'workflow_dispatch'` because `.NET 10 preview SDK 10.0.300` workload manifest references a Mono runtime pack (`Microsoft.NETCore.App.Runtime.Mono.linux-x64 = 10.0.8`) that isn't on any public NuGet feed — `NU1102` on every restore. Run manually via `gh workflow run "Build Android APK"` to probe NU1102 status. Remove the `if:` gate when SDK ships GA or pack lands publicly. |
 | `build-free-pool.yml` | cron каждые 6ч + `workflow_dispatch` | Server-side aggregator: фетчит 14 free-config sources, validates TCP+TLS, GeoIP enrich → `pool.json` artifact для in-app Free Configs tab. |
 | `publish-apt.yml` | `release` event + `workflow_dispatch` | Index'ит .deb из последнего stable release в reprepro APT repo на gh-pages. Также копирует `install.sh`, `install.ps1`, `uninstall.ps1`, `index.html` → gh-pages. CNAME `vpn.ninitux.com` deploy via GitHub Pages. |
+| `sign-android.yml` | `workflow_dispatch` only | Подписывает Android APK без .NET (обход NU1102): downloads `VPNRouter-vX.Y.Z-android-UNSIGNED.apk` с release, `zipalign`+`apksigner` против `ANDROID_KEYSTORE_*`, uploads `VPNRouter-vX.Y.Z-android.apk` + .sha256, удаляет UNSIGNED staging asset. |
+| `test.yml` (job `test`) | `push`/`PR` к `main`+`v3.0-prep` + `workflow_dispatch` | .NET 8 `dotnet test` VPNRouter.Tests — primary regression gate. Без `paths:` фильтра. Filter исключает Headless/PageScreenshot/VisualDiff (Skia/display на ubuntu). Job id `test` — branch-protection required-check, не renameить. |
+| `grep-placeholder-fingerprints.yml` (job `grep`) | `push`/`PR` к `main`+`v3.0-prep` + `workflow_dispatch` | Single-source gate: git grep 3 stas-class placeholder-fingerprint констант, fail если появляются вне `PlaceholderDefense.cs` / tests / plans / workflows. |
+| `test-windows-update.yml` | `release: published` + tag `v*` push + `workflow_dispatch` | Auto-update integration test (Windows runner): build → install+update ZIP → CLI `test-update` → реальный helper.cmd через cmd.exe → assert no parser errors. Ловит helper.cmd CMD-parser класс багов (v2.31.7-r10). |
+| `verify-release-integrity.yml` | `release` event + `workflow_dispatch` | Post-publish gate: downloads все `VPNRouter-*` assets, проверяет embedded AppVersion == release tag (Win = hard fail, Mac/Linux/Android = soft warn), recompute sha256 vs sidecar, считает assets (ожидает 14). Hard fail → drafts release + FAILED banner. |
 
 ## Secrets
 
@@ -24,6 +30,8 @@ CI pipelines. 4 workflow'а — каждый делает что-то специ
 | ~~`LIBBOX_AAR_BASE64`~~ | retired Wave 32 — replaced by tooling release fetch (48 KB secret cap × 15.6 MB aar = impossible). См. `.github/SECRETS.md` "Internal tooling releases". |
 
 Phase 6 Wave 26 (2026-05-18) добавила `LIBBOX_AAR_BASE64` чтобы CI мог собрать Android APK после Wave 23 (commit c33e372) бампа на net10.0-android36.0 + Avalonia 12. **Phase 7 Wave 32 (2026-05-19)** отретайрил этот secret — design не работал из-за 48 KB cap. Заменён на fetch из internal tooling release (`tooling-libbox-singbox-1.13.10` сейчас) через `gh release download` + `GITHUB_TOKEN`. Rotation procedure при bumps sing-box версии — `.github/SECRETS.md` "Internal tooling releases".
+
+`ANDROID_KEYSTORE_BASE64` + `ANDROID_KEYSTORE_PASSWORD` использует и `build-android.yml` (publish-time signing когда keystore present), и `sign-android.yml` (standalone `zipalign`+`apksigner`, no .NET — основной путь после tag-push, т.к. build-android tag-trigger gated). Тот же signing identity → in-place updates у установленных users.
 
 `GH_TOKEN` обязателен в env для каждого `gh release ...` step (иначе anonymously fails). См. `plans/session-handoff-2026-04-24.md` — урок от пропущенного `GH_TOKEN` в Trigger Homebrew Cask step.
 

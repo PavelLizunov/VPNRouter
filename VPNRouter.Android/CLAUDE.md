@@ -83,6 +83,13 @@ parser details.
 the repo. CI cannot build the full APK until libbox.aar is available;
 local-only builds require placing the aar at `VPNRouter.Android/Lib/`.
 
+`VpnRouterService.java` carries the no-doze foundations (v2.32.0
+AND-NETRES): `START_STICKY` so the kernel recreates the service under
+memory pressure, `startForeground` with `FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED`
+on API 34+, and a 60s-fail-safe connect `WakeLock` held for the tunnel
+lifetime. The matching battery-optimization-exemption request lives in
+`AndroidApp.Permissions.cs`.
+
 ## Build (when libbox.aar is present)
 
 ```powershell
@@ -94,7 +101,7 @@ dotnet build VPNRouter.Android/VPNRouter.Android.csproj -c Release `
   /p:JavaSdkDirectory=$env:JAVA_HOME
 ```
 
-Output: `bin\Release\net8.0-android\com.ninitux.vpnrouter-Signed.apk`.
+Output: `bin\Release\net10.0-android36.0\com.ninitux.vpnrouter-Signed.apk`.
 
 ## Phase 0 historical scaffolding
 

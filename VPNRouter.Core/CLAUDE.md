@@ -20,7 +20,7 @@ AppVersion.cs   единая версия — обновлять перед ка
 | `VpnEngine.cs` | Lifecycle VPN. `StartAsync` / `Apply` / `Stop`. Обе ветки (StartAsync, Apply) теперь обязаны звать `VlessServersResolver.Resolve` перед `ConfigGenerator.Generate` (см. `plans/session-night-shift-2026-04-25.md` — silent leak fix v2.28.2). |
 | `SingBoxManager.cs` | Process lifecycle для sing-box. Hot-reload через Clash API. **`Stop()` ставит `EnableRaisingEvents=false` ДО `Kill()`** — чтобы `Exited`-callback не сработал как false crash. |
 | `ConfigGenerator.cs` | sing-box 1.13+ JSON генератор. **Hard guard**: throws если servers пуст (v2.28.2). action-based route rules, type-based DNS. |
-| `CustomConfigInjector.cs` | User-provided sing-box JSON + injects process routing. `StripUnsupportedFeatures` мигрирует с legacy 1.11 на 1.13. |
+| `CustomConfigInjector.cs` | User-provided sing-box JSON + injects process routing. `StripUnsupportedFeatures` мигрирует с legacy 1.11 на 1.13. **v2.40.0 fail-CLOSED**: `route.final` = proxy в full-tunnel/exclude mode; `EnsureSynthesizedRemoteDns` синтезирует Cloudflare DoH через proxy outbound когда нет proxy-detour DNS; `InjectDnsRules` берёт `proxyTag` и синтезирует per-app DNS для include-split; `FindRemoteDnsTag` исключает `dns-direct`. |
 | `LeakProtection.cs` | Validation сгенерированного JSON. Ловит missing proxy outbound, DNS strategy, strict_route. **Зовётся в обоих StartAsync + Apply** с v2.28.2. |
 | `HealthMonitor.cs` | Periodic health check, auto-restart с backoff (5/10/20/40/80s), debounced rescan (5s window). |
 | `VlessServersResolver.cs` | **Single source of truth** для агрегации subscription→VLESS. Зовётся из `VpnEngine.StartAsync`, `VpnEngine.Apply`, `HealthMonitor.GenerateConfigJson`. (v2.28.2-r1) |
@@ -29,6 +29,8 @@ AppVersion.cs   единая версия — обновлять перед ка
 | `VlessUriParser.cs` | Парсер `vless://...` URI. **`HttpUtility.ParseQueryString` НЕ делает двойной unquote** — `pbk` (base64url с `-_`) приходит как есть. |
 | `ProcessScanner.cs` | Резолвит process_name по profile. Поддерживает wildcards через regex. **case-sensitive**: sing-box `process_name` matching через Go map → не использовать `ToLowerInvariant()`. |
 | `EtwProcessMonitor.cs` | Real-time process events через ETW. <10ms latency vs WMI 500ms+. |
+| `ProcessQuery.cs` | Handle-safe `GetProcessesByName` wrappers: `AnyAlive` / `CountAlive` dispose the `Process[]` в `finally`. `RuntimeStatusDetector.AnyProcessAlive` делегирует сюда. P0 handle-leak fix (v2.40.0-r3); `.githooks/pre-commit` Gate 7 hard-fails staged product `GetProcessesByName(...).Length`. |
+| `RoutingAppListEditor.cs` | Static helper для split-tunnel routing app lists: `TryAddProcessName` / `TryRemoveProcessName` + `IsStillRoutedByAnother` (survivor-guard — UI scrub `MainWindowViewModel.ScrubRoutingForApp` не удаляет process_name, который другая group ещё routes; v2.40.0-r2). |
 | `FirewallManager.cs` | Windows Firewall rules через `netsh.exe`. block_on_vpn_fail. |
 | `ProfileManager.cs` | GitHub > Local > Built-in source priority. Merging multiple profiles (union processes, strictest DNS wins). |
 | `SettingsLoader.cs` | YAML load/save через YamlDotNet. Auto-create defaults. |
@@ -87,7 +89,7 @@ _process.Kill(entireProcessTree: true);
 ## Тестирование
 
 `UnitTest1.cs` удалён (Phase 2E extraction 2026-05-17) — тесты разбиты на
-per-class файлы (~171 `.cs` в `VPNRouter.Tests/`), плюс headless Avalonia
+per-class файлы (~181 `.cs` в `VPNRouter.Tests/`), плюс headless Avalonia
 tests в отдельных файлах. Полный inventory с
 покрытием — `VPNRouter.Tests/CLAUDE.md` "Test classes" таблица.
 
@@ -98,8 +100,12 @@ Headline классы по Core (не исчерпывающе):
 - `ConfigGeneratorEmptyServersGuardTests` (v2.28.2) — hard guard pin
 - `LeakProtectionTests` — 19 cases (включая протокол-aware dispatch
   v2.30.1-r4 + smart-mode local-dns v2.31.x, добавлены в v2.31.5+)
-- `CustomConfigInjectorTests` — 22+ cases (Validate / Inject / DNS
-  optimization / sing-box check integration)
+- `CustomConfigInjectorTests` — 32 cases (Validate / Inject / DNS
+  optimization / sing-box check integration / v2.40.0 fail-CLOSED dns.final +
+  synthesized remote DNS)
+- `RoutingAppListEditorTests` — 21 cases (add/remove + `IsStillRoutedByAnother`
+  survivor-guard)
+- `ProcessQueryTests` — 9 cases (handle-safe `AnyAlive` / `CountAlive`)
 - `SubscriptionFetcherParserTests` (v2.31.5+) — 8 cases на 3 body формата
 - `FreeConfigAggregatorPreserveTests` (v2.28.3-r5) — 9 cases для merge logic
 - `Generate_FromSubscribeMode_PassesSingBoxCheck` — integration: запускает

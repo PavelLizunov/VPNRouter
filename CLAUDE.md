@@ -1,6 +1,6 @@
 # VPNRouter — root context for Claude
 
-Process-based split-tunnel VPN router for Windows / macOS / Linux. .NET 8 +
+Process-based split-tunnel VPN router for Windows / macOS / Linux / Android. .NET 8 +
 Avalonia + sing-box (TUN+VLESS+Reality). Solo dev project — see
 `.claude_handoff.md` for current state.
 
@@ -19,6 +19,7 @@ Avalonia + sing-box (TUN+VLESS+Reality). Solo dev project — see
 |---|---|
 | Бизнес-логика, sing-box, subscriptions, free configs | `VPNRouter.Core/CLAUDE.md` |
 | Avalonia GUI, ViewModels, design tokens | `VPNRouter.App/CLAUDE.md` |
+| Android port (libbox.aar JNI, shared Avalonia UI) | `VPNRouter.Android/CLAUDE.md` |
 | CLI (Spectre.Console) | `VPNRouter.CLI/CLAUDE.md` |
 | Windows Service wrapper | `VPNRouter.Service/CLAUDE.md` |
 | xUnit tests | `VPNRouter.Tests/CLAUDE.md` |
@@ -75,6 +76,7 @@ gh release view vX.Y.Z --repo PavelLizunov/VPNRouter --json isPrerelease,assets
 | `audit-overflow-fix` | UI overflow / стилевое несоответствие на settings page |
 | `merge-design-handoff` | User шлёт `claude.ai/design` URL — fetch + extract + map tokens |
 | `update-readme-versions` | После каждого release бампим version examples в README |
+| `phase-task-launcher` | START любой v3.0 refactor task / >30-строчного изменения — 6-gate lifecycle из `plans/v3.0-execution-methodology.md` |
 | `post-ship-mcp-verify` | **MUST** запускать после каждого ship-rolling-candidate (auto-chain). Download → install → launch → computer-use клики → log scan → PASS/FAIL report. v2.37.0-r21+. |
 
 ## Memory layer

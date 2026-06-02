@@ -193,6 +193,22 @@ _settings.App.ConfigMode = IsSubscribeMode ? "subscribe"
 SaveSettings: если `wantsCustomMode && !hasCustomConfig` → fallback на
 "subscribe" / "generated".
 
+### Page DataContextChanged → unsubscribe old VM (v2.40.0-r4)
+`DataContextChanged` в Avalonia fire'ит повторно (window recreation,
+headless tests, host-context swap). Page'и которые подписываются на VM-event
+в этом хендлере ОБЯЗАНЫ отписать старый VM перед wiring нового — иначе
+каждый change leak'ает handler, держит старый VM живым и double-fire'ит
+effect. Pattern (`ServersPage.axaml.cs` + `SubscribePage.axaml.cs` —
+`ActiveServerChanged` → `ScrollIntoView`):
+```csharp
+private MainWindowViewModel? _subscribedVm;
+private void OnDataContextChanged(object? s, EventArgs e) {
+  if (_subscribedVm is not null) _subscribedVm.ActiveServerChanged -= OnActiveServerChanged;
+  _subscribedVm = DataContext as MainWindowViewModel;
+  if (_subscribedVm is not null) _subscribedVm.ActiveServerChanged += OnActiveServerChanged;
+}
+```
+
 ## UI design rules (avoid recurring revisions)
 
 User feedback after r10..r13 surfaced ~5 same-class revisions. Lessons
@@ -312,8 +328,8 @@ offscreen-render для PNG snapshots.
 
 - `HeadlessGuiTests` (4) — MainWindow / AboutWindow ctor smoke + button
   input routing
-- `PageScreenshotTests` (14) — 9 page snapshots + NetworkPage Autostart
-  sub-tab + 3 narrow-window variants (520 / 440 / 360 / 300 / 720 / 500
+- `PageScreenshotTests` (20) — 9 page snapshots + NetworkPage Autostart
+  sub-tab + narrow-window variants (520 / 440 / 360 / 300 / 720 / 500
   / 400 px), inspectional PNG'и в `screenshots/` (gitignored)
 - `VisualDiffTests` (3, v2.31.5+) — pixel-tolerance regression vs
   pinned `screenshots/baseline/*.png` для DpiBypass / Telegram / Tools.

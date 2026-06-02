@@ -9,6 +9,7 @@ VPNRouter.CLI start --profile <name> [--dry-run]
 VPNRouter.CLI start --profile "Name1,Name2,Name3"   ← merge нескольких профилей
 VPNRouter.CLI stop
 VPNRouter.CLI status
+VPNRouter.CLI doctor                                 ← health check (exit 0=OK,1=warn,2=err)
 VPNRouter.CLI profiles list
 VPNRouter.CLI profiles show <name>
 VPNRouter.CLI profiles update
@@ -20,13 +21,19 @@ VPNRouter.CLI service install / uninstall / start / stop / status
 ```
 Program.cs                  ← Spectre.Console root + DI
 Commands/
-  StartCommand.cs           ← вызывает VlessServersResolver / SubscriptionResolver / VpnEngine
+  StartCommand.cs           ← SubscriptionResolver + PlatformServices.CreateVpnEngine
   StopCommand.cs
   StatusCommand.cs
-  ProfilesCommands.cs
-  ServiceCommands.cs        ← обёртка над ServiceInstaller (sc.exe)
+  DoctorCommand.cs          ← config/catalogue/binaries/state health check
+  ProfilesCommand.cs        ← ProfilesList/Show/Update commands
+  ServiceCommand.cs         ← Service{Install,Uninstall,Start,Stop,Status}, обёртка над ServiceInstaller (sc.exe)
+  TestUpdateCommand.cs      ← hidden, CI-only auto-update driver (VPNROUTER_CI=1)
+  EmergencyChannelTestCommand.cs ← hidden dev harness (wgturn-cli via EmergencyChannelEngine)
 Helpers/
   AdminHelper.cs            ← IsAdmin() check
+  ProfileSourceFactory.cs
+  StateFile.cs              ← state.json read/write (status + PID sync)
+  CliJsonContext.cs
 ```
 
 ## Critical patterns

@@ -16,7 +16,7 @@ ServiceInstaller.cs     ← sc.exe install/uninstall, failure recovery (3x/60s)
 
 ## Lifecycle
 
-1. **`sc.exe create VPNRouter binPath= "...\VPNRouter.Service.exe --service" start= delayed-auto`**
+1. **`sc.exe create VPNRouter binPath= "...\VPNRouter.Service.exe --service" start= auto`** (regular auto-start, не delayed — VPN должен подняться ASAP после boot; см. комментарий в `ServiceInstaller.Install`).
 2. Service запускается под `LocalSystem` после Tcpip/Dnscache/Dhcp (boot deps).
 3. `VPNRouterService.ExecuteAsync` стартует → читает `config.yaml` →
    `SubscriptionResolver.ResolveAsync(refreshFromNetwork: true)` → запускает
@@ -47,13 +47,15 @@ _watcher.Changed += async (_, _) => {
 Все ошибки идут в Windows Event Log (Source: "VPNRouter"). Юзер ищет проблемы
 через Event Viewer.
 
-### Ad-hoc install
-```bash
-VPNRouter.Service.exe install        ← sc.exe create
-VPNRouter.Service.exe uninstall      ← sc.exe stop + delete
-VPNRouter.Service.exe --service      ← запуск от sc.exe (не вручную!)
+### Install / uninstall
+`VPNRouter.Service.exe` сам распознаёт только `--service` (Program.cs ветвится
+на `args.Contains("--service")`; любой другой arg → console mode). Install /
+uninstall запускаются из CLI:
+```
+VPNRouter.CLI service install   → ServiceInstaller.Install()   (sc create)
+VPNRouter.CLI service uninstall → ServiceInstaller.Uninstall() (sc stop + delete)
+VPNRouter.Service.exe --service → запуск от sc.exe (не вручную!)
 ```
 
-`ServiceInstaller.RunSc` имеет известный баг с `Verb="runas" + UseShellExecute=false`
-(elevation не работает) — harmless, потому что caller уже elevated к моменту
-вызова.
+`ServiceInstaller.RunSc` не повышает права сам (`UseShellExecute=false`, без
+`Verb`); caller обязан быть уже elevated (CLI проверяет `AdminHelper.IsAdmin()`).

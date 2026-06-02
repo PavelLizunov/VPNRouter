@@ -48,7 +48,7 @@ offscreen-render → `window.CaptureRenderedFrame()` для PNG snapshots.
 | `LeakProtectionAppSettingsTests` | F-12 / parity audit P0: `ValidateAppSettings` defence-in-depth backstop for silent ConfigMode flips |
 | `LeakProtectionTests` | `ValidateConfig` invariants + protocol-aware dispatch (VLESS/Hy2/TUIC, v2.30.1-r4) + smart-mode local-dns + proxy-udp branch |
 | `VlessUriParserTests` | `VlessUriParser.Parse` URI shapes + invalid-input rejection |
-| `CustomConfigInjectorTests` | Custom-config inject pipeline: split-tunnel routing inject, action-vs-legacy dispatch, sing-box check integration |
+| `CustomConfigInjectorTests` | Custom-config inject pipeline: split-tunnel routing inject, action-vs-legacy dispatch, sing-box check integration. v2.40 additions: fail-CLOSED `dns.final` + `EnsureSynthesizedRemoteDns` (synth Cloudflare DoH via proxy when no proxy-detour DNS), `InjectDnsRules(proxyTag)` per-app DNS synth for include-split, `FindRemoteDnsTag` excludes `dns-direct` (32 tests) |
 | `VlessServersResolverTests` | v2.28.2: subscription→VLESS aggregation в 8 case'ах |
 | `ConfigGeneratorEmptyServersGuardTests` | v2.28.2: hard guard + e2e subscribe→resolve→generate + sing-box check integration |
 | `FreeConfigAggregatorPreserveTests` | v2.28.3-r5: cache merge logic (Verified preserved, recent Ok preserved, etc.) |
@@ -92,6 +92,15 @@ Auto-discovery: `Get-ChildItem VPNRouter.Tests\*Tests.cs`. Other files
 (`*Helper.cs`, `TestAppBuilder.cs`, `ViewModelTests.cs`,
 `HeadlessGuiTests.cs`, `PageScreenshotTests.cs`, `VisualDiffTests.cs`)
 follow the same convention.
+
+### v2.40.0 additions (not from 2E)
+
+| Класс / файл | Что покрывает |
+|---|---|
+| `ProcessQueryTests` | v2.40.0-r3 (audit P0 handle-leak sweep): `ProcessQuery.AnyAlive`/`CountAlive` handle-safe wrappers — input guards, positive/negative cases, params overload, 500-call callable-stability soak. Mirrors `RuntimeStatusDetectorHandleLeakTests` (9 tests, 7 `[Fact]` + 2 `[Theory]`) |
+| `RoutingAppListEditorTests` | v2.40.0-r2 additions: `RoutingAppListEditor.IsStillRoutedByAnother` survivor-guard so `ScrubRoutingForApp` won't over-remove a process name another group still routes (21 tests) |
+| `DiagnosticsRedactorTests` | v2.39.0-r1+ diagnostics export redaction; v2.40.0-r1 additions: `obfs_password`/`plugin_opts`, URL userinfo drop, Authorization/Bearer-token redaction (15 tests) |
+| `FreeConfigsApplyGateTests` | v2.40.0 FC interaction gates: Verified-only Connect/Apply, IsBusy guard, target/maxPing clamps (3 tests) |
 
 ## Запустить
 

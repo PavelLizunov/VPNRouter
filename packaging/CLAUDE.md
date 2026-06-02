@@ -8,16 +8,26 @@ one-liner UX на 3 платформах.
 ```
 apt-repo/
   install.sh           ← Linux Debian/Ubuntu one-liner: detects distro, adds GPG key + apt source, installs vpnrouter
+  distributions        ← reprepro distributions config
+  vpnrouter-apt-public.asc ← apt repo signing public key
+  README.md            ← apt repo / reprepro notes
 linux/
   postinst             ← .deb postinst: setcap cap_net_admin,cap_net_bind_service=+eip /opt/vpnrouter/sing-box
   postrm               ← .deb postrm: kill running sing-box + VPNRouter.App
   vpnrouter-update-helper  ← re-applies setcap after cp (xattrs не переживают cp)
+  VPNRouter.sh         ← launcher wrapper
+  vpnrouter.desktop    ← .desktop entry
+  com.vpnrouter.update.policy ← polkit policy (legacy pkexec path)
+  README.txt
 windows/
   install.ps1          ← Windows one-liner: UAC self-elevate, sha256 verify, install + Start Menu + ARP entry
   uninstall.ps1        ← matching uninstall: clean install dir, Start Menu shortcut, HKLM Uninstall key
+  repair.cmd           ← hosted self-repair tool (vpn.ninitux.com/repair.cmd): full reinstall + service reset
 winget/
   manifests/p/PavelLizunov/VPNRouter/<version>/   ← winget submission: version + installer + locale.en-US YAMLs
   README.md            ← submission process
+android-page/
+  index.html           ← vpn.ninitux.com/android APK download page (published to gh-pages)
 ```
 
 ## Critical patterns
@@ -60,17 +70,23 @@ NOPASSWD entry для конкретного `sing-box` binary path. После 
 2. PR в [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs).
 
 `packaging/winget/README.md` описывает процесс. **Не submitted в core ещё** —
-блокировано на нотариазации DMG (Apple Developer ID не куплен).
+единственный закоммиченный манифест `2.27.2` (не bump'ался). Блокер по README:
+нет dedicated GitHub-аккаунта под fork microsoft/winget-pkgs + PAT для авто-PR.
 
-## Один из 12 release-артефактов
+## Release-артефакты — 14 desktop / 16 с Android
 
-Каждый release должен иметь все **12 файлов** для всех 3 платформ:
+Каждый release должен иметь **14 desktop-файлов** для 3 desktop-платформ
+(каждый artifact + `.sha256` companion):
 ```
-VPNRouter-v{V}-win.zip                ← install (~50 MB) + .sha256
+VPNRouter-v{V}-win.zip                 ← install (~50 MB) + .sha256
 VPNRouter-update-v{V}-win.zip          ← lite update (~3 MB) + .sha256
-VPNRouter-v{V}-mac.dmg                 ← + .zip (raw .app)
+VPNRouter-v{V}-mac.dmg                 ← + .sha256
+VPNRouter-v{V}-mac.zip                 ← raw .app + .sha256
 VPNRouter-v{V}-linux-amd64.deb         ← + .sha256
 VPNRouter-v{V}-linux-x86_64.AppImage   ← + .sha256
 VPNRouter-v{V}-linux.tar.gz            ← + .sha256
 ```
-Если меньше 12 — не cut'аем stable. Re-trigger недостающего CI через `workflow_dispatch`.
+= 7 artifacts × 2 = 14. На stable cut добавляется Android APK
+(`VPNRouter-v{V}-android.apk` + .sha256, built unsigned locally + signed in CI
+via `sign-android.yml`) → **16**. Re-trigger недостающего CI через
+`workflow_dispatch`. Если меньше (14 desktop / 16 с Android) — не cut'аем stable.

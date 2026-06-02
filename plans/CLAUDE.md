@@ -40,16 +40,23 @@ release-notes-vX.Y.Z[-rN].md             ← черновик release notes (.gi
 <cross-refs>
 ```
 
-## Активные планы (на 2026-04-27)
+## Активные планы (на 2026-06-02)
+
+Stable v2.38.2; in-flight prerelease v2.40.0-r4 (folds v2.39 + v2.40).
 
 | Файл | Статус |
 |---|---|
-| `vpnrouter-v2.28-ux-bugfix.md` | основной — Bug 1 + Bug 2 + Free Configs UX (Phase 3A/3B/3C) |
-| `vpnrouter-v2.28.4-ux-redesign.md` | новый — NetworkPage overflow + DpiBypass/Apps style + Free Configs Simple+green-card |
-| `vpnrouter-core-stability-audit.md` | core layer audit (in flight, P2/P3 в backlog) |
+| `interaction-contracts/README.md` | adopted framework (FC + APP page interaction contracts) |
+| `v2.40.0-fc-interaction-gates.md` | Free Configs Verified-only Connect/Apply + busy/bounds gates |
+| `regression-review-v2.40.0-r1-followup-2026-06-02.md` | r2 over-scrub + per-app DNS leak follow-up |
+| `handle-leak-sweep-v2.40.0-r3-2026-06-02.md` | P0 handle-leak sweep (ProcessQuery + Gate 7 guard) |
+| `bug-responsiveness-memory-audit-targets-2026-06-02.md` | measurement-first perf/leak audit map |
+| `public-configs-pipeline-audit-and-hardening-plan-2026-06-02.md` | free-configs pipeline hardening |
+| `firewall-killswitch-linux-macos-2026-06-02.md` | P0 fail-closed firewall backstop (Linux/macOS) |
+| `vpn-connection-user-statistics-product-notes-2026-06-02.md` | STATS Phase 1-4 product notes |
+| `android-ci-distribution-roadmap-2026-05-31.md` | Android CI (NU1102) + distribution |
 | `vpnrouter-release-strategy.md` | rolling-rN policy reference |
-| `session-handoff-2026-04-24.md` | handoff после v2.27.2 stable cut |
-| `session-night-shift-2026-04-25.md` | v2.28.2-r1 post-mortem (silent leak fix) |
+| `cut-stable-checklist.md` | mandatory pre-cut live-update gate checklist |
 
 ## Что NOT в plans/
 
@@ -60,8 +67,9 @@ release-notes-vX.Y.Z[-rN].md             ← черновик release notes (.gi
 ## Persistence
 
 Активные планы (P0/P1) держим до их завершения + 1-2 stable cycles. Закрытые
-плану (после v2.28.x stable cut) можно архивировать в `plans/archive/<year>/`,
-но это пока не сделано — planов всего ~15, скрипт прокручивает быстро.
+планы (после stable cut) можно архивировать в `plans/archive/<year>/`, но это
+пока не сделано — план-файлов уже ~230 (+ release-notes/evidence), но скрипт
+прокручивает быстро.
 
 ## Cross-references
 
