@@ -36,7 +36,9 @@ public class ZapretManager : IDisposable
     public int? Pid => IsRunning ? _handle?.Pid : null;
 
     /// <summary>Check if winws.exe is running globally (handles .bat wrapper case).</summary>
-    public static bool IsWinwsRunning() => Process.GetProcessesByName("winws").Length > 0;
+    // v2.40.0-r3 (audit P0 handle-leak sweep): ProcessQuery disposes the Process[]
+    // (a bare GetProcessesByName(...).Length leaked one handle per winws process).
+    public static bool IsWinwsRunning() => ProcessQuery.AnyAlive("winws");
 
     /// <summary>PID of running winws.exe process (for status display).</summary>
     public static int? WinwsPid

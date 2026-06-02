@@ -42,32 +42,15 @@ public static class RuntimeStatusDetector
     /// is polled every 1–2 seconds (see class summary), so without explicit
     /// disposal we leaked one OS handle per <c>Process</c> per poll until GC
     /// finalised the orphaned objects — matching the audit's "+170 handles
-    /// per VPN start/stop cycle" symptom. Centralised the disposal here so
-    /// any future name-based detector picks it up automatically.
+    /// per VPN start/stop cycle" symptom.
+    ///
+    /// <para>v2.40.0-r3: the disposal logic moved to the shared
+    /// <see cref="ProcessQuery.AnyAlive(string)"/> so every name-based detector
+    /// (Zapret, VM status, Public Configs) shares one handle-safe path; this
+    /// stays as a thin alias for the existing call sites + the
+    /// RuntimeStatusDetectorHandleLeakTests pin.</para>
     /// </summary>
-    private static bool AnyProcessAlive(string processName)
-    {
-        Process[]? procs = null;
-        try
-        {
-            procs = Process.GetProcessesByName(processName);
-            return procs.Length > 0;
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            if (procs != null)
-            {
-                foreach (var p in procs)
-                {
-                    try { p.Dispose(); } catch { /* defensive — GC will mop up */ }
-                }
-            }
-        }
-    }
+    private static bool AnyProcessAlive(string processName) => ProcessQuery.AnyAlive(processName);
 
     /// <summary>
     /// True if something is listening on the configured TgProxy port.

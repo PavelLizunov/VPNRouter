@@ -1558,7 +1558,8 @@ public partial class FreeConfigsPageViewModel : ObservableObject, IDisposable
             // There will usually be our temporary verifier sing-box instances running during
             // deep-verify, but THIS check is made BEFORE we spawn any — so any sing-box we see
             // is the user's main VPN.
-            return System.Diagnostics.Process.GetProcessesByName("sing-box").Length > 0;
+            // v2.40.0-r3 (audit P0 handle-leak sweep): ProcessQuery disposes the Process[].
+            return VPNRouter.Core.Services.ProcessQuery.AnyAlive("sing-box");
         }
         catch
         {

@@ -51,16 +51,26 @@ public static class ZapretActions
         yield return "=== Clear Discord cache ===";
 
         var running = Process.GetProcessesByName("Discord");
-        if (running.Length == 0)
+        // v2.40.0-r3 (audit P0 handle-leak sweep): dispose the Process[] — the
+        // foreach killed each process but never released the array's kernel
+        // handles. yield-return inside try/finally (no catch) is legal in C#.
+        try
         {
-            yield return "Discord not running";
-        }
-        else
-        {
-            foreach (var p in running)
+            if (running.Length == 0)
             {
-                yield return KillProcessLine(p);
+                yield return "Discord not running";
             }
+            else
+            {
+                foreach (var p in running)
+                {
+                    yield return KillProcessLine(p);
+                }
+            }
+        }
+        finally
+        {
+            foreach (var p in running) { try { p.Dispose(); } catch { } }
         }
 
         await Task.Delay(500, ct);
@@ -122,7 +132,7 @@ public static class ZapretActions
 
         foreach (var proc in new[] { "AdguardSvc", "SmartByte" })
         {
-            yield return Process.GetProcessesByName(proc).Length > 0
+            yield return ProcessQuery.AnyAlive(proc) // v2.40.0-r3: handle-safe (was a bare .Length probe)
                 ? $"✗ [X] {proc} running — conflicts with zapret"
                 : $"✓ {proc} not running";
         }
@@ -140,7 +150,7 @@ public static class ZapretActions
 
         yield return await CheckHostsLineAsync(ct);
 
-        yield return Process.GetProcessesByName("winws").Length > 0
+        yield return ProcessQuery.AnyAlive("winws") // v2.40.0-r3: handle-safe (was a bare .Length probe)
             ? "✓ winws.exe is running"
             : "— winws.exe not running";
 

@@ -2975,7 +2975,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // that: once the owner releases (on Stop or death), the
             // kernel releases the semaphore atomically so there's no
             // stale window.
-            var singboxRunning = Process.GetProcessesByName("sing-box").Length > 0;
+            // v2.40.0-r3 (audit P0 handle-leak sweep): ProcessQuery disposes the
+            // Process[] (a bare GetProcessesByName(...).Length leaked a handle per
+            // poll on this status path).
+            var singboxRunning = VPNRouter.Core.Services.ProcessQuery.AnyAlive("sing-box");
             if (!singboxRunning) return;
 
             var tunOwned = TunOwnershipLock.IsOwnedByAnyone();
@@ -4328,7 +4331,8 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     private bool IsZapretRunning()
     {
 #if PLATFORM_WINDOWS
-        return System.Diagnostics.Process.GetProcessesByName("winws").Length > 0;
+        // v2.40.0-r3 (audit P0 handle-leak sweep): handle-safe (was GetProcessesByName(...).Length).
+        return VPNRouter.Core.Services.ProcessQuery.AnyAlive("winws");
 #else
         return false;
 #endif

@@ -125,6 +125,31 @@ if [ -n "$needs_tests" ]; then
   fi
 fi
 
+# ─── Gate 7 — No handle-leaking GetProcessesByName(...).Length ──────────
+# v2.40.0-r3 (audit Этап 1 P0 handle-leak sweep): a bare
+# GetProcessesByName(name).Length leaks one OS kernel handle per returned
+# Process until GC finalises it. On hot polling paths that was the AU-9
+# "+170 handles per VPN cycle" leak. Use ProcessQuery.AnyAlive / CountAlive
+# (they dispose the Process[] in a finally). This guard scans STAGED product
+# .cs (excludes VPNRouter.Tests + ProcessQuery.cs + comment lines) so the
+# leak can't quietly come back. DoD: no product GetProcessesByName(...).Length
+# without disposing the objects.
+leak_hits=""
+for f in $(git diff --cached --name-only --diff-filter=AM | grep -E '\.cs$' \
+            | grep -E '^(VPNRouter\.Core|VPNRouter\.App|VPNRouter\.Service|VPNRouter\.CLI|VPNRouter\.Android)/' \
+            | grep -v 'ProcessQuery\.cs' || true); do
+  [ -f "$f" ] || continue
+  # match the leak pattern, then drop comment lines (trimmed start //, ///, or *)
+  hits=$(grep -nE 'GetProcessesByName\([^)]*\)\.Length' "$f" 2>/dev/null \
+         | grep -vE '^[0-9]+:[[:space:]]*(///?|\*)' || true)
+  if [ -n "$hits" ]; then
+    leak_hits="${leak_hits} ${f}"
+  fi
+done
+if [ -n "$leak_hits" ]; then
+  ERRORS+=("Gate 7: handle-leaking GetProcessesByName(...).Length in product code (${leak_hits}). Use ProcessQuery.AnyAlive/CountAlive — they dispose the Process[].")
+fi
+
 # ─── Verdict ─────────────────────────────────────────────────────────────
 if [ "${#WARNINGS[@]}" -gt 0 ]; then
   echo ""
