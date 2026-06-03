@@ -411,6 +411,32 @@ sealed class Program
         }
         catch { }
 
+        // v2.40.0-r10 #2 (core-audit): also sweep on process exit, so an
+        // abnormal teardown that skips the engine's clean DeleteAllRules
+        // doesn't strand the user with kill-switch block rules still blocking
+        // the internet until the NEXT launch. Gated on !IsOwnedByAnyone() so
+        // that in background-service mode — where the Windows Service owns the
+        // TUN and the block rules while this GUI is just a control panel —
+        // closing the GUI window never nukes the Service's live rules. The
+        // startup sweep above remains the fail-closed backstop for the case
+        // where this process exits abnormally while still holding the lock.
+        try
+        {
+            AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+            {
+                try
+                {
+                    if (OperatingSystem.IsWindows()
+                        && !VPNRouter.Core.Services.TunOwnershipLock.IsOwnedByAnyone())
+                    {
+                        FirewallManager.TryCleanupOrphanedRulesSafe(Serilog.Log.Logger);
+                    }
+                }
+                catch { }
+            };
+        }
+        catch { }
+
         // v2.38.0 — the Explorer "route through VPN" context-menu verb is
         // registered in App.axaml.cs AFTER the ViewModel loads settings, so
         // Strings.Lang is already "ru"/"en" and the menu label is localized

@@ -106,26 +106,44 @@ public class FirewallManagerProcessRunnerWireShapeTests
                 logger: null, tunCidr: "172.19.0.1/30");
         });
 
-        // 4 calls total: allow rule (call 0), then 3 block rules.
-        Assert.Equal(4, fake.RunCalls.Count);
+        // v2.40.0-r10 #6: 7 calls total — allow rule (call 0), 3 IPv4 block
+        // rules (1-3), 3 IPv6 block rules (4-6).
+        Assert.Equal(7, fake.RunCalls.Count);
 
-        // Block rules MUST carry the complement-of-/30 range. The expected
-        // shape is `remoteip=0.0.0.0-172.18.255.255,172.19.0.4-255.255.255.255`.
+        // IPv4 block rules (calls 1-3) MUST carry the complement-of-/30 range.
+        // Expected shape `remoteip=0.0.0.0-172.18.255.255,172.19.0.4-255.255.255.255`.
         var expectedRange = "remoteip=0.0.0.0-172.18.255.255,172.19.0.4-255.255.255.255";
-        var blockCalls = fake.RunCalls.Skip(1).ToList();
-        foreach (var call in blockCalls)
+        var ipv4BlockCalls = fake.RunCalls.Skip(1).Take(3).ToList();
+        foreach (var call in ipv4BlockCalls)
         {
             Assert.Equal("netsh.exe", call.ExecutablePath);
             Assert.Contains("action=block", call.Arguments);
             Assert.Contains(expectedRange, call.Arguments);
         }
 
-        // Three distinct block targets: UDP/53, TCP/53, TCP/853.
-        Assert.Contains(blockCalls, c =>
+        // Three distinct IPv4 block targets: UDP/53, TCP/53, TCP/853.
+        Assert.Contains(ipv4BlockCalls, c =>
             c.Arguments.Contains("protocol=UDP") && c.Arguments.Contains("remoteport=53"));
-        Assert.Contains(blockCalls, c =>
+        Assert.Contains(ipv4BlockCalls, c =>
             c.Arguments.Contains("protocol=TCP") && c.Arguments.Contains("remoteport=53"));
-        Assert.Contains(blockCalls, c =>
+        Assert.Contains(ipv4BlockCalls, c =>
+            c.Arguments.Contains("protocol=TCP") && c.Arguments.Contains("remoteport=853"));
+
+        // v2.40.0-r10 #6: three parallel IPv6 block rules (calls 4-6) scoped
+        // to public global-unicast (2000::/3) — close the IPv6 DNS race the
+        // v4 rules miss. No TUN exclusion (shipping TUN is IPv4-only).
+        var ipv6BlockCalls = fake.RunCalls.Skip(4).Take(3).ToList();
+        foreach (var call in ipv6BlockCalls)
+        {
+            Assert.Equal("netsh.exe", call.ExecutablePath);
+            Assert.Contains("action=block", call.Arguments);
+            Assert.Contains("remoteip=2000::/3", call.Arguments);
+        }
+        Assert.Contains(ipv6BlockCalls, c =>
+            c.Arguments.Contains("protocol=UDP") && c.Arguments.Contains("remoteport=53"));
+        Assert.Contains(ipv6BlockCalls, c =>
+            c.Arguments.Contains("protocol=TCP") && c.Arguments.Contains("remoteport=53"));
+        Assert.Contains(ipv6BlockCalls, c =>
             c.Arguments.Contains("protocol=TCP") && c.Arguments.Contains("remoteport=853"));
     }
 
@@ -148,25 +166,33 @@ public class FirewallManagerProcessRunnerWireShapeTests
                 logger: null, tunCidr: null);
         });
 
-        Assert.Equal(4, fake.RunCalls.Count);
-        var blockCalls = fake.RunCalls.Skip(1).ToList();
+        // v2.40.0-r10 #6: 7 calls (allow + 3 IPv4 + 3 IPv6). The bundled-
+        // default complement range applies to the IPv4 blocks (calls 1-3).
+        Assert.Equal(7, fake.RunCalls.Count);
+        var ipv4BlockCalls = fake.RunCalls.Skip(1).Take(3).ToList();
         var expectedRange = "remoteip=0.0.0.0-172.18.255.255,172.19.0.4-255.255.255.255";
-        foreach (var call in blockCalls)
+        foreach (var call in ipv4BlockCalls)
         {
             Assert.Contains(expectedRange, call.Arguments);
+        }
+        // IPv6 blocks (calls 4-6) carry the fixed public-unicast scope.
+        foreach (var call in fake.RunCalls.Skip(4).Take(3))
+        {
+            Assert.Contains("remoteip=2000::/3", call.Arguments);
         }
     }
 
     [Fact]
-    public async Task DisableDnsLockdownAsync_DeletesAllSixRuleNames()
+    public async Task DisableDnsLockdownAsync_DeletesAllNineRuleNames()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(),
             "DisableDnsLockdownAsync is Windows-only (netsh)");
 
         // r17 Disable path tears down: the canonical 4 (allow + 3 blocks)
         // PLUS the legacy r12 TUN-allow rules (deleted on best-effort
-        // basis for users upgrading from r12..r16). Total = 6 delete
-        // calls; each MUST be a `delete rule name=<rule>` shape.
+        // basis for users upgrading from r12..r16) PLUS the r10 #6 IPv6
+        // block rules (3). Total = 9 delete calls; each MUST be a
+        // `delete rule name=<rule>` shape.
         var fake = new FakeProcessRunner();
         fake.OnRun(_ => true,
             new ProcessResult(0, "Ok.", "", TimeSpan.FromMilliseconds(5), false));
@@ -176,7 +202,7 @@ public class FirewallManagerProcessRunnerWireShapeTests
             await FirewallManager.DisableDnsLockdownAsync(logger: null);
         });
 
-        Assert.Equal(6, fake.RunCalls.Count);
+        Assert.Equal(9, fake.RunCalls.Count);
         foreach (var call in fake.RunCalls)
         {
             Assert.Equal("netsh.exe", call.ExecutablePath);
@@ -187,6 +213,14 @@ public class FirewallManagerProcessRunnerWireShapeTests
             Assert.Contains(call.Arguments,
                 arg => arg.StartsWith("name=", StringComparison.OrdinalIgnoreCase));
         }
+
+        // v2.40.0-r10 #6: the three IPv6 rule names must be among the deletes
+        // so a disable/cleanup fully tears them down (they also share the
+        // VPNRouter-DnsLockdown- prefix, so CleanupOrphanedRules covers them).
+        var allArgs = fake.RunCalls.SelectMany(c => c.Arguments).ToList();
+        Assert.Contains("name=VPNRouter-DnsLockdown-UDP53-v6", allArgs);
+        Assert.Contains("name=VPNRouter-DnsLockdown-TCP53-v6", allArgs);
+        Assert.Contains("name=VPNRouter-DnsLockdown-TCP853-v6", allArgs);
     }
 
     [Fact]

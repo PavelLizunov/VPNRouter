@@ -112,6 +112,30 @@ public class StartCommand : AsyncCommand<StartSettings>
             return await DryRunAsync(appSettings);
         }
 
+        // v2.40.0-r10 #4 (core-audit): sweep leftover firewall kill-switch
+        // rules before taking VPN ownership. The GUI front-end has always
+        // done this on startup (App/Program.cs); the CLI did not, so a CLI
+        // crash that left block rules enabled would strand the user's internet
+        // until the GUI happened to run. `start` is admin-gated and is taking
+        // ownership here, so an unconditional sweep mirrors the GUI.
+        VPNRouter.Core.Services.FirewallManager.TryCleanupOrphanedRulesSafe(Serilog.Log.Logger);
+
+        // v2.40.0-r10 #2 (core-audit): also sweep on process exit so an
+        // abnormal teardown that skips the engine's clean DeleteAllRules
+        // doesn't leave the kill-switch blocking the internet. Gated on
+        // !IsOwnedByAnyone() so we never nuke another live instance's rules;
+        // the startup sweep is the fail-closed backstop if we exit while
+        // still holding the lock.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            try
+            {
+                if (!VPNRouter.Core.Services.TunOwnershipLock.IsOwnedByAnyone())
+                    VPNRouter.Core.Services.FirewallManager.TryCleanupOrphanedRulesSafe(Serilog.Log.Logger);
+            }
+            catch { }
+        };
+
         // 5. Start VPN via engine
         // 3G-4 (v3.0 refactor): use the PlatformServices factory instead of
         // direct construction — keeps the platform-specific scanner /

@@ -111,6 +111,20 @@ public class HealthMonitor : IDisposable
     private static readonly TimeSpan RestartCooldown = TimeSpan.FromSeconds(60);
     private DateTime _lastFullRestart = DateTime.MinValue;
 
+    // v2.40.0-r10 #3 (core-audit leak window): a full sing-box Restart()
+    // re-creates the TUN from scratch — the interface is NOT yet routing the
+    // instant Restart() returns (it takes the OS a beat to bring the adapter
+    // up and install routes). Lifting the kill-switch block rules at that
+    // moment opens a leak window: routed apps egress via the default route
+    // (direct/ISP) until the TUN is actually serving. So the full-restart
+    // path no longer disables block rules inline — it sets this flag, and
+    // OnHealthTick lifts the rules only once IsHealthy() confirms the Clash
+    // API responds (== sing-box is serving the TUN). Hot-reload keeps the
+    // TUN up the whole time and still disables inline. int (not bool) so
+    // Interlocked.Exchange can atomically check-and-clear across the restart-
+    // continuation threadpool thread (set) and the timer thread (consume).
+    private int _deferredBlockRuleDisable;
+
     public event EventHandler? VpnStarted;
     public event EventHandler? VpnStopped;
     public event EventHandler<int>? RestartAttempted; // arg = attempt number
@@ -322,6 +336,28 @@ public class HealthMonitor : IDisposable
         {
             var isHealthy = _singBox.IsHealthy();
 
+            // v2.40.0-r10 #3 (core-audit): consume the deferred kill-switch
+            // lift requested by the full-restart path. We only drop the block
+            // rules once sing-box is confirmed healthy (Clash API responding
+            // == TUN serving), closing the leak window where a freshly
+            // re-created TUN isn't routing yet. Interlocked.Exchange does an
+            // atomic check-and-clear so a concurrent restart can't double-fire
+            // or lose the flag. If the disable throws, the flag stays cleared
+            // and the next crash/restart re-sets it — block rules remaining on
+            // is the safe failure direction.
+            if (isHealthy && System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 0) == 1)
+            {
+                try
+                {
+                    _firewall.DisableBlockRules();
+                    _logger.Information("[HealthMonitor] Kill-switch block rules lifted after restart confirmed healthy (deferred-disable)");
+                }
+                catch (Exception fwEx)
+                {
+                    _logger.Error(fwEx, "[HealthMonitor] Failed to lift firewall block rules on deferred-disable");
+                }
+            }
+
             if (!isHealthy && _vpnWasRunning)
             {
                 _logger.Warning("[HealthMonitor] Health check failed — sing-box is not healthy");
@@ -475,7 +511,8 @@ public class HealthMonitor : IDisposable
                 // if it didn't take. Pre-2D-4 this was a single
                 // _singBox.ReloadConfigJson(configJson) call that
                 // bundled write+hot-reload+restart-fallback inline.
-                if (!TryHotReloadViaApi(configJson))
+                var hotReloaded = TryHotReloadViaApi(configJson);
+                if (!hotReloaded)
                 {
                     _logger.Warning("[HealthMonitor] Hot-reload unavailable on restart attempt — performing full restart");
                     _singBox.Restart();
@@ -483,9 +520,26 @@ public class HealthMonitor : IDisposable
                 _lastScan = scan;
                 _lastFullRestart = DateTime.UtcNow;
 
-                // Disable firewall block rules — sing-box TUN is back up
-                try { _firewall.DisableBlockRules(); }
-                catch (Exception fwEx) { _logger.Error(fwEx, "[HealthMonitor] Failed to disable firewall block rules after restart"); }
+                if (hotReloaded)
+                {
+                    // Hot-reload swapped the config in place via the Clash API —
+                    // the TUN never went down, so it's safe to lift the
+                    // kill-switch block rules immediately. Clear any pending
+                    // deferred-disable from a prior full restart too.
+                    System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 0);
+                    try { _firewall.DisableBlockRules(); }
+                    catch (Exception fwEx) { _logger.Error(fwEx, "[HealthMonitor] Failed to disable firewall block rules after hot-reload"); }
+                }
+                else
+                {
+                    // v2.40.0-r10 #3: full restart re-created the TUN — DEFER
+                    // lifting the block rules until a health tick confirms
+                    // sing-box is actually serving, to avoid a leak window
+                    // while the fresh TUN is still coming up. Fail-closed: if
+                    // it never becomes healthy, the block rules stay on.
+                    System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
+                    _logger.Information("[HealthMonitor] Full restart done — deferring kill-switch lift until health confirmed");
+                }
 
                 _logger.Information("[HealthMonitor] sing-box restarted successfully");
                 // v2.31.6-r8: counter-reset under the lock (see comment above).

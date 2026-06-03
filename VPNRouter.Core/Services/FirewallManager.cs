@@ -69,6 +69,36 @@ public class FirewallManager : IFirewallManager
     internal const string DnsLockdownTcp53Rule = "VPNRouter-DnsLockdown-TCP53";
     internal const string DnsLockdownTcp853Rule = "VPNRouter-DnsLockdown-TCP853";
 
+    // v2.40.0-r10 #6 (core-audit IPv6 leak): the four rules above are
+    // IPv4-only (their remoteip math operates on 0.0.0.0-255.255.255.255).
+    // On a dual-stack machine the Windows DNS Client races queries over IPv6
+    // to public resolvers (Cloudflare 2606:4700:4700::1111, Google
+    // 2001:4860:4860::8888, the ISP's IPv6 resolver) — those leak straight
+    // past the v4 blocks. These parallel rules close that path.
+    //
+    // Why this is SAFE despite DnsLeakLockdown's internet-breakage history
+    // (brat r10/r16): that breakage was the UNSCOPED IPv4 block overriding
+    // the TUN allow ("Block wins over Allow"). That failure mode cannot
+    // recur on IPv6 because (a) our shipping TUN is IPv4-only — there is no
+    // IPv6 TUN range to accidentally clobber — and (b) sing-box's own DNS
+    // goes out as DoH on 443 via the VLESS outbound, never raw 53/853.
+    //
+    // Scope = 2000::/3 (global-unicast / public IPv6) ONLY. This is where
+    // every public/ISP resolver lives, so it closes the dominant leak while
+    // deliberately leaving ::1 (loopback), fe80::/10 (link-local — router-
+    // advertised DNS), fc00::/7 (ULA) and ff00::/8 (mDNS) untouched. Blocking
+    // those is the actual internet-breaking risk and buys little leak
+    // protection, so we don't.
+    internal const string DnsLockdownUdp53Ipv6Rule = "VPNRouter-DnsLockdown-UDP53-v6";
+    internal const string DnsLockdownTcp53Ipv6Rule = "VPNRouter-DnsLockdown-TCP53-v6";
+    internal const string DnsLockdownTcp853Ipv6Rule = "VPNRouter-DnsLockdown-TCP853-v6";
+
+    // Public global-unicast IPv6 range — every routable public/ISP DNS
+    // resolver address is inside 2000::/3. netsh accepts IPv6 CIDR for
+    // remoteip directly. See the v6 rule-name comment above for why we scope
+    // to this rather than ::/0.
+    private const string Ipv6PublicDnsScope = "2000::/3";
+
     // Prefixes covered by CleanupOrphanedRules — anything we ever add to the
     // firewall must be enumerable from here so a previous abnormal exit
     // doesn't leave the user's network locked down on next boot.
@@ -144,6 +174,38 @@ public class FirewallManager : IFirewallManager
     {
         _logger = logger ?? Log.Logger;
         _runner = runner ?? Runner;
+    }
+
+    /// <summary>
+    /// v2.40.0-r10 (#2 + #4 core-audit): best-effort, Windows-guarded sweep of
+    /// any orphaned VPNRouter firewall rules left by a previous abnormal exit
+    /// (crash, kill, failed update). Constructs a throwaway manager, runs the
+    /// prefix-based <see cref="CleanupOrphanedRules"/> (clears both the
+    /// block_on_vpn_fail rules AND the DNS-lockdown rules), and swallows every
+    /// exception so it is safe to wire into both startup AND
+    /// <see cref="AppDomain.ProcessExit"/> without ever throwing into those
+    /// paths.
+    ///
+    /// <para>Before r10 only the GUI front-end swept on startup
+    /// (App/Program.cs); the CLI and Windows Service did not, and nothing
+    /// swept on exit. A crash on the CLI/Service path — or any front-end
+    /// killed before its clean <c>Stop()</c>/<see cref="DeleteAllRules"/> —
+    /// could strand the user with kill-switch block rules still enabled and
+    /// the internet blocked until the GUI happened to run. This helper closes
+    /// both the missing-front-end gap (#4) and the no-exit-cleanup gap (#2).</para>
+    /// </summary>
+    public static void TryCleanupOrphanedRulesSafe(ILogger? logger = null)
+    {
+        try
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            using var fw = new FirewallManager(logger ?? Log.Logger);
+            fw.CleanupOrphanedRules();
+        }
+        catch
+        {
+            // Never throw from a startup / process-exit hook.
+        }
     }
 
     // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -742,6 +804,46 @@ public class FirewallManager : IFirewallManager
                     $"remoteip={blockExclusionRange} " +
                     $"enable=yes profile=any " +
                     $"description=\"VPNRouter Wave 39 BR-9: block TCP/853 to prevent DNS leak (TUN range excluded)\"");
+
+                // ── v2.40.0-r10 #6: IPv6 parallel blocks ────────────────────
+                // The four blocks above are IPv4-only. Without these, a dual-
+                // stack host leaks DNS over IPv6 to public resolvers (the
+                // Windows DNS Client races AAAA/A queries on both families).
+                // Scope = 2000::/3 (public global-unicast) so loopback / link-
+                // local / ULA / multicast DNS stay intact. No TUN exclusion is
+                // needed because the shipping TUN is IPv4-only and sing-box's
+                // own DNS is DoH/443, never 53/853. See the rule-name comment
+                // block for the full safety rationale.
+
+                // 5. Block UDP/53 over public IPv6.
+                RunNetshStatic(log,
+                    $"advfirewall firewall add rule " +
+                    $"name=\"{DnsLockdownUdp53Ipv6Rule}\" " +
+                    $"dir=out action=block " +
+                    $"protocol=UDP remoteport=53 " +
+                    $"remoteip={Ipv6PublicDnsScope} " +
+                    $"enable=yes profile=any " +
+                    $"description=\"VPNRouter r10 #6: block UDP/53 over public IPv6 (2000::/3) to prevent DNS leak\"");
+
+                // 6. Block TCP/53 over public IPv6 (DNS-over-TCP fallback).
+                RunNetshStatic(log,
+                    $"advfirewall firewall add rule " +
+                    $"name=\"{DnsLockdownTcp53Ipv6Rule}\" " +
+                    $"dir=out action=block " +
+                    $"protocol=TCP remoteport=53 " +
+                    $"remoteip={Ipv6PublicDnsScope} " +
+                    $"enable=yes profile=any " +
+                    $"description=\"VPNRouter r10 #6: block TCP/53 over public IPv6 (2000::/3) to prevent DNS leak\"");
+
+                // 7. Block TCP/853 over public IPv6 (DNS-over-TLS).
+                RunNetshStatic(log,
+                    $"advfirewall firewall add rule " +
+                    $"name=\"{DnsLockdownTcp853Ipv6Rule}\" " +
+                    $"dir=out action=block " +
+                    $"protocol=TCP remoteport=853 " +
+                    $"remoteip={Ipv6PublicDnsScope} " +
+                    $"enable=yes profile=any " +
+                    $"description=\"VPNRouter r10 #6: block TCP/853 over public IPv6 (2000::/3) to prevent DNS leak\"");
             }, timeoutCts.Token).ConfigureAwait(false);
 
             // BR-9 r18: log message reflects current architecture. r17
@@ -750,8 +852,8 @@ public class FirewallManager : IFirewallManager
             // range — not an allow scope. Wording matters for log readers.
             log.Information(
                 "[FirewallManager] DNS leak lockdown enabled — UDP/53, TCP/53, " +
-                "TCP/853 blocked on non-loopback interfaces; TUN block-exclusion={Tun} " +
-                "(block rules scoped to complement-of-TUN, BR-9)", tunAllowIp);
+                "TCP/853 blocked on non-loopback IPv4 interfaces (TUN block-exclusion={Tun}, " +
+                "BR-9) + public-IPv6 ({Ipv6Scope}) DNS blocked (r10 #6)", tunAllowIp, Ipv6PublicDnsScope);
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
@@ -805,10 +907,14 @@ public class FirewallManager : IFirewallManager
                 RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownUdp53Rule}\"");
                 RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp53Rule}\"");
                 RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp853Rule}\"");
+                // v2.40.0-r10 #6: tear down the parallel IPv6 blocks.
+                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownUdp53Ipv6Rule}\"");
+                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp53Ipv6Rule}\"");
+                RunNetshStatic(log, $"advfirewall firewall delete rule name=\"{DnsLockdownTcp853Ipv6Rule}\"");
             }, timeoutCts.Token).ConfigureAwait(false);
 
             log.Information(
-                "[FirewallManager] DNS leak lockdown disabled — firewall rules deleted (BR-9 r17)");
+                "[FirewallManager] DNS leak lockdown disabled — IPv4 + IPv6 firewall rules deleted (BR-9 r17 + r10 #6)");
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {

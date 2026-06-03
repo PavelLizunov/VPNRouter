@@ -98,6 +98,34 @@ catch (Exception ex)
     Log.Logger = new LoggerConfiguration().CreateLogger();
 }
 
+// ─── Firewall orphan sweep (v2.40.0-r10 #4 + #2 core-audit) ─────────────────────
+// The GUI front-end has always swept leftover kill-switch block rules on
+// startup; the Service did not, so a crashed Service run could strand the
+// user's internet behind block rules until the GUI happened to run. Sweep
+// here too — but ONLY when no other VPNRouter instance owns the TUN, mirroring
+// the orphan-sing-box guard above: if someone else owns the TUN, the block
+// rules are theirs and are NOT orphans. Also wire a process-exit sweep (same
+// gate) so an abnormal teardown doesn't leave rules behind.
+try
+{
+    if (!VPNRouter.Core.Services.TunOwnershipLock.IsOwnedByAnyone())
+        VPNRouter.Core.Services.FirewallManager.TryCleanupOrphanedRulesSafe(Log.Logger);
+
+    AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+    {
+        try
+        {
+            if (!VPNRouter.Core.Services.TunOwnershipLock.IsOwnedByAnyone())
+                VPNRouter.Core.Services.FirewallManager.TryCleanupOrphanedRulesSafe(Log.Logger);
+        }
+        catch { }
+    };
+}
+catch (Exception ex)
+{
+    WriteEvent($"Error during firewall orphan sweep: {ex.Message}", EventLogEntryType.Warning);
+}
+
 // ─── Mode detection ───────────────────────────────────────────────────────────
 // --service flag is passed by sc.exe binPath when running as Windows Service
 
