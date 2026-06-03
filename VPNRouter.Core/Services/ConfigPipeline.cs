@@ -139,10 +139,24 @@ internal static class ConfigPipeline
                 }
                 else
                 {
-                    // HealthMonitor semantics: validation is advisory on
-                    // restart so a transient invariant glitch doesn't
-                    // block recovery. We still log loudly so the failure
-                    // surfaces in vpnrouter.log.
+                    // HealthMonitor semantics: validation is advisory on restart so a
+                    // TRANSIENT invariant glitch (empty server list mid-refresh,
+                    // outbound-scope warning) doesn't block recovery. BUT a STATIC,
+                    // deterministic IPv6-leak invariant — dns.strategy must be ipv4_only
+                    // on the v4-only TUN — is not transient: shipping it re-enables AAAA
+                    // and leaks IPv6 past the tunnel on EVERY restart/rescan
+                    // (v2.40.0-r10 #7 core-audit). Strict mode already throws on it; make
+                    // Advisory fatal for this specific invariant too, so a crash-restart
+                    // can't silently re-ship a leaking config. Fail-closed: the block
+                    // rules stay enabled and recovery aborts rather than leaking.
+                    if (validation.Errors.Any(e =>
+                            e.Contains("ipv4_only", StringComparison.OrdinalIgnoreCase)
+                            || e.Contains("dns.strategy", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        throw new InvalidOperationException(
+                            $"Config validation failed (non-transient IPv6-leak invariant): {errors}");
+                    }
+                    // We still log loudly so the failure surfaces in vpnrouter.log.
                     logger?.Warning(
                         "[ConfigPipeline] LeakProtection flagged restart config: errors=[{Errors}] warnings=[{Warnings}]",
                         string.Join(" | ", validation.Errors),
