@@ -114,16 +114,30 @@ public class HealthMonitor : IDisposable
     // v2.40.0-r10 #3 (core-audit leak window): a full sing-box Restart()
     // re-creates the TUN from scratch — the interface is NOT yet routing the
     // instant Restart() returns (it takes the OS a beat to bring the adapter
-    // up and install routes). Lifting the kill-switch block rules at that
-    // moment opens a leak window: routed apps egress via the default route
-    // (direct/ISP) until the TUN is actually serving. So the full-restart
-    // path no longer disables block rules inline — it sets this flag, and
-    // OnHealthTick lifts the rules only once IsHealthy() confirms the Clash
-    // API responds (== sing-box is serving the TUN). Hot-reload keeps the
-    // TUN up the whole time and still disables inline. int (not bool) so
+    // up and install routes; observed wintun warm-up is up to ~16s, see the
+    // "device is not ready" retries in SingBoxManager). Lifting the kill-
+    // switch block rules at that moment opens a leak window: routed apps
+    // egress via the default route (direct/ISP) until the TUN is actually
+    // serving. So the full-restart path no longer disables block rules inline
+    // — it sets this flag, and OnHealthTick lifts the rules only once the
+    // Clash API actually RESPONDS (GET /version succeeds == sing-box finished
+    // loading the TUN inbound and is serving). On Windows IsHealthy() only
+    // proves the process is alive, so the explicit Clash-API probe
+    // (ClashApiResponds) is the real "TUN up" signal; a time-based fallback
+    // (DeferredDisableMaxWait) lifts anyway if the API wedges so the user's
+    // internet can't be stranded forever. Hot-reload keeps the TUN up the
+    // whole time and still disables inline. int (not bool) so
     // Interlocked.Exchange can atomically check-and-clear across the restart-
     // continuation threadpool thread (set) and the timer thread (consume).
     private int _deferredBlockRuleDisable;
+
+    // v2.40.0-r10 #3: hard ceiling on how long the deferred kill-switch lift
+    // waits for the Clash API to confirm the restarted TUN is serving before
+    // lifting anyway (process must still be healthy). 45s >> the ~16s worst-
+    // case TUN warm-up, so by then the tunnel is up or sing-box is broken (in
+    // which case isHealthy is false and we don't lift). Prevents a wedged
+    // Clash API from stranding the user behind block rules indefinitely.
+    private static readonly TimeSpan DeferredDisableMaxWait = TimeSpan.FromSeconds(45);
 
     public event EventHandler? VpnStarted;
     public event EventHandler? VpnStopped;
@@ -337,24 +351,35 @@ public class HealthMonitor : IDisposable
             var isHealthy = _singBox.IsHealthy();
 
             // v2.40.0-r10 #3 (core-audit): consume the deferred kill-switch
-            // lift requested by the full-restart path. We only drop the block
-            // rules once sing-box is confirmed healthy (Clash API responding
-            // == TUN serving), closing the leak window where a freshly
-            // re-created TUN isn't routing yet. Interlocked.Exchange does an
+            // lift requested by the full-restart path. The leak window we're
+            // closing is "fresh TUN re-created but not routing yet", so we must
+            // NOT lift merely because the sing-box PROCESS is back (on Windows
+            // IsHealthy() is process-liveness only — the Clash-API check is
+            // macOS-only). Gate on the Clash API actually responding
+            // (GET /version succeeds == sing-box loaded the TUN inbound and is
+            // serving), with a time-based fallback so a wedged API can't strand
+            // the user behind block rules forever. Interlocked.Exchange does an
             // atomic check-and-clear so a concurrent restart can't double-fire
-            // or lose the flag. If the disable throws, the flag stays cleared
-            // and the next crash/restart re-sets it — block rules remaining on
-            // is the safe failure direction.
-            if (isHealthy && System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 0) == 1)
+            // or lose the flag. Fail-closed: while pending, block rules stay on.
+            if (isHealthy && System.Threading.Volatile.Read(ref _deferredBlockRuleDisable) == 1)
             {
-                try
+                var sinceRestart = DateTime.UtcNow - _lastFullRestart;
+                var clashServing = ClashApiResponds();
+                var fallbackElapsed = sinceRestart >= DeferredDisableMaxWait;
+                if ((clashServing || fallbackElapsed)
+                    && System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 0) == 1)
                 {
-                    _firewall.DisableBlockRules();
-                    _logger.Information("[HealthMonitor] Kill-switch block rules lifted after restart confirmed healthy (deferred-disable)");
-                }
-                catch (Exception fwEx)
-                {
-                    _logger.Error(fwEx, "[HealthMonitor] Failed to lift firewall block rules on deferred-disable");
+                    try
+                    {
+                        _firewall.DisableBlockRules();
+                        _logger.Information(
+                            "[HealthMonitor] Kill-switch block rules lifted after restart — TUN serving confirmed (clashApi={Clash}, fallback={Fallback}, +{Secs:F0}s)",
+                            clashServing, fallbackElapsed, sinceRestart.TotalSeconds);
+                    }
+                    catch (Exception fwEx)
+                    {
+                        _logger.Error(fwEx, "[HealthMonitor] Failed to lift firewall block rules on deferred-disable");
+                    }
                 }
             }
 
@@ -409,6 +434,21 @@ public class HealthMonitor : IDisposable
             // flag without needing a memory barrier dance.
             System.Threading.Interlocked.Exchange(ref _onHealthTickInProgress, 0);
         }
+    }
+
+    // v2.40.0-r10 #3: cheap Clash-API liveness probe (GET /version) used to
+    // gate the deferred kill-switch lift. A non-null version means the Clash
+    // API is serving, which on every platform implies sing-box finished
+    // loading its config — including the TUN inbound — i.e. the TUN is up.
+    // This is the signal Windows IsHealthy() lacks (it only proves the
+    // process is alive). The ISingBoxApi impl enforces an internal 3s deadline
+    // so this can't wedge the timer thread; any failure (timeout, hung API,
+    // dead process) is treated as "not serving yet" so we keep waiting
+    // (fail-closed — block rules stay enabled).
+    private bool ClashApiResponds()
+    {
+        try { return _api.GetVersionAsync().GetAwaiter().GetResult() != null; }
+        catch { return false; }
     }
 
     private void OnSingBoxCrashed(object? sender, EventArgs e)
