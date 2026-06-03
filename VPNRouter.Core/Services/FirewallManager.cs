@@ -82,6 +82,12 @@ public class FirewallManager : IFirewallManager
     private readonly ILogger _logger;
     private readonly IProcessRunner _runner;
     private readonly List<string> _managedRules = new();
+    // v2.40.0-r10 (#1 core-audit HIGH): the FULL set of exact process names requested for
+    // block_on_vpn_fail, INCLUDING ones whose exe path couldn't be resolved at connect time
+    // (not running / off-PATH — e.g. Discord/Telegram launched AFTER connecting). On crash,
+    // EnableBlockRules re-resolves + late-creates their rules so the kill-switch doesn't
+    // fail OPEN for exactly the default privacy profiles.
+    private List<string> _requestedNames = new();
     private bool _disposed;
 
     // v2.31.6-r19: netsh.exe writes its output in the OEM code page (CP-866
@@ -164,6 +170,9 @@ public class FirewallManager : IFirewallManager
         var exact = processNames
             .Where(n => !n.Contains('*') && !n.Contains('?'))
             .ToList();
+        // Remember every requested name (even ones unresolvable right now) so the
+        // kill-switch can lazily create their rules on crash — see EnableBlockRules.
+        _requestedNames = exact;
 
         foreach (var name in exact)
         {
@@ -197,6 +206,30 @@ public class FirewallManager : IFirewallManager
     /// </summary>
     public void EnableBlockRules()
     {
+        // v2.40.0-r10 (#1 core-audit HIGH): the kill-switch was failing OPEN for the
+        // default privacy profiles. CreateBlockRules (at connect time) skips any process
+        // whose exe path can't be resolved — and Discord (%LocalAppData%) / Telegram are
+        // off-PATH and launched AFTER connecting, so their block rule was NEVER created
+        // and there was nothing to enable on crash → the routed app egressed direct with
+        // the real IP. We're now in the VPN-down window and the app is almost certainly
+        // running, so re-resolve + late-create (enabled) any requested rule still missing.
+        foreach (var name in _requestedNames)
+        {
+            var ruleName = RulePrefix + name.Replace(".exe", "", StringComparison.OrdinalIgnoreCase);
+            if (_managedRules.Contains(ruleName)) continue; // already created at connect time
+            var exePath = ResolveProcessPath(name);
+            if (exePath == null)
+            {
+                _logger.Warning("[Firewall] kill-switch: still cannot resolve {Process} — cannot block its direct egress", name);
+                continue;
+            }
+            if (CreateBlockRule(ruleName, exePath, enabled: true))
+            {
+                _managedRules.Add(ruleName);
+                _logger.Information("[Firewall] kill-switch: late-created + enabled block rule for {Process} (was unresolved at connect time)", name);
+            }
+        }
+
         // v2.31.6-r20: count actual successes so the summary log isn't a
         // lie when some rules vanished between create and enable (Group
         // Policy sweep, AV cleanup, manual deletion, etc.)

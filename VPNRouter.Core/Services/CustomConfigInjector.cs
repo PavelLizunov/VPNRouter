@@ -236,6 +236,15 @@ public static class CustomConfigInjector
                 dnsServersForFinal = new JsonArray();
                 dnsForFinal["servers"] = dnsServersForFinal;
             }
+            // v2.40.0-r10 (#5 core-audit HIGH): in full-tunnel / exclude mode the TUN is
+            // IPv4-only and EVERYTHING routes through the proxy, so an AAAA answer would be
+            // dialed straight out the physical NIC = silent IPv6 traffic leak. The custom
+            // path is never leak-validated, and Strip set dns.strategy=ipv4_only ONLY when
+            // the user's ForceIpv4Only toggle was on. Force it here regardless of the toggle
+            // so IPv6 can't escape the tunnel. (Split+include is left alone — its unmatched
+            // traffic legitimately egresses direct on the real NIC, v4 or v6.)
+            if (isFullTunnel || isExcludeMode)
+                dnsForFinal["strategy"] = "ipv4_only";
             var remoteTag = FindRemoteDnsTag(dnsServersForFinal, config["outbounds"] as JsonArray)
                             ?? EnsureSynthesizedRemoteDns(dnsServersForFinal, proxyTag);
             if (!string.IsNullOrEmpty(remoteTag))
