@@ -107,7 +107,9 @@ public class LeakProtectionMultiProtocolTests
             Tag = "proxy",
             Server = "1.2.3.4",
             ServerPort = 8388,
-            Method = "2022-blake3-aes-256-gcm",
+            // v2.40.0-r9 (#8): a standard AEAD cipher (SS2022 key-length validation is
+            // covered by its own property test). The placeholder password is fine here.
+            Method = "aes-256-gcm",
             Password = "secret"
         });
 

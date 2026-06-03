@@ -50,7 +50,9 @@ public class ConfigGeneratorExcludeModeTests
                         Uuid = "abc",
                         Flow = "xtls-rprx-vision",
                         Security = "reality",
-                        Reality = new VlessRealityConfig { PublicKey = "pk", ShortId = "sid" },
+                        // v2.40.0-r9 (#5/#7): use a valid 32-byte base64url pbk + hex sid
+                        // (LeakProtection now fails closed on an unusable Reality public_key).
+                        Reality = new VlessRealityConfig { PublicKey = "gDawCMB0X6iGXZkG8nZIFW5TaaW29x0DMzWijN-gc2A", ShortId = "78ca7952" },
                     },
                 },
             },

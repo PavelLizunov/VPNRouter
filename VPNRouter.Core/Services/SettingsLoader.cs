@@ -406,9 +406,15 @@ public static class SettingsLoader
 
         // (Tun.RouteExcludeAddress, Update — handled by EnsureSane above.)
 
-        // Ensure routing mode has a valid value
-        if (string.IsNullOrWhiteSpace(settings.App.RoutingMode))
-            settings.App.RoutingMode = "split";
+        // Ensure routing mode has a clean, canonical value. v2.40.0-r9 (#3 core-audit):
+        // a hand-edited config.yaml with `routing_mode: ' full '` (stray whitespace)
+        // previously survived untrimmed → the exact-match compares in ConfigGenerator /
+        // LeakProtection saw it as NOT "full" → full-tunnel SILENTLY degraded to
+        // include-split = everything direct on the real IP, with no warning. Trim +
+        // lower at the source so every downstream comparison sees the clean value.
+        settings.App.RoutingMode = string.IsNullOrWhiteSpace(settings.App.RoutingMode)
+            ? "split"
+            : settings.App.RoutingMode.Trim().ToLowerInvariant();
 
         // Ensure theme has a valid value
         if (string.IsNullOrWhiteSpace(settings.App.Theme))

@@ -870,8 +870,18 @@ public static class ConfigGenerator
         }
         else
         {
-            // Include split tunnel: targeted processes → VPN DNS (leak protection)
-            if (processes.Count > 0 && profile.DnsMode != "direct")
+            // Include split tunnel: the targeted processes are routed through the
+            // proxy, so their DNS MUST resolve through the tunnel too — otherwise
+            // their lookups fall through to dns.final = local-dns (real NIC) and the
+            // resolver sees the user's real IP for exactly the app they routed for
+            // privacy. v2.40.0-r9 (#1 core-audit HIGH): dns_mode="direct" previously
+            // SKIPPED this rule entirely (`profile.DnsMode != "direct"` guard) →
+            // silent DNS leak, one-click reachable via the shipped Privacy_Shell
+            // profile. Now a routed process ALWAYS gets a per-process DNS rule:
+            //   smart   → local-dns (the explicit "tunnel traffic, local DoH for
+            //             geo-CDN nearness" opt-in; an encrypted-DoH tradeoff),
+            //   vpn_only / direct / anything else → vpn-dns (tunnel the DNS).
+            if (processes.Count > 0)
             {
                 var dnsServer = profile.DnsMode == "smart" ? "local-dns" : "vpn-dns";
                 dns.Rules.Add(new DnsRule
@@ -1217,7 +1227,15 @@ public static class ConfigGenerator
                 {
                     Enabled   = true,
                     PublicKey = reality.PublicKey,
-                    ShortId   = reality.ShortId
+                    // v2.40.0-r9 (#2 core-audit): drop a structurally-invalid short_id.
+                    // sing-box's hex.Decode PANICS (index out of range) on a Reality
+                    // short_id > 8 bytes (16 hex chars) — a 10/20-hex sid from a
+                    // copy-paste/generator bug would crash sing-box at config load AND
+                    // crash-loop the HealthMonitor Advisory reload (→ routed traffic
+                    // falls direct). An empty short_id is valid, so degrade to "" → a
+                    // clean handshake attempt instead of a panic.
+                    ShortId   = VlessUriParser.IsValidRealityShortId(reality.ShortId)
+                                    ? reality.ShortId : string.Empty
                 },
                 // TLS record fragmentation: splits ClientHello across multiple TLS
                 // records to bypass DPI that inspects the first record for SNI.

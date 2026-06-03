@@ -226,6 +226,32 @@ public static class LeakProtection
                 warnings.Add($"Process '{proc}' is routed through proxy but has no DNS rule — DNS may leak");
         }
 
+        // v2.40.0-r9 (#6 core-audit): smart-mode routed apps resolve via local-dns
+        // (real-NIC DoH) — encrypted, but the resolver sees the user's real IP. The
+        // "no DNS rule" check above stays silent for them (local-dns IS a valid rule),
+        // so surface a DISTINCT informational note (not the "DNS may leak" string the
+        // SmartMode sentinel test guards) so the tunnel-side-privacy tradeoff is visible.
+        foreach (var proc in config.Dns.Rules
+                     .Where(r => r.Server == "local-dns" && r.Action == "route" && r.ProcessName != null)
+                     .SelectMany(r => r.ProcessName!)
+                     .Where(p => processesInRouteRules.Contains(p))
+                     .Distinct())
+            warnings.Add($"Process '{proc}' resolves DNS via local DoH (smart mode) — its DNS path " +
+                         "leaves the tunnel (encrypted, but the resolver sees your real IP)");
+
+        // v2.40.0-r9 (#4 core-audit): a VLESS+Reality outbound with no flow handshakes
+        // fine against a no-vision server but FAILS against an xtls-rprx-vision server,
+        // with zero error from either gate. Warn (not error — no-vision Reality is a
+        // valid deployment) so a mis-pasted link omitting &flow= is diagnosable.
+        foreach (var o in config.Outbounds)
+        {
+            if ((o.Type ?? string.Empty).Equals("vless", StringComparison.OrdinalIgnoreCase)
+                && o.Tls?.Reality?.Enabled == true
+                && string.IsNullOrEmpty(o.Flow))
+                warnings.Add($"VLESS+Reality outbound '{o.Tag}' has no flow — if the server expects " +
+                             "xtls-rprx-vision the handshake will fail; verify the share-link includes &flow=");
+        }
+
         // 4b. Full tunnel mode checks
         var isFullTunnel = config.Route.Final == "proxy";
         if (isFullTunnel)
@@ -243,7 +269,7 @@ public static class LeakProtection
         if (settings != null
             && !string.Equals(settings.App.ConfigMode, "custom", StringComparison.OrdinalIgnoreCase))
         {
-            var routingMode = (settings.App.RoutingMode ?? "split").ToLowerInvariant();
+            var routingMode = (settings.App.RoutingMode ?? "split").Trim().ToLowerInvariant();
             var isFull = routingMode == "full";
             var isExclude = string.Equals(settings.App.RoutingAppsMode, "exclude",
                 StringComparison.OrdinalIgnoreCase);
@@ -365,6 +391,16 @@ public static class LeakProtection
             errors.Add($"{label}: uuid is empty");
         if (vless.ServerPort is null or <= 0)
             errors.Add($"{label}: server_port is invalid");
+        // v2.40.0-r9 (#5/#7 core-audit): a Reality outbound REQUIRES a usable
+        // public_key. An empty or malformed pbk (missing &pbk=, truncated,
+        // non-base64url) previously passed every Core gate and only FATAL'd at
+        // sing-box load ("invalid public_key" / "decode public_key: illegal base64"),
+        // surfacing a generic "sing-box failed to start" + a HealthMonitor crash-loop.
+        // Fail closed here with an actionable, per-field message instead — mirroring
+        // the existing Shadowsocks method/password assertions.
+        if (vless.Tls?.Reality?.Enabled == true
+            && !VlessUriParser.IsValidRealityPublicKey(vless.Tls.Reality.PublicKey))
+            errors.Add($"{label}: reality public_key is missing or not a 32-byte base64url key");
     }
 
     private static void ValidateHysteria2Outbound(SingBoxOutbound hy2, List<string> errors)
@@ -401,8 +437,32 @@ public static class LeakProtection
             errors.Add($"{label}: method (cipher) is empty");
         if (string.IsNullOrWhiteSpace(ss.Password))
             errors.Add($"{label}: password is empty");
+        // v2.40.0-r9 (#8 core-audit): an SS2022 (2022-blake3-*) cipher requires the
+        // key to be base64 of an EXACT length (16 bytes for aes-128, else 32). A
+        // truncated / mis-pasted key previously passed Core and FATAL'd sing-box
+        // ("decode key: illegal base64") into a HealthMonitor crash-loop. Validate
+        // the deterministic key length here. (The cipher NAME itself is left to
+        // sing-box — an over-strict whitelist risks rejecting a valid cipher.)
+        else if (!string.IsNullOrWhiteSpace(ss.Method)
+                 && ss.Method!.StartsWith("2022-blake3-", StringComparison.OrdinalIgnoreCase)
+                 && !IsValidSs2022Key(ss.Method, ss.Password))
+            errors.Add($"{label}: SS2022 key for '{ss.Method}' is not valid base64 of the required length");
         if (ss.ServerPort is null or <= 0)
             errors.Add($"{label}: server_port is invalid");
+    }
+
+    /// <summary>SS2022 (2022-blake3-*) requires a base64 key of exactly 16 bytes
+    /// (aes-128 variant) or 32 bytes (all others). v2.40.0-r9 (#8).</summary>
+    private static bool IsValidSs2022Key(string method, string? password)
+    {
+        if (string.IsNullOrEmpty(password)) return false;
+        try
+        {
+            var raw = Convert.FromBase64String(password!);
+            var need = method.Contains("aes-128", StringComparison.OrdinalIgnoreCase) ? 16 : 32;
+            return raw.Length == need;
+        }
+        catch { return false; }
     }
 
     /// <summary>

@@ -94,6 +94,15 @@ public static class AppSettingsSane
             app.RoutingAppsMode = app.RoutingAppsMode!.ToLowerInvariant();
         }
 
+        // v2.40.0-r9 (#3 core-audit): canonicalize RoutingMode the same way. Only
+        // "split"/"full" are valid; trim + match case-insensitively, fall back to
+        // "split". Without this, a stray-whitespace "full" silently degraded full
+        // tunnel to split (everything direct on the real IP) — see the matching
+        // SettingsLoader.Parse guard.
+        app.RoutingMode =
+            string.Equals(app.RoutingMode?.Trim(), "full", StringComparison.OrdinalIgnoreCase)
+                ? "full" : "split";
+
         app.SubscriptionServers.RemoveAll(s => s == null!);
         foreach (var s in app.SubscriptionServers)
             EnsureSaneServerEntry(s);

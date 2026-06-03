@@ -241,14 +241,22 @@ public class ConfigGeneratorTests
     }
 
     [Fact]
-    public void DnsRule_DirectMode_NoDnsRuleCreated()
+    public void DnsRule_DirectMode_RoutedAppGetsVpnDnsRule()
     {
+        // v2.40.0-r9 (#1 core-audit fix): a routed app in dns_mode=direct previously
+        // got NO per-process DNS rule, so its DNS fell through to dns.final=local-dns
+        // (real NIC) = a DNS leak for exactly the app the user routed for privacy
+        // (reachable via the shipped Privacy_Shell profile). A routed app now ALWAYS
+        // gets a per-process DNS rule; only smart mode uses local DoH, everything else
+        // (incl. direct) tunnels DNS via vpn-dns.
         var settings = CreateSettings();
         var profile = CreateProfile(dnsMode: "direct");
         var config = ConfigGenerator.Generate(profile, new[] { "Discord.exe" }, settings);
 
-        var dnsRulesWithProcesses = config.Dns.Rules.Where(r => r.ProcessName != null);
-        Assert.Empty(dnsRulesWithProcesses);
+        var procRule = config.Dns.Rules
+            .FirstOrDefault(r => r.ProcessName != null && r.ProcessName.Contains("Discord.exe"));
+        Assert.NotNull(procRule);
+        Assert.Equal("vpn-dns", procRule!.Server);
     }
 
     [Fact]

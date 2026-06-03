@@ -162,4 +162,46 @@ public static class VlessUriParser
         catch (FormatException) { return null; }
         catch { return null; }
     }
+
+    // ─── Reality field validators (v2.40.0-r9 core-audit Phase A) ─────────────
+    // Shared by ConfigGenerator (sanitize short_id so sing-box's hex.Decode can't
+    // PANIC) and LeakProtection (fail-closed on a Reality outbound with no usable
+    // public_key). NOT wired into Parse() as a hard reject — many test fixtures use
+    // placeholder pbk/sid, and a paste-time reject would change that contract.
+
+    /// <summary>True when <paramref name="pbk"/> is a 32-byte x25519 key encoded as
+    /// base64url (a usable Reality public_key). Empty / wrong-length / non-base64url
+    /// → false (sing-box FATALs "invalid public_key" on those).</summary>
+    internal static bool IsValidRealityPublicKey(string? pbk)
+        => !string.IsNullOrEmpty(pbk) && TryDecodeBase64Url(pbk!, out var b) && b.Length == 32;
+
+    /// <summary>True when <paramref name="sid"/> is empty (Reality short_id is
+    /// optional) OR even-length hex of at most 8 bytes (16 chars). sing-box's
+    /// hex.Decode PANICS (index out of range) on a short_id longer than 8 bytes.</summary>
+    internal static bool IsValidRealityShortId(string? sid)
+    {
+        if (string.IsNullOrEmpty(sid)) return true;
+        if (sid!.Length > 16 || sid.Length % 2 != 0) return false;
+        foreach (var c in sid)
+            if (!System.Uri.IsHexDigit(c)) return false;
+        return true;
+    }
+
+    private static bool TryDecodeBase64Url(string s, out byte[] bytes)
+    {
+        bytes = System.Array.Empty<byte>();
+        try
+        {
+            var t = s.Replace('-', '+').Replace('_', '/');
+            switch (t.Length % 4)
+            {
+                case 2: t += "=="; break;
+                case 3: t += "="; break;
+                case 1: return false; // not a valid base64 length
+            }
+            bytes = System.Convert.FromBase64String(t);
+            return true;
+        }
+        catch { return false; }
+    }
 }
