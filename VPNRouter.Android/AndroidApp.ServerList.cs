@@ -109,6 +109,14 @@ public partial class AndroidApp
     /// <summary>Cancellation source for the current Test all batch (Stop button / overlay close).</summary>
     private CancellationTokenSource? _srvTestAllCts;
 
+    // AND-PERF (v2.40.0): coalesce per-probe-result list rebuilds. "Test all"
+    // delivers N results, and the old per-result Dispatcher.Post(RebuildServerList)
+    // queued N full O(N) rebuilds = O(N^2) BuildServerRow calls (janks hard at
+    // 100+ servers). This flag collapses a burst of results into ONE debounced
+    // rebuild. 0 = idle, 1 = a rebuild is already queued (Interlocked-guarded
+    // because ApplyResult runs from up to 4 concurrent probe continuations).
+    private int _srvRebuildScheduled;
+
     /// <summary>
     /// AND-MIGRATE-OVERLAYS (2026-05-09) — body content for the Servers
     /// tab inside the Advanced shell. Updated AND-ADV-SERVERS-SUBSCRIBE
@@ -934,6 +942,10 @@ public partial class AndroidApp
         _srvEmptyHint.IsVisible = false;
 
         var ordered = OrderServers(servers);
+        // AND-PERF probe: one line per real rebuild. During "Test all" the
+        // coalescing in ScheduleServerListRebuild should keep this to a handful
+        // of lines instead of one-per-result (the old O(N^2) behaviour).
+        global::Android.Util.Log.Info("VpnRouter.Perf", "server list rebuilt rows=" + ordered.Count);
         foreach (var srv in ordered)
         {
             _srvListStack.Children.Add(BuildServerRow(srv, activeName));
@@ -1409,10 +1421,32 @@ public partial class AndroidApp
             LastTestedAt = DateTimeOffset.UtcNow,
             Error = result.Error,
         };
-        // Re-render only the affected row by rebuilding the whole list —
-        // ListBox would be cheaper but we use plain StackPanel to keep
-        // the per-row Border.PointerReleased handler simple.
-        Dispatcher.UIThread.Post(RebuildServerList);
+        // Re-render the affected row by rebuilding the list, but COALESCE the
+        // burst: "Test all" delivers N results and a naive per-result
+        // Dispatcher.Post(RebuildServerList) queues N full O(N) rebuilds =
+        // O(N^2) BuildServerRow calls. Schedule a single debounced rebuild that
+        // picks up every result applied so far (final state still guaranteed by
+        // the finally-block RebuildServerList in OnSrvTestAllClicked).
+        ScheduleServerListRebuild();
+    }
+
+    /// <summary>
+    /// Coalesce a burst of per-result updates into a single list rebuild.
+    /// ApplyResult fires once per probe completion (up to 4 concurrently); the
+    /// first call queues a Background-priority rebuild and flips the flag, and
+    /// every other call in the same burst is a no-op — the queued rebuild reads
+    /// the latest <c>_srvResults</c> / <c>_srvTestingKeys</c> so it renders all
+    /// results applied so far. Turns O(N^2) into O(N) for "Test all".
+    /// </summary>
+    private void ScheduleServerListRebuild()
+    {
+        if (Interlocked.CompareExchange(ref _srvRebuildScheduled, 1, 0) != 0)
+            return; // a rebuild is already queued — it will include this result
+        Dispatcher.UIThread.Post(() =>
+        {
+            Interlocked.Exchange(ref _srvRebuildScheduled, 0);
+            RebuildServerList();
+        }, DispatcherPriority.Background);
     }
 
     private void UpdateProgressText(int done, int total)

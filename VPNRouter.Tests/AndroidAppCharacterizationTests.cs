@@ -78,8 +78,10 @@ public class AndroidAppCharacterizationTests
     // AndroidApp.Permissions.cs (proactive first-connect battery-opt prompt).
     // v2.40.0 night-shift bump (2026-06-02): added _menuExportDiagItem field +
     // OnMenuExportDiagClicked handler (Android diagnostics-export kebab parity).
+    // v2.40.0-r7 bump (2026-06-03): added _srvRebuildScheduled field +
+    // ScheduleServerListRebuild() (Servers Test-all O(N^2)→O(N) rebuild coalesce).
     private const string PinnedHash =
-        "6038c7f9f7cf02be936688ba592ac42fe738a23068766003200a83e7bb324f25";
+        "644bf6c583f12f3c2c801d21815d97baca4a754105db05d0ec9a9b3cb2d2901a";
 
     [Fact]
     public void AndroidApp_SourceSurface_MatchesPinnedHash()
