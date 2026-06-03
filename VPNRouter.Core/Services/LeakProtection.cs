@@ -452,17 +452,25 @@ public static class LeakProtection
     }
 
     /// <summary>SS2022 (2022-blake3-*) requires a base64 key of exactly 16 bytes
-    /// (aes-128 variant) or 32 bytes (all others). v2.40.0-r9 (#8).</summary>
-    private static bool IsValidSs2022Key(string method, string? password)
+    /// (aes-128 variant) or 32 bytes (all others). v2.40.0-r9 (#8).
+    /// <para>v2.40.0-r9 re-sweep fix: SS2022 also supports a COLON-JOINED multi-key
+    /// password (iPSK:uPSK for EIH / relay) that sing-box accepts — validate EVERY
+    /// segment independently rather than decoding the whole blob (the single-blob
+    /// check false-rejected the relay form, hard-failing a connect that worked).
+    /// Decoding is url-safe-tolerant (reuses VlessUriParser.TryDecodeBase64Url) so a
+    /// url-safe single key is no longer false-rejected either.</para></summary>
+    internal static bool IsValidSs2022Key(string method, string? password)
     {
         if (string.IsNullOrEmpty(password)) return false;
-        try
+        var need = method.Contains("aes-128", StringComparison.OrdinalIgnoreCase) ? 16 : 32;
+        var parts = password!.Split(':');
+        foreach (var part in parts)
         {
-            var raw = Convert.FromBase64String(password!);
-            var need = method.Contains("aes-128", StringComparison.OrdinalIgnoreCase) ? 16 : 32;
-            return raw.Length == need;
+            if (string.IsNullOrEmpty(part)) return false;
+            if (!VlessUriParser.TryDecodeBase64Url(part, out var raw) || raw.Length != need)
+                return false;
         }
-        catch { return false; }
+        return true;
     }
 
     /// <summary>

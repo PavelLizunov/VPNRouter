@@ -36,4 +36,25 @@ public class CoreAuditPhaseATests
     [InlineData("abc", false)]                   // odd length
     public void IsValidRealityShortId_RejectsPanicInducingValues(string sid, bool expectedValid)
         => Assert.Equal(expectedValid, VlessUriParser.IsValidRealityShortId(sid));
+
+    // #8 + re-sweep regression fix — SS2022 (2022-blake3-*) key validation. Must accept
+    // a single valid key AND a colon-joined multi-key (iPSK:uPSK / EIH-relay) password,
+    // which sing-box accepts; must reject wrong-length / garbage / empty-segment keys.
+    [Fact]
+    public void IsValidSs2022Key_AcceptsSingleAndMultiKey_RejectsBad()
+    {
+        var k32 = System.Convert.ToBase64String(new byte[32]);
+        var k16 = System.Convert.ToBase64String(new byte[16]);
+
+        Assert.True(LeakProtection.IsValidSs2022Key("2022-blake3-aes-256-gcm", k32));
+        Assert.True(LeakProtection.IsValidSs2022Key("2022-blake3-chacha20-poly1305", k32));
+        Assert.True(LeakProtection.IsValidSs2022Key("2022-blake3-aes-128-gcm", k16));
+        // multi-key relay (the re-sweep regression — sing-box accepts this)
+        Assert.True(LeakProtection.IsValidSs2022Key("2022-blake3-aes-256-gcm", k32 + ":" + k32));
+
+        Assert.False(LeakProtection.IsValidSs2022Key("2022-blake3-aes-256-gcm", k16));   // 16 ≠ 32
+        Assert.False(LeakProtection.IsValidSs2022Key("2022-blake3-aes-256-gcm", "not!base64"));
+        Assert.False(LeakProtection.IsValidSs2022Key("2022-blake3-aes-256-gcm", ""));
+        Assert.False(LeakProtection.IsValidSs2022Key("2022-blake3-aes-256-gcm", k32 + ":")); // empty segment
+    }
 }

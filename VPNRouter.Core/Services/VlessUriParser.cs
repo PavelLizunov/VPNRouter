@@ -187,7 +187,7 @@ public static class VlessUriParser
         return true;
     }
 
-    private static bool TryDecodeBase64Url(string s, out byte[] bytes)
+    internal static bool TryDecodeBase64Url(string s, out byte[] bytes)
     {
         bytes = System.Array.Empty<byte>();
         try
