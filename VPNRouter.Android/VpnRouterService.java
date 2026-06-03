@@ -297,6 +297,10 @@ public final class VpnRouterService extends VpnService {
             pendingPerAppPackages = intent.getStringArrayExtra(EXTRA_PER_APP_PACKAGES);
             startTunnel();
         } else if (ACTION_STOP.equals(action)) {
+            // v2.40.0-r8 (#3): an explicit user Disconnect must defuse any pending
+            // onTaskRemoved swipe-recovery alarm, else a swipe-then-Disconnect
+            // within the ~1.5s window silently re-establishes the tunnel.
+            cancelScheduledRestart();
             stopTunnel();
             stopSelf();
         } else {
@@ -610,6 +614,9 @@ public final class VpnRouterService extends VpnService {
 
     @Override
     public void onRevoke() {
+        // Explicit "stop using VPN" (permission revoked / another VPN took over):
+        // defuse any pending swipe-recovery restart so we don't resurrect it.
+        cancelScheduledRestart();
         stopTunnel();
         super.onRevoke();
     }
@@ -667,6 +674,38 @@ public final class VpnRouterService extends VpnService {
             Log.w(LOG_TAG, "AND-NODOZE: onTaskRemoved restart-schedule threw: " + e.getMessage());
         }
         super.onTaskRemoved(rootIntent);
+    }
+
+    /**
+     * v2.40.0-r8 (#3 bug-scout HIGH/regression fix) — cancel a pending
+     * onTaskRemoved swipe-recovery restart alarm. Called on an EXPLICIT user stop
+     * (ACTION_STOP / onRevoke) so that if the user swiped the app away and then
+     * deliberately Disconnected within the ~1.5s window, the scheduled
+     * ACTION_RESTART does NOT fire and silently re-establish the tunnel the user
+     * just turned off. Deliberately NOT called from onDestroy — a swipe the OEM
+     * honours by killing the FGS lands there, and the pending restart is the
+     * intended recovery. Reconstructs the same PendingIntent (request code 1 +
+     * ACTION_RESTART + FLAG_IMMUTABLE) so am.cancel matches by filterEquals; the
+     * alarm lives in the AlarmManager system service so this holds across the
+     * stopSelf that follows.
+     */
+    private void cancelScheduledRestart() {
+        try {
+            Intent restart = new Intent(getApplicationContext(), VpnRouterService.class)
+                    .setAction(ACTION_RESTART);
+            PendingIntent pi = PendingIntent.getService(
+                    this, 1, restart,
+                    PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
+            if (pi != null) {
+                AlarmManager am = (AlarmManager) getSystemService(ALARM_SERVICE);
+                if (am != null) am.cancel(pi);
+                pi.cancel();
+                Log.i(LOG_TAG, "AND-NODOZE: cancelled pending swipe-recovery restart "
+                        + "(explicit user stop)");
+            }
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "AND-NODOZE: cancelScheduledRestart threw: " + e.getMessage());
+        }
     }
 
     /**

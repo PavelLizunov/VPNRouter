@@ -502,6 +502,35 @@ public partial class MainWindowViewModel
     private void ScrubRoutingForApp(AppItemViewModel item)
     {
         if (item == null) return;
+        var name = item.ProcessName;
+
+        // v2.40.0-r8 (#5 bug-scout regression fix): compute the survivor decision
+        // BEFORE any uncheck. AppItemViewModel.IsChecked is a READ-THROUGH to the
+        // single shared routing-list entry (one entry per process name, shared by
+        // every AppItem with that name across groups). So `item.IsChecked = false`
+        // empties that entry IMMEDIATELY — and a survivor snapshot taken AFTER it
+        // would see the OTHER checked duplicate as unchecked too, collapse it, and
+        // un-route the app from EVERY group (split-tunnel leak-from-intent that
+        // defeats the r2 survivor-guard). Snapshot the checked OTHER duplicates
+        // here, while the shared entry is still intact.
+        bool stillRoutedByAnother = false;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            var survivors = AppGroups
+                .SelectMany(g => g.Apps)
+                .Where(a => !ReferenceEquals(a, item) && a.IsChecked)
+                .Select(a => a.ProcessName)
+                .ToList(); // materialise BEFORE the uncheck mutates the shared list
+            stillRoutedByAnother =
+                VPNRouter.Core.Services.RoutingAppListEditor.IsStillRoutedByAnother(name, survivors);
+        }
+
+        // Another checked AppItem still routes this name → leave the shared routing
+        // entry AND the other checkbox's state untouched; the caller just drops this
+        // row from its group. Unchecking here would remove the single shared entry
+        // and silently un-route the app the user keeps checked elsewhere.
+        if (stillRoutedByAnother) return;
+
         try { item.IsChecked = false; } catch { }
         try { VPNRouter.Core.Services.RoutingAppListEditor.TryRemoveProcessName(_settings, item.ProcessName); }
         catch { }
@@ -514,30 +543,14 @@ public partial class MainWindowViewModel
         // name and its .exe-stripped form for cross-platform safety.
         try
         {
-            var name = item.ProcessName;
             if (!string.IsNullOrWhiteSpace(name))
             {
                 var bare = StripExe(name);
                 bool Match(string p) =>
                     string.Equals(p, name, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(p, bare, StringComparison.OrdinalIgnoreCase);
-                // v2.40.0-r2 (regression review #1): guard the RemoveAll — only
-                // strip the name when NO OTHER surviving checked AppItem still
-                // routes it. The same process name can live as separate AppItems
-                // across groups (shell-verb add + a profile group; dedup is
-                // within-group only), and SaveSettings never rebuilds these lists,
-                // so an unconditional RemoveAll silently un-routes an app the user
-                // keeps checked elsewhere. item.IsChecked was set false above, so
-                // it is excluded by the IsChecked filter.
-                var survivors = AppGroups
-                    .SelectMany(g => g.Apps)
-                    .Where(a => !ReferenceEquals(a, item) && a.IsChecked)
-                    .Select(a => a.ProcessName);
-                if (!VPNRouter.Core.Services.RoutingAppListEditor.IsStillRoutedByAnother(name, survivors))
-                {
-                    _settings.App.RoutingAppsInclude?.RemoveAll(Match);
-                    _settings.App.RoutingAppsExclude?.RemoveAll(Match);
-                }
+                _settings.App.RoutingAppsInclude?.RemoveAll(Match);
+                _settings.App.RoutingAppsExclude?.RemoveAll(Match);
             }
         }
         catch { }

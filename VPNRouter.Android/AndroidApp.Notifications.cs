@@ -227,18 +227,28 @@ public partial class AndroidApp
     /// through the kebab toast. Fully self-guarded — a failure can never crash
     /// the app or touch the tunnel.
     /// </summary>
-    private void OnMenuExportDiagClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    private async void OnMenuExportDiagClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         if (_kebabPopup is not null) _kebabPopup.IsOpen = false;
         try
         {
             var connected = MainActivity.IntendedConnected;
             var configMode = AndroidStorage.GetConfigMode();
-            int serverCount;
-            try { serverCount = AndroidStorage.GetServers()?.Count ?? 0; } catch { serverCount = 0; }
 
-            var result = AndroidDiagnosticsExporter.Export(
-                System.DateTime.Now, connected, configMode, serverCount);
+            // v2.40.0-r8 (#4 bug-scout): offload the blocking work — file-tail +
+            // per-line regex secret-scrub + Optimal-level ZIP — to a background
+            // thread. Run inline it janked/ANR'd the Avalonia UI thread on a
+            // deliberate tap (the desktop sibling already uses await Task.Run).
+            // GetServers reads + deserialises a file, so it goes off-thread too.
+            // The await resumes on the UI SynchronizationContext, so the
+            // ShowMenuFeedback calls below stay UI-safe.
+            var result = await System.Threading.Tasks.Task.Run(() =>
+            {
+                int serverCount;
+                try { serverCount = AndroidStorage.GetServers()?.Count ?? 0; } catch { serverCount = 0; }
+                return AndroidDiagnosticsExporter.Export(
+                    System.DateTime.Now, connected, configMode, serverCount);
+            });
 
             if (result.ZipPath is not null)
             {

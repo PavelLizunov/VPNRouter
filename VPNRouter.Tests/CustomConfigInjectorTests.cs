@@ -985,6 +985,119 @@ public class CustomConfigInjectorTests
         finally { if (File.Exists(tempPath)) File.Delete(tempPath); }
     }
 
+    // v2.40.0-r8 (#1 — bug-scout HIGH leak): a custom config whose DNS server detours
+    // to a CUSTOM-NAMED direct outbound (detour:"myedge" -> {type:direct}), NOT the
+    // literal "direct". The old string-only classifier (detour != "direct") treated it
+    // as through-proxy, so in full/exclude mode route.final=proxy tunnelled everything
+    // while dns.final stayed on that real-NIC server = ISP-visible DNS leak. The fix
+    // resolves the detour to its outbound type and normalizes it to dns-direct.
+    private const string CustomNamedDirectDnsConfig = """
+    {
+      "dns": {
+        "servers": [ {"tag": "mydns", "address": "9.9.9.9", "detour": "myedge"} ],
+        "rules": []
+      },
+      "outbounds": [
+        {"type": "vless", "tag": "proxy", "server": "1.2.3.4", "server_port": 443, "uuid": "test"},
+        {"type": "direct", "tag": "myedge"},
+        {"type": "direct", "tag": "direct"}
+      ],
+      "route": { "rules": [], "final": "direct" }
+    }
+    """;
+
+    [Theory]
+    [InlineData("full", "include")]
+    [InlineData("split", "exclude")]
+    public void Inject_CustomNamedDirectDnsDetour_FullOrExclude_NoLeak(string routingMode, string appsMode)
+    {
+        var settings = CreateSettings();
+        settings.App.RoutingMode = routingMode;
+        settings.App.RoutingAppsMode = appsMode;
+        if (appsMode == "exclude")
+            settings.App.RoutingAppsExclude = new List<string> { "Steam.exe" };
+
+        var result = CustomConfigInjector.Inject(CustomNamedDirectDnsConfig, new[] { "Discord.exe" }, settings);
+        var json = (JsonNode.Parse(result) as JsonObject)!;
+
+        Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
+
+        // dns.final must resolve THROUGH the proxy — NOT the "mydns" real-NIC server
+        // whose detour points to the custom-named {type:direct} "myedge" outbound.
+        var dnsFinal = StjNodeHelpers.SelectToken(json, "dns.final")?.ToString();
+        Assert.False(string.IsNullOrEmpty(dnsFinal));
+        var servers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
+        var finalServer = servers!.OfType<JsonObject>().FirstOrDefault(s => s["tag"]?.ToString() == dnsFinal);
+        Assert.NotNull(finalServer);
+        Assert.Equal("proxy", finalServer!["detour"]?.ToString());
+
+        AssertSingBoxCheckPasses(result, $"customdirect-{routingMode}-{appsMode}");
+    }
+
+    // v2.40.0-r8 (#2 — bug-scout MEDIUM): no dns section + a DOMAIN proxy server.
+    // The synthesized proxy-detour resolver must NOT become default_domain_resolver,
+    // else the proxy's own domain resolves through the not-yet-connected proxy =
+    // circular bootstrap. A real-NIC dns-direct bootstrap resolver must back it.
+    private const string DomainProxyNoDnsConfig = """
+    {
+      "outbounds": [
+        {"type": "vless", "tag": "proxy", "server": "my.vpn.example.com", "server_port": 443, "uuid": "test"},
+        {"type": "direct", "tag": "direct"}
+      ],
+      "route": { "rules": [], "final": "direct" }
+    }
+    """;
+
+    [Fact]
+    public void Inject_NoDnsSection_DomainProxy_FullTunnel_DomainResolverIsLocal_NoCircular()
+    {
+        var settings = CreateSettings();
+        settings.App.RoutingMode = "full";
+
+        var result = CustomConfigInjector.Inject(DomainProxyNoDnsConfig, Array.Empty<string>(), settings);
+        var json = (JsonNode.Parse(result) as JsonObject)!;
+
+        Assert.Equal("proxy", StjNodeHelpers.SelectToken(json, "route.final")?.ToString());
+
+        // default_domain_resolver must point at a LOCAL (real-NIC) server so the
+        // proxy's OWN domain bootstraps off-tunnel — never the proxy-detour synth.
+        var ddr = StjNodeHelpers.SelectToken(json, "route.default_domain_resolver")?.ToString();
+        Assert.False(string.IsNullOrEmpty(ddr));
+        var servers = StjNodeHelpers.SelectToken(json, "dns.servers") as JsonArray;
+        var ddrServer = servers!.OfType<JsonObject>().FirstOrDefault(s => s["tag"]?.ToString() == ddr);
+        Assert.NotNull(ddrServer);
+        var ddrDetour = ddrServer!["detour"]?.ToString();
+        Assert.True(ddrDetour == "dns-direct" || ddrDetour == "direct" || string.IsNullOrEmpty(ddrDetour),
+            $"default_domain_resolver '{ddr}' must resolve on the real NIC, but detour was '{ddrDetour}'");
+
+        AssertSingBoxCheckPasses(result, "domainproxy-nodns-full");
+    }
+
+    /// <summary>Runs `sing-box check` on the emitted config and asserts exit 0.
+    /// Skips gracefully when the binary is absent (CI).</summary>
+    private static void AssertSingBoxCheckPasses(string configJson, string label)
+    {
+        var singBoxPath = @"C:\ProgramData\VPNRouter\bin\sing-box.exe";
+        if (!File.Exists(singBoxPath)) return;
+        var tempPath = Path.Combine(Path.GetTempPath(), $"vpnrouter-{label}-{Guid.NewGuid()}.json");
+        try
+        {
+            File.WriteAllText(tempPath, configJson);
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = singBoxPath, Arguments = $"check -c \"{tempPath}\"",
+                RedirectStandardOutput = true, RedirectStandardError = true,
+                UseShellExecute = false, CreateNoWindow = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi)!;
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(10000);
+            Assert.True(proc.ExitCode == 0,
+                $"sing-box check failed ({label}, exit {proc.ExitCode}):\n{stderr}\n\nConfig:\n{configJson}");
+        }
+        finally { if (File.Exists(tempPath)) File.Delete(tempPath); }
+    }
+
     [Fact]
     public void Inject_FullTunnel_OverridesUserFinalDirect_Selector()
     {
