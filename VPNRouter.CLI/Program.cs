@@ -20,7 +20,15 @@ Log.Logger = new LoggerConfiguration()
 
 // ─── CLI App ──────────────────────────────────────────────────────────────────
 
-var app = new CommandApp();
+// Bug fix 2026-06-03: pass a registrar that knows ISettingsStore. Without it,
+// Spectre 0.49.1's default activator picks the greediest ctor on the commands
+// that gained a DI ctor in Phase 4 Wave 19 (start, profiles list/show/update),
+// can't resolve ISettingsStore, and aborts with "Could not resolve type ...".
+// See SettingsAwareTypeRegistrar for the full write-up.
+var registrar = new VPNRouter.CLI.SettingsAwareTypeRegistrar();
+registrar.RegisterInstance(typeof(VPNRouter.Core.Services.ISettingsStore),
+    VPNRouter.Core.Services.RealSettingsStore.Instance);
+var app = new CommandApp(registrar);
 
 app.Configure(config =>
 {
