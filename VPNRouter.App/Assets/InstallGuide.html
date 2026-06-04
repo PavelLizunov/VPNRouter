@@ -43,7 +43,7 @@
     </div>
     <div class="cmd-block">
       <button class="copy-btn" onclick="copyCmd()">Копировать</button>
-      <code id="cmd">xattr -cr /Applications/VPNRouter.app && USER=$(whoami) && sudo bash -c "echo \"$USER ALL=(root) NOPASSWD: /Users/$USER/Library/Application\\ Support/VPNRouter/bin/sing-box *\" > /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/pkill\" >> /etc/sudoers.d/vpnrouter && chmod 0440 /etc/sudoers.d/vpnrouter" && open /Applications/VPNRouter.app</code>
+      <code id="cmd">xattr -cr /Applications/VPNRouter.app && USER=$(whoami) && sudo bash -c "echo \"$USER ALL=(root) NOPASSWD: /Users/$USER/Library/Application\\ Support/VPNRouter/bin/sing-box *\" > /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/pkill *\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/sbin/networksetup *\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/dscacheutil *\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/killall -HUP mDNSResponder\" >> /etc/sudoers.d/vpnrouter && chmod 0440 /etc/sudoers.d/vpnrouter" && open /Applications/VPNRouter.app</code>
     </div>
     <div class="step" style="margin-top:16px"><div class="step-num">4</div><div class="step-text"><h3>Введи пароль Mac</h3><p>Terminal попросит пароль — введи пароль от Mac. Это нужно <b>один раз</b>, больше не попросит.</p></div></div>
     <div class="note">✅ Готово! Приложение запустится. В следующий раз просто открывай из Applications.</div>
@@ -56,7 +56,7 @@
     </div>
     <div class="cmd-block">
       <button class="copy-btn" onclick="copyCmd()">Copy</button>
-      <code>xattr -cr /Applications/VPNRouter.app && USER=$(whoami) && sudo bash -c "echo \"$USER ALL=(root) NOPASSWD: /Users/$USER/Library/Application\\ Support/VPNRouter/bin/sing-box *\" > /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/pkill\" >> /etc/sudoers.d/vpnrouter && chmod 0440 /etc/sudoers.d/vpnrouter" && open /Applications/VPNRouter.app</code>
+      <code>xattr -cr /Applications/VPNRouter.app && USER=$(whoami) && sudo bash -c "echo \"$USER ALL=(root) NOPASSWD: /Users/$USER/Library/Application\\ Support/VPNRouter/bin/sing-box *\" > /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/pkill *\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/sbin/networksetup *\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/dscacheutil *\" >> /etc/sudoers.d/vpnrouter && echo \"$USER ALL=(root) NOPASSWD: /usr/bin/killall -HUP mDNSResponder\" >> /etc/sudoers.d/vpnrouter && chmod 0440 /etc/sudoers.d/vpnrouter" && open /Applications/VPNRouter.app</code>
     </div>
     <div class="step" style="margin-top:16px"><div class="step-num">4</div><div class="step-text"><h3>Enter Mac password</h3><p>Terminal will ask for your password — type your Mac password. Needed <b>only once</b>.</p></div></div>
     <div class="note">✅ Done! The app will launch. Next time just open from Applications.</div>

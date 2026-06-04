@@ -65,9 +65,25 @@ public sealed class MacDnsHardening : IUnixDnsHardening
                 SaveState(new MacDnsState { Service = service, OriginalServers = original });
             }
 
-            SetDnsServers(service, new[] { dnsTarget }, logger);
-            FlushDnsCache(logger);
-            logger?.Information("[MacDnsHardening] Pinned {Service} DNS -> {Target}", service, dnsTarget);
+            // Only claim success when networksetup actually applied the change.
+            // On failure (missing sudoers grant / networksetup error) the DNS is
+            // UNCHANGED — we must not log "Pinned" (it would falsely imply the
+            // leak is closed). We KEEP the saved state regardless: networksetup
+            // is atomic, so a failed set means DNS is still the saved original
+            // and a later Restore is a harmless no-op — strictly safer than
+            // deleting it and risking lost recovery. Surface a Warning so the
+            // leak path can reflect that hardening did not take effect.
+            if (SetDnsServers(service, new[] { dnsTarget }, logger))
+            {
+                FlushDnsCache(logger);
+                logger?.Information("[MacDnsHardening] Pinned {Service} DNS -> {Target}", service, dnsTarget);
+            }
+            else
+            {
+                logger?.Warning(
+                    "[MacDnsHardening] FAILED to pin {Service} DNS -> {Target} (networksetup non-zero — " +
+                    "sudoers grant missing? DNS is NOT hardened and may leak)", service, dnsTarget);
+            }
         }
         catch (Exception ex)
         {
@@ -107,10 +123,24 @@ public sealed class MacDnsHardening : IUnixDnsHardening
                 ? state.OriginalServers.ToArray()
                 : new[] { DhcpToken };
 
-            SetDnsServers(state.Service, servers, logger);
-            FlushDnsCache(logger);
-            TryDeleteState();
-            logger?.Information("[MacDnsHardening] {Context}: restored {Service} DNS", context, state.Service);
+            // Drop the crash-recovery sentinel ONLY after a confirmed-success
+            // restore. If networksetup failed (sudoers revoked, service renamed),
+            // keeping the sentinel lets RestoreStrandedIfAny retry next launch
+            // instead of stranding DNS on the dead TUN gateway (172.19.0.1)
+            // forever — the v2.41.0-r3 stuck-DNS defect.
+            if (SetDnsServers(state.Service, servers, logger))
+            {
+                FlushDnsCache(logger);
+                TryDeleteState();
+                logger?.Information("[MacDnsHardening] {Context}: restored {Service} DNS", context, state.Service);
+            }
+            else
+            {
+                logger?.Warning(
+                    "[MacDnsHardening] {Context}: FAILED to restore {Service} DNS — keeping state for retry " +
+                    "next launch. Manual recovery: sudo networksetup -setdnsservers <service> empty",
+                    context, state.Service);
+            }
         }
         catch (Exception ex)
         {
@@ -138,26 +168,36 @@ public sealed class MacDnsHardening : IUnixDnsHardening
         return MacDnsParsers.ParseGetDnsServers(stdout);
     }
 
-    private void SetDnsServers(string service, string[] servers, ILogger? logger)
+    /// <returns>true only when networksetup exited 0 (DNS was actually changed).</returns>
+    private bool SetDnsServers(string service, string[] servers, ILogger? logger)
     {
         // Requires root → via sudo -n (non-interactive; fails fast if the
         // networksetup sudoers grant — Fix #5 — isn't present, rather than
         // blocking on a password prompt).
         var args = new List<string> { "-n", "/usr/sbin/networksetup", "-setdnsservers", service };
         args.AddRange(servers);
-        RunSudo(args, logger);
+        return RunSudoChecked(args, logger);
     }
 
     private void FlushDnsCache(ILogger? logger)
     {
-        RunSudo(new[] { "-n", "/usr/bin/dscacheutil", "-flushcache" }, logger);
-        RunSudo(new[] { "-n", "/usr/bin/killall", "-HUP", "mDNSResponder" }, logger);
+        // Best-effort: a failed flush is a stale cache entry, not a leak.
+        RunSudoChecked(new[] { "-n", "/usr/bin/dscacheutil", "-flushcache" }, logger);
+        RunSudoChecked(new[] { "-n", "/usr/bin/killall", "-HUP", "mDNSResponder" }, logger);
     }
 
-    private void RunSudo(IEnumerable<string> sudoArgs, ILogger? logger)
-        => Run("/usr/bin/sudo", sudoArgs.ToArray(), logger);
+    private bool RunSudoChecked(IEnumerable<string> sudoArgs, ILogger? logger)
+        => RunResult("/usr/bin/sudo", sudoArgs.ToArray(), logger).ok;
 
     private string Run(string exe, string[] args, ILogger? logger)
+        => RunResult(exe, args, logger).stdout;
+
+    /// <summary>
+    /// Runs a command and returns BOTH the success flag (exit 0) and stdout.
+    /// The success flag is what lets <see cref="Apply"/>/<see cref="RestoreInternal"/>
+    /// avoid the "reported success while networksetup actually failed" defect.
+    /// </summary>
+    private (bool ok, string stdout) RunResult(string exe, string[] args, ILogger? logger)
     {
         try
         {
@@ -166,12 +206,12 @@ public sealed class MacDnsHardening : IUnixDnsHardening
             var result = _runner.RunAsync(req, cts.Token).GetAwaiter().GetResult();
             if (result.ExitCode != 0)
                 logger?.Debug("[MacDnsHardening] {Exe} exited {Code}: {Err}", exe, result.ExitCode, result.Stderr?.Trim());
-            return result.Stdout ?? string.Empty;
+            return (result.ExitCode == 0, result.Stdout ?? string.Empty);
         }
         catch (Exception ex)
         {
             logger?.Debug(ex, "[MacDnsHardening] {Exe} failed to run", exe);
-            return string.Empty;
+            return (false, string.Empty);
         }
     }
 

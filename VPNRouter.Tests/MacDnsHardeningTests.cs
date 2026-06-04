@@ -165,4 +165,72 @@ public class MacDnsHardeningTests : IDisposable
         Assert.Empty(fake.RunCalls);
         Assert.False(File.Exists(_statePath));
     }
+
+    // ── v2.41.0-r5: success-checked Apply/Restore (stuck-DNS fix) ────────────
+
+    private static ProcessResult Fail(string stderr = "sudo: a password is required") =>
+        new ProcessResult(1, "", stderr, TimeSpan.Zero, false);
+
+    /// <summary>Like <see cref="BuildFake"/> but the <c>-setdnsservers</c> sudo
+    /// call FAILS (exit 1) — models a missing/revoked sudoers grant. Registered
+    /// before the catch-all sudo so first-match-wins routes the set to failure
+    /// while flush calls still succeed.</summary>
+    private FakeProcessRunner BuildFakeFailingSet(string getDnsOut)
+    {
+        var fake = new FakeProcessRunner();
+        fake.OnRun(r => r.ExecutablePath == "/sbin/route", Ok(RouteOut));
+        fake.OnRun(r => r.ExecutablePath == "/usr/sbin/networksetup" && r.Arguments[0] == "-listnetworkserviceorder",
+            Ok(ListOrderOut));
+        fake.OnRun(r => r.ExecutablePath == "/usr/sbin/networksetup" && r.Arguments[0] == "-getdnsservers",
+            Ok(getDnsOut));
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-setdnsservers"), Fail());
+        fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
+        return fake;
+    }
+
+    [Fact]
+    public void Apply_when_setdnsservers_fails_keeps_state_and_does_not_flush()
+    {
+        var fake = BuildFakeFailingSet("8.8.8.8");
+        var sut = new MacDnsHardening(fake, _statePath);
+
+        sut.Apply("172.19.0.1", null);
+
+        // networksetup is atomic → a failed set means DNS is unchanged, so the
+        // saved-original state stays valid (restore = harmless no-op). Keeping
+        // it is strictly safer than deleting and risking lost recovery.
+        Assert.True(File.Exists(_statePath));
+        // No "Pinned" claim on failure → no cache flush should have run.
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("/usr/bin/dscacheutil"));
+        Assert.DoesNotContain(fake.RunCalls, c => c.Arguments.Contains("mDNSResponder"));
+    }
+
+    [Fact]
+    public void Restore_when_setdnsservers_fails_keeps_sentinel_for_retry()
+    {
+        // Apply succeeds → sentinel saved.
+        new MacDnsHardening(BuildFake("8.8.8.8\n1.1.1.1"), _statePath).Apply("172.19.0.1", null);
+        Assert.True(File.Exists(_statePath));
+
+        // Restore fails (sudoers revoked between connect and disconnect). The
+        // sentinel MUST survive so RestoreStrandedIfAny retries next launch —
+        // without this the DNS is stranded on the dead TUN gateway forever
+        // (the v2.41.0-r3 stuck-DNS defect this fix closes).
+        new MacDnsHardening(BuildFakeFailingSet("8.8.8.8"), _statePath).Restore(null);
+
+        Assert.True(File.Exists(_statePath));
+    }
+
+    [Fact]
+    public void RestoreStranded_heals_after_a_prior_failed_restore()
+    {
+        // End-to-end: apply ok → failed restore (sentinel kept) → next-launch
+        // RestoreStrandedIfAny with a working runner clears the sentinel.
+        new MacDnsHardening(BuildFake("8.8.8.8"), _statePath).Apply("172.19.0.1", null);
+        new MacDnsHardening(BuildFakeFailingSet("8.8.8.8"), _statePath).Restore(null);
+        Assert.True(File.Exists(_statePath)); // still stranded
+
+        new MacDnsHardening(BuildFake("8.8.8.8"), _statePath).RestoreStrandedIfAny(null);
+        Assert.False(File.Exists(_statePath)); // healed on retry
+    }
 }

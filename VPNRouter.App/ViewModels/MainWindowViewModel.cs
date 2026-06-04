@@ -3473,25 +3473,35 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // releases wrote a malformed file (spaces unescaped, no args
         // wildcard) that exists on disk but doesn't grant NOPASSWD for
         // our actual sudo invocation.
+        // v2.41.0-r5: authority is a USER-readable marker we write after a
+        // confirmed grant — NOT the /etc/sudoers.d file. That file is
+        // 0440 root:wheel; a normal admin user can't read it, so the old
+        // File.ReadAllText(sudoersPath) threw UnauthorizedAccessException and
+        // forced the "one-time" osascript prompt on EVERY connect. Reading our
+        // own marker never throws, so the prompt fires at most once per marker
+        // version (on first connect after an upgrade that bumps it).
+        var sudoersMarkerPath = Path.Combine(AppPaths.DataDir, "macos-sudoers.marker");
         bool needsRewrite = true;
         try
         {
-            if (File.Exists(sudoersPath))
+            if (File.Exists(sudoersMarkerPath) &&
+                File.ReadAllText(sudoersMarkerPath).Contains(SudoersFormatMarker, StringComparison.Ordinal))
             {
-                var existing = File.ReadAllText(sudoersPath);
-                if (existing.Contains(SudoersFormatMarker, StringComparison.Ordinal))
-                    needsRewrite = false;
+                needsRewrite = false;
             }
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // /etc/sudoers.d/vpnrouter is mode 0440 root:wheel — non-root
-            // user can't read it. If the file exists but we can't see its
-            // content, assume the previous (possibly malformed) write
-            // already happened and we need a rewrite to be safe.
-            // (osascript prompt is a one-time annoyance — much better
-            // than a permanently broken VPN.)
-            needsRewrite = true;
+            else if (File.Exists(sudoersPath))
+            {
+                // Best-effort: if we CAN read the root file (dev box / wheel
+                // member), honour its marker too. Unreadable (the common 0440
+                // case) → swallow and fall through to one rewrite, which then
+                // writes the user marker so later launches take the fast path.
+                try
+                {
+                    if (File.ReadAllText(sudoersPath).Contains(SudoersFormatMarker, StringComparison.Ordinal))
+                        needsRewrite = false;
+                }
+                catch { /* 0440 unreadable → needsRewrite stays true */ }
+            }
         }
         catch { needsRewrite = true; }
         if (!needsRewrite) return;
@@ -3553,7 +3563,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         proc.Dispose();
 
         if (File.Exists(sudoersPath))
+        {
             _logger.Information("Passwordless sudo configured");
+            // Persist a user-readable marker so the next launch takes the fast
+            // path above instead of re-prompting (v2.41.0-r5 every-connect fix).
+            try { File.WriteAllText(sudoersMarkerPath, SudoersFormatMarker); }
+            catch (Exception ex) { _logger.Warning(ex, "Failed to write sudoers marker — may re-prompt next launch"); }
+        }
         else
             _logger.Warning("Failed to configure sudoers");
     }
