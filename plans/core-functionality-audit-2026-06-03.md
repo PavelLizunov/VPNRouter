@@ -172,7 +172,32 @@ LeakAuditFix). **B3 (wildcard/child): 5 findings.**
 Phase B B4 MED items (RoutingAppListEditor guard naming/abstraction-drift in
 exclude mode + shell-verb dead-in-exclude UX) — hardening, no live leak; triage.
 
+### Phase C — DONE (2026-06-04)
+Adversarial sweep (3 agents) + source-pin tests. **C5 concurrency core SOUND** —
+B1 (ProcessExit dual-hook) + B2 (concurrent Stop) GUARDED, B4 (State torn read)
+correctly retired; verified against SingBoxManagerLifecycleStressTests/
+ConcurrentStop/CleanupPath suites. **3 findings fixed (commit fa2cc52):**
+- **C3-1 HIGH (regression from 573f2eb)**: HealthMonitor.Stop() didn't reset
+  _deferredBlockRuleDisable / _lastFullRestart → stale deferred kill-switch lift
+  fires on reconnect via fallback without confirming the new TUN. Fixed.
+- **C4-1 MED**: OnDebounceElapsed full-restart bounced the TUN with no kill-switch
+  coverage (unlike the crash path). Now EnableBlockRules-before + deferred-lift-
+  after. Fixed.
+- **C1-1 HIGH**: VpnEngine.Dispose() only ran Stop() (sole firewall/DNS teardown)
+  when IsRunning → mid-Start exception orphaned firewall+DNS on CLI/Service. Now
+  tears down even when !IsRunning. Fixed.
+- +3 CoreAuditPhaseCTests source-pins. 152 lifecycle tests green.
+
+**TRIAGE — deferred B3 state-machine class** (-> plans/singbox-lifecycle-hardening-v2.36.md,
+needs a state-machine refactor brief, NOT rushed): C2-1/C5-F-1 (OnProcessExited
+has no State guard; exit-code-1-during-Restart fires spurious Crashed ->
+double-restart), C5-F-2 (Stop()-racing-Restart() leaves "Running but unlocked" +
+cross-instance TUN-lock window), C4-2 (concurrent debounce+backoff -> double
+LaunchProcess), C3-3 (periodic tick inflates restart counter during backoff),
+C3-2 (max-attempts exhaustion strands user, no autonomous resume). All MED,
+latent, no crash-today.
+
 ### Pending phases
-C (lifecycle) → E (subscription) → F (free-configs) → G (cross-platform; G2 =
-known Linux/macOS kill-switch gap, task #131; G also: B3-4 Linux include_children
-no-op).
+E (subscription) → F (free-configs) → G (cross-platform; G2 = known Linux/macOS
+kill-switch gap, task #131; G also: B3-4 Linux include_children no-op).
+Plus: deferred B3 state-machine refactor brief (Phase C triage above).
