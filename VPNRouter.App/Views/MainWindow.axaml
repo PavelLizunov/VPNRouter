@@ -569,17 +569,22 @@
                                     <TextBlock Classes="section-label"
                                                Text="{Binding L_SmpMenuViewSection}"/>
 
-                                    <!-- Theme segmented: Light | Dark -->
+                                    <!-- Theme segmented: System | Light | Dark (v2.40.x Fix #7) -->
                                     <Border Classes="segment-container">
-                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="2">
+                                        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="2">
                                             <Button Grid.Column="0"
                                                     Classes="segment"
-                                                    Classes.active="{Binding !IsDarkTheme}"
-                                                    Command="{Binding SetThemeLightCommand}"
-                                                    Content="{Binding L_SmpSegLight}"/>
+                                                    Classes.active="{Binding IsSystemThemePref}"
+                                                    Command="{Binding SetThemeSystemCommand}"
+                                                    Content="{Binding L_SmpSegSystem}"/>
                                             <Button Grid.Column="1"
                                                     Classes="segment"
-                                                    Classes.active="{Binding IsDarkTheme}"
+                                                    Classes.active="{Binding IsLightThemePref}"
+                                                    Command="{Binding SetThemeLightCommand}"
+                                                    Content="{Binding L_SmpSegLight}"/>
+                                            <Button Grid.Column="2"
+                                                    Classes="segment"
+                                                    Classes.active="{Binding IsDarkThemePref}"
                                                     Command="{Binding SetThemeDarkCommand}"
                                                     Content="{Binding L_SmpSegDark}"/>
                                         </Grid>

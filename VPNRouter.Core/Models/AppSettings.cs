@@ -242,9 +242,13 @@ public class AppConfig
     [YamlMember(Alias = "routing_apps_exclude")]
     public List<string> RoutingAppsExclude { get; set; } = new();
 
-    /// <summary>UI theme: "light" or "dark".</summary>
+    /// <summary>UI theme preference: "light", "dark", or "system" (follow the
+    /// OS appearance). v2.40.x (Fix #7): default is "system" so fresh installs
+    /// match the OS theme on first launch — fixing the macOS "app starts light
+    /// while macOS is in Dark" desync. Existing users keep whatever explicit
+    /// "light"/"dark" they already have persisted (their choice wins).</summary>
     [YamlMember(Alias = "theme")]
-    public string Theme { get; set; } = "light";
+    public string Theme { get; set; } = "system";
 
     /// <summary>UI language: "en" or "ru". Empty string means "never chose
     /// one yet" → UI auto-detects from OS locale on first launch (v2.24.4)

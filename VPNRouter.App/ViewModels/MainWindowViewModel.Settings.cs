@@ -434,10 +434,10 @@ public partial class MainWindowViewModel
     {
         // v2.17.10: log entry so bug reports about the window teleporting
         // can be traced to the exact toggle that fired.
-        _logger.Information("[VM] ToggleTheme → {Theme}", IsDarkTheme ? "Light" : "Dark");
-        IsDarkTheme = !IsDarkTheme;
-        ApplyTheme();
-        RefreshLocalization();
+        // v2.40.x (Fix #7): flipping makes an EXPLICIT light/dark choice
+        // (leaving "system"), routed through SetThemePreference so the pref
+        // persists. Picks the opposite of whatever variant is showing.
+        SetThemePreference(IsDarkTheme ? "light" : "dark");
     }
 
     [RelayCommand]
@@ -472,23 +472,34 @@ public partial class MainWindowViewModel
     }
 
     // v2.25.2 — explicit segment commands for the redesigned ⋯ menu popover
-    // (Phase 1). The popover shows Theme as a Light|Dark segmented control
-    // and Language as RU|EN — clicking an already-active segment must be a
-    // no-op, whereas ToggleTheme/ToggleLanguage always flip. These wrappers
-    // let the XAML bind each segment button to its own command without
-    // having to compute "should I fire?" in the binding layer.
+    // (Phase 1). The popover shows Theme as a System|Light|Dark segmented
+    // control (System added v2.40.x / Fix #7) and Language as RU|EN — clicking
+    // an already-active segment is a no-op. These wrappers let the XAML bind
+    // each segment button to its own command.
     [RelayCommand]
-    private void SetThemeLight()
-    {
-        if (!IsDarkTheme) return;
-        ToggleTheme();
-    }
+    private void SetThemeLight() => SetThemePreference("light");
 
     [RelayCommand]
-    private void SetThemeDark()
+    private void SetThemeDark() => SetThemePreference("dark");
+
+    [RelayCommand]
+    private void SetThemeSystem() => SetThemePreference("system");
+
+    /// <summary>
+    /// v2.40.x (Fix #7): apply + persist a theme preference. No-op if already
+    /// active. ApplyTheme resolves "system" against the OS appearance and sets
+    /// IsDarkTheme; SaveSettings persists the preference string (mirrors
+    /// ToggleLanguage, which also saves on change).
+    /// </summary>
+    private void SetThemePreference(string pref)
     {
-        if (IsDarkTheme) return;
-        ToggleTheme();
+        pref = NormalizeThemePref(pref);
+        if (string.Equals(ThemePreference, pref, StringComparison.OrdinalIgnoreCase)) return;
+        _logger.Information("[VM] SetTheme → {Pref}", pref);
+        ThemePreference = pref;
+        ApplyTheme();
+        RefreshLocalization();
+        SaveSettings();
     }
 
     [RelayCommand]

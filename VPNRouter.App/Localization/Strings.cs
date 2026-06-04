@@ -1121,6 +1121,7 @@ public static class Strings
     public static string SmpMenuTroubleshootingSection => global::VPNRouter.Core.Localization.Strings.SmpMenuTroubleshootingSection;
     public static string SmpSegLight => global::VPNRouter.Core.Localization.Strings.SmpSegLight;
     public static string SmpSegDark => global::VPNRouter.Core.Localization.Strings.SmpSegDark;
+    public static string SmpSegSystem => global::VPNRouter.Core.Localization.Strings.SmpSegSystem;
     public static string SmpSegRu => global::VPNRouter.Core.Localization.Strings.SmpSegRu;
     public static string SmpSegEn => global::VPNRouter.Core.Localization.Strings.SmpSegEn;
 

@@ -178,8 +178,13 @@ public class MainWindowViewModelCharacterizationTests
     // (RelayCommand) + 4 L_Diag* localization getters. Intentional drift.
     // v2.39.0-r6: + private ScrubRoutingForApp helper (apps-page audit
     // "removed apps remain in routing policy" fix). Intentional drift.
+    // v2.40.x (Fix #7, macOS deep-audit): tri-state theme surface —
+    // ThemePreference (ObservableProperty) + IsSystemThemePref /
+    // IsLightThemePref / IsDarkThemePref getters + SetThemeSystemCommand
+    // (RelayCommand). Cross-platform members → Linux pin drifts in lock-step
+    // (soft-fail captures the actual via sentinel on the next ubuntu CI run).
     private const string PinnedHashWindows =
-        "6a849fc0ad32fb1e3edb33a0a4112c2580c69ef25febe1687aba5eab428cadd0";
+        "72e5147292e15b9cb36b4f48a3574042c96407f0c4e860633a14b3ada618acaa";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

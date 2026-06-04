@@ -136,6 +136,21 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(LogoSource))]
     private bool _isDarkTheme;
 
+    // v2.40.x (Fix #7): the user's theme PREFERENCE — "light" | "dark" |
+    // "system". Distinct from IsDarkTheme, which is the EFFECTIVE variant
+    // currently showing (resolved in ApplyTheme; "system" derives it from the
+    // OS appearance). The three derived bools drive the segmented control's
+    // active-state in the ⋯ menu.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSystemThemePref))]
+    [NotifyPropertyChangedFor(nameof(IsLightThemePref))]
+    [NotifyPropertyChangedFor(nameof(IsDarkThemePref))]
+    private string _themePreference = "system";
+
+    public bool IsSystemThemePref => string.Equals(ThemePreference, "system", StringComparison.OrdinalIgnoreCase);
+    public bool IsLightThemePref  => string.Equals(ThemePreference, "light",  StringComparison.OrdinalIgnoreCase);
+    public bool IsDarkThemePref   => string.Equals(ThemePreference, "dark",   StringComparison.OrdinalIgnoreCase);
+
     // v2.20.3: single transparent-background mascot (penguin_mascot.png,
     // 640×640, black lineart on alpha). Previous b_icon/w_icon pair had
     // SOLID backgrounds (not transparent) and I had them swapped to boot —
@@ -2846,6 +2861,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         LoadSettingsIntoUI();
 
+        // v2.40.x (Fix #7): follow live OS appearance flips while the theme
+        // preference is "system". Wired once here (PlatformSettings is ready
+        // after LoadSettingsIntoUI's first ApplyTheme); torn down in Dispose.
+        WireOsThemeFollow();
+
         // Detect VPN already running (e.g. started by Windows Service on boot)
         DetectServiceManagedVpn();
 
@@ -3031,8 +3051,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         IsRussian = storedLang.Equals("ru", StringComparison.OrdinalIgnoreCase);
         Strings.Lang = IsRussian ? "ru" : "en";
 
-        // Theme
-        IsDarkTheme = (_settings.App.Theme ?? "light").Equals("dark", StringComparison.OrdinalIgnoreCase);
+        // Theme preference: "light" | "dark" | "system" (default "system" →
+        // follow the OS appearance). ApplyTheme resolves the effective variant
+        // and sets IsDarkTheme. v2.40.x (Fix #7).
+        ThemePreference = NormalizeThemePref(_settings.App.Theme);
         ApplyTheme();
 
         // UI complexity mode. v2.21.7: always start in Simple on launch —
@@ -3759,8 +3781,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         // Update channel
         _settings.Update.Channel = ReceivePrereleases ? "experimental" : "stable";
 
-        // Theme & language
-        _settings.App.Theme = IsDarkTheme ? "dark" : "light";
+        // Theme & language. v2.40.x (Fix #7): persist the PREFERENCE
+        // ("light"/"dark"/"system"), not the resolved variant — otherwise a
+        // "system" choice would be flattened to whatever was showing.
+        _settings.App.Theme = NormalizeThemePref(ThemePreference);
         _settings.App.Language = IsRussian ? "ru" : "en";
         _settings.App.UiMode = IsSimpleMode ? "simple" : "advanced";
 
@@ -7148,6 +7172,11 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         if (_disposed) return;
         _disposed = true;
 
+        // 0. Drop the OS-appearance follow subscription (Fix #7) so the VM
+        // isn't held alive by PlatformSettings after disposal.
+        try { UnwireOsThemeFollow(); }
+        catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: UnwireOsThemeFollow failed"); }
+
         // 1. Stop polling timers.
         try
         {
@@ -7197,8 +7226,25 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     {
         if (Application.Current != null)
         {
-            Application.Current.RequestedThemeVariant =
-                IsDarkTheme ? ThemeVariant.Dark : ThemeVariant.Light;
+            // v2.40.x (Fix #7): resolve the effective variant from the
+            // preference. "system" follows the OS appearance: we set
+            // RequestedThemeVariant=Default so Avalonia tracks the platform,
+            // but we ALSO read the OS variant explicitly because our custom
+            // ThemeDictionaries (Light/Dark) don't reliably repaint on Default
+            // alone — IsDarkTheme + the C#-resolved brush getters need a
+            // concrete Light/Dark to read against.
+            ThemeVariant effective;
+            if (IsSystemThemePref)
+            {
+                Application.Current.RequestedThemeVariant = ThemeVariant.Default;
+                effective = ReadOsThemeVariant();
+            }
+            else
+            {
+                effective = IsDarkThemePref ? ThemeVariant.Dark : ThemeVariant.Light;
+                Application.Current.RequestedThemeVariant = effective;
+            }
+            IsDarkTheme = effective == ThemeVariant.Dark;
         }
 
         // DynamicResource bindings in XAML auto-update when the theme variant
@@ -7213,6 +7259,86 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         foreach (var s in Servers)             s.NotifyThemeChanged();
         foreach (var s in SubscriptionServers) s.NotifyThemeChanged();
+    }
+
+    /// <summary>
+    /// v2.40.x (Fix #7): read the OS appearance (Light/Dark) via Avalonia's
+    /// PlatformSettings. Maps the platform-native signal — Windows registry
+    /// AppsUseLightTheme, macOS NSAppearance, Linux freedesktop color-scheme —
+    /// to a concrete <see cref="ThemeVariant"/>. Falls back to Light if the
+    /// platform can't be queried (very early startup / headless).
+    /// </summary>
+    private static ThemeVariant ReadOsThemeVariant()
+    {
+        try
+        {
+            var os = Application.Current?.PlatformSettings?.GetColorValues().ThemeVariant;
+            return os == PlatformThemeVariant.Dark ? ThemeVariant.Dark : ThemeVariant.Light;
+        }
+        catch
+        {
+            return ThemeVariant.Light;
+        }
+    }
+
+    /// <summary>
+    /// v2.40.x (Fix #7): coerce a persisted/raw theme string to one of the
+    /// three canonical preferences. Unknown / null / legacy values fall back to
+    /// "system" so fresh installs (and corrupted values) follow the OS.
+    /// </summary>
+    internal static string NormalizeThemePref(string? raw)
+    {
+        if (string.Equals(raw, "dark", StringComparison.OrdinalIgnoreCase)) return "dark";
+        if (string.Equals(raw, "light", StringComparison.OrdinalIgnoreCase)) return "light";
+        return "system";
+    }
+
+    /// <summary>
+    /// v2.40.x (Fix #7): live OS appearance flip handler. Only re-applies while
+    /// the preference is "system" — an explicit Light/Dark choice ignores OS
+    /// changes. Marshalled to the UI thread because ApplyTheme touches
+    /// Application.Current + raises PropertyChanged for the brush getters.
+    /// </summary>
+    private void OnPlatformColorValuesChanged(object? sender, PlatformColorValues e)
+    {
+        if (!IsSystemThemePref) return;
+        Dispatcher.UIThread.Post(ApplyTheme);
+    }
+
+    // Held so Dispose can unsubscribe cleanly (avoids the leaked-handler /
+    // double-fire class of bug the project already hit with DataContextChanged).
+    private IPlatformSettings? _wiredPlatformSettings;
+
+    private void WireOsThemeFollow()
+    {
+        if (_wiredPlatformSettings != null) return;   // wire exactly once
+        try
+        {
+            var ps = Application.Current?.PlatformSettings;
+            if (ps == null) return;
+            ps.ColorValuesChanged += OnPlatformColorValuesChanged;
+            _wiredPlatformSettings = ps;
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[VM] WireOsThemeFollow: could not subscribe to ColorValuesChanged");
+        }
+    }
+
+    private void UnwireOsThemeFollow()
+    {
+        try
+        {
+            if (_wiredPlatformSettings != null)
+            {
+                _wiredPlatformSettings.ColorValuesChanged -= OnPlatformColorValuesChanged;
+                _wiredPlatformSettings = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, "[VM] UnwireOsThemeFollow: unsubscribe failed");
+        }
     }
 
     // ── Localization refresh ──

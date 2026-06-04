@@ -237,6 +237,7 @@ public partial class MainWindowViewModel
     public string L_SmpSegDark => Strings.SmpSegDark;
     public string L_SmpSegEn => Strings.SmpSegEn;
     public string L_SmpSegLight => Strings.SmpSegLight;
+    public string L_SmpSegSystem => Strings.SmpSegSystem;
     public string L_SmpSegRu => Strings.SmpSegRu;
     public string L_SmpSplitHint => Strings.SmpSplitHint;
     public string L_SmpSplitOption => Strings.SmpSplitOption;

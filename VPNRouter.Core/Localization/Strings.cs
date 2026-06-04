@@ -1974,6 +1974,8 @@ public static class Strings
     public static string SmpMenuTroubleshootingSection => Ru ? "Устранение неполадок" : "Troubleshooting";
     public static string SmpSegLight                  => Ru ? "Светлая"            : "Light";
     public static string SmpSegDark                   => Ru ? "Тёмная"             : "Dark";
+    // v2.40.x (Fix #7): tri-state theme — follow the OS appearance.
+    public static string SmpSegSystem                 => Ru ? "Системная"          : "System";
     public static string SmpSegRu                     => "RU";
     public static string SmpSegEn                     => "EN";
 
