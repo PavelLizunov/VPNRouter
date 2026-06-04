@@ -116,8 +116,18 @@ public class MacProcessScanner : IProcessScanner
             using var proc = Process.Start(psi);
             if (proc == null) return tree;
 
-            var output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(5000);
+            // Drain stdout on a background task so a stalled `ps` can't block
+            // forever: the old code ReadToEnd()'d FIRST, so the WaitForExit(5s)
+            // timeout never fired — a hung ps would deadlock Connect / hot-reload
+            // (audit 2026-06-04). Now the timeout is the real guard.
+            var readTask = System.Threading.Tasks.Task.Run(() => proc.StandardOutput.ReadToEnd());
+            if (!proc.WaitForExit(5000))
+            {
+                try { proc.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+                _logger.Warning("[MacProcessScanner] /bin/ps did not exit within 5s — killed; process tree may be incomplete this scan");
+                return tree;
+            }
+            var output = readTask.GetAwaiter().GetResult();
 
             foreach (var line in output.Split('\n').Skip(1))
             {

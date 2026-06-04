@@ -77,18 +77,21 @@ jobs:
       # BEFORE it reaches user installs. Doesn't block the artifact
       # upload (the DMG is still built); just adds a clear signal.
       - name: Smoke test - sing-box accepts our config shape
-        continue-on-error: true
         run: |
           set -e
           STAGED_APP=$(find /tmp -maxdepth 3 -name "VPNRouter.app" -type d | head -1)
           if [ -z "$STAGED_APP" ]; then
-            echo "::warning::staged VPNRouter.app not found - smoke test skipped"
-            exit 0
+            echo "::error::staged VPNRouter.app not found - cannot smoke-test the bundled sing-box"
+            exit 1
           fi
-          SINGBOX="$STAGED_APP/Contents/Resources/sing-box"
+          # Build stages sing-box in Contents/MacOS (NOT Resources). Looking in
+          # the wrong dir + exit 0 silently skipped this gate, so a broken/missing
+          # bundled sing-box could ship looking green (audit 2026-06-04). Hard-fail
+          # if it's missing at the real path.
+          SINGBOX="$STAGED_APP/Contents/MacOS/sing-box"
           if [ ! -x "$SINGBOX" ]; then
-            echo "::warning::sing-box not found at $SINGBOX - smoke test skipped"
-            exit 0
+            echo "::error::bundled sing-box missing/not-executable at $SINGBOX"
+            exit 1
           fi
           echo "Found sing-box at $SINGBOX"
           "$SINGBOX" version || echo "::warning::sing-box version check failed"
