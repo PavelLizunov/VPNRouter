@@ -83,4 +83,33 @@ public class MacHelperNameExpansionTests
     {
         Assert.Empty(ConfigGenerator.ExpandMacHelperNames(System.Array.Empty<string>()));
     }
+
+    // Fix #2b (live r1 Mac log 2026-06-04): Safari's network I/O runs under fixed
+    // Apple XPC names, NOT "Safari Helper" — so it needs the known-I/O map, and
+    // the inert Chromium-style suffix names must NOT be emitted for it.
+    [Fact]
+    public void Safari_maps_to_webkit_xpc_io_processes()
+    {
+        var result = ConfigGenerator.ExpandMacHelperNames(new[] { "Safari" });
+
+        Assert.Contains("Safari", result);
+        Assert.Contains("com.apple.WebKit.Networking", result);     // the process that actually connects (73 conns in the log)
+        Assert.Contains("com.apple.Safari.SearchHelper", result);
+        Assert.Contains("com.apple.WebKit.WebContent", result);
+        // The inert "Safari Helper" names must NOT be generated for Safari.
+        Assert.DoesNotContain("Safari Helper", result);
+        Assert.DoesNotContain("Safari Helper (Renderer)", result);
+    }
+
+    [Fact]
+    public void Chromium_apps_still_get_suffix_expansion_not_webkit()
+    {
+        // Regression: the known-I/O map must not break the Chromium path. Brave's
+        // real connector in the log is the bare "Brave Browser Helper".
+        var result = ConfigGenerator.ExpandMacHelperNames(new[] { "Brave Browser" });
+
+        Assert.Contains("Brave Browser Helper", result);
+        Assert.Contains("Brave Browser Helper (Renderer)", result);
+        Assert.DoesNotContain("com.apple.WebKit.Networking", result);
+    }
 }

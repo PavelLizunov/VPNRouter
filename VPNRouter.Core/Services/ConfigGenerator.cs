@@ -520,31 +520,67 @@ public static class ConfigGenerator
         " Helper (Plugin)",
     };
 
+    // macOS apps whose real network I/O runs under FIXED system process names
+    // that are NOT derivable from the app name by a suffix rule (Fix #2b, from
+    // live r1 Mac logs 2026-06-04: Safari connects via com.apple.WebKit.Networking
+    // — 73 conns — and com.apple.Safari.SearchHelper, never "Safari" or "Safari
+    // Helper"). Keyed by the routed base-name; values are the process_name(s)
+    // sing-box must match. NOTE: WebKit's Networking/GPU services are SHARED
+    // across all WebKit clients, so routing Safari also routes other WebKit web
+    // traffic — that's the only way to route Safari at all on macOS (it does no
+    // network I/O under its own name), and "route my web browsing" is the intent.
+    private static readonly Dictionary<string, string[]> MacKnownIoProcesses =
+        new(StringComparer.Ordinal)
+        {
+            ["Safari"] = new[]
+            {
+                "com.apple.WebKit.Networking",    // the network I/O process
+                "com.apple.WebKit.WebContent",
+                "com.apple.WebKit.GPU",
+                "com.apple.Safari.SearchHelper",  // search-bar suggestions
+            },
+        };
+
     /// <summary>
-    /// macOS (Fix #2): expand each routed app base-name to include the standard
-    /// Chromium/Electron child "Helper" process names, which is where the actual
-    /// network I/O happens. Preserves original case (process_name is
-    /// case-sensitive — golden rule #7) and dedups case-sensitively. Names that
-    /// are already a "… Helper …" are not re-expanded. Non-Chromium apps simply
-    /// gain inert names that never match a running process.
+    /// macOS (Fix #2 / #2b): expand each routed app base-name to the child
+    /// process(es) that actually open sockets, which sing-box matches by exact
+    /// process_name. Two cases: (a) Chromium/Electron apps use "&lt;App&gt; Helper
+    /// (Renderer)" etc. — append the suffixes; (b) a few apps (Safari/WebKit) do
+    /// their I/O under FIXED Apple XPC names that are NOT derivable from the app
+    /// name — look those up in <see cref="MacKnownIoProcesses"/>. Preserves
+    /// original case (process_name is case-sensitive — golden rule #7), dedups
+    /// case-sensitively, and never re-expands a name that is already a helper.
     /// </summary>
     internal static List<string> ExpandMacHelperNames(IEnumerable<string> names)
     {
         var result = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        void Add(string n)
+        {
+            if (n.Length > 0 && seen.Add(n)) result.Add(n);
+        }
+
         foreach (var name in names)
         {
             if (string.IsNullOrWhiteSpace(name)) continue;
-            if (seen.Add(name)) result.Add(name);
+            Add(name);
 
             // Don't expand something that is itself already a helper.
             if (name.Contains(" Helper", StringComparison.Ordinal)) continue;
 
-            foreach (var suffix in MacHelperSuffixes)
+            // Apps with FIXED I/O process names (Safari/WebKit): add those and
+            // SKIP the Chromium suffix expansion (it would only emit inert
+            // "Safari Helper" names that never match a real process).
+            if (MacKnownIoProcesses.TryGetValue(name, out var ioNames))
             {
-                var helper = name + suffix;
-                if (seen.Add(helper)) result.Add(helper);
+                foreach (var io in ioNames) Add(io);
+                continue;
             }
+
+            // Chromium/Electron: "<App> Helper (Renderer)" etc.
+            foreach (var suffix in MacHelperSuffixes)
+                Add(name + suffix);
         }
         return result;
     }
