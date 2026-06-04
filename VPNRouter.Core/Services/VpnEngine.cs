@@ -457,6 +457,21 @@ public class VpnEngine : IDisposable
         _disposed = true;
 
         if (IsRunning) Stop();
+        else
+        {
+            // v2.40.0 Phase C (C1-1): a mid-Start exception can leave firewall
+            // block rules created (StartupPipeline Phase 6) and/or DNS hardening
+            // applied (Phase 8) while sing-box never reached Running. Stop() is
+            // the only teardown path, but Dispose only calls it when IsRunning —
+            // so on the CLI/Service failure paths (which Dispose the engine
+            // without an explicit Stop) that partial state would orphan the
+            // user's firewall/registry until the next-launch sweep. Tear it down
+            // here, best-effort. Idempotent: Restore + firewall Dispose
+            // (DeleteAllRules) are safe on already-clean / never-started state.
+            try { _dnsHardening.Restore(_logger); } catch { }
+            try { _firewall?.Dispose(); } catch { }   // Dispose -> DeleteAllRules
+            _firewall = null;
+        }
         try { _probeCts?.Cancel(); } catch { }
         try { _probeCts?.Dispose(); } catch { }
         _probeCts = null;

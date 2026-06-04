@@ -249,6 +249,16 @@ public class HealthMonitor : IDisposable
     {
         _isStopping = true;
         _shouldBeRunning = false;  // v2.31.5-r2: disarm OnHealthTick recovery
+
+        // v2.40.0 Phase C (C3-1): clear the r10 #3 deferred-kill-switch-lift
+        // state so it can't leak across a Stop()/Start() (reconnect). Without
+        // this, a deferred lift still pending at disconnect would, on the next
+        // session's first healthy tick, observe a STALE _lastFullRestart (now
+        // far older than DeferredDisableMaxWait) -> fallbackElapsed=true -> lift
+        // the kill-switch WITHOUT confirming the new session's TUN is serving,
+        // defeating the deferred gate the r10 fix added.
+        System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 0);
+        _lastFullRestart = DateTime.MinValue;
         // v2.31.0-r1 (CO-2): also dispose the CTS — Cancel alone leaves the
         // wait handle alive until the GC catches the finalizer. Symmetric
         // with the AttemptRestart swap pattern.
@@ -773,7 +783,18 @@ public class HealthMonitor : IDisposable
                 {
                     _logger.Warning("[HealthMonitor] Hot-reload failed — performing full restart");
                     _lastFullRestart = DateTime.UtcNow;
+                    // v2.40.0 Phase C (C4-1): a full restart bounces the TUN
+                    // (~16s warm-up). Protect routed apps during the bounce the
+                    // same way the crash path does — enable the kill-switch
+                    // block rules BEFORE the TUN drops, then DEFER lifting them
+                    // until a health tick confirms the new TUN is serving
+                    // (Clash-API gated, r10 #3). No-op when block_on_vpn_fail
+                    // created no rules. Pre-fix this debounce-driven config
+                    // reload bounced the TUN with no kill-switch coverage.
+                    try { _firewall.EnableBlockRules(); }
+                    catch (Exception fwEx) { _logger.Error(fwEx, "[HealthMonitor] Failed to enable block rules before debounce restart"); }
                     _singBox.Restart();
+                    System.Threading.Interlocked.Exchange(ref _deferredBlockRuleDisable, 1);
                     _lastScan = newScan;
                     _restartAttempts = 0;
                     _logger.Information("[HealthMonitor] Full restart completed with {Count} processes", newFiltered.Count);
