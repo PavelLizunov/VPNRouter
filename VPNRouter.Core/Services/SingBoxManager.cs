@@ -1442,20 +1442,29 @@ public class SingBoxManager : IDisposable
     }
 
     /// <summary>
-    /// v2.29.0-r5 — Linux stop escalation chain. Tries kill methods from
+    /// v2.29.0-r5 — Unix stop escalation chain. Tries kill methods from
     /// least-privileged to most-privileged, verifying after each step that
-    /// sing-box is actually gone. Mac uses a separate sudo path; this method
-    /// is Linux-only.
+    /// sing-box is actually gone. Shared by Linux and macOS; the platform
+    /// controls which steps run.
     ///
-    /// <para>Steps:</para>
+    /// <para>Steps (Linux runs all three; macOS runs only Step 3):</para>
     /// <list type="number">
-    /// <item>Plain user pkill (works in capability mode + .deb installs
-    ///   where sing-box runs as user via setcap CAP_NET_ADMIN).</item>
-    /// <item>pkexec pkill -KILL (polkit GUI prompt; SIGKILL bypasses any
-    ///   signal mask sing-box might have set).</item>
+    /// <item>Plain user pkill (Linux only — works in capability mode + .deb
+    ///   installs where sing-box runs as user via setcap CAP_NET_ADMIN).</item>
+    /// <item>pkexec pkill -KILL (Linux only — polkit GUI prompt; SIGKILL
+    ///   bypasses any signal mask sing-box might have set; pkexec does not
+    ///   exist on macOS).</item>
     /// <item>sudo pkill -KILL (NOPASSWD if sudoers entry was set up at
-    ///   first Connect; falls through if not configured).</item>
+    ///   first Connect; falls through if not configured). This is the
+    ///   PRIMARY path on macOS, where sing-box runs as root via sudoers.</item>
     /// </list>
+    ///
+    /// <para>v2.40.x (Fix #8, macOS deep-audit): Steps 1-2 are gated behind
+    /// <c>OperatingSystem.IsLinux()</c>. On macOS a user-level pkill cannot
+    /// signal the root sing-box and pkexec is absent, so both steps were
+    /// guaranteed-failing no-ops that wasted ~1.3 s of sleeps and emitted a
+    /// misleading "escalating to pkexec" WARN on every disconnect. macOS goes
+    /// straight to Step 3, which is the only step that has ever worked there.</para>
     ///
     /// <para>Each attempt is followed by IsSingBoxAlive() check (Clash API
     /// probe + pgrep) so we know immediately if it worked. Logs each step
@@ -1463,33 +1472,39 @@ public class SingBoxManager : IDisposable
     /// </summary>
     private void LinuxStopEscalationChain()
     {
-        // Step 1: plain user pkill. Cheap and works in capability mode.
-        if (TrySpawnAndWait("/usr/bin/pkill", "-TERM -f sing-box", 3000, "user pkill -TERM"))
+        // Steps 1-2 only apply on Linux. On macOS sing-box runs as root and
+        // neither a user pkill nor pkexec can touch it — skip straight to the
+        // sudo path (Step 3) instead of burning a sleep + a failing pkexec spawn.
+        if (OperatingSystem.IsLinux())
         {
-            // Wait briefly for graceful exit (sing-box on SIGTERM should
-            // tear down TUN cleanly within ~1 s).
-            System.Threading.Thread.Sleep(800);
-            if (!IsSingBoxAlive())
+            // Step 1: plain user pkill. Cheap and works in capability mode.
+            if (TrySpawnAndWait("/usr/bin/pkill", "-TERM -f sing-box", 3000, "user pkill -TERM"))
             {
-                _logger.Information("[SingBoxManager] Linux stop: user pkill -TERM succeeded");
-                return;
+                // Wait briefly for graceful exit (sing-box on SIGTERM should
+                // tear down TUN cleanly within ~1 s).
+                System.Threading.Thread.Sleep(800);
+                if (!IsSingBoxAlive())
+                {
+                    _logger.Information("[SingBoxManager] Linux stop: user pkill -TERM succeeded");
+                    return;
+                }
             }
-        }
 
-        _logger.Information("[SingBoxManager] Linux stop: user pkill didn't kill sing-box, escalating to pkexec");
+            _logger.Information("[SingBoxManager] Linux stop: user pkill didn't kill sing-box, escalating to pkexec");
 
-        // Step 2: pkexec with SIGKILL. GUI prompt — user might dismiss.
-        if (TrySpawnAndWait("/usr/bin/pkexec", "pkill -KILL -f sing-box", 30000, "pkexec pkill -KILL"))
-        {
-            System.Threading.Thread.Sleep(500);
-            if (!IsSingBoxAlive())
+            // Step 2: pkexec with SIGKILL. GUI prompt — user might dismiss.
+            if (TrySpawnAndWait("/usr/bin/pkexec", "pkill -KILL -f sing-box", 30000, "pkexec pkill -KILL"))
             {
-                _logger.Information("[SingBoxManager] Linux stop: pkexec pkill -KILL succeeded");
-                return;
+                System.Threading.Thread.Sleep(500);
+                if (!IsSingBoxAlive())
+                {
+                    _logger.Information("[SingBoxManager] Linux stop: pkexec pkill -KILL succeeded");
+                    return;
+                }
             }
-        }
 
-        _logger.Warning("[SingBoxManager] Linux stop: pkexec didn't kill sing-box, trying sudo");
+            _logger.Warning("[SingBoxManager] Linux stop: pkexec didn't kill sing-box, trying sudo");
+        }
 
         // Step 3: sudo with -n (non-interactive — fail if password needed
         // rather than block forever). If user set up NOPASSWD sudoers, this
@@ -1500,17 +1515,23 @@ public class SingBoxManager : IDisposable
             System.Threading.Thread.Sleep(500);
             if (!IsSingBoxAlive())
             {
-                _logger.Information("[SingBoxManager] Linux stop: sudo -n pkill -KILL succeeded");
+                _logger.Information("[SingBoxManager] Unix stop: sudo -n pkill -KILL succeeded");
                 return;
             }
         }
 
         if (IsSingBoxAlive())
         {
-            _logger.Error("[SingBoxManager] Linux stop: ALL escalation steps failed — sing-box still alive. " +
+            // Cause list is platform-specific: macOS only ever reaches Step 3,
+            // so a failure there is a missing/broken sudoers NOPASSWD grant.
+            var causes = OperatingSystem.IsMacOS()
+                ? "sudoers NOPASSWD not set up (re-grant via the app's mac sudo prompt); " +
+                  "sing-box running under a uid we can't sudo-kill."
+                : "pkexec/polkit agent not installed; sudoers NOPASSWD not set up; " +
+                  "sing-box running under a different uid we can't kill.";
+            _logger.Error("[SingBoxManager] Unix stop: ALL escalation steps failed — sing-box still alive. " +
                           "Manual intervention required: `sudo pkill -KILL -f sing-box`. " +
-                          "Possible causes: pkexec/polkit agent not installed; sudoers NOPASSWD not set up; " +
-                          "sing-box running under a different uid we can't kill.");
+                          "Possible causes: " + causes);
         }
     }
 

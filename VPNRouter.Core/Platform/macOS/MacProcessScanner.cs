@@ -121,13 +121,13 @@ public class MacProcessScanner : IProcessScanner
 
             foreach (var line in output.Split('\n').Skip(1))
             {
-                var parts = line.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length < 3) continue;
+                // Parse pid/ppid/comm via the shared, space-path-safe parser.
+                // The comm column is a full executable path on macOS and may contain
+                // spaces ("/Applications/Google Chrome.app/.../Google Chrome"); a naive
+                // split would truncate it to "Google" and break process_name matching.
+                if (!Unix.PsProcessLineParser.TryParseLine(line, out var pid, out var ppid, out var comm))
+                    continue;
 
-                if (!int.TryParse(parts[0], out var pid)) continue;
-                if (!int.TryParse(parts[1], out var ppid)) continue;
-
-                var comm = Path.GetFileName(parts[2]);
                 tree.Names[pid] = comm;
 
                 if (!tree.Children.TryGetValue(ppid, out var list))
