@@ -75,6 +75,19 @@ public static class ConfigGenerator
             appsProcessList = explicitInclude.Count > 0 ? explicitInclude : processes;
         }
 
+        // macOS (Fix #2, deep-audit 2026-06-04): Chromium/Electron apps do their
+        // network I/O under child "Helper" processes ("Google Chrome Helper
+        // (Renderer)", etc.), NOT under the parent's name. sing-box matches
+        // process_name EXACTLY (filepath.Base, no wildcards), so a routed parent
+        // ("Google Chrome") never matches the helper actually connecting —
+        // split-tunnel silently leaks for every space-/Electron-named app.
+        // Windows is unaffected (children share the parent's chrome.exe name).
+        // Expand each routed base-name to the standard macOS helper variants;
+        // non-Chromium apps get inert names (no such process → no match → no
+        // effect), so the expansion is safe to apply blanket in both modes.
+        if (OperatingSystem.IsMacOS())
+            appsProcessList = ExpandMacHelperNames(appsProcessList);
+
         var logPath = AppPaths.SingBoxLogPath;
 
         var outbounds = BuildOutbounds(settings, out bool hasUdpProxy);
@@ -495,6 +508,47 @@ public static class ConfigGenerator
     /// Caller compares this against the input <paramref name="value"/>
     /// list to decide which route rules to emit / skip.</para>
     /// </summary>
+    // macOS Chromium/Electron helper-process suffixes (Fix #2). These are the
+    // child processes that actually open sockets; the parent (e.g. "Google
+    // Chrome") rarely connects directly. sing-box matches process_name exactly,
+    // so the parent name alone leaks the helpers' traffic past split-tunnel.
+    private static readonly string[] MacHelperSuffixes =
+    {
+        " Helper",
+        " Helper (GPU)",
+        " Helper (Renderer)",
+        " Helper (Plugin)",
+    };
+
+    /// <summary>
+    /// macOS (Fix #2): expand each routed app base-name to include the standard
+    /// Chromium/Electron child "Helper" process names, which is where the actual
+    /// network I/O happens. Preserves original case (process_name is
+    /// case-sensitive — golden rule #7) and dedups case-sensitively. Names that
+    /// are already a "… Helper …" are not re-expanded. Non-Chromium apps simply
+    /// gain inert names that never match a running process.
+    /// </summary>
+    internal static List<string> ExpandMacHelperNames(IEnumerable<string> names)
+    {
+        var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var name in names)
+        {
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            if (seen.Add(name)) result.Add(name);
+
+            // Don't expand something that is itself already a helper.
+            if (name.Contains(" Helper", StringComparison.Ordinal)) continue;
+
+            foreach (var suffix in MacHelperSuffixes)
+            {
+                var helper = name + suffix;
+                if (seen.Add(helper)) result.Add(helper);
+            }
+        }
+        return result;
+    }
+
     private static List<string> EnsureCustomRuleSetEntry(SingBoxConfig config, string type, string value)
     {
         config.Route.RuleSet ??= new List<RuleSetEntry>();
