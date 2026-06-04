@@ -3463,7 +3463,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// rewrite (which means the user gets a one-time osascript prompt
     /// after upgrading).</para>
     /// </summary>
-    private const string SudoersFormatMarker = "# vpnrouter v2.41.0 sudoers (sing-box + pkill + networksetup DNS hardening)";
+    private const string SudoersFormatMarker = "# vpnrouter v2.41.0-r6 sudoers (sing-box + pkill + networksetup DNS + pfctl kill-switch)";
 
     private void EnsureMacSudoAccess()
     {
@@ -3523,7 +3523,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
             // primary service's resolver to the TUN gateway + flush the cache.
             $"{user} ALL=(root) NOPASSWD: /usr/sbin/networksetup *\n" +
             $"{user} ALL=(root) NOPASSWD: /usr/bin/dscacheutil *\n" +
-            $"{user} ALL=(root) NOPASSWD: /usr/bin/killall -HUP mDNSResponder\n");
+            $"{user} ALL=(root) NOPASSWD: /usr/bin/killall -HUP mDNSResponder\n" +
+            // r6: pf kill-switch (block_on_vpn_fail) loads/flushes a global
+            // egress-block ruleset via pfctl in full-tunnel mode.
+            $"{user} ALL=(root) NOPASSWD: /sbin/pfctl *\n");
 
         // Write a helper script
         var helperScript = Path.Combine(Path.GetTempPath(), "vpnrouter-setup.sh");

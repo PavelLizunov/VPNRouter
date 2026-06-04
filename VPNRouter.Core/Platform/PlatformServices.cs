@@ -33,7 +33,12 @@ public static class PlatformServices
 #if PLATFORM_WINDOWS
         return () => new FirewallManager(logger);
 #else
-        return () => new NullFirewallManager(logger);
+        // r6: macOS gets a real pf kill-switch (global egress block, full-tunnel
+        // only, default-OFF — engaged only when a profile sets block_on_vpn_fail).
+        // Linux still has no impl → NullFirewallManager.
+        return OperatingSystem.IsMacOS()
+            ? () => new MacFirewallManager(logger)
+            : () => new NullFirewallManager(logger);
 #endif
     }
 
