@@ -359,6 +359,7 @@ public static class Strings
     public static string StrictDnsLabel => global::VPNRouter.Core.Localization.Strings.StrictDnsLabel;
     // Wave 39 (v2.35.0-r5) — firewall-level DNS lockdown setting.
     public static string DnsLeakLockdownLabel => global::VPNRouter.Core.Localization.Strings.DnsLeakLockdownLabel;
+    public static string DnsLeakLockdownUnavailableNote => global::VPNRouter.Core.Localization.Strings.DnsLeakLockdownUnavailableNote;
     public static string TipDnsLeakLockdown => global::VPNRouter.Core.Localization.Strings.TipDnsLeakLockdown;
 
     // ── Updates ──

@@ -1866,16 +1866,29 @@
                    layout note above. -->
               <Grid ColumnDefinitions="24,*" ColumnSpacing="6"
                     ToolTip.Tip="{Binding L_TipDnsLeakLockdown}">
+                <!-- v2.40.x (Fix #9): greyed out + annotated on macOS/Linux,
+                     where the firewall-backed lockdown has no backend yet
+                     (NullFirewallManager) and the toggle would be a silent
+                     no-op. IsEnabled re-enables once the kill-switch ships. -->
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding IsDnsLeakLockdownEnabled, Mode=TwoWay}"
+                          IsEnabled="{Binding IsDnsLeakLockdownAvailable}"
                           AutomationProperties.Name="{Binding DnsLeakLockdownLabel}"
                           MinHeight="0" Padding="0"
                           VerticalAlignment="Center"/>
                 <TextBlock Grid.Column="1"
                            Text="{Binding DnsLeakLockdownLabel}"
                            TextWrapping="Wrap"
+                           IsEnabled="{Binding IsDnsLeakLockdownAvailable}"
                            VerticalAlignment="Center"/>
               </Grid>
+              <!-- v2.40.x (Fix #9): platform honesty note — only on macOS/Linux. -->
+              <TextBlock Text="{Binding L_DnsLeakLockdownUnavailableNote}"
+                         IsVisible="{Binding !IsDnsLeakLockdownAvailable}"
+                         Foreground="{DynamicResource WarningFgBrush}"
+                         FontSize="11"
+                         TextWrapping="Wrap"
+                         Margin="30,-2,0,0"/>
             </StackPanel>
           </Border>
         </StackPanel>

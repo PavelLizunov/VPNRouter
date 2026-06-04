@@ -43,8 +43,12 @@ public static class SettingsValidator
     private static readonly HashSet<string> AllowedRoutingModes =
         new(StringComparer.OrdinalIgnoreCase) { "split", "full" };
 
+    // v2.40.x (Fix #7): "system" added — follow the OS appearance. Omitting it
+    // here would make SettingsValidator REJECT every config that adopted the new
+    // default theme and reset the WHOLE config.yaml to defaults on load (silent
+    // data loss). Caught by the YAML round-trip regression suite.
     private static readonly HashSet<string> AllowedThemes =
-        new(StringComparer.OrdinalIgnoreCase) { "light", "dark" };
+        new(StringComparer.OrdinalIgnoreCase) { "light", "dark", "system" };
 
     private static readonly HashSet<string> AllowedDnsStrategies =
         new(StringComparer.OrdinalIgnoreCase)

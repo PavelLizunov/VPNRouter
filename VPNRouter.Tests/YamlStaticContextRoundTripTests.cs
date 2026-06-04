@@ -121,7 +121,7 @@ public class YamlStaticContextRoundTripTests : IDisposable
         Assert.Equal("info", roundTripped.App.LogLevel);
         Assert.Equal("split", roundTripped.App.RoutingMode);
         Assert.Equal("include", roundTripped.App.RoutingAppsMode);
-        Assert.Equal("light", roundTripped.App.Theme);
+        Assert.Equal("system", roundTripped.App.Theme);   // Fix #7: default theme is now "system" (follow OS)
         Assert.Equal("advanced", roundTripped.App.UiMode);
         Assert.Equal("generated", roundTripped.App.ConfigMode);
         Assert.Equal("VPNRouter-TUN", roundTripped.Tun.InterfaceName);

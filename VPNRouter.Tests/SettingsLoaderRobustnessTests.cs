@@ -186,7 +186,7 @@ public class SettingsLoaderRobustnessTests : IDisposable
         // to flip to "full"; F-02 chip's default-flip was reverted with the
         // rest of the desktop changes).
         Assert.Equal("split", s.App.RoutingMode);
-        Assert.Equal("light", s.App.Theme);
+        Assert.Equal("system", s.App.Theme);   // Fix #7: default theme is now "system" (follow OS)
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -268,7 +268,7 @@ public class SettingsLoaderRobustnessTests : IDisposable
             var backups = Directory.GetFiles(_tempDir, "locked.yaml.unloadable-*");
             Assert.Empty(backups);
             // Defaults active because we couldn't read user values.
-            Assert.Equal("light", s.App.Theme);
+            Assert.Equal("system", s.App.Theme);   // Fix #7: default theme is now "system" (follow OS)
             // Hold the handle until after the assertions to keep the lock
             // active for the duration of the test.
             GC.KeepAlive(holder);

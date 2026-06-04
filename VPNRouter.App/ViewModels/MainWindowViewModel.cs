@@ -509,6 +509,16 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     // IsWindows so XAML can bind IsVisible without a converter.
     public bool IsLinuxPlatform   => OperatingSystem.IsLinux();
     public bool IsWindowsPlatform => OperatingSystem.IsWindows();
+
+    /// <summary>
+    /// v2.40.x (Fix #9, macOS deep-audit): the DNS-leak firewall lockdown is
+    /// backed by the platform firewall (Windows netsh). On macOS/Linux the
+    /// factory returns NullFirewallManager, so the toggle is a silent no-op
+    /// there until the pf / nftables kill-switch ships (task #131). Drives an
+    /// honesty note next to the toggle so users don't get a false sense of
+    /// protection. Remove the note once the kill-switch lands.
+    /// </summary>
+    public bool IsDnsLeakLockdownAvailable => OperatingSystem.IsWindows();
     /// <summary>True when Zapret DPI bypass is available on the current OS (Windows only).</summary>
     public bool IsZapretAvailable => OperatingSystem.IsWindows();
     /// <summary>True when bundled Telegram proxy is available on the current OS (Windows only).</summary>

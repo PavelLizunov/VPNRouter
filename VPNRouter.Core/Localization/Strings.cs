@@ -724,6 +724,12 @@ public static class Strings
     public static string DnsLeakLockdownLabel => Ru
         ? "Блокировать DNS вне VPN (защита от утечек)"
         : "Block DNS outside VPN (leak protection)";
+    // v2.40.x (Fix #9): honesty note — the firewall-backed lockdown has no
+    // backend on macOS/Linux yet (NullFirewallManager), so the toggle is a
+    // no-op there until the pf/nftables kill-switch ships (task #131).
+    public static string DnsLeakLockdownUnavailableNote => Ru
+        ? "Использует системный фаервол — пока недоступно на macOS и Linux"
+        : "Uses the system firewall — not available on macOS or Linux yet";
 
     // ── Updates ──
     public static string CheckForUpdates => Ru ? "Проверить обновления" : "Check for updates";
