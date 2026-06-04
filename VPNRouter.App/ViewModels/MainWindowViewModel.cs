@@ -3560,21 +3560,69 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         var stderr = proc.StandardError.ReadToEnd();
         var stdout = proc.StandardOutput.ReadToEnd();
         proc.WaitForExit(60000);
+        var osascriptExit = proc.HasExited ? proc.ExitCode : -1;
 
         _logger.Information("osascript exit={Exit} stdout={Out} stderr={Err}",
-            proc.ExitCode, stdout, stderr);
+            osascriptExit, stdout, stderr);
         proc.Dispose();
 
-        if (File.Exists(sudoersPath))
+        // r9 (claude-code audit P1): only mark the grant configured when osascript
+        // actually SUCCEEDED (exit 0 = user approved + helper installed the current
+        // grants) AND a non-interactive probe of the newest grant works. A stale
+        // /etc/sudoers.d/vpnrouter from an old version makes File.Exists true even
+        // after a CANCELLED or FAILED prompt — so File.Exists alone would falsely
+        // write the marker, skip the prompt forever, and let runtime `sudo -n`
+        // calls (networksetup / pfctl) fail silently later.
+        if (osascriptExit != 0)
         {
-            _logger.Information("Passwordless sudo configured");
-            // Persist a user-readable marker so the next launch takes the fast
-            // path above instead of re-prompting (v2.41.0-r5 every-connect fix).
-            try { File.WriteAllText(sudoersMarkerPath, SudoersFormatMarker); }
-            catch (Exception ex) { _logger.Warning(ex, "Failed to write sudoers marker — may re-prompt next launch"); }
+            _logger.Warning("sudoers setup: osascript exit {Exit} (cancelled/failed) — NOT writing marker; will re-prompt next time", osascriptExit);
+            return;
         }
-        else
-            _logger.Warning("Failed to configure sudoers");
+        if (!File.Exists(sudoersPath))
+        {
+            _logger.Warning("Failed to configure sudoers (file absent after a successful osascript?)");
+            return;
+        }
+        if (!ProbeSudoGrant())
+        {
+            _logger.Warning("sudoers setup: pfctl grant probe failed after osascript — NOT writing marker; will re-prompt");
+            return;
+        }
+
+        _logger.Information("Passwordless sudo configured + probed");
+        try { File.WriteAllText(sudoersMarkerPath, SudoersFormatMarker); }
+        catch (Exception ex) { _logger.Warning(ex, "Failed to write sudoers marker — may re-prompt next launch"); }
+    }
+
+    /// <summary>
+    /// Non-interactive probe that the pfctl NOPASSWD grant (the newest entry in
+    /// the r6 sudoers template) is actually active. <c>sudo -n /sbin/pfctl -s
+    /// info</c> exits 0 only when the grant is installed; a missing grant makes
+    /// sudo fail fast. macOS-only path.
+    /// </summary>
+    private static bool ProbeSudoGrant()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("/usr/bin/sudo")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            psi.ArgumentList.Add("-n");
+            psi.ArgumentList.Add("/sbin/pfctl");
+            psi.ArgumentList.Add("-s");
+            psi.ArgumentList.Add("info");
+            using var p = System.Diagnostics.Process.Start(psi);
+            if (p == null) return false;
+            p.StandardError.ReadToEnd();
+            p.StandardOutput.ReadToEnd();
+            if (!p.WaitForExit(8000)) { try { p.Kill(); } catch { } return false; }
+            return p.ExitCode == 0;
+        }
+        catch { return false; }
     }
 
     // Phase 2B (Wave 8, 2026-05-18) - StripExe moved to MainWindowViewModel.Profiles.cs.

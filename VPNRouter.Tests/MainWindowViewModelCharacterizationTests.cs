@@ -184,10 +184,13 @@ public class MainWindowViewModelCharacterizationTests
     // (RelayCommand).
     // v2.40.x (Fix #9): + IsDnsLeakLockdownAvailable getter (honesty guard for
     // the firewall-backed DNS-leak lockdown on macOS/Linux).
+    // v2.41.0-r9 (claude-code audit P1): + ProbeSudoGrant() private helper that
+    // gates the macOS sudoers marker on a proven pfctl grant — strict member
+    // snapshot drifts on the added method (re-pinned).
     // Cross-platform members → Linux pin drifts in lock-step (soft-fail
     // captures the actual via sentinel on the next ubuntu CI run).
     private const string PinnedHashWindows =
-        "ecfef3b6b2b675c73aad96a90064763534820f2cf42d56b1ea2da1cd33007561";
+        "9a64bc9bf2acd4b88c3eca54d1b60bbfbf2975bc79ca2229ce5343389c4268ee";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

@@ -408,6 +408,14 @@ sealed class Program
                 var fw = new FirewallManager(Serilog.Log.Logger ?? new Serilog.LoggerConfiguration().CreateLogger());
                 fw.CleanupOrphanedRules();
             }
+            else if (OperatingSystem.IsMacOS())
+            {
+                // r9: macOS pf kill-switch orphan sweep. Marker-gated — only acts
+                // if a prior session was hard-killed while the kill-switch was
+                // engaged (Dispose never ran), restoring /etc/pf.conf so the Mac
+                // isn't left with no internet. No-op on a normal launch.
+                VPNRouter.Core.Platform.macOS.MacFirewallManager.TryCleanupOrphanedRulesSafe(Serilog.Log.Logger);
+            }
         }
         catch { }
 

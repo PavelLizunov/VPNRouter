@@ -21,8 +21,14 @@ public class MacFirewallManagerTests : IDisposable
 {
     private readonly string _cfg =
         Path.Combine(Path.GetTempPath(), "vpnrouter-fw-cfg-" + Guid.NewGuid().ToString("N") + ".json");
+    private readonly string _marker =
+        Path.Combine(Path.GetTempPath(), "vpnrouter-fw-marker-" + Guid.NewGuid().ToString("N") + ".marker");
 
-    public void Dispose() { try { if (File.Exists(_cfg)) File.Delete(_cfg); } catch { } }
+    public void Dispose()
+    {
+        try { if (File.Exists(_cfg)) File.Delete(_cfg); } catch { }
+        try { if (File.Exists(_marker)) File.Delete(_marker); } catch { }
+    }
 
     private static ProcessResult Ok(string stdout = "", string stderr = "") =>
         new ProcessResult(0, stdout, stderr, TimeSpan.Zero, false);
@@ -49,7 +55,7 @@ public class MacFirewallManagerTests : IDisposable
     {
         WriteConfig("9.9.9.9");
         var fake = OkRunner();
-        var sut = new MacFirewallManager(null, fake, _cfg);
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker);
 
         sut.CreateBlockRules(new[] { "Discord", "chrome" });
         sut.EnableBlockRules();
@@ -62,7 +68,7 @@ public class MacFirewallManagerTests : IDisposable
     {
         WriteConfig("104.194.156.93");
         var fake = OkRunner();
-        var sut = new MacFirewallManager(null, fake, _cfg);
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker);
 
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
@@ -86,7 +92,7 @@ public class MacFirewallManagerTests : IDisposable
         fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo" && r.Arguments.Contains("-f")
             && !r.Arguments.Contains("/etc/pf.conf"), Fail());
         fake.OnRun(r => r.ExecutablePath == "/usr/bin/sudo", Ok());
-        var sut = new MacFirewallManager(null, fake, _cfg);
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker);
 
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
@@ -106,7 +112,7 @@ public class MacFirewallManagerTests : IDisposable
     {
         WriteConfig("9.9.9.9");
         var fake = OkRunner();
-        var sut = new MacFirewallManager(null, fake, _cfg);
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker);
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
 
@@ -121,7 +127,7 @@ public class MacFirewallManagerTests : IDisposable
     {
         WriteConfig("9.9.9.9");
         var fake = OkRunner();
-        var sut = new MacFirewallManager(null, fake, _cfg);
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker);
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
 
@@ -135,7 +141,7 @@ public class MacFirewallManagerTests : IDisposable
     {
         WriteConfig("9.9.9.9");
         var fake = OkRunner();
-        var sut = new MacFirewallManager(null, fake, _cfg);
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker);
         sut.CreateBlockRules(Array.Empty<string>()); // armed but never enabled
 
         sut.DisableBlockRules();
@@ -170,7 +176,7 @@ public class MacFirewallManagerTests : IDisposable
             { ""type"": ""vless"", ""server"": ""example.com"" },
             { ""type"": ""vless"", ""server"": ""5.6.7.8"" } ] }");
         var fake = OkRunner();
-        var sut = new MacFirewallManager(null, fake, _cfg);
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker);
 
         sut.CreateBlockRules(Array.Empty<string>());
         sut.EnableBlockRules();
@@ -179,5 +185,67 @@ public class MacFirewallManagerTests : IDisposable
         var rules = File.ReadAllText(load.Arguments.Last());
         Assert.Contains("5.6.7.8", rules);
         Assert.DoesNotContain("example.com", rules);
+    }
+
+    // ── r9 (claude-code audit): hostname allowlist + orphan cleanup ──────────
+
+    [Fact]
+    public void ReadServerIps_resolves_hostname_server_to_ip()
+    {
+        // Hostname server → must be RESOLVED (while VPN healthy) into the pf
+        // pass-list, else the kill-switch blocks crash-reconnect → bricked Mac.
+        File.WriteAllText(_cfg, @"{ ""outbounds"": [
+            { ""type"": ""vless"", ""server"": ""proxy.example.com"" } ] }");
+        var fake = OkRunner();
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker,
+            hostResolver: h => h == "proxy.example.com"
+                ? new[] { "203.0.113.10" }
+                : (IReadOnlyList<string>)System.Array.Empty<string>());
+
+        sut.CreateBlockRules(System.Array.Empty<string>());
+        sut.EnableBlockRules();
+
+        var load = fake.RunCalls.First(c => c.Arguments.Contains("-f") && !c.Arguments.Contains("/etc/pf.conf"));
+        var rules = File.ReadAllText(load.Arguments.Last());
+        Assert.Contains("203.0.113.10", rules);            // resolved IP allowed
+        Assert.DoesNotContain("proxy.example.com", rules); // hostname never in pf
+    }
+
+    [Fact]
+    public void Enable_writes_engaged_marker_Disable_clears_it()
+    {
+        WriteConfig("9.9.9.9");
+        var sut = new MacFirewallManager(null, OkRunner(), _cfg, _marker);
+        sut.CreateBlockRules(System.Array.Empty<string>());
+
+        sut.EnableBlockRules();
+        Assert.True(File.Exists(_marker));   // engaged → crash-recovery sentinel present
+
+        sut.DisableBlockRules();
+        Assert.False(File.Exists(_marker));  // clean teardown → sentinel gone
+    }
+
+    [Fact]
+    public void CleanupOrphanedRules_with_marker_restores_default_and_clears_marker()
+    {
+        File.WriteAllText(_marker, "engaged"); // simulate a prior hard kill while engaged
+        var fake = OkRunner();
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker);
+
+        sut.CleanupOrphanedRules(null);
+
+        Assert.Contains(fake.RunCalls, c => c.Arguments.Contains("-f") && c.Arguments.Contains("/etc/pf.conf"));
+        Assert.False(File.Exists(_marker)); // sentinel cleared after recovery
+    }
+
+    [Fact]
+    public void CleanupOrphanedRules_without_marker_is_noop()
+    {
+        var fake = OkRunner();
+        var sut = new MacFirewallManager(null, fake, _cfg, _marker); // no marker file
+
+        sut.CleanupOrphanedRules(null);
+
+        Assert.Empty(fake.RunCalls); // a normal launch must never touch pf
     }
 }

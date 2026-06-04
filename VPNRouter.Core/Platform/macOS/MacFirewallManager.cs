@@ -43,6 +43,8 @@ public sealed class MacFirewallManager : IFirewallManager
     private readonly IProcessRunner _runner;
     private readonly ILogger _logger;
     private readonly string _currentConfigPath;
+    private readonly string _markerPath;
+    private readonly Func<string, IReadOnlyList<string>> _resolveHost;
 
     private bool _armed;            // full-tunnel detected at CreateBlockRules
     private bool _loaded;           // our blocking ruleset is live
@@ -50,11 +52,21 @@ public sealed class MacFirewallManager : IFirewallManager
     private List<string> _serverIps = new();
     private bool _disposed;
 
-    public MacFirewallManager(ILogger? logger = null, IProcessRunner? runner = null, string? currentConfigPath = null)
+    public MacFirewallManager(
+        ILogger? logger = null,
+        IProcessRunner? runner = null,
+        string? currentConfigPath = null,
+        string? markerPath = null,
+        Func<string, IReadOnlyList<string>>? hostResolver = null)
     {
         _logger = logger ?? Log.Logger;
         _runner = runner ?? new ProcessRunner();
         _currentConfigPath = currentConfigPath ?? AppPaths.CurrentConfigPath;
+        // Crash-recovery sentinel: written when the block is engaged, deleted on
+        // clean teardown. If it survives to the next launch, a hard kill stranded
+        // the kill-switch and the orphan sweep restores the stock ruleset.
+        _markerPath = markerPath ?? System.IO.Path.Combine(AppPaths.DataDir, "pf-killswitch-engaged.marker");
+        _resolveHost = hostResolver ?? DefaultResolveHost;
     }
 
     /// <inheritdoc />
@@ -117,6 +129,7 @@ public sealed class MacFirewallManager : IFirewallManager
         if (load.ok)
         {
             _loaded = true;
+            WriteMarker(); // sentinel so a hard kill is recoverable on next launch
             _logger.Information("[MacFirewall] pf kill-switch ENGAGED — blocking all egress except lo0/LAN/server");
         }
         else
@@ -134,6 +147,7 @@ public sealed class MacFirewallManager : IFirewallManager
         if (!_loaded) return;
         RestoreDefaultRuleset();
         ReleaseEnable();
+        TryDeleteMarker();
         _loaded = false;
         _logger.Information("[MacFirewall] pf kill-switch lifted (default ruleset restored)");
     }
@@ -145,6 +159,7 @@ public sealed class MacFirewallManager : IFirewallManager
         // shutdown and orphan cleanup.
         RestoreDefaultRuleset();
         ReleaseEnable();
+        TryDeleteMarker();
         _loaded = false;
         _armed = false;
     }
@@ -157,7 +172,7 @@ public sealed class MacFirewallManager : IFirewallManager
         // sure it's gone even on an abrupt shutdown.
         if (_loaded)
         {
-            try { RestoreDefaultRuleset(); ReleaseEnable(); } catch { /* never throw from Dispose */ }
+            try { RestoreDefaultRuleset(); ReleaseEnable(); TryDeleteMarker(); } catch { /* never throw from Dispose */ }
             _loaded = false;
         }
     }
@@ -208,13 +223,21 @@ public sealed class MacFirewallManager : IFirewallManager
                     if (ob.TryGetProperty("server", out var srv) && srv.ValueKind == JsonValueKind.String)
                     {
                         var s = srv.GetString();
-                        // pf rules take literal IPs only — a hostname can't be
-                        // passed, so skip it (rare for Reality, which uses IPs).
-                        if (!string.IsNullOrWhiteSpace(s) &&
-                            System.Net.IPAddress.TryParse(s, out _) &&
-                            !ips.Contains(s!))
+                        if (string.IsNullOrWhiteSpace(s)) continue;
+                        if (System.Net.IPAddress.TryParse(s, out _))
                         {
-                            ips.Add(s!);
+                            if (!ips.Contains(s!)) ips.Add(s!);
+                        }
+                        else
+                        {
+                            // Hostname server (Reality usually uses IPs, but a
+                            // subscription can hand out hostnames). pf rules take
+                            // literal IPs only, so resolve NOW — while the VPN is
+                            // healthy — and add the resolved IP(s) to the pass-list.
+                            // Without this the kill-switch would block the
+                            // crash-reconnect to a hostname server → bricked Mac.
+                            foreach (var rip in _resolveHost(s!))
+                                if (!ips.Contains(rip)) ips.Add(rip);
                         }
                     }
                 }
@@ -225,6 +248,83 @@ public sealed class MacFirewallManager : IFirewallManager
             _logger.Debug(ex, "[MacFirewall] could not read server IPs from {Path}", _currentConfigPath);
         }
         return ips;
+    }
+
+    /// <summary>Bounded DNS resolve → IPv4 literals. Best-effort; empty on failure.</summary>
+    private IReadOnlyList<string> DefaultResolveHost(string host)
+    {
+        try
+        {
+            var task = System.Net.Dns.GetHostAddressesAsync(host);
+            if (!task.Wait(TimeSpan.FromSeconds(3)))
+            {
+                _logger.Warning("[MacFirewall] DNS resolve of {Host} timed out — kill-switch reconnect may need manual cleanup", host);
+                return Array.Empty<string>();
+            }
+            return task.Result
+                .Where(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                .Select(a => a.ToString())
+                .Distinct()
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(ex, "[MacFirewall] could not resolve server hostname {Host} — kill-switch reconnect may need manual cleanup", host);
+            return Array.Empty<string>();
+        }
+    }
+
+    private void WriteMarker()
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_markerPath)!);
+            System.IO.File.WriteAllText(_markerPath, "engaged");
+        }
+        catch { /* best-effort; absence just means the orphan sweep won't auto-run */ }
+    }
+
+    private void TryDeleteMarker()
+    {
+        try { if (System.IO.File.Exists(_markerPath)) System.IO.File.Delete(_markerPath); }
+        catch { /* swallow */ }
+    }
+
+    /// <summary>
+    /// Orphan recovery: if our engaged-marker survived (a prior session was
+    /// HARD-killed — kill -9 / crash / power loss — while the kill-switch was
+    /// live, so Dispose never ran), reload the stock pf ruleset so the Mac isn't
+    /// stranded with no internet. A fresh process can't know the old
+    /// <c>pfctl -E</c> token, so the enable ref may leak (logged); reloading
+    /// <c>/etc/pf.conf</c> still unblocks traffic. No-op when the marker is
+    /// absent — so a normal launch never touches pf.
+    /// </summary>
+    internal void CleanupOrphanedRules(ILogger? logger)
+    {
+        var log = logger ?? _logger;
+        try
+        {
+            if (!System.IO.File.Exists(_markerPath)) return;
+            log.Warning("[MacFirewall] engaged kill-switch marker from a prior session found (hard kill?) — restoring default pf ruleset");
+            var ok = RunSudo(new[] { "-n", PfCtl, "-f", DefaultPfConf }).ok;
+            TryDeleteMarker();
+            if (ok)
+                log.Information("[MacFirewall] orphan cleanup: default pf ruleset restored (a lost pfctl -E token cannot be released by a new process)");
+            else
+                log.Warning("[MacFirewall] orphan cleanup: pfctl -f /etc/pf.conf failed (sudoers grant missing?) — if the internet is blocked, run: sudo pfctl -d");
+        }
+        catch (Exception ex) { log.Warning(ex, "[MacFirewall] orphan cleanup failed"); }
+    }
+
+    /// <summary>
+    /// Static entry for app startup / process-exit — mirrors Windows
+    /// <c>FirewallManager.TryCleanupOrphanedRulesSafe</c>. Marker-gated, so it's a
+    /// no-op unless a prior session was hard-killed while the kill-switch was on.
+    /// Never throws.
+    /// </summary>
+    public static void TryCleanupOrphanedRulesSafe(ILogger? logger)
+    {
+        try { new MacFirewallManager(logger).CleanupOrphanedRules(logger); } catch { /* never throw from a startup hook */ }
     }
 
     internal static string? ParsePfToken(string? stderr)
