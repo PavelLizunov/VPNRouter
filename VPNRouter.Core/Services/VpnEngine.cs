@@ -25,6 +25,10 @@ public class VpnEngine : IDisposable
     private readonly Func<IFirewallManager> _firewallFactory;
     private readonly Func<IProcessMonitor> _monitorFactory;
     private readonly IWindowsDnsHardening _dnsHardening;
+    // Fix #1 (v2.41.0 r3): macOS/Linux DNS-leak hardening seam. Defaults to a
+    // no-op; PlatformServices supplies MacDnsHardening on macOS. Gated behind
+    // the DnsLeakLockdown setting in StartAsync (opt-in leak protection).
+    private readonly IUnixDnsHardening _unixDns;
     private readonly ILogger? _logger;
 
     // F-E (2026-05-11): runtime safety net for dead/placeholder configs.
@@ -149,7 +153,8 @@ public class VpnEngine : IDisposable
         Func<IFirewallManager> firewallFactory,
         Func<IProcessMonitor> monitorFactory,
         ILogger? logger = null,
-        IWindowsDnsHardening? dnsHardening = null)
+        IWindowsDnsHardening? dnsHardening = null,
+        IUnixDnsHardening? unixDnsHardening = null)
     {
         _scanner = scanner;
         _firewallFactory = firewallFactory;
@@ -161,6 +166,12 @@ public class VpnEngine : IDisposable
         // so the happy-path lifecycle suite (Task #36-C) doesn't mutate the
         // CI / dev machine's machine-wide DNS policy in HKLM.
         _dnsHardening = dnsHardening ?? WindowsDnsHardeningImpl.Default;
+        // Fix #1 (r3): Unix DNS hardening seam (NullUnixDnsHardening = no-op on
+        // Windows / in tests; MacDnsHardening on macOS via PlatformServices).
+        _unixDns = unixDnsHardening ?? NullUnixDnsHardening.Default;
+        // Crash-recovery: if a prior session crashed while DNS was pinned to the
+        // TUN, heal the stranded system resolver before doing anything else.
+        try { _unixDns.RestoreStrandedIfAny(_logger); } catch { }
     }
 
     // ─── Start ───────────────────────────────────────────────────────────────
@@ -209,6 +220,28 @@ public class VpnEngine : IDisposable
         {
             _logger?.Information(
                 "[VpnEngine] StartAsync: F-E re-entry handled by inner call (outer aborting)");
+            return;
+        }
+
+        // Fix #1 (r3): macOS DNS-leak hardening — pin the system resolver to the
+        // TUN gateway so mDNSResponder's queries enter the tunnel instead of
+        // leaking to the ISP (the diagnosed macOS leak). Opt-in via the same
+        // DnsLeakLockdown toggle as the Windows lockdown. No-op on Windows /
+        // Linux (NullUnixDnsHardening); MacDnsHardening itself is best-effort
+        // and degrades to no-op if the networksetup sudoers grant is absent.
+        if (settings.App.DnsLeakLockdown)
+        {
+            try
+            {
+                var gateway = VPNRouter.Core.Platform.Unix.MacDnsParsers
+                    .DeriveDnsTarget(settings.Tun?.Ipv4Address);
+                if (!string.IsNullOrEmpty(gateway))
+                    _unixDns.Apply(gateway!, _logger);
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning(ex, "[VpnEngine] Unix DNS hardening Apply failed (non-fatal)");
+            }
         }
     }
 
@@ -384,6 +417,8 @@ public class VpnEngine : IDisposable
         // no-op on non-Windows builds; the prior PLATFORM_WINDOWS guard at
         // the call site collapsed into the impl itself.
         try { _dnsHardening.Restore(_logger); } catch { }
+        // Fix #1 (r3): restore the macOS system resolver pinned at connect.
+        try { _unixDns.Restore(_logger); } catch { }
 
         try { _etw?.Stop(); } catch { }
 
@@ -469,6 +504,7 @@ public class VpnEngine : IDisposable
             // here, best-effort. Idempotent: Restore + firewall Dispose
             // (DeleteAllRules) are safe on already-clean / never-started state.
             try { _dnsHardening.Restore(_logger); } catch { }
+            try { _unixDns.Restore(_logger); } catch { }  // Fix #1 (r3): mac DNS partial-start cleanup
             try { _firewall?.Dispose(); } catch { }   // Dispose -> DeleteAllRules
             _firewall = null;
         }

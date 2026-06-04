@@ -47,6 +47,18 @@ public static class PlatformServices
     }
 
     /// <summary>
+    /// Fix #1 (r3): the Unix DNS-leak hardening service. MacDnsHardening on
+    /// macOS (pins the system resolver to the TUN gateway), a no-op everywhere
+    /// else (Windows uses IWindowsDnsHardening; Linux has no impl yet).
+    /// </summary>
+    public static IUnixDnsHardening CreateUnixDnsHardening(ILogger? logger = null)
+    {
+        return OperatingSystem.IsMacOS()
+            ? new macOS.MacDnsHardening()
+            : NullUnixDnsHardening.Default;
+    }
+
+    /// <summary>
     /// Convenience: create a fully wired VpnEngine with platform services.
     ///
     /// <para>3G-4 (v3.0 refactor): this factory is the SOLE blessed way to
@@ -65,7 +77,8 @@ public static class PlatformServices
             CreateProcessScanner(logger),
             CreateFirewallFactory(logger),
             CreateMonitorFactory(logger),
-            logger);
+            logger,
+            unixDnsHardening: CreateUnixDnsHardening(logger));
 #pragma warning restore CS0618
     }
 

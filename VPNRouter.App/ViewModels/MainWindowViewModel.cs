@@ -511,14 +511,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     public bool IsWindowsPlatform => OperatingSystem.IsWindows();
 
     /// <summary>
-    /// v2.40.x (Fix #9, macOS deep-audit): the DNS-leak firewall lockdown is
-    /// backed by the platform firewall (Windows netsh). On macOS/Linux the
-    /// factory returns NullFirewallManager, so the toggle is a silent no-op
-    /// there until the pf / nftables kill-switch ships (task #131). Drives an
-    /// honesty note next to the toggle so users don't get a false sense of
-    /// protection. Remove the note once the kill-switch lands.
+    /// v2.40.x (Fix #9) / v2.41.0 (Fix #1): whether the DNS-leak-lockdown toggle
+    /// does something on this OS. Windows: firewall DNS-port lockdown. macOS
+    /// (r3): MacDnsHardening pins the system resolver to the TUN gateway so
+    /// mDNSResponder stops leaking to the ISP. Linux: still a no-op (no DNS
+    /// hardening / nftables kill-switch yet) → toggle greyed + honesty note.
     /// </summary>
-    public bool IsDnsLeakLockdownAvailable => OperatingSystem.IsWindows();
+    public bool IsDnsLeakLockdownAvailable => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
     /// <summary>True when Zapret DPI bypass is available on the current OS (Windows only).</summary>
     public bool IsZapretAvailable => OperatingSystem.IsWindows();
     /// <summary>True when bundled Telegram proxy is available on the current OS (Windows only).</summary>
@@ -3464,7 +3463,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// rewrite (which means the user gets a one-time osascript prompt
     /// after upgrading).</para>
     /// </summary>
-    private const string SudoersFormatMarker = "# vpnrouter v2.28.6-r6 sudoers (escaped spaces + args wildcard)";
+    private const string SudoersFormatMarker = "# vpnrouter v2.41.0 sudoers (sing-box + pkill + networksetup DNS hardening)";
 
     private void EnsureMacSudoAccess()
     {
@@ -3509,7 +3508,12 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         File.WriteAllText(tmpFile,
             $"{SudoersFormatMarker}\n" +
             $"{user} ALL=(root) NOPASSWD: {singboxEscaped} *\n" +
-            $"{user} ALL=(root) NOPASSWD: /usr/bin/pkill *\n");
+            $"{user} ALL=(root) NOPASSWD: /usr/bin/pkill *\n" +
+            // Fix #1 (v2.41.0 r3): macOS DNS-leak hardening needs to repoint the
+            // primary service's resolver to the TUN gateway + flush the cache.
+            $"{user} ALL=(root) NOPASSWD: /usr/sbin/networksetup *\n" +
+            $"{user} ALL=(root) NOPASSWD: /usr/bin/dscacheutil *\n" +
+            $"{user} ALL=(root) NOPASSWD: /usr/bin/killall -HUP mDNSResponder\n");
 
         // Write a helper script
         var helperScript = Path.Combine(Path.GetTempPath(), "vpnrouter-setup.sh");
