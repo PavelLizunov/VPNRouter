@@ -50,10 +50,18 @@ public class MacProcessScanner : IProcessScanner
                 found.Add(strippedPattern);
 
                 var regex = BuildPatternRegex(strippedPattern);
-                foreach (var name in runningNames)
+                try
                 {
-                    if (regex.IsMatch(name))
-                        found.Add(name);
+                    foreach (var name in runningNames)
+                    {
+                        if (regex.IsMatch(name))
+                            found.Add(name);
+                    }
+                }
+                catch (RegexMatchTimeoutException)
+                {
+                    // B3-1: skip a pathological pattern (fail-safe) instead of
+                    // wedging the scan. See ProcessScanner for the rationale.
                 }
             }
 
@@ -162,7 +170,12 @@ public class MacProcessScanner : IProcessScanner
                 .Replace(@"\*", ".*")
                 .Replace(@"\?", ".") + "$";
 
-            return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            // B3-1: bounded match time — see ProcessScanner.PatternMatchTimeoutMs
+            // for the full rationale (untrusted scan_patterns + catastrophic
+            // backtracking on hot paths). Mirror the 250ms ceiling here.
+            return new Regex(regexPattern,
+                RegexOptions.IgnoreCase | RegexOptions.Compiled,
+                TimeSpan.FromMilliseconds(250));
         });
     }
 

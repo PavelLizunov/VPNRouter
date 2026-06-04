@@ -63,10 +63,21 @@ public class ProcessScanner : IProcessScanner
 
                     // Also match against currently running processes
                     var regex = BuildPatternRegex(pattern);
-                    foreach (var name in runningNow)
+                    try
                     {
-                        if (regex.IsMatch(name))
-                            found.Add(NormalizeName(name));
+                        foreach (var name in runningNow)
+                        {
+                            if (regex.IsMatch(name))
+                                found.Add(NormalizeName(name));
+                        }
+                    }
+                    catch (RegexMatchTimeoutException)
+                    {
+                        // B3-1: a pathological scan_pattern blew the 250ms match
+                        // cap. Skip it (fail-safe — the pattern matches nothing)
+                        // rather than wedge the scan. Explicit-name rules above
+                        // are unaffected.
+                        _logger.Warning("[ProcessScanner] scan_pattern '{Pattern}' exceeded the {Ms}ms match timeout — skipping it (check the profile for a catastrophic wildcard)", pattern, PatternMatchTimeoutMs);
                     }
                 }
 
@@ -137,7 +148,17 @@ public class ProcessScanner : IProcessScanner
     /// </summary>
     public static bool MatchesPattern(string processName, string pattern)
     {
-        return BuildPatternRegex(pattern).IsMatch(processName);
+        try
+        {
+            return BuildPatternRegex(pattern).IsMatch(processName);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // B3-1: fail-safe. This runs on the ETW process-launch hot path
+            // (StartupPipeline), so a pattern that can't decide within 250ms is
+            // treated as no-match rather than stalling every process launch.
+            return false;
+        }
     }
 
     // ─── Private ──────────────────────────────────────────────────────────────
@@ -218,6 +239,18 @@ public class ProcessScanner : IProcessScanner
 #endif
     }
 
+    // v2.40.0 Phase B (B3-1): hard ceiling on regex match time. scan_patterns
+    // come from untrusted profile JSON (GitHub > Local source priority) and the
+    // Apps UI; a pattern like "a*a*a*...b.exe" compiles to "^a.*a.*...b\.exe$",
+    // which catastrophically backtracks (measured ~8.5s on a single non-matching
+    // long process name). The match runs on hot paths — the ETW process-launch
+    // handler (per launch, system-wide) and every debounced rescan — so an
+    // unbounded match wedges the routing engine and INTENDED apps leak by
+    // starvation. 250ms is >1000x a legitimate match (process names are short),
+    // so it never trips on real input but turns a pathological pattern into a
+    // fast RegexMatchTimeoutException the callers treat as "no match" (fail-safe).
+    private const int PatternMatchTimeoutMs = 250;
+
     private static Regex BuildPatternRegex(string pattern)
     {
         return _regexCache.GetOrAdd(pattern, p =>
@@ -226,7 +259,9 @@ public class ProcessScanner : IProcessScanner
                 .Replace(@"\*", ".*")
                 .Replace(@"\?", ".") + "$";
 
-            return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            return new Regex(regexPattern,
+                RegexOptions.IgnoreCase | RegexOptions.Compiled,
+                TimeSpan.FromMilliseconds(PatternMatchTimeoutMs));
         });
     }
 
