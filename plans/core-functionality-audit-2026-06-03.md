@@ -127,3 +127,52 @@ the rest are smaller. Fully incremental — stop after any phase.
 ## Recommended start
 **Phase A** — it's the default path, never deep-audited, and the most likely
 home of a latent leak of the exact class we just kept finding in custom.
+
+---
+
+## Results log
+
+### Phase A — DONE (r9, 2026-06-03)
+8 latent generated-config invariant fixes (Reality pubkey/short_id validation,
+SS2022 multi-key validation, Privacy_Shell DNS leak, smart-mode info warning).
+Shipped in v2.40.0-r9. +CoreAuditPhaseATests.
+
+### Phase D — DONE (r10, 2026-06-03)
+All 7 leak/kill-switch findings fixed (#1 kill-switch fail-open re-resolve HIGH,
+#5 custom IPv6 closure HIGH, #7 ConfigPipeline Advisory-fatal, #3 deferred
+kill-switch lift [Clash-API-gated after re-sweep], #6 IPv6 2000::/3 DNS blocks,
+#4 CLI/Service orphan sweep, #2 ProcessExit sweep). Shipped r10. **#3 + #6
+LIVE-verified** on a real subscription tunnel (crash-restart deferred-lift fired
++7s with clashApi=true; IPv6 blocks coexist with live tunnel DNS/HTTP).
+
+### Phase B — DONE (2026-06-03)
+Adversarial sweep (3 agents) + property tests. **B1 (case-exactness), B2
+(include/exclude correctness), B4 (survivor-guard) HOLD** — verified by tracing
+the code; pinned by existing suites (ConfigGenerator/RoutingAppListEditor/
+LeakAuditFix). **B3 (wildcard/child): 5 findings.**
+- **B3-1 HIGH — FIXED (commit 20fdfd5)**: BuildPatternRegex had no matchTimeout
+  → catastrophic-backtracking scan_pattern (~8.5s) wedges the ETW/rescan hot
+  paths → intended apps leak by starvation. Added 250ms ceiling + fail-safe
+  catch (Windows + macOS scanners). +4 CoreAuditPhaseBTests.
+- **B3-2 / B3-3 (default profile over-match) — TRIAGE, not fixed**: `firefox.exe`
+  in the Tor rule + `browser.exe` in the Yandex rule (`profiles/default.json` /
+  ProfileManager built-ins) over-match the user's unrelated Firefox / any
+  `browser.exe`. This over-ROUTES through the proxy (not a direct leak) and is a
+  fundamental limit of name-based matching for Tor/Yandex. Decision needed: trim
+  the patterns (Tor/Yandex routing via process_name becomes incomplete) vs
+  accept + document.
+- **B3-4 MED — latent**: `include_children` PID-reuse over-include + post-snapshot
+  under-include + global name-routing (intrinsic to sing-box process_name). Also:
+  `include_children` is a no-op on Linux (`CollectDescendantNames` is Windows-only)
+  → children of routed apps leak direct on Linux.
+- **B3-5 MED — latent**: a `*` / all-wildcard pattern routes every running
+  process; no pattern validation. (matchTimeout from B3-1 does NOT cover this —
+  `*` matches fast, just over-broadly. Recommend a guard rejecting all-wildcard.)
+
+Phase B B4 MED items (RoutingAppListEditor guard naming/abstraction-drift in
+exclude mode + shell-verb dead-in-exclude UX) — hardening, no live leak; triage.
+
+### Pending phases
+C (lifecycle) → E (subscription) → F (free-configs) → G (cross-platform; G2 =
+known Linux/macOS kill-switch gap, task #131; G also: B3-4 Linux include_children
+no-op).
