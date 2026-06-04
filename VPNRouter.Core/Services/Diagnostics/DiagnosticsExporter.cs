@@ -19,17 +19,30 @@ namespace VPNRouter.Core.Services.Diagnostics;
 /// </summary>
 public static class DiagnosticsExporter
 {
-    /// <summary>Max number of log lines kept per log file (bounded bundle size).</summary>
-    public const int LogTailLines = 800;
+    /// <summary>
+    /// Max log lines kept per log file. v2.41.0 (user ask 2026-06-04): bumped
+    /// 800 → 40000 so a bundle holds days of history, not a couple of busy hours.
+    /// sing-box is verbose ("found process path" spam), so 800 lines was minutes
+    /// on an active session; the byte cap below is the real bound now.
+    /// </summary>
+    public const int LogTailLines = 40_000;
 
     /// <summary>
     /// Hard cap on bytes read when tailing a log (audit MEDIUM, 2026-06-02).
     /// `TailLines` only ever needs the END of the file, so we seek to the last
     /// <c>MaxTailReadBytes</c> instead of reading the whole thing — a corrupt or
-    /// runaway multi-GB log can no longer OOM the bundle. 2 MB comfortably holds
-    /// far more than <see cref="LogTailLines"/> lines of normal log output.
+    /// runaway multi-GB log can no longer OOM the bundle. v2.41.0: 2 MB → 12 MB
+    /// so a full sing-box rotation (rotates at 10 MB → singbox.old.log) is
+    /// captured intact, and a daily app log is included whole.
     /// </summary>
-    public const long MaxTailReadBytes = 2L * 1024 * 1024;
+    public const long MaxTailReadBytes = 12L * 1024 * 1024;
+
+    /// <summary>
+    /// How many days of daily-rolled app logs (<c>vpnrouter{date}.log</c>) to
+    /// include. v2.41.0: was implicitly 1 (latest file only) → 3 days, so a
+    /// "couple of days" of context lands in the bundle.
+    /// </summary>
+    public const int LogWindowDays = 3;
 
     public sealed record Result(
         string ZipPath,
@@ -68,11 +81,22 @@ public static class DiagnosticsExporter
             AddRedactedFile(staging, AppPaths.StatePath, "state.redacted.json",
                 DiagnosticsRedactor.RedactSingboxJson, entries, warnings);
 
-            // app log tail (latest vpnrouter*.log), scrubbed
-            AddLogTail(staging, FindLatestAppLog(), "vpnrouter-tail.log", entries, warnings);
+            // app log tails — last LogWindowDays of daily-rolled vpnrouter*.log,
+            // each kept under its own name so a few days of context is visible
+            // (v2.41.0: was the single latest file only).
+            var appLogs = FindRecentAppLogs();
+            if (appLogs.Count == 0)
+                warnings.Add("no vpnrouter*.log found — skipped");
+            foreach (var log in appLogs)
+                AddLogTail(staging, log, Path.GetFileName(log), entries, warnings);
 
-            // sing-box log tail, scrubbed
+            // sing-box log tail (current + rotated .old), scrubbed. sing-box
+            // rotates at 10 MB → singbox.old.log; include both so the bundle
+            // spans more than the current session (v2.41.0).
             AddLogTail(staging, AppPaths.SingBoxLogPath, "singbox-tail.log", entries, warnings);
+            var singBoxOld = Path.Combine(AppPaths.LogsDir, "singbox.old.log");
+            if (File.Exists(singBoxOld))
+                AddLogTail(staging, singBoxOld, "singbox-old-tail.log", entries, warnings);
 
             // emergency channel log, if present
             AddLogTail(staging, AppPaths.WgturnCliLogPath, "wgturn-cli-tail.log", entries, warnings);
@@ -116,8 +140,9 @@ public static class DiagnosticsExporter
         "  config.redacted.yaml   - your settings (secrets removed)",
         "  current.redacted.json  - the config sing-box actually loaded (secrets removed)",
         "  state.redacted.json    - runtime state (PID etc.)",
-        "  vpnrouter-tail.log      - last app log lines (scrubbed)",
-        "  singbox-tail.log        - last sing-box log lines (scrubbed)",
+        "  vpnrouter*.log          - app logs, last few days (scrubbed)",
+        "  singbox-tail.log        - sing-box log, current (scrubbed)",
+        "  singbox-old-tail.log    - sing-box log, previous rotation if present (scrubbed)",
         "  geo-manifest.txt        - geo rule file sizes & dates (not the files)",
     });
 
@@ -228,16 +253,37 @@ public static class DiagnosticsExporter
         }
     }
 
-    private static string? FindLatestAppLog()
+    /// <summary>
+    /// Daily-rolled app logs (<c>vpnrouter{date}.log</c>) modified within the
+    /// last <see cref="LogWindowDays"/> days, oldest→newest. Falls back to the
+    /// single newest file if none fall inside the window (e.g. the app was idle
+    /// for days), so the bundle is never empty. Excludes the tiny
+    /// <c>vpnrouter-launch-error.log</c> crash stub (different concern).
+    /// </summary>
+    internal static List<string> FindRecentAppLogs()
     {
         try
         {
-            if (!Directory.Exists(AppPaths.LogsDir)) return null;
-            return Directory.GetFiles(AppPaths.LogsDir, "vpnrouter*.log")
-                .OrderByDescending(File.GetLastWriteTimeUtc)
-                .FirstOrDefault();
+            if (!Directory.Exists(AppPaths.LogsDir)) return new List<string>();
+            var all = Directory.GetFiles(AppPaths.LogsDir, "vpnrouter*.log")
+                .Where(f => !Path.GetFileName(f).Contains("launch-error", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (all.Count == 0) return new List<string>();
+
+            var cutoff = DateTime.UtcNow - TimeSpan.FromDays(LogWindowDays);
+            var recent = all
+                .Where(f => File.GetLastWriteTimeUtc(f) >= cutoff)
+                .OrderBy(File.GetLastWriteTimeUtc)
+                .ToList();
+
+            // If nothing is recent (idle for > window), still include the newest
+            // one so support has something to look at.
+            if (recent.Count == 0)
+                recent.Add(all.OrderByDescending(File.GetLastWriteTimeUtc).First());
+
+            return recent;
         }
-        catch { return null; }
+        catch { return new List<string>(); }
     }
 
     /// <summary>Read a file even if another process holds it open for writing.</summary>

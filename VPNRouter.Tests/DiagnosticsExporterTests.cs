@@ -95,7 +95,9 @@ vless:
             Assert.Contains("summary.txt", entryNames);
             Assert.Contains("config.redacted.yaml", entryNames);
             Assert.Contains("current.redacted.json", entryNames);
-            Assert.Contains("vpnrouter-tail.log", entryNames);
+            // v2.41.0: app logs are kept under their real daily filenames (last
+            // few days), not a single "vpnrouter-tail.log".
+            Assert.Contains("vpnrouter20260602.log", entryNames);
 
             // ── diagnostic value preserved ──
             Assert.Contains("1.2.3.4", bundle);            // server host kept
