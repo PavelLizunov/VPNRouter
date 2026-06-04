@@ -103,7 +103,7 @@ public static class ConfigGenerator
             Dns = BuildDns(profile, appsProcessList, settings, isExcludeMode),
             Inbounds = BuildInbounds(settings),
             Outbounds = outbounds,
-            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode),
+            Route = BuildRoute(profile, appsProcessList, settings.App.RoutingMode, hasUdpProxy, isExcludeMode, settings.App.BlockQuicOnTcpProxy),
             Experimental = new SingBoxExperimental()
         };
 
@@ -1369,7 +1369,8 @@ public static class ConfigGenerator
     // ─── Route (sing-box 1.12+ action-based format) ──────────────────────────
 
     private static SingBoxRoute BuildRoute(Profile profile, List<string> processes,
-        string routingMode = "split", bool hasUdpProxy = false, bool isExcludeMode = false)
+        string routingMode = "split", bool hasUdpProxy = false, bool isExcludeMode = false,
+        bool blockQuicOnTcpProxy = true)
     {
         var isFullTunnel = (routingMode ?? "split").Equals("full", StringComparison.OrdinalIgnoreCase);
 
@@ -1392,6 +1393,36 @@ public static class ConfigGenerator
             Action      = "route",
             Outbound    = "direct"
         });
+
+        // YouTube / QUIC fix: when the proxy is TCP-only (VLESS+Reality+Vision
+        // with no UDP-capable TUIC/Hysteria2 sibling), QUIC (HTTP/3 over UDP/443)
+        // tunneled over the reliable VLESS-over-TCP stream suffers head-of-line
+        // blocking ("TCP-over-TCP meltdown") → YouTube/google-video stalls and
+        // buffering. Because QUIC is slow-not-rejected, the browser keeps
+        // retrying it instead of falling back. A clean reject forces the
+        // fallback to HTTP/2-over-TCP, which rides VLESS cleanly. The sniff rule
+        // above identifies QUIC; private-IP traffic is already routed direct, so
+        // LAN QUIC is untouched. Skipped when a UDP-capable outbound exists
+        // (proxy-udp) — there we honour the user's deliberate UDP routing.
+        if (blockQuicOnTcpProxy && !hasUdpProxy)
+        {
+            if (isFullTunnel || isExcludeMode)
+            {
+                // final = "proxy": (almost) all traffic rides the TCP-only proxy.
+                rules.Add(new RouteRule { Protocol = "quic", Action = "reject" });
+            }
+            else if (processes.Count > 0)
+            {
+                // Split include: only the listed apps ride the TCP-only proxy,
+                // so scope the QUIC reject to them — other apps keep QUIC direct.
+                rules.Add(new RouteRule
+                {
+                    ProcessName = processes.ToList(),
+                    Protocol    = "quic",
+                    Action      = "reject"
+                });
+            }
+        }
 
         // AM-1: when the user is in exclude mode under split tunnel, the
         // listed processes get routed to "direct" (kept OUT of the

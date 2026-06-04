@@ -395,6 +395,20 @@ public class AppConfig
     public bool ForceIpv4Only { get; set; } = true;
 
     /// <summary>
+    /// When true (default), reject QUIC (HTTP/3 over UDP) whenever the active
+    /// proxy is TCP-only — i.e. a VLESS+Reality outbound with no UDP-capable
+    /// (TUIC/Hysteria2) sibling. QUIC carried over a reliable VLESS-over-TCP
+    /// tunnel suffers head-of-line blocking ("TCP-over-TCP meltdown"), which is
+    /// the classic cause of YouTube/Google-video stalls on a VLESS VPN. A clean
+    /// reject makes the browser fall back to HTTP/2-over-TCP, which rides the
+    /// tunnel cleanly. Rejection is scoped: LAN/private-IP QUIC is routed direct
+    /// before the reject, and setups with a UDP-capable outbound are left alone.
+    /// Set false to restore raw QUIC tunneling (degraded UDP-over-VLESS).
+    /// </summary>
+    [YamlMember(Alias = "block_quic_on_tcp_proxy")]
+    public bool BlockQuicOnTcpProxy { get; set; } = true;
+
+    /// <summary>
     /// "Strict mode" — when true, HealthMonitor polls sing-box every 5 seconds
     /// instead of 30, so a crash is detected faster and the firewall kill switch
     /// activates sooner. Reduces the leak window from ~30s to ~5s.

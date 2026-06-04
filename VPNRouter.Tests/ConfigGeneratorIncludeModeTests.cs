@@ -77,9 +77,12 @@ public class ConfigGeneratorIncludeModeTests
         // route.final = direct (split tunnel, include mode)
         Assert.Equal("direct", config.Route.Final);
 
-        // There must be a process_name → proxy rule for the user list.
+        // There must be a process_name → proxy route rule for the user list.
+        // (v2.41.0-r4: the QUIC-block fix also adds a process_name rule with
+        // action="reject" for the same apps, so scope this to route rules — the
+        // QUIC reject is asserted separately in ConfigGeneratorQuicBlockTests.)
         var procRules = config.Route.Rules
-            .Where(r => r.ProcessName != null && r.ProcessName.Count > 0)
+            .Where(r => r.ProcessName != null && r.ProcessName.Count > 0 && r.Action == "route")
             .ToList();
         Assert.NotEmpty(procRules);
         var combined = procRules.SelectMany(r => r.ProcessName!).Distinct().ToList();
