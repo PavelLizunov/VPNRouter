@@ -914,6 +914,46 @@ public class SingBoxManager : IDisposable
     /// <see cref="OnProcessExited"/>'s orphan cleanup.</summary>
     private const string DefaultTunInterfaceName = "VPNRouter-TUN";
 
+    /// <summary>
+    /// Copies <c>libcronet.{dll,so}</c> next to the runtime sing-box binary so
+    /// its NaiveProxy outbound — which dlopens Cronet from the executable's
+    /// directory — works. sing-box is provisioned to
+    /// <c>%ProgramData%\VPNRouter\bin\</c> but the Cronet lib ships in the app
+    /// directory (<see cref="AppContext.BaseDirectory"/>). Without this, naive
+    /// servers FATAL <c>cronet: library not found</c> (brat-reported on
+    /// v2.41.1-r2). Idempotent (copies only when missing or a different size);
+    /// no-op on macOS (no upstream Cronet) and when the lib isn't bundled.
+    /// Failures are swallowed + logged — naive is the only feature that needs
+    /// it, so a copy failure must not block sing-box launch.
+    /// </summary>
+    internal static bool TryColocateCronet(string singBoxExePath, string bundledDir, ILogger? logger)
+    {
+        var libName = OperatingSystem.IsWindows() ? "libcronet.dll"
+                    : OperatingSystem.IsLinux()   ? "libcronet.so"
+                    : null;
+        if (libName == null) return false; // macOS / other: no Cronet upstream
+        try
+        {
+            var src = Path.Combine(bundledDir, libName);
+            if (!File.Exists(src)) return false; // not bundled (shouldn't happen on Win/Linux)
+            var destDir = Path.GetDirectoryName(singBoxExePath);
+            if (string.IsNullOrEmpty(destDir)) return false;
+            var dest = Path.Combine(destDir, libName);
+            if (string.Equals(Path.GetFullPath(src), Path.GetFullPath(dest), StringComparison.OrdinalIgnoreCase))
+                return true; // sing-box runs from the bundled dir — lib already beside it
+            if (File.Exists(dest) && new FileInfo(dest).Length == new FileInfo(src).Length)
+                return true; // already co-located, same size
+            File.Copy(src, dest, overwrite: true);
+            logger?.Information("[SingBoxManager] Co-located {Lib} next to sing-box at {Dest}", libName, dest);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger?.Warning(ex, "[SingBoxManager] Could not co-locate {Lib} next to sing-box — NaiveProxy may fail to start", libName);
+            return false;
+        }
+    }
+
     private void LaunchProcess(string exePath)
     {
         // PinkuDani Fix #3 (2026-05-21): reset the TUN-orphan crash flag +
@@ -936,6 +976,11 @@ public class SingBoxManager : IDisposable
             _capturedStderrCount = 0;
             Array.Clear(_capturedStderr, 0, _capturedStderr.Length);
         }
+
+        // v2.41.1-r3: guarantee libcronet sits next to the runtime sing-box so
+        // NaiveProxy outbounds don't FATAL "cronet: library not found". Single
+        // launch chokepoint → covers Start / Restart / HealthMonitor recovery.
+        TryColocateCronet(exePath, AppContext.BaseDirectory, _logger);
 
         // Hotfix 2026-05-19 (v2.35.0) — pre-launch TUN adapter cleanup
         // for Windows. EVERY start path passes through here (user Start,
