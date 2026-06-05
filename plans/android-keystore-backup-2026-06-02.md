@@ -1,8 +1,9 @@
 # Android signing keystore — disaster-recovery (READ THIS)
 
-**Status:** action doc for the maintainer (2026-06-02). Implements
-product-gap-audit **#142** (the backup half — versioning + signing already
-shipped). This is the single highest-impact irreversible Android failure mode.
+**Status:** UPDATED 2026-06-05 — the keystore was **ROTATED** from the old
+debug-DN key to a proper `CN=VPNRouter` key (details below). Originally an action
+doc (2026-06-02) for product-gap-audit **#142**. This is the single
+highest-impact irreversible Android failure mode.
 
 ## Why this matters (the one-sentence version)
 
@@ -11,18 +12,28 @@ who already installed the app** — Android refuses to update an app with a
 different signature, so a new key = a brand-new, separate app and every existing
 user is stranded on their current version forever.
 
-## What signs our APKs today
+## What signs our APKs today  (ROTATED 2026-06-05 → proper DN)
 
-- **Keystore alias:** `vpnrouter`
-- **Cert (SHA-256):** `c3fc0ceab00a0b8b729b1f65017357faaec1ed35b11eab1e32e03c42c8d3d37a`
-- **Cert DN:** `CN=Android Debug, O=Android, C=US` — *cosmetic only*. This is a
-  CUSTOM keystore (alias `vpnrouter`, secret password); the shared SDK debug key
-  uses alias `androiddebugkey`, so our private key is NOT the public debug key —
-  just the DN label happens to be the generic one. Fine for sideload + F-Droid.
-  (If you ever go to the Play Store, which rejects debug-DN certs, you'd need a
-  fresh proper-DN key — a one-time flag-day reinstall for existing users. Not now.)
-- **Where it lives:** ONLY as two GitHub Actions **secrets** —
-  `ANDROID_KEYSTORE_BASE64` (the keystore, base64) and `ANDROID_KEYSTORE_PASSWORD`.
+- **Keystore alias:** `vpnrouter`  ·  PKCS12  ·  RSA-2048  ·  valid → 2056-07-17
+- **Cert (SHA-256):** `6e50af0f51ff021db30883eca9fd5d4e66c18d7d64fab3b1b346942bf045a221`
+- **Cert DN:** `CN=VPNRouter, O=VPNRouter, C=RU` (proper DN — no longer the
+  debug-DN cosmetic label).
+- **Where it lives:** GitHub Actions secrets `ANDROID_KEYSTORE_BASE64` +
+  `ANDROID_KEYSTORE_PASSWORD` (rotated 2026-06-05), **plus** offline backups:
+  `C:\Users\vboxuser\vpnrouter.keystore` (dev VM) and
+  `Z:\vpnrouter-keystore-backup\` (host shared folder). The store password lives
+  in `vpnrouter-keystore-credentials.txt` alongside each backup — **NOT in git,
+  NOT in this doc**.
+
+### Previous key (superseded 2026-06-05)
+- Old cert `c3fc0cea…d37a`, DN `CN=Android Debug, O=Android, C=US`, store-pass
+  `android`. Signed v2.35.x → the first v2.41.0 APK. Archived as
+  `vpnrouter-keystore-OLD-debug.keystore` (kept for the record only).
+- **Flag-day:** the rotation changed the signing identity, so any install from a
+  pre-rotation APK **cannot update in place** — it must be uninstalled +
+  reinstalled. The rotation was done deliberately at near-zero install base (test
+  devices only), which is the cheapest possible moment. v2.41.0's live APK was
+  re-signed with the new key.
 
 ## The trap: the GitHub secret is NOT a backup
 

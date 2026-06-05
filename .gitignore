@@ -103,3 +103,12 @@ VPNRouter.Tests/screenshots/*
 # v3.0 Android Phase 1.B — libbox.aar built locally (92 MB Go cross-compile)
 VPNRouter.Android/Lib/libbox*.aar
 test-screenshots/
+
+# Android signing keystore + credentials — NEVER commit. The private signing
+# key lives ONLY as a GitHub Actions secret + offline backup (see
+# plans/android-keystore-backup-2026-06-02.md). Committing it — especially to a
+# public repo — lets anyone forge updates that install over users' apps.
+*.keystore
+*.jks
+vpnrouter-keystore-credentials.txt
+.vpnr-ks.*
