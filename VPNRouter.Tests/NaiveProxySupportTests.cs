@@ -217,6 +217,33 @@ public class NaiveProxySupportTests
         finally { ServerUriParser.NaiveRuntimeAvailable = original; }
     }
 
+    [Fact]
+    public void Generate_NaiveServer_PassesDeadConfigGuard()
+    {
+        // Regression for v2.41.1-r1 (brat Win, cdn.ninitux.top): the F-E
+        // pre-start dead-config guard's proxy-outbound allowlist
+        // (PlaceholderDefense.FindFirstProxyOutbound) omitted "naive", so a
+        // valid naive config was flagged "no proxy outbound found → dead",
+        // AutoFailover bounced naive → VLESS, settings reverted to naive, and
+        // the reconnect retried forever — surfacing as an "infinite process
+        // scan" (sing-box never even started with naive).
+        var original = ServerUriParser.NaiveRuntimeAvailable;
+        try
+        {
+            ServerUriParser.NaiveRuntimeAvailable = true;
+            var settings = NaiveSettings();
+            VlessServersResolver.Resolve(settings);
+            var config = ConfigGenerator.Generate(NaiveProfile(), new[] { "Discord.exe" }, settings);
+            var json = ConfigGenerator.Serialize(config);
+            var node = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+
+            var result = new ConfigSanityCheck().CheckBeforeStart(node);
+            Assert.False(result.IsDead,
+                $"naive config wrongly flagged dead by F-E guard: {result.Reason}");
+        }
+        finally { ServerUriParser.NaiveRuntimeAvailable = original; }
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
     private static Profile NaiveProfile() => new()

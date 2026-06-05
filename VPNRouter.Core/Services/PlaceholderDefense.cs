@@ -449,7 +449,7 @@ public static class PlaceholderDefense
             {
                 if (node is not JsonObject ob) continue;
                 var type = StjNodeHelpers.AsString(ob["type"])?.ToLowerInvariant() ?? "";
-                if (type is "vless" or "hysteria2" or "tuic" or "shadowsocks" or "trojan")
+                if (type is "vless" or "hysteria2" or "tuic" or "shadowsocks" or "naive" or "trojan")
                     return ob;
             }
             return null;

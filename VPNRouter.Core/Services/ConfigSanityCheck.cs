@@ -110,7 +110,7 @@ public sealed class ConfigSanityCheck
             // (the route rules would point at a non-existent tag). Same
             // class of bug LeakProtection catches separately.
             return new PreStartCheckResult(true,
-                "no proxy outbound found (vless/hysteria2/tuic/shadowsocks/trojan)",
+                "no proxy outbound found (vless/hysteria2/tuic/shadowsocks/naive/trojan)",
                 "outbounds");
         }
 
