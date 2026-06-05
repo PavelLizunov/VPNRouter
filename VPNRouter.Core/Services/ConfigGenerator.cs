@@ -1067,21 +1067,38 @@ public static class ConfigGenerator
 
         var outbounds = new List<SingBoxOutbound>();
 
-        // Auto-detect: split servers by flow presence
-        var flowServers = servers.Where(s => !string.IsNullOrEmpty(s.Flow)).ToList();
-        var noFlowServers = servers.Where(s => string.IsNullOrEmpty(s.Flow)).ToList();
-        hasUdpProxy = flowServers.Count > 0 && noFlowServers.Count > 0;
-
-        if (hasUdpProxy)
+        // r5: NaiveProxy UDP pairing. naive can't carry UDP (HTTP/2 CONNECT is
+        // TCP-only). When the active server is naive and the subscription
+        // provides a co-located UDP-capable sibling (matching PairGroup tag, or
+        // a matching base name as a pre-tag fallback), route ALL UDP through the
+        // sibling (proxy-udp) while TCP stays on naive (proxy). The existing
+        // hasUdpProxy route machinery then sends UDP → proxy-udp and skips the
+        // QUIC block. Same physical node → same exit IP, no leak.
+        var udpSibling = FindNaiveUdpSibling(servers, settings.Vless.Servers);
+        if (udpSibling != null)
         {
-            // Dual outbound: TCP → proxy (with flow), UDP → proxy-udp (no flow)
-            AddOutboundGroup(outbounds, flowServers, "proxy", "vless");
-            AddOutboundGroup(outbounds, noFlowServers, "proxy-udp", "vless-udp");
+            AddOutboundGroup(outbounds, servers, "proxy", "vless");                                          // naive → TCP/all
+            AddOutboundGroup(outbounds, new List<VlessServerEntry> { udpSibling }, "proxy-udp", "vless-udp"); // sibling → UDP
+            hasUdpProxy = true;
         }
         else
         {
-            // Single outbound: all traffic → proxy
-            AddOutboundGroup(outbounds, servers, "proxy", "vless");
+            // Auto-detect: split servers by flow presence (VLESS-vision TCP vs UDP)
+            var flowServers = servers.Where(s => !string.IsNullOrEmpty(s.Flow)).ToList();
+            var noFlowServers = servers.Where(s => string.IsNullOrEmpty(s.Flow)).ToList();
+            hasUdpProxy = flowServers.Count > 0 && noFlowServers.Count > 0;
+
+            if (hasUdpProxy)
+            {
+                // Dual outbound: TCP → proxy (with flow), UDP → proxy-udp (no flow)
+                AddOutboundGroup(outbounds, flowServers, "proxy", "vless");
+                AddOutboundGroup(outbounds, noFlowServers, "proxy-udp", "vless-udp");
+            }
+            else
+            {
+                // Single outbound: all traffic → proxy
+                AddOutboundGroup(outbounds, servers, "proxy", "vless");
+            }
         }
 
         outbounds.Add(new SingBoxOutbound { Type = "direct", Tag = "direct" });
@@ -1091,6 +1108,76 @@ public static class ConfigGenerator
         // makes it non-empty so we can route DNS through it.
         outbounds.Add(new SingBoxOutbound { Type = "direct", Tag = "dns-direct", UdpFragment = true });
         return outbounds;
+    }
+
+    /// <summary>
+    /// r5: when the active server is NaiveProxy (UDP-incapable), find a
+    /// co-located UDP-capable sibling so UDP (Discord voice, games) can route
+    /// through it. Pairing key, in priority order:
+    /// <list type="number">
+    /// <item><see cref="VlessServerEntry.PairGroup"/> — the subscription's
+    /// <c>pair=</c> tag (bulletproof; the backend marks naive + its same-node
+    /// HY2 with the same value).</item>
+    /// <item>Base-name match — strip the protocol token and compare the
+    /// remainder (transition fallback before a refresh ships the tag).</item>
+    /// </list>
+    /// Returns the sibling (preferring Hysteria2/TUIC for best UDP), or null
+    /// when the active server isn't naive or no UDP sibling exists (caller then
+    /// falls back to the standard flow/no-flow logic).
+    /// </summary>
+    private static VlessServerEntry? FindNaiveUdpSibling(
+        List<VlessServerEntry> activeServers, List<VlessServerEntry> pool)
+    {
+        var naive = activeServers.FirstOrDefault(IsNaiveServer);
+        if (naive == null || pool == null) return null;
+
+        // 1. PairGroup tag (bulletproof).
+        if (!string.IsNullOrWhiteSpace(naive.PairGroup))
+        {
+            var byTag = pool.Where(s => !IsNaiveServer(s)
+                && string.Equals(s.PairGroup, naive.PairGroup, StringComparison.OrdinalIgnoreCase));
+            var pick = PreferUdpServer(byTag);
+            if (pick != null) return pick;
+        }
+
+        // 2. Base-name fallback (pre-tag transition / cached subs).
+        var naiveBase = StripProtocolToken(naive.Name);
+        if (!string.IsNullOrWhiteSpace(naiveBase))
+        {
+            var byName = pool.Where(s => !IsNaiveServer(s)
+                && string.Equals(StripProtocolToken(s.Name), naiveBase, StringComparison.OrdinalIgnoreCase));
+            var pick = PreferUdpServer(byName);
+            if (pick != null) return pick;
+        }
+        return null;
+    }
+
+    private static bool IsNaiveServer(VlessServerEntry s) =>
+        "naive".Equals(s?.Protocol, StringComparison.OrdinalIgnoreCase);
+
+    // Prefer Hysteria2 / TUIC (QUIC-native, best for voice) over VLESS / Shadowsocks.
+    private static VlessServerEntry? PreferUdpServer(IEnumerable<VlessServerEntry> candidates)
+    {
+        static int Rank(VlessServerEntry s) => (s.Protocol ?? "").ToLowerInvariant() switch
+        {
+            "hysteria2" => 0,
+            "tuic"      => 1,
+            "vless"     => 2,
+            _           => 3,
+        };
+        return candidates.OrderBy(Rank).FirstOrDefault();
+    }
+
+    // Strip the protocol token from a server display name so co-located entries
+    // pair: "Latvia NAIVE ~main-brat" and "Latvia HY2 ~main-brat" both reduce to
+    // "Latvia ~main-brat".
+    private static string StripProtocolToken(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return string.Empty;
+        var tokens = new[] { "naive", "hysteria2", "hy2", "tuic", "shadowsocks", "ss", "vless" };
+        var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => !tokens.Contains(w.ToLowerInvariant()));
+        return string.Join(" ", words).Trim();
     }
 
     /// <summary>

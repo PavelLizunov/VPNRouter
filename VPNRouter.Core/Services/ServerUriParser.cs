@@ -204,6 +204,7 @@ public static class ServerUriParser
             Server = server,
             Port = port,
             Password = password,
+            PairGroup = query["pair"] ?? string.Empty, // r5: UDP-sibling pairing tag
             Tls = new VlessTlsConfig
             {
                 Enabled = true,
@@ -449,6 +450,7 @@ public static class ServerUriParser
             Port = port,
             Username = username,
             Password = password,
+            PairGroup = query["pair"] ?? string.Empty, // r5: UDP-sibling pairing tag
             Tls = new VlessTlsConfig
             {
                 Enabled = true,

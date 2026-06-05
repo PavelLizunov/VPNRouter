@@ -354,7 +354,9 @@ public partial class ServerViewModel : ViewModelBase
                     // entry carries default Security="reality"/Transport="tcp"
                     // fields that BuildNaiveOutbound ignores — without this case
                     // the subtitle would mislabel naive as "tcp + reality".
-                    parts.Add("naive");
+                    // r5: a co-located UDP sibling (same PairGroup tag) makes UDP
+                    // work via the paired HY2, so surface it as "naive + hy2".
+                    parts.Add(string.IsNullOrWhiteSpace(_originalEntry?.PairGroup) ? "naive" : "naive + hy2");
                     break;
 
                 default:

@@ -244,6 +244,51 @@ public class NaiveProxySupportTests
         finally { ServerUriParser.NaiveRuntimeAvailable = original; }
     }
 
+    // ── UDP pairing (r5) ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void Naive_PairTag_ParsedIntoPairGroup()
+    {
+        var e = ServerUriParser.Parse("naive+https://u:p@cdn.example.com:443?pair=cdn#Latvia NAIVE");
+        Assert.Equal("naive", e.Protocol);
+        Assert.Equal("cdn", e.PairGroup);
+    }
+
+    [Fact]
+    public void Hysteria2_PairTag_ParsedIntoPairGroup()
+    {
+        var e = ServerUriParser.Parse("hysteria2://pw@1.2.3.4:8444/?sni=x.com&pair=cdn#Latvia HY2");
+        Assert.Equal("hysteria2", e.Protocol);
+        Assert.Equal("cdn", e.PairGroup);
+    }
+
+    [Fact]
+    public void Generate_NaiveWithPairedHy2_RoutesUdpThroughHy2()
+    {
+        // r5: naive can't carry UDP. With a co-located HY2 sharing pair=cdn,
+        // config-gen must emit proxy=naive (TCP) + proxy-udp=hysteria2 (UDP) so
+        // the full-tunnel hasUdpProxy machinery routes UDP → the paired HY2.
+        var original = ServerUriParser.NaiveRuntimeAvailable;
+        try
+        {
+            ServerUriParser.NaiveRuntimeAvailable = true;
+            var settings = NaivePairedSettings();
+            Assert.Equal(2, VlessServersResolver.Resolve(settings).Count);
+            var config = ConfigGenerator.Generate(NaiveProfile(), System.Array.Empty<string>(), settings);
+
+            var proxy = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy");
+            var proxyUdp = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy-udp");
+            Assert.NotNull(proxy);
+            Assert.Equal("naive", proxy!.Type);          // TCP via naive
+            Assert.NotNull(proxyUdp);
+            Assert.Equal("hysteria2", proxyUdp!.Type);   // UDP via the paired HY2 (same node)
+            Assert.Equal("213.155.15.93", proxyUdp.Server);
+            // full-tunnel UDP split → proxy-udp
+            Assert.Contains(config.Route.Rules, r => r.Network == "udp" && r.Outbound == "proxy-udp");
+        }
+        finally { ServerUriParser.NaiveRuntimeAvailable = original; }
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
     private static Profile NaiveProfile() => new()
@@ -278,6 +323,46 @@ public class NaiveProxySupportTests
                             Username = "user1",
                             Password = "pass1",
                             Tls = new VlessTlsConfig { Enabled = true, ServerName = "naive.example.com" }
+                        }
+                    }
+                }
+            }
+        },
+        Tun = new TunSettings { InterfaceName = "VPNRouter-TUN", Ipv4Address = "172.19.0.1/30", Mtu = 9000, AutoRoute = true, StrictRoute = false },
+        Dns = new DnsSettings { VpnDns = "https://1.1.1.1/dns-query", Strategy = "ipv4_only" },
+        SingBox = new SingBoxSettings { ClashApi = "127.0.0.1:9090" },
+        Vless = new VlessConfig()
+    };
+
+    // naive (active) + co-located HY2, both pair=cdn, full tunnel.
+    private static AppSettings NaivePairedSettings() => new()
+    {
+        App = new AppConfig
+        {
+            LogLevel = "info",
+            ConfigMode = "subscribe",
+            RoutingMode = "full",
+            ActiveSubscriptionServer = "Latvia NAIVE",
+            Subscriptions = new List<SubscriptionEntry>
+            {
+                new()
+                {
+                    Name = "paired-sub",
+                    Url = "https://example.com",
+                    Enabled = true,
+                    Servers = new List<VlessServerEntry>
+                    {
+                        new()
+                        {
+                            Name = "Latvia NAIVE", Protocol = "naive", Server = "cdn.example.com", Port = 443,
+                            Username = "u", Password = "p", PairGroup = "cdn",
+                            Tls = new VlessTlsConfig { Enabled = true, ServerName = "cdn.example.com" }
+                        },
+                        new()
+                        {
+                            Name = "Latvia HY2", Protocol = "hysteria2", Server = "213.155.15.93", Port = 8444,
+                            Password = "hp", PairGroup = "cdn",
+                            Tls = new VlessTlsConfig { Enabled = true, ServerName = "213.155.15.93", Insecure = true }
                         }
                     }
                 }

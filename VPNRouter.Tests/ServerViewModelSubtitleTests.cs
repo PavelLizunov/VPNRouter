@@ -60,4 +60,24 @@ public class ServerViewModelSubtitleTests
         var vm = new ServerViewModel(entry);
         Assert.Equal("hysteria2 + salamander", vm.HostSubtitle);
     }
+
+    [Fact]
+    public void HostSubtitle_NaiveWithPairGroup_ShowsNaivePlusHy2()
+    {
+        // r5: a naive server tagged with a PairGroup has a co-located HY2 sibling
+        // that carries its UDP, so the subtitle advertises "naive + hy2".
+        var entry = new VlessServerEntry
+        {
+            Name = "Latvia NAIVE",
+            Protocol = "naive",
+            Server = "cdn.example.com",
+            Port = 443,
+            Security = "reality",
+            PairGroup = "cdn",
+            Tls = new VlessTlsConfig { Enabled = true, ServerName = "cdn.example.com" },
+            Transport = new VlessTransportConfig { Type = "tcp" },
+        };
+        var vm = new ServerViewModel(entry);
+        Assert.Equal("naive + hy2", vm.HostSubtitle);
+    }
 }

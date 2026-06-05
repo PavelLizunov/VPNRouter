@@ -983,6 +983,16 @@ public class VlessServerEntry
     /// </summary>
     [YamlMember(Alias = "plugin_opts")]
     public string PluginOpts { get; set; } = string.Empty;
+
+    /// <summary>
+    /// r5: co-located server pairing tag from the subscription (<c>pair=</c>
+    /// query param). NaiveProxy can't carry UDP, so a naive server and its
+    /// same-node UDP-capable sibling (e.g. Hysteria2) share an identical
+    /// PairGroup; VPNRouter routes UDP through the sibling (same physical node →
+    /// same exit IP). Empty = no pairing.
+    /// </summary>
+    [YamlMember(Alias = "pair")]
+    public string PairGroup { get; set; } = string.Empty;
 }
 
 /// <summary>VLESS Reality settings (replaces TLS)</summary>
