@@ -45,7 +45,7 @@ param(
     # SingBoxVersion: upstream sing-box release to bundle (v2.27.2+).
     # Keep aligned with Linux workflow (.github/workflows/build-linux.yml)
     # and build-mac.sh — all three platforms ship the same sing-box release.
-    [string]$SingBoxVersion = "1.13.10",
+    [string]$SingBoxVersion = "1.13.13",
     # Optional override: pre-existing sing-box.exe to bundle instead of
     # downloading upstream. Used for local testing of custom builds.
     # Empty string means "auto-download upstream $SingBoxVersion".
@@ -278,6 +278,10 @@ Write-Host "       Removed: WPF $([math]::Round($wpfRemoved/1MB,1)) MB + natives
 Write-Host "[6/9] Bundling sing-box.exe..." -ForegroundColor Yellow
 if ($SingBoxPath -and (Test-Path $SingBoxPath)) {
     Copy-Item $SingBoxPath (Join-Path $DistDir "sing-box.exe") -Force
+    # v2.41.1: also grab a sibling libcronet.dll if the override points into an
+    # extracted upstream archive — naive needs it next to sing-box.exe.
+    $ovCronet = Join-Path (Split-Path $SingBoxPath -Parent) "libcronet.dll"
+    if (Test-Path $ovCronet) { Copy-Item $ovCronet (Join-Path $DistDir "libcronet.dll") -Force }
     Write-Host "       Copied from: $SingBoxPath (override)" -ForegroundColor Gray
 } else {
     # Auto-download upstream. Cache under tools\singbox-cache\ so repeat
@@ -310,9 +314,18 @@ if ($SingBoxPath -and (Test-Path $SingBoxPath)) {
         }
     }
 
-    Copy-Item $cachedExe (Join-Path $DistDir "sing-box.exe") -Force
+    # Bundle the ENTIRE upstream archive verbatim — no cherry-picking (v2.41.1).
+    # Brings sing-box.exe AND its sibling libcronet.dll (the Chromium Cronet
+    # runtime sing-box dlopen's for NaiveProxy outbounds). Pre-2.41.1 we copied
+    # only sing-box.exe, which left naive broken for end users. LICENSE ships as
+    # LICENSE.sing-box so it can't clobber the app's own LICENSE.
+    Get-ChildItem -File $extractDir | ForEach-Object {
+        $destName = if ($_.Name -ieq 'LICENSE') { 'LICENSE.sing-box' } else { $_.Name }
+        Copy-Item $_.FullName (Join-Path $DistDir $destName) -Force
+    }
     $sbSize = [math]::Round((Get-Item $cachedExe).Length / 1MB, 1)
-    Write-Host "       Bundled upstream sing-box v$SingBoxVersion ($sbSize MB)" -ForegroundColor Green
+    $cronetNote = if (Test-Path (Join-Path $extractDir 'libcronet.dll')) { ' + libcronet' } else { '' }
+    Write-Host "       Bundled upstream sing-box v$SingBoxVersion$cronetNote ($sbSize MB exe)" -ForegroundColor Green
 }
 
 # ── wgturn-cli — downloaded on demand (v2.32.1-r3+, Zapret/TgProxy pattern) ──
@@ -463,6 +476,14 @@ if (Test-Path $singBoxInDist) {
     Copy-Item $singBoxInDist $BootstrapDir
     $updateFileCount++
     Write-Host "       sing-box.exe included in update (under _bootstrap/)" -ForegroundColor Gray
+}
+# v2.41.1: libcronet.dll must travel with sing-box.exe in the update payload,
+# else a naive user who auto-updates loses the Cronet runtime and naive breaks.
+$cronetInDist = Join-Path $DistDir "libcronet.dll"
+if (Test-Path $cronetInDist) {
+    Copy-Item $cronetInDist $BootstrapDir
+    $updateFileCount++
+    Write-Host "       libcronet.dll included in update (under _bootstrap/)" -ForegroundColor Gray
 }
 # wgturn-cli: downloaded on demand (v2.32.1-r3+, see plans/wgturn-on-demand-download.md)
 # Zapret: downloaded on demand, not in update package

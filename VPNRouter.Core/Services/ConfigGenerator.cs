@@ -1028,6 +1028,17 @@ public static class ConfigGenerator
     {
         var servers = settings.Vless.GetActiveServers();
 
+        // macOS / Android naive backstop. The parser refuses naive at intake on
+        // platforms without Cronet, so a naive entry can only reach generation
+        // here via a settings.yaml carried over from a Windows/Linux box. Emitting
+        // a naive outbound where libcronet is absent FATALs sing-box at start, so
+        // drop naive entries on those platforms; the rest of the pool still works.
+        // If this empties the pool the hard guard below fails loud (correct — no
+        // usable proxy on this platform).
+        if (!ServerUriParser.NaiveRuntimeAvailable)
+            servers = servers.Where(s =>
+                !"naive".Equals(s.Protocol, StringComparison.OrdinalIgnoreCase)).ToList();
+
         // v2.28.2 hard guard: if we got here with no servers, the resulting
         // sing-box JSON would have route rules referencing a "proxy" outbound
         // tag that we never emit (because AddOutboundGroup short-circuits on
@@ -1143,6 +1154,7 @@ public static class ConfigGenerator
             "tuic"        => BuildTuicOutbound(entry, tag),
             "shadowsocks" => BuildShadowsocksOutbound(entry, tag),
             "ss"          => BuildShadowsocksOutbound(entry, tag),
+            "naive"       => BuildNaiveOutbound(entry, tag),
             _             => BuildVlessOutboundCore(entry, tag),
         };
     }
@@ -1266,6 +1278,36 @@ public static class ConfigGenerator
             Password       = entry.Password,
             Plugin         = string.IsNullOrEmpty(entry.Plugin) ? null : entry.Plugin,
             PluginOpts     = string.IsNullOrEmpty(entry.PluginOpts) ? null : entry.PluginOpts,
+            DomainResolver = "local-dns",
+        };
+    }
+
+    /// <summary>
+    /// NaiveProxy outbound. sing-box 1.13's naive outbound is deliberately
+    /// minimal — username/password basic auth + a plain TLS block. It does
+    /// NOT accept <c>tls.insecure=true</c>, uTLS, or <c>alpn</c> (sing-box
+    /// rejects them at outbound init), so the TLS here is just
+    /// <c>{enabled, server_name}</c> (insecure defaults to false, which IS
+    /// accepted). Requires <c>libcronet.{dll,so}</c> next to the sing-box
+    /// binary → Windows + Linux only (SagerNet ships no macOS Cronet, on any
+    /// version). macOS naive servers are filtered out before generation so we
+    /// never emit a config that FATALs at sing-box start.
+    /// </summary>
+    private static SingBoxOutbound BuildNaiveOutbound(VlessServerEntry entry, string tag)
+    {
+        return new SingBoxOutbound
+        {
+            Type           = "naive",
+            Tag            = tag,
+            Server         = entry.Server,
+            ServerPort     = entry.Port,
+            Username       = entry.Username,
+            Password       = entry.Password,
+            Tls            = new TlsConfig
+            {
+                Enabled    = true,
+                ServerName = string.IsNullOrEmpty(entry.Tls?.ServerName) ? entry.Server : entry.Tls.ServerName,
+            },
             DomainResolver = "local-dns",
         };
     }

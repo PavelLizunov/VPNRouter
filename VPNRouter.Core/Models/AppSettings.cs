@@ -885,6 +885,7 @@ public class VlessServerEntry
     /// <item><c>hysteria2</c> — Hysteria2 (with optional Salamander obfs)</item>
     /// <item><c>tuic</c> — TUIC v5</item>
     /// <item><c>shadowsocks</c> — Shadowsocks 2022 (with optional ShadowTLS v3 plugin)</item>
+    /// <item><c>naive</c> — NaiveProxy (HTTP/2 or HTTP/3 via Cronet; Windows + Linux only)</item>
     /// </list>
     /// New entries default to "vless" so legacy settings.yaml without
     /// this field stays valid.
@@ -920,11 +921,19 @@ public class VlessServerEntry
     // All optional. Populated only when Protocol != "vless".
 
     /// <summary>
+    /// NaiveProxy basic-auth username (paired with <see cref="Password"/>).
+    /// Empty for non-naive protocols.
+    /// </summary>
+    [YamlMember(Alias = "username")]
+    public string Username { get; set; } = string.Empty;
+
+    /// <summary>
     /// Authentication password.
     /// <list type="bullet">
     /// <item>Hysteria2 — auth password (URL userinfo)</item>
     /// <item>TUIC — auth password (URL userinfo, paired with Uuid)</item>
     /// <item>Shadowsocks — encryption key / password (paired with Method)</item>
+    /// <item>NaiveProxy — auth password (paired with Username)</item>
     /// </list>
     /// </summary>
     [YamlMember(Alias = "password")]

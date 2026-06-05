@@ -305,7 +305,12 @@ public class SingBoxOutbound
 
     // ── Non-VLESS protocol fields (v2.30.1-r3 multi-protocol support) ──────
 
-    /// <summary>Auth password — used by Hysteria2, TUIC, Shadowsocks outbounds.</summary>
+    /// <summary>NaiveProxy basic-auth username (naive outbound only).</summary>
+    [JsonPropertyName("username")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Username { get; set; }
+
+    /// <summary>Auth password — used by Hysteria2, TUIC, Shadowsocks, NaiveProxy outbounds.</summary>
     [JsonPropertyName("password")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Password { get; set; }

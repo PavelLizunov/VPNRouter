@@ -22,6 +22,7 @@ namespace VPNRouter.Core.Services;
 /// <item><c>hysteria2://</c> (also <c>hy2://</c>) — Hysteria2 with optional Salamander obfs</item>
 /// <item><c>tuic://</c> — TUIC v5 (uuid:password userinfo)</item>
 /// <item><c>ss://</c> — Shadowsocks (incl. 2022 ciphers + ShadowTLS plugin opts)</item>
+/// <item><c>naive://</c> (also <c>naive+https://</c> / <c>naive+quic://</c>) — NaiveProxy (Windows + Linux only — needs libcronet)</item>
 /// </list>
 ///
 /// <para>v2.32.3 input gate (2026-05-17): the vless:// branch inherits
@@ -33,6 +34,21 @@ namespace VPNRouter.Core.Services;
 /// </summary>
 public static class ServerUriParser
 {
+    /// <summary>
+    /// Whether NaiveProxy is usable on the current platform. sing-box's naive
+    /// outbound needs Chromium Cronet (<c>libcronet</c>), which SagerNet ships
+    /// only for Windows + Linux desktop — never macOS (any version) and never
+    /// the Android libbox build. When false, naive URIs are refused at intake:
+    /// subscription lines are silently skipped (<see cref="IsSupportedScheme"/>
+    /// returns false) and a manual paste throws a clear <see cref="FormatException"/>.
+    /// This guarantees a naive server can never reach config generation and
+    /// FATAL sing-box at start on a platform that can't run it.
+    /// <para>Settable so tests can simulate an unsupported platform on a
+    /// Windows test host (reset it in a finally).</para>
+    /// </summary>
+    internal static bool NaiveRuntimeAvailable { get; set; } =
+        OperatingSystem.IsWindows() || OperatingSystem.IsLinux();
+
     /// <summary>Parse any supported share-link URI. Throws <see cref="FormatException"/> on unsupported scheme or malformed input.</summary>
     /// <remarks>
     /// v2.32.3: VLESS goes through <see cref="VlessUriParser.Parse"/> which
@@ -58,8 +74,22 @@ public static class ServerUriParser
             entry = ParseTuic(uri);
         else if (uri.StartsWith("ss://", StringComparison.OrdinalIgnoreCase))
             entry = ParseShadowsocks(uri);
+        else if (uri.StartsWith("naive://", StringComparison.OrdinalIgnoreCase) ||
+                 uri.StartsWith("naive+https://", StringComparison.OrdinalIgnoreCase) ||
+                 uri.StartsWith("naive+quic://", StringComparison.OrdinalIgnoreCase))
+        {
+            // Platform gate: naive needs sing-box's Cronet runtime (Win/Linux
+            // only). Refuse at intake on macOS / Android so it can never reach
+            // config-gen and FATAL sing-box. ParseMultiple pre-filters via
+            // IsSupportedScheme; this guards the direct / manual-paste path.
+            if (!NaiveRuntimeAvailable)
+                throw new FormatException(
+                    "NaiveProxy is supported only on Windows and Linux (it needs sing-box's Cronet runtime). " +
+                    "This platform can't use naive servers — use a VLESS / Hysteria2 / TUIC / Shadowsocks server instead.");
+            entry = ParseNaive(uri);
+        }
         else
-            throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss://. Got: {Truncate(uri, 40)}");
+            throw new FormatException($"Unsupported URI scheme. Expected vless:// / hysteria2:// / hy2:// / tuic:// / ss:// / naive://. Got: {Truncate(uri, 40)}");
 
         // v2.32.3 input gate (2026-05-17) — placeholder fingerprints can
         // surface in any protocol's server IP. Reject before the entry
@@ -118,6 +148,14 @@ public static class ServerUriParser
     /// <summary>Cheap scheme-prefix probe — used by SubscriptionFetcher's per-line filter.</summary>
     public static bool IsSupportedScheme(string line)
     {
+        // naive only counts as supported where the Cronet runtime exists
+        // (Win/Linux). On macOS / Android this returns false so subscription
+        // parsing (ParseMultiple) silently drops naive lines.
+        if (line.StartsWith("naive://",       StringComparison.OrdinalIgnoreCase) ||
+            line.StartsWith("naive+https://", StringComparison.OrdinalIgnoreCase) ||
+            line.StartsWith("naive+quic://",  StringComparison.OrdinalIgnoreCase))
+            return NaiveRuntimeAvailable;
+
         return line.StartsWith("vless://",     StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
                line.StartsWith("hy2://",       StringComparison.OrdinalIgnoreCase) ||
@@ -346,6 +384,78 @@ public static class ServerUriParser
         }
 
         return entry;
+    }
+
+    // ─── NaiveProxy (HTTP/2 CONNECT, or HTTP/3 / QUIC, via Chromium Cronet) ─
+    //
+    // Community share-link form (NekoBox / sing-box subscription import):
+    //   naive+https://user:pass@host:port?sni=...#name   (HTTP/2 over TCP)
+    //   naive+quic://user:pass@host:port#name            (HTTP/3 over QUIC)
+    //   naive://user:pass@host:port#name                 (bare; treated as https)
+    //
+    // The +https / +quic transport hint is informational — sing-box's naive
+    // outbound takes no `network` field and negotiates transport itself, so
+    // we just lift credentials + host + sni and emit a minimal naive
+    // outbound. Runtime needs libcronet next to sing-box → Windows + Linux
+    // only; macOS gating happens at config-generation / UI time, not here
+    // (the parser stays platform-neutral so a mac user can still SEE the
+    // server in their list with an "unsupported on macOS" marker).
+
+    private static VlessServerEntry ParseNaive(string uri)
+    {
+        // Strip the scheme (naive / naive+https / naive+quic) up to "://" and
+        // swap in https:// so System.Uri can split userinfo/host/port/query.
+        var schemeEnd = uri.IndexOf("://", StringComparison.Ordinal);
+        if (schemeEnd < 0)
+            throw new FormatException("Invalid naive URI: missing scheme separator");
+        var fake = "https://" + uri.Substring(schemeEnd + 3);
+
+        if (!Uri.TryCreate(fake, UriKind.Absolute, out var parsed))
+            throw new FormatException("Invalid naive URI: cannot parse");
+
+        var userinfo = Uri.UnescapeDataString(parsed.UserInfo);
+        if (userinfo.Length == 0)
+            throw new FormatException("Invalid naive URI: user:password missing (expected naive+https://user:pass@host:port)");
+
+        // Split user:password on the FIRST colon. A passwordless form
+        // (just a username) is tolerated, mirroring the TUIC branch.
+        string username;
+        string password;
+        var colon = userinfo.IndexOf(':');
+        if (colon < 0)
+        {
+            username = userinfo;
+            password = string.Empty;
+        }
+        else
+        {
+            username = userinfo.Substring(0, colon);
+            password = userinfo.Substring(colon + 1);
+        }
+
+        var server = parsed.Host;
+        var port = parsed.Port > 0 ? parsed.Port : 443;
+        if (server.Length == 0)
+            throw new FormatException("Invalid naive URI: host missing");
+
+        var query = HttpUtility.ParseQueryString(parsed.Query);
+        var name = Uri.UnescapeDataString(parsed.Fragment.TrimStart('#'));
+
+        return new VlessServerEntry
+        {
+            Name = name.Length > 0 ? name : $"naive-{server}-{port}",
+            Protocol = "naive",
+            Server = server,
+            Port = port,
+            Username = username,
+            Password = password,
+            Tls = new VlessTlsConfig
+            {
+                Enabled = true,
+                ServerName = query["sni"] ?? server,
+                // naive rejects insecure/uTLS/alpn — nothing else to carry.
+            },
+        };
     }
 
     private static string Truncate(string s, int max)

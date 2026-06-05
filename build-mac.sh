@@ -54,10 +54,13 @@ cp "$REPO_DIR/VPNRouter.App/Assets/AppIcon.icns" "$APP/Contents/Resources/AppIco
 # claimed it was bundled but the build script wasn't actually doing it.
 #
 # Matching Linux workflow: we use GitHub's prebuilt upstream binary
-# (1.13.10) rather than the custom VPNRouter rebuild. Upstream includes
+# (1.13.13) rather than the custom VPNRouter rebuild. Upstream includes
 # with_clash_api + with_utls + with_quic by default, and eliminates
 # "custom build" as a variable when diagnosing issues.
-SINGBOX_VER="1.13.10"
+# NOTE: the macOS upstream archive ships NO libcronet (SagerNet builds no
+# Cronet for Darwin), so NaiveProxy is gated off on macOS in ServerUriParser;
+# the mac bundle is just the sing-box binary (nothing to "not cut" here).
+SINGBOX_VER="1.13.13"
 # macos-latest on Actions is arm64; local dev Macs are usually arm64
 # too. Fall back to amd64 if running on Intel for the rare local case.
 ARCH="arm64"
