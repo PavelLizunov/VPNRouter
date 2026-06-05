@@ -349,6 +349,14 @@ public partial class ServerViewModel : ViewModelBase
                         parts.Add(_originalEntry!.Plugin.ToLowerInvariant());
                     break;
 
+                case "naive":
+                    // v2.41.1-r4: NaiveProxy (HTTP/2 over TLS via Cronet). The
+                    // entry carries default Security="reality"/Transport="tcp"
+                    // fields that BuildNaiveOutbound ignores — without this case
+                    // the subtitle would mislabel naive as "tcp + reality".
+                    parts.Add("naive");
+                    break;
+
                 default:
                     // VLESS — keep original "transport + security" format
                     var transport = _originalEntry?.Transport?.Type;
