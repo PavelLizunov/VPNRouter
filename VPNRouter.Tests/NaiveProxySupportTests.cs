@@ -291,6 +291,108 @@ public class NaiveProxySupportTests
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
+    [Fact]
+    public void Generate_NaivePairedSameHost_TcpGroupExcludesHy2()
+    {
+        // r6 #2: when naive + its paired HY2 share ONE host, GetActiveServers()
+        // returns BOTH. The TCP "proxy" group must still be naive-only — never a
+        // urltest that includes HY2 (which sing-box could pick for TCP, defeating
+        // naive's DPI-evasion). This is the case the r5 test (different hosts) did
+        // NOT cover, so it passed while the bug was live.
+        var original = ServerUriParser.NaiveRuntimeAvailable;
+        try
+        {
+            ServerUriParser.NaiveRuntimeAvailable = true;
+            var settings = NaivePairedSameHostSettings();
+            Assert.Equal(2, VlessServersResolver.Resolve(settings).Count);
+            var config = ConfigGenerator.Generate(NaiveProfile(), System.Array.Empty<string>(), settings);
+
+            var proxy = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy");
+            var proxyUdp = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy-udp");
+            Assert.NotNull(proxy);
+            Assert.Equal("naive", proxy!.Type);          // TCP = naive ONLY (not a urltest with HY2)
+            Assert.NotNull(proxyUdp);
+            Assert.Equal("hysteria2", proxyUdp!.Type);   // UDP = the paired HY2
+            Assert.Contains(config.Route.Rules, r => r.Network == "udp" && r.Outbound == "proxy-udp");
+        }
+        finally { ServerUriParser.NaiveRuntimeAvailable = original; }
+    }
+
+    [Fact]
+    public void Generate_NaivePairedWithVless_KeepsNaiveTcpOnly()
+    {
+        // r6 #3: a VLESS sharing the naive's pair tag must NOT be auto-selected as
+        // the UDP sibling (only Hy2/TUIC qualify). Result: no proxy-udp, naive
+        // stays TCP-only, and the QUIC reject rule remains (not wrongly skipped).
+        var original = ServerUriParser.NaiveRuntimeAvailable;
+        try
+        {
+            ServerUriParser.NaiveRuntimeAvailable = true;
+            var settings = NaivePairedWithVlessSettings();
+            VlessServersResolver.Resolve(settings);
+            var config = ConfigGenerator.Generate(NaiveProfile(), System.Array.Empty<string>(), settings);
+
+            var proxy = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy");
+            Assert.NotNull(proxy);
+            Assert.Equal("naive", proxy!.Type);
+            Assert.DoesNotContain(config.Outbounds, o => o.Tag == "proxy-udp");
+            Assert.Contains(config.Route.Rules, r => r.Protocol == "quic" && r.Action == "reject");
+        }
+        finally { ServerUriParser.NaiveRuntimeAvailable = original; }
+    }
+
+    [Fact]
+    public void Generate_NaiveStaleTagNoSibling_KeepsNaiveTcpOnly()
+    {
+        // r6 #3: naive carries a pair tag but the pool has NO Hy2/TUIC sibling
+        // (cached sub before a refresh). No proxy-udp; QUIC reject remains.
+        var original = ServerUriParser.NaiveRuntimeAvailable;
+        try
+        {
+            ServerUriParser.NaiveRuntimeAvailable = true;
+            var settings = NaiveAloneWithTagSettings();
+            VlessServersResolver.Resolve(settings);
+            var config = ConfigGenerator.Generate(NaiveProfile(), System.Array.Empty<string>(), settings);
+
+            Assert.DoesNotContain(config.Outbounds, o => o.Tag == "proxy-udp");
+            Assert.Contains(config.Route.Rules, r => r.Protocol == "quic" && r.Action == "reject");
+        }
+        finally { ServerUriParser.NaiveRuntimeAvailable = original; }
+    }
+
+    // r6 #2: naive + HY2 on the SAME host (pair=cdn) — GetActiveServers() returns both.
+    private static AppSettings NaivePairedSameHostSettings()
+    {
+        var s = NaivePairedSettings();
+        s.App.Subscriptions[0].Servers[1].Server = "cdn.example.com"; // HY2 onto the naive's host
+        s.App.Subscriptions[0].Servers[1].Tls = new VlessTlsConfig { Enabled = true, ServerName = "cdn.example.com", Insecure = true };
+        return s;
+    }
+
+    // r6 #3: naive (active) + a VLESS sharing pair=cdn on a different host.
+    private static AppSettings NaivePairedWithVlessSettings()
+    {
+        var s = NaivePairedSettings();
+        s.App.BlockQuicOnTcpProxy = true;
+        var sib = s.App.Subscriptions[0].Servers[1];
+        sib.Name = "Latvia VLESS";
+        sib.Protocol = "vless";
+        sib.Server = "9.9.9.9";
+        sib.Flow = "xtls-rprx-vision";
+        sib.PairGroup = "cdn";
+        return s;
+    }
+
+    // r6 #3: naive carries a pair tag but no sibling exists in the pool.
+    private static AppSettings NaiveAloneWithTagSettings()
+    {
+        var s = NaivePairedSettings();
+        s.App.BlockQuicOnTcpProxy = true;
+        s.App.Subscriptions[0].Servers.RemoveAt(1);              // drop the HY2 sibling
+        s.App.Subscriptions[0].Servers[0].PairGroup = "cdn";    // naive keeps its (now-stale) tag
+        return s;
+    }
+
     private static Profile NaiveProfile() => new()
     {
         Name = "T",

@@ -1077,7 +1077,15 @@ public static class ConfigGenerator
         var udpSibling = FindNaiveUdpSibling(servers, settings.Vless.Servers);
         if (udpSibling != null)
         {
-            AddOutboundGroup(outbounds, servers, "proxy", "vless");                                          // naive → TCP/all
+            // r6 #2: the TCP "proxy" group must contain ONLY naive/TCP entries —
+            // never the UDP sibling. GetActiveServers() returns every same-host
+            // entry, so when naive and its paired HY2 share one host the sibling
+            // lands in `servers` too; left in, sing-box's urltest could pick HY2
+            // for TCP and defeat the whole point of naive (its DPI-evasion).
+            // Exclude by identity — the base-name fallback may return a pool entry
+            // that isn't in `servers`, in which case this filter is a no-op.
+            var tcpServers = servers.Where(s => !ReferenceEquals(s, udpSibling)).ToList();
+            AddOutboundGroup(outbounds, tcpServers, "proxy", "vless");                                          // naive → TCP/all
             AddOutboundGroup(outbounds, new List<VlessServerEntry> { udpSibling }, "proxy-udp", "vless-udp"); // sibling → UDP
             hasUdpProxy = true;
         }
@@ -1155,7 +1163,19 @@ public static class ConfigGenerator
     private static bool IsNaiveServer(VlessServerEntry s) =>
         "naive".Equals(s?.Protocol, StringComparison.OrdinalIgnoreCase);
 
-    // Prefer Hysteria2 / TUIC (QUIC-native, best for voice) over VLESS / Shadowsocks.
+    // r6 #3: a naive UDP sibling MUST be a QUIC-native carrier (Hysteria2/TUIC).
+    // Pre-r6 the ranker fell through (`_ => 3`) and still returned VLESS / SS /
+    // unknown via FirstOrDefault, so a base-name collision (an unrelated VLESS
+    // sharing the naive's base name) could be auto-paired as the UDP carrier —
+    // setting hasUdpProxy=true, skipping the QUIC reject rule, and routing UDP to
+    // an outbound that may not carry it. Gate the input to UDP-capable protocols;
+    // when none match, PreferUdpServer returns null and the caller keeps the safe
+    // TCP-only path (QUIC stays rejected on a TCP-only proxy).
+    private static bool IsUdpCapableSibling(VlessServerEntry s) =>
+        (s?.Protocol ?? "").ToLowerInvariant() is "hysteria2" or "hy2" or "tuic";
+
+    // Among UDP-capable siblings, prefer Hysteria2 / TUIC. The vless/_ switch arms
+    // are unreachable now (IsUdpCapableSibling gates the input) but kept harmless.
     private static VlessServerEntry? PreferUdpServer(IEnumerable<VlessServerEntry> candidates)
     {
         static int Rank(VlessServerEntry s) => (s.Protocol ?? "").ToLowerInvariant() switch
@@ -1165,7 +1185,7 @@ public static class ConfigGenerator
             "vless"     => 2,
             _           => 3,
         };
-        return candidates.OrderBy(Rank).FirstOrDefault();
+        return candidates.Where(IsUdpCapableSibling).OrderBy(Rank).FirstOrDefault();
     }
 
     // Strip the protocol token from a server display name so co-located entries
