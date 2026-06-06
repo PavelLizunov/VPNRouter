@@ -97,4 +97,34 @@ public class ServerViewModelSubtitleTests
         ServerViewModel.RefreshUdpSiblingFlags(new[] { naive });
         Assert.Equal("naive", naive.HostSubtitle);
     }
+
+    [Fact]
+    public void RefreshUdpSiblingFlags_TracksManualAddAndRemove()
+    {
+        // r9 follow-up #1: subtitle stays correct when the user adds/removes
+        // servers manually (the CollectionChanged hook re-runs RefreshUdpSiblingFlags).
+        var naive = new ServerViewModel(new VlessServerEntry
+        {
+            Name = "Latvia NAIVE", Protocol = "naive", Server = "cdn.example.com",
+            Port = 443, Security = "reality", PairGroup = "cdn",
+            Tls = new VlessTlsConfig { Enabled = true, ServerName = "cdn.example.com" },
+            Transport = new VlessTransportConfig { Type = "tcp" },
+        });
+        var list = new System.Collections.Generic.List<ServerViewModel> { naive };
+
+        ServerViewModel.RefreshUdpSiblingFlags(list);
+        Assert.Equal("naive", naive.HostSubtitle);            // no sibling yet
+
+        var hy2 = new ServerViewModel(new VlessServerEntry
+        {
+            Name = "Latvia HY2", Protocol = "hysteria2", Server = "213.155.15.93", Port = 8444, PairGroup = "cdn",
+        });
+        list.Add(hy2);
+        ServerViewModel.RefreshUdpSiblingFlags(list);
+        Assert.Equal("naive + hy2", naive.HostSubtitle);      // sibling added
+
+        list.Remove(hy2);
+        ServerViewModel.RefreshUdpSiblingFlags(list);
+        Assert.Equal("naive", naive.HostSubtitle);            // sibling removed
+    }
 }

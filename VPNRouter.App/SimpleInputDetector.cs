@@ -36,9 +36,9 @@ public static class SimpleInputDetector
         if (string.IsNullOrWhiteSpace(input)) return SmpInputKind.Invalid;
         var trimmed = input.Trim();
 
-        // v2.30.1-r3: any supported share-link scheme — VLESS, Hysteria2,
-        // TUIC, Shadowsocks. Subscriber/Simple paths both delegate the
-        // actual parsing to ServerUriParser.
+        // v2.30.1-r3 / r8: any supported share-link scheme — VLESS, Hysteria2,
+        // TUIC, Shadowsocks, NaiveProxy (Windows/Linux runtime). Subscriber/Simple
+        // paths both delegate the actual parsing to ServerUriParser.
         if (trimmed.StartsWith("vless://",       StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("hysteria2://",   StringComparison.OrdinalIgnoreCase) ||
             trimmed.StartsWith("hy2://",         StringComparison.OrdinalIgnoreCase) ||

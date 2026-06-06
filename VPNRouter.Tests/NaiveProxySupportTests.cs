@@ -464,6 +464,49 @@ public class NaiveProxySupportTests
         finally { ServerUriParser.NaiveRuntimeAvailable = original; }
     }
 
+    [Fact]
+    public void NaivePairing_SameEntry_MatchesValueEqualClone()
+    {
+        // r9 follow-up #2: stable identity (not ReferenceEquals) so the TCP-group
+        // exclusion survives a future path that hands back a cloned sibling.
+        var a = new VlessServerEntry { Protocol = "hysteria2", Server = "1.2.3.4", Port = 8444, Password = "hp", PairGroup = "cdn" };
+        var clone = new VlessServerEntry { Protocol = "hysteria2", Server = "1.2.3.4", Port = 8444, Password = "hp", PairGroup = "cdn" };
+        var diffPwd = new VlessServerEntry { Protocol = "hysteria2", Server = "1.2.3.4", Port = 8444, Password = "OTHER", PairGroup = "cdn" };
+        Assert.True(NaivePairing.SameEntry(a, clone));
+        Assert.True(NaivePairing.SameEntry(a, a));
+        Assert.False(NaivePairing.SameEntry(a, diffPwd));
+        Assert.False(NaivePairing.SameEntry(a, null));
+    }
+
+    [Fact]
+    public void NaivePairing_BaseNameFallback_AmbiguousReturnsNull()
+    {
+        // r9 follow-up #3: two same-base-name HY2 with no pair= tag → ambiguous → no pairing.
+        var naive = new VlessServerEntry { Protocol = "naive", Name = "Latvia NAIVE", Server = "cdn.example.com", Port = 443 };
+        var hy2a = new VlessServerEntry { Protocol = "hysteria2", Name = "Latvia HY2", Server = "a.example.com", Port = 8444 };
+        var hy2b = new VlessServerEntry { Protocol = "hysteria2", Name = "Latvia HY2", Server = "b.example.com", Port = 8444 };
+        Assert.Null(NaivePairing.FindUdpSibling(naive, new[] { naive, hy2a, hy2b }));
+    }
+
+    [Fact]
+    public void NaivePairing_BaseNameFallback_SingleCandidatePairs()
+    {
+        // r9 follow-up #3: exactly one same-base-name HY2 → fallback pairing allowed.
+        var naive = new VlessServerEntry { Protocol = "naive", Name = "Latvia NAIVE", Server = "cdn.example.com", Port = 443 };
+        var hy2 = new VlessServerEntry { Protocol = "hysteria2", Name = "Latvia HY2", Server = "a.example.com", Port = 8444 };
+        Assert.Same(hy2, NaivePairing.FindUdpSibling(naive, new[] { naive, hy2 }));
+    }
+
+    [Fact]
+    public void NaivePairing_PairTag_WinsOverAmbiguousBaseName()
+    {
+        // r9 follow-up #3: explicit pair= stays authoritative even when base-name is ambiguous.
+        var naive = new VlessServerEntry { Protocol = "naive", Name = "Latvia NAIVE", Server = "cdn.example.com", Port = 443, PairGroup = "cdn" };
+        var tagged = new VlessServerEntry { Protocol = "hysteria2", Name = "Latvia HY2", Server = "a.example.com", Port = 8444, PairGroup = "cdn" };
+        var untagged = new VlessServerEntry { Protocol = "hysteria2", Name = "Latvia HY2", Server = "b.example.com", Port = 8444 };
+        Assert.Same(tagged, NaivePairing.FindUdpSibling(naive, new[] { naive, tagged, untagged }));
+    }
+
     private static Profile NaiveProfile() => new()
     {
         Name = "T",

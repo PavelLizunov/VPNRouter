@@ -3692,6 +3692,10 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         Servers.CollectionChanged += (_, _) =>
         {
             if (_isLoadingUI) return;
+            // r9 follow-up #1: keep the "naive + hy2" subtitle in sync on manual
+            // Add/Remove/row-delete/free-config-apply — not just load + sub rebuild.
+            try { ServerViewModel.RefreshUdpSiblingFlags(Servers); }
+            catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto RefreshUdpSiblingFlags on Servers change failed"); }
             try { MarkOrphanServers(); }
             catch (Exception ex) { _logger?.Warning(ex, "[VM] Auto MarkOrphanServers on Servers change failed"); }
         };

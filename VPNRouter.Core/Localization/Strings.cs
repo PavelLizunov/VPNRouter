@@ -1759,11 +1759,11 @@ public static class Strings
     // v2.17.1 skeleton — section labels + control captions
     public static string SmpInputLabel => Ru ? "Конфиг VPN" : "VPN config";
     public static string SmpInputWatermark => Ru
-        ? "vless://... или https://..."
-        : "vless://... or https://...";
+        ? "vless:// / naive://... или https://..."
+        : "vless:// / naive://... or https://...";
     public static string SmpInputHint => Ru
-        ? "Приму vless://-ссылку или URL подписки (http/https)."
-        : "Accepts a vless:// link or a subscription URL (http/https).";
+        ? "Приму ссылку сервера (vless / hysteria2 / tuic / ss / naive) или URL подписки (http/https)."
+        : "Accepts a server link (vless / hysteria2 / tuic / ss / naive) or a subscription URL (http/https).";
     public static string SmpTunnelModeLabel => Ru ? "Что идёт через VPN" : "Route through VPN";
     public static string SmpSplitOption => Ru
         ? "Выбранные приложения"

@@ -31,6 +31,24 @@ public static class NaivePairing
         (s?.Protocol ?? "").ToLowerInvariant() is "hysteria2" or "hy2" or "tuic";
 
     /// <summary>
+    /// r9 follow-up #2: stable identity match (NOT ReferenceEquals) so a caller
+    /// can exclude the UDP sibling from the TCP group even if a future
+    /// resolver/aggregation path hands back a cloned (equal-but-not-same) entry.
+    /// Compares the connection identity: protocol + endpoint + auth + pair tag.
+    /// </summary>
+    public static bool SameEntry(VlessServerEntry? a, VlessServerEntry? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+        return string.Equals(a.Protocol, b.Protocol, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(a.Server, b.Server, StringComparison.OrdinalIgnoreCase)
+            && a.Port == b.Port
+            && string.Equals(a.PairGroup ?? "", b.PairGroup ?? "", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(a.Uuid ?? "", b.Uuid ?? "", StringComparison.Ordinal)
+            && string.Equals(a.Password ?? "", b.Password ?? "", StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Find the UDP-capable sibling for a naive server, in priority order:
     /// <list type="number">
     /// <item><see cref="VlessServerEntry.PairGroup"/> tag match (bulletproof —
@@ -55,14 +73,18 @@ public static class NaivePairing
             if (pick != null) return pick;
         }
 
-        // 2. Base-name fallback.
+        // 2. Base-name fallback — ONLY when unambiguous (r9 follow-up #3). Matching
+        // by stripped display name can pair the WRONG node if two share a base name
+        // and neither has a pair= tag; the UDP exit IP would then differ from the
+        // naive TCP path. So require EXACTLY ONE UDP-capable candidate — otherwise
+        // don't guess (keep naive TCP-only). PairGroup above stays authoritative.
         var baseName = StripProtocolToken(naive.Name);
         if (!string.IsNullOrWhiteSpace(baseName))
         {
-            var byName = list.Where(s => !IsNaive(s)
-                && string.Equals(StripProtocolToken(s.Name), baseName, StringComparison.OrdinalIgnoreCase));
-            var pick = PreferUdp(byName);
-            if (pick != null) return pick;
+            var byName = list.Where(s => !IsNaive(s) && IsUdpCapable(s)
+                && string.Equals(StripProtocolToken(s.Name), baseName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (byName.Count == 1) return byName[0];
         }
         return null;
     }

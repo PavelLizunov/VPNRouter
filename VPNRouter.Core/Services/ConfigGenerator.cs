@@ -1084,7 +1084,7 @@ public static class ConfigGenerator
             // for TCP and defeat the whole point of naive (its DPI-evasion).
             // Exclude by identity — the base-name fallback may return a pool entry
             // that isn't in `servers`, in which case this filter is a no-op.
-            var tcpServers = servers.Where(s => !ReferenceEquals(s, udpSibling)).ToList();
+            var tcpServers = servers.Where(s => !NaivePairing.SameEntry(s, udpSibling)).ToList(); // r9 #2: stable identity, not ReferenceEquals
             AddOutboundGroup(outbounds, tcpServers, "proxy", "vless");                                          // naive → TCP/all
             AddOutboundGroup(outbounds, new List<VlessServerEntry> { udpSibling }, "proxy-udp", "vless-udp"); // sibling → UDP
             hasUdpProxy = true;
