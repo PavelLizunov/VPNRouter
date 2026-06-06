@@ -1075,19 +1075,28 @@ public static class ConfigGenerator
         // hasUdpProxy route machinery then sends UDP → proxy-udp and skips the
         // QUIC block. Same physical node → same exit IP, no leak.
         var udpSibling = FindNaiveUdpSibling(servers, settings.Vless.Servers);
-        if (udpSibling != null)
+        // r6 #2: the TCP "proxy" group must contain ONLY naive/TCP entries —
+        // never the UDP sibling. GetActiveServers() returns every same-host
+        // entry, so when naive and its paired HY2 share one host the sibling
+        // lands in `servers` too; left in, sing-box's urltest could pick HY2
+        // for TCP and defeat the whole point of naive (its DPI-evasion).
+        // r10 (Codex follow-up #1): build the TCP group from naive entries ONLY,
+        // so the UDP sibling AND any other same-host VLESS/HY2/TUIC are excluded
+        // by construction — not just the one chosen sibling. Otherwise a same-host
+        // non-naive server could be picked for TCP and defeat naive's DPI-evasion.
+        var tcpNaiveServers = udpSibling != null
+            ? servers.Where(NaivePairing.IsNaive).ToList()
+            : new List<VlessServerEntry>();
+        // r11 defensive guard: take the naive-pairing branch ONLY when the TCP
+        // group is actually non-empty. Today this is always true when udpSibling
+        // != null (both derive from `servers`, so a sibling implies a naive entry
+        // is present), but if a future GetActiveServers() change ever broke that
+        // invariant, emitting "proxy-udp" with no "proxy" would leave route rules
+        // referencing a missing outbound -> silent leak. Falling through to the
+        // standard split guarantees a "proxy" outbound is always built.
+        if (udpSibling != null && tcpNaiveServers.Count > 0)
         {
-            // r6 #2: the TCP "proxy" group must contain ONLY naive/TCP entries —
-            // never the UDP sibling. GetActiveServers() returns every same-host
-            // entry, so when naive and its paired HY2 share one host the sibling
-            // lands in `servers` too; left in, sing-box's urltest could pick HY2
-            // for TCP and defeat the whole point of naive (its DPI-evasion).
-            // r10 (Codex follow-up #1): build the TCP group from naive entries ONLY,
-            // so the UDP sibling AND any other same-host VLESS/HY2/TUIC are excluded
-            // by construction — not just the one chosen sibling. Otherwise a same-host
-            // non-naive server could be picked for TCP and defeat naive's DPI-evasion.
-            var tcpServers = servers.Where(NaivePairing.IsNaive).ToList();
-            AddOutboundGroup(outbounds, tcpServers, "proxy", "vless");                                          // naive → TCP/all
+            AddOutboundGroup(outbounds, tcpNaiveServers, "proxy", "vless");                                     // naive → TCP/all
             AddOutboundGroup(outbounds, new List<VlessServerEntry> { udpSibling }, "proxy-udp", "vless-udp"); // sibling → UDP
             hasUdpProxy = true;
         }
