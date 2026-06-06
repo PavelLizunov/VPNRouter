@@ -40,6 +40,16 @@ public partial class ServerViewModel : ViewModelBase
     /// </summary>
     [ObservableProperty] private bool _isOrphanFromSubscription;
 
+    /// <summary>
+    /// r8 #6: true when a real UDP-capable sibling (Hysteria2 / TUIC) exists for
+    /// this naive entry — set by <see cref="RefreshUdpSiblingFlags"/> via the same
+    /// <see cref="VPNRouter.Core.Services.NaivePairing"/> logic config-gen uses, so
+    /// the subtitle shows "naive + hy2" only when the generator would actually pair.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HostSubtitle))]
+    private bool _hasUdpSibling;
+
     // ── Connectivity test state (v2.15.2) ────────────────────────────────
 
     /// <summary>Last TCP+TLS probe outcome. Unknown = never tested.</summary>
@@ -350,13 +360,13 @@ public partial class ServerViewModel : ViewModelBase
                     break;
 
                 case "naive":
-                    // v2.41.1-r4: NaiveProxy (HTTP/2 over TLS via Cronet). The
-                    // entry carries default Security="reality"/Transport="tcp"
-                    // fields that BuildNaiveOutbound ignores — without this case
-                    // the subtitle would mislabel naive as "tcp + reality".
-                    // r5: a co-located UDP sibling (same PairGroup tag) makes UDP
-                    // work via the paired HY2, so surface it as "naive + hy2".
-                    parts.Add(string.IsNullOrWhiteSpace(_originalEntry?.PairGroup) ? "naive" : "naive + hy2");
+                    // r8 #6: "naive + hy2" ONLY when a real UDP-capable sibling
+                    // actually exists (HasUdpSibling, set by RefreshUdpSiblingFlags
+                    // via the same NaivePairing logic config-gen uses) — so the
+                    // label can't claim a pairing the generator wouldn't make.
+                    // Else "naive" (was mislabeled "tcp + reality" pre-r4: naive
+                    // carries default Security/Transport fields the outbound ignores).
+                    parts.Add(HasUdpSibling ? "naive + hy2" : "naive");
                     break;
 
                 default:
@@ -372,5 +382,22 @@ public partial class ServerViewModel : ViewModelBase
 
             return string.Join(" + ", parts);
         }
+    }
+
+    /// <summary>
+    /// r8 #6: set <see cref="HasUdpSibling"/> on every naive VM in the collection
+    /// by asking <see cref="VPNRouter.Core.Services.NaivePairing"/> (the same logic
+    /// ConfigGenerator uses) whether a UDP-capable sibling actually exists in the
+    /// pool. Call after (re)building a Servers / SubscriptionServers collection.
+    /// </summary>
+    public static void RefreshUdpSiblingFlags(System.Collections.Generic.IEnumerable<ServerViewModel> vms)
+    {
+        var list = new System.Collections.Generic.List<ServerViewModel>(vms);
+        var pool = new System.Collections.Generic.List<VlessServerEntry>(list.Count);
+        foreach (var v in list)
+            if (v._originalEntry != null) pool.Add(v._originalEntry);
+        foreach (var v in list)
+            if (VPNRouter.Core.Services.NaivePairing.IsNaive(v._originalEntry))
+                v.HasUdpSibling = VPNRouter.Core.Services.NaivePairing.FindUdpSibling(v._originalEntry!, pool) != null;
     }
 }

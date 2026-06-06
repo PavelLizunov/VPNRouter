@@ -62,22 +62,39 @@ public class ServerViewModelSubtitleTests
     }
 
     [Fact]
-    public void HostSubtitle_NaiveWithPairGroup_ShowsNaivePlusHy2()
+    public void HostSubtitle_NaiveWithRealHy2Sibling_ShowsNaivePlusHy2()
     {
-        // r5: a naive server tagged with a PairGroup has a co-located HY2 sibling
-        // that carries its UDP, so the subtitle advertises "naive + hy2".
-        var entry = new VlessServerEntry
+        // r8 #6: "naive + hy2" requires a REAL UDP-capable sibling in the
+        // collection (set via RefreshUdpSiblingFlags), not just a PairGroup tag.
+        var naive = new ServerViewModel(new VlessServerEntry
         {
-            Name = "Latvia NAIVE",
-            Protocol = "naive",
-            Server = "cdn.example.com",
-            Port = 443,
-            Security = "reality",
-            PairGroup = "cdn",
+            Name = "Latvia NAIVE", Protocol = "naive", Server = "cdn.example.com",
+            Port = 443, Security = "reality", PairGroup = "cdn",
             Tls = new VlessTlsConfig { Enabled = true, ServerName = "cdn.example.com" },
             Transport = new VlessTransportConfig { Type = "tcp" },
-        };
-        var vm = new ServerViewModel(entry);
-        Assert.Equal("naive + hy2", vm.HostSubtitle);
+        });
+        var hy2 = new ServerViewModel(new VlessServerEntry
+        {
+            Name = "Latvia HY2", Protocol = "hysteria2", Server = "213.155.15.93",
+            Port = 8444, PairGroup = "cdn",
+        });
+        ServerViewModel.RefreshUdpSiblingFlags(new[] { naive, hy2 });
+        Assert.Equal("naive + hy2", naive.HostSubtitle);
+    }
+
+    [Fact]
+    public void HostSubtitle_NaivePairTagButNoSibling_ShowsNaiveOnly()
+    {
+        // r8 #6: a PairGroup tag with NO matching Hy2/TUIC sibling must NOT claim
+        // "naive + hy2" — the label can't promise a pairing config-gen won't make.
+        var naive = new ServerViewModel(new VlessServerEntry
+        {
+            Name = "Latvia NAIVE", Protocol = "naive", Server = "cdn.example.com",
+            Port = 443, Security = "reality", PairGroup = "cdn",
+            Tls = new VlessTlsConfig { Enabled = true, ServerName = "cdn.example.com" },
+            Transport = new VlessTransportConfig { Type = "tcp" },
+        });
+        ServerViewModel.RefreshUdpSiblingFlags(new[] { naive });
+        Assert.Equal("naive", naive.HostSubtitle);
     }
 }

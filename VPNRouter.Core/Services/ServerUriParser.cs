@@ -46,7 +46,7 @@ public static class ServerUriParser
     /// <para>Settable so tests can simulate an unsupported platform on a
     /// Windows test host (reset it in a finally).</para>
     /// </summary>
-    internal static bool NaiveRuntimeAvailable { get; set; } =
+    public static bool NaiveRuntimeAvailable { get; internal set; } =
         OperatingSystem.IsWindows() || OperatingSystem.IsLinux();
 
     /// <summary>Parse any supported share-link URI. Throws <see cref="FormatException"/> on unsupported scheme or malformed input.</summary>

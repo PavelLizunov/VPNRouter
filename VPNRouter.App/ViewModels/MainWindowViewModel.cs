@@ -3224,6 +3224,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
                 entry.Name?.Equals(_settings.Vless.ActiveServer, StringComparison.OrdinalIgnoreCase) == true)
                 activeServer = vm;
         }
+        ServerViewModel.RefreshUdpSiblingFlags(Servers); // r8 #6: "naive + hy2" only on a real sibling
         SelectedServer = activeServer ?? Servers.FirstOrDefault();
 
         // v2.32 (r10, F-C) — flag legacy vless.servers entries that aren't

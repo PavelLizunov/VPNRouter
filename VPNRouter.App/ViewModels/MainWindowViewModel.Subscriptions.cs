@@ -57,6 +57,7 @@ public partial class MainWindowViewModel
             foreach (var serverEntry in sub.UnderlyingEntry.Servers)
                 SubscriptionServers.Add(new ServerViewModel(serverEntry));
         }
+        ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers); // r8 #6
 
         // Restore selection if possible
         SelectedSubscriptionServer = SubscriptionServers
@@ -215,6 +216,7 @@ public partial class MainWindowViewModel
             SubscriptionServers.Clear();
             foreach (var entry in entries)
                 SubscriptionServers.Add(new ServerViewModel(entry));
+            ServerViewModel.RefreshUdpSiblingFlags(SubscriptionServers); // r8 #6
 
             // Select first server as active
             SelectedSubscriptionServer = SubscriptionServers.FirstOrDefault();

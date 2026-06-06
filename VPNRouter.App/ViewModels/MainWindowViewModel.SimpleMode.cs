@@ -410,8 +410,8 @@ public partial class MainWindowViewModel
             else
             {
                 SmpErrorText = IsRussian
-                    ? "Вставь ссылку (vless:// / hysteria2:// / tuic:// / ss://) или URL подписки (http:// / https://)."
-                    : "Paste a server link (vless:// / hysteria2:// / tuic:// / ss://) or a subscription URL (http:// / https://).";
+                    ? "Вставь ссылку (vless:// / hysteria2:// / tuic:// / ss:// / naive://) или URL подписки (http:// / https://)."
+                    : "Paste a server link (vless:// / hysteria2:// / tuic:// / ss:// / naive://) or a subscription URL (http:// / https://).";
                 return;
             }
         }
@@ -466,6 +466,18 @@ public partial class MainWindowViewModel
     {
         try
         {
+            // r8 #4: NaiveProxy needs libcronet (Windows/Linux). On a platform
+            // without it, say so clearly instead of letting the parser throw and
+            // blaming a generic "invalid link".
+            if (uri.StartsWith("naive", StringComparison.OrdinalIgnoreCase) &&
+                !ServerUriParser.NaiveRuntimeAvailable)
+            {
+                SmpErrorText = IsRussian
+                    ? "NaiveProxy работает только на Windows и Linux (нужен libcronet)."
+                    : "NaiveProxy works only on Windows and Linux (needs libcronet).";
+                return false;
+            }
+
             // v2.30.1-r3: dispatch by scheme (vless / hysteria2 / hy2 / tuic / ss).
             var entry = ServerUriParser.Parse(uri);
 
@@ -502,8 +514,8 @@ public partial class MainWindowViewModel
         {
             _logger.Warning(ex, "[Simple] Server URI parse failed");
             SmpErrorText = IsRussian
-                ? "Некорректная ссылка. Поддерживаются vless:// / hysteria2:// / tuic:// / ss://, должна заканчиваться '#имя'."
-                : "Invalid server link. Supported: vless:// / hysteria2:// / tuic:// / ss://, must end with '#name'.";
+                ? "Некорректная ссылка. Поддерживаются vless:// / hysteria2:// / tuic:// / ss:// / naive://, должна заканчиваться '#имя'."
+                : "Invalid server link. Supported: vless:// / hysteria2:// / tuic:// / ss:// / naive://, must end with '#name'.";
             return false;
         }
     }

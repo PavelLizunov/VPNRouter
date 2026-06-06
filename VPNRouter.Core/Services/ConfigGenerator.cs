@@ -1136,68 +1136,11 @@ public static class ConfigGenerator
     private static VlessServerEntry? FindNaiveUdpSibling(
         List<VlessServerEntry> activeServers, List<VlessServerEntry> pool)
     {
-        var naive = activeServers.FirstOrDefault(IsNaiveServer);
-        if (naive == null || pool == null) return null;
-
-        // 1. PairGroup tag (bulletproof).
-        if (!string.IsNullOrWhiteSpace(naive.PairGroup))
-        {
-            var byTag = pool.Where(s => !IsNaiveServer(s)
-                && string.Equals(s.PairGroup, naive.PairGroup, StringComparison.OrdinalIgnoreCase));
-            var pick = PreferUdpServer(byTag);
-            if (pick != null) return pick;
-        }
-
-        // 2. Base-name fallback (pre-tag transition / cached subs).
-        var naiveBase = StripProtocolToken(naive.Name);
-        if (!string.IsNullOrWhiteSpace(naiveBase))
-        {
-            var byName = pool.Where(s => !IsNaiveServer(s)
-                && string.Equals(StripProtocolToken(s.Name), naiveBase, StringComparison.OrdinalIgnoreCase));
-            var pick = PreferUdpServer(byName);
-            if (pick != null) return pick;
-        }
-        return null;
-    }
-
-    private static bool IsNaiveServer(VlessServerEntry s) =>
-        "naive".Equals(s?.Protocol, StringComparison.OrdinalIgnoreCase);
-
-    // r6 #3: a naive UDP sibling MUST be a QUIC-native carrier (Hysteria2/TUIC).
-    // Pre-r6 the ranker fell through (`_ => 3`) and still returned VLESS / SS /
-    // unknown via FirstOrDefault, so a base-name collision (an unrelated VLESS
-    // sharing the naive's base name) could be auto-paired as the UDP carrier —
-    // setting hasUdpProxy=true, skipping the QUIC reject rule, and routing UDP to
-    // an outbound that may not carry it. Gate the input to UDP-capable protocols;
-    // when none match, PreferUdpServer returns null and the caller keeps the safe
-    // TCP-only path (QUIC stays rejected on a TCP-only proxy).
-    private static bool IsUdpCapableSibling(VlessServerEntry s) =>
-        (s?.Protocol ?? "").ToLowerInvariant() is "hysteria2" or "hy2" or "tuic";
-
-    // Among UDP-capable siblings, prefer Hysteria2 / TUIC. The vless/_ switch arms
-    // are unreachable now (IsUdpCapableSibling gates the input) but kept harmless.
-    private static VlessServerEntry? PreferUdpServer(IEnumerable<VlessServerEntry> candidates)
-    {
-        static int Rank(VlessServerEntry s) => (s.Protocol ?? "").ToLowerInvariant() switch
-        {
-            "hysteria2" => 0,
-            "tuic"      => 1,
-            "vless"     => 2,
-            _           => 3,
-        };
-        return candidates.Where(IsUdpCapableSibling).OrderBy(Rank).FirstOrDefault();
-    }
-
-    // Strip the protocol token from a server display name so co-located entries
-    // pair: "Latvia NAIVE ~main-brat" and "Latvia HY2 ~main-brat" both reduce to
-    // "Latvia ~main-brat".
-    private static string StripProtocolToken(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name)) return string.Empty;
-        var tokens = new[] { "naive", "hysteria2", "hy2", "tuic", "shadowsocks", "ss", "vless" };
-        var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Where(w => !tokens.Contains(w.ToLowerInvariant()));
-        return string.Join(" ", words).Trim();
+        // r8 #6: pairing logic lives in NaivePairing so config-gen and the UI
+        // ("naive + hy2" label) share ONE source of truth — the label can never
+        // claim a pairing the generator wouldn't make.
+        var naive = activeServers.FirstOrDefault(NaivePairing.IsNaive);
+        return naive == null ? null : NaivePairing.FindUdpSibling(naive, pool);
     }
 
     /// <summary>

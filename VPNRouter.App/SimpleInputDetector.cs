@@ -39,11 +39,16 @@ public static class SimpleInputDetector
         // v2.30.1-r3: any supported share-link scheme — VLESS, Hysteria2,
         // TUIC, Shadowsocks. Subscriber/Simple paths both delegate the
         // actual parsing to ServerUriParser.
-        if (trimmed.StartsWith("vless://",     StringComparison.OrdinalIgnoreCase) ||
-            trimmed.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.StartsWith("hy2://",       StringComparison.OrdinalIgnoreCase) ||
-            trimmed.StartsWith("tuic://",      StringComparison.OrdinalIgnoreCase) ||
-            trimmed.StartsWith("ss://",        StringComparison.OrdinalIgnoreCase))
+        if (trimmed.StartsWith("vless://",       StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("hysteria2://",   StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("hy2://",         StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("tuic://",        StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("ss://",          StringComparison.OrdinalIgnoreCase) ||
+            // r8 #4: NaiveProxy share-links (Win/Linux runtime; platform-gated at
+            // apply time so the parser doesn't blame an "invalid link" on macOS).
+            trimmed.StartsWith("naive://",       StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("naive+https://", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("naive+quic://",  StringComparison.OrdinalIgnoreCase))
             return SmpInputKind.ServerUri;
 
         if (trimmed.StartsWith("http://",  StringComparison.OrdinalIgnoreCase) ||
