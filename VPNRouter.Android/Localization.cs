@@ -529,6 +529,7 @@ internal static class Localization
     public static string SmpQrSubscriptionEmpty => global::VPNRouter.Core.Localization.Strings.SmpQrSubscriptionEmpty;
     public static string SmpQrSubscriptionFailed => global::VPNRouter.Core.Localization.Strings.SmpQrSubscriptionFailed;
     public static string SmpQrUnsupportedScheme => global::VPNRouter.Core.Localization.Strings.SmpQrUnsupportedScheme;
+    public static string SmpQrNaiveUnsupportedAndroid => global::VPNRouter.Core.Localization.Strings.SmpQrNaiveUnsupportedAndroid;
     // v2.32.3 (2026-05-17) — placeholder credentials rejection / migration banner.
     public static string PlaceholderCredentialRejected => global::VPNRouter.Core.Localization.Strings.PlaceholderCredentialRejected;
     public static string PlaceholderSubscriptionDropped => global::VPNRouter.Core.Localization.Strings.PlaceholderSubscriptionDropped;

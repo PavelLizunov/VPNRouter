@@ -1867,6 +1867,9 @@ public static class Strings
     public static string SmpQrUnsupportedScheme => Ru
         ? "QR не содержит vless:// или подписку"
         : "QR doesn't contain vless:// or a subscription URL";
+    public static string SmpQrNaiveUnsupportedAndroid => Ru
+        ? "NaiveProxy не поддерживается на Android"
+        : "NaiveProxy is not supported on Android";
 
     // v2.32.3 (2026-05-17) — placeholder credentials rejection toasts.
     // Triggered when the user scans / pastes / subscribes to a vless URL

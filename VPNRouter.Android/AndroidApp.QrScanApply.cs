@@ -57,13 +57,24 @@ public partial class AndroidApp
         var trimmed = scanned.Trim();
         var lowered = trimmed.ToLowerInvariant();
 
+        // r10 (Codex #4): NaiveProxy needs libcronet (Windows/Linux) — unsupported
+        // on Android. Say so explicitly instead of a generic "unsupported scheme".
+        if (lowered.StartsWith("naive://") ||
+            lowered.StartsWith("naive+https://") ||
+            lowered.StartsWith("naive+quic://"))
+        {
+            ShowMenuFeedback(Localization.SmpQrNaiveUnsupportedAndroid);
+            return;
+        }
+
+        // r10 (Codex #4): dropped ssr:// / vmess:// — the shared core parser doesn't
+        // support them, so they used to pass this gate then fail in ServerUriParser.
+        // Now they fall through to the unsupported-scheme message below.
         if (lowered.StartsWith("vless://") ||
             lowered.StartsWith("hy2://") ||
             lowered.StartsWith("hysteria2://") ||
             lowered.StartsWith("tuic://") ||
-            lowered.StartsWith("ss://") ||
-            lowered.StartsWith("ssr://") ||
-            lowered.StartsWith("vmess://"))
+            lowered.StartsWith("ss://"))
         {
             ApplyScannedServerUri(trimmed);
             return;

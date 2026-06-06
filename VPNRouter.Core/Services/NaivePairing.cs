@@ -31,24 +31,6 @@ public static class NaivePairing
         (s?.Protocol ?? "").ToLowerInvariant() is "hysteria2" or "hy2" or "tuic";
 
     /// <summary>
-    /// r9 follow-up #2: stable identity match (NOT ReferenceEquals) so a caller
-    /// can exclude the UDP sibling from the TCP group even if a future
-    /// resolver/aggregation path hands back a cloned (equal-but-not-same) entry.
-    /// Compares the connection identity: protocol + endpoint + auth + pair tag.
-    /// </summary>
-    public static bool SameEntry(VlessServerEntry? a, VlessServerEntry? b)
-    {
-        if (ReferenceEquals(a, b)) return true;
-        if (a is null || b is null) return false;
-        return string.Equals(a.Protocol, b.Protocol, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(a.Server, b.Server, StringComparison.OrdinalIgnoreCase)
-            && a.Port == b.Port
-            && string.Equals(a.PairGroup ?? "", b.PairGroup ?? "", StringComparison.OrdinalIgnoreCase)
-            && string.Equals(a.Uuid ?? "", b.Uuid ?? "", StringComparison.Ordinal)
-            && string.Equals(a.Password ?? "", b.Password ?? "", StringComparison.Ordinal);
-    }
-
-    /// <summary>
     /// Find the UDP-capable sibling for a naive server, in priority order:
     /// <list type="number">
     /// <item><see cref="VlessServerEntry.PairGroup"/> tag match (bulletproof —

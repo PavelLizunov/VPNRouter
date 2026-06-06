@@ -465,17 +465,45 @@ public class NaiveProxySupportTests
     }
 
     [Fact]
-    public void NaivePairing_SameEntry_MatchesValueEqualClone()
+    public void Generate_NaiveSameHostWithExtraVless_TcpGroupIsNaiveOnly()
     {
-        // r9 follow-up #2: stable identity (not ReferenceEquals) so the TCP-group
-        // exclusion survives a future path that hands back a cloned sibling.
-        var a = new VlessServerEntry { Protocol = "hysteria2", Server = "1.2.3.4", Port = 8444, Password = "hp", PairGroup = "cdn" };
-        var clone = new VlessServerEntry { Protocol = "hysteria2", Server = "1.2.3.4", Port = 8444, Password = "hp", PairGroup = "cdn" };
-        var diffPwd = new VlessServerEntry { Protocol = "hysteria2", Server = "1.2.3.4", Port = 8444, Password = "OTHER", PairGroup = "cdn" };
-        Assert.True(NaivePairing.SameEntry(a, clone));
-        Assert.True(NaivePairing.SameEntry(a, a));
-        Assert.False(NaivePairing.SameEntry(a, diffPwd));
-        Assert.False(NaivePairing.SameEntry(a, null));
+        // r10 (Codex #1): naive + paired HY2 + an extra same-host VLESS all in the
+        // active list → the TCP "proxy" group must be naive-ONLY (not a urltest that
+        // includes the VLESS, which sing-box could otherwise pick for TCP).
+        var original = ServerUriParser.NaiveRuntimeAvailable;
+        try
+        {
+            ServerUriParser.NaiveRuntimeAvailable = true;
+            var settings = NaiveSameHostTripleSettings();
+            VlessServersResolver.Resolve(settings);
+            var config = ConfigGenerator.Generate(NaiveProfile(), System.Array.Empty<string>(), settings);
+            var proxy = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy");
+            var proxyUdp = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy-udp");
+            Assert.NotNull(proxy);
+            Assert.Equal("naive", proxy!.Type);          // naive-only, not urltest-with-vless
+            Assert.NotNull(proxyUdp);
+            Assert.Equal("hysteria2", proxyUdp!.Type);
+        }
+        finally { ServerUriParser.NaiveRuntimeAvailable = original; }
+    }
+
+    [Fact]
+    public void Generate_Hy2AliasProtocol_BuildsHysteria2Outbound()
+    {
+        // r10 (Codex #2): a server stored as protocol "hy2" must build a hysteria2
+        // outbound, not fall through to VLESS.
+        var settings = NaiveSettings();
+        var s = settings.App.Subscriptions[0].Servers[0];
+        s.Protocol = "hy2";
+        s.Server = "1.2.3.4";
+        s.Port = 8444;
+        s.Password = "hp";
+        s.Tls = new VlessTlsConfig { Enabled = true, ServerName = "1.2.3.4", Insecure = true };
+        VlessServersResolver.Resolve(settings);
+        var config = ConfigGenerator.Generate(NaiveProfile(), System.Array.Empty<string>(), settings);
+        var proxy = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy");
+        Assert.NotNull(proxy);
+        Assert.Equal("hysteria2", proxy!.Type);
     }
 
     [Fact]
@@ -505,6 +533,19 @@ public class NaiveProxySupportTests
         var tagged = new VlessServerEntry { Protocol = "hysteria2", Name = "Latvia HY2", Server = "a.example.com", Port = 8444, PairGroup = "cdn" };
         var untagged = new VlessServerEntry { Protocol = "hysteria2", Name = "Latvia HY2", Server = "b.example.com", Port = 8444 };
         Assert.Same(tagged, NaivePairing.FindUdpSibling(naive, new[] { naive, tagged, untagged }));
+    }
+
+    // r10 #1: naive + HY2 + VLESS all on the SAME host; active = naive.
+    private static AppSettings NaiveSameHostTripleSettings()
+    {
+        var s = NaivePairedSameHostSettings(); // naive + HY2 both cdn.example.com, pair=cdn
+        s.App.Subscriptions[0].Servers.Add(new VlessServerEntry
+        {
+            Name = "Latvia VLESS", Protocol = "vless", Server = "cdn.example.com", Port = 8443,
+            Uuid = "u", Flow = "xtls-rprx-vision", Security = "reality",
+            Reality = new VlessRealityConfig { Enabled = true, PublicKey = "k", ServerName = "www.microsoft.com" },
+        });
+        return s;
     }
 
     private static Profile NaiveProfile() => new()

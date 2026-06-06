@@ -1082,9 +1082,11 @@ public static class ConfigGenerator
             // entry, so when naive and its paired HY2 share one host the sibling
             // lands in `servers` too; left in, sing-box's urltest could pick HY2
             // for TCP and defeat the whole point of naive (its DPI-evasion).
-            // Exclude by identity — the base-name fallback may return a pool entry
-            // that isn't in `servers`, in which case this filter is a no-op.
-            var tcpServers = servers.Where(s => !NaivePairing.SameEntry(s, udpSibling)).ToList(); // r9 #2: stable identity, not ReferenceEquals
+            // r10 (Codex follow-up #1): build the TCP group from naive entries ONLY,
+            // so the UDP sibling AND any other same-host VLESS/HY2/TUIC are excluded
+            // by construction — not just the one chosen sibling. Otherwise a same-host
+            // non-naive server could be picked for TCP and defeat naive's DPI-evasion.
+            var tcpServers = servers.Where(NaivePairing.IsNaive).ToList();
             AddOutboundGroup(outbounds, tcpServers, "proxy", "vless");                                          // naive → TCP/all
             AddOutboundGroup(outbounds, new List<VlessServerEntry> { udpSibling }, "proxy-udp", "vless-udp"); // sibling → UDP
             hasUdpProxy = true;
@@ -1201,6 +1203,7 @@ public static class ConfigGenerator
         return protocol switch
         {
             "hysteria2"   => BuildHysteria2Outbound(entry, tag),
+            "hy2"         => BuildHysteria2Outbound(entry, tag),   // r10 (Codex #2): hy2 alias parity with VlessDeepVerifier
             "tuic"        => BuildTuicOutbound(entry, tag),
             "shadowsocks" => BuildShadowsocksOutbound(entry, tag),
             "ss"          => BuildShadowsocksOutbound(entry, tag),
