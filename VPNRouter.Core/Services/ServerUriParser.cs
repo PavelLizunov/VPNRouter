@@ -209,7 +209,11 @@ public static class ServerUriParser
             {
                 Enabled = true,
                 ServerName = query["sni"] ?? server,
-                Insecure = query["insecure"] == "1",
+                // Accept the same insecure spellings as TUIC: insecure=1,
+                // allowInsecure=1 (Clash forks), allow_insecure=true (spec).
+                Insecure = query["insecure"] == "1"
+                        || query["allowInsecure"] == "1"
+                        || string.Equals(query["allow_insecure"], "true", StringComparison.OrdinalIgnoreCase),
             },
         };
 
@@ -394,8 +398,8 @@ public static class ServerUriParser
     //   naive+quic://user:pass@host:port#name            (HTTP/3 over QUIC)
     //   naive://user:pass@host:port#name                 (bare; treated as https)
     //
-    // The +https / +quic transport hint is informational — sing-box's naive
-    // outbound takes no `network` field and negotiates transport itself, so
+    // r7 #1: the +quic hint selects HTTP/3 over QUIC (stored as NaiveQuic, emitted
+    // as the outbound's `quic` boolean — sing-box's naive has no `network` field), so
     // we just lift credentials + host + sni and emit a minimal naive
     // outbound. Runtime needs libcronet next to sing-box → Windows + Linux
     // only; macOS gating happens at config-generation / UI time, not here
@@ -451,6 +455,7 @@ public static class ServerUriParser
             Username = username,
             Password = password,
             PairGroup = query["pair"] ?? string.Empty, // r5: UDP-sibling pairing tag
+            NaiveQuic = uri.StartsWith("naive+quic://", StringComparison.OrdinalIgnoreCase), // r7 #1: HTTP/3 over QUIC
             Tls = new VlessTlsConfig
             {
                 Enabled = true,

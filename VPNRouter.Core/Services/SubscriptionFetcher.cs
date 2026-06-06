@@ -252,7 +252,7 @@ public static class SubscriptionFetcher
         var deduped = new List<VlessServerEntry>(result.Count);
         foreach (var e in result)
         {
-            var key = $"{e.Server}:{e.Port}:{e.Uuid}:{e.Flow}:{e.Username}";
+            var key = $"{e.Server}:{e.Port}:{e.Uuid}:{e.Flow}:{e.Username}:{e.Password}";
             if (seen.Add(key)) deduped.Add(e);
         }
         if (deduped.Count < result.Count)

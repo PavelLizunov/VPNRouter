@@ -169,6 +169,21 @@ public sealed class VlessDeepVerifier
             return DeepVerifyResult.Failed("sing-box binary missing");
         }
 
+        // r7 #5: naive needs libcronet next to sing-box (Windows/Linux only). The
+        // parser refuses naive on Cronet-less platforms, but a carried-over
+        // settings.yaml could still hand us one — fail honestly instead of a
+        // misleading generic error. On Win/Linux, colocate libcronet next to the
+        // (maybe never-launched-yet) sing-box so the spawn below can dlopen it.
+        if ("naive".Equals(entry.Protocol, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!ServerUriParser.NaiveRuntimeAvailable)
+            {
+                _logger.Warning("[VlessDeepVerifier] {Name}: naive unsupported on this platform (needs libcronet)", label);
+                return DeepVerifyResult.Failed("naive needs libcronet (Windows/Linux only)");
+            }
+            SingBoxManager.TryColocateCronet(_singBoxPath, AppContext.BaseDirectory, _logger);
+        }
+
         var socksPort = FindFreePort();
         var clashPort = FindFreePort();
         string? tmpConfigPath = null;
@@ -296,6 +311,7 @@ public sealed class VlessDeepVerifier
             "tuic"        => BuildTuicOutbound(s),
             "shadowsocks" => BuildShadowsocksOutbound(s),
             "ss"          => BuildShadowsocksOutbound(s),
+            "naive"       => BuildNaiveOutbound(s),   // r7 #5: was falling to vless → false-fail for valid naive
             _             => BuildVlessOutbound(s),
         };
 
@@ -668,6 +684,31 @@ public sealed class VlessDeepVerifier
         if (!string.IsNullOrWhiteSpace(s.PluginOpts))
             outbound["plugin_opts"] = s.PluginOpts;
 
+        return outbound;
+    }
+
+    /// <summary>
+    /// r7 #5: NaiveProxy outbound (HTTP/2 CONNECT, or HTTP/3 when NaiveQuic).
+    /// Needs libcronet next to sing-box at runtime — VerifyAsync colocates it
+    /// before spawning. Mirrors <c>ConfigGenerator.BuildNaiveOutbound</c>.
+    /// </summary>
+    internal static JsonObject BuildNaiveOutbound(VlessServerEntry s)
+    {
+        var outbound = new JsonObject
+        {
+            ["type"] = "naive",
+            ["tag"] = "proxy",
+            ["server"] = s.Server,
+            ["server_port"] = s.Port,
+            ["username"] = s.Username ?? string.Empty,
+            ["password"] = s.Password ?? string.Empty,
+            ["tls"] = new JsonObject
+            {
+                ["enabled"] = true,
+                ["server_name"] = string.IsNullOrEmpty(s.Tls?.ServerName) ? s.Server : s.Tls!.ServerName,
+            },
+        };
+        if (s.NaiveQuic) outbound["quic"] = true;
         return outbound;
     }
 }

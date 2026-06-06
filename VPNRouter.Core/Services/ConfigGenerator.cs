@@ -1410,6 +1410,7 @@ public static class ConfigGenerator
             ServerPort     = entry.Port,
             Username       = entry.Username,
             Password       = entry.Password,
+            Quic           = entry.NaiveQuic ? true : (bool?)null, // r7 #1: HTTP/3 over QUIC
             Tls            = new TlsConfig
             {
                 Enabled    = true,

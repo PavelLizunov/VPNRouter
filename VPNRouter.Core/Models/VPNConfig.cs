@@ -310,6 +310,11 @@ public class SingBoxOutbound
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Username { get; set; }
 
+    /// <summary>r7 #1: NaiveProxy HTTP/3-over-QUIC transport (naive outbound only).</summary>
+    [JsonPropertyName("quic")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Quic { get; set; }
+
     /// <summary>Auth password — used by Hysteria2, TUIC, Shadowsocks, NaiveProxy outbounds.</summary>
     [JsonPropertyName("password")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

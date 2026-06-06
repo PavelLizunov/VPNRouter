@@ -993,6 +993,14 @@ public class VlessServerEntry
     /// </summary>
     [YamlMember(Alias = "pair")]
     public string PairGroup { get; set; } = string.Empty;
+
+    /// <summary>
+    /// r7 #1: NaiveProxy HTTP/3-over-QUIC transport. Set from a
+    /// <c>naive+quic://</c> share-link; emitted as the naive outbound's
+    /// <c>quic</c> boolean. False (default) = HTTP/2. Naive-only.
+    /// </summary>
+    [YamlMember(Alias = "naive_quic")]
+    public bool NaiveQuic { get; set; }
 }
 
 /// <summary>VLESS Reality settings (replaces TLS)</summary>

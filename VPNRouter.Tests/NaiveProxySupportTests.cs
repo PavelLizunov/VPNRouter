@@ -393,6 +393,77 @@ public class NaiveProxySupportTests
         return s;
     }
 
+    [Fact]
+    public void Naive_QuicScheme_SetsNaiveQuic()
+    {
+        // r7 #1: naive+quic:// → HTTP/3; naive+https:// / bare → HTTP/2.
+        Assert.True(ServerUriParser.Parse("naive+quic://u:p@cdn.example.com:443#Q").NaiveQuic);
+        Assert.False(ServerUriParser.Parse("naive+https://u:p@cdn.example.com:443#H").NaiveQuic);
+        Assert.False(ServerUriParser.Parse("naive://u:p@cdn.example.com:443#B").NaiveQuic);
+    }
+
+    [Fact]
+    public void Generate_NaiveQuic_EmitsQuicTrue()
+    {
+        // r7 #1: a naive server parsed from naive+quic:// emits quic=true on its outbound.
+        var original = ServerUriParser.NaiveRuntimeAvailable;
+        try
+        {
+            ServerUriParser.NaiveRuntimeAvailable = true;
+            var settings = NaiveSettings();
+            settings.App.Subscriptions[0].Servers[0].NaiveQuic = true;
+            VlessServersResolver.Resolve(settings);
+            var config = ConfigGenerator.Generate(NaiveProfile(), System.Array.Empty<string>(), settings);
+            var proxy = config.Outbounds.FirstOrDefault(o => o.Tag == "proxy");
+            Assert.NotNull(proxy);
+            Assert.Equal("naive", proxy!.Type);
+            Assert.True(proxy.Quic);
+        }
+        finally { ServerUriParser.NaiveRuntimeAvailable = original; }
+    }
+
+    [Fact]
+    public void DeepVerify_NaiveEntry_BuildsNaiveOutbound_NotVless()
+    {
+        // r7 #5: the deep verifier must emit a naive outbound (was falling through
+        // to BuildVlessOutbound → guaranteed false-fail for a valid naive server).
+        var entry = new VlessServerEntry
+        {
+            Name = "Latvia NAIVE", Protocol = "naive", Server = "cdn.example.com", Port = 443,
+            Username = "u", Password = "p", NaiveQuic = true,
+            Tls = new VlessTlsConfig { Enabled = true, ServerName = "cdn.example.com" },
+        };
+        var json = VlessDeepVerifier.BuildSingleOutboundConfig(entry, 11111, 22222);
+        Assert.Contains("\"naive\"", json);   // dispatched to BuildNaiveOutbound
+        Assert.Contains("\"quic\"", json);    // HTTP/3 carried into the verify config
+    }
+
+    [Fact]
+    public void Hysteria2_AllowInsecureVariants_ParseInsecureTrue()
+    {
+        // r7 (smaller): HY2 now accepts the same insecure spellings as TUIC.
+        Assert.True(ServerUriParser.Parse("hysteria2://pw@1.2.3.4:8444/?sni=x.com&insecure=1#A").Tls!.Insecure);
+        Assert.True(ServerUriParser.Parse("hysteria2://pw@1.2.3.4:8444/?sni=x.com&allowInsecure=1#B").Tls!.Insecure);
+        Assert.True(ServerUriParser.Parse("hysteria2://pw@1.2.3.4:8444/?sni=x.com&allow_insecure=true#C").Tls!.Insecure);
+        Assert.False(ServerUriParser.Parse("hysteria2://pw@1.2.3.4:8444/?sni=x.com#D").Tls!.Insecure);
+    }
+
+    [Fact]
+    public void ParseBody_NaiveSameUserDifferentPassword_NotCollapsed()
+    {
+        // r7 (smaller): dedup key now includes Password, so two naive creds that
+        // differ only by password survive instead of collapsing to one.
+        var original = ServerUriParser.NaiveRuntimeAvailable;
+        try
+        {
+            ServerUriParser.NaiveRuntimeAvailable = true;
+            var body = "naive+https://u:p1@h.example.com:443#A\nnaive+https://u:p2@h.example.com:443#B\n";
+            var list = SubscriptionFetcher.ParseBody(body, out _, null);
+            Assert.Equal(2, list.Count);
+        }
+        finally { ServerUriParser.NaiveRuntimeAvailable = original; }
+    }
+
     private static Profile NaiveProfile() => new()
     {
         Name = "T",
