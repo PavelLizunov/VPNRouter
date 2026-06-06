@@ -129,6 +129,32 @@ foreach ($dir in @($DistDir, $FdDir, $UpdateDir, $PackageDir)) {
     if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
 }
 
+# ── Prune stale release ZIPs from the repo root ──
+# DISK-FULL INCIDENT (v2.41.1 stable cut, 2026-06-06): every run drops the
+# install + update ZIPs (~100 MB/version) into the repo root and used to
+# leave them there forever. Across the v2.37.0 -> v2.41.1 cycle ~106 stale
+# ZIPs (~5.3 GB) piled up, filled the VM's C: drive, and Compress-Archive
+# died mid-cut with "There is not enough space on the disk". These root ZIPs
+# are gitignored (see .gitignore "VPNRouter-*.zip") and the canonical copies
+# live on the GitHub release, so old local ones are disposable. We prune
+# BEFORE building (not after) so the space is freed ahead of the
+# Compress-Archive writes that would otherwise hit a full disk. Each pruned
+# ZIP's .sha256 sidecar is removed alongside it so it never becomes an
+# orphan. Keep only the newest $KeepZipVersions versions (install + update).
+$KeepZipVersions = 3
+$staleRootZips = @(Get-ChildItem -Path $Root -Filter "VPNRouter-*.zip" -File -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -Skip ($KeepZipVersions * 2))
+foreach ($z in $staleRootZips) {
+    Remove-Item $z.FullName -Force -ErrorAction SilentlyContinue
+    $sidecar = "$($z.FullName).sha256"
+    if (Test-Path $sidecar) { Remove-Item $sidecar -Force -ErrorAction SilentlyContinue }
+    Write-Host "       Pruned stale ZIP: $($z.Name)" -ForegroundColor DarkGray
+}
+if ($staleRootZips.Count -gt 0) {
+    Write-Host "       Pruned $($staleRootZips.Count) stale root ZIP(s); kept newest $KeepZipVersions versions" -ForegroundColor Gray
+}
+
 # ── Publish all three self-contained to SAME dir (shared runtime) ──
 Write-Host "[2/9] Publishing VPNRouter.App (Avalonia, self-contained)..." -ForegroundColor Yellow
 dotnet publish "$Root\VPNRouter.App\VPNRouter.App.csproj" `
