@@ -352,6 +352,68 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         Assert.True(TunAdapterDiagnostics.IsNetAdapterModuleAvailable());
     }
 
+    // ─── Test 7: Alena CP-866 mojibake → latch via CommandNotFoundException ─
+
+    [Fact]
+    public async Task RemoveFails_Cp866MojibakeWithCommandNotFoundException_LatchesAndSkipsSecondSpawn()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        // Alena (2026-06-05, v2.41.0, Russian Windows): the proactive
+        // Get-Module probe reports the NetAdapter module AVAILABLE (manifest
+        // present), so TryRemoveAdapterAsync runs Remove-NetAdapter — but the
+        // cmdlet itself throws CommandNotFoundException. The human-readable
+        // stderr is CP-866 OEM mojibake of "не распознано" (renders as
+        // "­Ґ а бЇ®§­ ­®"), which matches NONE of the three localized-message
+        // substrings, so the BR-2 latch never set and EVERY connect re-spawned
+        // + re-logged the failed Remove-NetAdapter (2x/connect, accumulating).
+        //
+        // After the fix, the latch keys on the locale-INDEPENDENT
+        // "CommandNotFoundException" type name in the CategoryInfo line: the
+        // first failure latches, and the second call must short-circuit
+        // BEFORE spawning a second Remove-NetAdapter.
+        //
+        // The stderr below deliberately contains neither "is not recognized"
+        // nor the UTF-8 "не распознано" nor "nicht erkannt" — only the garbled
+        // message + the untranslated CommandNotFoundException CategoryInfo.
+        const string mojibakeStderr =
+            "Remove-NetAdapter : <CP-866 mojibake of the localized not-found message>\r\n" +
+            "+ ... Router-TUN' -ErrorAction SilentlyContinue | Remove-NetAdapter -Confir ...\r\n" +
+            "    + CategoryInfo          : ObjectNotFound: (Remove-NetAdapter:String) [], CommandNotFoundException\r\n" +
+            "    + FullyQualifiedErrorId : CommandNotFoundException";
+
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsRemoveNetAdapter,
+            new ProcessResult(
+                ExitCode: 1,
+                Stdout: "",
+                Stderr: mojibakeStderr,
+                Duration: TimeSpan.FromMilliseconds(10),
+                TimedOut: false));
+
+        // moduleAvailable: true mirrors Alena's machine — Get-Module finds the
+        // manifest, so the proactive fast-fail does NOT trigger and we reach
+        // the actual Remove-NetAdapter call.
+        await WithFakeAsync(fake, moduleAvailable: true, async () =>
+        {
+            var r1 = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
+                logger: null, adapterName: "VPNRouter-TUN",
+                context: "test.alena.mojibake.first");
+            Assert.False(r1);
+
+            var r2 = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
+                logger: null, adapterName: "VPNRouter-TUN",
+                context: "test.alena.mojibake.second");
+            Assert.False(r2);
+        });
+
+        // The latch must have fired on the first failure: exactly ONE
+        // Remove-NetAdapter spawn across both calls (the second short-circuits).
+        // Pre-fix this would be 2 — one noisy WRN per connect.
+        var removes = fake.RunCalls.Where(IsRemoveNetAdapter).ToList();
+        Assert.Single(removes);
+    }
+
     // ─── Serilog test sink ──────────────────────────────────────────────
 
     /// <summary>In-memory Serilog sink for capturing rendered log events.

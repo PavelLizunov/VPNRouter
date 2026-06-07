@@ -3,7 +3,8 @@
 **Date:** 2026-06-05
 **Reporter:** Alena (subscription tags `~alena_ruslan` / `~pyrojokk`), Windows 11 26100, v2.41.0 stable
 **Diag:** `Z:\VPNRouter-diagnostics-20260605-223449.zip` (captured 22:34, Connected=False)
-**Status:** triaged, NOT fixed — needs one clarifying question + product decision
+**Status:** RESOLVED 2026-06-07 (v2.41.2 maintenance) — see "## RESOLUTION" at bottom.
+Primary = not-a-bug (Fix A already shipped v2.29.0); only the log-noise D was a real defect, now fixed.
 
 ## Триггер (user words)
 "у меня фотошоп начал просить лицензию. я решила воспользоваться фаерволом и у
@@ -79,3 +80,42 @@
 ## Оценка
 A: ~S (UI warn). B: ~M (exclude UX already half-exists, needs discoverability +
 maybe preset). C/D: ~S each, low priority. Not ship-blocking; backlog.
+
+## RESOLUTION (2026-06-07)
+
+Re-checked against current code before touching anything — two corrections to
+the triage above:
+
+- **Fix A was already shipped (v2.29.0).** `ApplicationsPage.axaml` already shows
+  a full-tunnel banner (`AppsFullTunnelBanner`: «Активен Полный туннель — выбор
+  приложений игнорируется, весь трафик идёт через VPN.») with a one-click
+  «Переключить на Раздельный туннель» button, AND collapses the app list
+  (`IsVisible=IsSplitTunnel`) + dims the sidebar (BUG-36, v2.30.3). So the
+  "silent no-op UX trap" framing was wrong — the app already says this loudly.
+  The only gap is that this banner lives on the Advanced→Applications page; a
+  pure Simple-mode user who flips the «Весь трафик» radio doesn't visit it. But
+  the Simple radio itself («Выбранные приложения» vs «Весь трафик») is explicit.
+  → **Primary = not a bug.** Adobe relicense is inherent full-tunnel behaviour
+  (foreign exit IP); the "VPN died" half was her external firewall.
+
+- **D was a real defect — and the triage mischaracterised it.** It is NOT
+  "module missing" (the proactive `Get-Module NetAdapter -ListAvailable` probe
+  returns ≥1 on her machine — the manifest IS present). The cmdlet itself throws
+  `CommandNotFoundException`, and the CP-866 OEM stderr mojibake of «не
+  распознано» (`­Ґ а бЇ®§­ ­®`) defeated all three localized-message matches in
+  the BR-2 reactive latch → latch never set → every connect re-spawned
+  PowerShell and re-logged the multi-line `[WRN]` (2x/connect; her _003 log had
+  12 such lines across reconnects).
+  **Fix (TunAdapterDiagnostics.TryRemoveAdapterAsync):** latch on the
+  locale-INDEPENDENT `CommandNotFoundException` type name from the CategoryInfo
+  line (PowerShell never translates it). First failure latches → subsequent
+  calls short-circuit at Debug. +1 regression test
+  (`TunAdapterDiagnosticsNetAdapterAvailabilityTests.RemoveFails_Cp866MojibakeWithCommandNotFoundException`).
+
+- **B / C: not done.** B (exclude discoverability + Adobe-direct preset) left in
+  backlog — the existing banner + split mode already give her the fix. C
+  (sing-box exit -1) was a one-off, HealthMonitor recovered; watch only.
+
+- **Support answer relayed to Alena:** switch to Раздельный туннель (don't add
+  Photoshop to the list → it stays on her real IP); remove the external firewall
+  rule she added for Adobe — that's what killed the tunnel.

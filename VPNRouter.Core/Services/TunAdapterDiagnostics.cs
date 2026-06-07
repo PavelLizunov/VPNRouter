@@ -843,7 +843,21 @@ public static class TunAdapterDiagnostics
                 stderrText.IndexOf("is not recognized", StringComparison.OrdinalIgnoreCase) >= 0
                 || stderrText.IndexOf("не распознано", StringComparison.OrdinalIgnoreCase) >= 0
                 || stderrText.IndexOf("nicht erkannt", StringComparison.OrdinalIgnoreCase) >= 0
-                || stdoutText.IndexOf("is not recognized", StringComparison.OrdinalIgnoreCase) >= 0;
+                // Locale-INDEPENDENT signal (Alena, 2026-06-05): PowerShell emits
+                // the .NET exception type name in the CategoryInfo line WITHOUT
+                // translating it, even when the human-readable message is both
+                // localized AND mangled by CP-866 OEM mojibake. Her stderr read
+                // 'Remove-NetAdapter : €¬п "Remove-NetAdapter" ­Ґ а бЇ®§­ ­® ...'
+                // (garbled "не распознано") + 'CommandNotFoundException' in the
+                // CategoryInfo line. The three message-string matches above all
+                // missed the mojibake, so the latch never set and EVERY connect
+                // re-spawned PowerShell and re-logged this WRN (2x per connect,
+                // accumulating across reconnects). CommandNotFoundException is the
+                // robust signal — our script only invokes NetAdapter cmdlets, so
+                // a not-found here unambiguously means the module is unusable.
+                || stderrText.IndexOf("CommandNotFoundException", StringComparison.OrdinalIgnoreCase) >= 0
+                || stdoutText.IndexOf("is not recognized", StringComparison.OrdinalIgnoreCase) >= 0
+                || stdoutText.IndexOf("CommandNotFoundException", StringComparison.OrdinalIgnoreCase) >= 0;
             if (looksLikeCmdletMissing
                 && Interlocked.CompareExchange(ref s_removeNetAdapterMissing, 1, 0) == 0)
             {
