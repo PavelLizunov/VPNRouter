@@ -577,10 +577,28 @@ public class HealthMonitor : IDisposable
                     // regenerate + write-then-restart so the relaunch tracks the
                     // switched server and the two recovery paths (HealthMonitor +
                     // AutoFailover) converge instead of fighting.
-                    var freshScan = _scanner.ScanForProfile(_activeProfile);
-                    configJson = GenerateConfigJson(freshScan.ProcessNames);
-                    scan = freshScan;
-                    _singBox.ReloadConfigJson(configJson, forceRestart: true);
+                    try
+                    {
+                        var freshScan = _scanner.ScanForProfile(_activeProfile);
+                        configJson = GenerateConfigJson(freshScan.ProcessNames);
+                        scan = freshScan;
+                        _singBox.ReloadConfigJson(configJson, forceRestart: true);
+                    }
+                    catch (Exception regenEx)
+                    {
+                        // scout #3 #5: GenerateConfigJson can throw (e.g. the v2.28.2
+                        // empty-servers hard guard) if a concurrent settings mutation
+                        // left zero resolvable servers at this instant. The old
+                        // `_singBox.Restart()` could NOT fail this way — it relaunched
+                        // the last-good on-disk config regardless of settings state.
+                        // Fall back to that so a transient regen failure can't abort
+                        // recovery entirely (relaunch-stale beats no-relaunch; the
+                        // crash-path block rules stay enabled, so no leak).
+                        _logger.Warning(regenEx,
+                            "[HealthMonitor] Config regen before full restart failed — " +
+                            "falling back to relaunch of last-good on-disk config");
+                        _singBox.Restart();
+                    }
                 }
                 _lastScan = scan;
                 _lastFullRestart = DateTime.UtcNow;

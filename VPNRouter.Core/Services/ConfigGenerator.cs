@@ -1278,7 +1278,11 @@ public static class ConfigGenerator
             ServerPort     = entry.Port,
             Password       = entry.Password,
             Tls            = tls,
-            DomainResolver = "local-dns",
+            // 2026-06-08 (scout #2 #6): Hysteria2 dials its server over QUIC/UDP.
+            // In the naive+HY2 pairing it carries ALL the UDP, so on an IPv6-less
+            // host it hits the SAME "address not valid in its context" failure the
+            // naive fix targets. prefer_ipv4 = IPv4-first server resolution.
+            DomainResolver = new DomainResolverValue("local-dns", "prefer_ipv4"),
         };
 
         if (!string.IsNullOrEmpty(entry.ObfsType))
@@ -1317,7 +1321,9 @@ public static class ConfigGenerator
             CongestionControl = string.IsNullOrEmpty(entry.CongestionControl) ? "bbr" : entry.CongestionControl,
             UdpRelayMode      = string.IsNullOrEmpty(entry.UdpRelayMode) ? "native" : entry.UdpRelayMode,
             Tls               = tls,
-            DomainResolver    = "local-dns",
+            // 2026-06-08 (scout #2 #6): TUIC dials its server over QUIC/UDP — same
+            // IPv6-less-host hazard as Hysteria2/naive. prefer_ipv4 server resolution.
+            DomainResolver    = new DomainResolverValue("local-dns", "prefer_ipv4"),
         };
     }
 

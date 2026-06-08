@@ -224,9 +224,20 @@ public sealed class HealthMonitorTunOrphanRestartTests
             Assert.True(result,
                 "Cleanup returns true when there's nothing to do.");
 
-            // FakeProcessRunner.RunCalls is empty — the cleanup hook
-            // short-circuited on the false flag without invoking netsh.
-            Assert.Empty(tunFake.RunCalls);
+            // RunTunOrphanRecoveryCleanup short-circuits on the false flag, so
+            // it makes NO `netsh … admin=disabled` call — that's the contract
+            // under test. Assert the SPECIFIC netsh-disable absence rather than
+            // global emptiness: the `SignalExit` above schedules a fire-and-forget
+            // OnProcessExited crash-cleanup that can independently spawn
+            // Get-NetAdapter/pnputil probe calls on the shared TunAdapterDiagnostics
+            // Runner — unrelated to this hook and not a netsh disable. (Pre-2026-06-08
+            // the global Assert.Empty passed only by async-timing luck; the orphan
+            // removal rewrite made that race observable.)
+            var netshDisableCalls = tunFake.RunCalls
+                .Where(r => r.ExecutablePath == "netsh"
+                            && r.Arguments.Contains("admin=disabled"))
+                .ToList();
+            Assert.Empty(netshDisableCalls);
         }
         finally
         {

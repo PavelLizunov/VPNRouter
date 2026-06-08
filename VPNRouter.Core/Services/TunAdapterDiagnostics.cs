@@ -601,6 +601,13 @@ public static class TunAdapterDiagnostics
                 Arguments: new[]
                 {
                     "-NoProfile", "-NonInteractive", "-Command",
+                    // scout #1 #3 (2026-06-08): Import-Module explicitly so the probe
+                    // doesn't rely on command auto-loading — on GPO-hardened desktops
+                    // ($PSModuleAutoLoadingPreference=None) a bare `Get-Command
+                    // Get-NetAdapter` can false-negative, which would skip the orphan
+                    // removal and silently neuter the fix on the very machine class
+                    // this targets. Explicit import is locale- and policy-independent.
+                    "Import-Module NetAdapter -ErrorAction SilentlyContinue; " +
                     "if (Get-Command Get-NetAdapter -ErrorAction SilentlyContinue) { 1 } else { 0 }",
                 },
                 Timeout: TimeSpan.FromMilliseconds(5000))).GetAwaiter().GetResult();
