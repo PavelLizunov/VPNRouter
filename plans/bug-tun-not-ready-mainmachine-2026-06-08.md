@@ -98,3 +98,29 @@ ship a candidate → run → send fresh diagnostics → confirm orphan removal +
       in 1 cycle, not 7).
 - [ ] After any AutoFailover switch, UI server == running sing-box server.
 - [ ] naive+HY2 on IPv6-less host: no IPv6 UDP dial errors.
+
+## RESOLUTION (2026-06-08) — all three fixed on main
+
+- **#1 (14bd636):** phantom `Remove-NetAdapter` → `Get-NetAdapter` PnPDeviceID +
+  `pnputil /remove-device`. 51 TunAdapter/SingBox tests green. Mechanism verified
+  read-only on the dev VM; crash-loop relief needs main-machine confirmation.
+- **#3 (d2b87f7):** naive `prefer_ipv4` via the 1.13 `domain_resolver` object form
+  (the legacy top-level `domain_strategy` is FATAL in 1.13 — caught by the
+  sing-box-check test). `DomainResolver` became a `DomainResolverValue` (string OR
+  {server,strategy}) with byte-identical string output for the 5 existing sites.
+  44 naive + 63 config tests green.
+- **#2 (this commit):** HealthMonitor's full-restart fallback now RE-generates the
+  config from current settings immediately before relaunching
+  (`ReloadConfigJson(forceRestart:true)`) instead of relaunching the stale on-disk
+  config (`_singBox.Restart()`). Pavel's cascade: HealthMonitor regenerated at
+  10:27:03 (Germany), AutoFailover switched+persisted Finland at 10:27:05, the
+  10:27:06 restart resurrected the stale Germany config. Re-generating at restart
+  time makes both recovery paths converge on the switched server → runtime == UI.
+  16 HealthMonitor regression tests green. NOTE: this fixes the user-visible
+  symptom (server mismatch); a full restart-AUTHORITY mutex (so HealthMonitor +
+  AutoFailover can't both drive a restart at all) remains a larger follow-up
+  (task #194 stays open for that hardening) — but with both paths now converging
+  on the same server, the race is benign.
+
+Verification loop: ship v2.41.2-r1 → Pavel runs on the main machine → fresh
+diagnostics confirm (a) no crash loop, (b) UI server == runtime server.

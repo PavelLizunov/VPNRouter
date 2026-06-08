@@ -565,7 +565,22 @@ public class HealthMonitor : IDisposable
                 if (!hotReloaded)
                 {
                     _logger.Warning("[HealthMonitor] Hot-reload unavailable on restart attempt — performing full restart");
-                    _singBox.Restart();
+                    // #2 (2026-06-08, Pavel crash cascade): re-generate from the
+                    // CURRENT settings immediately before the full restart. The
+                    // configJson captured at the top of this continuation can be
+                    // seconds stale — a concurrent AutoFailover server-switch may
+                    // have persisted a NEW active server DURING the hot-reload
+                    // attempt + TUN-orphan cleanup window above. The old
+                    // `_singBox.Restart()` relaunched the on-disk config, which
+                    // resurrected the PRE-switch server (runtime = Germany while
+                    // UI/settings had already moved to Finland). Re-scan +
+                    // regenerate + write-then-restart so the relaunch tracks the
+                    // switched server and the two recovery paths (HealthMonitor +
+                    // AutoFailover) converge instead of fighting.
+                    var freshScan = _scanner.ScanForProfile(_activeProfile);
+                    configJson = GenerateConfigJson(freshScan.ProcessNames);
+                    scan = freshScan;
+                    _singBox.ReloadConfigJson(configJson, forceRestart: true);
                 }
                 _lastScan = scan;
                 _lastFullRestart = DateTime.UtcNow;
