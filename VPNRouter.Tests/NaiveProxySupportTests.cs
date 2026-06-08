@@ -154,6 +154,13 @@ public class NaiveProxySupportTests
             Assert.Null(proxy.Tls.Reality);
             Assert.Null(proxy.Tls.Utls);
             Assert.Null(proxy.Tls.Alpn);
+            // 2026-06-08 (Pavel "Latvia NAIVE" IPv6-less host): force IPv4-first
+            // server resolution via the 1.13 domain_resolver object form so
+            // naive_quic doesn't dial the server's AAAA and fail with "address
+            // not valid in its context".
+            Assert.NotNull(proxy.DomainResolver);
+            Assert.Equal("local-dns", proxy.DomainResolver!.Server);
+            Assert.Equal("prefer_ipv4", proxy.DomainResolver.Strategy);
         }
         finally { ServerUriParser.NaiveRuntimeAvailable = original; }
     }

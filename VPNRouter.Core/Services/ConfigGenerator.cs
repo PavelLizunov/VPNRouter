@@ -1371,7 +1371,15 @@ public static class ConfigGenerator
                 Enabled    = true,
                 ServerName = string.IsNullOrEmpty(entry.Tls?.ServerName) ? entry.Server : entry.Tls.ServerName,
             },
-            DomainResolver = "local-dns",
+            // 2026-06-08 (Pavel "Latvia NAIVE" run): force IPv4-first server
+            // resolution via the 1.13 domain_resolver object form. naive_quic
+            // dials the server over UDP/QUIC; on an IPv6-less host sing-box was
+            // picking the server's AAAA and failing with "open UDP connection to
+            // [2001:...]: address not valid in its context" (17x). prefer_ipv4
+            // tries the A record first, falling back to IPv6 only if there's no
+            // A — safe for IPv6-only servers too. (The legacy top-level
+            // domain_strategy outbound option is FATAL in sing-box 1.13.)
+            DomainResolver = new DomainResolverValue("local-dns", "prefer_ipv4"),
         };
     }
 

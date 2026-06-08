@@ -1,7 +1,79 @@
 #nullable enable
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace VPNRouter.Core.Models;
+
+/// <summary>
+/// A sing-box <c>domain_resolver</c> dial-field value. Serializes as a bare
+/// string (<c>"local-dns"</c>) when <see cref="Strategy"/> is null, or as the
+/// 1.13 object form (<c>{ "server": "local-dns", "strategy": "prefer_ipv4" }</c>)
+/// when a strategy is set. Implicitly constructible from a string so existing
+/// <c>DomainResolver = "local-dns"</c> call sites stay byte-identical.
+/// </summary>
+public sealed class DomainResolverValue
+{
+    public DomainResolverValue() { }
+    public DomainResolverValue(string server, string? strategy = null)
+    {
+        Server = server;
+        Strategy = strategy;
+    }
+
+    public string Server { get; set; } = "";
+    public string? Strategy { get; set; }
+
+    public static implicit operator DomainResolverValue(string server) => new(server);
+}
+
+/// <summary>
+/// Writes <see cref="DomainResolverValue"/> as a bare string (server only) or
+/// the object form (server + strategy). Reads either form back.
+/// </summary>
+public sealed class DomainResolverValueConverter : JsonConverter<DomainResolverValue>
+{
+    public override DomainResolverValue? Read(
+        ref Utf8JsonReader reader, System.Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null) return null;
+        if (reader.TokenType == JsonTokenType.String)
+            return new DomainResolverValue(reader.GetString() ?? "");
+        if (reader.TokenType == JsonTokenType.StartObject)
+        {
+            var v = new DomainResolverValue();
+            while (reader.Read())
+            {
+                if (reader.TokenType == JsonTokenType.EndObject) break;
+                if (reader.TokenType != JsonTokenType.PropertyName) continue;
+                var name = reader.GetString();
+                reader.Read();
+                if (string.Equals(name, "server", System.StringComparison.OrdinalIgnoreCase))
+                    v.Server = reader.GetString() ?? "";
+                else if (string.Equals(name, "strategy", System.StringComparison.OrdinalIgnoreCase))
+                    v.Strategy = reader.GetString();
+                else
+                    reader.Skip();
+            }
+            return v;
+        }
+        reader.Skip();
+        return null;
+    }
+
+    public override void Write(
+        Utf8JsonWriter writer, DomainResolverValue value, JsonSerializerOptions options)
+    {
+        if (string.IsNullOrEmpty(value.Strategy))
+        {
+            writer.WriteStringValue(value.Server);
+            return;
+        }
+        writer.WriteStartObject();
+        writer.WriteString("server", value.Server);
+        writer.WriteString("strategy", value.Strategy);
+        writer.WriteEndObject();
+    }
+}
 
 // ─── sing-box config root ───────────────────────────────────────────────────
 
@@ -233,9 +305,22 @@ public class SingBoxOutbound
     /// Suppresses "missing domain_resolver in dial fields" deprecation warning.
     /// Must reference a tag from dns.servers.
     /// </summary>
+    /// <summary>
+    /// sing-box dial field. Serializes as a bare string tag
+    /// (<c>"domain_resolver": "local-dns"</c>) when no IPv4/IPv6 strategy is
+    /// needed, or as the 1.13 object form
+    /// (<c>{ "server": "local-dns", "strategy": "prefer_ipv4" }</c>) when a
+    /// strategy is set. The legacy top-level <c>domain_strategy</c> outbound
+    /// option was REMOVED in sing-box 1.13 (FATAL unless
+    /// ENABLE_DEPRECATED_LEGACY_DOMAIN_STRATEGY_OPTIONS=true), so per-outbound
+    /// IPv4-preference must ride inside <c>domain_resolver</c>. An implicit
+    /// <c>string</c> conversion keeps the 5 existing <c>= "local-dns"</c> call
+    /// sites byte-identical (string form, strategy null).
+    /// </summary>
     [JsonPropertyName("domain_resolver")]
+    [JsonConverter(typeof(DomainResolverValueConverter))]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? DomainResolver { get; set; }
+    public DomainResolverValue? DomainResolver { get; set; }
 
     // ── TCP dial keepalive (v2.36 F4 fix — EOStārāTheia 2026-05-23) ──
     // sing-box 1.13 changed the default tcp_keep_alive INITIAL period
