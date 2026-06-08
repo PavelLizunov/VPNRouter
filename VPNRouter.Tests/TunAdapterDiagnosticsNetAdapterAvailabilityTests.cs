@@ -12,65 +12,53 @@ using Xunit;
 namespace VPNRouter.Tests;
 
 /// <summary>
-/// PinkuDani Fix #1 + #4 (2026-05-21) regression suite.
+/// TUN orphan-removal regression suite.
 ///
-/// <para><b>Trigger:</b> PinkuDani's log
-/// (<c>Z:\PinkuDani\vpnrouter20260521_002.log</c>) showed a Windows 10
-/// LTSC install missing the PowerShell <c>NetAdapter</c> module. Every
-/// <see cref="TunAdapterDiagnostics.TryRemoveAdapterAsync"/> call burned
-/// ~1.5-2 s before failing with CommandNotFoundException, 5 times per
-/// connect cycle — total cumulative delay caused the VM 30 s timeout
-/// to fire and force-stop a connecting VPN.</para>
+/// <para><b>2026-06-08 root-cause rewrite (Pavel main-machine crash loop,
+/// v2.41.1):</b> <c>Remove-NetAdapter</c> IS NOT A CMDLET
+/// (<c>Get-Command Remove-NetAdapter</c> → 0; the NetAdapter module exports
+/// only Get/Set/Enable/Disable/Rename/Restart). The old
+/// <c>Get-NetAdapter | Remove-NetAdapter</c> therefore ALWAYS threw
+/// CommandNotFoundException and fell through to netsh-disable — which never
+/// deletes the device record. The stale record made the next
+/// WintunCreateAdapter crash with "The device is not ready for use" /
+/// "Cannot create a file ... already exists" (7 crashes in one day on Pavel's
+/// main machine). The whole PinkuDani "module missing" framing + the Alena
+/// a20a047 CommandNotFoundException latch were treating the symptom of calling
+/// a phantom cmdlet.</para>
 ///
-/// <para>BR-2's reactive latch (Wave 39 follow-up, brat 2026-05-19)
-/// failed to catch this on Russian Windows because CP-866 OEM stderr
-/// mangled "не распознано" into "­Ґ а бЇ®§­ ­®" — the literal-string
-/// substring search never matched, latch stayed at 0, every callsite
-/// kept spawning PowerShell.</para>
-///
-/// <para><b>Fix:</b> proactive Lazy probe via <c>Get-Module NetAdapter
-/// -ListAvailable | Measure-Object | Select -ExpandProperty Count</c>.
-/// Locale-independent (parses an integer count, not an error string).
-/// Latched for the process lifetime. When unavailable, every
-/// <see cref="TunAdapterDiagnostics.TryRemoveAdapterAsync"/> returns
-/// false immediately and <see cref="TunAdapterDiagnostics.PreStartCleanupAsync"/>
-/// falls back to <see cref="TunAdapterDiagnostics.TryDisableAdapterViaNetshAsync"/>
-/// (Fix #4) so the wintun kernel handle is still released.</para>
+/// <para><b>Fix:</b> resolve the orphan's PnP InstanceId via the REAL
+/// <see cref="TunAdapterDiagnostics.TryRemoveAdapterAsync"/> → Get-NetAdapter
+/// -ExpandProperty PnPDeviceID, then delete the device record with the
+/// built-in <c>pnputil /remove-device</c> (plain, then /force retry). The
+/// availability probe is repointed from <c>Get-Module NetAdapter</c> to
+/// <c>Get-Command Get-NetAdapter</c>. Verified on the dev VM (read-only):
+/// Get-NetAdapter exposes PnPDeviceID and pnputil targets the same InstanceId.</para>
 ///
 /// <para>Tests assign a <see cref="FakeProcessRunner"/> to the static
-/// <see cref="TunAdapterDiagnostics.Runner"/> seam, exercise the
-/// availability + cache + fallback paths, assert observed behaviour.
-/// Runs cross-platform — Windows-only helpers silently skip on
-/// non-Windows so the test class itself stays portable.</para>
+/// <see cref="TunAdapterDiagnostics.Runner"/> seam and assert the shell-out
+/// shapes (Get-NetAdapter resolve + pnputil remove). Windows-only helpers
+/// silently skip on non-Windows so the class stays portable.</para>
 /// </summary>
 public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
 {
     // ─── helpers ────────────────────────────────────────────────────────
 
-    /// <summary>Convenience: build a FakeProcessRunner with reasonable
-    /// defaults (any unmocked netsh = empty success, any unmocked PS =
-    /// empty success). Tests override specific predicates above this.</summary>
     private static FakeProcessRunner NewRunner()
     {
         var fake = new FakeProcessRunner();
-        // Default: anything not specifically matched gets empty success.
         fake.OnRun(_ => true,
             new ProcessResult(0, "", "", TimeSpan.FromMilliseconds(5), false));
         return fake;
     }
 
-    /// <summary>Set up a fresh test environment: swap Runner, clear BR-2
-    /// latch, clear Lazy. <paramref name="moduleAvailable"/> dictates the
-    /// cached availability outcome (skips the real probe).</summary>
     private static async Task WithFakeAsync(
-        FakeProcessRunner fake,
-        bool moduleAvailable,
-        Func<Task> body)
+        FakeProcessRunner fake, bool removalAvailable, Func<Task> body)
     {
         var previous = TunAdapterDiagnostics.Runner;
         TunAdapterDiagnostics.Runner = fake;
         TunAdapterDiagnostics.ResetRemoveNetAdapterLatchForTests();
-        TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(moduleAvailable);
+        TunAdapterDiagnostics.SetNetAdapterModuleAvailableForTests(removalAvailable);
         try { await body(); }
         finally
         {
@@ -79,12 +67,7 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         }
     }
 
-    /// <summary>Like WithFakeAsync but does NOT pre-set the Lazy — used
-    /// by the "cache works" test which wants to observe a real Lazy
-    /// resolution against the fake's Get-Module match.</summary>
-    private static async Task WithFakeNoPresetAsync(
-        FakeProcessRunner fake,
-        Func<Task> body)
+    private static async Task WithFakeNoPresetAsync(FakeProcessRunner fake, Func<Task> body)
     {
         var previous = TunAdapterDiagnostics.Runner;
         TunAdapterDiagnostics.Runner = fake;
@@ -97,144 +80,149 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         }
     }
 
-    /// <summary>Identify a Get-Module probe request shape — used in
-    /// matchers and assertions to differentiate it from
-    /// Remove-NetAdapter calls (both spawn powershell.exe).</summary>
-    private static bool IsGetModuleProbe(ProcessRequest r)
-    {
-        return r.ExecutablePath == "powershell.exe"
-            && r.Arguments.Count == 4
-            && r.Arguments[0] == "-NoProfile"
-            && r.Arguments[1] == "-NonInteractive"
-            && r.Arguments[2] == "-Command"
-            && r.Arguments[3].Contains("Get-Module NetAdapter -ListAvailable");
-    }
+    /// <summary>The repointed availability probe: `Get-Command Get-NetAdapter`.</summary>
+    private static bool IsGetNetAdapterProbe(ProcessRequest r) =>
+        r.ExecutablePath == "powershell.exe"
+        && r.Arguments.Count == 4
+        && r.Arguments[3].Contains("Get-Command Get-NetAdapter");
 
-    /// <summary>Identify a Remove-NetAdapter call shape.</summary>
-    private static bool IsRemoveNetAdapter(ProcessRequest r)
-    {
-        return r.ExecutablePath == "powershell.exe"
-            && r.Arguments.Count == 4
-            && r.Arguments[3].Contains("Remove-NetAdapter");
-    }
+    /// <summary>Step 1: resolve InstanceId via Get-NetAdapter → PnPDeviceID.</summary>
+    private static bool IsGetNetAdapterResolve(ProcessRequest r) =>
+        r.ExecutablePath == "powershell.exe"
+        && r.Arguments.Count == 4
+        && r.Arguments[3].Contains("Get-NetAdapter -Name")
+        && r.Arguments[3].Contains("PnPDeviceID");
 
-    /// <summary>Identify a netsh disable call shape.</summary>
-    private static bool IsNetshDisable(ProcessRequest r)
-    {
-        return r.ExecutablePath == "netsh"
-            && r.Arguments.Contains("admin=disabled");
-    }
+    /// <summary>Step 2: pnputil /remove-device (plain, no /force).</summary>
+    private static bool IsPnpUtilRemovePlain(ProcessRequest r) =>
+        r.ExecutablePath == "pnputil.exe"
+        && r.Arguments.Contains("/remove-device")
+        && !r.Arguments.Contains("/force");
 
-    /// <summary>Identify a netsh enumeration call shape.</summary>
-    private static bool IsNetshEnumeration(ProcessRequest r)
-    {
-        return r.ExecutablePath == "netsh"
-            && r.Arguments.Count == 3
-            && r.Arguments[0] == "interface"
-            && r.Arguments[1] == "show"
-            && r.Arguments[2] == "interface";
-    }
+    /// <summary>pnputil /remove-device /force.</summary>
+    private static bool IsPnpUtilRemoveForce(ProcessRequest r) =>
+        r.ExecutablePath == "pnputil.exe"
+        && r.Arguments.Contains("/remove-device")
+        && r.Arguments.Contains("/force");
 
-    // ─── Test 1: module available → Remove-NetAdapter fires ─────────────
+    private static bool IsNetshDisable(ProcessRequest r) =>
+        r.ExecutablePath == "netsh" && r.Arguments.Contains("admin=disabled");
+
+    private static bool IsNetshEnumeration(ProcessRequest r) =>
+        r.ExecutablePath == "netsh"
+        && r.Arguments.Count == 3
+        && r.Arguments[0] == "interface" && r.Arguments[1] == "show" && r.Arguments[2] == "interface";
+
+    private static ProcessResult Ok(string stdout = "") =>
+        new ProcessResult(0, stdout, "", TimeSpan.FromMilliseconds(5), false);
+
+    // ─── Test 1: available + adapter exists → resolve then pnputil remove ──
 
     [Fact]
-    public async Task NetAdapterAvailable_TrueResult_TryRemoveCallsPowerShell()
+    public async Task Available_AdapterExists_ResolvesInstanceIdThenPnpUtilRemoves()
     {
         if (!OperatingSystem.IsWindows()) return;
 
-        // Module reported available via the test-only setter — the
-        // TryRemoveAdapterAsync call should spawn powershell.exe with the
-        // Remove-NetAdapter script. (We bypass the probe entirely via
-        // SetNetAdapterModuleAvailableForTests(true) so no Get-Module
-        // call appears in the run log.)
-        var fake = NewRunner();
-
-        await WithFakeAsync(fake, moduleAvailable: true, async () =>
-        {
-            var result = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                logger: null, adapterName: "VPNRouter-TUN",
-                context: "test.available.remove");
-            Assert.True(result); // fake returns exit 0
-        });
-
-        // Exactly one powershell.exe call, matching Remove-NetAdapter shape.
-        var psCalls = fake.RunCalls.Where(IsRemoveNetAdapter).ToList();
-        Assert.Single(psCalls);
-        Assert.Contains("'VPNRouter-TUN'", psCalls[0].Arguments[3]);
-    }
-
-    // ─── Test 2: module unavailable → Remove-NetAdapter NOT called ──────
-
-    [Fact]
-    public async Task NetAdapterAvailable_FalseResult_TryRemoveSkipsPowerShell()
-    {
-        if (!OperatingSystem.IsWindows()) return;
-
-        // Module reported unavailable → TryRemoveAdapterAsync should
-        // return false immediately without spawning any PowerShell.
-        var fake = NewRunner();
-
-        await WithFakeAsync(fake, moduleAvailable: false, async () =>
-        {
-            var result = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                logger: null, adapterName: "VPNRouter-TUN",
-                context: "test.unavailable.skip");
-            Assert.False(result);
-        });
-
-        // No Remove-NetAdapter PowerShell call should appear.
-        Assert.DoesNotContain(fake.RunCalls, IsRemoveNetAdapter);
-        // And no Get-Module probe either — we pre-set the Lazy via
-        // SetNetAdapterModuleAvailableForTests so the probe is skipped.
-        Assert.DoesNotContain(fake.RunCalls, IsGetModuleProbe);
-    }
-
-    // ─── Test 3: cache works across multiple calls ──────────────────────
-
-    [Fact]
-    public async Task NetAdapterAvailable_CachedAcrossCalls()
-    {
-        if (!OperatingSystem.IsWindows()) return;
-
-        // Don't pre-set the Lazy — let the fake's Get-Module match drive
-        // the real Lazy resolution. The probe should fire exactly once
-        // even though TryRemoveAdapterAsync is called 5 times.
+        const string instanceId = @"ROOT\NET\0001";
         var fake = new FakeProcessRunner();
-        fake.OnRun(IsGetModuleProbe,
-            new ProcessResult(0, "1\r\n", "", TimeSpan.FromMilliseconds(5), false));
-        fake.OnRun(IsRemoveNetAdapter,
-            new ProcessResult(0, "", "", TimeSpan.FromMilliseconds(5), false));
+        fake.OnRun(IsGetNetAdapterResolve, Ok(instanceId + "\r\n"));
+        fake.OnRun(IsPnpUtilRemovePlain, Ok());
+
+        await WithFakeAsync(fake, removalAvailable: true, async () =>
+        {
+            var ok = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
+                logger: null, adapterName: "VPNRouter-TUN", context: "test.remove");
+            Assert.True(ok);
+        });
+
+        // Exactly one Get-NetAdapter resolve, then one pnputil /remove-device
+        // carrying the resolved InstanceId. No phantom Remove-NetAdapter.
+        Assert.Single(fake.RunCalls.Where(IsGetNetAdapterResolve));
+        var pnp = fake.RunCalls.Where(IsPnpUtilRemovePlain).ToList();
+        Assert.Single(pnp);
+        Assert.Contains(instanceId, pnp[0].Arguments);
+        Assert.DoesNotContain(fake.RunCalls,
+            c => c.ExecutablePath == "powershell.exe" && c.Arguments.Any(a => a.Contains("Remove-NetAdapter")));
+    }
+
+    // ─── Test 2: adapter already gone (empty resolve) → idempotent, no pnputil ──
+
+    [Fact]
+    public async Task Available_AdapterGone_EmptyResolve_NoPnpUtil_ReturnsTrue()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsGetNetAdapterResolve, Ok("")); // no adapter → empty stdout
+
+        await WithFakeAsync(fake, removalAvailable: true, async () =>
+        {
+            var ok = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
+                logger: null, adapterName: "VPNRouter-TUN", context: "test.gone");
+            Assert.True(ok); // idempotent success — nothing to remove
+        });
+
+        Assert.DoesNotContain(fake.RunCalls, c => c.ExecutablePath == "pnputil.exe");
+    }
+
+    // ─── Test 3: pnputil plain refused → /force retry ──────────────────────
+
+    [Fact]
+    public async Task Available_PnpUtilPlainRefused_RetriesWithForce()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsGetNetAdapterResolve, Ok(@"ROOT\NET\0002" + "\r\n"));
+        // Order matters: register the /force matcher first so it wins for the
+        // force call; plain matcher returns a refusal exit.
+        fake.OnRun(IsPnpUtilRemoveForce, Ok());
+        fake.OnRun(IsPnpUtilRemovePlain,
+            new ProcessResult(1, "", "remove refused", TimeSpan.FromMilliseconds(5), false));
+
+        await WithFakeAsync(fake, removalAvailable: true, async () =>
+        {
+            var ok = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
+                logger: null, adapterName: "VPNRouter-TUN", context: "test.force");
+            Assert.True(ok);
+        });
+
+        Assert.Single(fake.RunCalls.Where(IsPnpUtilRemovePlain));
+        Assert.Single(fake.RunCalls.Where(IsPnpUtilRemoveForce));
+    }
+
+    // ─── Test 4: probe fires once across many calls ────────────────────────
+
+    [Fact]
+    public async Task Available_Probe_CachedAcrossCalls()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var fake = new FakeProcessRunner();
+        fake.OnRun(IsGetNetAdapterProbe, Ok("1\r\n"));
+        fake.OnRun(IsGetNetAdapterResolve, Ok("")); // adapter gone — keep it cheap
+        fake.OnRun(_ => true, Ok());
 
         await WithFakeNoPresetAsync(fake, async () =>
         {
             for (var i = 0; i < 5; i++)
-            {
                 _ = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                    logger: null, adapterName: "VPNRouter-TUN",
-                    context: $"test.cache.iter{i}");
-            }
+                    logger: null, adapterName: "VPNRouter-TUN", context: $"test.cache{i}");
         });
 
-        // Exactly one Get-Module probe should appear in the run log.
-        var probes = fake.RunCalls.Where(IsGetModuleProbe).ToList();
-        Assert.Single(probes);
-
-        // And five Remove-NetAdapter calls (one per iteration, since
-        // module is available and BR-2 latch never fires on fake exit 0).
-        var removes = fake.RunCalls.Where(IsRemoveNetAdapter).ToList();
-        Assert.Equal(5, removes.Count);
+        // The Get-Command Get-NetAdapter probe runs exactly once (Lazy-cached),
+        // even though resolve runs all 5 times.
+        Assert.Single(fake.RunCalls.Where(IsGetNetAdapterProbe));
+        Assert.Equal(5, fake.RunCalls.Where(IsGetNetAdapterResolve).Count());
     }
 
-    // ─── Test 4: PreStartCleanup falls back to netsh disable ────────────
+    // ─── Test 5: removal unavailable → PreStartCleanup uses netsh disable ──
 
     [Fact]
-    public async Task NetAdapterUnavailable_PreStartCleanup_FallsBackToNetshDisable()
+    public async Task RemovalUnavailable_PreStartCleanup_FallsBackToNetshDisable()
     {
         if (!OperatingSystem.IsWindows()) return;
 
-        // Enumeration returns VPNRouter-TUN; module unavailable; cleanup
-        // must call netsh admin=disabled (Fix #4 fallback) and skip
-        // Remove-NetAdapter entirely.
         var fake = new FakeProcessRunner();
         fake.OnRun(IsNetshEnumeration,
             new ProcessResult(0,
@@ -244,180 +232,77 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
                 Enabled        Connected      Dedicated        Ethernet
                 Disabled       Disconnected   Dedicated        VPNRouter-TUN
                 """,
-                Stderr: "",
-                Duration: TimeSpan.FromMilliseconds(10),
-                TimedOut: false));
-        // netsh admin=disabled responds with success
-        fake.OnRun(IsNetshDisable,
-            new ProcessResult(0, "Ok.", "", TimeSpan.FromMilliseconds(5), false));
+                Stderr: "", Duration: TimeSpan.FromMilliseconds(10), TimedOut: false));
+        fake.OnRun(IsNetshDisable, new ProcessResult(0, "Ok.", "", TimeSpan.FromMilliseconds(5), false));
 
-        await WithFakeAsync(fake, moduleAvailable: false, async () =>
+        await WithFakeAsync(fake, removalAvailable: false, async () =>
         {
-            _ = await TunAdapterDiagnostics.PreStartCleanupAsync(
-                logger: null, context: "test.fallback");
+            _ = await TunAdapterDiagnostics.PreStartCleanupAsync(logger: null, context: "test.fallback");
         });
 
-        // netsh disable invocation captured for VPNRouter-TUN.
-        var disableCalls = fake.RunCalls.Where(IsNetshDisable).ToList();
-        Assert.NotEmpty(disableCalls);
-        Assert.Contains(disableCalls,
+        Assert.Contains(fake.RunCalls.Where(IsNetshDisable),
             c => c.Arguments.Contains("name=VPNRouter-TUN"));
-
-        // No Remove-NetAdapter call — Fix #4 path bypasses PowerShell.
-        Assert.DoesNotContain(fake.RunCalls, IsRemoveNetAdapter);
+        // No pnputil and no Get-NetAdapter resolve — removal path skipped.
+        Assert.DoesNotContain(fake.RunCalls, c => c.ExecutablePath == "pnputil.exe");
+        Assert.DoesNotContain(fake.RunCalls, IsGetNetAdapterResolve);
     }
 
-    // ─── Test 5: first call logs the actionable INF ─────────────────────
+    // ─── Test 6: removal unavailable → actionable INF once ─────────────────
 
     [Fact]
-    public async Task NetAdapterUnavailable_FirstCall_LogsActionableInfo()
+    public async Task RemovalUnavailable_FirstCall_LogsActionableInfoOnce()
     {
         if (!OperatingSystem.IsWindows()) return;
 
-        // First TryRemoveAdapterAsync after probe says "unavailable" must
-        // emit a single Information-level message with the user-actionable
-        // hint about RSAT / Pro SKU. Subsequent calls must NOT re-emit it
-        // (Debug level only).
         var fake = NewRunner();
         var sink = new InMemorySink();
-        var logger = new LoggerConfiguration()
-            .MinimumLevel.Verbose()
-            .WriteTo.Sink(sink)
-            .CreateLogger();
+        var logger = new LoggerConfiguration().MinimumLevel.Verbose().WriteTo.Sink(sink).CreateLogger();
 
-        await WithFakeAsync(fake, moduleAvailable: false, async () =>
+        await WithFakeAsync(fake, removalAvailable: false, async () =>
         {
-            _ = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                logger, "VPNRouter-TUN", "test.actionable.first");
-            _ = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                logger, "VPNRouter-TUN", "test.actionable.second");
-            _ = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                logger, "VPNRouter-TUN", "test.actionable.third");
+            _ = await TunAdapterDiagnostics.TryRemoveAdapterAsync(logger, "VPNRouter-TUN", "t.first");
+            _ = await TunAdapterDiagnostics.TryRemoveAdapterAsync(logger, "VPNRouter-TUN", "t.second");
+            _ = await TunAdapterDiagnostics.TryRemoveAdapterAsync(logger, "VPNRouter-TUN", "t.third");
         });
 
         var infEvents = sink.Events(LogEventLevel.Information)
-            .Where(s => s.Contains("NetAdapter module unavailable"))
+            .Where(s => s.Contains("Get-NetAdapter cmdlet unavailable"))
             .ToList();
-        // Exactly one Information-level actionable message — first call
-        // wins, subsequent calls log at Debug.
         Assert.Single(infEvents);
-        // The message mentions RSAT or Pro/Enterprise (user-actionable
-        // hint) so the user knows what to do.
-        Assert.Contains("RSAT", infEvents[0]);
+        Assert.Contains("netsh-disable fallback", infEvents[0]);
     }
 
-    // ─── Test 6: cache stays "available" even if a call fails ───────────
+    // ─── Test 7: Get-NetAdapter genuinely not-found → latch + skip ──────────
 
     [Fact]
-    public async Task NetAdapterAvailable_Cache_DoesNotInvalidateOnRemoveFailure()
+    public async Task ResolveThrowsCommandNotFound_LatchesAndSkipsSecondResolve()
     {
         if (!OperatingSystem.IsWindows()) return;
 
-        // Module probe returns "available" (1). First Remove-NetAdapter
-        // call returns exit 5 (e.g. permissions / adapter busy / locked) —
-        // BR-2 latch sees stderr without "is not recognized" so it stays
-        // at 0. Second call must still attempt Remove-NetAdapter.
-        // Cache (Fix #1) should stay "available" since only Get-Module
-        // can flip it.
+        // Degenerate: Get-NetAdapter itself unresolvable (broken PS state). The
+        // resolve returns CommandNotFoundException in stderr → latch so the
+        // second call short-circuits (no second resolve spawn).
         var fake = new FakeProcessRunner();
-        fake.OnRun(IsRemoveNetAdapter,
-            new ProcessResult(
-                ExitCode: 5,
-                Stdout: "",
-                Stderr: "Access is denied (this is not a missing-cmdlet error)",
-                Duration: TimeSpan.FromMilliseconds(10),
-                TimedOut: false));
+        fake.OnRun(IsGetNetAdapterResolve,
+            new ProcessResult(1, "",
+                "Get-NetAdapter : ... [], CommandNotFoundException",
+                TimeSpan.FromMilliseconds(5), false));
 
-        await WithFakeAsync(fake, moduleAvailable: true, async () =>
+        await WithFakeAsync(fake, removalAvailable: true, async () =>
         {
-            var r1 = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                logger: null, adapterName: "VPNRouter-TUN",
-                context: "test.no-invalidate.first");
-            Assert.False(r1); // exit 5 fails
-
-            var r2 = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                logger: null, adapterName: "VPNRouter-TUN",
-                context: "test.no-invalidate.second");
-            Assert.False(r2); // exit 5 again
-        });
-
-        // Both attempts must have actually spawned Remove-NetAdapter —
-        // the cache should not have downgraded to "unavailable" just
-        // because the first call failed with exit 5.
-        var removes = fake.RunCalls.Where(IsRemoveNetAdapter).ToList();
-        Assert.Equal(2, removes.Count);
-
-        // Cache remains "available" — explicit assertion via the public
-        // accessor so the contract is pinned for Fix #3 consumers.
-        Assert.True(TunAdapterDiagnostics.IsNetAdapterModuleAvailable());
-    }
-
-    // ─── Test 7: Alena CP-866 mojibake → latch via CommandNotFoundException ─
-
-    [Fact]
-    public async Task RemoveFails_Cp866MojibakeWithCommandNotFoundException_LatchesAndSkipsSecondSpawn()
-    {
-        if (!OperatingSystem.IsWindows()) return;
-
-        // Alena (2026-06-05, v2.41.0, Russian Windows): the proactive
-        // Get-Module probe reports the NetAdapter module AVAILABLE (manifest
-        // present), so TryRemoveAdapterAsync runs Remove-NetAdapter — but the
-        // cmdlet itself throws CommandNotFoundException. The human-readable
-        // stderr is CP-866 OEM mojibake of "не распознано" (renders as
-        // "­Ґ а бЇ®§­ ­®"), which matches NONE of the three localized-message
-        // substrings, so the BR-2 latch never set and EVERY connect re-spawned
-        // + re-logged the failed Remove-NetAdapter (2x/connect, accumulating).
-        //
-        // After the fix, the latch keys on the locale-INDEPENDENT
-        // "CommandNotFoundException" type name in the CategoryInfo line: the
-        // first failure latches, and the second call must short-circuit
-        // BEFORE spawning a second Remove-NetAdapter.
-        //
-        // The stderr below deliberately contains neither "is not recognized"
-        // nor the UTF-8 "не распознано" nor "nicht erkannt" — only the garbled
-        // message + the untranslated CommandNotFoundException CategoryInfo.
-        const string mojibakeStderr =
-            "Remove-NetAdapter : <CP-866 mojibake of the localized not-found message>\r\n" +
-            "+ ... Router-TUN' -ErrorAction SilentlyContinue | Remove-NetAdapter -Confir ...\r\n" +
-            "    + CategoryInfo          : ObjectNotFound: (Remove-NetAdapter:String) [], CommandNotFoundException\r\n" +
-            "    + FullyQualifiedErrorId : CommandNotFoundException";
-
-        var fake = new FakeProcessRunner();
-        fake.OnRun(IsRemoveNetAdapter,
-            new ProcessResult(
-                ExitCode: 1,
-                Stdout: "",
-                Stderr: mojibakeStderr,
-                Duration: TimeSpan.FromMilliseconds(10),
-                TimedOut: false));
-
-        // moduleAvailable: true mirrors Alena's machine — Get-Module finds the
-        // manifest, so the proactive fast-fail does NOT trigger and we reach
-        // the actual Remove-NetAdapter call.
-        await WithFakeAsync(fake, moduleAvailable: true, async () =>
-        {
-            var r1 = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                logger: null, adapterName: "VPNRouter-TUN",
-                context: "test.alena.mojibake.first");
+            var r1 = await TunAdapterDiagnostics.TryRemoveAdapterAsync(null, "VPNRouter-TUN", "t.cnf1");
             Assert.False(r1);
-
-            var r2 = await TunAdapterDiagnostics.TryRemoveAdapterAsync(
-                logger: null, adapterName: "VPNRouter-TUN",
-                context: "test.alena.mojibake.second");
+            var r2 = await TunAdapterDiagnostics.TryRemoveAdapterAsync(null, "VPNRouter-TUN", "t.cnf2");
             Assert.False(r2);
         });
 
-        // The latch must have fired on the first failure: exactly ONE
-        // Remove-NetAdapter spawn across both calls (the second short-circuits).
-        // Pre-fix this would be 2 — one noisy WRN per connect.
-        var removes = fake.RunCalls.Where(IsRemoveNetAdapter).ToList();
-        Assert.Single(removes);
+        // Latched on first failure → exactly one resolve spawn across both calls.
+        Assert.Single(fake.RunCalls.Where(IsGetNetAdapterResolve));
+        Assert.DoesNotContain(fake.RunCalls, c => c.ExecutablePath == "pnputil.exe");
     }
 
     // ─── Serilog test sink ──────────────────────────────────────────────
 
-    /// <summary>In-memory Serilog sink for capturing rendered log events.
-    /// Mirrors the pattern from <c>TgProxyAutostartLoggingTests</c>.</summary>
     private sealed class InMemorySink : ILogEventSink
     {
         private readonly List<(LogEventLevel Level, string Rendered)> _events = new();
@@ -425,15 +310,13 @@ public sealed class TunAdapterDiagnosticsNetAdapterAvailabilityTests
         public void Emit(LogEvent logEvent)
         {
             var rendered = logEvent.RenderMessage();
-            lock (_events)
-                _events.Add((logEvent.Level, rendered));
+            lock (_events) _events.Add((logEvent.Level, rendered));
         }
 
         public IReadOnlyList<string> Events(LogEventLevel level)
         {
             lock (_events)
-                return _events.Where(e => e.Level == level)
-                    .Select(e => e.Rendered).ToList();
+                return _events.Where(e => e.Level == level).Select(e => e.Rendered).ToList();
         }
     }
 }

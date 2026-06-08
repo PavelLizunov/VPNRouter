@@ -587,17 +587,21 @@ public static class TunAdapterDiagnostics
 
         try
         {
-            // One-shot probe via the existing Runner seam — same shape as
-            // every other TunAdapterDiagnostics PowerShell call so tests
-            // intercept it identically with FakeProcessRunner. 5 s timeout
-            // is generous (real cost ~340 ms); only relevant if PowerShell
-            // itself is in an unusual state.
+            // Repointed 2026-06-08: probe for Get-NetAdapter — the REAL cmdlet
+            // we now use to resolve the orphan's PnP InstanceId — instead of the
+            // old `Get-Module NetAdapter -ListAvailable`. That old probe checked
+            // module PRESENCE, which was irrelevant: the module is present on
+            // every supported SKU, but the removal cmdlet we used to call
+            // (Remove-NetAdapter) never existed, so removal always failed. Using
+            // Get-Command resolves whether the cmdlet we actually invoke is
+            // usable in this spawned context. One-shot via the Runner seam so
+            // tests intercept it with FakeProcessRunner.
             var result = Runner.RunAsync(new ProcessRequest(
                 ExecutablePath: "powershell.exe",
                 Arguments: new[]
                 {
                     "-NoProfile", "-NonInteractive", "-Command",
-                    "Get-Module NetAdapter -ListAvailable | Measure-Object | Select -ExpandProperty Count",
+                    "if (Get-Command Get-NetAdapter -ErrorAction SilentlyContinue) { 1 } else { 0 }",
                 },
                 Timeout: TimeSpan.FromMilliseconds(5000))).GetAwaiter().GetResult();
 
@@ -756,135 +760,165 @@ public static class TunAdapterDiagnostics
     internal static async Task<bool> TryRemoveAdapterAsync(
         ILogger? logger, string adapterName, string context)
     {
-        // PinkuDani Fix #1 (2026-05-21) fast-fail: proactive Lazy probe.
-        // Runs Get-Module once per process; if NetAdapter module is
-        // missing, every subsequent TryRemoveAdapterAsync skips the
-        // ~1.5-2s Remove-NetAdapter spawn. Locale-independent because it
-        // parses an integer count, not an error string — works on
-        // CP-866 Russian Windows where BR-2's stderr-substring match
-        // never latches (the mojibake garbles "не распознано").
+        // Removal-capability gate. The proactive Lazy probe was repointed
+        // 2026-06-08 to check for Get-NetAdapter — a REAL cmdlet we now use to
+        // resolve the orphan's PnP InstanceId — instead of the phantom
+        // Remove-NetAdapter. If even Get-NetAdapter is unavailable
+        // (vanishingly rare; NetAdapter ships in-box on every supported SKU),
+        // skip to the netsh-disable fallback.
         if (!s_netAdapterModuleAvailable.Value)
         {
-            // Log the actionable INF once per process — first observation
-            // only. All subsequent skips log at Debug to keep log noise
-            // minimal during HealthMonitor restart bursts.
             if (Interlocked.CompareExchange(ref s_actionableModuleMissingLogged, 1, 0) == 0)
             {
                 logger?.Information(
-                    "[TunDiag] {Ctx}: PowerShell NetAdapter module unavailable on this Windows " +
-                    "install — using netsh fallback for TUN orphan cleanup. For full device-record " +
-                    "removal install RSAT (Settings → Apps → Optional Features → 'RSAT: Server " +
-                    "Manager') or use a Pro/Enterprise SKU.",
+                    "[TunDiag] {Ctx}: Get-NetAdapter cmdlet unavailable in this PowerShell " +
+                    "environment — using netsh-disable fallback for TUN orphan cleanup " +
+                    "(device record cannot be deleted, only disabled).",
                     context);
             }
             else
             {
                 logger?.Debug(
-                    "[TunDiag] {Ctx}: skipping Remove-NetAdapter for '{Name}' " +
-                    "(NetAdapter module unavailable; cached for process lifetime)",
+                    "[TunDiag] {Ctx}: skipping pnputil removal for '{Name}' " +
+                    "(Get-NetAdapter unavailable; cached for process lifetime)",
                     context, adapterName);
             }
             return false;
         }
 
-        // BR-2 fast-fail (reactive belt-and-suspenders): if a previous
-        // call still observed the cmdlet missing despite the Fix #1 probe
-        // saying the module's available (rare edge — module manifest
-        // present but cmdlet itself fails), skip the PowerShell round-trip.
+        // Reactive latch: a previous call in this process already found the
+        // removal mechanism genuinely broken — skip the round-trip.
         if (Volatile.Read(ref s_removeNetAdapterMissing) == 1)
         {
             logger?.Debug(
-                "[TunDiag] {Ctx}: skipping Remove-NetAdapter for '{Name}' " +
-                "(cmdlet was missing on first probe; cached for process lifetime)",
+                "[TunDiag] {Ctx}: skipping pnputil removal for '{Name}' " +
+                "(removal mechanism unavailable on first probe; cached for process lifetime)",
                 context, adapterName);
             return false;
         }
 
         try
         {
-            // Embed adapterName via single-quoted PowerShell string. The
-            // whitelist regex in ExtractStaleAdapterNames restricts names
-            // to [A-Za-z0-9_-] characters, so single-quote injection is
-            // not a concern here — there's no apostrophe path.
-            var script =
+            // 2026-06-08 root-cause fix (Pavel main-machine crash loop, v2.41.1).
+            // Remove-NetAdapter IS NOT A CMDLET: `Get-Command Remove-NetAdapter`
+            // returns 0; the NetAdapter module exports only Get/Set/Enable/
+            // Disable/Rename/Restart. The old `Get-NetAdapter | Remove-NetAdapter`
+            // therefore ALWAYS threw CommandNotFoundException and fell through to
+            // netsh-disable — which releases the handle but NEVER deletes the
+            // device record. The stale record makes the next WintunCreateAdapter
+            // fail with "The device is not ready for use" / "Cannot create a file
+            // ... already exists", i.e. the chronic crash loop. Real fix: resolve
+            // the orphan's PnP InstanceId via the REAL Get-NetAdapter cmdlet, then
+            // delete the device record with the built-in `pnputil /remove-device`.
+            // (Supersedes the a20a047 CommandNotFoundException latch, which only
+            // silenced the symptom of calling a phantom cmdlet.)
+            //
+            // Step 1 — resolve InstanceId. adapterName is whitelist-restricted
+            // (ExtractStaleAdapterNames: [A-Za-z0-9_-]) so single-quote injection
+            // is impossible.
+            var resolveScript =
                 $"Get-NetAdapter -Name '{adapterName}' -ErrorAction SilentlyContinue | " +
-                "Remove-NetAdapter -Confirm:$false -ErrorAction SilentlyContinue";
-
-            // Phase 3+ (2026-05-21): pre-split argv. The script is a SINGLE
-            // argv element (one long PS expression) — .NET ArgumentList
-            // wraps it in quotes for the kernel because it contains
-            // whitespace, matching the pre-migration command line shape
-            // `powershell.exe -NoProfile -NonInteractive -Command "<script>"`.
-            var (exitCode, stdout, stderr) = await RunAndCaptureAsync(
+                "Select-Object -ExpandProperty PnPDeviceID";
+            var (rExit, rOut, rErr) = await RunAndCaptureAsync(
                 "powershell.exe",
-                new[] { "-NoProfile", "-NonInteractive", "-Command", script },
+                new[] { "-NoProfile", "-NonInteractive", "-Command", resolveScript },
                 timeoutMs: 10000, logger: logger);
 
-            if (exitCode == 0)
+            // Get-NetAdapter is a real cmdlet; a not-found here means a genuinely
+            // broken PowerShell/module state — latch so we don't re-probe every
+            // connect, and fall back to netsh-disable.
+            var rErrText = rErr ?? string.Empty;
+            if (rErrText.IndexOf("CommandNotFoundException", StringComparison.OrdinalIgnoreCase) >= 0
+                || rErrText.IndexOf("is not recognized", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                logger?.Information(
-                    "[TunDiag] {Ctx}: removed stale adapter '{Name}' via Remove-NetAdapter",
+                if (Interlocked.CompareExchange(ref s_removeNetAdapterMissing, 1, 0) == 0)
+                    logger?.Information(
+                        "[TunDiag] {Ctx}: Get-NetAdapter not resolvable in this PowerShell " +
+                        "environment — cannot resolve InstanceId for '{Name}'; netsh-disable " +
+                        "fallback only for the rest of this process.",
+                        context, adapterName);
+                return false;
+            }
+
+            var instanceIds = (rOut ?? string.Empty)
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => s.Length > 0)
+                .ToList();
+
+            if (instanceIds.Count == 0)
+            {
+                // No matching adapter — already gone. Idempotent success.
+                logger?.Debug(
+                    "[TunDiag] {Ctx}: adapter '{Name}' not present (no InstanceId) — nothing to remove",
                     context, adapterName);
                 return true;
             }
 
-            // BR-2 cmdlet-missing latch: stderr from powershell.exe when
-            // a cmdlet is missing looks like
-            //   "Remove-NetAdapter : The term 'Remove-NetAdapter' is not
-            //    recognized as the name of a cmdlet, function, ..."
-            // The substring "is not recognized as the name of a cmdlet"
-            // is locale-EN; the localised Russian/German/etc. variants
-            // also contain the cmdlet name literal so we match on the
-            // English phrase OR on the literal name appearing after
-            // "term '" — robust to either locale.
-            var stderrText = stderr ?? string.Empty;
-            var stdoutText = stdout ?? string.Empty;
-            var looksLikeCmdletMissing =
-                stderrText.IndexOf("is not recognized", StringComparison.OrdinalIgnoreCase) >= 0
-                || stderrText.IndexOf("не распознано", StringComparison.OrdinalIgnoreCase) >= 0
-                || stderrText.IndexOf("nicht erkannt", StringComparison.OrdinalIgnoreCase) >= 0
-                // Locale-INDEPENDENT signal (Alena, 2026-06-05): PowerShell emits
-                // the .NET exception type name in the CategoryInfo line WITHOUT
-                // translating it, even when the human-readable message is both
-                // localized AND mangled by CP-866 OEM mojibake. Her stderr read
-                // 'Remove-NetAdapter : €¬п "Remove-NetAdapter" ­Ґ а бЇ®§­ ­® ...'
-                // (garbled "не распознано") + 'CommandNotFoundException' in the
-                // CategoryInfo line. The three message-string matches above all
-                // missed the mojibake, so the latch never set and EVERY connect
-                // re-spawned PowerShell and re-logged this WRN (2x per connect,
-                // accumulating across reconnects). CommandNotFoundException is the
-                // robust signal — our script only invokes NetAdapter cmdlets, so
-                // a not-found here unambiguously means the module is unusable.
-                || stderrText.IndexOf("CommandNotFoundException", StringComparison.OrdinalIgnoreCase) >= 0
-                || stdoutText.IndexOf("is not recognized", StringComparison.OrdinalIgnoreCase) >= 0
-                || stdoutText.IndexOf("CommandNotFoundException", StringComparison.OrdinalIgnoreCase) >= 0;
-            if (looksLikeCmdletMissing
-                && Interlocked.CompareExchange(ref s_removeNetAdapterMissing, 1, 0) == 0)
+            // Step 2 — delete each device record via the built-in pnputil. No
+            // PowerShell module, no phantom cmdlet.
+            var removedAny = false;
+            foreach (var id in instanceIds)
             {
-                // First-time observation — log once at Information level so
-                // the user/ops can see the environment limitation. All
-                // subsequent calls log at Debug only.
-                logger?.Information(
-                    "[TunDiag] {Ctx}: Remove-NetAdapter cmdlet not available in this " +
-                    "PowerShell environment (NetAdapter module missing). " +
-                    "Skipping direct-by-name fallback for the rest of this process — " +
-                    "netsh enumeration cleanup still runs. Adapter '{Name}' left untouched.",
-                    context, adapterName);
-                return false;
+                if (await RunPnpUtilRemoveAsync(logger, id, adapterName, context))
+                    removedAny = true;
             }
-
-            logger?.Warning(
-                "[TunDiag] {Ctx}: Remove-NetAdapter for '{Name}' returned exit {Exit}: stdout='{Out}' stderr='{Err}'",
-                context, adapterName, exitCode, stdoutText.Trim(), stderrText.Trim());
-            return false;
+            return removedAny;
         }
         catch (Exception ex)
         {
             logger?.Warning(ex,
-                "[TunDiag] {Ctx}: Remove-NetAdapter for '{Name}' threw (non-fatal)",
+                "[TunDiag] {Ctx}: pnputil removal for '{Name}' threw (non-fatal)",
                 context, adapterName);
             return false;
         }
+    }
+
+    /// <summary>
+    /// 2026-06-08: delete a single device record by PnP InstanceId via the
+    /// built-in <c>pnputil /remove-device</c>. Plain attempt first, then one
+    /// <c>/force</c> retry if the plain remove is refused (some device states
+    /// require it). Returns true on a successful removal. InstanceId comes from
+    /// <c>Get-NetAdapter -Name '&lt;whitelisted&gt;'</c> output, so it is bound
+    /// to an adapter we own (VPNRouter-TUN / sing-box-tun-*).
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static async Task<bool> RunPnpUtilRemoveAsync(
+        ILogger? logger, string instanceId, string adapterName, string context)
+    {
+        var (exit, _, err) = await RunAndCaptureAsync(
+            "pnputil.exe",
+            new[] { "/remove-device", instanceId },
+            timeoutMs: 10000, logger: logger);
+
+        if (exit == 0)
+        {
+            logger?.Information(
+                "[TunDiag] {Ctx}: removed stale adapter '{Name}' device record via pnputil ({Id})",
+                context, adapterName, instanceId);
+            return true;
+        }
+
+        // Retry with /force — some device states refuse a plain remove.
+        var (fExit, _, fErr) = await RunAndCaptureAsync(
+            "pnputil.exe",
+            new[] { "/remove-device", instanceId, "/force" },
+            timeoutMs: 10000, logger: logger);
+
+        if (fExit == 0)
+        {
+            logger?.Information(
+                "[TunDiag] {Ctx}: removed stale adapter '{Name}' device record via pnputil /force ({Id})",
+                context, adapterName, instanceId);
+            return true;
+        }
+
+        logger?.Warning(
+            "[TunDiag] {Ctx}: pnputil /remove-device for '{Name}' ({Id}) failed: " +
+            "plain exit={E1} stderr='{Err1}'; force exit={E2} stderr='{Err2}'",
+            context, adapterName, instanceId, exit, (err ?? string.Empty).Trim(),
+            fExit, (fErr ?? string.Empty).Trim());
+        return false;
     }
 
     /// <summary>

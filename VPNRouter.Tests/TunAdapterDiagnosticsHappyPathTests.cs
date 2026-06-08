@@ -58,12 +58,22 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
             && r.Arguments.Contains("admin=disabled");
     }
 
-    /// <summary>Identify a PowerShell Remove-NetAdapter call shape.</summary>
-    private static bool IsRemoveNetAdapter(ProcessRequest r)
+    /// <summary>Identify the Get-NetAdapter → PnPDeviceID resolve call shape
+    /// (step 1 of the 2026-06-08 pnputil removal — replaces the phantom
+    /// Remove-NetAdapter that never existed).</summary>
+    private static bool IsGetNetAdapterResolve(ProcessRequest r)
     {
         return r.ExecutablePath == "powershell.exe"
             && r.Arguments.Count == 4
-            && r.Arguments[3].Contains("Remove-NetAdapter");
+            && r.Arguments[3].Contains("Get-NetAdapter -Name")
+            && r.Arguments[3].Contains("PnPDeviceID");
+    }
+
+    /// <summary>Identify a `pnputil /remove-device` call (step 2).</summary>
+    private static bool IsPnpUtilRemove(ProcessRequest r)
+    {
+        return r.ExecutablePath == "pnputil.exe"
+            && r.Arguments.Contains("/remove-device");
     }
 
     /// <summary>Swap in fake Runner, pre-set NetAdapter module availability,
@@ -122,8 +132,11 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         // PowerShell removal).
         fake.OnRun(IsNetshDisable,
             new ProcessResult(0, "Ok.", "", TimeSpan.FromMilliseconds(5), false));
-        // PowerShell Remove-NetAdapter — exit 0 indicates "adapter removed".
-        fake.OnRun(IsRemoveNetAdapter,
+        // Step 1: Get-NetAdapter resolve returns the orphan's InstanceId.
+        fake.OnRun(IsGetNetAdapterResolve,
+            new ProcessResult(0, @"ROOT\NET\0001" + "\r\n", "", TimeSpan.FromMilliseconds(5), false));
+        // Step 2: pnputil /remove-device exit 0 = "device record removed".
+        fake.OnRun(IsPnpUtilRemove,
             new ProcessResult(0, "", "", TimeSpan.FromMilliseconds(5), false));
 
         int removed = 0;
@@ -148,18 +161,23 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         Assert.Contains(disableCalls,
             c => c.Arguments.Contains("name=VPNRouter-TUN"));
 
-        // Remove-NetAdapter PowerShell call fired with the single-quoted
+        // Step 1: Get-NetAdapter resolve fired with the single-quoted
         // adapter-name embed (whitelist-safe, no apostrophe path).
-        var removeCalls = fake.RunCalls.Where(IsRemoveNetAdapter).ToList();
-        Assert.NotEmpty(removeCalls);
-        var psCall = removeCalls[0];
+        var resolveCalls = fake.RunCalls.Where(IsGetNetAdapterResolve).ToList();
+        Assert.NotEmpty(resolveCalls);
+        var psCall = resolveCalls[0];
         Assert.Equal(4, psCall.Arguments.Count);
         Assert.Equal("-NoProfile", psCall.Arguments[0]);
         Assert.Equal("-NonInteractive", psCall.Arguments[1]);
         Assert.Equal("-Command", psCall.Arguments[2]);
-        Assert.Contains("Get-NetAdapter", psCall.Arguments[3]);
-        Assert.Contains("Remove-NetAdapter", psCall.Arguments[3]);
+        Assert.Contains("Get-NetAdapter -Name", psCall.Arguments[3]);
         Assert.Contains("'VPNRouter-TUN'", psCall.Arguments[3]);
+        Assert.Contains("PnPDeviceID", psCall.Arguments[3]);
+
+        // Step 2: pnputil /remove-device carried the resolved InstanceId.
+        var pnpCalls = fake.RunCalls.Where(IsPnpUtilRemove).ToList();
+        Assert.NotEmpty(pnpCalls);
+        Assert.Contains(@"ROOT\NET\0001", pnpCalls[0].Arguments);
     }
 
     // ─── Test 2: module unavailable + orphan found → netsh fallback ─────
@@ -210,9 +228,10 @@ public sealed class TunAdapterDiagnosticsHappyPathTests
         // PreStartCleanupAsync removed counter increments.
         Assert.Equal(1, removed);
 
-        // No PowerShell Remove-NetAdapter call must appear — the Fix #4
-        // path is the entire point of this test.
-        Assert.DoesNotContain(fake.RunCalls, IsRemoveNetAdapter);
+        // No removal path must appear — the netsh-disable fallback is the
+        // entire point of this test (no Get-NetAdapter resolve, no pnputil).
+        Assert.DoesNotContain(fake.RunCalls, IsGetNetAdapterResolve);
+        Assert.DoesNotContain(fake.RunCalls, IsPnpUtilRemove);
 
         // netsh admin=disabled fired for VPNRouter-TUN.
         var disableCalls = fake.RunCalls.Where(IsNetshDisable).ToList();
