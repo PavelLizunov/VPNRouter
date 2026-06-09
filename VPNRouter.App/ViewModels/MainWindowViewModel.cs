@@ -2808,6 +2808,13 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
 
         _engine = PlatformServices.CreateVpnEngine(_logger);
         _engine.StatusChanged += OnEngineStatus;
+        // 2026-06-09 (rectuspc report): surface AutoFailover messages — the
+        // post-start probe finding the active server dead / no failover
+        // candidate. This event had NO subscriber in the GUI, so a
+        // "connected but the server is unreachable" looked like a silent,
+        // successful connect. Now it overwrites the connection status line
+        // with the honest warning.
+        _engine.AutoFailoverTriggered += OnAutoFailoverMessage;
 
         _settings = _settingsStore.Load(AppPaths.ConfigYamlPath);
 
@@ -3991,6 +3998,26 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     // ── Engine events ──
+
+    /// <summary>
+    /// 2026-06-09: AutoFailover surfaced a user-facing message — either it
+    /// switched servers after a dead-config probe, or (the rectuspc case) the
+    /// active server is unreachable and there's no candidate to fail over to.
+    /// The VPN process is still "running", so we don't flip IsConnected; we
+    /// overwrite the connection status line with the warning so the user
+    /// doesn't stare at a silent "Connected" while no traffic flows. Persists
+    /// until the next state transition (the engine's StatusChanged fires only
+    /// on transitions, not on healthy periodic ticks).
+    /// </summary>
+    private void OnAutoFailoverMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            StatusText = "⚠ " + message;
+            _logger?.Warning("[VM] AutoFailover surfaced to user: {Message}", message);
+        });
+    }
 
     private void OnEngineStatus(string status)
     {
@@ -7281,6 +7308,7 @@ public partial class MainWindowViewModel : ViewModelBase, IDisposable
         try
         {
             _engine.StatusChanged -= OnEngineStatus;
+            _engine.AutoFailoverTriggered -= OnAutoFailoverMessage;
         }
         catch (Exception ex) { _logger.Debug(ex, "[VM] Dispose: engine StatusChanged unhook failed"); }
 

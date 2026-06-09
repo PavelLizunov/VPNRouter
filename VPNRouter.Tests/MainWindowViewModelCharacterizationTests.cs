@@ -189,8 +189,13 @@ public class MainWindowViewModelCharacterizationTests
     // snapshot drifts on the added method (re-pinned).
     // Cross-platform members → Linux pin drifts in lock-step (soft-fail
     // captures the actual via sentinel on the next ubuntu CI run).
+    // v2.41.2-r2 (rectuspc dead-Connected surfacing): + OnAutoFailoverMessage()
+    // private handler wired to VpnEngine.AutoFailoverTriggered (surfaces the
+    // "server unreachable / no candidates" message into StatusText instead of
+    // a silent green Connected). Cross-platform member → strict snapshot drifts,
+    // re-pinned to the actual.
     private const string PinnedHashWindows =
-        "9a64bc9bf2acd4b88c3eca54d1b60bbfbf2975bc79ca2229ce5343389c4268ee";
+        "7cae0c42cf34b4cec915bf7ec5d9d5cf4e4a113dd13301701cb2dba4dc125277";
 
     /// <summary>
     /// Linux hash, captured 2026-05-18 from ubuntu-latest CI run on the

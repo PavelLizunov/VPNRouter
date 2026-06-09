@@ -156,13 +156,22 @@ public sealed class AutoFailoverEngine
             _logger?.Warning(
                 "[AutoFailover] No candidate servers left (pool source: {Source})",
                 poolSource);
+            // 2026-06-09 (rectuspc report — subscription trimmed to one server
+            // that the user's ISP blocks by IP): the previous wording ("нет
+            // ДРУГИХ серверов, нажмите Обновить") was misleading — the active
+            // server isn't absent, it's UNREACHABLE, and Refresh won't help.
+            // Convey the real situation: the server isn't responding (likely
+            // ISP-blocked or down) and there's no alternative to fail over to.
             return new FailoverOutcome(
                 Switched: false,
                 NewActiveServer: null,
                 UserFacingMessage:
                     poolSource == "subscriptions"
-                        ? "В подписке нет других серверов. Попробуйте 'Обновить' на вкладке Подписки."
-                        : "Нет других доступных серверов в списке VLESS.");
+                        ? "Сервер не отвечает, а других в подписке нет — возможно, провайдер " +
+                          "блокирует его IP или сервер недоступен. Смените сервер или попросите " +
+                          "обновить подписку."
+                        : "Сервер не отвечает, а других в списке VLESS нет — возможно, он " +
+                          "заблокирован или недоступен. Добавьте другой сервер.");
         }
 
         // 4. Record the OLD active server in _tried so we never loop back

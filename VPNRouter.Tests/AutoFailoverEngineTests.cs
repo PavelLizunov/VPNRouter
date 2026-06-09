@@ -208,6 +208,13 @@ public class AutoFailoverEngineTests
 
         Assert.False(outcome.Switched);
         Assert.NotNull(outcome.UserFacingMessage);
+        // v2.41.2-r2 (rectuspc): the single-server-dead message must be the
+        // honest one that names the likely cause (ISP IP-block) and the action
+        // (swap / refresh subscription) — NOT the old misleading "нет других
+        // серверов, попробуйте Обновить" which implied a refresh would help when
+        // the user's ISP is blocking the only server's IP.
+        Assert.Contains("провайдер", outcome.UserFacingMessage!);
+        Assert.Contains("подписк", outcome.UserFacingMessage!);
     }
 
     [Fact]
